@@ -1,0 +1,6 @@
+# Copy this file to android/key.properties and fill it locally.
+# Never commit android/key.properties or the .jks keystore file.
+storePassword=replace-with-keystore-password
+keyPassword=replace-with-key-password
+keyAlias=malva
+storeFile=../malva-release-key.jks

@@ -1,0 +1,111 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isPatient(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function hasRole(role) {
+      return signedIn() && request.auth.token.role == role;
+    }
+
+    function isProfessionalFor(patientId) {
+      return signedIn()
+        && hasRole('professional')
+        && exists(/databases/$(database)/documents/patient_professional_links/$(patientId + '_' + request.auth.uid));
+    }
+
+    function patientCanRead(patientId) {
+      return isPatient(patientId) || isProfessionalFor(patientId);
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update: if signedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    match /patients/{patientId} {
+      allow read: if patientCanRead(patientId);
+      allow create: if isPatient(patientId);
+      allow update: if isPatient(patientId) || isProfessionalFor(patientId);
+      allow delete: if false;
+
+      match /mood_entries/{entryId} {
+        allow read: if patientCanRead(patientId);
+        allow create, update: if isPatient(patientId);
+        allow delete: if isPatient(patientId);
+      }
+
+      match /diary_entries/{entryId} {
+        allow read: if patientCanRead(patientId);
+        allow create, update: if isPatient(patientId);
+        allow delete: if isPatient(patientId);
+      }
+
+      match /medications/{medId} {
+        allow read: if patientCanRead(patientId);
+        allow create, update: if isPatient(patientId) || isProfessionalFor(patientId);
+        allow delete: if isProfessionalFor(patientId);
+      }
+
+      match /medication_logs/{logId} {
+        allow read: if patientCanRead(patientId);
+        allow create: if isPatient(patientId);
+        allow update, delete: if false;
+      }
+
+      match /assessments/{assessmentId} {
+        allow read: if patientCanRead(patientId);
+        allow create: if isPatient(patientId);
+        allow update, delete: if false;
+      }
+
+      match /goals/{goalId} {
+        allow read: if patientCanRead(patientId);
+        allow create, update: if isPatient(patientId) || isProfessionalFor(patientId);
+        allow delete: if isPatient(patientId);
+      }
+
+      match /health_records/{recordId} {
+        allow read: if patientCanRead(patientId);
+        allow create, update: if isProfessionalFor(patientId);
+        allow delete: if false;
+      }
+    }
+
+    match /patient_professional_links/{linkId} {
+      allow read: if signedIn()
+        && (resource.data.patientId == request.auth.uid || resource.data.professionalId == request.auth.uid);
+      allow create, update: if hasRole('admin');
+      allow delete: if false;
+    }
+
+    match /alerts/{alertId} {
+      allow read: if signedIn()
+        && (resource.data.patientId == request.auth.uid || isProfessionalFor(resource.data.patientId));
+      allow create: if signedIn()
+        && (request.resource.data.patientId == request.auth.uid || isProfessionalFor(request.resource.data.patientId));
+      allow update: if isProfessionalFor(resource.data.patientId);
+      allow delete: if false;
+    }
+
+    match /notification_tokens/{tokenId} {
+      allow read: if false;
+      allow create, update: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if hasRole('admin');
+      allow create: if false;
+      allow update, delete: if false;
+    }
+  }
+}

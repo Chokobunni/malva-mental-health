@@ -1,0 +1,62 @@
+# Dart and Flutter generated files
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+
+# Backup directory
+.malva_source_backup/
+
+# Development screenshots (root level)
+*.png
+!docs/*.png
+!web/icons/*.png
+!android/app/src/main/res/**/*.png
+
+# Local IDE and machine state
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Android local machine paths and generated output
+android/local.properties
+android/key.properties
+android/*.jks
+android/*.keystore
+!android/key.properties.example
+android/.gradle/
+android/app/build/
+
+# iOS/macOS generated files if those platforms are added later
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Pods/
+ios/Runner.xcworkspace/
+macos/Flutter/GeneratedPluginRegistrant.swift
+macos/Pods/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+flutter_web_stdout.log
+flutter_web_stderr.log
+
+# Local Go build artifacts
+backend/*.exe
+
+# Local secrets and production environment files
+.env
+.env.*
+!.env.example
+!backend/deploy/env.production.example
+android/app/google-services.json
+firebase-service-account.json
+*-service-account.json
+
+# OS files
+.DS_Store
+Thumbs.db

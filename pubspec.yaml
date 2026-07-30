@@ -1,0 +1,28 @@
+name: malva_mental_health
+description: Flutter MVP for a mental health patient and professional app.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  http: ^1.6.0
+  web_socket_channel: ^3.0.3
+  flutter_secure_storage: ^10.3.1
+  file_picker: ^8.1.7
+  url_launcher: ^6.3.1
+  firebase_core: ^4.11.0
+  firebase_messaging: ^16.4.1
+  flutter_local_notifications: ^22.0.1
+  timezone: ^0.11.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
