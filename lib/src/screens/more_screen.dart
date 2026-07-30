@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../providers/data/export_provider.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
@@ -114,6 +115,9 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                         builder: (_) => ConsentManagementScreen()),
                   ),
                 ),
+                const SizedBox(height: 20),
+                const SectionLabel('Export Data'),
+                _ExportSection(),
                 const SizedBox(height: 20),
                 const SectionLabel('Pengaturan Privasi'),
                 SoftCard(
@@ -267,6 +271,131 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// EXPORT SECTION WIDGET
+// ============================================================
+
+class _ExportSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final exportService = ref.watch(exportServiceProvider);
+
+    return SoftCard(
+      child: Column(
+        children: [
+          _ExportTile(
+            icon: Icons.mood_rounded,
+            title: 'Export Mood History',
+            subtitle: 'CSV format untuk analisis',
+            color: MalvaColors.seed,
+            onTap: () async {
+              final csv = ref.read(moodCsvProvider);
+              await exportService.shareCsv(csv, 'malva_mood_history.csv');
+            },
+          ),
+          const SizedBox(height: 8),
+          _ExportTile(
+            icon: Icons.fact_check_rounded,
+            title: 'Export Screening Results',
+            subtitle: 'PHQ-9 dan GAD-7 scores',
+            color: MalvaColors.amber,
+            onTap: () async {
+              final csv = ref.read(screeningCsvProvider);
+              await exportService.shareCsv(csv, 'malva_screenings.csv');
+            },
+          ),
+          const SizedBox(height: 8),
+          _ExportTile(
+            icon: Icons.medication_rounded,
+            title: 'Export Medication Log',
+            subtitle: 'Riwayat konsumsi obat',
+            color: MalvaColors.mint,
+            onTap: () async {
+              final csv = ref.read(medicationLogCsvProvider);
+              await exportService.shareCsv(csv, 'malva_medication_log.csv');
+            },
+          ),
+          const SizedBox(height: 8),
+          _ExportTile(
+            icon: Icons.note_rounded,
+            title: 'Export Diary Entries',
+            subtitle: 'Catatan harian',
+            color: MalvaColors.orchid,
+            onTap: () async {
+              final csv = ref.read(diaryCsvProvider);
+              await exportService.shareCsv(csv, 'malva_diary.csv');
+            },
+          ),
+          const Divider(height: 24),
+          _ExportTile(
+            icon: Icons.file_download_rounded,
+            title: 'Export All Data (JSON)',
+            subtitle: 'Backup lengkap untuk konsultasi',
+            color: MalvaColors.plum,
+            onTap: () async {
+              final json = ref.read(fullJsonExportProvider);
+              await exportService.shareJson(json, 'malva_full_export.json');
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExportTile extends StatelessWidget {
+  const _ExportTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: color.withValues(alpha: 0.12),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.black54),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: Colors.black26),
+          ],
+        ),
       ),
     );
   }

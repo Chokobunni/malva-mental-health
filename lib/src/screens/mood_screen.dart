@@ -288,10 +288,16 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
           ? 'Tidak ada catatan.'
           : _noteController.text.trim(),
     );
-    ref.read(malvaStoreProvider.notifier).addMood(
-          entry,
-        );
-    unawaited(_syncEntry(entry));
+    ref.read(malvaStoreProvider.notifier).addMood(entry);
+
+    // Offline-first: always save locally, queue for sync if offline
+    final isOnline = ref.read(isOnlineProvider);
+    if (isOnline) {
+      unawaited(_syncEntry(entry));
+    } else {
+      unawaited(ref.read(offlineSyncServiceProvider).enqueueMood(entry));
+    }
+
     _noteController.clear();
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Mood entry tersimpan.')));
@@ -301,6 +307,8 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
     final apiClient = widget.apiClient;
     final accessToken = widget.session?.accessToken;
     if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+      // Queue for later sync
+      unawaited(ref.read(offlineSyncServiceProvider).enqueueMood(entry));
       return;
     }
     try {
@@ -315,10 +323,12 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
         occurredAt: entry.date,
       );
     } on Object catch (error) {
+      // Queue for offline sync on failure
+      unawaited(ref.read(offlineSyncServiceProvider).enqueueMood(entry));
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Mood tersimpan lokal, sync backend gagal: $error'),
+          content: Text('Tersimpan lokal, akan sync saat online: $error'),
         ),
       );
     }

@@ -8,7 +8,9 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
+import '../widgets/crisis_hotline.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/sync_status.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({
@@ -92,6 +94,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
             ),
+            const CrisisHotlineBanner(),
+            const OfflineBanner(),
             Padding(
               padding: const EdgeInsets.all(18),
               child: Column(

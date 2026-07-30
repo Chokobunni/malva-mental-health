@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'models.dart';
 import 'providers/providers.dart';
+import 'providers/data/sync_provider.dart';
 import 'screens/assessment_screen.dart';
 import 'screens/initial_screening_consent_screen.dart';
 import 'screens/login_screen.dart';
@@ -47,6 +48,9 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
         widget.medicationReminderService ?? MedicationReminderService();
     unawaited(_medicationReminderService.initialize().catchError((_) {}));
 
+    // Initialize offline sync service
+    unawaited(ref.read(offlineSyncServiceProvider).initialize());
+
     // Hide splash after delay
     Future<void>.delayed(const Duration(milliseconds: 1800), () {
       if (!mounted) return;
@@ -76,6 +80,11 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     unawaited(_pushNotifications.registerDeviceToken(session));
     ref.read(malvaStoreProvider.notifier).persistSession(session);
     _scheduleAllMedicationReminders();
+
+    // Sync any pending offline data
+    unawaited(ref.read(offlineSyncServiceProvider).syncNow(
+          accessToken: session.accessToken,
+        ));
   }
 
   void _handleLogout() {
@@ -128,6 +137,19 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
         _scheduleAllMedicationReminders();
       } else if (!next.isAuthenticated && previous?.session != null) {
         _dashboardSyncService.stopSync();
+      }
+    });
+
+    // Session expiry auto-redirect
+    ref.listen<bool>(sessionIsExpiredProvider, (_, expired) {
+      if (expired && mounted) {
+        _handleLogout();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Session expired. Silakan login kembali.'),
+            backgroundColor: MalvaColors.danger,
+          ),
+        );
       }
     });
 
