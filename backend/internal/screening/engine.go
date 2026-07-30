@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const RuleVersion = "2026.1"
+const RuleVersion = "2026.1.FC" // FC = Forward Chaining
 
 type Answer struct {
 	QuestionID string `json:"question_id"`
@@ -21,6 +21,7 @@ type Result struct {
 	Summary    string   `json:"summary"`
 	CrisisFlag bool     `json:"crisis_flag"`
 	Answers    []Answer `json:"answers"`
+	CF         float64  `json:"cf"`
 }
 
 type Bundle struct {
@@ -101,12 +102,16 @@ func Score(kind string, values []int) (Result, error) {
 		})
 	}
 
-	level, summary := riskFor(kind, total)
-	crisis := kind == "phq9" && values[8] > 0
-	if crisis {
+	level, summary, crisis, cf := riskFor(kind, total)
+
+	// Check for crisis flag: PHQ-9 item 9 (self-harm) positive
+	if kind == "phq9" && len(values) == 9 && values[8] > 0 {
+		crisis = true
 		level = "crisis"
 		summary = "Ada indikator keselamatan diri. Tampilkan crisis flow dan hubungi profesional."
+		cf = 0.95
 	}
+
 	return Result{
 		Type:       kind,
 		Score:      total,
@@ -115,33 +120,34 @@ func Score(kind string, values []int) (Result, error) {
 		Summary:    summary,
 		CrisisFlag: crisis,
 		Answers:    answers,
+		CF:         cf,
 	}, nil
 }
 
-func riskFor(kind string, total int) (string, string) {
+func riskFor(kind string, total int) (string, string, bool, float64) {
 	if kind == "phq9" {
 		switch {
 		case total <= 4:
-			return "minimal", "Gejala depresi minimal. Pantau pola mood dan rutinitas."
+			return "minimal", "Gejala depresi minimal. Pantau pola mood dan rutinitas.", false, 0.9
 		case total <= 9:
-			return "mild", "Gejala ringan. Ulangi asesmen dan diskusikan bila menetap."
+			return "mild", "Gejala ringan. Ulangi asesmen dan diskusikan bila menetap.", false, 0.85
 		case total <= 14:
-			return "moderate", "Gejala sedang. Perlu review profesional dan rencana tindak lanjut."
+			return "moderate", "Gejala sedang. Perlu review profesional dan rencana tindak lanjut.", false, 0.9
 		case total <= 19:
-			return "severe", "Gejala cukup berat. Prioritaskan evaluasi profesional."
+			return "severe", "Gejala cukup berat. Prioritaskan evaluasi profesional.", false, 0.92
 		default:
-			return "severe", "Gejala berat. Butuh review klinis segera."
+			return "severe", "Gejala berat. Butuh review klinis segera.", false, 0.95
 		}
 	}
 	switch {
 	case total <= 4:
-		return "minimal", "Gejala kecemasan minimal. Lanjutkan pemantauan rutin."
+		return "minimal", "Gejala kecemasan minimal. Lanjutkan pemantauan rutin.", false, 0.9
 	case total <= 9:
-		return "mild", "Gejala ringan. Ulangi asesmen pada follow-up."
+		return "mild", "Gejala ringan. Ulangi asesmen pada follow-up.", false, 0.85
 	case total <= 14:
-		return "moderate", "Gejala sedang. Perlu evaluasi profesional."
+		return "moderate", "Gejala sedang. Perlu evaluasi profesional.", false, 0.9
 	default:
-		return "severe", "Gejala berat. Prioritaskan review klinis dan rencana dukungan."
+		return "severe", "Gejala berat. Prioritaskan review klinis dan rencana dukungan.", false, 0.92
 	}
 }
 

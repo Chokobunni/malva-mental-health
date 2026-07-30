@@ -1,4 +1,5 @@
 import 'models.dart';
+import 'ai/ai.dart' as ai;
 
 enum AssessmentType { phq9, gad7 }
 
@@ -205,6 +206,10 @@ class AssessmentEngine {
     };
   }
 
+  /// Score using Forward Chaining + Certainty Factor.
+  ///
+  /// This method uses the AI engine internally for clinical reasoning
+  /// while maintaining backward compatibility with existing screens.
   static AssessmentResult score({
     required AssessmentType type,
     required List<int> answers,
@@ -217,151 +222,81 @@ class AssessmentEngine {
       throw ArgumentError('Assessment answers must be between 0 and 3.');
     }
 
-    final memory = _WorkingMemory(type: type, answers: answers);
-    for (final rule in _rulesFor(type)) {
-      if (rule.when(memory)) {
-        rule.then(memory);
-      }
-    }
+    // Get question IDs for the AI engine
+    final questionIds = questionsFor(type).map((q) => q.id).toList();
+
+    // Get rules for this assessment type
+    final rules = type == AssessmentType.phq9
+        ? ai.KnowledgeBase.phq9Rules
+        : ai.KnowledgeBase.gad7Rules;
+
+    // Run Forward Chaining inference
+    final aiEngine = ai.ForwardChainingEngine();
+    final inferenceResult = aiEngine.infer(
+      questionIds: questionIds,
+      answers: answers,
+      rules: rules,
+    );
+
+    // Calculate simple total score for backward compatibility
+    final totalScore = answers.fold<int>(0, (sum, value) => sum + value);
+
+    // Map AI result level to RiskLevel
+    final riskLevel = _mapToRiskLevel(inferenceResult.level);
+
+    // Convert AI trace to RuleTrace for backward compatibility
+    final rulesFired = inferenceResult.trace
+        .where((t) => t.fired)
+        .map((t) => RuleTrace(
+              id: t.rule.id,
+              label: t.rule.description,
+              level: _mapToRiskLevel(t.rule.id.contains('CRISIS')
+                  ? 'crisis'
+                  : _levelFromRuleId(t.rule.id)),
+            ))
+        .toList();
+
+    // Build summary with CF information
+    final summary = '${inferenceResult.summary}\n'
+        'Confidence: ${(inferenceResult.certaintyFactor * 100).toStringAsFixed(1)}%';
 
     return AssessmentResult(
       type: type,
-      score: memory.total,
+      score: totalScore,
       maxScore: type == AssessmentType.phq9 ? 27 : 21,
-      level: memory.level,
-      summary: memory.summary,
-      crisisFlag: memory.crisisFlag,
-      rulesFired: List.unmodifiable(memory.traces),
+      level: riskLevel,
+      summary: summary,
+      crisisFlag: inferenceResult.isCrisis,
+      rulesFired: rulesFired,
       createdAt: DateTime.now(),
       ruleVersion: ruleVersion,
     );
   }
 
-  static List<_ScreeningRule> _rulesFor(AssessmentType type) {
-    return switch (type) {
-      AssessmentType.phq9 => [
-          _ScreeningRule(
-            id: 'PHQ9_0_4',
-            when: (m) => m.total <= 4,
-            then: (m) => m.setLevel(
-              RiskLevel.minimal,
-              'Gejala depresi minimal. Pantau pola mood dan rutinitas.',
-            ),
-          ),
-          _ScreeningRule(
-            id: 'PHQ9_5_9',
-            when: (m) => m.total >= 5 && m.total <= 9,
-            then: (m) => m.setLevel(
-              RiskLevel.mild,
-              'Gejala ringan. Ulangi asesmen dan diskusikan bila menetap.',
-            ),
-          ),
-          _ScreeningRule(
-            id: 'PHQ9_10_14',
-            when: (m) => m.total >= 10 && m.total <= 14,
-            then: (m) => m.setLevel(
-              RiskLevel.moderate,
-              'Gejala sedang. Perlu review profesional dan rencana tindak lanjut.',
-            ),
-          ),
-          _ScreeningRule(
-            id: 'PHQ9_15_19',
-            when: (m) => m.total >= 15 && m.total <= 19,
-            then: (m) => m.setLevel(
-              RiskLevel.severe,
-              'Gejala cukup berat. Prioritaskan evaluasi profesional.',
-            ),
-          ),
-          _ScreeningRule(
-            id: 'PHQ9_20_27',
-            when: (m) => m.total >= 20,
-            then: (m) => m.setLevel(
-              RiskLevel.severe,
-              'Gejala berat. Butuh review klinis segera.',
-            ),
-          ),
-          _ScreeningRule(
-            id: 'PHQ9_ITEM_9_POSITIVE',
-            when: (m) => m.answers[8] > 0,
-            then: (m) => m.markCrisis(
-              'Ada indikator keselamatan diri. Tampilkan crisis flow dan hubungi profesional.',
-            ),
-          ),
-        ],
-      AssessmentType.gad7 => [
-          _ScreeningRule(
-            id: 'GAD7_0_4',
-            when: (m) => m.total <= 4,
-            then: (m) => m.setLevel(
-              RiskLevel.minimal,
-              'Gejala kecemasan minimal. Lanjutkan pemantauan rutin.',
-            ),
-          ),
-          _ScreeningRule(
-            id: 'GAD7_5_9',
-            when: (m) => m.total >= 5 && m.total <= 9,
-            then: (m) => m.setLevel(
-              RiskLevel.mild,
-              'Gejala ringan. Ulangi asesmen pada follow-up.',
-            ),
-          ),
-          _ScreeningRule(
-            id: 'GAD7_10_14',
-            when: (m) => m.total >= 10 && m.total <= 14,
-            then: (m) => m.setLevel(
-              RiskLevel.moderate,
-              'Gejala sedang. Perlu evaluasi profesional.',
-            ),
-          ),
-          _ScreeningRule(
-            id: 'GAD7_15_21',
-            when: (m) => m.total >= 15,
-            then: (m) => m.setLevel(
-              RiskLevel.severe,
-              'Gejala berat. Prioritaskan review klinis dan rencana dukungan.',
-            ),
-          ),
-        ],
-    };
-  }
-}
-
-class _WorkingMemory {
-  _WorkingMemory({required this.type, required this.answers})
-      : total = answers.fold<int>(0, (sum, value) => sum + value);
-
-  final AssessmentType type;
-  final List<int> answers;
-  final int total;
-  final List<RuleTrace> traces = [];
-  RiskLevel level = RiskLevel.minimal;
-  String summary = 'Belum ada rule yang terpenuhi.';
-  bool crisisFlag = false;
-
-  void setLevel(RiskLevel value, String message) {
-    level = value;
-    summary = message;
-    traces.add(RuleTrace(
-        id: '${type.title}_${value.name}', label: message, level: value));
+  /// Map AI inference level to RiskLevel enum.
+  static RiskLevel _mapToRiskLevel(String level) {
+    switch (level) {
+      case 'minimal':
+        return RiskLevel.minimal;
+      case 'mild':
+        return RiskLevel.mild;
+      case 'moderate':
+        return RiskLevel.moderate;
+      case 'severe':
+        return RiskLevel.severe;
+      case 'crisis':
+        return RiskLevel.crisis;
+      default:
+        return RiskLevel.minimal;
+    }
   }
 
-  void markCrisis(String message) {
-    crisisFlag = true;
-    level = RiskLevel.crisis;
-    summary = message;
-    traces.add(RuleTrace(
-        id: '${type.title}_CRISIS', label: message, level: RiskLevel.crisis));
+  /// Extract level from rule ID.
+  static String _levelFromRuleId(String ruleId) {
+    if (ruleId.contains('MINIMAL')) return 'minimal';
+    if (ruleId.contains('MILD')) return 'mild';
+    if (ruleId.contains('MODERATE')) return 'moderate';
+    if (ruleId.contains('SEVERE')) return 'severe';
+    return 'minimal';
   }
-}
-
-class _ScreeningRule {
-  const _ScreeningRule({
-    required this.id,
-    required this.when,
-    required this.then,
-  });
-
-  final String id;
-  final bool Function(_WorkingMemory memory) when;
-  final void Function(_WorkingMemory memory) then;
 }
