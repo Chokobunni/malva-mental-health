@@ -17,16 +17,20 @@ import (
 	"malva/backend/internal/config"
 	"malva/backend/internal/realtime"
 	"malva/backend/internal/screening"
+	"malva/backend/internal/security"
 	"malva/backend/internal/store"
 )
 
 type Server struct {
-	cfg    config.Config
-	auth   auth.Manager
-	store  *store.Store
-	hub    *realtime.Hub
-	logger *slog.Logger
-	limits *rateLimiter
+	cfg           config.Config
+	auth          auth.Manager
+	store         *store.Store
+	hub           *realtime.Hub
+	logger        *slog.Logger
+	limits        *rateLimiter
+	secLogger     *security.SecurityLogger
+	lockout       *security.AccountLockout
+	sessions      *security.SessionManager
 }
 
 type registerRequest struct {
@@ -124,6 +128,11 @@ type privacyConsentRequest struct {
 	ShareTimeline    bool   `json:"share_timeline"`
 }
 
+type passwordChangeRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
 type diaryFeedbackRequest struct {
 	PatientID string `json:"patient_id"`
 	Feedback  string `json:"feedback"`
@@ -133,12 +142,15 @@ const refreshSessionTTL = 30 * 24 * time.Hour
 
 func New(cfg config.Config, authManager auth.Manager, st *store.Store, hub *realtime.Hub, logger *slog.Logger) *Server {
 	return &Server{
-		cfg:    cfg,
-		auth:   authManager,
-		store:  st,
-		hub:    hub,
-		logger: logger,
-		limits: newRateLimiter(20, time.Minute),
+		cfg:       cfg,
+		auth:      authManager,
+		store:     st,
+		hub:       hub,
+		logger:    logger,
+		limits:    newRateLimiter(20, time.Minute),
+		secLogger: security.NewSecurityLogger(logger),
+		lockout:   security.NewAccountLockout(cfg.MaxLoginAttempts, time.Duration(cfg.LockoutDuration)*time.Minute, time.Duration(cfg.LockoutDuration)*time.Minute),
+		sessions:  security.NewSessionManager(),
 	}
 }
 
@@ -150,6 +162,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/auth/login", s.rateLimit(s.login))
 	mux.HandleFunc("POST /v1/auth/refresh", s.rateLimit(s.refresh))
 	mux.HandleFunc("POST /v1/auth/logout", s.rateLimit(s.logout))
+	mux.HandleFunc("POST /v1/auth/change-password", s.requireAuth(s.changePassword))
 	mux.HandleFunc("GET /v1/me", s.requireAuth(s.me))
 	mux.HandleFunc("POST /v1/device-tokens", s.requireAuth(s.upsertDeviceToken))
 	mux.HandleFunc("POST /v1/screenings", s.requireAuth(s.createScreening))
@@ -183,7 +196,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/notifications/test", s.requireAuth(s.testNotification))
 	mux.HandleFunc("GET /v1/realtime/ws", s.realtimeWS)
 	mux.HandleFunc("POST /v1/crisis-alerts", s.requireAuth(s.handleCrisisAlert))
-	return s.recover(s.securityHeaders(s.cors(mux)))
+	return s.recover(s.securityHeaders(s.inputSanitize(s.cors(mux))))
 }
 
 func (s *Server) root(w http.ResponseWriter, r *http.Request) {
@@ -273,8 +286,12 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("role must be patient or professional"))
 		return
 	}
-	if len(req.Password) < 8 {
-		writeError(w, http.StatusBadRequest, errors.New("password must be at least 8 characters"))
+	if err := security.ValidatePassword(req.Password, req.Email); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if !security.ValidateEmail(req.Email) {
+		writeError(w, http.StatusBadRequest, errors.New("invalid email format"))
 		return
 	}
 	hash, err := auth.HashPassword(req.Password)
@@ -293,6 +310,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	s.secLogger.LogAuthSuccess(r, user.ID)
 	s.writeAuthResponse(w, r, http.StatusCreated, user)
 }
 
@@ -302,8 +320,16 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	lockoutKey := clientIP(r) + ":" + req.Email
+	if s.lockout.IsLocked(lockoutKey) {
+		s.secLogger.LogAccountLocked(r, req.Email)
+		writeError(w, http.StatusTooManyRequests, errors.New("account temporarily locked due to too many failed attempts"))
+		return
+	}
 	user, err := s.store.GetUserByEmail(r.Context(), req.Email)
 	if errors.Is(err, sql.ErrNoRows) {
+		s.lockout.RecordFailure(lockoutKey)
+		s.secLogger.LogAuthFailure(r, req.Email, "user not found")
 		writeError(w, http.StatusUnauthorized, errors.New("email or password is invalid"))
 		return
 	}
@@ -312,9 +338,13 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !auth.CheckPassword(user.PasswordHash, req.Password) {
+		s.lockout.RecordFailure(lockoutKey)
+		s.secLogger.LogAuthFailure(r, req.Email, "invalid password")
 		writeError(w, http.StatusUnauthorized, errors.New("email or password is invalid"))
 		return
 	}
+	s.lockout.Reset(lockoutKey)
+	s.secLogger.LogAuthSuccess(r, user.ID)
 	s.writeAuthResponse(w, r, http.StatusOK, user)
 }
 
@@ -360,6 +390,40 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
+}
+
+func (s *Server) changePassword(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	var req passwordChangeRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	user, err := s.store.GetUserByID(r.Context(), claims.Subject)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !auth.CheckPassword(user.PasswordHash, req.CurrentPassword) {
+		s.secLogger.LogAuthFailure(r, user.Email, "invalid current password")
+		writeError(w, http.StatusUnauthorized, errors.New("current password is incorrect"))
+		return
+	}
+	if err := security.ValidatePassword(req.NewPassword, user.Email); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	hash, err := auth.HashPassword(req.NewPassword)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if err := s.store.UpdatePassword(r.Context(), claims.Subject, hash); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.sessions.InvalidateUserSessions(claims.Subject)
+	s.secLogger.LogSessionInvalidated(r, claims.Subject, "password_changed")
+	writeJSON(w, http.StatusOK, map[string]string{"status": "password_changed"})
 }
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -1286,8 +1350,10 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		if s.cfg.OriginAllowed(origin) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-CSRF-Token")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Max-Age", "86400")
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -1303,6 +1369,29 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) inputSanitize(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, values := range r.URL.Query() {
+			for _, value := range values {
+				if suspicious, reason := security.DetectSuspiciousInput(value); suspicious {
+					s.secLogger.LogSuspiciousInput(r, value, reason)
+					writeError(w, http.StatusBadRequest, errors.New("invalid input detected"))
+					return
+				}
+			}
+		}
+		if r.URL.Path != "" && security.DetectPathTraversal(r.URL.Path) {
+			s.secLogger.LogSuspiciousInput(r, r.URL.Path, "path traversal")
+			writeError(w, http.StatusBadRequest, errors.New("invalid path"))
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }

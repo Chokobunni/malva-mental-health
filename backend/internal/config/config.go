@@ -13,6 +13,9 @@ type Config struct {
 	AllowedOrigins     []string
 	FCMCredentialsFile string
 	FCMCredentialsJSON string
+	MaxLoginAttempts   int
+	LockoutDuration    int
+	MaxRequestBodySize int64
 }
 
 func Load() (Config, error) {
@@ -23,6 +26,9 @@ func Load() (Config, error) {
 		AllowedOrigins:     splitCSV(getenv("MALVA_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://localhost:8080")),
 		FCMCredentialsFile: os.Getenv("MALVA_FCM_CREDENTIALS_FILE"),
 		FCMCredentialsJSON: os.Getenv("MALVA_FCM_CREDENTIALS_JSON"),
+		MaxLoginAttempts:   5,
+		LockoutDuration:    15,
+		MaxRequestBodySize: 1 << 20,
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("MALVA_DATABASE_URL is required")

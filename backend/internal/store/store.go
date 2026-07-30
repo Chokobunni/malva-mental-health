@@ -287,6 +287,18 @@ func (s *Store) GetUserByID(ctx context.Context, id string) (User, error) {
 	return user, err
 }
 
+func (s *Store) UpdatePassword(ctx context.Context, userID, passwordHash string) error {
+	if userID == "" || passwordHash == "" {
+		return errors.New("user_id and password_hash are required")
+	}
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE users
+		SET password_hash = $1, updated_at = now()
+		WHERE id = $2 AND disabled_at IS NULL
+	`, passwordHash, userID)
+	return err
+}
+
 func (s *Store) CreateRefreshSession(ctx context.Context, userID, refreshTokenHash, userAgent, ipAddress string, ttl time.Duration) error {
 	if userID == "" || refreshTokenHash == "" {
 		return errors.New("user_id and refresh_token_hash are required")
