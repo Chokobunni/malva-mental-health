@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'firebase_options.dart';
 import 'src/malva_app.dart';
 import 'src/services/medication_reminder_service.dart';
 
@@ -13,11 +14,9 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  try {
-    await Firebase.initializeApp();
-  } on Object {
-    // Firebase not configured — app continues without FCM
-  }
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   final medicationReminderService = MedicationReminderService();
   await medicationReminderService.initialize();
