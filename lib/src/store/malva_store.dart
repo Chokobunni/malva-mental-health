@@ -511,6 +511,11 @@ class MalvaStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void deleteMedication(String medicationId) {
+    _medications.removeWhere((med) => med.id == medicationId);
+    notifyListeners();
+  }
+
   void replaceMedications(List<Medication> medications) {
     _medications
       ..clear()
@@ -603,6 +608,28 @@ class MalvaStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void addScreeningBundle(ScreeningBundle bundle) {
+    _screeningBundles.add(bundle);
+    _assessments.add(bundle.phq9);
+    _assessments.add(bundle.gad7);
+    if (bundle.isInitial) {
+      _initialScreeningStatus = InitialScreeningStatus.completed;
+    }
+    notifyListeners();
+  }
+
+  void replaceScreeningBundles(List<ScreeningBundle> bundles) {
+    _screeningBundles
+      ..clear()
+      ..addAll(bundles);
+    _assessments
+      ..clear()
+      ..addAll([
+        for (final bundle in bundles) ...[bundle.phq9, bundle.gad7],
+      ]);
+    notifyListeners();
+  }
+
   Future<ScreeningBundle> submitScreeningBundle({
     required List<int> phq9Answers,
     required List<int> gad7Answers,
@@ -632,10 +659,7 @@ class MalvaStore extends ChangeNotifier {
     if (apiClient != null && accessToken != null && accessToken.isNotEmpty) {
       final remote = await apiClient.submitScreening(
         accessToken: accessToken,
-        phq9Answers: phq9Answers,
-        gad7Answers: gad7Answers,
-        isInitial: isInitial,
-        source: source,
+        bundle: bundle,
       );
       if (remote.id.isNotEmpty) {
         bundle = ScreeningBundle(

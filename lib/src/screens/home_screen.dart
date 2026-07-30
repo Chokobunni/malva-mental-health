@@ -16,6 +16,7 @@ class HomeScreen extends StatefulWidget {
     required this.onOpenMood,
     required this.onOpenMedication,
     required this.onOpenDiary,
+    required this.onOpenChat,
     required this.onOpenMore,
     this.session,
     this.apiClient,
@@ -25,6 +26,7 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onOpenMood;
   final VoidCallback onOpenMedication;
   final VoidCallback onOpenDiary;
+  final VoidCallback onOpenChat;
   final VoidCallback onOpenMore;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
@@ -150,6 +152,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       title: 'Health Record',
                       subtitle: 'Diagnosis, file asesmen, dan riwayat obat',
                       onTap: widget.onOpenMore,
+                    ),
+                    const SizedBox(height: 10),
+                    ActionTile(
+                      icon: Icons.chat_bubble_outline_rounded,
+                      title: 'Chat Profesional',
+                      subtitle: 'Kirim pesan langsung ke profesional Anda',
+                      onTap: widget.onOpenChat,
+                      color: MalvaColors.orchid,
                     ),
                     const SizedBox(height: 22),
                     const SectionLabel('Health Check-in'),

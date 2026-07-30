@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../assessment_engine.dart';
 import '../models.dart';
+import '../services/dashboard_sync_service.dart';
 import '../services/malva_api_client.dart';
 import '../store/malva_store.dart';
 import '../theme.dart';
@@ -16,12 +17,14 @@ class ProfessionalDashboardScreen extends StatefulWidget {
     required this.onLogout,
     this.session,
     this.apiClient,
+    this.syncService,
   });
 
   final MalvaStore store;
   final VoidCallback onLogout;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
+  final DashboardSyncService? syncService;
 
   @override
   State<ProfessionalDashboardScreen> createState() =>
@@ -50,10 +53,41 @@ class _ProfessionalDashboardScreenState
   bool _isLoadingOnlineData = false;
   String? _onlineError;
 
+  SyncStatus _syncStatus = SyncStatus.idle;
+  DateTime? _lastSyncTime;
+  late final DashboardSyncService _syncService;
+  StreamSubscription<DashboardSyncEvent>? _syncSubscription;
+
   @override
   void initState() {
     super.initState();
+    _syncService = widget.syncService ?? DashboardSyncService();
+    _syncService.setOnRefresh(_loadOnlineProfessionalData);
+    _syncSubscription = _syncService.stream.listen((event) {
+      if (!mounted) return;
+      setState(() {
+        _syncStatus = event.status;
+        _lastSyncTime = event.lastSyncTime;
+        if (event.status == SyncStatus.error && event.errorMessage != null) {
+          _onlineError = event.errorMessage;
+        }
+      });
+    });
+    _syncService.startSync();
     unawaited(_loadOnlineProfessionalData());
+  }
+
+  @override
+  void dispose() {
+    _syncSubscription?.cancel();
+    if (widget.syncService == null) {
+      _syncService.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _manualRefresh() async {
+    await _syncService.refreshNow();
   }
 
   @override
@@ -94,10 +128,35 @@ class _ProfessionalDashboardScreenState
                     color: Colors.white,
                     size: 34,
                   ),
-                  trailing: IconButton(
-                    tooltip: 'Keluar',
-                    onPressed: widget.onLogout,
-                    icon: const Icon(Icons.logout_rounded, color: Colors.white),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _SyncStatusIndicator(
+                        status: _syncStatus,
+                        lastSyncTime: _lastSyncTime,
+                      ),
+                      IconButton(
+                        tooltip: 'Refresh manual',
+                        onPressed: _manualRefresh,
+                        icon: _syncStatus == SyncStatus.syncing
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.refresh_rounded,
+                                color: Colors.white),
+                      ),
+                      IconButton(
+                        tooltip: 'Keluar',
+                        onPressed: widget.onLogout,
+                        icon:
+                            const Icon(Icons.logout_rounded, color: Colors.white),
+                      ),
+                    ],
                   ),
                 ),
                 Padding(
@@ -111,6 +170,12 @@ class _ProfessionalDashboardScreenState
                         hasBackendSession:
                             widget.session?.accessToken?.isNotEmpty == true,
                         onRetry: _loadOnlineProfessionalData,
+                      ),
+                      _SyncStatusBar(
+                        syncStatus: _syncStatus,
+                        lastSyncTime: _lastSyncTime,
+                        hasBackendSession:
+                            widget.session?.accessToken?.isNotEmpty == true,
                       ),
                       _PriorityMetrics(
                         patientCount: patients.length,
@@ -395,6 +460,7 @@ class _ProfessionalDashboardScreenState
         _reviewedScreeningIds.addAll(reviewedScreeningIds);
         _selectedPatientId ??= links.isEmpty ? null : links.first.patientId;
         _isLoadingOnlineData = false;
+        _lastSyncTime = DateTime.now();
       });
     } on MalvaApiException catch (error) {
       if (!mounted) return;
@@ -1129,6 +1195,87 @@ class _StatusBanner extends StatelessWidget {
       );
     }
     return const SizedBox.shrink();
+  }
+}
+
+class _SyncStatusBar extends StatelessWidget {
+  const _SyncStatusBar({
+    required this.syncStatus,
+    required this.lastSyncTime,
+    required this.hasBackendSession,
+  });
+
+  final SyncStatus syncStatus;
+  final DateTime? lastSyncTime;
+  final bool hasBackendSession;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!hasBackendSession) return const SizedBox.shrink();
+
+    final color = switch (syncStatus) {
+      SyncStatus.syncing => MalvaColors.mint,
+      SyncStatus.error => MalvaColors.danger,
+      SyncStatus.idle => _stalenessColor,
+    };
+
+    final icon = switch (syncStatus) {
+      SyncStatus.syncing => Icons.sync_rounded,
+      SyncStatus.error => Icons.error_outline_rounded,
+      SyncStatus.idle => Icons.check_circle_outline_rounded,
+    };
+
+    final text = switch (syncStatus) {
+      SyncStatus.syncing => 'Menyinkronkan...',
+      SyncStatus.error => 'Sync gagal',
+      SyncStatus.idle => lastSyncTime != null
+          ? 'Terakhir sync: ${_formatTimeAgo(lastSyncTime!)}'
+          : 'Belum pernah sync',
+    };
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: SoftCard(
+        color: color.withValues(alpha: 0.08),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (syncStatus == SyncStatus.syncing)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color get _stalenessColor {
+    if (lastSyncTime == null) return Colors.grey;
+    final diff = DateTime.now().difference(lastSyncTime!);
+    if (diff.inMinutes < 5) return MalvaColors.mint;
+    if (diff.inMinutes < 30) return MalvaColors.amber;
+    return MalvaColors.danger;
+  }
+
+  String _formatTimeAgo(DateTime time) {
+    final diff = DateTime.now().difference(time);
+    if (diff.inSeconds < 60) return '${diff.inSeconds}s lalu';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m lalu';
+    if (diff.inHours < 24) return '${diff.inHours}j lalu';
+    return '${diff.inDays}h lalu';
   }
 }
 
@@ -2395,4 +2542,60 @@ class _MedicationResult {
   final List<BackendMedication> medications;
   final List<BackendMedicationLog> logs;
   final bool restricted;
+}
+
+class _SyncStatusIndicator extends StatelessWidget {
+  const _SyncStatusIndicator({
+    required this.status,
+    this.lastSyncTime,
+  });
+
+  final SyncStatus status;
+  final DateTime? lastSyncTime;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (status) {
+      SyncStatus.syncing => MalvaColors.mint,
+      SyncStatus.error => MalvaColors.danger,
+      SyncStatus.idle => _stalenessColor,
+    };
+
+    final tooltip = switch (status) {
+      SyncStatus.syncing => 'Syncing...',
+      SyncStatus.error => 'Sync error',
+      SyncStatus.idle => lastSyncTime != null
+          ? 'Last synced: ${_formatTimeAgo(lastSyncTime!)}'
+          : 'Not synced yet',
+    };
+
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        width: 10,
+        height: 10,
+        margin: const EdgeInsets.only(right: 8),
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+  }
+
+  Color get _stalenessColor {
+    if (lastSyncTime == null) return Colors.grey;
+    final diff = DateTime.now().difference(lastSyncTime!);
+    if (diff.inMinutes < 5) return MalvaColors.mint;
+    if (diff.inMinutes < 30) return MalvaColors.amber;
+    return MalvaColors.danger;
+  }
+
+  String _formatTimeAgo(DateTime time) {
+    final diff = DateTime.now().difference(time);
+    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../services/malva_api_client.dart';
+import '../services/medication_reminder_service.dart';
 import '../store/malva_store.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
@@ -14,11 +15,13 @@ class MedicationScreen extends StatelessWidget {
     required this.store,
     this.session,
     this.apiClient,
+    this.medicationReminderService,
   });
 
   final MalvaStore store;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
+  final MedicationReminderService? medicationReminderService;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +42,7 @@ class MedicationScreen extends StatelessWidget {
                 return;
               }
               try {
-                final backendMeds = await apiClient.listMedications(
+                final backendMeds = await apiClient!.listMedications(
                   accessToken: accessToken,
                 );
                 final meds = backendMeds
@@ -182,8 +185,41 @@ class MedicationScreen extends StatelessWidget {
         onSave: (value) {
           store.upsertMedication(value);
           unawaited(_syncMedication(context, value));
+          unawaited(
+              medicationReminderService?.scheduleMedicationReminder(value));
           Navigator.pop(context);
         },
+        onDelete: medication != null
+            ? () {
+                Navigator.pop(context);
+                _deleteMedication(context, medication);
+              }
+            : null,
+      ),
+    );
+  }
+
+  void _deleteMedication(BuildContext context, Medication medication) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Hapus ${medication.name}?'),
+        content: const Text('Obat dan reminder akan dihapus.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              store.deleteMedication(medication.id);
+              unawaited(
+                  medicationReminderService?.cancelReminder(medication.id));
+            },
+            child: const Text('Hapus'),
+          ),
+        ],
       ),
     );
   }
@@ -406,10 +442,12 @@ class MedicationFormSheet extends StatefulWidget {
     super.key,
     required this.onSave,
     this.initial,
+    this.onDelete,
   });
 
   final Medication? initial;
   final ValueChanged<Medication> onSave;
+  final VoidCallback? onDelete;
 
   @override
   State<MedicationFormSheet> createState() => _MedicationFormSheetState();
@@ -527,6 +565,15 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
             ),
             const SizedBox(height: 16),
             FilledButton(onPressed: _save, child: const Text('Simpan')),
+            if (widget.onDelete != null) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: widget.onDelete,
+                icon: const Icon(Icons.delete_rounded, color: MalvaColors.danger),
+                label: const Text('Hapus Obat',
+                    style: TextStyle(color: MalvaColors.danger)),
+              ),
+            ],
           ],
         ),
       ),

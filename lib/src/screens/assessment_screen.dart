@@ -228,6 +228,14 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
 
     if (!mounted) return;
     setState(() => _isSubmitting = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Screening berhasil dikirim. ID: ${bundle.id}',
+        ),
+        backgroundColor: MalvaColors.mint,
+      ),
+    );
     Navigator.push(
       context,
       MaterialPageRoute(

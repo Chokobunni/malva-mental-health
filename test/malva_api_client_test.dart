@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:malva_mental_health/src/assessment_engine.dart';
 import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 
@@ -97,10 +98,34 @@ void main() {
 
     final result = await api.submitScreening(
       accessToken: 'token_123',
-      phq9Answers: const [1, 1, 1, 1, 1, 0, 0, 0, 0],
-      gad7Answers: const [2, 2, 2, 2, 2, 0, 0],
-      isInitial: true,
-      source: 'test',
+      bundle: ScreeningBundle(
+        id: 'test_bundle',
+        phq9: AssessmentResult(
+          type: AssessmentType.phq9,
+          score: 5,
+          maxScore: 27,
+          level: RiskLevel.mild,
+          summary: 'test',
+          crisisFlag: false,
+          rulesFired: [],
+          createdAt: DateTime(2026),
+          ruleVersion: '1.0',
+        ),
+        gad7: AssessmentResult(
+          type: AssessmentType.gad7,
+          score: 8,
+          maxScore: 21,
+          level: RiskLevel.moderate,
+          summary: 'test',
+          crisisFlag: false,
+          rulesFired: [],
+          createdAt: DateTime(2026),
+          ruleVersion: '1.0',
+        ),
+        createdAt: DateTime(2026),
+        isInitial: true,
+        source: 'test',
+      ),
     );
 
     expect(result.id, 'screening_1');
@@ -162,6 +187,7 @@ void main() {
 
     final sessions = await api.listScreenings(
       accessToken: 'token_123',
+      patientId: 'patient_1',
       limit: 10,
     );
 

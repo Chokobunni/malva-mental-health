@@ -6,6 +6,7 @@ import '../store/malva_store.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 import 'assessment_screen.dart';
+import 'chat_screen.dart';
 import 'consent_management_screen.dart';
 import 'goals_screen.dart';
 import 'record_screen.dart';
@@ -85,6 +86,22 @@ class _MoreScreenState extends State<MoreScreen> {
                     context,
                     MaterialPageRoute(
                         builder: (_) => RecordScreen(store: widget.store)),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ActionTile(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  title: 'Chat dengan Profesional',
+                  subtitle: 'Kirim pesan langsung ke profesional Anda',
+                  color: MalvaColors.orchid,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => ChatScreen(
+                              session: widget.session,
+                              apiClient: widget.apiClient,
+                              otherUserName: 'Profesional',
+                            )),
                   ),
                 ),
                 const SizedBox(height: 10),

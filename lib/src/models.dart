@@ -293,3 +293,42 @@ class HealthRecord {
   final String type;
   final bool lockedByProfessional;
 }
+
+enum ChatState { connecting, connected, disconnected }
+
+class ChatMessage {
+  const ChatMessage({
+    required this.id,
+    required this.senderId,
+    required this.senderName,
+    required this.text,
+    required this.timestamp,
+    required this.isMine,
+  });
+
+  final String id;
+  final String senderId;
+  final String senderName;
+  final String text;
+  final DateTime timestamp;
+  final bool isMine;
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json, {required String currentUserId}) {
+    return ChatMessage(
+      id: json['id']?.toString() ?? '',
+      senderId: json['sender_id']?.toString() ?? '',
+      senderName: json['sender_name']?.toString() ?? '',
+      text: json['text']?.toString() ?? '',
+      timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ?? DateTime.now(),
+      isMine: json['sender_id']?.toString() == currentUserId,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'sender_id': senderId,
+        'sender_name': senderName,
+        'text': text,
+        'timestamp': timestamp.toIso8601String(),
+      };
+}

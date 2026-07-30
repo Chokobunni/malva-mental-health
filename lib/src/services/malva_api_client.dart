@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../assessment_engine.dart';
 import '../models.dart';
 
 class MalvaApiClient {
@@ -145,15 +146,13 @@ class MalvaApiClient {
 
   Future<List<BackendScreeningSession>> listScreenings({
     required String accessToken,
-    String? patientId,
+    required String patientId,
     int limit = 20,
   }) async {
     final uri = baseUri.replace(
-      path: '/v1/screenings',
+      path: '/v1/patients/${patientId.trim()}/screenings',
       queryParameters: {
         'limit': limit.toString(),
-        if (patientId != null && patientId.trim().isNotEmpty)
-          'patient_id': patientId.trim(),
       },
     );
     final payload = await _sendUri('GET', uri, accessToken: accessToken);
@@ -207,20 +206,25 @@ class MalvaApiClient {
 
   Future<BackendScreeningResult> submitScreening({
     required String accessToken,
-    required List<int> phq9Answers,
-    required List<int> gad7Answers,
-    required bool isInitial,
-    required String source,
+    required ScreeningBundle bundle,
   }) async {
     final payload = await _send(
       'POST',
       '/v1/screenings',
       accessToken: accessToken,
       body: {
-        'source': source,
-        'is_initial': isInitial,
-        'phq9': phq9Answers,
-        'gad7': gad7Answers,
+        'phq9_score': bundle.phq9.score,
+        'phq9_level': bundle.phq9.level.name,
+        'gad7_score': bundle.gad7.score,
+        'gad7_level': bundle.gad7.level.name,
+        'crisis_flag': bundle.crisisFlag,
+        'rules_fired': [
+          for (final rule in bundle.phq9.rulesFired)
+            {'id': rule.id, 'label': rule.label, 'level': rule.level.name},
+          for (final rule in bundle.gad7.rulesFired)
+            {'id': rule.id, 'label': rule.label, 'level': rule.level.name},
+        ],
+        'is_initial': bundle.isInitial,
       },
     );
     final screening = payload['screening'];
@@ -232,7 +236,25 @@ class MalvaApiClient {
       id: screening['id']?.toString() ?? '',
       overallLevel: screening['overall_level']?.toString() ?? '',
       crisisFlag: screening['crisis_flag'] == true,
+      createdAt: DateTime.tryParse(screening['created_at']?.toString() ?? ''),
     );
+  }
+
+  Future<BackendScreeningSession> getScreeningDetail({
+    required String accessToken,
+    required String screeningId,
+  }) async {
+    final payload = await _send(
+      'GET',
+      '/v1/screenings/$screeningId',
+      accessToken: accessToken,
+    );
+    final screening = payload['screening'];
+    if (screening is! Map<String, dynamic>) {
+      throw const MalvaApiException(
+          'Respons detail screening dari server tidak valid.');
+    }
+    return BackendScreeningSession.fromJson(screening);
   }
 
   Future<BackendScreeningReview> reviewScreening({
@@ -878,11 +900,13 @@ class BackendScreeningResult {
     required this.id,
     required this.overallLevel,
     required this.crisisFlag,
+    this.createdAt,
   });
 
   final String id;
   final String overallLevel;
   final bool crisisFlag;
+  final DateTime? createdAt;
 }
 
 class BackendAssessmentSummary {
