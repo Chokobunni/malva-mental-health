@@ -207,6 +207,50 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
 
   Future<void> _submitResult() async {
     if (_isSubmitting) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.fact_check_rounded, color: MalvaColors.seed),
+        title: const Text('Ringkasan Jawaban'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('PHQ-9:', style: TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 4),
+              for (var i = 0; i < _phq9Answers.length; i++)
+                Text('  ${i + 1}. Skor: ${_phq9Answers[i] ?? 0} — ${_phq9Answers[i] != null ? AssessmentEngine.responseLabels[_phq9Answers[i]!] : "Belum dijawab"}'),
+              const SizedBox(height: 12),
+              const Text('GAD-7:', style: TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 4),
+              for (var i = 0; i < _gad7Answers.length; i++)
+                Text('  ${i + 1}. Skor: ${_gad7Answers[i] ?? 0} — ${_gad7Answers[i] != null ? AssessmentEngine.responseLabels[_gad7Answers[i]!] : "Belum dijawab"}'),
+              const SizedBox(height: 12),
+              Text(
+                'Total: $_answeredCount/$_questionCount terjawab',
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Kembali Edit'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.send_rounded),
+            label: const Text('Ya, Kirim'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
     setState(() => _isSubmitting = true);
     late final ScreeningBundle bundle;
     try {
@@ -261,6 +305,14 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Tutup'),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _submitResult();
+            },
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Coba Lagi'),
           ),
         ],
       ),

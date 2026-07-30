@@ -164,6 +164,48 @@ class MedicationScreen extends StatelessWidget {
                         const SizedBox(height: 12),
                       ],
                     const SizedBox(height: 70),
+                    const SizedBox(height: 22),
+                    const SectionLabel('Riwayat Minum Obat'),
+                    if (store.medicationLogs.isEmpty)
+                      const SoftCard(
+                        child: Text('Belum ada riwayat minum obat.'),
+                      )
+                    else
+                      for (final log in store.medicationLogs.take(10))
+                        SoftCard(
+                          child: Row(
+                            children: [
+                              Icon(
+                                log.status == 'taken'
+                                    ? Icons.check_circle_rounded
+                                    : log.status == 'skipped'
+                                        ? Icons.skip_next_rounded
+                                        : Icons.cancel_rounded,
+                                color: log.status == 'taken'
+                                    ? MalvaColors.mint
+                                    : log.status == 'skipped'
+                                        ? MalvaColors.amber
+                                        : MalvaColors.danger,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      log.medicationName,
+                                      style: const TextStyle(fontWeight: FontWeight.w800),
+                                    ),
+                                    Text(
+                                      '${log.status.toUpperCase()} — ${_formatLogTime(log.takenAt)}',
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                   ],
                 ),
               ),
@@ -173,6 +215,12 @@ class MedicationScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  static String _formatLogTime(DateTime dt) {
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '${dt.day}/${dt.month}/${dt.year} $h:$m';
   }
 
   void _openMedicationForm(BuildContext context, [Medication? medication]) {
@@ -283,6 +331,15 @@ class MedicationScreen extends StatelessWidget {
   void _logMedication(BuildContext context, Medication medication, String status) {
     store.takeMedication(medication.id);
     unawaited(_syncMedicationLog(context, medication, status));
+    if (medication.needsRefill) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${medication.name} stok rendah (${medication.currentStock}). Segera refill!'),
+          backgroundColor: MalvaColors.amber,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
 
   Future<void> _syncMedication(

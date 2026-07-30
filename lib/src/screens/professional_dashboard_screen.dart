@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../assessment_engine.dart';
 import '../models.dart';
@@ -35,8 +36,8 @@ class _ProfessionalDashboardScreenState
     extends State<ProfessionalDashboardScreen> {
   final Set<String> _reviewedScreeningIds = {};
   final List<_AuditEntry> _auditEntries = [];
-  final Map<String, String> _professionalNotes = {};
-  final Map<String, String> _followUpMessages = {};
+  final Map<String, List<BackendProfessionalNote>> _professionalNotes = {};
+  final Map<String, List<BackendFollowUpMessage>> _followUpMessages = {};
 
   List<BackendPatientProfessionalLink> _links = const [];
   Map<String, List<BackendScreeningSession>> _screeningsByPatient = const {};
@@ -276,9 +277,9 @@ class _ProfessionalDashboardScreenState
                         ),
                         const SizedBox(height: 22),
                         _ProfessionalNotesSection(
-                          note: _professionalNotes[selectedPatient.patientId],
-                          followUp:
-                              _followUpMessages[selectedPatient.patientId],
+                          notes: _professionalNotes[selectedPatient.patientId] ?? const [],
+                          followUps:
+                              _followUpMessages[selectedPatient.patientId] ?? const [],
                           onEditNote: () => _openProfessionalNote(
                             selectedPatient,
                           ),
@@ -342,8 +343,8 @@ class _ProfessionalDashboardScreenState
       final medicationLogsByPatient = <String, List<BackendMedicationLog>>{};
       final moodDiaryRestrictedPatients = <String>{};
       final medicationRestrictedPatients = <String>{};
-      final notesByPatient = <String, String>{};
-      final followUpsByPatient = <String, String>{};
+      final notesByPatient = <String, List<BackendProfessionalNote>>{};
+      final followUpsByPatient = <String, List<BackendFollowUpMessage>>{};
       final reviewedScreeningIds = <String>{};
       final serverAuditEntries = <_AuditEntry>[];
 
@@ -403,14 +404,10 @@ class _ProfessionalDashboardScreenState
         }
 
         final notes = results[2] as List<BackendProfessionalNote>? ?? const <BackendProfessionalNote>[];
-        if (notes.isNotEmpty) {
-          notesByPatient[patientId] = notes.first.body;
-        }
+        notesByPatient[patientId] = notes;
 
         final followUps = results[3] as List<BackendFollowUpMessage>? ?? const <BackendFollowUpMessage>[];
-        if (followUps.isNotEmpty) {
-          followUpsByPatient[patientId] = followUps.first.body;
-        }
+        followUpsByPatient[patientId] = followUps;
 
         timelineEventsByPatient[patientId] = results[4] as List<BackendTimelineEvent>? ?? const <BackendTimelineEvent>[];
 
@@ -690,7 +687,7 @@ class _ProfessionalDashboardScreenState
           FilledButton.icon(
             onPressed: () {
               Navigator.pop(context);
-              unawaited(_markScreeningReviewed(patient, screening));
+              unawaited(_reviewScreening(screening.id).catchError((_) {}));
             },
             icon: const Icon(Icons.check_rounded),
             label: const Text('Tandai direview'),
@@ -700,47 +697,64 @@ class _ProfessionalDashboardScreenState
     );
   }
 
-  Future<void> _markScreeningReviewed(
-    _ProfessionalPatient patient,
-    _ScreeningView screening,
-  ) async {
-    setState(() {
-      _reviewedScreeningIds.add(screening.id);
-      _auditEntries.insert(
-        0,
-        _AuditEntry(
-          title: 'Screening direview',
-          body: '${patient.displayName} - ${screening.overallLevelLabel}',
-          createdAt: DateTime.now(),
-        ),
-      );
-    });
-
+  Future<void> _reviewScreening(String screeningId) async {
     final apiClient = widget.apiClient;
     final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
-      return;
-    }
+    if (apiClient == null || accessToken == null || accessToken.isEmpty) return;
+
+    final noteController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.verified_rounded, color: MalvaColors.mint),
+        title: const Text('Tandai sebagai direview?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Tambahkan catatan profesional (opsional):'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: noteController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Catatan review...',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Ya, Tandai'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
 
     try {
       await apiClient.reviewScreening(
         accessToken: accessToken,
-        screeningId: screening.id,
+        screeningId: screeningId,
         status: 'reviewed',
-        note:
-            'Reviewed via dashboard profesional. Level ${screening.overallLevelLabel}.',
+        note: noteController.text.trim(),
       );
-      await _loadOnlineProfessionalData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Review screening tersimpan ke backend.')),
-      );
-    } on Object catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Review tersimpan lokal, sync backend gagal: $error'),
+        const SnackBar(
+          content: Text('Screening ditandai sebagai direview.'),
+          backgroundColor: MalvaColors.mint,
         ),
+      );
+    } on MalvaApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal: ${e.message}'), backgroundColor: MalvaColors.danger),
       );
     }
   }
@@ -855,8 +869,9 @@ class _ProfessionalDashboardScreenState
   }
 
   void _openProfessionalNote(_ProfessionalPatient patient) {
+    final existing = _professionalNotes[patient.patientId];
     final controller = TextEditingController(
-        text: _professionalNotes[patient.patientId] ?? '');
+        text: existing?.isNotEmpty == true ? existing!.first.body : '');
     _openTextSheet(
       title: 'Catatan profesional',
       subtitle:
@@ -869,7 +884,17 @@ class _ProfessionalDashboardScreenState
           if (value.isEmpty) {
             _professionalNotes.remove(patient.patientId);
           } else {
-            _professionalNotes[patient.patientId] = value;
+            _professionalNotes[patient.patientId] = [
+              if (existing != null) ...existing,
+              BackendProfessionalNote(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                patientId: patient.patientId,
+                professionalId: widget.session?.identifier ?? '',
+                body: value,
+                visibility: 'private',
+                updatedAt: DateTime.now(),
+              ),
+            ];
           }
           _auditEntries.insert(
             0,
@@ -886,8 +911,9 @@ class _ProfessionalDashboardScreenState
   }
 
   void _openFollowUpMessage(_ProfessionalPatient patient) {
+    final existing = _followUpMessages[patient.patientId];
     final controller =
-        TextEditingController(text: _followUpMessages[patient.patientId] ?? '');
+        TextEditingController(text: existing?.isNotEmpty == true ? existing!.first.body : '');
     _openTextSheet(
       title: 'Follow-up message',
       subtitle:
@@ -900,7 +926,18 @@ class _ProfessionalDashboardScreenState
           if (value.isEmpty) {
             _followUpMessages.remove(patient.patientId);
           } else {
-            _followUpMessages[patient.patientId] = value;
+            _followUpMessages[patient.patientId] = [
+              if (existing != null) ...existing,
+              BackendFollowUpMessage(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                patientId: patient.patientId,
+                professionalId: widget.session?.identifier ?? '',
+                body: value,
+                status: 'sent',
+                createdAt: DateTime.now(),
+                readAt: null,
+              ),
+            ];
           }
           _auditEntries.insert(
             0,
@@ -1040,6 +1077,55 @@ class _ProfessionalDashboardScreenState
     ).whenComplete(controller.dispose);
   }
 
+  void _exportData() async {
+    final patients = _patientsForDashboard();
+    final selected = _selectedPatient(patients);
+
+    final StringBuffer csv = StringBuffer();
+    csv.writeln('Malva Professional Dashboard Export');
+    csv.writeln('Date: ${DateTime.now()}');
+    csv.writeln();
+
+    csv.writeln('--- Patient Info ---');
+    csv.writeln('Name: ${selected?.displayName ?? "N/A"}');
+    csv.writeln('ID: ${selected?.patientId ?? "N/A"}');
+    csv.writeln();
+
+    csv.writeln('--- Screening History ---');
+    csv.writeln('ID,PHQ-9 Score,PHQ-9 Level,GAD-7 Score,GAD-7 Level,Crisis,Created');
+    if (selected != null) {
+      for (final s in selected.screenings) {
+        csv.writeln('${s.id},${s.phq9Score},${s.phq9Level},${s.gad7Score},${s.gad7Level},${s.crisisFlag},${s.createdAt}');
+      }
+    }
+    csv.writeln();
+
+    csv.writeln('--- Timeline Events ---');
+    csv.writeln('ID,Type,Title,Body,Created');
+    if (selected != null) {
+      final events = _timelineEventsByPatient[selected.patientId] ?? const <BackendTimelineEvent>[];
+      for (final e in events) {
+        csv.writeln('${e.id},${e.type},${e.title},${e.body},${e.createdAt}');
+      }
+    }
+    csv.writeln();
+
+    csv.writeln('--- Audit Logs ---');
+    csv.writeln('Title,Body,Created');
+    for (final a in _auditEntries) {
+      csv.writeln('${a.title},${a.body},${a.createdAt}');
+    }
+
+    try {
+      await Share.share(csv.toString(), subject: 'Malva Dashboard Export');
+    } on Object {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Export gagal'), backgroundColor: MalvaColors.danger),
+      );
+    }
+  }
+
   void _openExportSummary(_ProfessionalPatient patient) {
     final latest = patient.latestScreening;
     final summary = [
@@ -1054,9 +1140,9 @@ class _ProfessionalDashboardScreenState
         'Crisis flag: ${latest.crisisFlag ? 'Ya' : 'Tidak'}',
       ],
       if (_professionalNotes[patient.patientId]?.isNotEmpty == true)
-        'Catatan profesional: ${_professionalNotes[patient.patientId]}',
+        'Catatan profesional: ${_professionalNotes[patient.patientId]!.map((n) => n.body).join("; ")}',
       if (_followUpMessages[patient.patientId]?.isNotEmpty == true)
-        'Follow-up: ${_followUpMessages[patient.patientId]}',
+        'Follow-up: ${_followUpMessages[patient.patientId]!.map((f) => f.body).join("; ")}',
     ].join('\n');
 
     final csvData = [
@@ -1128,14 +1214,8 @@ class _ProfessionalDashboardScreenState
           ),
           FilledButton.icon(
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Data telah disalin. Untuk export PDF, gunakan fitur print browser.',
-                  ),
-                ),
-              );
               Navigator.pop(context);
+              _exportData();
             },
             icon: const Icon(Icons.copy_rounded),
             label: const Text('Copy Data'),
@@ -1339,7 +1419,7 @@ class _PatientSearch extends StatelessWidget {
     return TextField(
       onChanged: onChanged,
       decoration: const InputDecoration(
-        labelText: '14. Filter/search pasien',
+        labelText: 'Filter/search pasien',
         hintText: 'Cari nama, patient id, atau level risiko',
         prefixIcon: Icon(Icons.search_rounded),
       ),
@@ -2097,14 +2177,14 @@ class _MedicationRow extends StatelessWidget {
 
 class _ProfessionalNotesSection extends StatelessWidget {
   const _ProfessionalNotesSection({
-    required this.note,
-    required this.followUp,
+    required this.notes,
+    required this.followUps,
     required this.onEditNote,
     required this.onFollowUp,
   });
 
-  final String? note;
-  final String? followUp;
+  final List<BackendProfessionalNote> notes;
+  final List<BackendFollowUpMessage> followUps;
   final VoidCallback onEditNote;
   final VoidCallback onFollowUp;
 
@@ -2120,8 +2200,8 @@ class _ProfessionalNotesSection extends StatelessWidget {
               child: ActionTile(
                 icon: Icons.edit_note_rounded,
                 title: 'Catatan profesional',
-                subtitle: note?.isNotEmpty == true
-                    ? note!
+                subtitle: notes.isNotEmpty
+                    ? notes.first.body
                     : 'Tambah catatan internal lokal',
                 onTap: onEditNote,
               ),
@@ -2131,8 +2211,8 @@ class _ProfessionalNotesSection extends StatelessWidget {
               child: ActionTile(
                 icon: Icons.send_rounded,
                 title: 'Follow-up',
-                subtitle: followUp?.isNotEmpty == true
-                    ? followUp!
+                subtitle: followUps.isNotEmpty
+                    ? followUps.first.body
                     : 'Buat draft arahan pasien',
                 color: MalvaColors.orchid,
                 onTap: onFollowUp,
@@ -2140,6 +2220,46 @@ class _ProfessionalNotesSection extends StatelessWidget {
             ),
           ],
         ),
+        if (notes.length > 1) ...[
+          const SizedBox(height: 12),
+          const Text('Riwayat catatan profesional:',
+              style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          for (final note in notes)
+            SoftCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(note.body, maxLines: 3, overflow: TextOverflow.ellipsis),
+                  if (note.updatedAt != null)
+                    Text(
+                      _formatDate(note.updatedAt),
+                      style: const TextStyle(fontSize: 11, color: Colors.black54),
+                    ),
+                ],
+              ),
+            ),
+        ],
+        if (followUps.length > 1) ...[
+          const SizedBox(height: 12),
+          const Text('Riwayat follow-up:',
+              style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          for (final fu in followUps)
+            SoftCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(fu.body, maxLines: 3, overflow: TextOverflow.ellipsis),
+                  if (fu.createdAt != null)
+                    Text(
+                      _formatDate(fu.createdAt),
+                      style: const TextStyle(fontSize: 11, color: Colors.black54),
+                    ),
+                ],
+              ),
+            ),
+        ],
       ],
     );
   }

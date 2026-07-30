@@ -18,6 +18,7 @@ class HomeScreen extends StatefulWidget {
     required this.onOpenDiary,
     required this.onOpenChat,
     required this.onOpenMore,
+    required this.onOpenAssessment,
     this.session,
     this.apiClient,
   });
@@ -28,6 +29,7 @@ class HomeScreen extends StatefulWidget {
   final VoidCallback onOpenDiary;
   final VoidCallback onOpenChat;
   final VoidCallback onOpenMore;
+  final VoidCallback onOpenAssessment;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
@@ -183,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icons.fact_check_rounded,
                       title: 'Assessment',
                       subtitle: 'PHQ-9, GAD-7, dan rule engine',
-                      onTap: widget.onOpenMore,
+                      onTap: widget.onOpenAssessment,
                       color: MalvaColors.amber,
                     ),
                     const SizedBox(height: 76),
@@ -312,13 +314,42 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _notifyProfessionalCrisis(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Notifikasi crisis telah dikirim ke profesional Anda.'),
-        backgroundColor: MalvaColors.danger,
-      ),
-    );
+  Future<void> _notifyProfessionalCrisis(BuildContext context) async {
+    final apiClient = widget.apiClient;
+    final accessToken = widget.session?.accessToken;
+    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tidak dapat mengirim notifikasi: tidak terhubung ke server.'),
+          backgroundColor: MalvaColors.danger,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await apiClient.createCrisisAlert(
+        accessToken: accessToken,
+        patientName: widget.store.patient.name,
+        message: 'Pasien mengaktifkan alert crisis dari aplikasi.',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Notifikasi crisis telah dikirim ke profesional Anda.'),
+          backgroundColor: MalvaColors.danger,
+        ),
+      );
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal mengirim notifikasi: $e'),
+          backgroundColor: MalvaColors.danger,
+        ),
+      );
+    }
   }
 }
 

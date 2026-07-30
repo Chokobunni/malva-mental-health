@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../assessment_engine.dart';
 import '../models.dart';
@@ -168,6 +171,8 @@ class MalvaStore extends ChangeNotifier {
   final List<AssessmentResult> _assessments;
   final List<ScreeningBundle> _screeningBundles;
   final MalvaApiClient? _apiClient;
+  static const _secureStorage = FlutterSecureStorage();
+  static const _sessionKey = 'malva_active_session';
 
   final Map<String, _Credential> _patientAccounts = {
     'pasien@malva.app':
@@ -675,6 +680,45 @@ class MalvaStore extends ChangeNotifier {
 
     saveScreeningBundle(bundle);
     return bundle;
+  }
+
+  Future<void> persistSession(AuthSession session) async {
+    final data = jsonEncode({
+      'role': session.role.name,
+      'identifier': session.identifier,
+      'displayName': session.displayName,
+      'backendUserId': session.backendUserId,
+      'accessToken': session.accessToken,
+      'refreshToken': session.refreshToken,
+      'backendSynced': session.backendSynced,
+    });
+    await _secureStorage.write(key: _sessionKey, value: data);
+  }
+
+  Future<AuthSession?> restoreSession() async {
+    try {
+      final data = await _secureStorage.read(key: _sessionKey);
+      if (data == null || data.isEmpty) return null;
+      final map = jsonDecode(data) as Map<String, dynamic>;
+      final role = map['role'] == UserRole.professional.name
+          ? UserRole.professional
+          : UserRole.patient;
+      return AuthSession(
+        role: role,
+        identifier: map['identifier']?.toString() ?? '',
+        displayName: map['displayName']?.toString() ?? '',
+        backendUserId: map['backendUserId']?.toString(),
+        accessToken: map['accessToken']?.toString(),
+        refreshToken: map['refreshToken']?.toString(),
+        backendSynced: map['backendSynced'] == true,
+      );
+    } on Object {
+      return null;
+    }
+  }
+
+  Future<void> clearSession() async {
+    await _secureStorage.delete(key: _sessionKey);
   }
 
   void addRecord(HealthRecord record) {

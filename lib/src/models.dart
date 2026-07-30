@@ -332,3 +332,13 @@ class ChatMessage {
         'timestamp': timestamp.toIso8601String(),
       };
 }
+
+class ChatPresence {
+  const ChatPresence({
+    required this.userId,
+    required this.isOnline,
+  });
+
+  final String userId;
+  final bool isOnline;
+}

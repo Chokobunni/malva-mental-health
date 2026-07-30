@@ -33,6 +33,8 @@ class _ChatScreenState extends State<ChatScreen> {
   StreamSubscription<ChatState>? _stateSub;
   StreamSubscription<ChatMessage>? _messageSub;
   StreamSubscription<bool>? _typingSub;
+  StreamSubscription<ChatPresence>? _presenceSub;
+  final Map<String, bool> _onlineUsers = {};
 
   @override
   void initState() {
@@ -55,6 +57,7 @@ class _ChatScreenState extends State<ChatScreen> {
       userId: session.backendUserId ?? session.identifier,
       accessToken: session.accessToken!,
       baseUrl: baseUrl,
+      senderName: session.displayName,
     );
 
     _stateSub = _chatService!.stateStream.listen((state) {
@@ -79,6 +82,12 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) setState(() => _otherTyping = isTyping);
     });
 
+    _presenceSub = _chatService!.presenceStream.listen((presence) {
+      if (mounted) {
+        setState(() => _onlineUsers[presence.userId] = presence.isOnline);
+      }
+    });
+
     _chatService!.connect();
   }
 
@@ -89,6 +98,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _stateSub?.cancel();
     _messageSub?.cancel();
     _typingSub?.cancel();
+    _presenceSub?.cancel();
     _chatService?.dispose();
     super.dispose();
   }
@@ -123,7 +133,32 @@ class _ChatScreenState extends State<ChatScreen> {
               widget.otherUserName,
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
             ),
-            _ConnectionStatusChip(state: _chatState),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ConnectionStatusChip(state: _chatState),
+                if (_onlineUsers.values.any((online) => online)) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: MalvaColors.mint,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Text(
+                    'Online',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
         actions: [

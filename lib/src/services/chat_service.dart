@@ -10,11 +10,13 @@ class ChatService {
     required this.userId,
     required this.accessToken,
     required this.baseUrl,
+    this.senderName = '',
   });
 
   final String userId;
   final String accessToken;
   final String baseUrl;
+  final String senderName;
 
   WebSocketChannel? _channel;
   ChatState _state = ChatState.disconnected;
@@ -24,13 +26,17 @@ class ChatService {
   Timer? _typingDebounceTimer;
   bool _disposed = false;
 
+  final _pendingMessages = <Map<String, dynamic>>[];
+
   final _stateController = StreamController<ChatState>.broadcast();
   final _messageController = StreamController<ChatMessage>.broadcast();
   final _typingController = StreamController<bool>.broadcast();
+  final _presenceController = StreamController<ChatPresence>.broadcast();
 
   Stream<ChatState> get stateStream => _stateController.stream;
   Stream<ChatMessage> get messageStream => _messageController.stream;
   Stream<bool> get typingStream => _typingController.stream;
+  Stream<ChatPresence> get presenceStream => _presenceController.stream;
 
   ChatState get currentState => _state;
 
@@ -54,6 +60,7 @@ class ChatService {
       _updateState(ChatState.connected);
       _reconnectAttempt = 0;
       _startPing();
+      _flushPendingMessages();
     } on Object catch (_) {
       _scheduleReconnect();
     }
@@ -84,10 +91,15 @@ class ChatService {
             }
           }
         case 'realtime.connected':
-          // connection confirmed by server
           break;
         case 'presence':
-          // presence events (online/offline) – ignored for now
+          if (eventData is Map<String, dynamic>) {
+            final presence = ChatPresence(
+              userId: eventData['user_id']?.toString() ?? '',
+              isOnline: eventData['online'] == true,
+            );
+            _presenceController.add(presence);
+          }
           break;
         default:
           break;
@@ -148,7 +160,6 @@ class ChatService {
   }
 
   void sendMessage(String text) {
-    if (_state != ChatState.connected || _channel == null) return;
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
 
@@ -157,11 +168,30 @@ class ChatService {
       'data': {
         'id': 'msg_${DateTime.now().millisecondsSinceEpoch}',
         'sender_id': userId,
+        'sender_name': senderName,
         'text': trimmed,
         'timestamp': DateTime.now().toIso8601String(),
       },
     };
-    _channel!.sink.add(jsonEncode(event));
+
+    if (_state == ChatState.connected && _channel != null) {
+      _channel!.sink.add(jsonEncode(event));
+    } else {
+      _pendingMessages.add(event);
+    }
+  }
+
+  void _flushPendingMessages() {
+    if (_pendingMessages.isEmpty) return;
+    final toSend = List<Map<String, dynamic>>.from(_pendingMessages);
+    _pendingMessages.clear();
+    for (final event in toSend) {
+      if (_channel != null && _state == ChatState.connected) {
+        _channel!.sink.add(jsonEncode(event));
+      } else {
+        _pendingMessages.add(event);
+      }
+    }
   }
 
   void startTyping() {
@@ -204,5 +234,6 @@ class ChatService {
     _stateController.close();
     _messageController.close();
     _typingController.close();
+    _presenceController.close();
   }
 }

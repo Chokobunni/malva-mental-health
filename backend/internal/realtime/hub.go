@@ -83,6 +83,24 @@ func (h *Hub) Publish(userID string, event Event) {
 	}
 }
 
+func (h *Hub) Broadcast(msg interface{}) {
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		h.logger.Warn("broadcast marshal failed", "error", err)
+		return
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, clients := range h.clients {
+		for c := range clients {
+			select {
+			case c.send <- payload:
+			default:
+			}
+		}
+	}
+}
+
 func (h *Hub) register(c *client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

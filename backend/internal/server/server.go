@@ -181,6 +181,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PATCH /v1/notifications/{notification_id}/read", s.requireAuth(s.markNotificationRead))
 	mux.HandleFunc("POST /v1/notifications/test", s.requireAuth(s.testNotification))
 	mux.HandleFunc("GET /v1/realtime/ws", s.realtimeWS)
+	mux.HandleFunc("POST /v1/crisis-alerts", s.requireAuth(s.handleCrisisAlert))
 	return s.recover(s.securityHeaders(s.cors(mux)))
 }
 
@@ -1027,6 +1028,33 @@ func (s *Server) testNotification(w http.ResponseWriter, r *http.Request, claims
 		Data: notification,
 	})
 	writeJSON(w, http.StatusCreated, map[string]any{"notification": notification})
+}
+
+func (s *Server) handleCrisisAlert(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	var req struct {
+		PatientName string `json:"patient_name"`
+		Message     string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	crisisEvent := map[string]interface{}{
+		"type": "crisis_alert",
+		"data": map[string]interface{}{
+			"patient_name": req.PatientName,
+			"message":      req.Message,
+			"timestamp":    time.Now().UTC().Format(time.RFC3339),
+		},
+	}
+
+	s.hub.Broadcast(crisisEvent)
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "sent",
+		"message": "Crisis alert dikirim ke profesional",
+	})
 }
 
 func (s *Server) realtimeWS(w http.ResponseWriter, r *http.Request) {

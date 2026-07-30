@@ -59,8 +59,8 @@ class _MalvaAppState extends State<MalvaApp> {
       setState(() => _showSplash = false);
     });
 
-    // Initialize FCM handlers early so background messages are captured.
     unawaited(_pushNotifications.initialize());
+    unawaited(_restoreSession());
   }
 
   @override
@@ -149,12 +149,15 @@ class _MalvaAppState extends State<MalvaApp> {
       _session = session;
       _isTakingInitialScreening = false;
     });
+    _apiClient.setRefreshToken(session.refreshToken);
     unawaited(_pushNotifications.registerDeviceToken(session));
+    unawaited(_store.persistSession(session));
     _scheduleAllMedicationReminders();
   }
 
   void _handleLogout() {
     _dashboardSyncService.stopSync();
+    unawaited(_store.clearSession());
     setState(() {
       _session = null;
       _isTakingInitialScreening = false;
@@ -164,6 +167,16 @@ class _MalvaAppState extends State<MalvaApp> {
   void _scheduleAllMedicationReminders() {
     for (final med in _store.medications) {
       unawaited(_medicationReminderService.scheduleMedicationReminder(med));
+    }
+  }
+
+  Future<void> _restoreSession() async {
+    final session = await _store.restoreSession();
+    if (session != null && mounted) {
+      setState(() => _session = session);
+      _apiClient.setRefreshToken(session.refreshToken);
+      unawaited(_pushNotifications.registerDeviceToken(session));
+      _scheduleAllMedicationReminders();
     }
   }
 

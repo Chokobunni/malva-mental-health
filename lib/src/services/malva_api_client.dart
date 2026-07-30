@@ -757,6 +757,22 @@ class MalvaApiClient {
     return (payload['updated'] as num?)?.toInt() ?? 0;
   }
 
+  Future<void> createCrisisAlert({
+    required String accessToken,
+    required String patientName,
+    required String message,
+  }) async {
+    await _send(
+      'POST',
+      '/v1/crisis-alerts',
+      accessToken: accessToken,
+      body: {
+        'patient_name': patientName,
+        'message': message,
+      },
+    );
+  }
+
   Uri realtimeUri(String accessToken) {
     final scheme = baseUri.scheme == 'https' ? 'wss' : 'ws';
     return baseUri.replace(

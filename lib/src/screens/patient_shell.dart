@@ -9,6 +9,7 @@ import 'diary_screen.dart';
 import 'home_screen.dart';
 import 'medication_screen.dart';
 import 'mood_screen.dart';
+import 'assessment_screen.dart';
 import 'more_screen.dart';
 
 class PatientShell extends StatefulWidget {
@@ -46,6 +47,17 @@ class _PatientShellState extends State<PatientShell> {
         onOpenDiary: () => setState(() => _index = 3),
         onOpenChat: () => setState(() => _index = 4),
         onOpenMore: () => setState(() => _index = 5),
+        onOpenAssessment: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AssessmentScreen(
+                store: widget.store,
+                session: widget.session,
+              ),
+            ),
+          );
+        },
       ),
       MoodScreen(
         store: widget.store,
