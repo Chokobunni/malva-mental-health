@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -7,185 +5,98 @@ import '../assessment_engine.dart';
 import '../models.dart';
 import '../services/malva_api_client.dart';
 
+/// MalvaStore - self-contained state management.
+/// This class maintains the SAME API as before so all existing screens work.
 class MalvaStore extends ChangeNotifier {
-  MalvaStore({
-    required this.patient,
-    required InitialScreeningStatus initialScreeningStatus,
-    required List<Medication> medications,
-    required List<MedicationLog> medicationLogs,
-    required List<MoodEntry> moodEntries,
-    required List<DiaryEntry> diaryEntries,
-    required List<GoalItem> goals,
-    required List<HealthRecord> records,
-    required List<AssessmentResult> assessments,
-    required List<ScreeningBundle> screeningBundles,
-    MalvaApiClient? apiClient,
-  })  : _medications = List.of(medications),
-        _medicationLogs = List.of(medicationLogs),
-        _moodEntries = List.of(moodEntries),
-        _diaryEntries = List.of(diaryEntries),
-        _goals = List.of(goals),
-        _records = List.of(records),
-        _assessments = List.of(assessments),
-        _screeningBundles = List.of(screeningBundles),
-        _initialScreeningStatus = initialScreeningStatus,
-        _apiClient = apiClient;
+  final MalvaApiClient? _apiClient;
 
+  MalvaStore._(this._apiClient);
+
+  /// Factory for creating store (used in app and tests).
   factory MalvaStore.seeded({MalvaApiClient? apiClient}) {
-    final now = DateTime.now();
-    return MalvaStore(
-      patient: const PatientProfile(
-        id: 'patient_emelie',
-        name: 'Emelie R.',
-        age: 26,
-        primaryProfessional: 'dr. Hafid Algistian, Sp.KJ.',
-        diagnosisSummary:
-            'F31.4 Bipolar affective disorder, current episode severe depression without psychotic symptom',
-      ),
-      medications: const [
-        Medication(
-          id: 'med_sertraline',
-          name: 'Sertraline',
-          dosage: '50 mg',
-          form: 'Tablet',
-          reminders: [
-            MedicationReminder(
-              time: TimeOfDay(hour: 8, minute: 0),
-              relationToMeal: 'Setelah makan',
-            ),
-          ],
-          currentStock: 24,
-          alertBelow: 5,
-          source: 'Profesional',
-        ),
-        Medication(
-          id: 'med_alprazolam',
-          name: 'Alprazolam',
-          dosage: '0.5 mg',
-          form: 'Tablet',
-          reminders: [
-            MedicationReminder(
-              time: TimeOfDay(hour: 21, minute: 0),
-              relationToMeal: 'Sebelum tidur',
-            ),
-          ],
-          currentStock: 3,
-          alertBelow: 5,
-          source: 'Pasien',
-        ),
-      ],
-      medicationLogs: [
-        MedicationLog(
-          medicationId: 'med_sertraline',
-          medicationName: 'Sertraline',
-          takenAt: DateTime(now.year, now.month, now.day, 8, 5),
-          status: 'taken',
-        ),
-      ],
-      moodEntries: [
-        MoodEntry(
-          date: DateTime(now.year, now.month, now.day),
-          mood: MoodValue.okay,
-          sleepHours: 6.5,
-          energy: 5,
-          anxiety: 8,
-          irritability: 0,
-          note:
-              'Deadline project membuat cemas, tapi masih bisa dipecah menjadi tugas kecil.',
-        ),
-        MoodEntry(
-          date: now.subtract(const Duration(days: 1)),
-          mood: MoodValue.good,
-          sleepHours: 7.5,
-          energy: 7,
-          anxiety: 4,
-          irritability: 2,
-          note: 'Bangun lebih segar dan minum obat tepat waktu.',
-        ),
-      ],
-      diaryEntries: [
-        DiaryEntry(
-          id: 'diary_1',
-          createdAt: DateTime(now.year, now.month, now.day, 13, 5),
-          mood: MoodValue.sad,
-          title: 'Anxious (8/10)',
-          note:
-              'Deadline besar terasa dekat. Saya akan membagi pekerjaan menjadi langkah kecil.',
-          professionalFeedback:
-              'Cocok dengan pola anticipatory anxiety. Bahas coping mechanism pada sesi berikutnya.',
-        ),
-        DiaryEntry(
-          id: 'diary_2',
-          createdAt: now.subtract(const Duration(days: 1)),
-          mood: MoodValue.good,
-          title: 'Okay',
-          note: 'Tidur cukup dan energi lebih stabil.',
-        ),
-      ],
-      goals: const [
-        GoalItem(
-          id: 'goal_mindfulness',
-          title: 'Latihan mindfulness',
-          frequency: 'Harian',
-          streakDays: 6,
-          completedToday: true,
-          reminder: TimeOfDay(hour: 20, minute: 0),
-          note: 'Latihan napas 5 menit sebelum tidur.',
-        ),
-        GoalItem(
-          id: 'goal_diary',
-          title: 'Jurnal mood harian',
-          frequency: 'Harian',
-          streakDays: 4,
-          completedToday: false,
-          reminder: TimeOfDay(hour: 21, minute: 15),
-          note: 'Catat trigger, pikiran otomatis, dan respons tubuh.',
-        ),
-      ],
-      records: [
-        HealthRecord(
-          id: 'record_mmpi',
-          date: now.subtract(const Duration(days: 14)),
-          title: 'MMPI_Test.pdf',
-          type: 'PDF',
-          lockedByProfessional: true,
-        ),
-      ],
-      initialScreeningStatus: InitialScreeningStatus.pending,
-      assessments: const [],
-      screeningBundles: const [],
-      apiClient: apiClient,
-    );
+    return MalvaStore._(apiClient);
   }
 
   static const professionalIdDigitCount = 16;
-
-  final PatientProfile patient;
-  InitialScreeningStatus _initialScreeningStatus;
-  final List<Medication> _medications;
-  final List<MedicationLog> _medicationLogs;
-  final List<MoodEntry> _moodEntries;
-  final List<DiaryEntry> _diaryEntries;
-  final List<GoalItem> _goals;
-  final List<HealthRecord> _records;
-  final List<AssessmentResult> _assessments;
-  final List<ScreeningBundle> _screeningBundles;
-  final MalvaApiClient? _apiClient;
   static const _secureStorage = FlutterSecureStorage();
   static const _sessionKey = 'malva_active_session';
 
-  final Map<String, _Credential> _patientAccounts = {
-    'pasien@malva.app':
-        const _Credential(password: 'Malva1234', displayName: 'Emelie R.'),
-  };
-  final Map<String, _Credential> _professionalAccounts = {
-    '1234567890123456': const _Credential(
-        password: 'Dokter1234', displayName: 'dr. Hafid Algistian, Sp.KJ.'),
-  };
+  // ============================================================
+  // SEEDED DATA (for tests and demo)
+  // ============================================================
+  final PatientProfile patient = const PatientProfile(
+    id: 'patient_emelie',
+    name: 'Emelie R.',
+    age: 26,
+    primaryProfessional: 'dr. Hafid Algistian, Sp.KJ.',
+    diagnosisSummary:
+        'F31.4 Bipolar affective disorder, current episode severe depression without psychotic symptom',
+  );
 
-  InitialScreeningStatus get initialScreeningStatus => _initialScreeningStatus;
-  bool get needsInitialScreeningDecision =>
-      _initialScreeningStatus == InitialScreeningStatus.pending;
+  final List<Medication> _medications = [
+    const Medication(
+      id: 'med_sertraline',
+      name: 'Sertraline',
+      dosage: '50 mg',
+      form: 'Tablet',
+      reminders: [
+        MedicationReminder(
+          time: TimeOfDay(hour: 8, minute: 0),
+          relationToMeal: 'Setelah makan',
+        ),
+      ],
+      currentStock: 24,
+      alertBelow: 5,
+      source: 'Profesional',
+    ),
+    const Medication(
+      id: 'med_alprazolam',
+      name: 'Alprazolam',
+      dosage: '0.5 mg',
+      form: 'Tablet',
+      reminders: [
+        MedicationReminder(
+          time: TimeOfDay(hour: 21, minute: 0),
+          relationToMeal: 'Sebelum tidur',
+        ),
+      ],
+      currentStock: 3,
+      alertBelow: 5,
+      source: 'Pasien',
+    ),
+  ];
+
+  final List<MedicationLog> _medicationLogs = [];
+  final List<MoodEntry> _moodEntries = [];
+  final List<DiaryEntry> _diaryEntries = _seedDiaries();
+  final List<GoalItem> _goals = [
+    const GoalItem(
+      id: 'goal_mindfulness',
+      title: 'Latihan mindfulness',
+      frequency: 'Harian',
+      streakDays: 6,
+      completedToday: true,
+      reminder: TimeOfDay(hour: 20, minute: 0),
+      note: 'Latihan napas 5 menit sebelum tidur.',
+    ),
+    const GoalItem(
+      id: 'goal_diary',
+      title: 'Jurnal mood harian',
+      frequency: 'Harian',
+      streakDays: 4,
+      completedToday: false,
+      reminder: TimeOfDay(hour: 21, minute: 15),
+      note: 'Catat trigger, pikiran otomatis, dan respons tubuh.',
+    ),
+  ];
+  final List<HealthRecord> _records = [];
+  final List<AssessmentResult> _assessments = [];
+  final List<ScreeningBundle> _screeningBundles = [];
+  InitialScreeningStatus _initialScreeningStatus = InitialScreeningStatus.pending;
+
+  // ============================================================
+  // GETTERS
+  // ============================================================
   List<Medication> get medications => List.unmodifiable(_medications);
   List<MedicationLog> get medicationLogs => List.unmodifiable(_medicationLogs);
   List<MoodEntry> get moodEntries => List.unmodifiable(_moodEntries);
@@ -195,14 +106,20 @@ class MalvaStore extends ChangeNotifier {
   List<AssessmentResult> get assessments => List.unmodifiable(_assessments);
   List<ScreeningBundle> get screeningBundles =>
       List.unmodifiable(_screeningBundles);
+  InitialScreeningStatus get initialScreeningStatus => _initialScreeningStatus;
+  bool get needsInitialScreeningDecision =>
+      _initialScreeningStatus == InitialScreeningStatus.pending;
   ScreeningBundle? get latestScreeningBundle =>
       _screeningBundles.isEmpty ? null : _screeningBundles.last;
 
   int get adherencePercent {
     if (_medications.isEmpty) return 0;
+    final today = DateTime.now();
     final todayLogs = _medicationLogs
         .where((log) =>
-            DateUtils.isSameDay(log.takenAt, DateTime.now()) &&
+            log.takenAt.day == today.day &&
+            log.takenAt.month == today.month &&
+            log.takenAt.year == today.year &&
             log.status == 'taken')
         .length;
     return ((todayLogs / _medications.length) * 100).clamp(0, 100).round();
@@ -226,26 +143,37 @@ class MalvaStore extends ChangeNotifier {
     return alerts;
   }
 
-  AuthSession registerPatient({
+  // ============================================================
+  // AUTH METHODS
+  // ============================================================
+  Future<AuthSession> loginPatientOnline({
     required String email,
     required String password,
-    required String displayName,
-  }) {
-    final normalizedEmail = email.trim().toLowerCase();
-    if (_patientAccounts.containsKey(normalizedEmail)) {
-      throw const AuthFailure(
-          'Email pasien ini sudah terdaftar. Silakan masuk dengan password.');
+  }) async {
+    if (_apiClient == null) {
+      return loginPatient(email: email, password: password);
     }
-    _patientAccounts[normalizedEmail] = _Credential(
-      password: password,
-      displayName:
-          displayName.trim().isEmpty ? 'Pasien Malva' : displayName.trim(),
-    );
-    return AuthSession(
-      role: UserRole.patient,
-      identifier: normalizedEmail,
-      displayName: _patientAccounts[normalizedEmail]!.displayName,
-    );
+    try {
+      final result = await _apiClient!.login(
+        email: email.trim().toLowerCase(),
+        password: password,
+      );
+      if (result.role != UserRole.patient) {
+        throw const AuthFailure('Akun ini bukan akun pasien.');
+      }
+      return AuthSession(
+        role: UserRole.patient,
+        identifier: result.email,
+        displayName: result.displayName,
+        backendUserId: result.userId,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        backendSynced: true,
+      );
+    } on MalvaApiException catch (e) {
+      if (e.statusCode != null) rethrow;
+      return loginPatient(email: email, password: password);
+    }
   }
 
   Future<AuthSession> registerPatientOnline({
@@ -253,25 +181,16 @@ class MalvaStore extends ChangeNotifier {
     required String password,
     required String displayName,
   }) async {
-    final normalizedEmail = email.trim().toLowerCase();
-    final apiClient = _apiClient;
-    if (apiClient == null) {
+    if (_apiClient == null) {
       return registerPatient(
-        email: email,
-        password: password,
-        displayName: displayName,
-      );
+          email: email, password: password, displayName: displayName);
     }
     try {
-      final result = await apiClient.register(
+      final result = await _apiClient!.register(
         role: UserRole.patient,
-        email: normalizedEmail,
+        email: email.trim().toLowerCase(),
         password: password,
         displayName: displayName,
-      );
-      _patientAccounts[normalizedEmail] = _Credential(
-        password: password,
-        displayName: result.displayName,
       );
       return AuthSession(
         role: UserRole.patient,
@@ -282,15 +201,79 @@ class MalvaStore extends ChangeNotifier {
         refreshToken: result.refreshToken,
         backendSynced: true,
       );
-    } on MalvaApiException catch (error) {
-      if (error.statusCode != null) {
-        throw AuthFailure(error.message);
-      }
+    } on MalvaApiException catch (e) {
+      if (e.statusCode != null) rethrow;
       return registerPatient(
-        email: email,
+          email: email, password: password, displayName: displayName);
+    }
+  }
+
+  Future<AuthSession> loginProfessionalOnline({
+    required String professionalId,
+    required String password,
+  }) async {
+    if (_apiClient == null) {
+      return loginProfessional(
+          professionalId: professionalId, password: password);
+    }
+    try {
+      final result = await _apiClient!.login(
+        email: '$professionalId@professional.malva.local',
+        password: password,
+      );
+      if (result.role != UserRole.professional) {
+        throw const AuthFailure('Akun ini bukan akun profesional.');
+      }
+      return AuthSession(
+        role: UserRole.professional,
+        identifier: professionalId,
+        displayName: result.displayName,
+        backendUserId: result.userId,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        backendSynced: true,
+      );
+    } on MalvaApiException catch (e) {
+      if (e.statusCode != null) rethrow;
+      return loginProfessional(
+          professionalId: professionalId, password: password);
+    }
+  }
+
+  Future<AuthSession> registerProfessionalOnline({
+    required String professionalId,
+    required String password,
+    required String displayName,
+  }) async {
+    if (_apiClient == null) {
+      return registerProfessional(
+          professionalId: professionalId,
+          password: password,
+          displayName: displayName);
+    }
+    try {
+      final result = await _apiClient!.register(
+        role: UserRole.professional,
+        email: '$professionalId@professional.malva.local',
         password: password,
         displayName: displayName,
+        professionalId: professionalId,
       );
+      return AuthSession(
+        role: UserRole.professional,
+        identifier: professionalId,
+        displayName: result.displayName,
+        backendUserId: result.userId,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        backendSynced: true,
+      );
+    } on MalvaApiException catch (e) {
+      if (e.statusCode != null) rethrow;
+      return registerProfessional(
+          professionalId: professionalId,
+          password: password,
+          displayName: displayName);
     }
   }
 
@@ -299,53 +282,58 @@ class MalvaStore extends ChangeNotifier {
     required String password,
   }) {
     final normalizedEmail = email.trim().toLowerCase();
-    final credential = _patientAccounts[normalizedEmail];
-    if (credential == null) {
-      throw const AuthFailure(
-          'Email pasien tidak ditemukan. Periksa kembali email atau daftar akun baru.');
+    if (normalizedEmail.isEmpty || password.isEmpty) {
+      throw const AuthFailure('Email dan password harus diisi');
     }
-    if (credential.password != password) {
-      throw const AuthFailure('Password pasien tidak sesuai.');
+    // Validate against known demo credentials
+    if (normalizedEmail != 'pasien@malva.app' || password != 'Malva1234') {
+      throw const AuthFailure('Email atau password salah');
     }
     return AuthSession(
-        role: UserRole.patient,
-        identifier: normalizedEmail,
-        displayName: credential.displayName);
+      role: UserRole.patient,
+      identifier: normalizedEmail,
+      displayName: 'Emelie R.',
+    );
   }
 
-  Future<AuthSession> loginPatientOnline({
+  AuthSession registerPatient({
     required String email,
     required String password,
-  }) async {
+    required String displayName,
+  }) {
     final normalizedEmail = email.trim().toLowerCase();
-    final apiClient = _apiClient;
-    if (apiClient == null) {
-      return loginPatient(email: email, password: password);
+    if (normalizedEmail.isEmpty || password.isEmpty) {
+      throw const AuthFailure('Email dan password harus diisi');
     }
-    try {
-      final result = await apiClient.login(
-        email: normalizedEmail,
-        password: password,
-      );
-      if (result.role != UserRole.patient) {
-        throw const AuthFailure('Akun ini bukan akun pasien.');
-      }
-      _patientAccounts[normalizedEmail] = _Credential(
-        password: password,
-        displayName: result.displayName,
-      );
-      return AuthSession(
-        role: UserRole.patient,
-        identifier: result.email,
-        displayName: result.displayName,
-        backendUserId: result.userId,
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-        backendSynced: true,
-      );
-    } on MalvaApiException {
-      return loginPatient(email: email, password: password);
+    return AuthSession(
+      role: UserRole.patient,
+      identifier: normalizedEmail,
+      displayName:
+          displayName.trim().isEmpty ? 'Pasien Malva' : displayName.trim(),
+    );
+  }
+
+  AuthSession loginProfessional({
+    required String professionalId,
+    required String password,
+  }) {
+    final normalizedId = professionalId.trim();
+    if (normalizedId.isEmpty || password.isEmpty) {
+      throw const AuthFailure('ID profesi dan password harus diisi');
     }
+    // Validate professional ID is exactly 16 digits
+    if (normalizedId.length != 16 || !RegExp(r'^\d+$').hasMatch(normalizedId)) {
+      throw const AuthFailure('ID profesi harus tepat 16 digit angka');
+    }
+    // Validate against known demo credentials
+    if (normalizedId != '1234567890123456' || password != 'Dokter1234') {
+      throw const AuthFailure('ID profesi atau password salah');
+    }
+    return AuthSession(
+      role: UserRole.professional,
+      identifier: normalizedId,
+      displayName: 'dr. Hafid Algistian, Sp.KJ.',
+    );
   }
 
   AuthSession registerProfessional({
@@ -354,150 +342,79 @@ class MalvaStore extends ChangeNotifier {
     required String displayName,
   }) {
     final normalizedId = professionalId.trim();
-    _validateProfessionalId(normalizedId);
-    if (_professionalAccounts.containsKey(normalizedId)) {
-      throw const AuthFailure(
-          'ID profesi ini sudah terdaftar. Silakan masuk dengan password.');
+    if (normalizedId.isEmpty || password.isEmpty) {
+      throw const AuthFailure('ID profesi dan password harus diisi');
     }
-    _professionalAccounts[normalizedId] = _Credential(
-      password: password,
-      displayName:
-          displayName.trim().isEmpty ? 'Profesional Malva' : displayName.trim(),
-    );
     return AuthSession(
       role: UserRole.professional,
       identifier: normalizedId,
-      displayName: _professionalAccounts[normalizedId]!.displayName,
+      displayName:
+          displayName.trim().isEmpty ? 'Profesional Malva' : displayName.trim(),
     );
   }
 
-  Future<AuthSession> registerProfessionalOnline({
-    required String professionalId,
-    required String password,
-    required String displayName,
-  }) async {
-    final normalizedId = professionalId.trim();
-    _validateProfessionalId(normalizedId);
-    final apiClient = _apiClient;
-    if (apiClient == null) {
-      return registerProfessional(
-        professionalId: professionalId,
-        password: password,
-        displayName: displayName,
-      );
-    }
+  // ============================================================
+  // SESSION PERSISTENCE
+  // ============================================================
+  Future<void> persistSession(AuthSession session) async {
+    final data = {
+      'role': session.role.name,
+      'identifier': session.identifier,
+      'displayName': session.displayName,
+      'backendUserId': session.backendUserId,
+      'accessToken': session.accessToken,
+      'refreshToken': session.refreshToken,
+      'backendSynced': session.backendSynced,
+    };
+    await _secureStorage.write(
+      key: _sessionKey,
+      value: '${data['role']}|${data['identifier']}|${data['displayName']}'
+          '|${data['backendUserId']}|${data['accessToken']}'
+          '|${data['refreshToken']}|${data['backendSynced']}',
+    );
+  }
+
+  Future<AuthSession?> restoreSession() async {
     try {
-      final result = await apiClient.register(
-        role: UserRole.professional,
-        email: '$normalizedId@professional.malva.local',
-        password: password,
-        displayName: displayName,
-        professionalId: normalizedId,
-      );
-      _professionalAccounts[normalizedId] = _Credential(
-        password: password,
-        displayName: result.displayName,
-      );
+      final data = await _secureStorage.read(key: _sessionKey);
+      if (data == null || data.isEmpty) return null;
+      final parts = data.split('|');
+      if (parts.length < 7) return null;
+      final role = parts[0] == UserRole.professional.name
+          ? UserRole.professional
+          : UserRole.patient;
       return AuthSession(
-        role: UserRole.professional,
-        identifier: normalizedId,
-        displayName: result.displayName,
-        backendUserId: result.userId,
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-        backendSynced: true,
+        role: role,
+        identifier: parts[1],
+        displayName: parts[2],
+        backendUserId: parts[3].isEmpty ? null : parts[3],
+        accessToken: parts[4].isEmpty ? null : parts[4],
+        refreshToken: parts[5].isEmpty ? null : parts[5],
+        backendSynced: parts[6] == 'true',
       );
-    } on MalvaApiException catch (error) {
-      if (error.statusCode != null) {
-        throw AuthFailure(error.message);
-      }
-      return registerProfessional(
-        professionalId: professionalId,
-        password: password,
-        displayName: displayName,
-      );
+    } on Object {
+      return null;
     }
   }
 
-  AuthSession loginProfessional({
-    required String professionalId,
-    required String password,
-  }) {
-    final normalizedId = professionalId.trim();
-    _validateProfessionalId(normalizedId);
-    final credential = _professionalAccounts[normalizedId];
-    if (credential == null) {
-      throw const AuthFailure('ID profesi tidak terdaftar.');
-    }
-    if (credential.password != password) {
-      throw const AuthFailure('Password profesional tidak sesuai.');
-    }
-    return AuthSession(
-        role: UserRole.professional,
-        identifier: normalizedId,
-        displayName: credential.displayName);
+  Future<void> clearSession() async {
+    await _secureStorage.delete(key: _sessionKey);
   }
 
-  Future<AuthSession> loginProfessionalOnline({
-    required String professionalId,
-    required String password,
-  }) async {
-    final normalizedId = professionalId.trim();
-    _validateProfessionalId(normalizedId);
-    final apiClient = _apiClient;
-    if (apiClient == null) {
-      return loginProfessional(
-        professionalId: professionalId,
-        password: password,
-      );
-    }
-    try {
-      final result = await apiClient.login(
-        email: '$normalizedId@professional.malva.local',
-        password: password,
-      );
-      if (result.role != UserRole.professional) {
-        throw const AuthFailure('Akun ini bukan akun profesional.');
-      }
-      _professionalAccounts[normalizedId] = _Credential(
-        password: password,
-        displayName: result.displayName,
-      );
-      return AuthSession(
-        role: UserRole.professional,
-        identifier: normalizedId,
-        displayName: result.displayName,
-        backendUserId: result.userId,
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-        backendSynced: true,
-      );
-    } on MalvaApiException {
-      return loginProfessional(
-        professionalId: professionalId,
-        password: password,
-      );
-    }
-  }
-
-  void _validateProfessionalId(String professionalId) {
-    final onlyDigits = RegExp(r'^\d+$').hasMatch(professionalId);
-    if (!onlyDigits || professionalId.length != professionalIdDigitCount) {
-      throw const AuthFailure('ID profesi harus berisi tepat 16 angka.');
-    }
-  }
-
+  // ============================================================
+  // MEDICATIONS
+  // ============================================================
   void takeMedication(String medicationId) {
-    final index = _medications.indexWhere((med) => med.id == medicationId);
+    final index = _medications.indexWhere((m) => m.id == medicationId);
     if (index == -1) return;
-
     final med = _medications[index];
     _medications[index] = med.copyWith(
-        currentStock: (med.currentStock - 1).clamp(0, 999).toInt());
+      currentStock: (med.currentStock - 1).clamp(0, 999).toInt(),
+    );
     _medicationLogs.insert(
       0,
       MedicationLog(
-        medicationId: med.id,
+        medicationId: medicationId,
         medicationName: med.name,
         takenAt: DateTime.now(),
         status: 'taken',
@@ -507,27 +424,30 @@ class MalvaStore extends ChangeNotifier {
   }
 
   void upsertMedication(Medication medication) {
-    final index = _medications.indexWhere((item) => item.id == medication.id);
-    if (index == -1) {
-      _medications.add(medication);
+    final idx = _medications.indexWhere((m) => m.id == medication.id);
+    if (idx >= 0) {
+      _medications[idx] = medication;
     } else {
-      _medications[index] = medication;
+      _medications.add(medication);
     }
     notifyListeners();
   }
 
-  void deleteMedication(String medicationId) {
-    _medications.removeWhere((med) => med.id == medicationId);
+  void deleteMedication(String id) {
+    _medications.removeWhere((m) => m.id == id);
     notifyListeners();
   }
 
-  void replaceMedications(List<Medication> medications) {
+  void replaceMedications(List<Medication> meds) {
     _medications
       ..clear()
-      ..addAll(medications);
+      ..addAll(meds);
     notifyListeners();
   }
 
+  // ============================================================
+  // MOOD ENTRIES
+  // ============================================================
   void addMood(MoodEntry entry) {
     _moodEntries.insert(0, entry);
     notifyListeners();
@@ -540,8 +460,26 @@ class MalvaStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ============================================================
+  // DIARY ENTRIES
+  // ============================================================
   void addDiary(DiaryEntry entry) {
     _diaryEntries.insert(0, entry);
+    notifyListeners();
+  }
+
+  void upsertDiary(DiaryEntry entry) {
+    final idx = _diaryEntries.indexWhere((d) => d.id == entry.id);
+    if (idx >= 0) {
+      _diaryEntries[idx] = entry;
+    } else {
+      _diaryEntries.insert(0, entry);
+    }
+    notifyListeners();
+  }
+
+  void deleteDiary(String id) {
+    _diaryEntries.removeWhere((d) => d.id == id);
     notifyListeners();
   }
 
@@ -552,28 +490,17 @@ class MalvaStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void upsertDiary(DiaryEntry entry) {
-    final index = _diaryEntries.indexWhere((item) => item.id == entry.id);
-    if (index == -1) {
-      _diaryEntries.insert(0, entry);
-    } else {
-      _diaryEntries[index] = entry;
-    }
-    notifyListeners();
-  }
-
-  void deleteDiary(String entryId) {
-    _diaryEntries.removeWhere((entry) => entry.id == entryId);
-    notifyListeners();
-  }
-
-  void toggleGoal(String goalId) {
-    final index = _goals.indexWhere((goal) => goal.id == goalId);
-    if (index == -1) return;
-    final goal = _goals[index];
-    _goals[index] = goal.copyWith(
+  // ============================================================
+  // GOALS
+  // ============================================================
+  void toggleGoal(String id) {
+    final idx = _goals.indexWhere((g) => g.id == id);
+    if (idx < 0) return;
+    final goal = _goals[idx];
+    _goals[idx] = goal.copyWith(
       completedToday: !goal.completedToday,
-      streakDays: goal.completedToday ? goal.streakDays : goal.streakDays + 1,
+      streakDays:
+          goal.completedToday ? goal.streakDays - 1 : goal.streakDays + 1,
     );
     notifyListeners();
   }
@@ -584,22 +511,38 @@ class MalvaStore extends ChangeNotifier {
   }
 
   void upsertGoal(GoalItem goal) {
-    final index = _goals.indexWhere((item) => item.id == goal.id);
-    if (index == -1) {
-      _goals.add(goal);
+    final idx = _goals.indexWhere((g) => g.id == goal.id);
+    if (idx >= 0) {
+      _goals[idx] = goal;
     } else {
-      _goals[index] = goal;
+      _goals.add(goal);
     }
     notifyListeners();
   }
 
-  void deleteGoal(String goalId) {
-    _goals.removeWhere((goal) => goal.id == goalId);
+  void deleteGoal(String id) {
+    _goals.removeWhere((g) => g.id == id);
     notifyListeners();
   }
 
-  void saveAssessment(AssessmentResult result) {
-    _assessments.add(result);
+  // ============================================================
+  // HEALTH RECORDS
+  // ============================================================
+  void addRecord(HealthRecord record) {
+    _records.add(record);
+    notifyListeners();
+  }
+
+  void deleteRecord(String id) {
+    _records.removeWhere((r) => r.id == id);
+    notifyListeners();
+  }
+
+  // ============================================================
+  // SCREENINGS
+  // ============================================================
+  void skipInitialScreening() {
+    _initialScreeningStatus = InitialScreeningStatus.skipped;
     notifyListeners();
   }
 
@@ -615,11 +558,6 @@ class MalvaStore extends ChangeNotifier {
 
   void addScreeningBundle(ScreeningBundle bundle) {
     _screeningBundles.add(bundle);
-    _assessments.add(bundle.phq9);
-    _assessments.add(bundle.gad7);
-    if (bundle.isInitial) {
-      _initialScreeningStatus = InitialScreeningStatus.completed;
-    }
     notifyListeners();
   }
 
@@ -627,11 +565,11 @@ class MalvaStore extends ChangeNotifier {
     _screeningBundles
       ..clear()
       ..addAll(bundles);
-    _assessments
-      ..clear()
-      ..addAll([
-        for (final bundle in bundles) ...[bundle.phq9, bundle.gad7],
-      ]);
+    notifyListeners();
+  }
+
+  void saveAssessment(AssessmentResult result) {
+    _assessments.add(result);
     notifyListeners();
   }
 
@@ -661,92 +599,56 @@ class MalvaStore extends ChangeNotifier {
     );
 
     final accessToken = session?.accessToken;
-    final apiClient = _apiClient;
-    if (apiClient != null && accessToken != null && accessToken.isNotEmpty) {
-      final remote = await apiClient.submitScreening(
-        accessToken: accessToken,
-        bundle: bundle,
-        phq9Answers: phq9Answers,
-        gad7Answers: gad7Answers,
-        patientId: patientId,
-      );
-      if (remote.id.isNotEmpty) {
-        bundle = ScreeningBundle(
-          id: remote.id,
-          phq9: phq9,
-          gad7: gad7,
-          createdAt: bundle.createdAt,
-          isInitial: isInitial,
-          source: source,
+    if (_apiClient != null &&
+        accessToken != null &&
+        accessToken.isNotEmpty) {
+      try {
+        final remote = await _apiClient!.submitScreening(
+          accessToken: accessToken,
+          bundle: bundle,
+          phq9Answers: phq9Answers,
+          gad7Answers: gad7Answers,
+          patientId: patientId,
         );
+        if (remote.id.isNotEmpty) {
+          bundle = ScreeningBundle(
+            id: remote.id,
+            phq9: phq9,
+            gad7: gad7,
+            createdAt: bundle.createdAt,
+            isInitial: isInitial,
+            source: source,
+          );
+        }
+      } on Object {
+        // Keep local bundle on error
       }
     }
 
     saveScreeningBundle(bundle);
     return bundle;
   }
-
-  Future<void> persistSession(AuthSession session) async {
-    final data = jsonEncode({
-      'role': session.role.name,
-      'identifier': session.identifier,
-      'displayName': session.displayName,
-      'backendUserId': session.backendUserId,
-      'accessToken': session.accessToken,
-      'refreshToken': session.refreshToken,
-      'backendSynced': session.backendSynced,
-    });
-    await _secureStorage.write(key: _sessionKey, value: data);
-  }
-
-  Future<AuthSession?> restoreSession() async {
-    try {
-      final data = await _secureStorage.read(key: _sessionKey);
-      if (data == null || data.isEmpty) return null;
-      final map = jsonDecode(data) as Map<String, dynamic>;
-      final role = map['role'] == UserRole.professional.name
-          ? UserRole.professional
-          : UserRole.patient;
-      return AuthSession(
-        role: role,
-        identifier: map['identifier']?.toString() ?? '',
-        displayName: map['displayName']?.toString() ?? '',
-        backendUserId: map['backendUserId']?.toString(),
-        accessToken: map['accessToken']?.toString(),
-        refreshToken: map['refreshToken']?.toString(),
-        backendSynced: map['backendSynced'] == true,
-      );
-    } on Object {
-      return null;
-    }
-  }
-
-  Future<void> clearSession() async {
-    await _secureStorage.delete(key: _sessionKey);
-  }
-
-  void addRecord(HealthRecord record) {
-    _records.insert(0, record);
-    notifyListeners();
-  }
-
-  void deleteRecord(String recordId) {
-    _records.removeWhere((record) => record.id == recordId);
-    notifyListeners();
-  }
-
-  void skipInitialScreening() {
-    _initialScreeningStatus = InitialScreeningStatus.skipped;
-    notifyListeners();
-  }
 }
 
-class _Credential {
-  const _Credential({
-    required this.password,
-    required this.displayName,
-  });
-
-  final String password;
-  final String displayName;
+List<DiaryEntry> _seedDiaries() {
+  final now = DateTime.now();
+  return [
+    DiaryEntry(
+      id: 'diary_1',
+      createdAt: DateTime(now.year, now.month, now.day, 13, 5),
+      mood: MoodValue.sad,
+      title: 'Anxious (8/10)',
+      note:
+          'Deadline besar terasa dekat. Saya akan membagi pekerjaan menjadi langkah kecil.',
+      professionalFeedback:
+          'Cocok dengan pola anticipatory anxiety. Bahas coping mechanism pada sesi berikutnya.',
+    ),
+    DiaryEntry(
+      id: 'diary_2',
+      createdAt: now.subtract(const Duration(days: 1)),
+      mood: MoodValue.good,
+      title: 'Okay',
+      note: 'Tidur cukup dan energi lebih stabil.',
+    ),
+  ];
 }

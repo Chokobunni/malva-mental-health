@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 
 import 'firebase_options.dart';
 import 'src/malva_app.dart';
-import 'src/services/medication_reminder_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,10 +17,5 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  final medicationReminderService = MedicationReminderService();
-  await medicationReminderService.initialize();
-
-  runApp(MalvaApp(
-    medicationReminderService: medicationReminderService,
-  ));
+  runApp(const MalvaApp());
 }

@@ -16,15 +16,12 @@ import 'services/push_notification_service.dart';
 import 'store/malva_store.dart';
 import 'theme.dart';
 
-final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 class MalvaApp extends StatefulWidget {
-  const MalvaApp({
-    super.key,
-    required this.medicationReminderService,
-  });
+  const MalvaApp({super.key, this.medicationReminderService});
 
-  final MedicationReminderService medicationReminderService;
+  final MedicationReminderService? medicationReminderService;
 
   @override
   State<MalvaApp> createState() => _MalvaAppState();
@@ -35,25 +32,26 @@ class _MalvaAppState extends State<MalvaApp> {
   late final MalvaApiClient _apiClient;
   late final PushNotificationService _pushNotifications;
   late final DashboardSyncService _dashboardSyncService;
+  late final MedicationReminderService _medicationReminderService;
   AuthSession? _session;
   bool _showSplash = true;
   bool _isTakingInitialScreening = false;
-
-  MedicationReminderService get _medicationReminderService =>
-      widget.medicationReminderService;
 
   @override
   void initState() {
     super.initState();
     _apiClient = MalvaApiClient();
+    _store = MalvaStore.seeded(apiClient: _apiClient);
     _pushNotifications = PushNotificationService(
       apiClient: _apiClient,
-      navigatorKey: _navigatorKey,
+      navigatorKey: navigatorKey,
     );
-    _store = MalvaStore.seeded(apiClient: _apiClient);
     _dashboardSyncService = DashboardSyncService();
-    _medicationReminderService.onNotificationTap = _handleNotificationTap;
+    _medicationReminderService =
+        widget.medicationReminderService ?? MedicationReminderService();
+    unawaited(_medicationReminderService.initialize().catchError((_) {}));
 
+    // Hide splash after delay
     Future<void>.delayed(const Duration(milliseconds: 1800), () {
       if (!mounted) return;
       setState(() => _showSplash = false);
@@ -76,72 +74,8 @@ class _MalvaAppState extends State<MalvaApp> {
       return;
     }
     if (_session!.role == UserRole.patient) {
-      _navigatorKey.currentState?.pushNamed('/medication');
+      navigatorKey.currentState?.pushNamed('/medication');
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: _navigatorKey,
-      debugShowCheckedModeBanner: false,
-      title: 'Malva',
-      theme: buildMalvaTheme(),
-      initialRoute: '/',
-      onGenerateRoute: _onGenerateRoute,
-      home: _showSplash
-          ? const SplashScreen()
-          : _session == null
-              ? LoginScreen(
-                  store: _store,
-                  onAuthenticated: _handleAuthenticated,
-                )
-              : _session!.role == UserRole.professional
-                  ? ProfessionalDashboardScreen(
-                      store: _store,
-                      session: _session,
-                      apiClient: _apiClient,
-                      syncService: _dashboardSyncService,
-                      onLogout: _handleLogout,
-                    )
-                  : _buildPatientHome(),
-    );
-  }
-
-  Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
-    final name = settings.name;
-    if (name == null) return null;
-
-    // Only handle named routes that come from notification taps.
-    // Let the default `home` / Navigator handle normal pushes.
-    return switch (name) {
-      '/crisis-alert' => MaterialPageRoute(
-          builder: (_) => _buildPatientHome(),
-          settings: settings,
-        ),
-      '/medication' => MaterialPageRoute(
-          builder: (_) => _session == null
-              ? LoginScreen(store: _store, onAuthenticated: _handleAuthenticated)
-              : PatientShell(
-                  store: _store,
-                  session: _session,
-                  apiClient: _apiClient,
-                  medicationReminderService: _medicationReminderService,
-                  onLogout: () => setState(() {
-                    _session = null;
-                    _isTakingInitialScreening = false;
-                  }),
-                ),
-          settings: settings,
-        ),
-      '/assessment/result' => MaterialPageRoute(
-          builder: (_) => _session == null
-              ? LoginScreen(store: _store, onAuthenticated: _handleAuthenticated)
-              : _buildPatientHome(),
-          settings: settings,
-        ),
-      _ => null,
-    };
   }
 
   void _handleAuthenticated(AuthSession session) {
@@ -185,7 +119,10 @@ class _MalvaAppState extends State<MalvaApp> {
       return InitialScreeningConsentScreen(
         store: _store,
         onAgree: () => setState(() => _isTakingInitialScreening = true),
-        onSkip: () => setState(() => _isTakingInitialScreening = false),
+        onSkip: () => setState(() {
+          _store.skipInitialScreening();
+          _isTakingInitialScreening = false;
+        }),
       );
     }
 
@@ -204,10 +141,72 @@ class _MalvaAppState extends State<MalvaApp> {
       session: _session,
       apiClient: _apiClient,
       medicationReminderService: _medicationReminderService,
-      onLogout: () => setState(() {
-        _session = null;
-        _isTakingInitialScreening = false;
-      }),
+      onLogout: _handleLogout,
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      navigatorKey: navigatorKey,
+      debugShowCheckedModeBanner: false,
+      title: 'Malva',
+      theme: buildMalvaTheme(),
+      initialRoute: '/',
+      onGenerateRoute: _onGenerateRoute,
+      home: _showSplash
+          ? const SplashScreen()
+          : _session == null
+              ? LoginScreen(
+                  store: _store,
+                  onAuthenticated: _handleAuthenticated,
+                )
+              : _session!.role == UserRole.professional
+                  ? ProfessionalDashboardScreen(
+                      store: _store,
+                      session: _session,
+                      apiClient: _apiClient,
+                      syncService: _dashboardSyncService,
+                      onLogout: _handleLogout,
+                    )
+                  : _buildPatientHome(),
+    );
+  }
+
+  Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
+    final name = settings.name;
+    if (name == null) return null;
+
+    return switch (name) {
+      '/crisis-alert' => MaterialPageRoute(
+          builder: (_) => _buildPatientHome(),
+          settings: settings,
+        ),
+      '/medication' => MaterialPageRoute(
+          builder: (_) => _session == null
+              ? LoginScreen(
+                  store: _store,
+                  onAuthenticated: _handleAuthenticated,
+                )
+              : PatientShell(
+                  store: _store,
+                  session: _session,
+                  apiClient: _apiClient,
+                  medicationReminderService: _medicationReminderService,
+                  onLogout: _handleLogout,
+                ),
+          settings: settings,
+        ),
+      '/assessment/result' => MaterialPageRoute(
+          builder: (_) => _session == null
+              ? LoginScreen(
+                  store: _store,
+                  onAuthenticated: _handleAuthenticated,
+                )
+              : _buildPatientHome(),
+          settings: settings,
+        ),
+      _ => null,
+    };
   }
 }
