@@ -19,7 +19,7 @@ if (hasReleaseKeystore) {
 
 android {
     namespace = "id.malva.app"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

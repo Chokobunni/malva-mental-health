@@ -14,7 +14,6 @@ import 'malva_api_client.dart';
 @pragma('vm:entry-point')
 Future<void> _onBackgroundMessage(RemoteMessage message) async {
   await Firebase.initializeApp();
-  debugPrint('FCM background message: ${message.messageId}');
 }
 
 class PushNotificationService {
@@ -134,7 +133,7 @@ class PushNotificationService {
       if (token == null || token.isEmpty) return;
       await _sendTokenToBackend(accessToken, token);
     } on Object catch (error) {
-      debugPrint('FCM token registration failed: $error');
+      if (kDebugMode) debugPrint('FCM token registration failed: $error');
     }
   }
 
@@ -146,7 +145,9 @@ class PushNotificationService {
         token: token,
       );
     } on Object catch (error) {
-      debugPrint('Failed to send FCM token to backend: $error');
+      if (kDebugMode) {
+        debugPrint('Failed to send FCM token to backend: $error');
+      }
     }
   }
 
@@ -194,7 +195,9 @@ class PushNotificationService {
       );
       _handleNotificationNavigation(data);
     } on Object catch (error) {
-      debugPrint('Error parsing notification payload: $error');
+      if (kDebugMode) {
+        debugPrint('Error parsing notification payload: $error');
+      }
     }
   }
 
