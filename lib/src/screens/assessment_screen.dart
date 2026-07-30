@@ -1,33 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../assessment_engine.dart';
 import '../models.dart';
+import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
-import '../store/malva_store.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 
-class AssessmentScreen extends StatefulWidget {
+class AssessmentScreen extends ConsumerStatefulWidget {
   const AssessmentScreen({
     super.key,
-    required this.store,
     this.session,
     this.isInitialScreening = false,
     this.onComplete,
     this.onBack,
   });
 
-  final MalvaStore store;
   final AuthSession? session;
   final bool isInitialScreening;
   final VoidCallback? onComplete;
   final VoidCallback? onBack;
 
   @override
-  State<AssessmentScreen> createState() => _AssessmentScreenState();
+  ConsumerState<AssessmentScreen> createState() => _AssessmentScreenState();
 }
 
-class _AssessmentScreenState extends State<AssessmentScreen> {
+class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
   late final List<int?> _phq9Answers;
   late final List<int?> _gad7Answers;
   bool _isSubmitting = false;
@@ -254,7 +253,7 @@ class _AssessmentScreenState extends State<AssessmentScreen> {
     setState(() => _isSubmitting = true);
     late final ScreeningBundle bundle;
     try {
-      bundle = await widget.store.submitScreeningBundle(
+      bundle = await ref.read(malvaStoreProvider.notifier).submitScreeningBundle(
         phq9Answers: _phq9Answers.map((answer) => answer ?? 0).toList(),
         gad7Answers: _gad7Answers.map((answer) => answer ?? 0).toList(),
         isInitial: widget.isInitialScreening,

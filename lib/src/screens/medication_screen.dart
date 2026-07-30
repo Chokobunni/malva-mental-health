@@ -1,219 +1,215 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/medication_reminder_service.dart';
-import '../store/malva_store.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 
-class MedicationScreen extends StatelessWidget {
+class MedicationScreen extends ConsumerWidget {
   const MedicationScreen({
     super.key,
-    required this.store,
     this.session,
     this.apiClient,
     this.medicationReminderService,
   });
 
-  final MalvaStore store;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
   final MedicationReminderService? medicationReminderService;
 
   @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: store,
-      builder: (context, _) {
-        return Scaffold(
-          floatingActionButton: FloatingActionButton(
-            heroTag: 'medication_add_fab',
-            onPressed: () => _openMedicationForm(context),
-            child: const Icon(Icons.add_rounded),
-          ),
-          body: RefreshIndicator(
-            onRefresh: () async {
-              final accessToken = session?.accessToken;
-              if (apiClient == null || accessToken == null || accessToken.isEmpty) {
-                await Future<void>.delayed(const Duration(milliseconds: 500));
-                return;
-              }
-              try {
-                final backendMeds = await apiClient!.listMedications(
-                  accessToken: accessToken,
-                );
-                final meds = backendMeds
-                    .map(
-                      (b) => Medication(
-                        id: b.id,
-                        name: b.name,
-                        dosage: b.dosage,
-                        form: b.form,
-                        reminders: [
-                          MedicationReminder(
-                            time: _parseReminderTime(b.reminderTime),
-                            relationToMeal: 'Setelah makan',
-                          ),
-                        ],
-                        currentStock: b.currentStock,
-                        alertBelow: b.alertBelow,
-                        source: 'Profesional',
+  Widget build(BuildContext context, WidgetRef ref) {
+    final storeState = ref.watch(malvaStoreProvider);
+    final store = ref.read(malvaStoreProvider.notifier);
+    return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'medication_add_fab',
+        onPressed: () => _openMedicationForm(context, ref),
+        child: const Icon(Icons.add_rounded),
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          final accessToken = session?.accessToken;
+          if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+            return;
+          }
+          try {
+            final backendMeds = await apiClient!.listMedications(
+              accessToken: accessToken,
+            );
+            final meds = backendMeds
+                .map(
+                  (b) => Medication(
+                    id: b.id,
+                    name: b.name,
+                    dosage: b.dosage,
+                    form: b.form,
+                    reminders: [
+                      MedicationReminder(
+                        time: _parseReminderTime(b.reminderTime),
+                        relationToMeal: 'Setelah makan',
                       ),
-                    )
-                    .toList();
-                store.replaceMedications(meds);
-              } on Object catch (_) {
-                await Future<void>.delayed(const Duration(milliseconds: 500));
-              }
-            },
-            child: ListView(
-              padding: EdgeInsets.zero,
+                    ],
+                    currentStock: b.currentStock,
+                    alertBelow: b.alertBelow,
+                    source: 'Profesional',
+                  ),
+                )
+                .toList();
+            store.replaceMedications(meds);
+          } on Object catch (_) {
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+          }
+        },
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+          const GradientHeader(
+            title: 'Medication',
+            subtitle: 'Reminder, stok, dan adherence',
+            leading: Icon(Icons.medication_rounded,
+                color: Colors.white, size: 34),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-              const GradientHeader(
-                title: 'Medication',
-                subtitle: 'Reminder, stok, dan adherence',
-                leading: Icon(Icons.medication_rounded,
-                    color: Colors.white, size: 34),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+                SoftCard(
+                  color: MalvaColors.plum,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Weekly Adherence',
+                              style: TextStyle(
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              '${storeState.adherencePercent}% hari ini',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineSmall
+                                  ?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text('Tap Take Now setelah obat diminum.',
+                                style: TextStyle(color: Colors.white70)),
+                          ],
+                        ),
+                      ),
+                      CircleAvatar(
+                        radius: 34,
+                        backgroundColor: Colors.white,
+                        child: Text(
+                          '${storeState.adherencePercent}%',
+                          style: const TextStyle(
+                              color: MalvaColors.plum,
+                              fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 22),
+                const SectionLabel('Jadwal hari ini'),
+                if (storeState.medications.isEmpty)
+                  SoftCard(
+                    child: Column(
+                      children: [
+                        const Icon(Icons.medication_rounded,
+                            size: 48, color: MalvaColors.seed),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Belum ada obat',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Tambahkan obat pertama Anda untuk mulai melacak.',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton.icon(
+                          onPressed: () => _openMedicationForm(context, ref),
+                          icon: const Icon(Icons.add_rounded),
+                          label: const Text('Tambah Obat Pertama'),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  for (final med in storeState.medications) ...[
+                    _MedicationCard(
+                      medication: med,
+                      onTake: () => _takeMedication(context, ref, med),
+                      onEdit: () => _openMedicationForm(context, ref, med),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                const SizedBox(height: 70),
+                const SizedBox(height: 22),
+                const SectionLabel('Riwayat Minum Obat'),
+                if (storeState.medicationLogs.isEmpty)
+                  const SoftCard(
+                    child: Text('Belum ada riwayat minum obat.'),
+                  )
+                else
+                  for (final log in storeState.medicationLogs.take(10))
                     SoftCard(
-                      color: MalvaColors.plum,
                       child: Row(
                         children: [
+                          Icon(
+                            log.status == 'taken'
+                                ? Icons.check_circle_rounded
+                                : log.status == 'skipped'
+                                    ? Icons.skip_next_rounded
+                                    : Icons.cancel_rounded,
+                            color: log.status == 'taken'
+                                ? MalvaColors.mint
+                                : log.status == 'skipped'
+                                    ? MalvaColors.amber
+                                    : MalvaColors.danger,
+                          ),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
-                                  'Weekly Adherence',
-                                  style: TextStyle(
-                                      color: Colors.white70,
-                                      fontWeight: FontWeight.w800),
-                                ),
-                                const SizedBox(height: 5),
                                 Text(
-                                  '${store.adherencePercent}% hari ini',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .headlineSmall
-                                      ?.copyWith(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w900,
-                                      ),
+                                  log.medicationName,
+                                  style: const TextStyle(fontWeight: FontWeight.w800),
                                 ),
-                                const SizedBox(height: 6),
-                                const Text('Tap Take Now setelah obat diminum.',
-                                    style: TextStyle(color: Colors.white70)),
+                                Text(
+                                  '${log.status.toUpperCase()} — ${_formatLogTime(log.takenAt)}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
                               ],
-                            ),
-                          ),
-                          CircleAvatar(
-                            radius: 34,
-                            backgroundColor: Colors.white,
-                            child: Text(
-                              '${store.adherencePercent}%',
-                              style: const TextStyle(
-                                  color: MalvaColors.plum,
-                                  fontWeight: FontWeight.w900),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 22),
-                    const SectionLabel('Jadwal hari ini'),
-                    if (store.medications.isEmpty)
-                      SoftCard(
-                        child: Column(
-                          children: [
-                            const Icon(Icons.medication_rounded,
-                                size: 48, color: MalvaColors.seed),
-                            const SizedBox(height: 12),
-                            const Text(
-                              'Belum ada obat',
-                              style: TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Tambahkan obat pertama Anda untuk mulai melacak.',
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            FilledButton.icon(
-                              onPressed: () => _openMedicationForm(context),
-                              icon: const Icon(Icons.add_rounded),
-                              label: const Text('Tambah Obat Pertama'),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      for (final med in store.medications) ...[
-                        _MedicationCard(
-                          medication: med,
-                          onTake: () => _takeMedication(context, med),
-                          onEdit: () => _openMedicationForm(context, med),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                    const SizedBox(height: 70),
-                    const SizedBox(height: 22),
-                    const SectionLabel('Riwayat Minum Obat'),
-                    if (store.medicationLogs.isEmpty)
-                      const SoftCard(
-                        child: Text('Belum ada riwayat minum obat.'),
-                      )
-                    else
-                      for (final log in store.medicationLogs.take(10))
-                        SoftCard(
-                          child: Row(
-                            children: [
-                              Icon(
-                                log.status == 'taken'
-                                    ? Icons.check_circle_rounded
-                                    : log.status == 'skipped'
-                                        ? Icons.skip_next_rounded
-                                        : Icons.cancel_rounded,
-                                color: log.status == 'taken'
-                                    ? MalvaColors.mint
-                                    : log.status == 'skipped'
-                                        ? MalvaColors.amber
-                                        : MalvaColors.danger,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      log.medicationName,
-                                      style: const TextStyle(fontWeight: FontWeight.w800),
-                                    ),
-                                    Text(
-                                      '${log.status.toUpperCase()} — ${_formatLogTime(log.takenAt)}',
-                                      style: Theme.of(context).textTheme.bodySmall,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        );
-      },
+        ],
+      ),
+      ),
     );
   }
 
@@ -223,7 +219,7 @@ class MedicationScreen extends StatelessWidget {
     return '${dt.day}/${dt.month}/${dt.year} $h:$m';
   }
 
-  void _openMedicationForm(BuildContext context, [Medication? medication]) {
+  void _openMedicationForm(BuildContext context, WidgetRef ref, [Medication? medication]) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -231,7 +227,7 @@ class MedicationScreen extends StatelessWidget {
       builder: (context) => MedicationFormSheet(
         initial: medication,
         onSave: (value) {
-          store.upsertMedication(value);
+          ref.read(malvaStoreProvider.notifier).upsertMedication(value);
           unawaited(_syncMedication(context, value));
           unawaited(
               medicationReminderService?.scheduleMedicationReminder(value));
@@ -240,14 +236,14 @@ class MedicationScreen extends StatelessWidget {
         onDelete: medication != null
             ? () {
                 Navigator.pop(context);
-                _deleteMedication(context, medication);
+                _deleteMedication(context, ref, medication);
               }
             : null,
       ),
     );
   }
 
-  void _deleteMedication(BuildContext context, Medication medication) {
+  void _deleteMedication(BuildContext context, WidgetRef ref, Medication medication) {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -261,7 +257,7 @@ class MedicationScreen extends StatelessWidget {
           FilledButton(
             onPressed: () {
               Navigator.pop(context);
-              store.deleteMedication(medication.id);
+              ref.read(malvaStoreProvider.notifier).deleteMedication(medication.id);
               unawaited(
                   medicationReminderService?.cancelReminder(medication.id));
             },
@@ -272,7 +268,7 @@ class MedicationScreen extends StatelessWidget {
     );
   }
 
-  void _takeMedication(BuildContext context, Medication medication) {
+  void _takeMedication(BuildContext context, WidgetRef ref, Medication medication) {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -286,7 +282,7 @@ class MedicationScreen extends StatelessWidget {
               subtitle: const Text('Obat sudah diminum'),
               onTap: () {
                 Navigator.pop(context);
-                _logMedication(context, medication, 'taken');
+                _logMedication(context, ref, medication, 'taken');
               },
             ),
             ListTile(
@@ -295,7 +291,7 @@ class MedicationScreen extends StatelessWidget {
               subtitle: const Text('Dilewati dengan sengaja'),
               onTap: () {
                 Navigator.pop(context);
-                _logMedication(context, medication, 'skipped');
+                _logMedication(context, ref, medication, 'skipped');
               },
             ),
             ListTile(
@@ -304,7 +300,7 @@ class MedicationScreen extends StatelessWidget {
               subtitle: const Text('Terlewat tanpa sengaja'),
               onTap: () {
                 Navigator.pop(context);
-                _logMedication(context, medication, 'missed');
+                _logMedication(context, ref, medication, 'missed');
               },
             ),
             ListTile(
@@ -313,7 +309,7 @@ class MedicationScreen extends StatelessWidget {
               subtitle: const Text('Sebagian diminum'),
               onTap: () {
                 Navigator.pop(context);
-                _logMedication(context, medication, 'partial');
+                _logMedication(context, ref, medication, 'partial');
               },
             ),
           ],
@@ -328,8 +324,8 @@ class MedicationScreen extends StatelessWidget {
     );
   }
 
-  void _logMedication(BuildContext context, Medication medication, String status) {
-    store.takeMedication(medication.id);
+  void _logMedication(BuildContext context, WidgetRef ref, Medication medication, String status) {
+    ref.read(malvaStoreProvider.notifier).takeMedication(medication.id);
     unawaited(_syncMedicationLog(context, medication, status));
     if (medication.needsRefill) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -586,7 +582,7 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
                   'Reminder ${_time.hour.toString().padLeft(2, '0')}:${_time.minute.toString().padLeft(2, '0')}'),
             ),
             DropdownButtonFormField<String>(
-              initialValue: _relation,
+              value: _relation,
               decoration: const InputDecoration(labelText: 'Relasi makan'),
               items: const [
                 DropdownMenuItem(

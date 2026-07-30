@@ -1,30 +1,29 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
-import '../store/malva_store.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 
-class DiaryScreen extends StatefulWidget {
+class DiaryScreen extends ConsumerStatefulWidget {
   const DiaryScreen({
     super.key,
-    required this.store,
     this.session,
     this.apiClient,
   });
 
-  final MalvaStore store;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
   @override
-  State<DiaryScreen> createState() => _DiaryScreenState();
+  ConsumerState<DiaryScreen> createState() => _DiaryScreenState();
 }
 
-class _DiaryScreenState extends State<DiaryScreen> {
+class _DiaryScreenState extends ConsumerState<DiaryScreen> {
   final _searchController = TextEditingController();
   bool _isInitialLoading = true;
 
@@ -68,7 +67,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
             ),
           )
           .toList();
-      widget.store.replaceDiaryEntries(entries);
+      ref.read(malvaStoreProvider.notifier).replaceDiaryEntries(entries);
       if (mounted) setState(() {});
     } on Object catch (_) {
       await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -77,102 +76,98 @@ class _DiaryScreenState extends State<DiaryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: widget.store,
-      builder: (context, _) {
-        final query = _searchController.text.trim().toLowerCase();
-        final entries = query.isEmpty
-            ? widget.store.diaryEntries
-            : widget.store.diaryEntries.where((entry) {
-                final haystack =
-                    '${entry.title} ${entry.note} ${entry.mood.label}'
-                        .toLowerCase();
-                return haystack.contains(query);
-              }).toList(growable: false);
+    final storeState = ref.watch(malvaStoreProvider);
+    final query = _searchController.text.trim().toLowerCase();
+    final entries = query.isEmpty
+        ? storeState.diaryEntries
+        : storeState.diaryEntries.where((entry) {
+            final haystack =
+                '${entry.title} ${entry.note} ${entry.mood.label}'
+                    .toLowerCase();
+            return haystack.contains(query);
+          }).toList(growable: false);
 
-        return Scaffold(
-          floatingActionButton: FloatingActionButton(
-            heroTag: 'diary_add_fab',
-            onPressed: () => _openDiaryForm(context),
-            child: const Icon(Icons.add_rounded),
+    return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'diary_add_fab',
+        onPressed: () => _openDiaryForm(context),
+        child: const Icon(Icons.add_rounded),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _refreshData,
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            if (_isInitialLoading) const LinearProgressIndicator(),
+            const GradientHeader(
+            title: 'Diary History',
+            subtitle: 'Catat trigger, pikiran, dan feedback',
+            leading: Icon(Icons.edit_note_rounded,
+                color: Colors.white, size: 34),
           ),
-          body: RefreshIndicator(
-            onRefresh: _refreshData,
-            child: ListView(
-              padding: EdgeInsets.zero,
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
               children: [
-                if (_isInitialLoading) const LinearProgressIndicator(),
-                const GradientHeader(
-                title: 'Diary History',
-                subtitle: 'Catat trigger, pikiran, dan feedback',
-                leading: Icon(Icons.edit_note_rounded,
-                    color: Colors.white, size: 34),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _searchController,
-                      onChanged: (_) => setState(() {}),
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        hintText: 'Cari entry atau perasaan',
-                        suffixIcon: _searchController.text.isEmpty
-                            ? null
-                            : IconButton(
-                                tooltip: 'Clear search',
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() {});
-                                },
-                                icon: const Icon(Icons.close_rounded),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    if (entries.isEmpty)
-                      SoftCard(
-                        child: Column(
-                          children: [
-                            const Icon(Icons.edit_note_rounded,
-                                size: 48, color: MalvaColors.seed),
-                            const SizedBox(height: 12),
-                            const Text(
-                              'Belum ada diary',
-                              style: TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Mulai catat trigger, pikiran, dan respons Anda hari ini.',
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            FilledButton.icon(
-                              onPressed: () => _openDiaryForm(context),
-                              icon: const Icon(Icons.add_rounded),
-                              label: const Text('Tambah Diary Pertama'),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      for (final entry in entries) ...[
-                        _DiaryCard(
-                          entry: entry,
-                          onEdit: () => _openDiaryForm(context, entry: entry),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                    const SizedBox(height: 70),
-                  ],
+                TextField(
+                  controller: _searchController,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    hintText: 'Cari entry atau perasaan',
+                    suffixIcon: _searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {});
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 18),
+                if (entries.isEmpty)
+                  SoftCard(
+                    child: Column(
+                      children: [
+                        const Icon(Icons.edit_note_rounded,
+                            size: 48, color: MalvaColors.seed),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Belum ada diary',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Mulai catat trigger, pikiran, dan respons Anda hari ini.',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton.icon(
+                          onPressed: () => _openDiaryForm(context),
+                          icon: const Icon(Icons.add_rounded),
+                          label: const Text('Tambah Diary Pertama'),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  for (final entry in entries) ...[
+                    _DiaryCard(
+                      entry: entry,
+                      onEdit: () => _openDiaryForm(context, entry: entry),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                const SizedBox(height: 70),
+              ],
+            ),
           ),
-          ),
-        );
-      },
+        ],
+      ),
+      ),
     );
   }
 
@@ -184,7 +179,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
       builder: (context) => _DiaryFormSheet(
         initialEntry: entry,
         onSave: (savedEntry) {
-          widget.store.upsertDiary(savedEntry);
+          ref.read(malvaStoreProvider.notifier).upsertDiary(savedEntry);
           unawaited(_syncDiary(savedEntry));
           Navigator.pop(context);
         },
@@ -211,7 +206,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
                   ),
                 );
                 if (confirmed == true && context.mounted) {
-                  widget.store.deleteDiary(entry.id);
+                  ref.read(malvaStoreProvider.notifier).deleteDiary(entry.id);
                   Navigator.pop(context);
                 }
               },

@@ -1,18 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
+import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
-import '../store/malva_store.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({
     super.key,
-    required this.store,
     required this.onOpenMood,
     required this.onOpenMedication,
     required this.onOpenDiary,
@@ -23,7 +23,6 @@ class HomeScreen extends StatefulWidget {
     this.apiClient,
   });
 
-  final MalvaStore store;
   final VoidCallback onOpenMood;
   final VoidCallback onOpenMedication;
   final VoidCallback onOpenDiary;
@@ -34,10 +33,10 @@ class HomeScreen extends StatefulWidget {
   final MalvaApiClient? apiClient;
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<BackendFollowUpMessage> _followUps = const [];
   bool _isLoadingFollowUps = false;
   String? _followUpError;
@@ -66,137 +65,133 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: widget.store,
-      builder: (context, _) {
-        return Scaffold(
-          floatingActionButton: FloatingActionButton(
-            heroTag: 'home_safety_fab',
-            backgroundColor: MalvaColors.danger,
-            foregroundColor: Colors.white,
-            onPressed: () => _showSafetyDialog(context),
-            child: const Icon(Icons.warning_amber_rounded),
-          ),
-          body: RefreshIndicator(
-            onRefresh: _refreshAll,
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                if (_isInitialLoading) const LinearProgressIndicator(),
-              GradientHeader(
-                title: 'Home',
-                subtitle: 'Halo, ${widget.store.patient.name}',
-                trailing: IconButton(
-                  tooltip: 'Profil',
-                  onPressed: widget.onOpenMore,
-                  icon: const CircleAvatar(
-                    backgroundColor: Colors.white,
-                    child: Icon(Icons.person_rounded, color: MalvaColors.seed),
-                  ),
-                ),
+    final storeState = ref.watch(malvaStoreProvider);
+    return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'home_safety_fab',
+        backgroundColor: MalvaColors.danger,
+        foregroundColor: Colors.white,
+        onPressed: () => _showSafetyDialog(context),
+        child: const Icon(Icons.warning_amber_rounded),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _refreshAll,
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            if (_isInitialLoading) const LinearProgressIndicator(),
+          GradientHeader(
+            title: 'Home',
+            subtitle: 'Halo, ${storeState.patient.name}',
+            trailing: IconButton(
+              tooltip: 'Profil',
+              onPressed: widget.onOpenMore,
+              icon: const CircleAvatar(
+                backgroundColor: Colors.white,
+                child: Icon(Icons.person_rounded, color: MalvaColors.seed),
               ),
-              Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              children: [
+                if (storeState.activeAlerts.isNotEmpty) ...[
+                  _AlertBanner(alerts: storeState.activeAlerts),
+                  const SizedBox(height: 18),
+                ],
+                if (_shouldShowFollowUps) ...[
+                  _FollowUpPanel(
+                    followUps: _followUps,
+                    isLoading: _isLoadingFollowUps,
+                    error: _followUpError,
+                    onRefresh: _loadFollowUps,
+                  ),
+                  const SizedBox(height: 18),
+                ],
+                Row(
                   children: [
-                    if (widget.store.activeAlerts.isNotEmpty) ...[
-                      _AlertBanner(alerts: widget.store.activeAlerts),
-                      const SizedBox(height: 18),
-                    ],
-                    if (_shouldShowFollowUps) ...[
-                      _FollowUpPanel(
-                        followUps: _followUps,
-                        isLoading: _isLoadingFollowUps,
-                        error: _followUpError,
-                        onRefresh: _loadFollowUps,
+                    Expanded(
+                      child: MetricTile(
+                        icon: Icons.medication_liquid_rounded,
+                        value: '${storeState.adherencePercent}%',
+                        label: 'Adherence hari ini',
+                        color: MalvaColors.mint,
                       ),
-                      const SizedBox(height: 18),
-                    ],
-                    Row(
-                      children: [
-                        Expanded(
-                          child: MetricTile(
-                            icon: Icons.medication_liquid_rounded,
-                            value: '${widget.store.adherencePercent}%',
-                            label: 'Adherence hari ini',
-                            color: MalvaColors.mint,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: MetricTile(
-                            icon: Icons.flag_rounded,
-                            value: '${widget.store.completedGoalPercent}%',
-                            label: 'Goals hari ini',
-                            color: MalvaColors.amber,
-                          ),
-                        ),
-                      ],
                     ),
-                    const SizedBox(height: 22),
-                    const SectionLabel('Self-care'),
-                    ActionTile(
-                      icon: Icons.task_alt_rounded,
-                      title: 'Goals & Habits',
-                      subtitle: 'Lihat target harian dan streak',
-                      onTap: widget.onOpenMore,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: MetricTile(
+                        icon: Icons.flag_rounded,
+                        value: '${storeState.completedGoalPercent}%',
+                        label: 'Goals hari ini',
+                        color: MalvaColors.amber,
+                      ),
                     ),
-                    const SizedBox(height: 10),
-                    ActionTile(
-                      icon: Icons.edit_note_rounded,
-                      title: 'Diary History',
-                      subtitle: 'Catat trigger, pikiran, dan respons',
-                      onTap: widget.onOpenDiary,
-                    ),
-                    const SizedBox(height: 10),
-                    ActionTile(
-                      icon: Icons.folder_shared_rounded,
-                      title: 'Health Record',
-                      subtitle: 'Diagnosis, file asesmen, dan riwayat obat',
-                      onTap: widget.onOpenMore,
-                    ),
-                    const SizedBox(height: 10),
-                    ActionTile(
-                      icon: Icons.chat_bubble_outline_rounded,
-                      title: 'Chat Profesional',
-                      subtitle: 'Kirim pesan langsung ke profesional Anda',
-                      onTap: widget.onOpenChat,
-                      color: MalvaColors.orchid,
-                    ),
-                    const SizedBox(height: 22),
-                    const SectionLabel('Health Check-in'),
-                    ActionTile(
-                      icon: Icons.mood_rounded,
-                      title: 'Mood Tracker',
-                      subtitle: 'Mood, tidur, energi, kecemasan',
-                      onTap: widget.onOpenMood,
-                      color: MalvaColors.orchid,
-                    ),
-                    const SizedBox(height: 10),
-                    ActionTile(
-                      icon: Icons.medication_rounded,
-                      title: 'Medication Tracker',
-                      subtitle: 'Reminder, stok, dan log minum obat',
-                      onTap: widget.onOpenMedication,
-                      color: MalvaColors.mint,
-                    ),
-                    const SizedBox(height: 10),
-                    ActionTile(
-                      icon: Icons.fact_check_rounded,
-                      title: 'Assessment',
-                      subtitle: 'PHQ-9, GAD-7, dan rule engine',
-                      onTap: widget.onOpenAssessment,
-                      color: MalvaColors.amber,
-                    ),
-                    const SizedBox(height: 76),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 22),
+                const SectionLabel('Self-care'),
+                ActionTile(
+                  icon: Icons.task_alt_rounded,
+                  title: 'Goals & Habits',
+                  subtitle: 'Lihat target harian dan streak',
+                  onTap: widget.onOpenMore,
+                ),
+                const SizedBox(height: 10),
+                ActionTile(
+                  icon: Icons.edit_note_rounded,
+                  title: 'Diary History',
+                  subtitle: 'Catat trigger, pikiran, dan respons',
+                  onTap: widget.onOpenDiary,
+                ),
+                const SizedBox(height: 10),
+                ActionTile(
+                  icon: Icons.folder_shared_rounded,
+                  title: 'Health Record',
+                  subtitle: 'Diagnosis, file asesmen, dan riwayat obat',
+                  onTap: widget.onOpenMore,
+                ),
+                const SizedBox(height: 10),
+                ActionTile(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  title: 'Chat Profesional',
+                  subtitle: 'Kirim pesan langsung ke profesional Anda',
+                  onTap: widget.onOpenChat,
+                  color: MalvaColors.orchid,
+                ),
+                const SizedBox(height: 22),
+                const SectionLabel('Health Check-in'),
+                ActionTile(
+                  icon: Icons.mood_rounded,
+                  title: 'Mood Tracker',
+                  subtitle: 'Mood, tidur, energi, kecemasan',
+                  onTap: widget.onOpenMood,
+                  color: MalvaColors.orchid,
+                ),
+                const SizedBox(height: 10),
+                ActionTile(
+                  icon: Icons.medication_rounded,
+                  title: 'Medication Tracker',
+                  subtitle: 'Reminder, stok, dan log minum obat',
+                  onTap: widget.onOpenMedication,
+                  color: MalvaColors.mint,
+                ),
+                const SizedBox(height: 10),
+                ActionTile(
+                  icon: Icons.fact_check_rounded,
+                  title: 'Assessment',
+                  subtitle: 'PHQ-9, GAD-7, dan rule engine',
+                  onTap: widget.onOpenAssessment,
+                  color: MalvaColors.amber,
+                ),
+                const SizedBox(height: 76),
+              ],
+            ),
           ),
-          ),
-        );
-      },
+        ],
+        ),
+      ),
     );
   }
 
@@ -329,9 +324,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
+      final patientName = ref.read(malvaStoreProvider).patient.name;
       await apiClient.createCrisisAlert(
         accessToken: accessToken,
-        patientName: widget.store.patient.name,
+        patientName: patientName,
         message: 'Pasien mengaktifkan alert crisis dari aplikasi.',
       );
       if (!mounted) return;

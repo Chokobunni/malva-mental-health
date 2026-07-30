@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:malva_mental_health/src/screens/assessment_screen.dart';
-import 'package:malva_mental_health/src/store/malva_store.dart';
 import 'package:malva_mental_health/src/theme.dart';
 
 void main() {
   testWidgets('shows PHQ-9, GAD-7, then submit in one long page',
       (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
-        theme: buildMalvaTheme(),
-        home: AssessmentScreen(store: MalvaStore.seeded()),
+      ProviderScope(
+        child: MaterialApp(
+          theme: buildMalvaTheme(),
+          home: const AssessmentScreen(),
+        ),
       ),
     );
 
@@ -42,9 +44,11 @@ void main() {
   testWidgets('enables the combined submit only after all 16 answers',
       (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
-        theme: buildMalvaTheme(),
-        home: AssessmentScreen(store: MalvaStore.seeded()),
+      ProviderScope(
+        child: MaterialApp(
+          theme: buildMalvaTheme(),
+          home: const AssessmentScreen(),
+        ),
       ),
     );
 

@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:malva_mental_health/src/screens/professional_dashboard_screen.dart';
-import 'package:malva_mental_health/src/store/malva_store.dart';
 import 'package:malva_mental_health/src/theme.dart';
 
 void main() {
   testWidgets('professional dashboard renders professional feature sections',
       (tester) async {
-    final store = MalvaStore.seeded();
-
     await tester.pumpWidget(
-      MaterialApp(
-        theme: buildMalvaTheme(),
-        home: ProfessionalDashboardScreen(
-          store: store,
-          onLogout: () {},
+      ProviderScope(
+        child: MaterialApp(
+          theme: buildMalvaTheme(),
+          home: ProfessionalDashboardScreen(
+            onLogout: () {},
+          ),
         ),
       ),
     );

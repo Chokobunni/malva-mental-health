@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/medication_reminder_service.dart';
-import '../store/malva_store.dart';
 import 'chat_screen.dart';
 import 'diary_screen.dart';
 import 'home_screen.dart';
@@ -12,27 +13,25 @@ import 'mood_screen.dart';
 import 'assessment_screen.dart';
 import 'more_screen.dart';
 
-class PatientShell extends StatefulWidget {
+class PatientShell extends ConsumerStatefulWidget {
   const PatientShell({
     super.key,
-    required this.store,
     required this.onLogout,
     this.session,
     this.apiClient,
     this.medicationReminderService,
   });
 
-  final MalvaStore store;
   final VoidCallback onLogout;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
   final MedicationReminderService? medicationReminderService;
 
   @override
-  State<PatientShell> createState() => _PatientShellState();
+  ConsumerState<PatientShell> createState() => _PatientShellState();
 }
 
-class _PatientShellState extends State<PatientShell> {
+class _PatientShellState extends ConsumerState<PatientShell> {
   int _index = 0;
   String _professionalUserId = '';
   String _professionalName = 'Profesional';
@@ -64,7 +63,6 @@ class _PatientShellState extends State<PatientShell> {
   Widget build(BuildContext context) {
     final pages = [
       HomeScreen(
-        store: widget.store,
         session: widget.session,
         apiClient: widget.apiClient,
         onOpenMood: () => setState(() => _index = 1),
@@ -77,7 +75,6 @@ class _PatientShellState extends State<PatientShell> {
             context,
             MaterialPageRoute(
               builder: (_) => AssessmentScreen(
-                store: widget.store,
                 session: widget.session,
               ),
             ),
@@ -85,18 +82,15 @@ class _PatientShellState extends State<PatientShell> {
         },
       ),
       MoodScreen(
-        store: widget.store,
         session: widget.session,
         apiClient: widget.apiClient,
       ),
       MedicationScreen(
-        store: widget.store,
         session: widget.session,
         apiClient: widget.apiClient,
         medicationReminderService: widget.medicationReminderService,
       ),
       DiaryScreen(
-        store: widget.store,
         session: widget.session,
         apiClient: widget.apiClient,
       ),
@@ -106,7 +100,7 @@ class _PatientShellState extends State<PatientShell> {
         otherUserName: _professionalName,
         otherUserId: _professionalUserId,
       ),
-      MoreScreen(store: widget.store, onLogout: widget.onLogout, apiClient: widget.apiClient, session: widget.session, professionalUserId: _professionalUserId, professionalName: _professionalName),
+      MoreScreen(onLogout: widget.onLogout, apiClient: widget.apiClient, session: widget.session, professionalUserId: _professionalUserId, professionalName: _professionalName),
     ];
 
     return Scaffold(

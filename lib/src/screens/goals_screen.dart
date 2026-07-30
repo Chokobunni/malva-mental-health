@@ -1,96 +1,92 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
-import '../store/malva_store.dart';
+import '../providers/providers.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 
-class GoalsScreen extends StatelessWidget {
-  const GoalsScreen({super.key, required this.store});
-
-  final MalvaStore store;
+class GoalsScreen extends ConsumerWidget {
+  const GoalsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: store,
-      builder: (context, _) {
-        return Scaffold(
-          floatingActionButton: FloatingActionButton(
-            heroTag: 'goals_add_fab',
-            onPressed: () => _openGoalForm(context),
-            child: const Icon(Icons.add_rounded),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final storeState = ref.watch(malvaStoreProvider);
+    final store = ref.read(malvaStoreProvider.notifier);
+    return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'goals_add_fab',
+        onPressed: () => _openGoalForm(context, ref),
+        child: const Icon(Icons.add_rounded),
+      ),
+      body: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          GradientHeader(
+            title: 'Goals & Habits',
+            subtitle: 'Daily focus dan history',
+            leading: IconButton(
+              onPressed: () => Navigator.maybePop(context),
+              icon:
+                  const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            ),
           ),
-          body: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              GradientHeader(
-                title: 'Goals & Habits',
-                subtitle: 'Daily focus dan history',
-                leading: IconButton(
-                  onPressed: () => Navigator.maybePop(context),
-                  icon:
-                      const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SoftCard(
-                      color: MalvaColors.seed,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Daily Progress',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '${store.completedGoalPercent}% completed',
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
-                                ?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                          ),
-                          const SizedBox(height: 12),
-                          ProgressStrip(
-                            value: store.completedGoalPercent / 100,
-                            color: Colors.white,
-                          ),
-                        ],
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SoftCard(
+                  color: MalvaColors.seed,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Daily Progress',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 22),
-                    const SectionLabel('Today focus'),
-                    for (final goal in store.goals) ...[
-                      _GoalCard(
-                        goal: goal,
-                        onToggle: () => store.toggleGoal(goal.id),
-                        onEdit: () => _openGoalForm(context, goal: goal),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${storeState.completedGoalPercent}% completed',
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall
+                            ?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                            ),
                       ),
                       const SizedBox(height: 12),
+                      ProgressStrip(
+                        value: storeState.completedGoalPercent / 100,
+                        color: Colors.white,
+                      ),
                     ],
-                    const SizedBox(height: 70),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 22),
+                const SectionLabel('Today focus'),
+                for (final goal in storeState.goals) ...[
+                  _GoalCard(
+                    goal: goal,
+                    onToggle: () => store.toggleGoal(goal.id),
+                    onEdit: () => _openGoalForm(context, ref, goal: goal),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                const SizedBox(height: 70),
+              ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
-  void _openGoalForm(BuildContext context, {GoalItem? goal}) {
+  void _openGoalForm(BuildContext context, WidgetRef ref, {GoalItem? goal}) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -98,7 +94,7 @@ class GoalsScreen extends StatelessWidget {
       builder: (context) => _GoalFormSheet(
         initialGoal: goal,
         onSave: (savedGoal) {
-          store.upsertGoal(savedGoal);
+          ref.read(malvaStoreProvider.notifier).upsertGoal(savedGoal);
           Navigator.pop(context);
         },
         onDelete: goal == null
@@ -124,7 +120,7 @@ class GoalsScreen extends StatelessWidget {
                   ),
                 );
                 if (confirmed == true && context.mounted) {
-                  store.deleteGoal(goal.id);
+                  ref.read(malvaStoreProvider.notifier).deleteGoal(goal.id);
                   Navigator.pop(context);
                 }
               },
@@ -279,7 +275,7 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
-              initialValue: _frequency,
+              value: _frequency,
               decoration: const InputDecoration(labelText: 'Frequency'),
               items: const [
                 DropdownMenuItem(value: 'Harian', child: Text('Harian')),

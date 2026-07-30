@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'models.dart';
+import 'providers/providers.dart';
 import 'screens/assessment_screen.dart';
 import 'screens/initial_screening_consent_screen.dart';
 import 'screens/login_screen.dart';
@@ -10,40 +12,34 @@ import 'screens/patient_shell.dart';
 import 'screens/professional_dashboard_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/dashboard_sync_service.dart';
-import 'services/malva_api_client.dart';
 import 'services/medication_reminder_service.dart';
 import 'services/push_notification_service.dart';
-import 'store/malva_store.dart';
 import 'theme.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-class MalvaApp extends StatefulWidget {
+class MalvaApp extends ConsumerStatefulWidget {
   const MalvaApp({super.key, this.medicationReminderService});
 
   final MedicationReminderService? medicationReminderService;
 
   @override
-  State<MalvaApp> createState() => _MalvaAppState();
+  ConsumerState<MalvaApp> createState() => _MalvaAppState();
 }
 
-class _MalvaAppState extends State<MalvaApp> {
-  late final MalvaStore _store;
-  late final MalvaApiClient _apiClient;
+class _MalvaAppState extends ConsumerState<MalvaApp> {
   late final PushNotificationService _pushNotifications;
   late final DashboardSyncService _dashboardSyncService;
   late final MedicationReminderService _medicationReminderService;
-  AuthSession? _session;
-  bool _showSplash = true;
   bool _isTakingInitialScreening = false;
+  bool _showSplash = true;
 
   @override
   void initState() {
     super.initState();
-    _apiClient = MalvaApiClient();
-    _store = MalvaStore.seeded(apiClient: _apiClient);
+    final apiClient = ref.read(apiClientProvider);
     _pushNotifications = PushNotificationService(
-      apiClient: _apiClient,
+      apiClient: apiClient,
       navigatorKey: navigatorKey,
     );
     _dashboardSyncService = DashboardSyncService();
@@ -58,7 +54,6 @@ class _MalvaAppState extends State<MalvaApp> {
     });
 
     unawaited(_pushNotifications.initialize().catchError((_) {}));
-    unawaited(_restoreSession());
   }
 
   @override
@@ -69,67 +64,56 @@ class _MalvaAppState extends State<MalvaApp> {
 
   void _handleNotificationTap(String medicationId) {
     if (!mounted) return;
-    if (_session == null) {
-      setState(() => _showSplash = false);
+    final session = ref.read(currentSessionProvider);
+    if (session == null) {
+      ref.read(authStateProvider.notifier).clearSession();
       return;
     }
-    if (_session!.role == UserRole.patient) {
+    if (session.role == UserRole.patient) {
       navigatorKey.currentState?.pushNamed('/medication');
     }
   }
 
+  void _scheduleAllMedicationReminders() {
+    final meds = ref.read(malvaStoreProvider).medications;
+    for (final med in meds) {
+      unawaited(_medicationReminderService.scheduleMedicationReminder(med));
+    }
+  }
+
   void _handleAuthenticated(AuthSession session) {
-    setState(() {
-      _session = session;
-      _isTakingInitialScreening = false;
-    });
-    _apiClient.setRefreshToken(session.refreshToken);
+    setState(() => _isTakingInitialScreening = false);
+    ref.read(authStateProvider.notifier).setSession(session);
+    ref.read(apiClientProvider).setRefreshToken(session.refreshToken);
     unawaited(_pushNotifications.registerDeviceToken(session));
-    unawaited(_store.persistSession(session));
+    ref.read(malvaStoreProvider.notifier).persistSession(session);
     _scheduleAllMedicationReminders();
   }
 
   void _handleLogout() {
     _dashboardSyncService.stopSync();
-    unawaited(_store.clearSession());
-    setState(() {
-      _session = null;
-      _isTakingInitialScreening = false;
-    });
-  }
-
-  void _scheduleAllMedicationReminders() {
-    for (final med in _store.medications) {
-      unawaited(_medicationReminderService.scheduleMedicationReminder(med));
-    }
-  }
-
-  Future<void> _restoreSession() async {
-    final session = await _store.restoreSession();
-    if (session != null && mounted) {
-      setState(() => _session = session);
-      _apiClient.setRefreshToken(session.refreshToken);
-      unawaited(_pushNotifications.registerDeviceToken(session));
-      _scheduleAllMedicationReminders();
-    }
+    ref.read(authStateProvider.notifier).clearSession();
+    ref.read(malvaStoreProvider.notifier).clearSession();
+    setState(() => _isTakingInitialScreening = false);
   }
 
   Widget _buildPatientHome() {
-    if (_store.needsInitialScreeningDecision && !_isTakingInitialScreening) {
+    final storeState = ref.watch(malvaStoreProvider);
+
+    if (storeState.needsInitialScreeningDecision &&
+        !_isTakingInitialScreening) {
       return InitialScreeningConsentScreen(
-        store: _store,
         onAgree: () => setState(() => _isTakingInitialScreening = true),
-        onSkip: () => setState(() {
-          _store.skipInitialScreening();
-          _isTakingInitialScreening = false;
-        }),
+        onSkip: () {
+          ref.read(malvaStoreProvider.notifier).skipInitialScreening();
+          setState(() => _isTakingInitialScreening = false);
+        },
       );
     }
 
     if (_isTakingInitialScreening) {
       return AssessmentScreen(
-        store: _store,
-        session: _session,
+        session: ref.read(currentSessionProvider),
         isInitialScreening: true,
         onComplete: () => setState(() => _isTakingInitialScreening = false),
         onBack: () => setState(() => _isTakingInitialScreening = false),
@@ -137,9 +121,7 @@ class _MalvaAppState extends State<MalvaApp> {
     }
 
     return PatientShell(
-      store: _store,
-      session: _session,
-      apiClient: _apiClient,
+      session: ref.read(currentSessionProvider),
       medicationReminderService: _medicationReminderService,
       onLogout: _handleLogout,
     );
@@ -147,6 +129,20 @@ class _MalvaAppState extends State<MalvaApp> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authStateProvider);
+
+    // Listen to auth changes
+    ref.listen<AuthState>(authStateProvider, (previous, next) {
+      if (next.isAuthenticated && previous?.session == null) {
+        final session = next.session!;
+        ref.read(apiClientProvider).setRefreshToken(session.refreshToken);
+        unawaited(_pushNotifications.registerDeviceToken(session));
+        _scheduleAllMedicationReminders();
+      } else if (!next.isAuthenticated && previous?.session != null) {
+        _dashboardSyncService.stopSync();
+      }
+    });
+
     return MaterialApp(
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
@@ -156,16 +152,11 @@ class _MalvaAppState extends State<MalvaApp> {
       onGenerateRoute: _onGenerateRoute,
       home: _showSplash
           ? const SplashScreen()
-          : _session == null
-              ? LoginScreen(
-                  store: _store,
-                  onAuthenticated: _handleAuthenticated,
-                )
-              : _session!.role == UserRole.professional
+          : authState.session == null
+              ? LoginScreen(onAuthenticated: _handleAuthenticated)
+              : authState.isProfessional
                   ? ProfessionalDashboardScreen(
-                      store: _store,
-                      session: _session,
-                      apiClient: _apiClient,
+                      session: authState.session,
                       syncService: _dashboardSyncService,
                       onLogout: _handleLogout,
                     )
@@ -177,32 +168,26 @@ class _MalvaAppState extends State<MalvaApp> {
     final name = settings.name;
     if (name == null) return null;
 
+    final authState = ref.read(authStateProvider);
+
     return switch (name) {
       '/crisis-alert' => MaterialPageRoute(
           builder: (_) => _buildPatientHome(),
           settings: settings,
         ),
       '/medication' => MaterialPageRoute(
-          builder: (_) => _session == null
-              ? LoginScreen(
-                  store: _store,
-                  onAuthenticated: _handleAuthenticated,
-                )
+          builder: (_) => authState.session == null
+              ? LoginScreen(onAuthenticated: _handleAuthenticated)
               : PatientShell(
-                  store: _store,
-                  session: _session,
-                  apiClient: _apiClient,
+                  session: authState.session,
                   medicationReminderService: _medicationReminderService,
                   onLogout: _handleLogout,
                 ),
           settings: settings,
         ),
       '/assessment/result' => MaterialPageRoute(
-          builder: (_) => _session == null
-              ? LoginScreen(
-                  store: _store,
-                  onAuthenticated: _handleAuthenticated,
-                )
+          builder: (_) => authState.session == null
+              ? LoginScreen(onAuthenticated: _handleAuthenticated)
               : _buildPatientHome(),
           settings: settings,
         ),

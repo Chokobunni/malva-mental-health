@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
-import '../store/malva_store.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 import 'assessment_screen.dart';
@@ -11,10 +12,9 @@ import 'consent_management_screen.dart';
 import 'goals_screen.dart';
 import 'record_screen.dart';
 
-class MoreScreen extends StatefulWidget {
+class MoreScreen extends ConsumerStatefulWidget {
   const MoreScreen({
     super.key,
-    required this.store,
     required this.onLogout,
     this.apiClient,
     this.session,
@@ -22,7 +22,6 @@ class MoreScreen extends StatefulWidget {
     this.professionalName = 'Profesional',
   });
 
-  final MalvaStore store;
   final VoidCallback onLogout;
   final MalvaApiClient? apiClient;
   final AuthSession? session;
@@ -30,10 +29,10 @@ class MoreScreen extends StatefulWidget {
   final String professionalName;
 
   @override
-  State<MoreScreen> createState() => _MoreScreenState();
+  ConsumerState<MoreScreen> createState() => _MoreScreenState();
 }
 
-class _MoreScreenState extends State<MoreScreen> {
+class _MoreScreenState extends ConsumerState<MoreScreen> {
   bool _privacyMode = false;
   bool _hideDiagnosis = false;
   bool _hideMedicationName = false;
@@ -65,7 +64,7 @@ class _MoreScreenState extends State<MoreScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => AssessmentScreen(store: widget.store)),
+                        builder: (_) => const AssessmentScreen()),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -77,7 +76,7 @@ class _MoreScreenState extends State<MoreScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => GoalsScreen(store: widget.store)),
+                        builder: (_) => const GoalsScreen()),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -89,7 +88,7 @@ class _MoreScreenState extends State<MoreScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => RecordScreen(store: widget.store)),
+                        builder: (_) => const RecordScreen()),
                   ),
                 ),
                 const SizedBox(height: 10),

@@ -1,30 +1,29 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
-import '../store/malva_store.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 
-class MoodScreen extends StatefulWidget {
+class MoodScreen extends ConsumerStatefulWidget {
   const MoodScreen({
     super.key,
-    required this.store,
     this.session,
     this.apiClient,
   });
 
-  final MalvaStore store;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
   @override
-  State<MoodScreen> createState() => _MoodScreenState();
+  ConsumerState<MoodScreen> createState() => _MoodScreenState();
 }
 
-class _MoodScreenState extends State<MoodScreen> {
+class _MoodScreenState extends ConsumerState<MoodScreen> {
   MoodValue _mood = MoodValue.okay;
   double _sleep = 7;
   double _energy = 5;
@@ -74,7 +73,7 @@ class _MoodScreenState extends State<MoodScreen> {
             ),
           )
           .toList();
-      widget.store.replaceMoodEntries(entries);
+      ref.read(malvaStoreProvider.notifier).replaceMoodEntries(entries);
       if (mounted) setState(() {});
     } on Object catch (_) {
       await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -83,198 +82,194 @@ class _MoodScreenState extends State<MoodScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: widget.store,
-      builder: (context, _) {
-        final entries = widget.store.moodEntries;
-        return Scaffold(
-          body: RefreshIndicator(
-            onRefresh: _refreshData,
-            child: ListView(
-              padding: EdgeInsets.zero,
+    final storeState = ref.watch(malvaStoreProvider);
+    final entries = storeState.moodEntries;
+    return Scaffold(
+      body: RefreshIndicator(
+        onRefresh: _refreshData,
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            if (_isInitialLoading) const LinearProgressIndicator(),
+            const GradientHeader(
+            title: 'Mood Tracker',
+            subtitle: 'Mood, tidur, energi, kecemasan',
+            leading:
+                Icon(Icons.mood_rounded, color: Colors.white, size: 34),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (_isInitialLoading) const LinearProgressIndicator(),
-                const GradientHeader(
-                title: 'Mood Tracker',
-                subtitle: 'Mood, tidur, energi, kecemasan',
-                leading:
-                    Icon(Icons.mood_rounded, color: Colors.white, size: 34),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: MetricTile(
-                            icon: Icons.check_circle_rounded,
-                            value: '${entries.length}',
-                            label: 'Total check-in',
-                            color: MalvaColors.mint,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: MetricTile(
-                            icon: Icons.local_fire_department_rounded,
-                            value: '${entries.take(7).length}',
-                            label: 'Streak hari',
-                            color: MalvaColors.amber,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 22),
-                    const SectionLabel('Check-in hari ini'),
-                    SoftCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Bagaimana perasaanmu?',
-                              style: TextStyle(fontWeight: FontWeight.w900)),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: MoodValue.values.map((mood) {
-                              return ChoiceChip(
-                                avatar: Icon(mood.icon, size: 18),
-                                label: Text(mood.label),
-                                selected: _mood == mood,
-                                onSelected: (_) => setState(() => _mood = mood),
-                              );
-                            }).toList(),
-                          ),
-                          const SizedBox(height: 18),
-                          _SliderField(
-                            label: 'Tidur',
-                            value: _sleep,
-                            min: 0,
-                            max: 12,
-                            divisions: 24,
-                            suffix: '${_sleep.toStringAsFixed(1)} jam',
-                            onChanged: (value) =>
-                                setState(() => _sleep = value),
-                          ),
-                          _SliderField(
-                            label: 'Energi',
-                            value: _energy,
-                            min: 0,
-                            max: 10,
-                            divisions: 10,
-                            suffix: _energy.round().toString(),
-                            onChanged: (value) =>
-                                setState(() => _energy = value),
-                          ),
-                          _SliderField(
-                            label: 'Kecemasan',
-                            value: _anxiety,
-                            min: 0,
-                            max: 10,
-                            divisions: 10,
-                            suffix: _anxiety.round().toString(),
-                            onChanged: (value) =>
-                                setState(() => _anxiety = value),
-                          ),
-                          _SliderField(
-                            label: 'Iritabilitas',
-                            value: _irritability,
-                            min: 0,
-                            max: 10,
-                            divisions: 10,
-                            suffix: _irritability.round().toString(),
-                            onChanged: (value) =>
-                                setState(() => _irritability = value),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _noteController,
-                            minLines: 2,
-                            maxLines: 4,
-                            decoration: const InputDecoration(
-                              labelText: 'Catatan singkat',
-                              hintText:
-                                  'Trigger, pikiran, atau hal yang membantu hari ini',
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          FilledButton.icon(
-                            onPressed: _saveEntry,
-                            icon: const Icon(Icons.save_rounded),
-                            label: const Text('Simpan Mood Entry'),
-                          ),
-                        ],
+                    Expanded(
+                      child: MetricTile(
+                        icon: Icons.check_circle_rounded,
+                        value: '${entries.length}',
+                        label: 'Total check-in',
+                        color: MalvaColors.mint,
                       ),
                     ),
-                    const SizedBox(height: 22),
-                    const SectionLabel('Combo chart'),
-                    SoftCard(
-                      child: SizedBox(
-                        height: 210,
-                        child: entries.isEmpty
-                            ? const Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.mood_rounded,
-                                        size: 48, color: MalvaColors.seed),
-                                    SizedBox(height: 12),
-                                    Text(
-                                      'Belum ada data mood',
-                                      style: TextStyle(fontWeight: FontWeight.w700),
-                                    ),
-                                    SizedBox(height: 4),
-                                    Text(
-                                      'Data mood akan muncul setelah Anda melakukan check-in.',
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : GestureDetector(
-                                onTapUp: (details) {
-                                  final chartEntries = entries.take(7).toList().reversed.toList();
-                                  if (chartEntries.isEmpty) return;
-                                  final RenderBox box = context.findRenderObject() as RenderBox;
-                                  final localPosition = box.globalToLocal(details.globalPosition);
-                                  final step = box.size.width / chartEntries.length;
-                                  final index = (localPosition.dx / step).floor();
-                                  if (index >= 0 && index < chartEntries.length) {
-                                    _showMoodDetail(context, chartEntries[index]);
-                                  }
-                                },
-                                child: CustomPaint(
-                                  painter: _MoodChartPainter(
-                                      entries.take(7).toList().reversed.toList()),
-                                  child: const SizedBox.expand(),
-                                ),
-                              ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: MetricTile(
+                        icon: Icons.local_fire_department_rounded,
+                        value: '${entries.take(7).length}',
+                        label: 'Streak hari',
+                        color: MalvaColors.amber,
                       ),
                     ),
-                    if (entries.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _ChartLegend(color: MalvaColors.mint, label: 'Mood'),
-                            const SizedBox(width: 16),
-                            _ChartLegend(color: MalvaColors.amber, label: 'Kecemasan'),
-                            const SizedBox(width: 16),
-                            _ChartLegend(color: MalvaColors.pink, label: 'Tidur'),
-                          ],
-                        ),
-                      ),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 22),
+                const SectionLabel('Check-in hari ini'),
+                SoftCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Bagaimana perasaanmu?',
+                          style: TextStyle(fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: MoodValue.values.map((mood) {
+                          return ChoiceChip(
+                            avatar: Icon(mood.icon, size: 18),
+                            label: Text(mood.label),
+                            selected: _mood == mood,
+                            onSelected: (_) => setState(() => _mood = mood),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 18),
+                      _SliderField(
+                        label: 'Tidur',
+                        value: _sleep,
+                        min: 0,
+                        max: 12,
+                        divisions: 24,
+                        suffix: '${_sleep.toStringAsFixed(1)} jam',
+                        onChanged: (value) =>
+                            setState(() => _sleep = value),
+                      ),
+                      _SliderField(
+                        label: 'Energi',
+                        value: _energy,
+                        min: 0,
+                        max: 10,
+                        divisions: 10,
+                        suffix: _energy.round().toString(),
+                        onChanged: (value) =>
+                            setState(() => _energy = value),
+                      ),
+                      _SliderField(
+                        label: 'Kecemasan',
+                        value: _anxiety,
+                        min: 0,
+                        max: 10,
+                        divisions: 10,
+                        suffix: _anxiety.round().toString(),
+                        onChanged: (value) =>
+                            setState(() => _anxiety = value),
+                      ),
+                      _SliderField(
+                        label: 'Iritabilitas',
+                        value: _irritability,
+                        min: 0,
+                        max: 10,
+                        divisions: 10,
+                        suffix: _irritability.round().toString(),
+                        onChanged: (value) =>
+                            setState(() => _irritability = value),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _noteController,
+                        minLines: 2,
+                        maxLines: 4,
+                        decoration: const InputDecoration(
+                          labelText: 'Catatan singkat',
+                          hintText:
+                              'Trigger, pikiran, atau hal yang membantu hari ini',
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      FilledButton.icon(
+                        onPressed: _saveEntry,
+                        icon: const Icon(Icons.save_rounded),
+                        label: const Text('Simpan Mood Entry'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 22),
+                const SectionLabel('Combo chart'),
+                SoftCard(
+                  child: SizedBox(
+                    height: 210,
+                    child: entries.isEmpty
+                        ? const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.mood_rounded,
+                                    size: 48, color: MalvaColors.seed),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Belum ada data mood',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Data mood akan muncul setelah Anda melakukan check-in.',
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          )
+                        : GestureDetector(
+                            onTapUp: (details) {
+                              final chartEntries = entries.take(7).toList().reversed.toList();
+                              if (chartEntries.isEmpty) return;
+                              final RenderBox box = context.findRenderObject() as RenderBox;
+                              final localPosition = box.globalToLocal(details.globalPosition);
+                              final step = box.size.width / chartEntries.length;
+                              final index = (localPosition.dx / step).floor();
+                              if (index >= 0 && index < chartEntries.length) {
+                                _showMoodDetail(context, chartEntries[index]);
+                              }
+                            },
+                            child: CustomPaint(
+                              painter: _MoodChartPainter(
+                                  entries.take(7).toList().reversed.toList()),
+                              child: const SizedBox.expand(),
+                            ),
+                          ),
+                  ),
+                ),
+                if (entries.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _ChartLegend(color: MalvaColors.mint, label: 'Mood'),
+                        const SizedBox(width: 16),
+                        _ChartLegend(color: MalvaColors.amber, label: 'Kecemasan'),
+                        const SizedBox(width: 16),
+                        _ChartLegend(color: MalvaColors.pink, label: 'Tidur'),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ),
-        ),
-        );
-      },
+        ],
+      ),
+    ),
     );
   }
 
@@ -290,7 +285,7 @@ class _MoodScreenState extends State<MoodScreen> {
           ? 'Tidak ada catatan.'
           : _noteController.text.trim(),
     );
-    widget.store.addMood(
+    ref.read(malvaStoreProvider.notifier).addMood(
       entry,
     );
     unawaited(_syncEntry(entry));

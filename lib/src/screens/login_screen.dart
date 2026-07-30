@@ -1,26 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
-import '../store/malva_store.dart';
+import '../providers/providers.dart';
 import '../theme.dart';
 
 enum _AuthMode { login, register }
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({
     super.key,
-    required this.store,
     required this.onAuthenticated,
   });
 
-  final MalvaStore store;
   final ValueChanged<AuthSession> onAuthenticated;
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController(text: 'pasien@malva.app');
   final _patientNameController = TextEditingController(text: 'Emelie R.');
   final _professionalIdController =
@@ -142,24 +141,24 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       setState(() => _isSubmitting = true);
       _validateFields();
+      final store = ref.read(malvaStoreProvider.notifier);
       final session = await switch ((_role, _mode)) {
-        (UserRole.patient, _AuthMode.login) => widget.store.loginPatientOnline(
+        (UserRole.patient, _AuthMode.login) => store.loginPatientOnline(
             email: _emailController.text,
             password: _passwordController.text,
           ),
-        (UserRole.patient, _AuthMode.register) =>
-          widget.store.registerPatientOnline(
+        (UserRole.patient, _AuthMode.register) => store.registerPatientOnline(
             email: _emailController.text,
             password: _passwordController.text,
             displayName: _patientNameController.text,
           ),
         (UserRole.professional, _AuthMode.login) =>
-          widget.store.loginProfessionalOnline(
+          store.loginProfessionalOnline(
             professionalId: _professionalIdController.text,
             password: _passwordController.text,
           ),
         (UserRole.professional, _AuthMode.register) =>
-          widget.store.registerProfessionalOnline(
+          store.registerProfessionalOnline(
             professionalId: _professionalIdController.text,
             password: _passwordController.text,
             displayName: _professionalNameController.text,
@@ -332,7 +331,7 @@ class _LoginCard extends StatelessWidget {
                 controller: professionalIdController,
                 keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.next,
-                maxLength: MalvaStore.professionalIdDigitCount,
+                maxLength: 16,
                 decoration: const InputDecoration(
                   labelText: 'ID profesi',
                   prefixIcon: Icon(Icons.verified_user_rounded),

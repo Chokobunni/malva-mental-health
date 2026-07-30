@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../store/malva_store.dart';
+import '../providers/providers.dart';
 import '../theme.dart';
 
-class InitialScreeningConsentScreen extends StatelessWidget {
+class InitialScreeningConsentScreen extends ConsumerWidget {
   const InitialScreeningConsentScreen({
     super.key,
-    required this.store,
     required this.onAgree,
     required this.onSkip,
   });
 
-  final MalvaStore store;
   final VoidCallback onAgree;
   final VoidCallback onSkip;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: Container(
         width: double.infinity,
@@ -83,7 +82,7 @@ class InitialScreeningConsentScreen extends StatelessWidget {
                         const SizedBox(height: 10),
                         OutlinedButton(
                           onPressed: () {
-                            store.skipInitialScreening();
+                            ref.read(malvaStoreProvider.notifier).skipInitialScreening();
                             onSkip();
                           },
                           style: OutlinedButton.styleFrom(

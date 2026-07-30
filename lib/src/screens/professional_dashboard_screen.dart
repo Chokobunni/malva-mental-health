@@ -1,39 +1,38 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../assessment_engine.dart';
 import '../models.dart';
+import '../providers/providers.dart';
 import '../services/dashboard_sync_service.dart';
 import '../services/malva_api_client.dart';
-import '../store/malva_store.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 
-class ProfessionalDashboardScreen extends StatefulWidget {
+class ProfessionalDashboardScreen extends ConsumerStatefulWidget {
   const ProfessionalDashboardScreen({
     super.key,
-    required this.store,
     required this.onLogout,
     this.session,
     this.apiClient,
     this.syncService,
   });
 
-  final MalvaStore store;
   final VoidCallback onLogout;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
   final DashboardSyncService? syncService;
 
   @override
-  State<ProfessionalDashboardScreen> createState() =>
+  ConsumerState<ProfessionalDashboardScreen> createState() =>
       _ProfessionalDashboardScreenState();
 }
 
 class _ProfessionalDashboardScreenState
-    extends State<ProfessionalDashboardScreen> {
+    extends ConsumerState<ProfessionalDashboardScreen> {
   final Set<String> _reviewedScreeningIds = {};
   final List<_AuditEntry> _auditEntries = [];
   final Map<String, List<BackendProfessionalNote>> _professionalNotes = {};
@@ -101,214 +100,200 @@ class _ProfessionalDashboardScreenState
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: widget.store,
-      builder: (context, _) {
-        final patients = _patientsForDashboard();
-        final filteredPatients = _filterPatients(patients);
-        final selectedPatient = _selectedPatient(patients);
-        final selectedScreenings = selectedPatient == null
-            ? <_ScreeningView>[]
-            : selectedPatient.screenings;
-        final crisisQueue = _crisisQueue(patients);
-        final reviewQueue = _reviewQueue(patients);
-        final isBackendPatient = selectedPatient?.sourceLabel == 'Backend';
-
-        return Scaffold(
-          body: RefreshIndicator(
-            onRefresh: _loadOnlineProfessionalData,
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                GradientHeader(
-                  title: 'Professional',
-                  subtitle:
-                      'Prioritas pasien, screening, alert, dan follow-up klinis',
-                  leading: const Icon(
-                    Icons.medical_information_rounded,
-                    color: Colors.white,
-                    size: 34,
+    final storeState = ref.watch(malvaStoreProvider);
+    return Scaffold(
+      body: RefreshIndicator(
+        onRefresh: _loadOnlineProfessionalData,
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            GradientHeader(
+              title: 'Professional',
+              subtitle:
+                  'Prioritas pasien, screening, alert, dan follow-up klinis',
+              leading: const Icon(
+                Icons.medical_information_rounded,
+                color: Colors.white,
+                size: 34,
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _SyncStatusIndicator(
+                    status: _syncStatus,
+                    lastSyncTime: _lastSyncTime,
                   ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _SyncStatusIndicator(
-                        status: _syncStatus,
-                        lastSyncTime: _lastSyncTime,
-                      ),
-                      IconButton(
-                        tooltip: 'Refresh manual',
-                        onPressed: _manualRefresh,
-                        icon: _syncStatus == SyncStatus.syncing
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.refresh_rounded,
-                                color: Colors.white),
-                      ),
-                      IconButton(
-                        tooltip: 'Keluar',
-                        onPressed: widget.onLogout,
-                        icon:
-                            const Icon(Icons.logout_rounded, color: Colors.white),
-                      ),
-                    ],
+                  IconButton(
+                    tooltip: 'Refresh manual',
+                    onPressed: _manualRefresh,
+                    icon: _syncStatus == SyncStatus.syncing
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.refresh_rounded,
+                            color: Colors.white),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _StatusBanner(
-                        isLoading: _isLoadingOnlineData,
-                        error: _onlineError,
-                        hasBackendSession:
-                            widget.session?.accessToken?.isNotEmpty == true,
-                        onRetry: _loadOnlineProfessionalData,
-                      ),
-                      _SyncStatusBar(
-                        syncStatus: _syncStatus,
-                        lastSyncTime: _lastSyncTime,
-                        hasBackendSession:
-                            widget.session?.accessToken?.isNotEmpty == true,
-                      ),
-                      _PriorityMetrics(
-                        patientCount: patients.length,
-                        crisisCount: crisisQueue.length,
-                        reviewCount: reviewQueue.length,
-                      ),
-                      const SizedBox(height: 18),
-                      _PatientSearch(
-                        query: _searchQuery,
-                        onChanged: (value) =>
-                            setState(() => _searchQuery = value),
-                      ),
-                      const SizedBox(height: 18),
-                      SectionLabel(
-                        '1. Dashboard prioritas pasien',
-                        action: TextButton.icon(
-                          onPressed: _loadOnlineProfessionalData,
-                          icon: const Icon(Icons.refresh_rounded),
-                          label: const Text('Refresh'),
-                        ),
-                      ),
-                      _PriorityQueue(
-                        crisisQueue: crisisQueue,
-                        reviewQueue: reviewQueue,
-                        reviewedIds: _reviewedScreeningIds,
-                        onReview: _openScreeningReview,
-                      ),
-                      const SizedBox(height: 22),
-                      const SectionLabel('2. Daftar pasien terhubung'),
-                      _ConnectedPatientList(
-                        patients: filteredPatients,
-                        selectedPatientId: selectedPatient?.patientId,
-                        onSelect: (patient) => setState(
-                          () => _selectedPatientId = patient.patientId,
-                        ),
-                      ),
-                      const SizedBox(height: 22),
-                      if (selectedPatient == null)
-                        const EmptyState(
-                          icon: Icons.people_outline_rounded,
-                          title: 'Belum ada pasien terhubung',
-                          subtitle:
-                              'Pasien perlu menghubungkan akun dengan ID profesional sebelum data real muncul.',
-                        )
-                      else ...[
-                        _PatientDetailSection(
-                          patient: selectedPatient,
-                          professionalCode: widget.session?.identifier,
-                        ),
-                        const SizedBox(height: 22),
-                        _ScreeningHistorySection(
-                          patient: selectedPatient,
-                          screenings: selectedScreenings,
-                          reviewedIds: _reviewedScreeningIds,
-                          onReview: _openScreeningReview,
-                        ),
-                        const SizedBox(height: 22),
-                        _TimelineSection(
-                          patient: selectedPatient,
-                          backendEvents: _timelineEventsByPatient[
-                                  selectedPatient.patientId] ??
-                              const <BackendTimelineEvent>[],
-                          diaryEntries: widget.store.diaryEntries.take(2),
-                          medicationLogs: widget.store.medicationLogs.take(2),
-                          allowLocalFallback: !isBackendPatient,
-                        ),
-                        const SizedBox(height: 22),
-                        _MoodDiaryReviewSection(
-                          online: isBackendPatient,
-                          restricted: _moodDiaryRestrictedPatients
-                              .contains(selectedPatient.patientId),
-                          moods: _moodsByPatient[selectedPatient.patientId] ??
-                              const <BackendMoodCheckin>[],
-                          backendEntries:
-                              _diariesByPatient[selectedPatient.patientId] ??
-                                  const <BackendDiaryEntry>[],
-                          localEntries:
-                              widget.store.diaryEntries.take(4).toList(),
-                          onBackendFeedback: (entry) =>
-                              _openBackendDiaryFeedback(
-                            selectedPatient,
-                            entry,
-                          ),
-                          onLocalFeedback: _openDiaryFeedback,
-                        ),
-                        const SizedBox(height: 22),
-                        _MedicationMonitoringSection(
-                          store: widget.store,
-                          online: isBackendPatient,
-                          restricted: _medicationRestrictedPatients
-                              .contains(selectedPatient.patientId),
-                          medications: _medicationsByPatient[
-                                  selectedPatient.patientId] ??
-                              const <BackendMedication>[],
-                          logs: _medicationLogsByPatient[
-                                  selectedPatient.patientId] ??
-                              const <BackendMedicationLog>[],
-                        ),
-                        const SizedBox(height: 22),
-                        _ProfessionalNotesSection(
-                          notes: _professionalNotes[selectedPatient.patientId] ?? const [],
-                          followUps:
-                              _followUpMessages[selectedPatient.patientId] ?? const [],
-                          onEditNote: () => _openProfessionalNote(
-                            selectedPatient,
-                          ),
-                          onFollowUp: () =>
-                              _openFollowUpMessage(selectedPatient),
-                        ),
-                        const SizedBox(height: 22),
-                        _RelationshipManagementSection(
-                          patients: patients,
-                          professionalCode: widget.session?.identifier,
-                          onRefresh: _loadOnlineProfessionalData,
-                        ),
-                        const SizedBox(height: 22),
-                        _AuditAndExportSection(
-                          auditEntries: [
-                            ..._auditEntries,
-                            ..._serverAuditEntries,
-                          ],
-                          onExport: () => _openExportSummary(selectedPatient),
-                        ),
-                      ],
-                    ],
+                  IconButton(
+                    tooltip: 'Keluar',
+                    onPressed: widget.onLogout,
+                    icon:
+                        const Icon(Icons.logout_rounded, color: Colors.white),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      },
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _StatusBanner(
+                    isLoading: _isLoadingOnlineData,
+                    error: _onlineError,
+                    hasBackendSession:
+                        widget.session?.accessToken?.isNotEmpty == true,
+                    onRetry: _loadOnlineProfessionalData,
+                  ),
+                  _SyncStatusBar(
+                    syncStatus: _syncStatus,
+                    lastSyncTime: _lastSyncTime,
+                    hasBackendSession:
+                        widget.session?.accessToken?.isNotEmpty == true,
+                  ),
+                  _PriorityMetrics(
+                    patientCount: _patientsForDashboard(storeState).length,
+                    crisisCount: _crisisQueue(_patientsForDashboard(storeState)).length,
+                    reviewCount: _reviewQueue(_patientsForDashboard(storeState)).length,
+                  ),
+                  const SizedBox(height: 18),
+                  _PatientSearch(
+                    query: _searchQuery,
+                    onChanged: (value) =>
+                        setState(() => _searchQuery = value),
+                  ),
+                  const SizedBox(height: 18),
+                  SectionLabel(
+                    '1. Dashboard prioritas pasien',
+                    action: TextButton.icon(
+                      onPressed: _loadOnlineProfessionalData,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Refresh'),
+                    ),
+                  ),
+                  _PriorityQueue(
+                    crisisQueue: _crisisQueue(_patientsForDashboard(storeState)),
+                    reviewQueue: _reviewQueue(_patientsForDashboard(storeState)),
+                    reviewedIds: _reviewedScreeningIds,
+                    onReview: _openScreeningReview,
+                  ),
+                  const SizedBox(height: 22),
+                  const SectionLabel('2. Daftar pasien terhubung'),
+                  _ConnectedPatientList(
+                    patients: _filterPatients(_patientsForDashboard(storeState)),
+                    selectedPatientId: _selectedPatient(_patientsForDashboard(storeState))?.patientId,
+                    onSelect: (patient) => setState(
+                      () => _selectedPatientId = patient.patientId,
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  if (_selectedPatient(_patientsForDashboard(storeState)) == null)
+                    const EmptyState(
+                      icon: Icons.people_outline_rounded,
+                      title: 'Belum ada pasien terhubung',
+                      subtitle:
+                          'Pasien perlu menghubungkan akun dengan ID profesional sebelum data real muncul.',
+                    )
+                  else ...[
+                    _PatientDetailSection(
+                      patient: _selectedPatient(_patientsForDashboard(storeState))!,
+                      professionalCode: widget.session?.identifier,
+                    ),
+                    const SizedBox(height: 22),
+                    _ScreeningHistorySection(
+                      patient: _selectedPatient(_patientsForDashboard(storeState))!,
+                      screenings: _selectedPatient(_patientsForDashboard(storeState))!.screenings,
+                      reviewedIds: _reviewedScreeningIds,
+                      onReview: _openScreeningReview,
+                    ),
+                    const SizedBox(height: 22),
+                    _TimelineSection(
+                      patient: _selectedPatient(_patientsForDashboard(storeState))!,
+                      backendEvents: _timelineEventsByPatient[
+                              _selectedPatient(_patientsForDashboard(storeState))!.patientId] ??
+                          const <BackendTimelineEvent>[],
+                      diaryEntries: storeState.diaryEntries.take(2),
+                      medicationLogs: storeState.medicationLogs.take(2),
+                      allowLocalFallback: !(_selectedPatient(_patientsForDashboard(storeState))!.sourceLabel == 'Backend'),
+                    ),
+                    const SizedBox(height: 22),
+                    _MoodDiaryReviewSection(
+                      online: _selectedPatient(_patientsForDashboard(storeState))!.sourceLabel == 'Backend',
+                      restricted: _moodDiaryRestrictedPatients
+                          .contains(_selectedPatient(_patientsForDashboard(storeState))!.patientId),
+                      moods: _moodsByPatient[_selectedPatient(_patientsForDashboard(storeState))!.patientId] ??
+                          const <BackendMoodCheckin>[],
+                      backendEntries:
+                          _diariesByPatient[_selectedPatient(_patientsForDashboard(storeState))!.patientId] ??
+                              const <BackendDiaryEntry>[],
+                      localEntries:
+                          storeState.diaryEntries.take(4).toList(),
+                      onBackendFeedback: (entry) =>
+                          _openBackendDiaryFeedback(
+                        _selectedPatient(_patientsForDashboard(storeState))!,
+                        entry,
+                      ),
+                      onLocalFeedback: _openDiaryFeedback,
+                    ),
+                    const SizedBox(height: 22),
+                    _MedicationMonitoringSection(
+                      storeState: storeState,
+                      online: _selectedPatient(_patientsForDashboard(storeState))!.sourceLabel == 'Backend',
+                      restricted: _medicationRestrictedPatients
+                          .contains(_selectedPatient(_patientsForDashboard(storeState))!.patientId),
+                      medications: _medicationsByPatient[
+                              _selectedPatient(_patientsForDashboard(storeState))!.patientId] ??
+                          const <BackendMedication>[],
+                      logs: _medicationLogsByPatient[
+                              _selectedPatient(_patientsForDashboard(storeState))!.patientId] ??
+                          const <BackendMedicationLog>[],
+                    ),
+                    const SizedBox(height: 22),
+                    _ProfessionalNotesSection(
+                      notes: _professionalNotes[_selectedPatient(_patientsForDashboard(storeState))!.patientId] ?? const [],
+                      followUps:
+                          _followUpMessages[_selectedPatient(_patientsForDashboard(storeState))!.patientId] ?? const [],
+                      onEditNote: () => _openProfessionalNote(
+                        _selectedPatient(_patientsForDashboard(storeState))!,
+                      ),
+                      onFollowUp: () =>
+                          _openFollowUpMessage(_selectedPatient(_patientsForDashboard(storeState))!),
+                    ),
+                    const SizedBox(height: 22),
+                    _RelationshipManagementSection(
+                      patients: _patientsForDashboard(storeState),
+                      professionalCode: widget.session?.identifier,
+                      onRefresh: _loadOnlineProfessionalData,
+                    ),
+                    const SizedBox(height: 22),
+                    _AuditAndExportSection(
+                      auditEntries: [
+                        ..._auditEntries,
+                        ..._serverAuditEntries,
+                      ],
+                      onExport: () => _openExportSummary(_selectedPatient(_patientsForDashboard(storeState))!),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -536,7 +521,7 @@ class _ProfessionalDashboardScreenState
     }
   }
 
-  List<_ProfessionalPatient> _patientsForDashboard() {
+  List<_ProfessionalPatient> _patientsForDashboard(MalvaStoreState storeState) {
     if (_links.isNotEmpty) {
       return [
         for (final link in _links)
@@ -556,15 +541,15 @@ class _ProfessionalDashboardScreenState
       ];
     }
 
-    final localScreenings = widget.store.screeningBundles
+    final localScreenings = storeState.screeningBundles
         .map(_ScreeningView.fromLocal)
         .toList(growable: false)
         .reversed
         .toList(growable: false);
     return [
       _ProfessionalPatient(
-        patientId: widget.store.patient.id,
-        displayName: widget.store.patient.name,
+        patientId: storeState.patient.id,
+        displayName: storeState.patient.name,
         sourceLabel: 'Demo lokal',
         status: 'active',
         linkedAt: null,
@@ -797,7 +782,7 @@ class _ProfessionalDashboardScreenState
                 FilledButton(
                   onPressed: () {
                     final feedback = controller.text.trim();
-                    widget.store.upsertDiary(
+                    ref.read(malvaStoreProvider.notifier).upsertDiary(
                       DiaryEntry(
                         id: entry.id,
                         createdAt: entry.createdAt,
@@ -1078,7 +1063,8 @@ class _ProfessionalDashboardScreenState
   }
 
   void _exportData() async {
-    final patients = _patientsForDashboard();
+    final storeState = ref.read(malvaStoreProvider);
+    final patients = _patientsForDashboard(storeState);
     final selected = _selectedPatient(patients);
 
     final StringBuffer csv = StringBuffer();
@@ -2017,14 +2003,14 @@ class _MoodDiaryReviewSection extends StatelessWidget {
 
 class _MedicationMonitoringSection extends StatelessWidget {
   const _MedicationMonitoringSection({
-    required this.store,
+    required this.storeState,
     required this.online,
     required this.restricted,
     required this.medications,
     required this.logs,
   });
 
-  final MalvaStore store;
+  final MalvaStoreState storeState;
   final bool online;
   final bool restricted;
   final List<BackendMedication> medications;
@@ -2058,13 +2044,13 @@ class _MedicationMonitoringSection extends StatelessWidget {
                   label: 'Adherence hari ini',
                   score: online
                       ? _backendAdherencePercent
-                      : store.adherencePercent,
+                      : storeState.adherencePercent,
                   maxScore: 100,
                   level:
-                      '${online ? _backendAdherencePercent : store.adherencePercent}%',
+                      '${online ? _backendAdherencePercent : storeState.adherencePercent}%',
                   color: (online
                               ? _backendAdherencePercent
-                              : store.adherencePercent) >=
+                              : storeState.adherencePercent) >=
                           80
                       ? MalvaColors.mint
                       : MalvaColors.orchid,
@@ -2081,7 +2067,7 @@ class _MedicationMonitoringSection extends StatelessWidget {
                     const SizedBox(height: 8),
                   ]
                 else
-                  for (final med in store.medications) ...[
+                  for (final med in storeState.medications) ...[
                     Row(
                       children: [
                         Icon(
