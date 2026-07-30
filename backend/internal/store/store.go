@@ -1757,3 +1757,108 @@ func normalizeLimit(value, fallback, max int) int {
 	}
 	return value
 }
+
+type ChatMessage struct {
+	ID             string    `json:"id"`
+	PatientID      string    `json:"patient_id"`
+	ProfessionalID string    `json:"professional_id"`
+	SenderID       string    `json:"sender_id"`
+	SenderName     string    `json:"sender_name"`
+	Text           string    `json:"text"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+func (s *Store) CreateChatMessage(ctx context.Context, msg ChatMessage) (ChatMessage, error) {
+	msg.Text = strings.TrimSpace(msg.Text)
+	msg.SenderName = strings.TrimSpace(msg.SenderName)
+	if msg.ID == "" || msg.PatientID == "" || msg.ProfessionalID == "" || msg.SenderID == "" || msg.Text == "" {
+		return ChatMessage{}, errors.New("id, patient_id, professional_id, sender_id, and text are required")
+	}
+	var saved ChatMessage
+	err := s.db.QueryRowContext(ctx, `
+		INSERT INTO chat_messages (id, patient_id, professional_id, sender_id, sender_name, text)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, patient_id, professional_id, sender_id, sender_name, text, created_at
+	`, msg.ID, msg.PatientID, msg.ProfessionalID, msg.SenderID, msg.SenderName, msg.Text).
+		Scan(&saved.ID, &saved.PatientID, &saved.ProfessionalID, &saved.SenderID,
+			&saved.SenderName, &saved.Text, &saved.CreatedAt)
+	if err != nil {
+		return ChatMessage{}, err
+	}
+	_ = s.AddAuditLog(ctx, msg.SenderID, msg.PatientID, "chat_message.sent", "chat_message", saved.ID, nil)
+	return saved, nil
+}
+
+func (s *Store) ListChatMessages(ctx context.Context, patientID, professionalID string, limit int) ([]ChatMessage, error) {
+	patientID = strings.TrimSpace(patientID)
+	professionalID = strings.TrimSpace(professionalID)
+	if patientID == "" || professionalID == "" {
+		return nil, errors.New("patient_id and professional_id are required")
+	}
+	limit = normalizeLimit(limit, 50, 200)
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, patient_id, professional_id, sender_id, sender_name, text, created_at
+		FROM chat_messages
+		WHERE patient_id = $1 AND professional_id = $2
+		ORDER BY created_at DESC
+		LIMIT $3
+	`, patientID, professionalID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var messages []ChatMessage
+	for rows.Next() {
+		var msg ChatMessage
+		if err := rows.Scan(&msg.ID, &msg.PatientID, &msg.ProfessionalID,
+			&msg.SenderID, &msg.SenderName, &msg.Text, &msg.CreatedAt); err != nil {
+			return nil, err
+		}
+		messages = append(messages, msg)
+	}
+	return messages, rows.Err()
+}
+
+func (s *Store) AreUsersLinked(ctx context.Context, userID1, userID2 string) (patientID, professionalID string, linked bool, err error) {
+	err = s.db.QueryRowContext(ctx, `
+		SELECT patient_id, professional_id
+		FROM patient_professional_links
+		WHERE ((patient_id = $1 AND professional_id = $2)
+		    OR (patient_id = $2 AND professional_id = $1))
+		  AND status = 'active'
+		LIMIT 1
+	`, userID1, userID2).Scan(&patientID, &professionalID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", false, nil
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+	return patientID, professionalID, true, nil
+}
+
+func (s *Store) ListLinkedUsers(ctx context.Context, userID string) ([]string, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, errors.New("user_id is required")
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT CASE WHEN patient_id = $1 THEN professional_id ELSE patient_id END
+		FROM patient_professional_links
+		WHERE (patient_id = $1 OR professional_id = $1)
+		  AND status = 'active'
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}

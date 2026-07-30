@@ -128,6 +128,20 @@ class MalvaApiClient {
     );
   }
 
+  Future<BackendMeResult> fetchMe({required String accessToken}) async {
+    final payload = await _send('GET', '/v1/me', accessToken: accessToken);
+    final user = payload['user'];
+    if (user is! Map<String, dynamic>) {
+      throw const MalvaApiException('Respons /v1/me tidak valid.');
+    }
+    return BackendMeResult(
+      id: user['id']?.toString() ?? '',
+      email: user['email']?.toString() ?? '',
+      role: user['role']?.toString() ?? '',
+      displayName: user['display_name']?.toString() ?? '',
+    );
+  }
+
   Future<void> saveDeviceToken({
     required String accessToken,
     required String platform,
@@ -210,12 +224,15 @@ class MalvaApiClient {
     required ScreeningBundle bundle,
     List<int>? phq9Answers,
     List<int>? gad7Answers,
+    String? patientId,
   }) async {
     final payload = await _send(
       'POST',
       '/v1/screenings',
       accessToken: accessToken,
       body: {
+        if (patientId != null && patientId.isNotEmpty)
+          'patient_id': patientId,
         'phq9': phq9Answers ?? List.filled(9, 0),
         'gad7': gad7Answers ?? List.filled(7, 0),
         'source': bundle.source,
@@ -1113,6 +1130,20 @@ class BackendFollowUpMessage {
   final String status;
   final DateTime? createdAt;
   final DateTime? readAt;
+}
+
+class BackendMeResult {
+  const BackendMeResult({
+    required this.id,
+    required this.email,
+    required this.role,
+    required this.displayName,
+  });
+
+  final String id;
+  final String email;
+  final String role;
+  final String displayName;
 }
 
 class BackendMoodCheckin {

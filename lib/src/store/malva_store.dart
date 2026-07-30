@@ -641,6 +641,7 @@ class MalvaStore extends ChangeNotifier {
     required bool isInitial,
     required String source,
     AuthSession? session,
+    String? patientId,
   }) async {
     final phq9 = AssessmentEngine.score(
       type: AssessmentType.phq9,
@@ -667,6 +668,7 @@ class MalvaStore extends ChangeNotifier {
         bundle: bundle,
         phq9Answers: phq9Answers,
         gad7Answers: gad7Answers,
+        patientId: patientId,
       );
       if (remote.id.isNotEmpty) {
         bundle = ScreeningBundle(

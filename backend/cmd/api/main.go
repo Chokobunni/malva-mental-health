@@ -55,7 +55,7 @@ func run(logger *slog.Logger) error {
 
 	st := store.New(db)
 	authManager := auth.NewManager(cfg.JWTSecret)
-	hub := realtime.NewHub(logger, cfg.OriginAllowed)
+	hub := realtime.NewHub(logger, cfg.OriginAllowed, st)
 	provider, err := notify.NewProvider(ctx, cfg, logger)
 	if err != nil {
 		return err

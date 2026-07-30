@@ -10,12 +10,14 @@ class ChatService {
     required this.userId,
     required this.accessToken,
     required this.baseUrl,
+    required this.recipientId,
     this.senderName = '',
   });
 
   final String userId;
   final String accessToken;
   final String baseUrl;
+  final String recipientId;
   final String senderName;
 
   WebSocketChannel? _channel;
@@ -169,6 +171,7 @@ class ChatService {
         'id': 'msg_${DateTime.now().millisecondsSinceEpoch}',
         'sender_id': userId,
         'sender_name': senderName,
+        'recipient_id': recipientId,
         'text': trimmed,
         'timestamp': DateTime.now().toIso8601String(),
       },
@@ -212,6 +215,7 @@ class ChatService {
       'type': 'typing_indicator',
       'data': {
         'sender_id': userId,
+        'recipient_id': recipientId,
         'typing': isTyping,
       },
     };

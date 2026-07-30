@@ -13,11 +13,13 @@ class ChatScreen extends StatefulWidget {
     required this.session,
     this.apiClient,
     required this.otherUserName,
+    required this.otherUserId,
   });
 
   final AuthSession? session;
   final MalvaApiClient? apiClient;
   final String otherUserName;
+  final String otherUserId;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -57,6 +59,7 @@ class _ChatScreenState extends State<ChatScreen> {
       userId: session.backendUserId ?? session.identifier,
       accessToken: session.accessToken!,
       baseUrl: baseUrl,
+      recipientId: widget.otherUserId,
       senderName: session.displayName,
     );
 

@@ -34,6 +34,31 @@ class PatientShell extends StatefulWidget {
 
 class _PatientShellState extends State<PatientShell> {
   int _index = 0;
+  String _professionalUserId = '';
+  String _professionalName = 'Profesional';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLinkedProfessional();
+  }
+
+  Future<void> _fetchLinkedProfessional() async {
+    final apiClient = widget.apiClient;
+    final accessToken = widget.session?.accessToken;
+    if (apiClient == null || accessToken == null || accessToken.isEmpty) return;
+    try {
+      final links = await apiClient.listPatientProfessionalLinks(
+        accessToken: accessToken,
+      );
+      if (links.isNotEmpty && mounted) {
+        setState(() {
+          _professionalUserId = links.first.professionalUserId;
+          _professionalName = links.first.professionalDisplayName;
+        });
+      }
+    } on Object catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -78,9 +103,10 @@ class _PatientShellState extends State<PatientShell> {
       ChatScreen(
         session: widget.session,
         apiClient: widget.apiClient,
-        otherUserName: 'Profesional',
+        otherUserName: _professionalName,
+        otherUserId: _professionalUserId,
       ),
-      MoreScreen(store: widget.store, onLogout: widget.onLogout, apiClient: widget.apiClient, session: widget.session),
+      MoreScreen(store: widget.store, onLogout: widget.onLogout, apiClient: widget.apiClient, session: widget.session, professionalUserId: _professionalUserId, professionalName: _professionalName),
     ];
 
     return Scaffold(

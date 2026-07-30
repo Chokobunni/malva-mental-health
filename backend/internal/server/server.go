@@ -176,6 +176,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/audit-logs", s.requireAuth(s.auditLogs))
 	mux.HandleFunc("GET /v1/privacy/consents", s.requireAuth(s.getPrivacyConsent))
 	mux.HandleFunc("PUT /v1/privacy/consents", s.requireAuth(s.updatePrivacyConsent))
+	mux.HandleFunc("GET /v1/messages", s.requireAuth(s.listMessages))
 	mux.HandleFunc("GET /v1/notifications", s.requireAuth(s.listNotifications))
 	mux.HandleFunc("PATCH /v1/notifications/read-all", s.requireAuth(s.markAllNotificationsRead))
 	mux.HandleFunc("PATCH /v1/notifications/{notification_id}/read", s.requireAuth(s.markNotificationRead))
@@ -981,6 +982,39 @@ func (s *Server) updatePrivacyConsent(w http.ResponseWriter, r *http.Request, cl
 	writeJSON(w, http.StatusOK, map[string]any{"consent": consent})
 }
 
+func (s *Server) listMessages(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	patientID := strings.TrimSpace(r.URL.Query().Get("patient_id"))
+	professionalID := strings.TrimSpace(r.URL.Query().Get("professional_id"))
+	if patientID == "" || professionalID == "" {
+		writeError(w, http.StatusBadRequest, errors.New("patient_id and professional_id are required"))
+		return
+	}
+	if claims.Subject != patientID && claims.Subject != professionalID {
+		writeError(w, http.StatusForbidden, errors.New("not authorized to view this conversation"))
+		return
+	}
+ canonicalPatientID, canonicalProfessionalID, linked, err := s.store.AreUsersLinked(r.Context(), patientID, professionalID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !linked {
+		writeError(w, http.StatusForbidden, errors.New("users are not linked"))
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	messages, err := s.store.ListChatMessages(r.Context(), canonicalPatientID, canonicalProfessionalID, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if messages == nil {
+		messages = []store.ChatMessage{}
+	}
+	_ = s.store.AddAuditLog(r.Context(), claims.Subject, canonicalPatientID, "chat_messages.viewed", "chat_message", "", nil)
+	writeJSON(w, http.StatusOK, map[string]any{"messages": messages})
+}
+
 func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	items, err := s.store.ListNotifications(r.Context(), claims.Subject, limit)
@@ -1063,7 +1097,7 @@ func (s *Server) realtimeWS(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, err)
 		return
 	}
-	s.hub.ServeWS(w, r, claims.Subject)
+	s.hub.ServeWS(w, r, claims.Subject, claims.Role)
 }
 
 func (s *Server) authorizeScreeningPatient(r *http.Request, claims auth.Claims, requestedPatientID string) (string, error) {

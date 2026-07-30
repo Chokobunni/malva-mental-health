@@ -18,12 +18,16 @@ class MoreScreen extends StatefulWidget {
     required this.onLogout,
     this.apiClient,
     this.session,
+    this.professionalUserId = '',
+    this.professionalName = 'Profesional',
   });
 
   final MalvaStore store;
   final VoidCallback onLogout;
   final MalvaApiClient? apiClient;
   final AuthSession? session;
+  final String professionalUserId;
+  final String professionalName;
 
   @override
   State<MoreScreen> createState() => _MoreScreenState();
@@ -100,7 +104,8 @@ class _MoreScreenState extends State<MoreScreen> {
                         builder: (_) => ChatScreen(
                               session: widget.session,
                               apiClient: widget.apiClient,
-                              otherUserName: 'Profesional',
+                              otherUserName: widget.professionalName,
+                              otherUserId: widget.professionalUserId,
                             )),
                   ),
                 ),
