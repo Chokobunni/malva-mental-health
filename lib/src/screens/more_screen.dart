@@ -62,8 +62,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   color: MalvaColors.amber,
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(
-                        builder: (_) => const AssessmentScreen()),
+                    MaterialPageRoute(builder: (_) => const AssessmentScreen()),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -74,8 +73,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   color: MalvaColors.seed,
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(
-                        builder: (_) => const GoalsScreen()),
+                    MaterialPageRoute(builder: (_) => const GoalsScreen()),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -86,8 +84,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   color: MalvaColors.mint,
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(
-                        builder: (_) => const RecordScreen()),
+                    MaterialPageRoute(builder: (_) => const RecordScreen()),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -100,8 +97,6 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                     context,
                     MaterialPageRoute(
                         builder: (_) => ChatScreen(
-                              session: widget.session,
-                              apiClient: widget.apiClient,
                               otherUserName: widget.professionalName,
                               otherUserId: widget.professionalUserId,
                             )),
@@ -116,8 +111,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => ConsentManagementScreen(
-                            apiClient: widget.apiClient, session: widget.session)),
+                        builder: (_) => ConsentManagementScreen()),
                   ),
                 ),
                 const SizedBox(height: 20),

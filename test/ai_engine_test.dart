@@ -64,7 +64,8 @@ void main() {
 
     group('combineConditions', () {
       test('combines multiple positive conditions', () {
-        final result = CertaintyFactorCalculator.combineConditions([0.6, 0.4, 0.5]);
+        final result =
+            CertaintyFactorCalculator.combineConditions([0.6, 0.4, 0.5]);
         expect(result, greaterThan(0.0));
         expect(result, lessThan(1.0));
       });
@@ -74,7 +75,8 @@ void main() {
       });
 
       test('returns 0.0 when all conditions are 0', () {
-        expect(CertaintyFactorCalculator.combineConditions([0.0, 0.0, 0.0]), 0.0);
+        expect(
+            CertaintyFactorCalculator.combineConditions([0.0, 0.0, 0.0]), 0.0);
       });
     });
 

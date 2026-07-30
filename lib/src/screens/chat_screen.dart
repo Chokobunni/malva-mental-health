@@ -1,31 +1,28 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../providers/providers.dart';
 import '../services/chat_service.dart';
-import '../services/malva_api_client.dart';
 import '../theme.dart';
 
-class ChatScreen extends StatefulWidget {
+class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({
     super.key,
-    required this.session,
-    this.apiClient,
     required this.otherUserName,
     required this.otherUserId,
   });
 
-  final AuthSession? session;
-  final MalvaApiClient? apiClient;
   final String otherUserName;
   final String otherUserId;
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   final _messages = <ChatMessage>[];
@@ -45,15 +42,14 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _initChat() {
-    final session = widget.session;
+    final session = ref.read(currentSessionProvider);
+    final apiClient = ref.read(apiClientProvider);
     if (session?.accessToken == null || session!.accessToken!.isEmpty) return;
-    if (widget.apiClient == null) return;
 
-    final apiClient = widget.apiClient;
-    if (apiClient == null) return;
     final baseUri = apiClient.baseUri;
     final wsScheme = baseUri.scheme == 'https' ? 'wss' : 'ws';
-    final baseUrl = '$wsScheme://${baseUri.host}${baseUri.port == 80 || baseUri.port == 443 ? '' : ':${baseUri.port}'}';
+    final baseUrl =
+        '$wsScheme://${baseUri.host}${baseUri.port == 80 || baseUri.port == 443 ? '' : ':${baseUri.port}'}';
 
     _chatService = ChatService(
       userId: session.backendUserId ?? session.identifier,
@@ -183,7 +179,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     itemBuilder: (context, index) {
                       final msg = _messages[index];
                       final showTimestamp = index == 0 ||
-                          _messages[index - 1].timestamp
+                          _messages[index - 1]
+                                  .timestamp
                                   .difference(msg.timestamp)
                                   .inMinutes >
                               5;
@@ -352,7 +349,8 @@ class _EmptyChat extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 56, color: MalvaColors.seed.withValues(alpha: 0.5)),
+            Icon(icon,
+                size: 56, color: MalvaColors.seed.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             Text(
               title,
@@ -520,11 +518,9 @@ class _ChatInput extends StatelessWidget {
                 minLines: 1,
                 maxLines: 4,
                 decoration: InputDecoration(
-                  hintText: enabled
-                      ? 'Ketik pesan...'
-                      : 'Menunggu koneksi...',
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
+                  hintText: enabled ? 'Ketik pesan...' : 'Menunggu koneksi...',
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
             ),

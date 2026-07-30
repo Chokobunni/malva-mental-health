@@ -1,28 +1,23 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models.dart';
+import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 
-class ConsentManagementScreen extends StatefulWidget {
-  const ConsentManagementScreen({
-    super.key,
-    this.apiClient,
-    this.session,
-  });
-
-  final MalvaApiClient? apiClient;
-  final AuthSession? session;
+class ConsentManagementScreen extends ConsumerStatefulWidget {
+  const ConsentManagementScreen({super.key});
 
   @override
-  State<ConsentManagementScreen> createState() =>
+  ConsumerState<ConsentManagementScreen> createState() =>
       _ConsentManagementScreenState();
 }
 
-class _ConsentManagementScreenState extends State<ConsentManagementScreen> {
+class _ConsentManagementScreenState
+    extends ConsumerState<ConsentManagementScreen> {
   bool _shareScreenings = true;
   bool _shareMoodDiary = true;
   bool _shareMedications = true;
@@ -37,9 +32,10 @@ class _ConsentManagementScreenState extends State<ConsentManagementScreen> {
   }
 
   Future<void> _loadConsent() async {
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+    final apiClient = ref.read(apiClientProvider);
+    final session = ref.read(currentSessionProvider);
+    final accessToken = session?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
       return;
     }
 
@@ -51,7 +47,7 @@ class _ConsentManagementScreenState extends State<ConsentManagementScreen> {
     try {
       final consent = await apiClient.getPrivacyConsent(
         accessToken: accessToken,
-        professionalId: widget.session?.identifier ?? '',
+        professionalId: session?.identifier ?? '',
       );
       if (mounted) {
         setState(() {
@@ -80,9 +76,10 @@ class _ConsentManagementScreenState extends State<ConsentManagementScreen> {
   }
 
   Future<void> _updateConsent() async {
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+    final apiClient = ref.read(apiClientProvider);
+    final session = ref.read(currentSessionProvider);
+    final accessToken = session?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
       return;
     }
 
@@ -91,7 +88,7 @@ class _ConsentManagementScreenState extends State<ConsentManagementScreen> {
     try {
       await apiClient.updatePrivacyConsent(
         accessToken: accessToken,
-        professionalId: widget.session?.identifier ?? '',
+        professionalId: session?.identifier ?? '',
         shareScreenings: _shareScreenings,
         shareMoodDiary: _shareMoodDiary,
         shareMedications: _shareMedications,
@@ -127,8 +124,8 @@ class _ConsentManagementScreenState extends State<ConsentManagementScreen> {
           const GradientHeader(
             title: 'Consent Management',
             subtitle: 'Kelola berbagi data dengan profesional',
-            leading: Icon(Icons.security_rounded,
-                color: Colors.white, size: 34),
+            leading:
+                Icon(Icons.security_rounded, color: Colors.white, size: 34),
           ),
           Padding(
             padding: const EdgeInsets.all(18),

@@ -279,8 +279,7 @@ class KnowledgeBase {
               factId: 'appetite_change_present',
               value: true,
               cf: 0.7,
-              explanation:
-                  'Gejala perubahan nafsu makan terdeteksi (skor ≥ 2)',
+              explanation: 'Gejala perubahan nafsu makan terdeteksi (skor ≥ 2)',
             ),
           ],
           ruleCF: 0.8,
@@ -302,8 +301,7 @@ class KnowledgeBase {
               factId: 'concentration_issue_present',
               value: true,
               cf: 0.7,
-              explanation:
-                  'Gejala kesulitan konsentrasi terdeteksi (skor ≥ 2)',
+              explanation: 'Gejala kesulitan konsentrasi terdeteksi (skor ≥ 2)',
             ),
           ],
           ruleCF: 0.8,
@@ -355,7 +353,8 @@ class KnowledgeBase {
               factId: 'anxiety_level',
               value: 'minimal',
               cf: 0.9,
-              explanation: 'Skor GAD-7 ≤ 4 menunjukkan gejala kecemasan minimal',
+              explanation:
+                  'Skor GAD-7 ≤ 4 menunjukkan gejala kecemasan minimal',
             ),
             RuleConclusion(
               factId: 'anxiety_summary',
@@ -421,7 +420,8 @@ class KnowledgeBase {
               factId: 'anxiety_level',
               value: 'moderate',
               cf: 0.9,
-              explanation: 'Skor GAD-7 10-14 menunjukkan gejala kecemasan sedang',
+              explanation:
+                  'Skor GAD-7 10-14 menunjukkan gejala kecemasan sedang',
             ),
             RuleConclusion(
               factId: 'anxiety_summary',
@@ -452,7 +452,8 @@ class KnowledgeBase {
             ),
             RuleConclusion(
               factId: 'anxiety_summary',
-              value: 'Gejala berat. Prioritaskan review klinis dan rencana dukungan.',
+              value:
+                  'Gejala berat. Prioritaskan review klinis dan rencana dukungan.',
               cf: 0.92,
             ),
           ],

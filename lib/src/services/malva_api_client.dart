@@ -231,8 +231,7 @@ class MalvaApiClient {
       '/v1/screenings',
       accessToken: accessToken,
       body: {
-        if (patientId != null && patientId.isNotEmpty)
-          'patient_id': patientId,
+        if (patientId != null && patientId.isNotEmpty) 'patient_id': patientId,
         'phq9': phq9Answers ?? List.filled(9, 0),
         'gad7': gad7Answers ?? List.filled(7, 0),
         'source': bundle.source,
@@ -873,13 +872,17 @@ class MalvaApiClient {
         ? <String, dynamic>{}
         : jsonDecode(response.body) as Map<String, dynamic>;
 
-    if (response.statusCode == 401 && retryOnAuth && _currentRefreshToken != null) {
+    if (response.statusCode == 401 &&
+        retryOnAuth &&
+        _currentRefreshToken != null) {
       try {
         await _handleTokenRefresh();
-        return _sendUri(method, uri, accessToken: accessToken, body: body, retryOnAuth: false);
+        return _sendUri(method, uri,
+            accessToken: accessToken, body: body, retryOnAuth: false);
       } on Object {
         throw MalvaApiException(
-          decoded['error']?.toString() ?? 'Sesi berakhir, silakan login kembali.',
+          decoded['error']?.toString() ??
+              'Sesi berakhir, silakan login kembali.',
           statusCode: response.statusCode,
         );
       }

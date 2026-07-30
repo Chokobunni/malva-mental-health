@@ -82,7 +82,9 @@ class InitialScreeningConsentScreen extends ConsumerWidget {
                         const SizedBox(height: 10),
                         OutlinedButton(
                           onPressed: () {
-                            ref.read(malvaStoreProvider.notifier).skipInitialScreening();
+                            ref
+                                .read(malvaStoreProvider.notifier)
+                                .skipInitialScreening();
                             onSkip();
                           },
                           style: OutlinedButton.styleFrom(

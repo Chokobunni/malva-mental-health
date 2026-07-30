@@ -37,8 +37,7 @@ class ForwardChainingEngine {
     required List<ScreeningRule> rules,
   }) {
     if (questionIds.length != answers.length) {
-      throw ArgumentError(
-          'Question IDs and answers must have the same length');
+      throw ArgumentError('Question IDs and answers must have the same length');
     }
 
     // Initialize working memory with patient answers
@@ -214,14 +213,11 @@ class ForwardChainingEngine {
 
     // Handle different types of comparisons
     if (factValue is int && conditionValue is int) {
-      return _compareInt(
-          factValue, condition.operator, conditionValue);
+      return _compareInt(factValue, condition.operator, conditionValue);
     } else if (factValue is double && conditionValue is double) {
-      return _compareDouble(
-          factValue, condition.operator, conditionValue);
+      return _compareDouble(factValue, condition.operator, conditionValue);
     } else if (factValue is String && conditionValue is String) {
-      return _compareString(
-          factValue, condition.operator, conditionValue);
+      return _compareString(factValue, condition.operator, conditionValue);
     } else if (factValue is bool && conditionValue is bool) {
       return factValue == conditionValue;
     }
@@ -330,13 +326,11 @@ class ForwardChainingEngine {
     if (depPriority >= anxPriority) {
       finalLevel = depressionLevel?.value as String? ?? 'minimal';
       finalCF = depressionLevel?.certaintyFactor ?? 0.0;
-      summary =
-          depressionLevel?.explanation ?? 'Gejala depresi minimal.';
+      summary = depressionLevel?.explanation ?? 'Gejala depresi minimal.';
     } else {
       finalLevel = anxietyLevel?.value as String? ?? 'minimal';
       finalCF = anxietyLevel?.certaintyFactor ?? 0.0;
-      summary =
-          anxietyLevel?.explanation ?? 'Gejala kecemasan minimal.';
+      summary = anxietyLevel?.explanation ?? 'Gejala kecemasan minimal.';
     }
 
     // Build combined summary

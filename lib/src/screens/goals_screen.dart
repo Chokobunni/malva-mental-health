@@ -27,8 +27,7 @@ class GoalsScreen extends ConsumerWidget {
             subtitle: 'Daily focus dan history',
             leading: IconButton(
               onPressed: () => Navigator.maybePop(context),
-              icon:
-                  const Icon(Icons.arrow_back_rounded, color: Colors.white),
+              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
             ),
           ),
           Padding(
@@ -51,13 +50,11 @@ class GoalsScreen extends ConsumerWidget {
                       const SizedBox(height: 8),
                       Text(
                         '${storeState.completedGoalPercent}% completed',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall
-                            ?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w900,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                ),
                       ),
                       const SizedBox(height: 12),
                       ProgressStrip(
@@ -103,9 +100,11 @@ class GoalsScreen extends ConsumerWidget {
                 final confirmed = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
-                    icon: const Icon(Icons.delete_rounded, color: MalvaColors.danger),
+                    icon: const Icon(Icons.delete_rounded,
+                        color: MalvaColors.danger),
                     title: const Text('Hapus Goal?'),
-                    content: const Text('Tindakan ini tidak dapat dibatalkan. Apakah Anda yakin ingin menghapus goal ini?'),
+                    content: const Text(
+                        'Tindakan ini tidak dapat dibatalkan. Apakah Anda yakin ingin menghapus goal ini?'),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context, false),
@@ -113,7 +112,8 @@ class GoalsScreen extends ConsumerWidget {
                       ),
                       FilledButton(
                         onPressed: () => Navigator.pop(context, true),
-                        style: FilledButton.styleFrom(backgroundColor: MalvaColors.danger),
+                        style: FilledButton.styleFrom(
+                            backgroundColor: MalvaColors.danger),
                         child: const Text('Hapus'),
                       ),
                     ],

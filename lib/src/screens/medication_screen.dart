@@ -70,145 +70,147 @@ class MedicationScreen extends ConsumerWidget {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-          const GradientHeader(
-            title: 'Medication',
-            subtitle: 'Reminder, stok, dan adherence',
-            leading: Icon(Icons.medication_rounded,
-                color: Colors.white, size: 34),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SoftCard(
-                  color: MalvaColors.plum,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Weekly Adherence',
-                              style: TextStyle(
-                                  color: Colors.white70,
-                                  fontWeight: FontWeight.w800),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              '${storeState.adherencePercent}% hari ini',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .headlineSmall
-                                  ?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                            ),
-                            const SizedBox(height: 6),
-                            const Text('Tap Take Now setelah obat diminum.',
-                                style: TextStyle(color: Colors.white70)),
-                          ],
-                        ),
-                      ),
-                      CircleAvatar(
-                        radius: 34,
-                        backgroundColor: Colors.white,
-                        child: Text(
-                          '${storeState.adherencePercent}%',
-                          style: const TextStyle(
-                              color: MalvaColors.plum,
-                              fontWeight: FontWeight.w900),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 22),
-                const SectionLabel('Jadwal hari ini'),
-                if (storeState.medications.isEmpty)
+            const GradientHeader(
+              title: 'Medication',
+              subtitle: 'Reminder, stok, dan adherence',
+              leading:
+                  Icon(Icons.medication_rounded, color: Colors.white, size: 34),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                   SoftCard(
-                    child: Column(
+                    color: MalvaColors.plum,
+                    child: Row(
                       children: [
-                        const Icon(Icons.medication_rounded,
-                            size: 48, color: MalvaColors.seed),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Belum ada obat',
-                          style: TextStyle(fontWeight: FontWeight.w900),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Weekly Adherence',
+                                style: TextStyle(
+                                    color: Colors.white70,
+                                    fontWeight: FontWeight.w800),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                '${storeState.adherencePercent}% hari ini',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall
+                                    ?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text('Tap Take Now setelah obat diminum.',
+                                  style: TextStyle(color: Colors.white70)),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Tambahkan obat pertama Anda untuk mulai melacak.',
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        FilledButton.icon(
-                          onPressed: () => _openMedicationForm(context, ref),
-                          icon: const Icon(Icons.add_rounded),
-                          label: const Text('Tambah Obat Pertama'),
+                        CircleAvatar(
+                          radius: 34,
+                          backgroundColor: Colors.white,
+                          child: Text(
+                            '${storeState.adherencePercent}%',
+                            style: const TextStyle(
+                                color: MalvaColors.plum,
+                                fontWeight: FontWeight.w900),
+                          ),
                         ),
                       ],
                     ),
-                  )
-                else
-                  for (final med in storeState.medications) ...[
-                    _MedicationCard(
-                      medication: med,
-                      onTake: () => _takeMedication(context, ref, med),
-                      onEdit: () => _openMedicationForm(context, ref, med),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                const SizedBox(height: 70),
-                const SizedBox(height: 22),
-                const SectionLabel('Riwayat Minum Obat'),
-                if (storeState.medicationLogs.isEmpty)
-                  const SoftCard(
-                    child: Text('Belum ada riwayat minum obat.'),
-                  )
-                else
-                  for (final log in storeState.medicationLogs.take(10))
+                  ),
+                  const SizedBox(height: 22),
+                  const SectionLabel('Jadwal hari ini'),
+                  if (storeState.medications.isEmpty)
                     SoftCard(
-                      child: Row(
+                      child: Column(
                         children: [
-                          Icon(
-                            log.status == 'taken'
-                                ? Icons.check_circle_rounded
-                                : log.status == 'skipped'
-                                    ? Icons.skip_next_rounded
-                                    : Icons.cancel_rounded,
-                            color: log.status == 'taken'
-                                ? MalvaColors.mint
-                                : log.status == 'skipped'
-                                    ? MalvaColors.amber
-                                    : MalvaColors.danger,
+                          const Icon(Icons.medication_rounded,
+                              size: 48, color: MalvaColors.seed),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Belum ada obat',
+                            style: TextStyle(fontWeight: FontWeight.w900),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  log.medicationName,
-                                  style: const TextStyle(fontWeight: FontWeight.w800),
-                                ),
-                                Text(
-                                  '${log.status.toUpperCase()} — ${_formatLogTime(log.takenAt)}',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Tambahkan obat pertama Anda untuk mulai melacak.',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          FilledButton.icon(
+                            onPressed: () => _openMedicationForm(context, ref),
+                            icon: const Icon(Icons.add_rounded),
+                            label: const Text('Tambah Obat Pertama'),
                           ),
                         ],
                       ),
-                    ),
-              ],
+                    )
+                  else
+                    for (final med in storeState.medications) ...[
+                      _MedicationCard(
+                        medication: med,
+                        onTake: () => _takeMedication(context, ref, med),
+                        onEdit: () => _openMedicationForm(context, ref, med),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  const SizedBox(height: 70),
+                  const SizedBox(height: 22),
+                  const SectionLabel('Riwayat Minum Obat'),
+                  if (storeState.medicationLogs.isEmpty)
+                    const SoftCard(
+                      child: Text('Belum ada riwayat minum obat.'),
+                    )
+                  else
+                    for (final log in storeState.medicationLogs.take(10))
+                      SoftCard(
+                        child: Row(
+                          children: [
+                            Icon(
+                              log.status == 'taken'
+                                  ? Icons.check_circle_rounded
+                                  : log.status == 'skipped'
+                                      ? Icons.skip_next_rounded
+                                      : Icons.cancel_rounded,
+                              color: log.status == 'taken'
+                                  ? MalvaColors.mint
+                                  : log.status == 'skipped'
+                                      ? MalvaColors.amber
+                                      : MalvaColors.danger,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    log.medicationName,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w800),
+                                  ),
+                                  Text(
+                                    '${log.status.toUpperCase()} — ${_formatLogTime(log.takenAt)}',
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -219,7 +221,8 @@ class MedicationScreen extends ConsumerWidget {
     return '${dt.day}/${dt.month}/${dt.year} $h:$m';
   }
 
-  void _openMedicationForm(BuildContext context, WidgetRef ref, [Medication? medication]) {
+  void _openMedicationForm(BuildContext context, WidgetRef ref,
+      [Medication? medication]) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -243,7 +246,8 @@ class MedicationScreen extends ConsumerWidget {
     );
   }
 
-  void _deleteMedication(BuildContext context, WidgetRef ref, Medication medication) {
+  void _deleteMedication(
+      BuildContext context, WidgetRef ref, Medication medication) {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -257,7 +261,9 @@ class MedicationScreen extends ConsumerWidget {
           FilledButton(
             onPressed: () {
               Navigator.pop(context);
-              ref.read(malvaStoreProvider.notifier).deleteMedication(medication.id);
+              ref
+                  .read(malvaStoreProvider.notifier)
+                  .deleteMedication(medication.id);
               unawaited(
                   medicationReminderService?.cancelReminder(medication.id));
             },
@@ -268,7 +274,8 @@ class MedicationScreen extends ConsumerWidget {
     );
   }
 
-  void _takeMedication(BuildContext context, WidgetRef ref, Medication medication) {
+  void _takeMedication(
+      BuildContext context, WidgetRef ref, Medication medication) {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -277,7 +284,8 @@ class MedicationScreen extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.check_circle_rounded, color: MalvaColors.mint),
+              leading: const Icon(Icons.check_circle_rounded,
+                  color: MalvaColors.mint),
               title: const Text('Taken'),
               subtitle: const Text('Obat sudah diminum'),
               onTap: () {
@@ -286,7 +294,8 @@ class MedicationScreen extends ConsumerWidget {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.skip_next_rounded, color: MalvaColors.amber),
+              leading:
+                  const Icon(Icons.skip_next_rounded, color: MalvaColors.amber),
               title: const Text('Skipped'),
               subtitle: const Text('Dilewati dengan sengaja'),
               onTap: () {
@@ -295,7 +304,8 @@ class MedicationScreen extends ConsumerWidget {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.cancel_rounded, color: MalvaColors.danger),
+              leading:
+                  const Icon(Icons.cancel_rounded, color: MalvaColors.danger),
               title: const Text('Missed'),
               subtitle: const Text('Terlewat tanpa sengaja'),
               onTap: () {
@@ -304,7 +314,8 @@ class MedicationScreen extends ConsumerWidget {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.hourglass_bottom_rounded, color: MalvaColors.orchid),
+              leading: const Icon(Icons.hourglass_bottom_rounded,
+                  color: MalvaColors.orchid),
               title: const Text('Partial'),
               subtitle: const Text('Sebagian diminum'),
               onTap: () {
@@ -324,13 +335,15 @@ class MedicationScreen extends ConsumerWidget {
     );
   }
 
-  void _logMedication(BuildContext context, WidgetRef ref, Medication medication, String status) {
+  void _logMedication(BuildContext context, WidgetRef ref,
+      Medication medication, String status) {
     ref.read(malvaStoreProvider.notifier).takeMedication(medication.id);
     unawaited(_syncMedicationLog(context, medication, status));
     if (medication.needsRefill) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${medication.name} stok rendah (${medication.currentStock}). Segera refill!'),
+          content: Text(
+              '${medication.name} stok rendah (${medication.currentStock}). Segera refill!'),
           backgroundColor: MalvaColors.amber,
           duration: const Duration(seconds: 4),
         ),
@@ -622,7 +635,8 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
               const SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed: widget.onDelete,
-                icon: const Icon(Icons.delete_rounded, color: MalvaColors.danger),
+                icon:
+                    const Icon(Icons.delete_rounded, color: MalvaColors.danger),
                 label: const Text('Hapus Obat',
                     style: TextStyle(color: MalvaColors.danger)),
               ),

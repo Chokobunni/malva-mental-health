@@ -141,8 +141,7 @@ class _ProfessionalDashboardScreenState
                   IconButton(
                     tooltip: 'Keluar',
                     onPressed: widget.onLogout,
-                    icon:
-                        const Icon(Icons.logout_rounded, color: Colors.white),
+                    icon: const Icon(Icons.logout_rounded, color: Colors.white),
                   ),
                 ],
               ),
@@ -167,14 +166,15 @@ class _ProfessionalDashboardScreenState
                   ),
                   _PriorityMetrics(
                     patientCount: _patientsForDashboard(storeState).length,
-                    crisisCount: _crisisQueue(_patientsForDashboard(storeState)).length,
-                    reviewCount: _reviewQueue(_patientsForDashboard(storeState)).length,
+                    crisisCount:
+                        _crisisQueue(_patientsForDashboard(storeState)).length,
+                    reviewCount:
+                        _reviewQueue(_patientsForDashboard(storeState)).length,
                   ),
                   const SizedBox(height: 18),
                   _PatientSearch(
                     query: _searchQuery,
-                    onChanged: (value) =>
-                        setState(() => _searchQuery = value),
+                    onChanged: (value) => setState(() => _searchQuery = value),
                   ),
                   const SizedBox(height: 18),
                   SectionLabel(
@@ -186,22 +186,28 @@ class _ProfessionalDashboardScreenState
                     ),
                   ),
                   _PriorityQueue(
-                    crisisQueue: _crisisQueue(_patientsForDashboard(storeState)),
-                    reviewQueue: _reviewQueue(_patientsForDashboard(storeState)),
+                    crisisQueue:
+                        _crisisQueue(_patientsForDashboard(storeState)),
+                    reviewQueue:
+                        _reviewQueue(_patientsForDashboard(storeState)),
                     reviewedIds: _reviewedScreeningIds,
                     onReview: _openScreeningReview,
                   ),
                   const SizedBox(height: 22),
                   const SectionLabel('2. Daftar pasien terhubung'),
                   _ConnectedPatientList(
-                    patients: _filterPatients(_patientsForDashboard(storeState)),
-                    selectedPatientId: _selectedPatient(_patientsForDashboard(storeState))?.patientId,
+                    patients:
+                        _filterPatients(_patientsForDashboard(storeState)),
+                    selectedPatientId:
+                        _selectedPatient(_patientsForDashboard(storeState))
+                            ?.patientId,
                     onSelect: (patient) => setState(
                       () => _selectedPatientId = patient.patientId,
                     ),
                   ),
                   const SizedBox(height: 22),
-                  if (_selectedPatient(_patientsForDashboard(storeState)) == null)
+                  if (_selectedPatient(_patientsForDashboard(storeState)) ==
+                      null)
                     const EmptyState(
                       icon: Icons.people_outline_rounded,
                       title: 'Belum ada pasien terhubung',
@@ -210,40 +216,54 @@ class _ProfessionalDashboardScreenState
                     )
                   else ...[
                     _PatientDetailSection(
-                      patient: _selectedPatient(_patientsForDashboard(storeState))!,
+                      patient:
+                          _selectedPatient(_patientsForDashboard(storeState))!,
                       professionalCode: widget.session?.identifier,
                     ),
                     const SizedBox(height: 22),
                     _ScreeningHistorySection(
-                      patient: _selectedPatient(_patientsForDashboard(storeState))!,
-                      screenings: _selectedPatient(_patientsForDashboard(storeState))!.screenings,
+                      patient:
+                          _selectedPatient(_patientsForDashboard(storeState))!,
+                      screenings:
+                          _selectedPatient(_patientsForDashboard(storeState))!
+                              .screenings,
                       reviewedIds: _reviewedScreeningIds,
                       onReview: _openScreeningReview,
                     ),
                     const SizedBox(height: 22),
                     _TimelineSection(
-                      patient: _selectedPatient(_patientsForDashboard(storeState))!,
-                      backendEvents: _timelineEventsByPatient[
-                              _selectedPatient(_patientsForDashboard(storeState))!.patientId] ??
+                      patient:
+                          _selectedPatient(_patientsForDashboard(storeState))!,
+                      backendEvents: _timelineEventsByPatient[_selectedPatient(
+                                  _patientsForDashboard(storeState))!
+                              .patientId] ??
                           const <BackendTimelineEvent>[],
                       diaryEntries: storeState.diaryEntries.take(2),
                       medicationLogs: storeState.medicationLogs.take(2),
-                      allowLocalFallback: !(_selectedPatient(_patientsForDashboard(storeState))!.sourceLabel == 'Backend'),
+                      allowLocalFallback:
+                          !(_selectedPatient(_patientsForDashboard(storeState))!
+                                  .sourceLabel ==
+                              'Backend'),
                     ),
                     const SizedBox(height: 22),
                     _MoodDiaryReviewSection(
-                      online: _selectedPatient(_patientsForDashboard(storeState))!.sourceLabel == 'Backend',
-                      restricted: _moodDiaryRestrictedPatients
-                          .contains(_selectedPatient(_patientsForDashboard(storeState))!.patientId),
-                      moods: _moodsByPatient[_selectedPatient(_patientsForDashboard(storeState))!.patientId] ??
+                      online:
+                          _selectedPatient(_patientsForDashboard(storeState))!
+                                  .sourceLabel ==
+                              'Backend',
+                      restricted: _moodDiaryRestrictedPatients.contains(
+                          _selectedPatient(_patientsForDashboard(storeState))!
+                              .patientId),
+                      moods: _moodsByPatient[_selectedPatient(
+                                  _patientsForDashboard(storeState))!
+                              .patientId] ??
                           const <BackendMoodCheckin>[],
-                      backendEntries:
-                          _diariesByPatient[_selectedPatient(_patientsForDashboard(storeState))!.patientId] ??
-                              const <BackendDiaryEntry>[],
-                      localEntries:
-                          storeState.diaryEntries.take(4).toList(),
-                      onBackendFeedback: (entry) =>
-                          _openBackendDiaryFeedback(
+                      backendEntries: _diariesByPatient[_selectedPatient(
+                                  _patientsForDashboard(storeState))!
+                              .patientId] ??
+                          const <BackendDiaryEntry>[],
+                      localEntries: storeState.diaryEntries.take(4).toList(),
+                      onBackendFeedback: (entry) => _openBackendDiaryFeedback(
                         _selectedPatient(_patientsForDashboard(storeState))!,
                         entry,
                       ),
@@ -252,26 +272,37 @@ class _ProfessionalDashboardScreenState
                     const SizedBox(height: 22),
                     _MedicationMonitoringSection(
                       storeState: storeState,
-                      online: _selectedPatient(_patientsForDashboard(storeState))!.sourceLabel == 'Backend',
-                      restricted: _medicationRestrictedPatients
-                          .contains(_selectedPatient(_patientsForDashboard(storeState))!.patientId),
-                      medications: _medicationsByPatient[
-                              _selectedPatient(_patientsForDashboard(storeState))!.patientId] ??
+                      online:
+                          _selectedPatient(_patientsForDashboard(storeState))!
+                                  .sourceLabel ==
+                              'Backend',
+                      restricted: _medicationRestrictedPatients.contains(
+                          _selectedPatient(_patientsForDashboard(storeState))!
+                              .patientId),
+                      medications: _medicationsByPatient[_selectedPatient(
+                                  _patientsForDashboard(storeState))!
+                              .patientId] ??
                           const <BackendMedication>[],
-                      logs: _medicationLogsByPatient[
-                              _selectedPatient(_patientsForDashboard(storeState))!.patientId] ??
+                      logs: _medicationLogsByPatient[_selectedPatient(
+                                  _patientsForDashboard(storeState))!
+                              .patientId] ??
                           const <BackendMedicationLog>[],
                     ),
                     const SizedBox(height: 22),
                     _ProfessionalNotesSection(
-                      notes: _professionalNotes[_selectedPatient(_patientsForDashboard(storeState))!.patientId] ?? const [],
-                      followUps:
-                          _followUpMessages[_selectedPatient(_patientsForDashboard(storeState))!.patientId] ?? const [],
+                      notes: _professionalNotes[_selectedPatient(
+                                  _patientsForDashboard(storeState))!
+                              .patientId] ??
+                          const [],
+                      followUps: _followUpMessages[_selectedPatient(
+                                  _patientsForDashboard(storeState))!
+                              .patientId] ??
+                          const [],
                       onEditNote: () => _openProfessionalNote(
                         _selectedPatient(_patientsForDashboard(storeState))!,
                       ),
-                      onFollowUp: () =>
-                          _openFollowUpMessage(_selectedPatient(_patientsForDashboard(storeState))!),
+                      onFollowUp: () => _openFollowUpMessage(
+                          _selectedPatient(_patientsForDashboard(storeState))!),
                     ),
                     const SizedBox(height: 22),
                     _RelationshipManagementSection(
@@ -285,7 +316,8 @@ class _ProfessionalDashboardScreenState
                         ..._auditEntries,
                         ..._serverAuditEntries,
                       ],
-                      onExport: () => _openExportSummary(_selectedPatient(_patientsForDashboard(storeState))!),
+                      onExport: () => _openExportSummary(
+                          _selectedPatient(_patientsForDashboard(storeState))!),
                     ),
                   ],
                 ],
@@ -335,7 +367,7 @@ class _ProfessionalDashboardScreenState
 
       final patientFutures = links.map((link) async {
         final patientId = link.patientId;
-        
+
         final results = await Future.wait([
           apiClient.listScreenings(
             accessToken: accessToken,
@@ -343,32 +375,32 @@ class _ProfessionalDashboardScreenState
             limit: 20,
           ),
           safely(() => apiClient.listScreeningReviews(
-            accessToken: accessToken,
-            patientId: patientId,
-            limit: 50,
-          )),
+                accessToken: accessToken,
+                patientId: patientId,
+                limit: 50,
+              )),
           safely(() => apiClient.listProfessionalNotes(
-            accessToken: accessToken,
-            patientId: patientId,
-            limit: 5,
-          )),
+                accessToken: accessToken,
+                patientId: patientId,
+                limit: 5,
+              )),
           safely(() => apiClient.listFollowUps(
-            accessToken: accessToken,
-            patientId: patientId,
-            limit: 5,
-          )),
+                accessToken: accessToken,
+                patientId: patientId,
+                limit: 5,
+              )),
           safely(() => apiClient.listTimeline(
-            accessToken: accessToken,
-            patientId: patientId,
-            limit: 20,
-          )),
+                accessToken: accessToken,
+                patientId: patientId,
+                limit: 20,
+              )),
           _loadMoodDiaryData(apiClient, accessToken, patientId),
           _loadMedicationData(apiClient, accessToken, patientId),
           safely(() => apiClient.listAuditLogs(
-            accessToken: accessToken,
-            patientId: patientId,
-            limit: 20,
-          )),
+                accessToken: accessToken,
+                patientId: patientId,
+                limit: 20,
+              )),
         ]);
 
         return (link, results);
@@ -378,23 +410,29 @@ class _ProfessionalDashboardScreenState
 
       for (final (link, results) in patientResults) {
         final patientId = link.patientId;
-        
-        screeningsByPatient[patientId] = results[0] as List<BackendScreeningSession>;
-        
-        final reviews = results[1] as List<BackendScreeningReview>? ?? const <BackendScreeningReview>[];
+
+        screeningsByPatient[patientId] =
+            results[0] as List<BackendScreeningSession>;
+
+        final reviews = results[1] as List<BackendScreeningReview>? ??
+            const <BackendScreeningReview>[];
         for (final review in reviews) {
           if (review.status.toLowerCase() != 'pending') {
             reviewedScreeningIds.add(review.screeningSessionId);
           }
         }
 
-        final notes = results[2] as List<BackendProfessionalNote>? ?? const <BackendProfessionalNote>[];
+        final notes = results[2] as List<BackendProfessionalNote>? ??
+            const <BackendProfessionalNote>[];
         notesByPatient[patientId] = notes;
 
-        final followUps = results[3] as List<BackendFollowUpMessage>? ?? const <BackendFollowUpMessage>[];
+        final followUps = results[3] as List<BackendFollowUpMessage>? ??
+            const <BackendFollowUpMessage>[];
         followUpsByPatient[patientId] = followUps;
 
-        timelineEventsByPatient[patientId] = results[4] as List<BackendTimelineEvent>? ?? const <BackendTimelineEvent>[];
+        timelineEventsByPatient[patientId] =
+            results[4] as List<BackendTimelineEvent>? ??
+                const <BackendTimelineEvent>[];
 
         final moodDiaryResult = results[5] as _MoodDiaryResult;
         moodsByPatient[patientId] = moodDiaryResult.moods;
@@ -410,7 +448,8 @@ class _ProfessionalDashboardScreenState
           medicationRestrictedPatients.add(patientId);
         }
 
-        final auditLogs = results[7] as List<BackendAuditLog>? ?? const <BackendAuditLog>[];
+        final auditLogs =
+            results[7] as List<BackendAuditLog>? ?? const <BackendAuditLog>[];
         serverAuditEntries.addAll(
           auditLogs.map(
             (entry) => _AuditEntry(
@@ -739,7 +778,9 @@ class _ProfessionalDashboardScreenState
     } on MalvaApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal: ${e.message}'), backgroundColor: MalvaColors.danger),
+        SnackBar(
+            content: Text('Gagal: ${e.message}'),
+            backgroundColor: MalvaColors.danger),
       );
     }
   }
@@ -783,16 +824,16 @@ class _ProfessionalDashboardScreenState
                   onPressed: () {
                     final feedback = controller.text.trim();
                     ref.read(malvaStoreProvider.notifier).upsertDiary(
-                      DiaryEntry(
-                        id: entry.id,
-                        createdAt: entry.createdAt,
-                        mood: entry.mood,
-                        title: entry.title,
-                        note: entry.note,
-                        professionalFeedback:
-                            feedback.isEmpty ? null : feedback,
-                      ),
-                    );
+                          DiaryEntry(
+                            id: entry.id,
+                            createdAt: entry.createdAt,
+                            mood: entry.mood,
+                            title: entry.title,
+                            note: entry.note,
+                            professionalFeedback:
+                                feedback.isEmpty ? null : feedback,
+                          ),
+                        );
                     setState(() {
                       _auditEntries.insert(
                         0,
@@ -897,8 +938,8 @@ class _ProfessionalDashboardScreenState
 
   void _openFollowUpMessage(_ProfessionalPatient patient) {
     final existing = _followUpMessages[patient.patientId];
-    final controller =
-        TextEditingController(text: existing?.isNotEmpty == true ? existing!.first.body : '');
+    final controller = TextEditingController(
+        text: existing?.isNotEmpty == true ? existing!.first.body : '');
     _openTextSheet(
       title: 'Follow-up message',
       subtitle:
@@ -1078,10 +1119,12 @@ class _ProfessionalDashboardScreenState
     csv.writeln();
 
     csv.writeln('--- Screening History ---');
-    csv.writeln('ID,PHQ-9 Score,PHQ-9 Level,GAD-7 Score,GAD-7 Level,Crisis,Created');
+    csv.writeln(
+        'ID,PHQ-9 Score,PHQ-9 Level,GAD-7 Score,GAD-7 Level,Crisis,Created');
     if (selected != null) {
       for (final s in selected.screenings) {
-        csv.writeln('${s.id},${s.phq9Score},${s.phq9Level},${s.gad7Score},${s.gad7Level},${s.crisisFlag},${s.createdAt}');
+        csv.writeln(
+            '${s.id},${s.phq9Score},${s.phq9Level},${s.gad7Score},${s.gad7Level},${s.crisisFlag},${s.createdAt}');
       }
     }
     csv.writeln();
@@ -1089,7 +1132,8 @@ class _ProfessionalDashboardScreenState
     csv.writeln('--- Timeline Events ---');
     csv.writeln('ID,Type,Title,Body,Created');
     if (selected != null) {
-      final events = _timelineEventsByPatient[selected.patientId] ?? const <BackendTimelineEvent>[];
+      final events = _timelineEventsByPatient[selected.patientId] ??
+          const <BackendTimelineEvent>[];
       for (final e in events) {
         csv.writeln('${e.id},${e.type},${e.title},${e.body},${e.createdAt}');
       }
@@ -1107,7 +1151,8 @@ class _ProfessionalDashboardScreenState
     } on Object {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Export gagal'), backgroundColor: MalvaColors.danger),
+        const SnackBar(
+            content: Text('Export gagal'), backgroundColor: MalvaColors.danger),
       );
     }
   }
@@ -2220,7 +2265,8 @@ class _ProfessionalNotesSection extends StatelessWidget {
                   if (note.updatedAt != null)
                     Text(
                       _formatDate(note.updatedAt),
-                      style: const TextStyle(fontSize: 11, color: Colors.black54),
+                      style:
+                          const TextStyle(fontSize: 11, color: Colors.black54),
                     ),
                 ],
               ),
@@ -2240,7 +2286,8 @@ class _ProfessionalNotesSection extends StatelessWidget {
                   if (fu.createdAt != null)
                     Text(
                       _formatDate(fu.createdAt),
-                      style: const TextStyle(fontSize: 11, color: Colors.black54),
+                      style:
+                          const TextStyle(fontSize: 11, color: Colors.black54),
                     ),
                 ],
               ),

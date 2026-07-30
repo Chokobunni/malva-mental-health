@@ -80,116 +80,116 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           padding: EdgeInsets.zero,
           children: [
             if (_isInitialLoading) const LinearProgressIndicator(),
-          GradientHeader(
-            title: 'Home',
-            subtitle: 'Halo, ${storeState.patient.name}',
-            trailing: IconButton(
-              tooltip: 'Profil',
-              onPressed: widget.onOpenMore,
-              icon: const CircleAvatar(
-                backgroundColor: Colors.white,
-                child: Icon(Icons.person_rounded, color: MalvaColors.seed),
+            GradientHeader(
+              title: 'Home',
+              subtitle: 'Halo, ${storeState.patient.name}',
+              trailing: IconButton(
+                tooltip: 'Profil',
+                onPressed: widget.onOpenMore,
+                icon: const CircleAvatar(
+                  backgroundColor: Colors.white,
+                  child: Icon(Icons.person_rounded, color: MalvaColors.seed),
+                ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              children: [
-                if (storeState.activeAlerts.isNotEmpty) ...[
-                  _AlertBanner(alerts: storeState.activeAlerts),
-                  const SizedBox(height: 18),
-                ],
-                if (_shouldShowFollowUps) ...[
-                  _FollowUpPanel(
-                    followUps: _followUps,
-                    isLoading: _isLoadingFollowUps,
-                    error: _followUpError,
-                    onRefresh: _loadFollowUps,
-                  ),
-                  const SizedBox(height: 18),
-                ],
-                Row(
-                  children: [
-                    Expanded(
-                      child: MetricTile(
-                        icon: Icons.medication_liquid_rounded,
-                        value: '${storeState.adherencePercent}%',
-                        label: 'Adherence hari ini',
-                        color: MalvaColors.mint,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: MetricTile(
-                        icon: Icons.flag_rounded,
-                        value: '${storeState.completedGoalPercent}%',
-                        label: 'Goals hari ini',
-                        color: MalvaColors.amber,
-                      ),
-                    ),
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                children: [
+                  if (storeState.activeAlerts.isNotEmpty) ...[
+                    _AlertBanner(alerts: storeState.activeAlerts),
+                    const SizedBox(height: 18),
                   ],
-                ),
-                const SizedBox(height: 22),
-                const SectionLabel('Self-care'),
-                ActionTile(
-                  icon: Icons.task_alt_rounded,
-                  title: 'Goals & Habits',
-                  subtitle: 'Lihat target harian dan streak',
-                  onTap: widget.onOpenMore,
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.edit_note_rounded,
-                  title: 'Diary History',
-                  subtitle: 'Catat trigger, pikiran, dan respons',
-                  onTap: widget.onOpenDiary,
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.folder_shared_rounded,
-                  title: 'Health Record',
-                  subtitle: 'Diagnosis, file asesmen, dan riwayat obat',
-                  onTap: widget.onOpenMore,
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.chat_bubble_outline_rounded,
-                  title: 'Chat Profesional',
-                  subtitle: 'Kirim pesan langsung ke profesional Anda',
-                  onTap: widget.onOpenChat,
-                  color: MalvaColors.orchid,
-                ),
-                const SizedBox(height: 22),
-                const SectionLabel('Health Check-in'),
-                ActionTile(
-                  icon: Icons.mood_rounded,
-                  title: 'Mood Tracker',
-                  subtitle: 'Mood, tidur, energi, kecemasan',
-                  onTap: widget.onOpenMood,
-                  color: MalvaColors.orchid,
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.medication_rounded,
-                  title: 'Medication Tracker',
-                  subtitle: 'Reminder, stok, dan log minum obat',
-                  onTap: widget.onOpenMedication,
-                  color: MalvaColors.mint,
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.fact_check_rounded,
-                  title: 'Assessment',
-                  subtitle: 'PHQ-9, GAD-7, dan rule engine',
-                  onTap: widget.onOpenAssessment,
-                  color: MalvaColors.amber,
-                ),
-                const SizedBox(height: 76),
-              ],
+                  if (_shouldShowFollowUps) ...[
+                    _FollowUpPanel(
+                      followUps: _followUps,
+                      isLoading: _isLoadingFollowUps,
+                      error: _followUpError,
+                      onRefresh: _loadFollowUps,
+                    ),
+                    const SizedBox(height: 18),
+                  ],
+                  Row(
+                    children: [
+                      Expanded(
+                        child: MetricTile(
+                          icon: Icons.medication_liquid_rounded,
+                          value: '${storeState.adherencePercent}%',
+                          label: 'Adherence hari ini',
+                          color: MalvaColors.mint,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: MetricTile(
+                          icon: Icons.flag_rounded,
+                          value: '${storeState.completedGoalPercent}%',
+                          label: 'Goals hari ini',
+                          color: MalvaColors.amber,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  const SectionLabel('Self-care'),
+                  ActionTile(
+                    icon: Icons.task_alt_rounded,
+                    title: 'Goals & Habits',
+                    subtitle: 'Lihat target harian dan streak',
+                    onTap: widget.onOpenMore,
+                  ),
+                  const SizedBox(height: 10),
+                  ActionTile(
+                    icon: Icons.edit_note_rounded,
+                    title: 'Diary History',
+                    subtitle: 'Catat trigger, pikiran, dan respons',
+                    onTap: widget.onOpenDiary,
+                  ),
+                  const SizedBox(height: 10),
+                  ActionTile(
+                    icon: Icons.folder_shared_rounded,
+                    title: 'Health Record',
+                    subtitle: 'Diagnosis, file asesmen, dan riwayat obat',
+                    onTap: widget.onOpenMore,
+                  ),
+                  const SizedBox(height: 10),
+                  ActionTile(
+                    icon: Icons.chat_bubble_outline_rounded,
+                    title: 'Chat Profesional',
+                    subtitle: 'Kirim pesan langsung ke profesional Anda',
+                    onTap: widget.onOpenChat,
+                    color: MalvaColors.orchid,
+                  ),
+                  const SizedBox(height: 22),
+                  const SectionLabel('Health Check-in'),
+                  ActionTile(
+                    icon: Icons.mood_rounded,
+                    title: 'Mood Tracker',
+                    subtitle: 'Mood, tidur, energi, kecemasan',
+                    onTap: widget.onOpenMood,
+                    color: MalvaColors.orchid,
+                  ),
+                  const SizedBox(height: 10),
+                  ActionTile(
+                    icon: Icons.medication_rounded,
+                    title: 'Medication Tracker',
+                    subtitle: 'Reminder, stok, dan log minum obat',
+                    onTap: widget.onOpenMedication,
+                    color: MalvaColors.mint,
+                  ),
+                  const SizedBox(height: 10),
+                  ActionTile(
+                    icon: Icons.fact_check_rounded,
+                    title: 'Assessment',
+                    subtitle: 'PHQ-9, GAD-7, dan rule engine',
+                    onTap: widget.onOpenAssessment,
+                    color: MalvaColors.amber,
+                  ),
+                  const SizedBox(height: 76),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );
@@ -316,7 +316,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Tidak dapat mengirim notifikasi: tidak terhubung ke server.'),
+          content: Text(
+              'Tidak dapat mengirim notifikasi: tidak terhubung ke server.'),
           backgroundColor: MalvaColors.danger,
         ),
       );
@@ -500,8 +501,7 @@ class _CrisisAction extends StatelessWidget {
                 children: [
                   Text(title,
                       style: const TextStyle(fontWeight: FontWeight.w700)),
-                  Text(subtitle,
-                      style: Theme.of(context).textTheme.bodySmall),
+                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
                 ],
               ),
             ),

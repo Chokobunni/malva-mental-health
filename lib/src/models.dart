@@ -313,13 +313,15 @@ class ChatMessage {
   final DateTime timestamp;
   final bool isMine;
 
-  factory ChatMessage.fromJson(Map<String, dynamic> json, {required String currentUserId}) {
+  factory ChatMessage.fromJson(Map<String, dynamic> json,
+      {required String currentUserId}) {
     return ChatMessage(
       id: json['id']?.toString() ?? '',
       senderId: json['sender_id']?.toString() ?? '',
       senderName: json['sender_name']?.toString() ?? '',
       text: json['text']?.toString() ?? '',
-      timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ?? DateTime.now(),
+      timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ??
+          DateTime.now(),
       isMine: json['sender_id']?.toString() == currentUserId,
     );
   }

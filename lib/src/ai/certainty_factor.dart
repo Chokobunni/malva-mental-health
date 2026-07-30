@@ -72,8 +72,10 @@ class CertaintyFactorCalculator {
       neg = cf1;
     }
 
-    return (pos + neg) / (1.0 - pos.abs().clamp(0.0, 1.0).toDouble() *
-        (pos.abs() < neg.abs() ? pos.abs() : neg.abs()));
+    return (pos + neg) /
+        (1.0 -
+            pos.abs().clamp(0.0, 1.0).toDouble() *
+                (pos.abs() < neg.abs() ? pos.abs() : neg.abs()));
   }
 
   /// Convert a raw symptom score (0-3) to a Certainty Factor.

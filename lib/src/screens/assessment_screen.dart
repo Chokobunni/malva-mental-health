@@ -217,15 +217,19 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('PHQ-9:', style: TextStyle(fontWeight: FontWeight.w900)),
+              const Text('PHQ-9:',
+                  style: TextStyle(fontWeight: FontWeight.w900)),
               const SizedBox(height: 4),
               for (var i = 0; i < _phq9Answers.length; i++)
-                Text('  ${i + 1}. Skor: ${_phq9Answers[i] ?? 0} — ${_phq9Answers[i] != null ? AssessmentEngine.responseLabels[_phq9Answers[i]!] : "Belum dijawab"}'),
+                Text(
+                    '  ${i + 1}. Skor: ${_phq9Answers[i] ?? 0} — ${_phq9Answers[i] != null ? AssessmentEngine.responseLabels[_phq9Answers[i]!] : "Belum dijawab"}'),
               const SizedBox(height: 12),
-              const Text('GAD-7:', style: TextStyle(fontWeight: FontWeight.w900)),
+              const Text('GAD-7:',
+                  style: TextStyle(fontWeight: FontWeight.w900)),
               const SizedBox(height: 4),
               for (var i = 0; i < _gad7Answers.length; i++)
-                Text('  ${i + 1}. Skor: ${_gad7Answers[i] ?? 0} — ${_gad7Answers[i] != null ? AssessmentEngine.responseLabels[_gad7Answers[i]!] : "Belum dijawab"}'),
+                Text(
+                    '  ${i + 1}. Skor: ${_gad7Answers[i] ?? 0} — ${_gad7Answers[i] != null ? AssessmentEngine.responseLabels[_gad7Answers[i]!] : "Belum dijawab"}'),
               const SizedBox(height: 12),
               Text(
                 'Total: $_answeredCount/$_questionCount terjawab',
@@ -253,15 +257,16 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
     setState(() => _isSubmitting = true);
     late final ScreeningBundle bundle;
     try {
-      bundle = await ref.read(malvaStoreProvider.notifier).submitScreeningBundle(
-        phq9Answers: _phq9Answers.map((answer) => answer ?? 0).toList(),
-        gad7Answers: _gad7Answers.map((answer) => answer ?? 0).toList(),
-        isInitial: widget.isInitialScreening,
-        source: widget.isInitialScreening
-            ? 'Initial patient screening'
-            : 'Self assessment',
-        session: widget.session,
-      );
+      bundle =
+          await ref.read(malvaStoreProvider.notifier).submitScreeningBundle(
+                phq9Answers: _phq9Answers.map((answer) => answer ?? 0).toList(),
+                gad7Answers: _gad7Answers.map((answer) => answer ?? 0).toList(),
+                isInitial: widget.isInitialScreening,
+                source: widget.isInitialScreening
+                    ? 'Initial patient screening'
+                    : 'Self assessment',
+                session: widget.session,
+              );
     } on MalvaApiException catch (error) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);

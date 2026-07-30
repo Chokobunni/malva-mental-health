@@ -67,8 +67,7 @@ void main() {
       store.deleteDiary(removedId);
 
       expect(store.state.diaryEntries, hasLength(1));
-      expect(
-          store.state.diaryEntries.any((entry) => entry.id == removedId),
+      expect(store.state.diaryEntries.any((entry) => entry.id == removedId),
           isFalse);
     });
   });

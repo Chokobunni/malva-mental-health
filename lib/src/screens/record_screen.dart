@@ -29,8 +29,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
             subtitle: 'Data klinis terkunci dan audit-ready',
             leading: IconButton(
               onPressed: () => Navigator.maybePop(context),
-              icon:
-                  const Icon(Icons.arrow_back_rounded, color: Colors.white),
+              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
             ),
           ),
           Padding(
@@ -48,8 +47,8 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                         decoration: BoxDecoration(
                           border: Border(
                               left: BorderSide(
-                                  color: MalvaColors.seed
-                                      .withValues(alpha: 0.7),
+                                  color:
+                                      MalvaColors.seed.withValues(alpha: 0.7),
                                   width: 6)),
                         ),
                         child: Text(
@@ -107,9 +106,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                               Text(
                                   '${med.reminders.first.label} - ${med.reminders.first.relationToMeal}'),
                               Text('Source: ${med.source}',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall),
+                                  style: Theme.of(context).textTheme.bodySmall),
                             ],
                           ),
                         ),
@@ -267,14 +264,14 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                 if (title.isEmpty) return;
 
                 ref.read(malvaStoreProvider.notifier).addRecord(
-                  HealthRecord(
-                    id: 'record_${DateTime.now().millisecondsSinceEpoch}',
-                    date: DateTime.now(),
-                    title: title,
-                    type: selectedType,
-                    lockedByProfessional: false,
-                  ),
-                );
+                      HealthRecord(
+                        id: 'record_${DateTime.now().millisecondsSinceEpoch}',
+                        date: DateTime.now(),
+                        title: title,
+                        type: selectedType,
+                        lockedByProfessional: false,
+                      ),
+                    );
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(

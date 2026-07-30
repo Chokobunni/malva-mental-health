@@ -629,8 +629,8 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   // ============================================================
 
   void skipInitialScreening() {
-    state = state.copyWith(
-        initialScreeningStatus: InitialScreeningStatus.skipped);
+    state =
+        state.copyWith(initialScreeningStatus: InitialScreeningStatus.skipped);
   }
 
   void saveScreeningBundle(ScreeningBundle bundle) {
@@ -685,9 +685,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     );
 
     final accessToken = session?.accessToken;
-    if (_apiClient != null &&
-        accessToken != null &&
-        accessToken.isNotEmpty) {
+    if (_apiClient != null && accessToken != null && accessToken.isNotEmpty) {
       try {
         final remote = await _apiClient.submitScreening(
           accessToken: accessToken,
@@ -758,5 +756,3 @@ final screeningCrisisFlagProvider = Provider<bool>((ref) {
 final patientProfileProvider = Provider<PatientProfile>((ref) {
   return ref.watch(malvaStoreProvider).patient;
 });
-
-

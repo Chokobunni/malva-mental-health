@@ -85,7 +85,8 @@ class PushNotificationService {
       const AndroidNotificationChannel(
         'crisis_alerts',
         'Crisis Alerts',
-        description: 'Urgent crisis notifications requiring immediate attention',
+        description:
+            'Urgent crisis notifications requiring immediate attention',
         importance: Importance.max,
         enableVibration: true,
         playSound: true,
@@ -166,9 +167,8 @@ class PushNotificationService {
       importance: channel == 'crisis_alerts'
           ? Importance.max
           : Importance.defaultImportance,
-      priority: channel == 'crisis_alerts'
-          ? Priority.high
-          : Priority.defaultPriority,
+      priority:
+          channel == 'crisis_alerts' ? Priority.high : Priority.defaultPriority,
     );
     const iosDetails = DarwinNotificationDetails();
 
@@ -176,7 +176,8 @@ class PushNotificationService {
       id: notification.hashCode,
       title: notification.title,
       body: notification.body,
-      notificationDetails: NotificationDetails(android: androidDetails, iOS: iosDetails),
+      notificationDetails:
+          NotificationDetails(android: androidDetails, iOS: iosDetails),
       payload: jsonEncode(data),
     );
   }
@@ -281,7 +282,12 @@ class PushNotificationService {
         payload: payload,
       );
     } else {
-      await _localNotifications.show(id: id, title: title, body: body, notificationDetails: details, payload: payload);
+      await _localNotifications.show(
+          id: id,
+          title: title,
+          body: body,
+          notificationDetails: details,
+          payload: payload);
     }
   }
 }

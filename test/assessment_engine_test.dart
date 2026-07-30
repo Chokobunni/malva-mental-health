@@ -57,8 +57,8 @@ void main() {
       ),
     );
 
-    expect(store.state.initialScreeningStatus,
-        InitialScreeningStatus.completed);
+    expect(
+        store.state.initialScreeningStatus, InitialScreeningStatus.completed);
     expect(store.state.screeningBundles, hasLength(1));
     expect(store.state.assessments, hasLength(2));
   });

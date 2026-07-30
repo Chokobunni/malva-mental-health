@@ -94,12 +94,15 @@ class _PatientShellState extends ConsumerState<PatientShell> {
         apiClient: widget.apiClient,
       ),
       ChatScreen(
-        session: widget.session,
-        apiClient: widget.apiClient,
         otherUserName: _professionalName,
         otherUserId: _professionalUserId,
       ),
-      MoreScreen(onLogout: widget.onLogout, apiClient: widget.apiClient, session: widget.session, professionalUserId: _professionalUserId, professionalName: _professionalName),
+      MoreScreen(
+          onLogout: widget.onLogout,
+          apiClient: widget.apiClient,
+          session: widget.session,
+          professionalUserId: _professionalUserId,
+          professionalName: _professionalName),
     ];
 
     return Scaffold(

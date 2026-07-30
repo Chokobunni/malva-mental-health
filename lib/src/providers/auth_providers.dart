@@ -44,7 +44,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> _restoreSession() async {
     try {
       state = state.copyWith(isLoading: true);
-      // Session restoration happens via MalvaStore
       state = state.copyWith(isLoading: false);
     } on Object {
       state = const AuthState();
@@ -64,8 +63,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 }
 
-final authStateProvider = StateNotifierProvider<AuthNotifier, AuthState>(
-    (ref) => AuthNotifier());
+final authStateProvider =
+    StateNotifierProvider<AuthNotifier, AuthState>((ref) => AuthNotifier());
 
 final currentSessionProvider = Provider<AuthSession?>((ref) {
   return ref.watch(authStateProvider).session;
