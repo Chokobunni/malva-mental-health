@@ -665,6 +665,8 @@ class MalvaStore extends ChangeNotifier {
       final remote = await apiClient.submitScreening(
         accessToken: accessToken,
         bundle: bundle,
+        phq9Answers: phq9Answers,
+        gad7Answers: gad7Answers,
       );
       if (remote.id.isNotEmpty) {
         bundle = ScreeningBundle(

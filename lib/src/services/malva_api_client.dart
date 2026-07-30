@@ -150,8 +150,9 @@ class MalvaApiClient {
     int limit = 20,
   }) async {
     final uri = baseUri.replace(
-      path: '/v1/patients/${patientId.trim()}/screenings',
+      path: '/v1/screenings',
       queryParameters: {
+        'patient_id': patientId.trim(),
         'limit': limit.toString(),
       },
     );
@@ -207,23 +208,17 @@ class MalvaApiClient {
   Future<BackendScreeningResult> submitScreening({
     required String accessToken,
     required ScreeningBundle bundle,
+    List<int>? phq9Answers,
+    List<int>? gad7Answers,
   }) async {
     final payload = await _send(
       'POST',
       '/v1/screenings',
       accessToken: accessToken,
       body: {
-        'phq9_score': bundle.phq9.score,
-        'phq9_level': bundle.phq9.level.name,
-        'gad7_score': bundle.gad7.score,
-        'gad7_level': bundle.gad7.level.name,
-        'crisis_flag': bundle.crisisFlag,
-        'rules_fired': [
-          for (final rule in bundle.phq9.rulesFired)
-            {'id': rule.id, 'label': rule.label, 'level': rule.level.name},
-          for (final rule in bundle.gad7.rulesFired)
-            {'id': rule.id, 'label': rule.label, 'level': rule.level.name},
-        ],
+        'phq9': phq9Answers ?? List.filled(9, 0),
+        'gad7': gad7Answers ?? List.filled(7, 0),
+        'source': bundle.source,
         'is_initial': bundle.isInitial,
       },
     );

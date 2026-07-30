@@ -126,6 +126,8 @@ void main() {
         isInitial: true,
         source: 'test',
       ),
+      phq9Answers: [1, 0, 1, 2, 0, 0, 1, 0, 0],
+      gad7Answers: [1, 1, 2, 1, 0, 1, 1],
     );
 
     expect(result.id, 'screening_1');

@@ -59,7 +59,7 @@ class _MalvaAppState extends State<MalvaApp> {
       setState(() => _showSplash = false);
     });
 
-    unawaited(_pushNotifications.initialize());
+    unawaited(_pushNotifications.initialize().catchError((_) {}));
     unawaited(_restoreSession());
   }
 
