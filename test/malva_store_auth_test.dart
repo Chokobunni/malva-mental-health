@@ -1,11 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:malva_mental_health/src/models.dart';
-import 'package:malva_mental_health/src/store/malva_store.dart';
+import 'package:malva_mental_health/src/providers/providers.dart';
 
 void main() {
   group('MalvaStore auth', () {
     test('logs in seeded patient with email and password', () {
-      final store = MalvaStore.seeded();
+      final container = ProviderContainer();
+      final store = container.read(malvaStoreProvider.notifier);
 
       final session =
           store.loginPatient(email: 'pasien@malva.app', password: 'Malva1234');
@@ -15,7 +17,8 @@ void main() {
     });
 
     test('rejects unknown patient email and wrong password', () {
-      final store = MalvaStore.seeded();
+      final container = ProviderContainer();
+      final store = container.read(malvaStoreProvider.notifier);
 
       expect(
         () =>
@@ -30,7 +33,8 @@ void main() {
     });
 
     test('requires professional id to contain exactly 16 digits', () {
-      final store = MalvaStore.seeded();
+      final container = ProviderContainer();
+      final store = container.read(malvaStoreProvider.notifier);
 
       expect(
         () => store.loginProfessional(

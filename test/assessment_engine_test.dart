@@ -1,7 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:malva_mental_health/src/assessment_engine.dart';
 import 'package:malva_mental_health/src/models.dart';
-import 'package:malva_mental_health/src/store/malva_store.dart';
+import 'package:malva_mental_health/src/providers/providers.dart';
 
 void main() {
   group('AssessmentEngine PHQ-9', () {
@@ -40,7 +41,8 @@ void main() {
   });
 
   test('stores combined initial screening bundle', () {
-    final store = MalvaStore.seeded();
+    final container = ProviderContainer();
+    final store = container.read(malvaStoreProvider.notifier);
     final phq9 = _phqNoCrisis(10);
     final gad7 = _gad(5);
 
@@ -55,9 +57,10 @@ void main() {
       ),
     );
 
-    expect(store.initialScreeningStatus, InitialScreeningStatus.completed);
-    expect(store.screeningBundles, hasLength(1));
-    expect(store.assessments, hasLength(2));
+    expect(store.state.initialScreeningStatus,
+        InitialScreeningStatus.completed);
+    expect(store.state.screeningBundles, hasLength(1));
+    expect(store.state.assessments, hasLength(2));
   });
 }
 

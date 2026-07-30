@@ -636,6 +636,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   void saveScreeningBundle(ScreeningBundle bundle) {
     state = state.copyWith(
       screeningBundles: [...state.screeningBundles, bundle],
+      assessments: [...state.assessments, bundle.phq9, bundle.gad7],
       initialScreeningStatus: bundle.isInitial
           ? InitialScreeningStatus.completed
           : state.initialScreeningStatus,
