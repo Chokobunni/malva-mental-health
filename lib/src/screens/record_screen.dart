@@ -16,7 +16,6 @@ class RecordScreen extends ConsumerStatefulWidget {
 
 class _RecordScreenState extends ConsumerState<RecordScreen> {
   String? _selectedFileName;
-  String? _selectedFilePath;
 
   @override
   Widget build(BuildContext context) {
@@ -248,7 +247,6 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                     final result = await FilePicker.platform.pickFiles();
                     if (result != null && result.files.isNotEmpty) {
                       _selectedFileName = result.files.single.name;
-                      _selectedFilePath = result.files.single.path;
                       setDialogState(() {});
                     }
                   },

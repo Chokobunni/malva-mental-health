@@ -247,7 +247,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       return loginPatient(email: email, password: password);
     }
     try {
-      final result = await _apiClient!.login(
+      final result = await _apiClient.login(
         email: email.trim().toLowerCase(),
         password: password,
       );
@@ -279,7 +279,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
           email: email, password: password, displayName: displayName);
     }
     try {
-      final result = await _apiClient!.register(
+      final result = await _apiClient.register(
         role: UserRole.patient,
         email: email.trim().toLowerCase(),
         password: password,
@@ -310,7 +310,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
           professionalId: professionalId, password: password);
     }
     try {
-      final result = await _apiClient!.login(
+      final result = await _apiClient.login(
         email: '$professionalId@professional.malva.local',
         password: password,
       );
@@ -345,7 +345,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
           displayName: displayName);
     }
     try {
-      final result = await _apiClient!.register(
+      final result = await _apiClient.register(
         role: UserRole.professional,
         email: '$professionalId@professional.malva.local',
         password: password,
@@ -689,7 +689,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         accessToken != null &&
         accessToken.isNotEmpty) {
       try {
-        final remote = await _apiClient!.submitScreening(
+        final remote = await _apiClient.submitScreening(
           accessToken: accessToken,
           bundle: bundle,
           phq9Answers: phq9Answers,
@@ -758,3 +758,5 @@ final screeningCrisisFlagProvider = Provider<bool>((ref) {
 final patientProfileProvider = Provider<PatientProfile>((ref) {
   return ref.watch(malvaStoreProvider).patient;
 });
+
+

@@ -62,18 +62,6 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     super.dispose();
   }
 
-  void _handleNotificationTap(String medicationId) {
-    if (!mounted) return;
-    final session = ref.read(currentSessionProvider);
-    if (session == null) {
-      ref.read(authStateProvider.notifier).clearSession();
-      return;
-    }
-    if (session.role == UserRole.patient) {
-      navigatorKey.currentState?.pushNamed('/medication');
-    }
-  }
-
   void _scheduleAllMedicationReminders() {
     final meds = ref.read(malvaStoreProvider).medications;
     for (final med in meds) {
