@@ -241,7 +241,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: () async {
-                    final result = await FilePicker.pickFiles();
+                    final result = await FilePicker.platform.pickFiles();
                     if (result != null && result.files.isNotEmpty) {
                       _selectedFileName = result.files.single.name;
                       setDialogState(() {});
@@ -275,7 +275,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Record "$title" berhasil ditambahkan.'),
+                    content: Text('Record "${title}" berhasil ditambahkan.'),
                   ),
                 );
               },
