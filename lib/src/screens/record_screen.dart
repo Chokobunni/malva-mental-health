@@ -241,7 +241,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: () async {
-                    final result = await FilePicker.platform.pickFiles();
+                    final result = await FilePicker.pickFiles();
                     if (result != null && result.files.isNotEmpty) {
                       _selectedFileName = result.files.single.name;
                       setDialogState(() {});
