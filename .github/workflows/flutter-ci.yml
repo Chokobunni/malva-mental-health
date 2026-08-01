@@ -99,6 +99,10 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
+      - name: Enable Developer Mode (required for plugin symlinks)
+        shell: pwsh
+        run: |
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /t REG_DWORD /f /v "AllowDevelopmentWithoutDevLicense" /d "1"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.44.8'
