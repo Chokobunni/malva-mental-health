@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/demo_professionals.dart';
 import '../../models.dart';
+import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
+import '../../widgets/professional_avatar.dart';
 import 'doctor_profile_screen.dart';
 
 // ============================================================
@@ -28,7 +32,8 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
   String _specialization = '';
   bool? _bpjsOnly;
   bool _isLoading = true;
-  String? _error;
+  Object? _error;
+  bool _offlineMode = false;
   List<BackendDoctorSearchResult> _doctors = const [];
 
   static const _sortOptions = [
@@ -54,18 +59,14 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
     super.dispose();
   }
 
+  /// Muat dari server bila terjangkau; selalu fallback ke direktori demo
+  /// agar daftar tidak pernah kosong dan tidak menampilkan error mentah.
   Future<void> _load() async {
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _error = 'Login diperlukan untuk mencari profesional.';
-        });
-      }
-      return;
-    }
+    final MalvaApiClient apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
+    final rawToken = widget.session?.accessToken;
+    final accessToken =
+        (rawToken == null || rawToken.isEmpty) ? null : rawToken;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -78,23 +79,70 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
         sortBy: _sortBy,
       );
       if (!mounted) return;
-      setState(() {
-        _doctors = doctors;
-        _isLoading = false;
-      });
-    } on MalvaApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.message;
-        _isLoading = false;
-      });
+      if (doctors.isEmpty) {
+        setState(() {
+          _doctors = _demoDirectory();
+          _offlineMode = true;
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _doctors = doctors;
+          _offlineMode = false;
+          _isLoading = false;
+        });
+      }
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Gagal memuat daftar profesional: $e';
+        _doctors = _demoDirectory();
+        _offlineMode = true;
+        _error = e;
         _isLoading = false;
       });
     }
+  }
+
+  /// Direktori demo dengan filter & urutan yang sama seperti server.
+  List<BackendDoctorSearchResult> _demoDirectory() {
+    var list =
+        demoProfessionals().map((demo) => demo.entry).toList(growable: false);
+    if (_specialization.isNotEmpty) {
+      list = list
+          .where((d) => d.specialization == _specialization)
+          .toList(growable: false);
+    }
+    if (_bpjsOnly == true) {
+      list = list.where((d) => d.isBpjsSupported).toList(growable: false);
+    }
+    final sorted = list.toList();
+    switch (_sortBy) {
+      case 'name_desc':
+        sorted.sort((a, b) => b.displayName.compareTo(a.displayName));
+      case 'sessions':
+        sorted.sort((a, b) => b.legacyCount.compareTo(a.legacyCount));
+      case 'popular':
+        sorted.sort((a, b) => b.reviewCount.compareTo(a.reviewCount));
+      case 'distance':
+        sorted.sort((a, b) {
+          final da = a.distanceKm;
+          final db = b.distanceKm;
+          if (da == null && db == null) return 0;
+          if (da == null) return 1;
+          if (db == null) return -1;
+          return da.compareTo(db);
+        });
+      case 'availability':
+        sorted.sort((a, b) {
+          final ab = (b.isAvailableToday == true ? 1 : 0) -
+              (a.isAvailableToday == true ? 1 : 0);
+          if (ab != 0) return ab;
+          return a.displayName.compareTo(b.displayName);
+        });
+      default:
+        sorted.sort((a, b) => a.displayName.compareTo(b.displayName));
+    }
+    return sorted;
   }
 
   List<BackendDoctorSearchResult> get _filtered {
@@ -195,16 +243,26 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
               ),
             ),
             const SizedBox(height: 14),
+            if (_offlineMode) ...[
+              InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: _isLoading ? null : _load,
+                child: const OfflineNoticeBanner(
+                  message: 'Menampilkan direktori contoh. '
+                      'Ketuk untuk memuat ulang dari server.',
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
             if (_isLoading)
               const Center(child: CircularProgressIndicator())
-            else if (_error != null)
-              _ErrorCard(error: _error!, onRetry: _load)
+            else if (_filtered.isEmpty && _error != null)
+              FriendlyErrorCard(error: _error!, onRetry: _load)
             else if (_filtered.isEmpty)
               const EmptyState(
                 icon: Icons.medical_services_outlined,
-                title: 'Belum ada profesional',
-                subtitle:
-                    'Belum ada profesional terverifikasi yang cocok dengan filter.',
+                title: 'Tidak ada yang cocok',
+                subtitle: 'Coba ubah kata kunci atau atur ulang filter.',
               )
             else
               for (final doctor in _filtered) ...[
@@ -216,6 +274,7 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
                       MaterialPageRoute(
                         builder: (_) => DoctorProfileScreen(
                           doctorUserId: doctor.userId,
+                          doctorName: doctor.displayName,
                           session: widget.session,
                           apiClient: widget.apiClient,
                         ),
@@ -227,32 +286,6 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
               ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ErrorCard extends StatelessWidget {
-  const _ErrorCard({required this.error, required this.onRetry});
-
-  final String error;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return SoftCard(
-      child: Column(
-        children: [
-          Text(error,
-              style: const TextStyle(
-                  color: MalvaColors.danger, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Coba Lagi'),
-          ),
-        ],
       ),
     );
   }
@@ -273,20 +306,7 @@ class _DoctorCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
-            child: Text(
-              doctor.displayName.isEmpty
-                  ? '?'
-                  : doctor.displayName.characters.first.toUpperCase(),
-              style: const TextStyle(
-                color: MalvaColors.seed,
-                fontWeight: FontWeight.w900,
-                fontSize: 22,
-              ),
-            ),
-          ),
+          ProfessionalAvatar(displayName: doctor.displayName, radius: 30),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -308,6 +328,12 @@ class _DoctorCard extends StatelessWidget {
                         color: MalvaColors.mint,
                         icon: Icons.verified_rounded,
                       ),
+                    if (doctor.isAvailableToday == true)
+                      const StatusPill(
+                        label: 'Hari ini',
+                        color: MalvaColors.seed,
+                        icon: Icons.event_available_rounded,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -316,6 +342,26 @@ class _DoctorCard extends StatelessWidget {
                   style: const TextStyle(
                       fontWeight: FontWeight.w900, fontSize: 16),
                 ),
+                if (doctor.hospitalName.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      const Icon(Icons.local_hospital_rounded,
+                          size: 14, color: MalvaColors.seed),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          doctor.hospitalName,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.black54,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 4),
                 Wrap(
                   spacing: 10,

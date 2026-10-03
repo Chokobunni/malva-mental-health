@@ -943,8 +943,9 @@ class MalvaApiClient {
         _expectMap(c, 'Respons kredensial tidak valid.'));
   }
 
+  // Direktori publik: token opsional agar bisa dijelajahi offline/tanpa login.
   Future<List<BackendDoctorSearchResult>> searchDoctors({
-    required String accessToken,
+    String? accessToken,
     double? patientLat,
     double? patientLng,
     String specialization = '',
@@ -976,7 +977,7 @@ class MalvaApiClient {
   }
 
   Future<BackendDoctorProfile> getDoctorProfile({
-    required String accessToken,
+    String? accessToken,
     required String userId,
   }) async {
     final payload =
@@ -986,7 +987,7 @@ class MalvaApiClient {
   }
 
   Future<List<BackendDoctorSlot>> getDoctorAvailableSlots({
-    required String accessToken,
+    String? accessToken,
     required String userId,
     required String date,
   }) async {
@@ -1246,9 +1247,29 @@ class MalvaApiClient {
       throw const MalvaApiException('Backend Malva belum dapat dihubungi.');
     }
 
-    final decoded = response.body.isEmpty
-        ? <String, dynamic>{}
-        : jsonDecode(response.body) as Map<String, dynamic>;
+    // Respons non-JSON (mis. halaman HTML dari proxy/portal) tidak boleh
+    // bocor sebagai FormatException mentah ke UI.
+    final Map<String, dynamic> decoded;
+    if (response.body.isEmpty) {
+      decoded = <String, dynamic>{};
+    } else {
+      try {
+        final parsed = jsonDecode(response.body);
+        if (parsed is Map<String, dynamic>) {
+          decoded = parsed;
+        } else {
+          throw const MalvaApiException(
+            'Server mengembalikan format data yang tidak dikenal.',
+          );
+        }
+      } on MalvaApiException {
+        rethrow;
+      } on Object {
+        throw const MalvaApiException(
+          'Server mengembalikan respons yang tidak valid. Coba lagi nanti.',
+        );
+      }
+    }
 
     if (response.statusCode == 401 &&
         retryOnAuth &&
@@ -1876,6 +1897,10 @@ class BackendProfessionalCredential {
     required this.verificationStatus,
     required this.strNumber,
     required this.sippNumber,
+    this.hospitalName = '',
+    this.bio = '',
+    this.isBpjsSupported = false,
+    this.yearsExperience = 0,
   });
 
   factory BackendProfessionalCredential.fromJson(Map<String, dynamic> json) {
@@ -1886,6 +1911,10 @@ class BackendProfessionalCredential {
       verificationStatus: json['verification_status']?.toString() ?? 'PENDING',
       strNumber: json['str_number']?.toString() ?? '',
       sippNumber: json['sipp_number']?.toString() ?? '',
+      hospitalName: json['hospital_name']?.toString() ?? '',
+      bio: json['bio']?.toString() ?? '',
+      isBpjsSupported: json['is_bpjs_supported'] == true,
+      yearsExperience: (json['years_experience'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -1895,6 +1924,10 @@ class BackendProfessionalCredential {
   final String verificationStatus;
   final String strNumber;
   final String sippNumber;
+  final String hospitalName;
+  final String bio;
+  final bool isBpjsSupported;
+  final int yearsExperience;
 }
 
 class BackendDoctorSearchResult {
@@ -1909,6 +1942,8 @@ class BackendDoctorSearchResult {
     required this.isBpjsSupported,
     this.distanceKm,
     this.isAvailableToday,
+    this.hospitalName = '',
+    this.bio = '',
   });
 
   factory BackendDoctorSearchResult.fromJson(Map<String, dynamic> json) {
@@ -1923,6 +1958,8 @@ class BackendDoctorSearchResult {
       isBpjsSupported: json['is_bpjs_supported'] == true,
       distanceKm: (json['distance_km'] as num?)?.toDouble(),
       isAvailableToday: json['is_available_today'] == 1,
+      hospitalName: json['hospital_name']?.toString() ?? '',
+      bio: json['bio']?.toString() ?? '',
     );
   }
 
@@ -1936,6 +1973,8 @@ class BackendDoctorSearchResult {
   final bool isBpjsSupported;
   final double? distanceKm;
   final bool? isAvailableToday;
+  final String hospitalName;
+  final String bio;
 
   int get helpfulnessPercent => reviewCount <= 0
       ? 0

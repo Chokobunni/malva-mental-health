@@ -12,19 +12,21 @@ import 'package:malva_mental_health/src/widgets/home_personalization.dart';
 import 'package:malva_mental_health/src/widgets/mini_summary.dart';
 
 void main() {
-  testWidgets('doctor discovery menampilkan filter dan empty state',
+  testWidgets('doctor discovery menampilkan filter dan direktori demo',
       (tester) async {
     await tester.pumpWidget(
       const ProviderScope(child: MaterialApp(home: DoctorDiscoveryScreen())),
     );
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
 
     expect(find.text('Jadwal Profesional'), findsOneWidget);
     expect(find.text('Urutkan'), findsOneWidget);
     expect(find.text('Nama profesional'), findsOneWidget);
-    // Tanpa backend: error login diperlukan
-    expect(find.text('Login diperlukan untuk mencari profesional.'),
-        findsOneWidget);
+    // Tanpa backend: fallback direktori demo (tidak pernah kosong).
+    expect(find.text('dr. Hafid Algistian, Sp.KJ'), findsWidgets);
+    expect(find.textContaining('direktori contoh'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -92,8 +94,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('E-Prescription'), findsOneWidget);
-    // Tanpa backend: tampil error login diperlukan
-    expect(find.text('Login diperlukan.'), findsOneWidget);
+    // Tanpa backend: tampil pesan mode offline yang ramah.
+    expect(find.textContaining('Mode offline'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 import 'payment_screen.dart';
 
@@ -246,7 +247,8 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
     final apiClient = widget.apiClient;
     final accessToken = widget.session?.accessToken;
     if (apiClient == null || accessToken == null || accessToken.isEmpty) {
-      setState(() => _error = 'Login diperlukan untuk booking.');
+      setState(() => _error = 'Mode offline aktif. '
+          'Hubungkan ke server untuk membuat booking.');
       return;
     }
     setState(() {
@@ -281,7 +283,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
     } on MalvaApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } on Object catch (e) {
-      if (mounted) setState(() => _error = 'Gagal membuat booking: $e');
+      if (mounted) setState(() => _error = friendlyErrorMessage(e));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

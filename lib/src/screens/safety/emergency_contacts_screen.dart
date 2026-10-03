@@ -6,6 +6,7 @@ import '../../models.dart';
 import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 
 // ============================================================
@@ -96,12 +97,9 @@ class _EmergencyContactsScreenState
                 ),
             if (safety.error != null) ...[
               const SizedBox(height: 12),
-              Text(
-                safety.error!,
-                style: const TextStyle(
-                  color: MalvaColors.danger,
-                  fontWeight: FontWeight.w700,
-                ),
+              FriendlyErrorCard(
+                error: safety.error!,
+                onRetry: () => ref.read(safetyProvider.notifier).load(),
               ),
             ],
           ],
@@ -140,7 +138,7 @@ class _EmergencyContactsScreenState
     } on Object catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal menghapus: $e')),
+        SnackBar(content: Text(friendlyErrorMessage(e))),
       );
     }
   }
@@ -408,7 +406,7 @@ class _ContactFormState extends ConsumerState<_ContactForm> {
     } on MalvaApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } on Object catch (e) {
-      if (mounted) setState(() => _error = 'Gagal menyimpan: $e');
+      if (mounted) setState(() => _error = friendlyErrorMessage(e));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

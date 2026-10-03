@@ -54,6 +54,7 @@ class _ProfessionalDashboardScreenState
   List<_AuditEntry> _serverAuditEntries = const [];
   String? _selectedPatientId;
   String _searchQuery = '';
+  int _tabIndex = 0;
   bool _isLoadingOnlineData = false;
   String? _onlineError;
 
@@ -105,6 +106,8 @@ class _ProfessionalDashboardScreenState
   @override
   Widget build(BuildContext context) {
     final storeState = ref.watch(malvaStoreProvider);
+    final patients = _patientsForDashboard(storeState);
+    final selected = _selectedPatient(patients);
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: _loadOnlineProfessionalData,
@@ -155,120 +158,103 @@ class _ProfessionalDashboardScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _StatusBanner(
-                    isLoading: _isLoadingOnlineData,
-                    error: _onlineError,
-                    hasBackendSession:
-                        widget.session?.accessToken?.isNotEmpty == true,
-                    onRetry: _loadOnlineProfessionalData,
-                  ),
-                  _SyncStatusBar(
-                    syncStatus: _syncStatus,
-                    lastSyncTime: _lastSyncTime,
-                    hasBackendSession:
-                        widget.session?.accessToken?.isNotEmpty == true,
-                  ),
-                  _PriorityMetrics(
-                    patientCount: _patientsForDashboard(storeState).length,
-                    crisisCount:
-                        _crisisQueue(_patientsForDashboard(storeState)).length,
-                    reviewCount:
-                        _reviewQueue(_patientsForDashboard(storeState)).length,
-                  ),
-                  const SizedBox(height: 18),
-                  _PatientSearch(
-                    query: _searchQuery,
-                    onChanged: (value) => setState(() => _searchQuery = value),
-                  ),
-                  const SizedBox(height: 18),
-                  SectionLabel(
-                    '1. Dashboard prioritas pasien',
-                    action: TextButton.icon(
-                      onPressed: _loadOnlineProfessionalData,
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Refresh'),
+                  // ---- TAB 0: DASHBOARD ----
+                  if (_tabIndex == 0)
+                    _StatusBanner(
+                      isLoading: _isLoadingOnlineData,
+                      error: _onlineError,
+                      hasBackendSession:
+                          widget.session?.accessToken?.isNotEmpty == true,
+                      onRetry: _loadOnlineProfessionalData,
                     ),
-                  ),
-                  _PriorityQueue(
-                    crisisQueue:
-                        _crisisQueue(_patientsForDashboard(storeState)),
-                    reviewQueue:
-                        _reviewQueue(_patientsForDashboard(storeState)),
-                    reviewedIds: _reviewedScreeningIds,
-                    onReview: _openScreeningReview,
-                  ),
-                  const SizedBox(height: 22),
-                  const SectionLabel('2. Daftar pasien terhubung'),
-                  _ConnectedPatientList(
-                    patients:
-                        _filterPatients(_patientsForDashboard(storeState)),
-                    selectedPatientId:
-                        _selectedPatient(_patientsForDashboard(storeState))
-                            ?.patientId,
-                    onSelect: (patient) => setState(
-                      () => _selectedPatientId = patient.patientId,
+                  if (_tabIndex == 0)
+                    _SyncStatusBar(
+                      syncStatus: _syncStatus,
+                      lastSyncTime: _lastSyncTime,
+                      hasBackendSession:
+                          widget.session?.accessToken?.isNotEmpty == true,
                     ),
-                  ),
-                  const SizedBox(height: 22),
-                  if (_selectedPatient(_patientsForDashboard(storeState)) ==
-                      null)
+                  if (_tabIndex == 0)
+                    _PriorityMetrics(
+                      patientCount: patients.length,
+                      crisisCount: _crisisQueue(patients).length,
+                      reviewCount: _reviewQueue(patients).length,
+                    ),
+                  if (_tabIndex == 0) const SizedBox(height: 18),
+                  // ---- TAB 1: PASIEN ----
+                  if (_tabIndex == 1)
+                    _PatientSearch(
+                      query: _searchQuery,
+                      onChanged: (value) =>
+                          setState(() => _searchQuery = value),
+                    ),
+                  if (_tabIndex == 1) const SizedBox(height: 18),
+                  if (_tabIndex == 0)
+                    SectionLabel(
+                      'Prioritas pasien',
+                      action: TextButton.icon(
+                        onPressed: _loadOnlineProfessionalData,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Refresh'),
+                      ),
+                    ),
+                  if (_tabIndex == 0)
+                    _PriorityQueue(
+                      crisisQueue: _crisisQueue(patients),
+                      reviewQueue: _reviewQueue(patients),
+                      reviewedIds: _reviewedScreeningIds,
+                      onReview: _openScreeningReview,
+                    ),
+                  if (_tabIndex == 1) const SectionLabel('Pasien terhubung'),
+                  if (_tabIndex == 1)
+                    _ConnectedPatientList(
+                      patients: _filterPatients(patients),
+                      selectedPatientId: selected?.patientId,
+                      onSelect: (patient) => setState(
+                        () => _selectedPatientId = patient.patientId,
+                      ),
+                    ),
+                  if (_tabIndex == 1 && selected == null)
                     const EmptyState(
                       icon: Icons.people_outline_rounded,
                       title: 'Belum ada pasien terhubung',
                       subtitle:
                           'Pasien perlu menghubungkan akun dengan ID profesional sebelum data real muncul.',
                     )
-                  else ...[
+                  else if (_tabIndex == 1) ...[
                     _PatientDetailSection(
-                      patient:
-                          _selectedPatient(_patientsForDashboard(storeState))!,
+                      patient: selected!,
                       professionalCode: widget.session?.identifier,
                     ),
                     const SizedBox(height: 22),
                     _ScreeningHistorySection(
-                      patient:
-                          _selectedPatient(_patientsForDashboard(storeState))!,
-                      screenings:
-                          _selectedPatient(_patientsForDashboard(storeState))!
-                              .screenings,
+                      patient: selected,
+                      screenings: selected.screenings,
                       reviewedIds: _reviewedScreeningIds,
                       onReview: _openScreeningReview,
                     ),
                     const SizedBox(height: 22),
                     _TimelineSection(
-                      patient:
-                          _selectedPatient(_patientsForDashboard(storeState))!,
-                      backendEvents: _timelineEventsByPatient[_selectedPatient(
-                                  _patientsForDashboard(storeState))!
-                              .patientId] ??
-                          const <BackendTimelineEvent>[],
+                      patient: selected,
+                      backendEvents:
+                          _timelineEventsByPatient[selected.patientId] ??
+                              const <BackendTimelineEvent>[],
                       diaryEntries: storeState.diaryEntries.take(2),
                       medicationLogs: storeState.medicationLogs.take(2),
-                      allowLocalFallback:
-                          !(_selectedPatient(_patientsForDashboard(storeState))!
-                                  .sourceLabel ==
-                              'Backend'),
+                      allowLocalFallback: !(selected.sourceLabel == 'Backend'),
                     ),
                     const SizedBox(height: 22),
                     _MoodDiaryReviewSection(
-                      online:
-                          _selectedPatient(_patientsForDashboard(storeState))!
-                                  .sourceLabel ==
-                              'Backend',
-                      restricted: _moodDiaryRestrictedPatients.contains(
-                          _selectedPatient(_patientsForDashboard(storeState))!
-                              .patientId),
-                      moods: _moodsByPatient[_selectedPatient(
-                                  _patientsForDashboard(storeState))!
-                              .patientId] ??
+                      online: selected.sourceLabel == 'Backend',
+                      restricted: _moodDiaryRestrictedPatients
+                          .contains(selected.patientId),
+                      moods: _moodsByPatient[selected.patientId] ??
                           const <BackendMoodCheckin>[],
-                      backendEntries: _diariesByPatient[_selectedPatient(
-                                  _patientsForDashboard(storeState))!
-                              .patientId] ??
+                      backendEntries: _diariesByPatient[selected.patientId] ??
                           const <BackendDiaryEntry>[],
                       localEntries: storeState.diaryEntries.take(4).toList(),
                       onBackendFeedback: (entry) => _openBackendDiaryFeedback(
-                        _selectedPatient(_patientsForDashboard(storeState))!,
+                        selected,
                         entry,
                       ),
                       onLocalFeedback: _openDiaryFeedback,
@@ -276,41 +262,40 @@ class _ProfessionalDashboardScreenState
                     const SizedBox(height: 22),
                     _MedicationMonitoringSection(
                       storeState: storeState,
-                      online:
-                          _selectedPatient(_patientsForDashboard(storeState))!
-                                  .sourceLabel ==
-                              'Backend',
-                      restricted: _medicationRestrictedPatients.contains(
-                          _selectedPatient(_patientsForDashboard(storeState))!
-                              .patientId),
-                      medications: _medicationsByPatient[_selectedPatient(
-                                  _patientsForDashboard(storeState))!
-                              .patientId] ??
+                      online: selected.sourceLabel == 'Backend',
+                      restricted: _medicationRestrictedPatients
+                          .contains(selected.patientId),
+                      medications: _medicationsByPatient[selected.patientId] ??
                           const <BackendMedication>[],
-                      logs: _medicationLogsByPatient[_selectedPatient(
-                                  _patientsForDashboard(storeState))!
-                              .patientId] ??
+                      logs: _medicationLogsByPatient[selected.patientId] ??
                           const <BackendMedicationLog>[],
                     ),
-                    const SizedBox(height: 22),
-                    _ProfessionalNotesSection(
-                      notes: _professionalNotes[_selectedPatient(
-                                  _patientsForDashboard(storeState))!
-                              .patientId] ??
-                          const [],
-                      followUps: _followUpMessages[_selectedPatient(
-                                  _patientsForDashboard(storeState))!
-                              .patientId] ??
-                          const [],
-                      onEditNote: () => _openProfessionalNote(
-                        _selectedPatient(_patientsForDashboard(storeState))!,
+                  ]
+                  // ---- TAB 2: TUGAS (catatan & follow-up) ----
+                  else if (_tabIndex == 2) ...[
+                    if (selected == null)
+                      const EmptyState(
+                        icon: Icons.task_outlined,
+                        title: 'Pilih pasien dulu',
+                        subtitle:
+                            'Buka tab Pasien lalu pilih pasien untuk menulis catatan atau follow-up.',
+                      )
+                    else
+                      _ProfessionalNotesSection(
+                        notes:
+                            _professionalNotes[selected.patientId] ?? const [],
+                        followUps:
+                            _followUpMessages[selected.patientId] ?? const [],
+                        onEditNote: () => _openProfessionalNote(
+                          selected,
+                        ),
+                        onFollowUp: () => _openFollowUpMessage(selected),
                       ),
-                      onFollowUp: () => _openFollowUpMessage(
-                          _selectedPatient(_patientsForDashboard(storeState))!),
-                    ),
-                    const SizedBox(height: 22),
+                  ]
+                  // ---- TAB 3: LAINNYA ----
+                  else if (_tabIndex == 3) ...[
                     _RelationshipManagementSection(
-                      patients: _patientsForDashboard(storeState),
+                      patients: patients,
                       professionalCode: widget.session?.identifier,
                       onRefresh: _loadOnlineProfessionalData,
                     ),
@@ -320,8 +305,7 @@ class _ProfessionalDashboardScreenState
                         ..._auditEntries,
                         ..._serverAuditEntries,
                       ],
-                      onExport: () => _openExportSummary(
-                          _selectedPatient(_patientsForDashboard(storeState))!),
+                      onExport: () => _openExportSummary(selected!),
                     ),
                     const SizedBox(height: 22),
                     _ProfessionalPortalSection(
@@ -334,6 +318,28 @@ class _ProfessionalDashboardScreenState
             ),
           ],
         ),
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tabIndex,
+        onDestinationSelected: (value) => setState(() => _tabIndex = value),
+        destinations: const [
+          NavigationDestination(
+              icon: Icon(Icons.dashboard_outlined),
+              selectedIcon: Icon(Icons.dashboard_rounded),
+              label: 'Dashboard'),
+          NavigationDestination(
+              icon: Icon(Icons.people_outline_rounded),
+              selectedIcon: Icon(Icons.people_rounded),
+              label: 'Pasien'),
+          NavigationDestination(
+              icon: Icon(Icons.task_outlined),
+              selectedIcon: Icon(Icons.task_rounded),
+              label: 'Tugas'),
+          NavigationDestination(
+              icon: Icon(Icons.grid_view_outlined),
+              selectedIcon: Icon(Icons.grid_view_rounded),
+              label: 'Lainnya'),
+        ],
       ),
     );
   }
@@ -1114,8 +1120,8 @@ class _ProfessionalDashboardScreenState
 
   void _exportData() async {
     final storeState = ref.read(malvaStoreProvider);
-    final patients = _patientsForDashboard(storeState);
-    final selected = _selectedPatient(patients);
+    final exportPatients = _patientsForDashboard(storeState);
+    final selected = _selectedPatient(exportPatients);
 
     final StringBuffer csv = StringBuffer();
     csv.writeln('Malva Professional Dashboard Export');
@@ -1418,9 +1424,10 @@ class _PriorityMetrics extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          child: MetricTile(
+          child: _MetricCard(
             icon: Icons.people_alt_rounded,
             value: '$patientCount',
             label: 'Pasien aktif',
@@ -1429,7 +1436,7 @@ class _PriorityMetrics extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: MetricTile(
+          child: _MetricCard(
             icon: Icons.warning_amber_rounded,
             value: '$crisisCount',
             label: 'Crisis alert',
@@ -1438,7 +1445,7 @@ class _PriorityMetrics extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: MetricTile(
+          child: _MetricCard(
             icon: Icons.rate_review_rounded,
             value: '$reviewCount',
             label: 'Perlu review',
@@ -1446,6 +1453,58 @@ class _PriorityMetrics extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Kartu metrik vertikal: ikon di atas, angka, lalu label 2 baris max.
+/// Tidak pernah memaksa teks satu kolom huruf-per-huruf.
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String value;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: color.withValues(alpha: 0.12),
+            child: Icon(icon, color: color),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1599,7 +1658,7 @@ class _PatientDetailSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionLabel('3. Detail pasien'),
+        const SectionLabel('Detail pasien'),
         SoftCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1687,7 +1746,7 @@ class _ScreeningHistorySection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionLabel('4. Histori PHQ-9/GAD-7 & 6. Review screening'),
+        const SectionLabel('Histori screening & review'),
         if (screenings.isEmpty)
           const EmptyState(
             icon: Icons.fact_check_outlined,
@@ -1856,7 +1915,7 @@ class _TimelineSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionLabel('7. Timeline pasien'),
+        const SectionLabel('Timeline pasien'),
         if (events.isEmpty)
           const EmptyState(
             icon: Icons.timeline_rounded,
@@ -1930,7 +1989,7 @@ class _MoodDiaryReviewSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionLabel('8. Mood/diary review'),
+        const SectionLabel('Review mood & diary'),
         if (restricted)
           const EmptyState(
             icon: Icons.lock_outline_rounded,
@@ -2080,7 +2139,7 @@ class _MedicationMonitoringSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionLabel('9. Monitoring obat'),
+        const SectionLabel('Monitoring obat'),
         if (restricted)
           const EmptyState(
             icon: Icons.lock_outline_rounded,
@@ -2238,7 +2297,7 @@ class _ProfessionalNotesSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionLabel('10. Catatan profesional & 12. Follow-up message'),
+        const SectionLabel('Catatan & follow-up'),
         Row(
           children: [
             Expanded(
@@ -2329,7 +2388,7 @@ class _RelationshipManagementSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SectionLabel(
-          '11. Manajemen relasi pasien-profesional',
+          'Relasi pasien–profesional',
           action: TextButton.icon(
             onPressed: onRefresh,
             icon: const Icon(Icons.sync_rounded),
@@ -2387,7 +2446,7 @@ class _AuditAndExportSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SectionLabel(
-          '13. Audit log UI & 15. Export ringkasan',
+          'Audit & export ringkasan',
           action: TextButton.icon(
             onPressed: onExport,
             icon: const Icon(Icons.ios_share_rounded),
@@ -2537,31 +2596,54 @@ class _ReviewItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return SoftCard(
       color: color.withValues(alpha: 0.08),
-      child: Row(
-        children: [
-          CircleAvatar(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final avatar = CircleAvatar(
             backgroundColor: color.withValues(alpha: 0.16),
             child: Icon(
               reviewed ? Icons.check_rounded : Icons.priority_high_rounded,
               color: color,
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: const TextStyle(fontWeight: FontWeight.w900)),
-                Text(body),
-              ],
-            ),
-          ),
-          FilledButton(
+          );
+          final texts = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+              Text(body),
+            ],
+          );
+          final action = FilledButton(
             onPressed: onReview,
             child: Text(reviewed ? 'Lihat' : 'Review'),
-          ),
-        ],
+          );
+          // Layar sempit: susun vertikal agar teks tidak terjepit.
+          if (constraints.maxWidth < 320) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    avatar,
+                    const SizedBox(width: 12),
+                    Expanded(child: texts),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                action,
+              ],
+            );
+          }
+          return Row(
+            children: [
+              avatar,
+              const SizedBox(width: 12),
+              Expanded(child: texts),
+              const SizedBox(width: 8),
+              action,
+            ],
+          );
+        },
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 
 // ============================================================
@@ -48,7 +49,8 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _error = 'Login diperlukan.';
+          _error = 'Mode offline aktif. '
+              'Hubungkan ke server untuk melihat resep.';
         });
       }
       return;
@@ -77,7 +79,7 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Gagal memuat resep: $e';
+        _error = friendlyErrorMessage(e);
         _isLoading = false;
       });
     }
@@ -411,7 +413,8 @@ class _EPrescriptionFormScreenState
     final apiClient = widget.apiClient;
     final accessToken = widget.session?.accessToken;
     if (apiClient == null || accessToken == null || accessToken.isEmpty) {
-      setState(() => _error = 'Login diperlukan.');
+      setState(() => _error = 'Mode offline aktif. '
+          'Hubungkan ke server untuk menerbitkan resep.');
       return;
     }
     if (_patientId == null || _patientId!.isEmpty) {
@@ -456,7 +459,7 @@ class _EPrescriptionFormScreenState
     } on MalvaApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } on Object catch (e) {
-      if (mounted) setState(() => _error = 'Gagal menerbitkan: $e');
+      if (mounted) setState(() => _error = friendlyErrorMessage(e));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -601,7 +604,8 @@ class _EPrescriptionDetailScreenState
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _error = 'Login diperlukan.';
+          _error = 'Mode offline aktif. '
+              'Hubungkan ke server untuk melihat detail resep.';
         });
       }
       return;
@@ -625,7 +629,7 @@ class _EPrescriptionDetailScreenState
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Gagal memuat: $e';
+        _error = friendlyErrorMessage(e);
         _isLoading = false;
       });
     }

@@ -5,6 +5,7 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
+import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 
 // ============================================================
@@ -42,13 +43,17 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   }
 
   Future<void> _load() async {
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+    final MalvaApiClient apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
+    final rawToken = widget.session?.accessToken;
+    final accessToken =
+        (rawToken == null || rawToken.isEmpty) ? null : rawToken;
+    if (accessToken == null) {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _error = 'Login diperlukan.';
+          _error = 'Mode offline aktif. '
+              'Hubungkan ke server untuk melihat jadwal dan profesional Anda.';
         });
       }
       return;
@@ -68,16 +73,10 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
         _bookings = results[1] as List<BackendBooking>;
         _isLoading = false;
       });
-    } on MalvaApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.message;
-        _isLoading = false;
-      });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Gagal memuat My Care: $e';
+        _error = friendlyErrorMessage(e);
         _isLoading = false;
       });
     }
@@ -337,7 +336,8 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _error = 'Login diperlukan.';
+          _error = 'Mode offline aktif. '
+              'Hubungkan ke server untuk mengatur persetujuan ini.';
         });
       }
       return;
@@ -359,7 +359,7 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = 'Gagal memuat consent: $e';
+        _error = friendlyErrorMessage(e);
       });
     }
   }
@@ -448,7 +448,7 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
     } on MalvaApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } on Object catch (e) {
-      if (mounted) setState(() => _error = 'Gagal menyimpan: $e');
+      if (mounted) setState(() => _error = friendlyErrorMessage(e));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

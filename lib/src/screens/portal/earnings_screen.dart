@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 
 // ============================================================
@@ -39,7 +40,8 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _error = 'Login diperlukan.';
+          _error = 'Mode offline aktif. '
+              'Hubungkan ke server untuk melihat earnings.';
         });
       }
       return;
@@ -65,7 +67,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Gagal memuat earnings: $e';
+        _error = friendlyErrorMessage(e);
         _isLoading = false;
       });
     }
@@ -274,7 +276,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
     } on Object catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal: $e')),
+        SnackBar(content: Text(friendlyErrorMessage(e))),
       );
     }
   }

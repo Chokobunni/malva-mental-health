@@ -206,9 +206,11 @@ func (s *Server) Routes() http.Handler {
 	// Professional credentials + doctor discovery
 	mux.HandleFunc("POST /v1/credentials", s.requireAuth(s.uploadCredentials))
 	mux.HandleFunc("GET /v1/credentials/me", s.requireAuth(s.getMyCredentials))
-	mux.HandleFunc("GET /v1/doctors/search", s.requireAuth(s.searchDoctors))
-	mux.HandleFunc("GET /v1/doctors/{user_id}", s.requireAuth(s.getDoctorProfile))
-	mux.HandleFunc("GET /v1/doctors/{user_id}/slots", s.requireAuth(s.getDoctorAvailableSlots))
+	// Direktori profesional bersifat publik (read-only) agar pasien bisa
+	// menelusuri dokter sebelum/sesudah login maupun saat sesi lokal.
+	mux.HandleFunc("GET /v1/doctors/search", s.public(s.searchDoctors))
+	mux.HandleFunc("GET /v1/doctors/{user_id}", s.public(s.getDoctorProfile))
+	mux.HandleFunc("GET /v1/doctors/{user_id}/slots", s.public(s.getDoctorAvailableSlots))
 	// Booking, Payment, Earnings, E-Prescription
 	mux.HandleFunc("POST /v1/bookings", s.requireAuth(s.createBooking))
 	mux.HandleFunc("POST /v1/payments", s.requireAuth(s.createPayment))
@@ -1332,6 +1334,14 @@ func (s *Server) requireAuth(next authedHandler) http.HandlerFunc {
 			return
 		}
 		next(w, r, claims)
+	}
+}
+
+// public membungkus handler terautentikasi agar bisa diakses tanpa token.
+// Klaim kosong aman karena handler direktori mengabaikan klaim.
+func (s *Server) public(next authedHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		next(w, r, auth.Claims{})
 	}
 }
 

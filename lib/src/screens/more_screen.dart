@@ -69,7 +69,11 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   color: MalvaColors.amber,
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const AssessmentScreen()),
+                    MaterialPageRoute(
+                        builder: (_) => AssessmentScreen(
+                              session: widget.session,
+                              apiClient: widget.apiClient,
+                            )),
                   ),
                 ),
                 const SizedBox(height: 10),

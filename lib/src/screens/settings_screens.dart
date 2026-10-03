@@ -5,6 +5,7 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
+import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 
 // ============================================================
@@ -294,7 +295,7 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
     } on MalvaApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } on Object catch (e) {
-      if (mounted) setState(() => _error = 'Gagal mengubah: $e');
+      if (mounted) setState(() => _error = friendlyErrorMessage(e));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

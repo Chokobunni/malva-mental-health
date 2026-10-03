@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/demo_professionals.dart';
 import '../../models.dart';
+import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
+import '../../widgets/professional_avatar.dart';
 import 'booking_detail_screen.dart';
 
 // ============================================================
@@ -15,13 +19,19 @@ class DoctorProfileScreen extends ConsumerStatefulWidget {
   const DoctorProfileScreen({
     super.key,
     required this.doctorUserId,
+    this.doctorName,
     this.session,
     this.apiClient,
+    this.demoProfile,
   });
 
   final String doctorUserId;
+  final String? doctorName;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
+
+  /// Profil demo (offline) — bila diisi, tidak ada panggilan jaringan.
+  final BackendDoctorProfile? demoProfile;
 
   @override
   ConsumerState<DoctorProfileScreen> createState() =>
@@ -32,7 +42,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   BackendDoctorProfile? _profile;
   List<BackendDoctorSlot> _todaySlots = const [];
   bool _isLoading = true;
-  String? _error;
+  Object? _error;
   String _serviceType = 'chat';
 
   @override
@@ -42,17 +52,25 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   }
 
   Future<void> _load() async {
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _error = 'Login diperlukan untuk melihat profil profesional.';
-        });
-      }
+    // Jalur demo/offline: data lokal langsung tampil.
+    final demoOverride = widget.demoProfile ??
+        findDemoProfessional(widget.doctorUserId)?.toProfile();
+    if (demoOverride != null) {
+      final demo = findDemoProfessional(widget.doctorUserId);
+      if (!mounted) return;
+      setState(() {
+        _profile = demoOverride;
+        _todaySlots = demo?.demoSlotsFor(DateTime.now()) ?? const [];
+        _isLoading = false;
+        _error = null;
+      });
       return;
     }
+    final MalvaApiClient apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
+    final rawToken = widget.session?.accessToken;
+    final accessToken =
+        (rawToken == null || rawToken.isEmpty) ? null : rawToken;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -81,18 +99,22 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
         _todaySlots = slots;
         _isLoading = false;
       });
-    } on MalvaApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.message;
-        _isLoading = false;
-      });
     } on Object catch (e) {
       if (!mounted) return;
-      setState(() {
-        _error = 'Gagal memuat profil: $e';
-        _isLoading = false;
-      });
+      // Fallback terakhir: direktori demo agar tidak kosong.
+      final demo = findDemoProfessional(widget.doctorUserId);
+      if (demo != null) {
+        setState(() {
+          _profile = demo.toProfile();
+          _todaySlots = demo.demoSlotsFor(DateTime.now());
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _error = e;
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -112,22 +134,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(_error!,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                                color: MalvaColors.danger,
-                                fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed: _load,
-                          icon: const Icon(Icons.refresh_rounded),
-                          label: const Text('Coba Lagi'),
-                        ),
-                      ],
-                    ),
+                    child: FriendlyErrorCard(error: _error!, onRetry: _load),
                   ),
                 )
               : cred == null
@@ -140,14 +147,9 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                           SoftCard(
                             child: Row(
                               children: [
-                                CircleAvatar(
+                                ProfessionalAvatar(
+                                  displayName: _displayName,
                                   radius: 34,
-                                  backgroundColor:
-                                      MalvaColors.seed.withValues(alpha: 0.12),
-                                  child: const Icon(
-                                      Icons.medical_services_rounded,
-                                      color: MalvaColors.seed,
-                                      size: 34),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
@@ -177,14 +179,65 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                                             color: MalvaColors.mint,
                                             icon: Icons.verified_rounded,
                                           ),
+                                          if (cred.isBpjsSupported)
+                                            const StatusPill(
+                                              label: 'BPJS',
+                                              color: MalvaColors.seed,
+                                              icon: Icons.verified_rounded,
+                                            ),
                                         ],
                                       ),
+                                      if (cred.hospitalName.isNotEmpty) ...[
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.local_hospital_rounded,
+                                              size: 14,
+                                              color: MalvaColors.seed,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Expanded(
+                                              child: Text(
+                                                cred.hospitalName,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall
+                                                    ?.copyWith(
+                                                      color: Colors.black54,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
                               ],
                             ),
                           ),
+                          if (cred.bio.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            SoftCard(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Tentang profesional',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 15)),
+                                  const SizedBox(height: 4),
+                                  Text(cred.bio,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium),
+                                ],
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 12),
                           const SectionLabel('Lisensi Praktik'),
                           SoftCard(
@@ -322,6 +375,8 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   }
 
   String get _displayName {
+    final hint = widget.doctorName?.trim() ?? '';
+    if (hint.isNotEmpty) return hint;
     final cred = _profile?.credential;
     if (cred == null) return 'Profesional';
     return 'dr. Profesional ${cred.specialization}';

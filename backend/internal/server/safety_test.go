@@ -2,14 +2,21 @@ package server
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"malva/backend/internal/auth"
 	"malva/backend/internal/config"
+	"malva/backend/internal/store"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func newSafetyTestServer() (*Server, string, string) {
@@ -58,9 +65,6 @@ func TestSafetyEndpointsRequireAuth(t *testing.T) {
 		{"GET", "/v1/sos-blast-status?incident_id=x"},
 		{"POST", "/v1/credentials"},
 		{"GET", "/v1/credentials/me"},
-		{"GET", "/v1/doctors/search"},
-		{"GET", "/v1/doctors/u1"},
-		{"GET", "/v1/doctors/u1/slots?date=2026-01-01"},
 		{"POST", "/v1/bookings"},
 		{"POST", "/v1/payments"},
 		{"POST", "/v1/payments/mark-paid"},
@@ -75,6 +79,53 @@ func TestSafetyEndpointsRequireAuth(t *testing.T) {
 		rec := doAuthed(t, handler, tc.method, tc.path, "", `{"x":1}`)
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("%s %s: expected 401, got %d (%s)", tc.method, tc.path, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+func TestDoctorDirectoryIsPublic(t *testing.T) {
+	// Direktori profesional boleh diakses tanpa token (read-only).
+	// Butuh DB (CI-safe: skip bila tidak tersedia).
+	dsn := "postgres://malva:malva_dev_password@localhost:5432/malva?sslmode=disable"
+	if v := os.Getenv("MALVA_TEST_DATABASE_URL"); v != "" {
+		dsn = v
+	} else if v := os.Getenv("MALVA_DATABASE_URL"); v != "" {
+		dsn = v
+	}
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Skipf("db unavailable: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		t.Skipf("db unreachable (CI-safe): %v", err)
+	}
+
+	cfg := config.Config{AllowedOrigins: []string{"https://api.malva.id"}}
+	logger := slog.New(slog.NewTextHandler(testWriter{}, nil))
+	mgr := auth.NewManager("12345678901234567890123456789012")
+	srv := New(cfg, mgr, store.New(db), nil, logger)
+	handler := srv.Routes()
+
+	rec := doAuthed(t, handler, "GET", "/v1/doctors/search", "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /v1/doctors/search: expected 200 tanpa token, got %d (%s)",
+			rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "dr. Hafid Algistian") {
+		t.Errorf("expected seed doctor in response, got: %s", rec.Body.String())
+	}
+
+	// Profil & slot juga publik (bukan 401).
+	for _, path := range []string{
+		"/v1/doctors/u1",
+		"/v1/doctors/u1/slots?date=2026-01-01",
+	} {
+		rec := doAuthed(t, handler, "GET", path, "", "")
+		if rec.Code == http.StatusUnauthorized {
+			t.Errorf("GET %s: direktori harus publik, got 401", path)
 		}
 	}
 }

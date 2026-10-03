@@ -7,18 +7,22 @@ import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/friendly_error.dart';
+import 'booking/doctor_discovery_screen.dart';
 import 'safety/emergency_dashboard_screen.dart';
 
 class AssessmentScreen extends ConsumerStatefulWidget {
   const AssessmentScreen({
     super.key,
     this.session,
+    this.apiClient,
     this.isInitialScreening = false,
     this.onComplete,
     this.onBack,
   });
 
   final AuthSession? session;
+  final MalvaApiClient? apiClient;
   final bool isInitialScreening;
   final VoidCallback? onComplete;
   final VoidCallback? onBack;
@@ -273,6 +277,11 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
       setState(() => _isSubmitting = false);
       _showSubmitError(error.message);
       return;
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      _showSubmitError(friendlyErrorMessage(error));
+      return;
     }
 
     if (!mounted) return;
@@ -290,6 +299,8 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
       MaterialPageRoute(
         builder: (_) => AssessmentResultScreen(
           bundle: bundle,
+          session: widget.session,
+          apiClient: widget.apiClient,
           onDone: () {
             Navigator.of(context).popUntil((route) => route.isFirst);
             widget.onComplete?.call();
@@ -555,10 +566,14 @@ class AssessmentResultScreen extends StatelessWidget {
     super.key,
     required this.bundle,
     required this.onDone,
+    this.session,
+    this.apiClient,
   });
 
   final ScreeningBundle bundle;
   final VoidCallback onDone;
+  final AuthSession? session;
+  final MalvaApiClient? apiClient;
 
   @override
   Widget build(BuildContext context) {
@@ -625,7 +640,10 @@ class AssessmentResultScreen extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 18),
-                const _RecommendDoctors(),
+                _RecommendDoctors(
+                  session: session,
+                  apiClient: apiClient,
+                ),
                 const SizedBox(height: 18),
                 const SectionLabel('Tips dukungan'),
                 const _TipCard(
@@ -712,7 +730,10 @@ class _CrisisSupportCard extends StatelessWidget {
 }
 
 class _RecommendDoctors extends ConsumerWidget {
-  const _RecommendDoctors();
+  const _RecommendDoctors({this.session, this.apiClient});
+
+  final AuthSession? session;
+  final MalvaApiClient? apiClient;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -731,10 +752,13 @@ class _RecommendDoctors extends ConsumerWidget {
               const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                          'Buka menu Lainnya → Booking Konsultasi untuk memilih profesional.'),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DoctorDiscoveryScreen(
+                        session: session,
+                        apiClient: apiClient,
+                      ),
                     ),
                   );
                 },

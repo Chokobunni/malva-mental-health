@@ -12,9 +12,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Notifikasi'), findsOneWidget);
-    // Tanpa backend: tampil pesan login diperlukan
-    expect(find.text('Login diperlukan untuk melihat notifikasi.'),
-        findsOneWidget);
+    // Tanpa backend: tampil pesan mode offline yang ramah.
+    expect(find.textContaining('Mode offline'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

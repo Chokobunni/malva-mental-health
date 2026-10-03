@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 
 // ============================================================
@@ -182,7 +183,8 @@ class _CredentialUploadScreenState
     final apiClient = widget.apiClient;
     final accessToken = widget.session?.accessToken;
     if (apiClient == null || accessToken == null || accessToken.isEmpty) {
-      setState(() => _error = 'Login diperlukan.');
+      setState(() => _error = 'Mode offline aktif. '
+          'Hubungkan ke server untuk mengirim verifikasi.');
       return;
     }
     setState(() {
@@ -205,7 +207,7 @@ class _CredentialUploadScreenState
     } on MalvaApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } on Object catch (e) {
-      if (mounted) setState(() => _error = 'Gagal mengirim: $e');
+      if (mounted) setState(() => _error = friendlyErrorMessage(e));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
+import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 
 // ============================================================
@@ -33,13 +35,17 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   }
 
   Future<void> _load() async {
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+    final MalvaApiClient apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
+    final rawToken = widget.session?.accessToken;
+    final accessToken =
+        (rawToken == null || rawToken.isEmpty) ? null : rawToken;
+    if (accessToken == null) {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _error = 'Login diperlukan untuk melihat notifikasi.';
+          _error = 'Mode offline aktif. '
+              'Hubungkan ke server untuk melihat notifikasi.';
         });
       }
       return;
@@ -55,16 +61,10 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         _items = items;
         _isLoading = false;
       });
-    } on MalvaApiException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.message;
-        _isLoading = false;
-      });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Gagal memuat notifikasi: $e';
+        _error = friendlyErrorMessage(e);
         _isLoading = false;
       });
     }
@@ -94,7 +94,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal menandai: $e')),
+        SnackBar(content: Text(friendlyErrorMessage(e))),
       );
     }
   }
@@ -116,7 +116,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal: $e')),
+        SnackBar(content: Text(friendlyErrorMessage(e))),
       );
     }
   }

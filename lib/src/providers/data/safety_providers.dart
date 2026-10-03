@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models.dart';
 import '../../services/malva_api_client.dart';
+import '../../widgets/friendly_error.dart';
 import '../auth_providers.dart';
 
 // ============================================================
@@ -84,8 +85,7 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
       state = state.copyWith(isLoading: false, error: e.message);
     } on Object catch (e) {
       if (!mounted) return;
-      state = state.copyWith(
-          isLoading: false, error: 'Gagal memuat data keselamatan: $e');
+      state = state.copyWith(isLoading: false, error: friendlyErrorMessage(e));
     }
   }
 
@@ -119,8 +119,8 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
       rethrow;
     } on Object catch (e) {
       if (mounted) {
-        state = state.copyWith(
-            isLoading: false, error: 'Gagal menambah kontak: $e');
+        state =
+            state.copyWith(isLoading: false, error: friendlyErrorMessage(e));
       }
       rethrow;
     }
@@ -141,7 +141,7 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
     } on MalvaApiException {
       rethrow;
     } on Object catch (e) {
-      throw Exception('Gagal menghapus kontak: $e');
+      throw Exception(friendlyErrorMessage(e));
     }
   }
 
@@ -200,7 +200,7 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
     } on Object catch (e) {
       if (mounted) {
         state =
-            state.copyWith(isLoading: false, error: 'Gagal mengirim SOS: $e');
+            state.copyWith(isLoading: false, error: friendlyErrorMessage(e));
       }
       rethrow;
     }

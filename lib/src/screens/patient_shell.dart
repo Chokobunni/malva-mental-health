@@ -77,6 +77,7 @@ class _PatientShellState extends ConsumerState<PatientShell> {
             MaterialPageRoute(
               builder: (_) => AssessmentScreen(
                 session: widget.session,
+                apiClient: widget.apiClient,
               ),
             ),
           );
@@ -113,7 +114,8 @@ class _PatientShellState extends ConsumerState<PatientShell> {
 
     return Scaffold(
       body: IndexedStack(index: _index, children: pages),
-      floatingActionButton: _index == 4 ? null : const SosFab(),
+      // SOS hanya di Home — tidak stay di halaman lain.
+      floatingActionButton: _index == 0 ? const SosFab() : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),

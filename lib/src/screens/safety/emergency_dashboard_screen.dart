@@ -10,6 +10,7 @@ import '../../providers/providers.dart';
 import '../../models.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 import 'emergency_contacts_screen.dart';
 import 'guided_grounding_screen.dart';
@@ -307,7 +308,7 @@ class _EmergencyDashboardScreenState
     } on Object catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal mengirim SOS: $e')),
+        SnackBar(content: Text(friendlyErrorMessage(e))),
       );
     }
   }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 
 // ============================================================
@@ -47,7 +48,8 @@ class _CrisisIncidentLogScreenState
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _error = 'Login diperlukan.';
+          _error = 'Mode offline aktif. '
+              'Hubungkan ke server untuk melihat incident log.';
         });
       }
       return;
@@ -99,7 +101,7 @@ class _CrisisIncidentLogScreenState
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Gagal memuat incident log: $e';
+        _error = friendlyErrorMessage(e);
         _isLoading = false;
       });
     }
@@ -225,7 +227,7 @@ class _CrisisIncidentLogScreenState
     } on Object catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal: $e')),
+        SnackBar(content: Text(friendlyErrorMessage(e))),
       );
     }
   }

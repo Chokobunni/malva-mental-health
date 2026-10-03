@@ -8,6 +8,7 @@ import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/crisis_hotline.dart';
+import '../widgets/friendly_error.dart';
 import '../widgets/home_personalization.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/sync_status.dart';
@@ -134,7 +135,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal menandai: $e')),
+        SnackBar(content: Text(friendlyErrorMessage(e))),
       );
     }
   }

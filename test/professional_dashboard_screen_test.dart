@@ -19,14 +19,29 @@ void main() {
     );
 
     expect(find.text('Professional'), findsOneWidget);
-    expect(find.text('1. Dashboard prioritas pasien'), findsOneWidget);
-    expect(find.text('2. Daftar pasien terhubung'), findsOneWidget);
-    expect(find.text('3. Detail pasien'), findsOneWidget);
+    // Tab Dashboard: tanpa penomoran.
+    expect(find.text('Prioritas pasien'), findsOneWidget);
+    expect(find.text('Dashboard'), findsOneWidget);
+    expect(find.text('Pasien'), findsOneWidget);
+    expect(find.text('Tugas'), findsOneWidget);
+    expect(find.text('Lainnya'), findsOneWidget);
 
-    await tester.drag(find.byType(ListView), const Offset(0, -1400));
+    // Tab Pasien: daftar terhubung.
+    await tester.tap(find.text('Pasien'));
     await tester.pumpAndSettle();
+    expect(find.text('Pasien terhubung'), findsOneWidget);
 
-    expect(find.text('8. Mood/diary review'), findsOneWidget);
-    expect(find.text('9. Monitoring obat'), findsOneWidget);
+    // Tab Tugas: catatan & follow-up (pasien demo otomatis terpilih).
+    await tester.tap(find.text('Tugas'));
+    await tester.pumpAndSettle();
+    expect(find.text('Catatan & follow-up'), findsOneWidget);
+
+    // Tab Lainnya: relasi, audit, portal — tanpa penomoran.
+    await tester.tap(find.text('Lainnya'));
+    await tester.pumpAndSettle();
+    expect(find.text('Relasi pasien–profesional'), findsOneWidget);
+    expect(find.text('Audit & export ringkasan'), findsOneWidget);
+    expect(find.text('Portal Profesional'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

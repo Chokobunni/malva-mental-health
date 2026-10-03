@@ -113,6 +113,7 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     if (_isTakingInitialScreening) {
       return AssessmentScreen(
         session: ref.read(currentSessionProvider),
+        apiClient: ref.read(apiClientProvider),
         isInitialScreening: true,
         onComplete: () => setState(() => _isTakingInitialScreening = false),
         onBack: () => setState(() => _isTakingInitialScreening = false),
@@ -121,6 +122,7 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
 
     return PatientShell(
       session: ref.read(currentSessionProvider),
+      apiClient: ref.read(apiClientProvider),
       medicationReminderService: _medicationReminderService,
       onLogout: _handleLogout,
     );
