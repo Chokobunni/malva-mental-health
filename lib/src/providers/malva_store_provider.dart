@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../assessment_engine.dart';
 import '../models.dart';
 import '../services/malva_api_client.dart';
+import 'auth_providers.dart';
 
 const _sessionKey = 'malva_active_session';
 const _secureStorage = FlutterSecureStorage();
@@ -726,7 +727,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
 
 final malvaStoreProvider =
     StateNotifierProvider<MalvaStoreNotifier, MalvaStoreState>((ref) {
-  return MalvaStoreNotifier(null);
+  return MalvaStoreNotifier(ref.watch(apiClientProvider));
 });
 
 final adherencePercentProvider = Provider<int>((ref) {

@@ -2,15 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/crisis_hotline.dart';
+import '../widgets/home_personalization.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/sync_status.dart';
+import 'safety/guided_grounding_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({
@@ -69,13 +70,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final storeState = ref.watch(malvaStoreProvider);
     return Scaffold(
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'home_safety_fab',
-        backgroundColor: MalvaColors.danger,
-        foregroundColor: Colors.white,
-        onPressed: () => _showSafetyDialog(context),
-        child: const Icon(Icons.warning_amber_rounded),
-      ),
       body: RefreshIndicator(
         onRefresh: _refreshAll,
         child: ListView(
@@ -113,6 +107,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     const SizedBox(height: 18),
                   ],
+                  ConditionBanner(
+                    bundle: storeState.latestScreeningBundle,
+                  ),
+                  const SizedBox(height: 18),
+                  InlineMoodCheckIn(
+                    onSaved: () => setState(() {}),
+                  ),
+                  const SizedBox(height: 18),
+                  const SmallWinsCard(),
+                  const SizedBox(height: 18),
+                  DailyExercisesGrid(
+                    onBreathing: () => _openGrounding(context),
+                    onCbt: widget.onOpenDiary,
+                    onMindfulness: () => _openGrounding(context),
+                    onJournaling: widget.onOpenMood,
+                  ),
+                  const SizedBox(height: 22),
                   Row(
                     children: [
                       Expanded(
@@ -203,6 +214,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       widget.session?.accessToken?.isNotEmpty == true &&
       widget.apiClient != null;
 
+  void _openGrounding(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const GuidedGroundingScreen()),
+    );
+  }
+
   Future<void> _loadFollowUps() async {
     final apiClient = widget.apiClient;
     final accessToken = widget.session?.accessToken;
@@ -243,113 +261,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _followUpError = 'Follow-up belum bisa dimuat: $error';
         _isLoadingFollowUps = false;
       });
-    }
-  }
-
-  void _showSafetyDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.warning_amber_rounded,
-            color: MalvaColors.danger, size: 42),
-        title: const Text('Butuh bantuan segera?'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Jika Anda atau orang lain dalam bahaya, segera hubungi layanan darurat.',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 16),
-              _CrisisAction(
-                icon: Icons.emergency_rounded,
-                title: 'Darurat Nasional',
-                subtitle: '119 / 112',
-                onTap: () => launchUrl(Uri.parse('tel:119')),
-              ),
-              const SizedBox(height: 8),
-              _CrisisAction(
-                icon: Icons.local_hospital_rounded,
-                title: 'RS Terdekat',
-                subtitle: 'Hubungi IGD rumah sakit terdekat',
-                onTap: () => launchUrl(Uri.parse('tel:118')),
-              ),
-              const SizedBox(height: 8),
-              _CrisisAction(
-                icon: Icons.psychology_rounded,
-                title: 'Hotline Kesehatan Mental',
-                subtitle: '021-500-454 (24 jam)',
-                onTap: () => launchUrl(Uri.parse('tel:021500454')),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Langkah keselamatan:',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              const Text('1. Jauhkan diri dari situasi berbahaya'),
-              const Text('2. Hubungi orang terdekat yang dipercaya'),
-              const Text('3. Jangan tinggal sendirian'),
-              const Text('4. Ikuti instruksi layanan darurat'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Tutup')),
-          FilledButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              _notifyProfessionalCrisis(context);
-            },
-            icon: const Icon(Icons.send_rounded),
-            label: const Text('Notifikasi Profesional'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _notifyProfessionalCrisis(BuildContext context) async {
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'Tidak dapat mengirim notifikasi: tidak terhubung ke server.'),
-          backgroundColor: MalvaColors.danger,
-        ),
-      );
-      return;
-    }
-
-    try {
-      final patientName = ref.read(malvaStoreProvider).patient.name;
-      await apiClient.createCrisisAlert(
-        accessToken: accessToken,
-        patientName: patientName,
-        message: 'Pasien mengaktifkan alert crisis dari aplikasi.',
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Notifikasi crisis telah dikirim ke profesional Anda.'),
-          backgroundColor: MalvaColors.danger,
-        ),
-      );
-    } on Object catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Gagal mengirim notifikasi: $e'),
-          backgroundColor: MalvaColors.danger,
-        ),
-      );
     }
   }
 }
@@ -466,52 +377,6 @@ class _AlertBanner extends StatelessWidget {
               child: Text(alert, style: Theme.of(context).textTheme.bodyMedium),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _CrisisAction extends StatelessWidget {
-  const _CrisisAction({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: MalvaColors.danger.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: MalvaColors.danger),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: MalvaColors.danger),
-          ],
-        ),
       ),
     );
   }

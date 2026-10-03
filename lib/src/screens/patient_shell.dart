@@ -11,6 +11,7 @@ import 'medication_screen.dart';
 import 'mood_screen.dart';
 import 'assessment_screen.dart';
 import 'more_screen.dart';
+import '../widgets/sos_fab.dart';
 
 class PatientShell extends ConsumerStatefulWidget {
   const PatientShell({
@@ -107,6 +108,7 @@ class _PatientShellState extends ConsumerState<PatientShell> {
 
     return Scaffold(
       body: IndexedStack(index: _index, children: pages),
+      floatingActionButton: const SosFab(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),

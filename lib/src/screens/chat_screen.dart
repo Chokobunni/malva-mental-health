@@ -7,6 +7,7 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/chat_service.dart';
 import '../theme.dart';
+import '../widgets/mini_summary.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({
@@ -161,6 +162,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ],
         ),
         actions: [
+          const MiniSummaryButton(),
           _TypingIndicator(isTyping: _otherTyping),
         ],
       ),

@@ -7,10 +7,13 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 import 'assessment_screen.dart';
+import 'booking/doctor_discovery_screen.dart';
 import 'chat_screen.dart';
 import 'consent_management_screen.dart';
 import 'goals_screen.dart';
 import 'record_screen.dart';
+import 'safety/emergency_contacts_screen.dart';
+import 'tests_marketplace_screen.dart';
 
 class MoreScreen extends ConsumerStatefulWidget {
   const MoreScreen({
@@ -101,6 +104,45 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                               otherUserName: widget.professionalName,
                               otherUserId: widget.professionalUserId,
                             )),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ActionTile(
+                  icon: Icons.calendar_month_rounded,
+                  title: 'Booking Konsultasi',
+                  subtitle: 'Cari profesional & jadwal sesi',
+                  color: MalvaColors.seed,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => DoctorDiscoveryScreen(
+                              session: widget.session,
+                              apiClient: widget.apiClient,
+                            )),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ActionTile(
+                  icon: Icons.contact_emergency_rounded,
+                  title: 'Kontak Darurat',
+                  subtitle: 'Kelola kontak untuk Silent SOS',
+                  color: MalvaColors.amber,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const EmergencyContactsScreen()),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ActionTile(
+                  icon: Icons.quiz_rounded,
+                  title: 'Tes Psikologi',
+                  subtitle: 'Katalog tes kepribadian & wellbeing',
+                  color: MalvaColors.orchid,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const TestsMarketplaceScreen()),
                   ),
                 ),
                 const SizedBox(height: 10),

@@ -11,6 +11,10 @@ import '../services/dashboard_sync_service.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
+import 'booking/credential_screens.dart';
+import 'portal/crisis_incident_log_screen.dart';
+import 'portal/e_prescription_screen.dart';
+import 'portal/earnings_screen.dart';
 
 class ProfessionalDashboardScreen extends ConsumerStatefulWidget {
   const ProfessionalDashboardScreen({
@@ -318,6 +322,11 @@ class _ProfessionalDashboardScreenState
                       ],
                       onExport: () => _openExportSummary(
                           _selectedPatient(_patientsForDashboard(storeState))!),
+                    ),
+                    const SizedBox(height: 22),
+                    _ProfessionalPortalSection(
+                      session: widget.session,
+                      apiClient: widget.apiClient,
                     ),
                   ],
                 ],
@@ -2419,6 +2428,86 @@ class _AuditAndExportSection extends StatelessWidget {
               ],
             ),
           ),
+      ],
+    );
+  }
+}
+
+class _ProfessionalPortalSection extends StatelessWidget {
+  const _ProfessionalPortalSection({this.session, this.apiClient});
+
+  final AuthSession? session;
+  final MalvaApiClient? apiClient;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionLabel('Portal Profesional'),
+        ActionTile(
+          icon: Icons.shield_rounded,
+          title: 'Crisis Incident Log',
+          subtitle: 'Incident aktif, resolusi, dan jejak liability',
+          color: MalvaColors.danger,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CrisisIncidentLogScreen(
+                session: session,
+                apiClient: apiClient,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        ActionTile(
+          icon: Icons.medication_liquid_rounded,
+          title: 'E-Prescription',
+          subtitle: 'Terbitkan resep dengan digital signature + QR',
+          color: MalvaColors.mint,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => EPrescriptionScreen(
+                session: session,
+                apiClient: apiClient,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        ActionTile(
+          icon: Icons.account_balance_wallet_rounded,
+          title: 'Earnings',
+          subtitle: 'Pendapatan, fee platform, dan payout',
+          color: MalvaColors.amber,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => EarningsScreen(
+                session: session,
+                apiClient: apiClient,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        ActionTile(
+          icon: Icons.verified_outlined,
+          title: 'Verifikasi STR/SIP',
+          subtitle: 'Upload dokumen lisensi untuk verifikasi admin',
+          color: MalvaColors.orchid,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CredentialUploadScreen(
+                session: session,
+                apiClient: apiClient,
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }

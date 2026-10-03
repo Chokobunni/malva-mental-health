@@ -8,6 +8,7 @@ import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/medication_reminder_service.dart';
 import '../theme.dart';
+import '../widgets/home_personalization.dart';
 import '../widgets/malva_components.dart';
 
 class MedicationScreen extends ConsumerWidget {
@@ -120,6 +121,34 @@ class MedicationScreen extends ConsumerWidget {
                             style: const TextStyle(
                                 color: MalvaColors.plum,
                                 fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  SoftCard(
+                    child: Row(
+                      children: [
+                        StreakRing(percent: storeState.adherencePercent),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                storeState.adherencePercent >= 100
+                                    ? 'Perfect! Adherence 100%'
+                                    : 'Adherence streak',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w900, fontSize: 16),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${storeState.medications.length} obat dipantau • ${storeState.medicationLogs.length} log tercatat',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
                           ),
                         ),
                       ],

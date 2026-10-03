@@ -11,6 +11,9 @@ import 'screens/initial_screening_consent_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/patient_shell.dart';
 import 'screens/professional_dashboard_screen.dart';
+import 'screens/safety/emergency_contacts_screen.dart';
+import 'screens/safety/emergency_dashboard_screen.dart';
+import 'screens/safety/guided_grounding_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/dashboard_sync_service.dart';
 import 'services/medication_reminder_service.dart';
@@ -167,6 +170,7 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
               : authState.isProfessional
                   ? ProfessionalDashboardScreen(
                       session: authState.session,
+                      apiClient: ref.read(apiClientProvider),
                       syncService: _dashboardSyncService,
                       onLogout: _handleLogout,
                     )
@@ -183,6 +187,24 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     return switch (name) {
       '/crisis-alert' => MaterialPageRoute(
           builder: (_) => _buildPatientHome(),
+          settings: settings,
+        ),
+      '/safety' => MaterialPageRoute(
+          builder: (_) => authState.session == null
+              ? LoginScreen(onAuthenticated: _handleAuthenticated)
+              : const EmergencyDashboardScreen(),
+          settings: settings,
+        ),
+      '/safety/contacts' => MaterialPageRoute(
+          builder: (_) => authState.session == null
+              ? LoginScreen(onAuthenticated: _handleAuthenticated)
+              : const EmergencyContactsScreen(),
+          settings: settings,
+        ),
+      '/safety/grounding' => MaterialPageRoute(
+          builder: (_) => authState.session == null
+              ? LoginScreen(onAuthenticated: _handleAuthenticated)
+              : const GuidedGroundingScreen(),
           settings: settings,
         ),
       '/medication' => MaterialPageRoute(

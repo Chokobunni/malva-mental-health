@@ -16,10 +16,22 @@ class RecordScreen extends ConsumerStatefulWidget {
 
 class _RecordScreenState extends ConsumerState<RecordScreen> {
   String? _selectedFileName;
+  String _searchQuery = '';
+  String _typeFilter = 'All';
+
+  List<String> get _typeOptions =>
+      const ['All', 'PDF', 'IMAGE', 'DOC', 'OTHER'];
 
   @override
   Widget build(BuildContext context) {
     final storeState = ref.watch(malvaStoreProvider);
+    final records = storeState.records.where((r) {
+      final matchesType =
+          _typeFilter == 'All' || r.type.toUpperCase() == _typeFilter;
+      final matchesQuery = _searchQuery.isEmpty ||
+          r.title.toLowerCase().contains(_searchQuery.toLowerCase());
+      return matchesType && matchesQuery;
+    }).toList();
     return Scaffold(
       body: ListView(
         padding: EdgeInsets.zero,
@@ -39,39 +51,41 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
               children: [
                 const SectionLabel('Diagnosis'),
                 SoftCard(
+                  color: MalvaColors.plum,
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          border: Border(
-                              left: BorderSide(
-                                  color:
-                                      MalvaColors.seed.withValues(alpha: 0.7),
-                                  width: 6)),
+                      const Text(
+                        'Diagnosis',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
                         ),
-                        child: Text(
-                          storeState.patient.diagnosisSummary,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w900),
-                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        storeState.patient.diagnosisSummary,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white),
                       ),
                       const SizedBox(height: 12),
                       Row(
                         children: [
                           const Icon(Icons.lock_rounded,
-                              size: 18, color: Colors.black45),
+                              size: 18, color: Colors.white70),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Hanya profesional terhubung yang boleh mengubah diagnosis.',
+                              'Only your doctor can edit — pasien read-only.',
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall
-                                  ?.copyWith(color: Colors.black54),
+                                  ?.copyWith(color: Colors.white70),
                             ),
                           ),
                         ],
@@ -130,16 +144,48 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                     label: const Text('Add File'),
                   ),
                 ),
-                if (storeState.records.isEmpty)
+                TextField(
+                  decoration: const InputDecoration(
+                    labelText: 'Search',
+                    hintText: 'Cari dokumen...',
+                    prefixIcon: Icon(Icons.search_rounded),
+                  ),
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                ),
+                const SizedBox(height: 10),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final option in _typeOptions)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: FilterChip(
+                            label: Text(option),
+                            selected: _typeFilter == option,
+                            onSelected: (_) =>
+                                setState(() => _typeFilter = option),
+                            selectedColor:
+                                MalvaColors.seed.withValues(alpha: 0.15),
+                            checkmarkColor: MalvaColors.seed,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                if (records.isEmpty)
                   SoftCard(
                     child: Column(
                       children: [
                         const Icon(Icons.folder_open_rounded,
                             size: 48, color: MalvaColors.seed),
                         const SizedBox(height: 12),
-                        const Text(
-                          'Belum ada record',
-                          style: TextStyle(fontWeight: FontWeight.w900),
+                        Text(
+                          storeState.records.isEmpty
+                              ? 'Belum ada record'
+                              : 'Tidak ada dokumen yang cocok',
+                          style: const TextStyle(fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 8),
                         const Text(
@@ -150,7 +196,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                     ),
                   )
                 else
-                  for (final record in storeState.records) ...[
+                  for (final record in records) ...[
                     SoftCard(
                       child: Row(
                         children: [

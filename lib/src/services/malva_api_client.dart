@@ -20,7 +20,7 @@ class MalvaApiClient {
 
   static String get defaultBaseUrl {
     if (_dartDefineBaseUrl.isNotEmpty) return _dartDefineBaseUrl;
-    if (kIsWeb) return Uri.base.origin;
+    if (kIsWeb) return 'http://localhost:8080';
     return 'http://10.0.2.2:8080';
   }
 
@@ -768,21 +768,372 @@ class MalvaApiClient {
     return (payload['updated'] as num?)?.toInt() ?? 0;
   }
 
-  Future<void> createCrisisAlert({
+  // ============================================================
+  // SAFETY: Emergency Contacts + Crisis Incidents + SOS
+  // ============================================================
+
+  Future<List<BackendEmergencyContact>> listEmergencyContacts({
     required String accessToken,
-    required String patientName,
-    required String message,
   }) async {
-    await _send(
-      'POST',
-      '/v1/crisis-alerts',
-      accessToken: accessToken,
-      body: {
-        'patient_name': patientName,
-        'message': message,
-      },
-    );
+    final payload =
+        await _send('GET', '/v1/emergency-contacts', accessToken: accessToken);
+    return (payload['contacts'] as List?)
+            ?.map((e) => BackendEmergencyContact.fromJson(
+                _expectMap(e, 'Data kontak tidak valid.')))
+            .toList() ??
+        const [];
   }
+
+  Future<BackendEmergencyContact> createEmergencyContact({
+    required String accessToken,
+    required String contactName,
+    required String contactPhone,
+    String relationship = '',
+    bool isDefault = false,
+  }) async {
+    final payload = await _send('POST', '/v1/emergency-contacts',
+        accessToken: accessToken,
+        body: {
+          'contact_name': contactName,
+          'contact_phone': contactPhone,
+          'relationship': relationship,
+          'is_default': isDefault,
+        });
+    return BackendEmergencyContact.fromJson(
+        _expectMap(payload['contact'], 'Respons kontak tidak valid.'));
+  }
+
+  Future<void> deleteEmergencyContact({
+    required String accessToken,
+    required String contactId,
+  }) async {
+    await _send('DELETE', '/v1/emergency-contacts/$contactId',
+        accessToken: accessToken);
+  }
+
+  Future<BackendCrisisIncident> createCrisisAlertV2({
+    required String accessToken,
+    String triggeredBy = 'sos_button',
+    int? phq9Q9Score,
+    double? latitude,
+    double? longitude,
+    String message = '',
+  }) async {
+    final payload = await _send('POST', '/v1/crisis-alerts',
+        accessToken: accessToken,
+        body: {
+          'triggered_by': triggeredBy,
+          if (phq9Q9Score != null) 'phq9_q9_score': phq9Q9Score,
+          if (latitude != null) 'latitude': latitude,
+          if (longitude != null) 'longitude': longitude,
+          'message': message,
+        });
+    return BackendCrisisIncident.fromJson(
+        _expectMap(payload['incident'], 'Respons incident tidak valid.'));
+  }
+
+  Future<List<BackendCrisisIncident>> listCrisisIncidents({
+    required String accessToken,
+    String patientId = '',
+    int limit = 20,
+  }) async {
+    final query =
+        'limit=$limit${patientId.isNotEmpty ? '&patient_id=$patientId' : ''}';
+    final payload = await _send('GET', '/v1/crisis-incidents?$query',
+        accessToken: accessToken);
+    return (payload['incidents'] as List?)
+            ?.map((e) => BackendCrisisIncident.fromJson(
+                _expectMap(e, 'Data incident tidak valid.')))
+            .toList() ??
+        const [];
+  }
+
+  Future<BackendCrisisIncident> resolveCrisisIncident({
+    required String accessToken,
+    required String incidentId,
+    required String resolutionNotes,
+  }) async {
+    final payload = await _send(
+        'POST', '/v1/crisis-incidents/$incidentId/resolve',
+        accessToken: accessToken,
+        body: {
+          'resolution_notes': resolutionNotes,
+        });
+    return BackendCrisisIncident.fromJson(
+        _expectMap(payload['incident'], 'Respons resolusi tidak valid.'));
+  }
+
+  Future<BackendSOSBlastStatus> getBlastStatus({
+    required String accessToken,
+    required String incidentId,
+  }) async {
+    final payload = await _send(
+        'GET', '/v1/sos-blast-status?incident_id=$incidentId',
+        accessToken: accessToken);
+    return BackendSOSBlastStatus.fromJson(
+        _expectMap(payload['blast'], 'Respons blast tidak valid.'));
+  }
+
+  // ============================================================
+  // PROFESSIONAL CREDENTIALS & DISCOVERY
+  // ============================================================
+
+  Future<BackendProfessionalCredential> uploadProfessionalCredentials({
+    required String accessToken,
+    String strNumber = '',
+    String sipNumber = '',
+    String sippNumber = '',
+    String specialization = 'M.Psi',
+    List<String> subSpecialties = const [],
+    double? hospitalLat,
+    double? hospitalLng,
+    String hospitalName = '',
+    String addressDetails = '',
+    bool isBpjsSupported = false,
+    String bio = '',
+    String photoIntroUrl = '',
+    String videoIntroUrl = '',
+    List<dynamic> education = const [],
+  }) async {
+    final payload =
+        await _send('POST', '/v1/credentials', accessToken: accessToken, body: {
+      'str_number': strNumber,
+      'sip_number': sipNumber,
+      'sipp_number': sippNumber,
+      'specialization': specialization,
+      'sub_specialties': subSpecialties,
+      if (hospitalLat != null) 'hospital_lat': hospitalLat,
+      if (hospitalLng != null) 'hospital_lng': hospitalLng,
+      'hospital_name': hospitalName,
+      'address_details': addressDetails,
+      'is_bpjs_supported': isBpjsSupported,
+      'bio': bio,
+      if (photoIntroUrl.isNotEmpty) 'photo_intro_url': photoIntroUrl,
+      if (videoIntroUrl.isNotEmpty) 'video_intro_url': videoIntroUrl,
+      'education': education,
+    });
+    return BackendProfessionalCredential.fromJson(
+        _expectMap(payload['credential'], 'Respons kredensial tidak valid.'));
+  }
+
+  Future<BackendProfessionalCredential?> getMyCredentials({
+    required String accessToken,
+  }) async {
+    final payload =
+        await _send('GET', '/v1/credentials/me', accessToken: accessToken);
+    final c = payload['credential'];
+    if (c == null) return null;
+    return BackendProfessionalCredential.fromJson(
+        _expectMap(c, 'Respons kredensial tidak valid.'));
+  }
+
+  Future<List<BackendDoctorSearchResult>> searchDoctors({
+    required String accessToken,
+    double? patientLat,
+    double? patientLng,
+    String specialization = '',
+    int? maxPrice,
+    double? maxKm,
+    bool? isBpjsSupported,
+    String sortBy = 'name_asc',
+    int limit = 50,
+  }) async {
+    final query = <String, String>{
+      'limit': '$limit',
+      'sort_by': sortBy,
+      if (patientLat != null) 'patient_lat': patientLat.toString(),
+      if (patientLng != null) 'patient_lng': patientLng.toString(),
+      if (specialization.isNotEmpty) 'specialization': specialization,
+      if (maxPrice != null) 'max_price': '$maxPrice',
+      if (maxKm != null) 'max_km': maxKm.toString(),
+      if (isBpjsSupported != null)
+        'is_bpjs_supported': isBpjsSupported.toString(),
+    };
+    final uri =
+        baseUri.replace(path: '/v1/doctors/search', queryParameters: query);
+    final payload = await _sendUri('GET', uri, accessToken: accessToken);
+    return (payload['doctors'] as List?)
+            ?.map((e) => BackendDoctorSearchResult.fromJson(
+                _expectMap(e, 'Data dokter tidak valid.')))
+            .toList() ??
+        const [];
+  }
+
+  Future<BackendDoctorProfile> getDoctorProfile({
+    required String accessToken,
+    required String userId,
+  }) async {
+    final payload =
+        await _send('GET', '/v1/doctors/$userId', accessToken: accessToken);
+    return BackendDoctorProfile.fromJson(
+        _expectMap(payload, 'Respons profil tidak valid.'));
+  }
+
+  Future<List<BackendDoctorSlot>> getDoctorAvailableSlots({
+    required String accessToken,
+    required String userId,
+    required String date,
+  }) async {
+    final payload = await _send('GET', '/v1/doctors/$userId/slots?date=$date',
+        accessToken: accessToken);
+    return (payload['slots'] as List?)
+            ?.map((e) => BackendDoctorSlot.fromJson(
+                _expectMap(e, 'Data slot tidak valid.')))
+            .toList() ??
+        const [];
+  }
+
+  // ============================================================
+  // BOOKINGS & PAYMENTS & EARNINGS & E-PRESCRIPTION
+  // ============================================================
+
+  Future<BackendBooking> createBooking({
+    required String accessToken,
+    String patientId = '',
+    required String professionalId,
+    String? packageId,
+    String serviceType = 'quick_consult',
+    String sessionType = 'chat',
+    required String bookingDate,
+    required String slotTime,
+    int durationMinutes = 30,
+    required int price,
+  }) async {
+    final payload =
+        await _send('POST', '/v1/bookings', accessToken: accessToken, body: {
+      if (patientId.isNotEmpty) 'patient_id': patientId,
+      'professional_id': professionalId,
+      if (packageId != null) 'package_id': packageId,
+      'service_type': serviceType,
+      'session_type': sessionType,
+      'booking_date': bookingDate,
+      'slot_time': slotTime,
+      'duration_minutes': durationMinutes,
+      'price': price,
+    });
+    return BackendBooking.fromJson(
+        _expectMap(payload['booking'], 'Respons booking tidak valid.'));
+  }
+
+  Future<BackendPaymentResponse> createPayment({
+    required String accessToken,
+    required String bookingId,
+    String paymentMethod = 'gopay',
+  }) async {
+    final payload =
+        await _send('POST', '/v1/payments', accessToken: accessToken, body: {
+      'booking_id': bookingId,
+      'payment_method': paymentMethod,
+    });
+    return BackendPaymentResponse.fromJson(
+        _expectMap(payload, 'Respons pembayaran tidak valid.'));
+  }
+
+  Future<BackendPayment> markPaymentPaid({
+    required String accessToken,
+    required String reference,
+    String externalId = '',
+  }) async {
+    final payload = await _send('POST', '/v1/payments/mark-paid',
+        accessToken: accessToken,
+        body: {
+          'reference': reference,
+          'external_id': externalId,
+        });
+    return BackendPayment.fromJson(
+        _expectMap(payload['payment'], 'Respons status tidak valid.'));
+  }
+
+  Future<List<BackendBooking>> listBookings({
+    required String accessToken,
+    int limit = 20,
+  }) async {
+    final payload = await _send('GET', '/v1/bookings?limit=$limit',
+        accessToken: accessToken);
+    return (payload['bookings'] as List?)
+            ?.map((e) => BackendBooking.fromJson(
+                _expectMap(e, 'Data booking tidak valid.')))
+            .toList() ??
+        const [];
+  }
+
+  Future<BackendEarningsSummary> getEarningsSummary({
+    required String accessToken,
+  }) async {
+    final full = await getEarningsFull(accessToken: accessToken);
+    return full.summary;
+  }
+
+  Future<BackendEarningsFull> getEarningsFull({
+    required String accessToken,
+  }) async {
+    final payload =
+        await _send('GET', '/v1/earnings', accessToken: accessToken);
+    return BackendEarningsFull.fromJson(payload);
+  }
+
+  Future<void> requestPayout({
+    required String accessToken,
+    required String earningId,
+  }) async {
+    await _send('POST', '/v1/earnings/$earningId/payout',
+        accessToken: accessToken);
+  }
+
+  Future<BackendEPrescription> createEPrescription({
+    required String accessToken,
+    required String patientId,
+    String instructions = '',
+    String notes = '',
+    required List<BackendEPrescriptionItem> items,
+  }) async {
+    final payload = await _send('POST', '/v1/e-prescriptions',
+        accessToken: accessToken,
+        body: {
+          'patient_id': patientId,
+          'instructions': instructions,
+          'notes': notes,
+          'items': items.map((i) => i.toJson()).toList(),
+        });
+    return BackendEPrescription.fromJson(
+        _expectMap(payload['prescription'], 'Respons resep tidak valid.'));
+  }
+
+  Future<BackendEPrescription> getEPrescription({
+    required String accessToken,
+    required String prescriptionId,
+  }) async {
+    final payload = await _send('GET', '/v1/e-prescriptions/$prescriptionId',
+        accessToken: accessToken);
+    return BackendEPrescription.fromJson(
+        _expectMap(payload['prescription'], 'Respons resep tidak valid.'));
+  }
+
+  Future<List<BackendEPrescription>> listEPrescriptions({
+    required String accessToken,
+  }) async {
+    final payload =
+        await _send('GET', '/v1/e-prescriptions', accessToken: accessToken);
+    return (payload['prescriptions'] as List?)
+            ?.map((e) => BackendEPrescription.fromJson(
+                _expectMap(e, 'Data resep tidak valid.')))
+            .toList() ??
+        const [];
+  }
+
+  Future<BackendQRVerifyResult> verifyPrescriptionQR({
+    required String token,
+  }) async {
+    final uri = baseUri.replace(
+        path: '/v1/e-prescriptions/verify', queryParameters: {'token': token});
+    final payload = await _sendUri('GET', uri);
+    return BackendQRVerifyResult.fromJson(
+        _expectMap(payload, 'Respons QR tidak valid.'));
+  }
+
+  // ============================================================
+  // EXISTING — keep below
+  // ============================================================
 
   Uri realtimeUri(String accessToken) {
     final scheme = baseUri.scheme == 'https' ? 'wss' : 'ws';
@@ -1385,6 +1736,499 @@ class BackendNotification {
   final Map<String, String> data;
 
   bool get isRead => readAt != null;
+}
+
+// ============================================================
+// NEW MODELS: Safety Protocol, Professional, Discovery, Booking, E-Prescription
+// ============================================================
+
+class BackendEmergencyContact {
+  const BackendEmergencyContact({
+    required this.id,
+    required this.patientId,
+    required this.contactName,
+    required this.contactPhone,
+    required this.relationship,
+    required this.isDefault,
+  });
+
+  factory BackendEmergencyContact.fromJson(Map<String, dynamic> json) {
+    return BackendEmergencyContact(
+      id: json['id']?.toString() ?? '',
+      patientId: json['patient_id']?.toString() ?? '',
+      contactName: json['contact_name']?.toString() ?? '',
+      contactPhone: json['contact_phone']?.toString() ?? '',
+      relationship: json['relationship']?.toString() ?? '',
+      isDefault: json['is_default'] == true,
+    );
+  }
+
+  final String id;
+  final String patientId;
+  final String contactName;
+  final String contactPhone;
+  final String relationship;
+  final bool isDefault;
+}
+
+class BackendCrisisIncident {
+  const BackendCrisisIncident({
+    required this.id,
+    required this.patientId,
+    required this.triggeredBy,
+    this.phq9Q9Score,
+    this.latitude,
+    this.longitude,
+    required this.status,
+    this.resolutionNotes = '',
+    this.createdAt,
+    this.resolvedAt,
+    this.patientName = '',
+  });
+
+  factory BackendCrisisIncident.fromJson(Map<String, dynamic> json) {
+    return BackendCrisisIncident(
+      id: json['id']?.toString() ?? '',
+      patientId: json['patient_id']?.toString() ?? '',
+      triggeredBy: json['triggered_by']?.toString() ?? '',
+      phq9Q9Score: (json['phq9_q9_score'] as num?)?.toInt(),
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
+      status: json['status']?.toString() ?? '',
+      resolutionNotes: json['resolution_notes']?.toString() ?? '',
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
+      resolvedAt: DateTime.tryParse(json['resolved_at']?.toString() ?? ''),
+      patientName: json['patient_display_name']?.toString() ?? '',
+    );
+  }
+
+  final String id;
+  final String patientId;
+  final String triggeredBy;
+  final int? phq9Q9Score;
+  final double? latitude;
+  final double? longitude;
+  final String status;
+  final String resolutionNotes;
+  final DateTime? createdAt;
+  final DateTime? resolvedAt;
+  final String patientName;
+}
+
+class BackendSOSBlastStatus {
+  const BackendSOSBlastStatus({
+    required this.total,
+    required this.sent,
+    required this.delivered,
+    required this.pending,
+    required this.failed,
+  });
+
+  factory BackendSOSBlastStatus.fromJson(Map<String, dynamic> json) {
+    return BackendSOSBlastStatus(
+      total: (json['total'] as num?)?.toInt() ?? 0,
+      sent: (json['sent'] as num?)?.toInt() ?? 0,
+      delivered: (json['delivered'] as num?)?.toInt() ?? 0,
+      pending: (json['pending'] as num?)?.toInt() ?? 0,
+      failed: (json['failed'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final int total;
+  final int sent;
+  final int delivered;
+  final int pending;
+  final int failed;
+}
+
+class BackendProfessionalCredential {
+  const BackendProfessionalCredential({
+    required this.id,
+    required this.userId,
+    required this.specialization,
+    required this.verificationStatus,
+    required this.strNumber,
+    required this.sippNumber,
+  });
+
+  factory BackendProfessionalCredential.fromJson(Map<String, dynamic> json) {
+    return BackendProfessionalCredential(
+      id: json['id']?.toString() ?? '',
+      userId: json['user_id']?.toString() ?? '',
+      specialization: json['specialization']?.toString() ?? 'M.Psi',
+      verificationStatus: json['verification_status']?.toString() ?? 'PENDING',
+      strNumber: json['str_number']?.toString() ?? '',
+      sippNumber: json['sipp_number']?.toString() ?? '',
+    );
+  }
+
+  final String id;
+  final String userId;
+  final String specialization;
+  final String verificationStatus;
+  final String strNumber;
+  final String sippNumber;
+}
+
+class BackendDoctorSearchResult {
+  const BackendDoctorSearchResult({
+    required this.userId,
+    required this.displayName,
+    required this.specialization,
+    required this.legacyCount,
+    required this.helpfulnessCount,
+    required this.reviewCount,
+    required this.yearsExperience,
+    required this.isBpjsSupported,
+    this.distanceKm,
+    this.isAvailableToday,
+  });
+
+  factory BackendDoctorSearchResult.fromJson(Map<String, dynamic> json) {
+    return BackendDoctorSearchResult(
+      userId: json['user_id']?.toString() ?? '',
+      displayName: json['display_name']?.toString() ?? '',
+      specialization: json['specialization']?.toString() ?? '',
+      legacyCount: (json['legacy_count'] as num?)?.toInt() ?? 0,
+      helpfulnessCount: (json['helpfulness_count'] as num?)?.toInt() ?? 0,
+      reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
+      yearsExperience: (json['years_experience'] as num?)?.toInt() ?? 0,
+      isBpjsSupported: json['is_bpjs_supported'] == true,
+      distanceKm: (json['distance_km'] as num?)?.toDouble(),
+      isAvailableToday: json['is_available_today'] == 1,
+    );
+  }
+
+  final String userId;
+  final String displayName;
+  final String specialization;
+  final int legacyCount;
+  final int helpfulnessCount;
+  final int reviewCount;
+  final int yearsExperience;
+  final bool isBpjsSupported;
+  final double? distanceKm;
+  final bool? isAvailableToday;
+
+  int get helpfulnessPercent => reviewCount <= 0
+      ? 0
+      : ((helpfulnessCount * 100) / reviewCount).round().clamp(0, 100);
+}
+
+class BackendDoctorSlot {
+  const BackendDoctorSlot({required this.time, required this.available});
+
+  factory BackendDoctorSlot.fromJson(Map<String, dynamic> json) {
+    return BackendDoctorSlot(
+      time: json['time']?.toString() ?? '',
+      available: json['available'] == true,
+    );
+  }
+
+  final String time;
+  final bool available;
+}
+
+class BackendDoctorProfile {
+  const BackendDoctorProfile({
+    required this.credential,
+    this.packages = const [],
+  });
+
+  factory BackendDoctorProfile.fromJson(Map<String, dynamic> json) {
+    final cred = BackendProfessionalCredential.fromJson(
+        json['credential'] as Map<String, dynamic>? ?? const {});
+    final pkgs = (json['packages'] as List?)
+            ?.map((e) =>
+                BackendServicePackage.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        const [];
+    return BackendDoctorProfile(credential: cred, packages: pkgs);
+  }
+
+  final BackendProfessionalCredential credential;
+  final List<BackendServicePackage> packages;
+}
+
+class BackendServicePackage {
+  const BackendServicePackage({
+    required this.id,
+    required this.packageSessions,
+    required this.packageDurationDays,
+    required this.price,
+    this.label = '',
+  });
+
+  factory BackendServicePackage.fromJson(Map<String, dynamic> json) {
+    return BackendServicePackage(
+      id: json['id']?.toString() ?? '',
+      packageSessions: (json['package_sessions'] as num?)?.toInt() ?? 1,
+      packageDurationDays:
+          (json['package_duration_days'] as num?)?.toInt() ?? 30,
+      price: (json['price'] as num?)?.toInt() ?? 0,
+      label: json['label']?.toString() ?? '',
+    );
+  }
+
+  final String id;
+  final int packageSessions;
+  final int packageDurationDays;
+  final int price;
+  final String label;
+}
+
+class BackendBooking {
+  const BackendBooking({
+    required this.id,
+    required this.patientId,
+    required this.professionalId,
+    required this.serviceType,
+    required this.bookingDate,
+    required this.status,
+  });
+
+  factory BackendBooking.fromJson(Map<String, dynamic> json) {
+    return BackendBooking(
+      id: json['id']?.toString() ?? '',
+      patientId: json['patient_id']?.toString() ?? '',
+      professionalId: json['professional_id']?.toString() ?? '',
+      serviceType: json['service_type']?.toString() ?? 'quick_consult',
+      bookingDate: json['booking_date']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+    );
+  }
+
+  final String id;
+  final String patientId;
+  final String professionalId;
+  final String serviceType;
+  final String bookingDate;
+  final String status;
+}
+
+class BackendPaymentResponse {
+  const BackendPaymentResponse({
+    required this.payment,
+    required this.breakdown,
+  });
+
+  factory BackendPaymentResponse.fromJson(Map<String, dynamic> json) {
+    final payment = json['payment'] as Map<String, dynamic>? ?? const {};
+    final breakdown = json['breakdown'] as Map<String, dynamic>? ?? const {};
+    return BackendPaymentResponse(
+      payment: BackendPayment.fromJson(payment),
+      breakdown: breakdown,
+    );
+  }
+
+  final BackendPayment payment;
+  final Map<String, dynamic> breakdown;
+}
+
+class BackendPayment {
+  const BackendPayment({
+    required this.id,
+    required this.bookingId,
+    required this.reference,
+    required this.status,
+  });
+
+  factory BackendPayment.fromJson(Map<String, dynamic> json) {
+    return BackendPayment(
+      id: json['id']?.toString() ?? '',
+      bookingId: json['booking_id']?.toString() ?? '',
+      reference: json['reference']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+    );
+  }
+
+  final String id;
+  final String bookingId;
+  final String reference;
+  final String status;
+}
+
+class BackendEarningsSummary {
+  const BackendEarningsSummary({
+    required this.totalSessions,
+    required this.grossAmount,
+    required this.platformFee,
+    required this.netAmount,
+    required this.payoutBalance,
+    required this.payoutAccount,
+  });
+
+  factory BackendEarningsSummary.fromJson(Map<String, dynamic> json) {
+    return BackendEarningsSummary(
+      totalSessions: (json['total_sessions'] as num?)?.toInt() ?? 0,
+      grossAmount: (json['gross_amount'] as num?)?.toInt() ?? 0,
+      platformFee: (json['platform_fee'] as num?)?.toInt() ?? 0,
+      netAmount: (json['net_amount'] as num?)?.toInt() ?? 0,
+      payoutBalance: json['payout_balance']?.toString() ?? '',
+      payoutAccount: json['payout_account']?.toString() ?? '',
+    );
+  }
+
+  final int totalSessions;
+  final int grossAmount;
+  final int platformFee;
+  final int netAmount;
+  final String payoutBalance;
+  final String payoutAccount;
+}
+
+class BackendEarningsTransaction {
+  const BackendEarningsTransaction({
+    required this.id,
+    required this.paymentId,
+    required this.reference,
+    required this.paymentMethod,
+    required this.gross,
+    required this.platformFee,
+    required this.net,
+    this.paidAt,
+    required this.payoutStatus,
+  });
+
+  factory BackendEarningsTransaction.fromJson(Map<String, dynamic> json) {
+    return BackendEarningsTransaction(
+      id: json['id']?.toString() ?? '',
+      paymentId: json['payment_id']?.toString() ?? '',
+      reference: json['reference']?.toString() ?? '',
+      paymentMethod: json['payment_method']?.toString() ?? '',
+      gross: (json['gross'] as num?)?.toInt() ?? 0,
+      platformFee: (json['platform_fee'] as num?)?.toInt() ?? 0,
+      net: (json['net'] as num?)?.toInt() ?? 0,
+      paidAt: DateTime.tryParse(json['paid_at']?.toString() ?? ''),
+      payoutStatus: json['payout_status']?.toString() ?? '',
+    );
+  }
+
+  final String id;
+  final String paymentId;
+  final String reference;
+  final String paymentMethod;
+  final int gross;
+  final int platformFee;
+  final int net;
+  final DateTime? paidAt;
+  final String payoutStatus;
+}
+
+class BackendEarningsFull {
+  const BackendEarningsFull({
+    required this.summary,
+    this.transactions = const [],
+  });
+
+  factory BackendEarningsFull.fromJson(Map<String, dynamic> json) {
+    return BackendEarningsFull(
+      summary: BackendEarningsSummary.fromJson(
+          json['summary'] as Map<String, dynamic>? ?? const {}),
+      transactions: (json['transactions'] as List?)
+              ?.map((e) => BackendEarningsTransaction.fromJson(
+                  e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+    );
+  }
+
+  final BackendEarningsSummary summary;
+  final List<BackendEarningsTransaction> transactions;
+}
+
+class BackendEPrescriptionItem {
+  const BackendEPrescriptionItem({
+    this.medicationId,
+    required this.name,
+    required this.dosage,
+    required this.frequency,
+    this.days = 30,
+    this.unitsPerDay = 1,
+  });
+
+  BackendEPrescriptionItem.fromJson(Map<String, dynamic> json)
+      : medicationId = json['medication_id']?.toString(),
+        name = json['name']?.toString() ?? '',
+        dosage = json['dosage']?.toString() ?? '',
+        frequency = json['frequency']?.toString() ?? '',
+        days = (json['days'] as num?)?.toInt() ?? 30,
+        unitsPerDay = (json['units_per_day'] as num?)?.toInt() ?? 1;
+
+  final String? medicationId;
+  final String name;
+  final String dosage;
+  final String frequency;
+  final int days;
+  final int unitsPerDay;
+
+  Map<String, dynamic> toJson() => {
+        if (medicationId != null) 'medication_id': medicationId,
+        'name': name,
+        'dosage': dosage,
+        'frequency': frequency,
+        'days': days,
+        'units_per_day': unitsPerDay,
+      };
+}
+
+class BackendEPrescription {
+  const BackendEPrescription({
+    required this.id,
+    required this.professionalId,
+    required this.patientId,
+    required this.instructions,
+    required this.signatureData,
+    required this.qrToken,
+    this.items = const [],
+    this.status = '',
+  });
+
+  factory BackendEPrescription.fromJson(Map<String, dynamic> json) {
+    final sig = json['signature_data'];
+    return BackendEPrescription(
+      id: json['id']?.toString() ?? '',
+      professionalId: json['professional_id']?.toString() ?? '',
+      patientId: json['patient_id']?.toString() ?? '',
+      instructions: json['instructions']?.toString() ?? '',
+      signatureData:
+          sig is Map<String, dynamic> ? sig : const <String, dynamic>{},
+      qrToken: json['qr_token']?.toString() ?? '',
+      items: (json['items'] as List?)
+              ?.map((e) =>
+                  BackendEPrescriptionItem.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      status: json['status']?.toString() ?? '',
+    );
+  }
+
+  final String id;
+  final String professionalId;
+  final String patientId;
+  final String instructions;
+  final Map<String, dynamic> signatureData;
+  final String qrToken;
+  final List<BackendEPrescriptionItem> items;
+  final String status;
+}
+
+class BackendQRVerifyResult {
+  const BackendQRVerifyResult({
+    required this.valid,
+    required this.prescription,
+  });
+
+  factory BackendQRVerifyResult.fromJson(Map<String, dynamic> json) {
+    final rx = json['prescription'] as Map<String, dynamic>? ?? const {};
+    return BackendQRVerifyResult(
+      valid: json['valid'] == true,
+      prescription: BackendEPrescription.fromJson(rx),
+    );
+  }
+
+  final bool valid;
+  final BackendEPrescription prescription;
 }
 
 class MalvaApiException implements Exception {

@@ -195,7 +195,32 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PATCH /v1/notifications/{notification_id}/read", s.requireAuth(s.markNotificationRead))
 	mux.HandleFunc("POST /v1/notifications/test", s.requireAuth(s.testNotification))
 	mux.HandleFunc("GET /v1/realtime/ws", s.realtimeWS)
-	mux.HandleFunc("POST /v1/crisis-alerts", s.requireAuth(s.handleCrisisAlert))
+	// Safety Protocol — new endpoints
+	mux.HandleFunc("GET /v1/emergency-contacts", s.requireAuth(s.listEmergencyContacts))
+	mux.HandleFunc("POST /v1/emergency-contacts", s.requireAuth(s.createEmergencyContact))
+	mux.HandleFunc("DELETE /v1/emergency-contacts/{id}", s.requireAuth(s.deleteEmergencyContact))
+	mux.HandleFunc("POST /v1/crisis-alerts", s.requireAuth(s.handleCrisisAlertV2))
+	mux.HandleFunc("GET /v1/crisis-incidents", s.requireAuth(s.listCrisisIncidents))
+	mux.HandleFunc("POST /v1/crisis-incidents/{id}/resolve", s.requireAuth(s.resolveCrisisIncident))
+	mux.HandleFunc("GET /v1/sos-blast-status", s.requireAuth(s.listBlastStatus))
+	// Professional credentials + doctor discovery
+	mux.HandleFunc("POST /v1/credentials", s.requireAuth(s.uploadCredentials))
+	mux.HandleFunc("GET /v1/credentials/me", s.requireAuth(s.getMyCredentials))
+	mux.HandleFunc("GET /v1/doctors/search", s.requireAuth(s.searchDoctors))
+	mux.HandleFunc("GET /v1/doctors/{user_id}", s.requireAuth(s.getDoctorProfile))
+	mux.HandleFunc("GET /v1/doctors/{user_id}/slots", s.requireAuth(s.getDoctorAvailableSlots))
+	// Booking, Payment, Earnings, E-Prescription
+	mux.HandleFunc("POST /v1/bookings", s.requireAuth(s.createBooking))
+	mux.HandleFunc("POST /v1/payments", s.requireAuth(s.createPayment))
+	mux.HandleFunc("POST /v1/payments/mark-paid", s.requireAuth(s.markPaymentPaid))
+	mux.HandleFunc("GET /v1/bookings", s.requireAuth(s.listBookings))
+	mux.HandleFunc("GET /v1/earnings", s.requireAuth(s.earningsSummary))
+	mux.HandleFunc("POST /v1/earnings/{earning_id}/payout", s.requireAuth(s.requestPayout))
+	mux.HandleFunc("POST /v1/e-prescriptions", s.requireAuth(s.createEPrescription))
+	mux.HandleFunc("GET /v1/e-prescriptions", s.requireAuth(s.listEPrescriptions))
+	mux.HandleFunc("GET /v1/e-prescriptions/{id}", s.requireAuth(s.getEPrescription))
+	// QR verification (public - one-time token)
+	mux.HandleFunc("GET /v1/e-prescriptions/verify", s.verifyEPrescriptionQR)
 	return s.recover(s.securityHeaders(s.inputSanitize(s.cors(mux))))
 }
 
