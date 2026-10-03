@@ -17,15 +17,17 @@ void main() {
     await tester.pumpWidget(
       const ProviderScope(child: MaterialApp(home: DoctorDiscoveryScreen())),
     );
-    await tester.pumpAndSettle();
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
 
     expect(find.text('Jadwal Profesional'), findsOneWidget);
     expect(find.text('Urutkan'), findsOneWidget);
     expect(find.text('Nama profesional'), findsOneWidget);
     // Tanpa backend: fallback direktori demo (tidak pernah kosong).
-    expect(find.text('dr. Hafid Algistian, Sp.KJ'), findsWidgets);
+    // Viewport 800x600 hanya memuat 2 kartu pertama (urut nama).
+    expect(find.text('Andi Wijaya, M.Psi'), findsOneWidget);
     expect(find.textContaining('direktori contoh'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

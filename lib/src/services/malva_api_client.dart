@@ -1901,6 +1901,8 @@ class BackendProfessionalCredential {
     this.bio = '',
     this.isBpjsSupported = false,
     this.yearsExperience = 0,
+    this.addressDetails = '',
+    this.priceFrom = 0,
   });
 
   factory BackendProfessionalCredential.fromJson(Map<String, dynamic> json) {
@@ -1915,6 +1917,8 @@ class BackendProfessionalCredential {
       bio: json['bio']?.toString() ?? '',
       isBpjsSupported: json['is_bpjs_supported'] == true,
       yearsExperience: (json['years_experience'] as num?)?.toInt() ?? 0,
+      addressDetails: json['address_details']?.toString() ?? '',
+      priceFrom: (json['price_from'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -1928,6 +1932,8 @@ class BackendProfessionalCredential {
   final String bio;
   final bool isBpjsSupported;
   final int yearsExperience;
+  final String addressDetails;
+  final int priceFrom;
 }
 
 class BackendDoctorSearchResult {
@@ -1944,6 +1950,10 @@ class BackendDoctorSearchResult {
     this.isAvailableToday,
     this.hospitalName = '',
     this.bio = '',
+    this.hospitalLat,
+    this.hospitalLng,
+    this.addressDetails = '',
+    this.priceFrom = 0,
   });
 
   factory BackendDoctorSearchResult.fromJson(Map<String, dynamic> json) {
@@ -1960,6 +1970,10 @@ class BackendDoctorSearchResult {
       isAvailableToday: json['is_available_today'] == 1,
       hospitalName: json['hospital_name']?.toString() ?? '',
       bio: json['bio']?.toString() ?? '',
+      hospitalLat: (json['hospital_lat'] as num?)?.toDouble(),
+      hospitalLng: (json['hospital_lng'] as num?)?.toDouble(),
+      addressDetails: json['address_details']?.toString() ?? '',
+      priceFrom: (json['price_from'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -1975,10 +1989,39 @@ class BackendDoctorSearchResult {
   final bool? isAvailableToday;
   final String hospitalName;
   final String bio;
+  final double? hospitalLat;
+  final double? hospitalLng;
+  final String addressDetails;
+  final int priceFrom;
 
   int get helpfulnessPercent => reviewCount <= 0
       ? 0
       : ((helpfulnessCount * 100) / reviewCount).round().clamp(0, 100);
+
+  /// Salin dengan beberapa field diganti (dipakai untuk hitung jarak lokal).
+  BackendDoctorSearchResult copyWith({
+    double? distanceKm,
+    bool? isAvailableToday,
+  }) {
+    return BackendDoctorSearchResult(
+      userId: userId,
+      displayName: displayName,
+      specialization: specialization,
+      legacyCount: legacyCount,
+      helpfulnessCount: helpfulnessCount,
+      reviewCount: reviewCount,
+      yearsExperience: yearsExperience,
+      isBpjsSupported: isBpjsSupported,
+      distanceKm: distanceKm ?? this.distanceKm,
+      isAvailableToday: isAvailableToday ?? this.isAvailableToday,
+      hospitalName: hospitalName,
+      bio: bio,
+      hospitalLat: hospitalLat,
+      hospitalLng: hospitalLng,
+      addressDetails: addressDetails,
+      priceFrom: priceFrom,
+    );
+  }
 }
 
 class BackendDoctorSlot {

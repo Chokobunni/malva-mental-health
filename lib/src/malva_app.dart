@@ -53,6 +53,12 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     // Initialize offline sync service
     unawaited(ref.read(offlineSyncServiceProvider).initialize());
 
+    // Izin lokasi saat aplikasi dibuka — untuk jarak faskes (km).
+    // Ditunda ke post-frame agar tidak setState saat build/tes.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(ref.read(patientLocationProvider.notifier).resolveOnStartup());
+    });
+
     // Hide splash after delay
     Future<void>.delayed(const Duration(milliseconds: 1800), () {
       if (!mounted) return;

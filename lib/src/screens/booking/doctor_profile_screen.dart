@@ -213,6 +213,51 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                                           ],
                                         ),
                                       ],
+                                      if (cred.addressDetails.isNotEmpty) ...[
+                                        const SizedBox(height: 2),
+                                        Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.place_rounded,
+                                              size: 14,
+                                              color: MalvaColors.orchid,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Expanded(
+                                              child: Text(
+                                                cred.addressDetails,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall
+                                                    ?.copyWith(
+                                                        color: Colors.black54),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            cred.priceFrom > 0
+                                                ? 'Mulai Rp ${_rupiah(cred.priceFrom)}'
+                                                : 'Harga saat booking',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 13.5,
+                                              color: MalvaColors.seed,
+                                            ),
+                                          ),
+                                          if (cred.isBpjsSupported) ...[
+                                            const SizedBox(width: 8),
+                                            const StatusPill(
+                                              label: 'BPJS tersedia',
+                                              color: MalvaColors.mint,
+                                            ),
+                                          ],
+                                        ],
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -380,6 +425,17 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
     final cred = _profile?.credential;
     if (cred == null) return 'Profesional';
     return 'dr. Profesional ${cred.specialization}';
+  }
+
+  static String _rupiah(int value) {
+    final s = value.toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      final pos = s.length - i;
+      buf.write(s[i]);
+      if (pos > 1 && pos % 3 == 1) buf.write('.');
+    }
+    return buf.toString();
   }
 
   void _openBooking(BuildContext context, BackendServicePackage? package) {

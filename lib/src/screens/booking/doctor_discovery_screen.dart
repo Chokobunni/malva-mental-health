@@ -50,7 +50,7 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   @override
@@ -72,11 +72,15 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
       _error = null;
     });
     try {
+      final location = ref.read(patientLocationProvider);
+      final pos = location.position;
       final doctors = await apiClient.searchDoctors(
         accessToken: accessToken,
         specialization: _specialization,
         isBpjsSupported: _bpjsOnly,
         sortBy: _sortBy,
+        patientLat: pos?.latitude,
+        patientLng: pos?.longitude,
       );
       if (!mounted) return;
       if (doctors.isEmpty) {
@@ -104,9 +108,19 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
   }
 
   /// Direktori demo dengan filter & urutan yang sama seperti server.
+  /// Jarak dihitung lokal dari posisi pasien (bila ada) ke koordinat faskes.
   List<BackendDoctorSearchResult> _demoDirectory() {
-    var list =
-        demoProfessionals().map((demo) => demo.entry).toList(growable: false);
+    final pos = ref.read(patientLocationProvider).position;
+    var list = demoProfessionals()
+        .map((demo) => demo.entry.copyWith(
+              distanceKm: distanceKmBetween(
+                fromLat: pos?.latitude,
+                fromLng: pos?.longitude,
+                toLat: demo.entry.hospitalLat,
+                toLng: demo.entry.hospitalLng,
+              ),
+            ))
+        .toList(growable: false);
     if (_specialization.isNotEmpty) {
       list = list
           .where((d) => d.specialization == _specialization)
@@ -243,6 +257,18 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
               ),
             ),
             const SizedBox(height: 14),
+            if (ref.watch(patientLocationProvider).permissionDenied ||
+                ref.watch(patientLocationProvider).serviceDisabled) ...[
+              InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: () => ref.read(patientLocationProvider.notifier).retry(),
+                child: const OfflineNoticeBanner(
+                  message:
+                      'Izin lokasi nonaktif. Aktifkan untuk melihat jarak faskes (km). Ketuk untuk coba lagi.',
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
             if (_offlineMode) ...[
               InkWell(
                 borderRadius: BorderRadius.circular(18),
@@ -268,6 +294,10 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
               for (final doctor in _filtered) ...[
                 _DoctorCard(
                   doctor: doctor,
+                  patientLat:
+                      ref.watch(patientLocationProvider).position?.latitude,
+                  patientLng:
+                      ref.watch(patientLocationProvider).position?.longitude,
                   onTap: () {
                     Navigator.push(
                       context,
@@ -292,128 +322,184 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
 }
 
 class _DoctorCard extends StatelessWidget {
-  const _DoctorCard({required this.doctor, required this.onTap});
+  const _DoctorCard({
+    required this.doctor,
+    required this.onTap,
+    this.patientLat,
+    this.patientLng,
+  });
 
   final BackendDoctorSearchResult doctor;
   final VoidCallback onTap;
+  final double? patientLat;
+  final double? patientLng;
+
+  double? get _effectiveKm {
+    if (doctor.distanceKm != null) return doctor.distanceKm;
+    return distanceKmBetween(
+      fromLat: patientLat,
+      fromLng: patientLng,
+      toLat: doctor.hospitalLat,
+      toLng: doctor.hospitalLng,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final helpful =
         doctor.reviewCount == 0 ? 0 : doctor.helpfulnessPercent.clamp(0, 100);
+    final km = _effectiveKm;
     return SoftCard(
       onTap: onTap,
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ProfessionalAvatar(displayName: doctor.displayName, radius: 30),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ProfessionalAvatar(displayName: doctor.displayName, radius: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    StatusPill(
-                      label: doctor.specialization.isEmpty
-                          ? 'Profesional'
-                          : doctor.specialization,
-                      color: MalvaColors.orchid,
+                    Text(
+                      doctor.displayName,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 15.5),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    if (doctor.isBpjsSupported)
-                      const StatusPill(
-                        label: 'BPJS',
-                        color: MalvaColors.mint,
-                        icon: Icons.verified_rounded,
-                      ),
-                    if (doctor.isAvailableToday == true)
-                      const StatusPill(
-                        label: 'Hari ini',
-                        color: MalvaColors.seed,
-                        icon: Icons.event_available_rounded,
-                      ),
+                    const SizedBox(height: 3),
+                    Text(
+                      doctor.specialization.isEmpty
+                          ? 'Profesional kesehatan jiwa'
+                          : (doctor.specialization == 'Sp.KJ'
+                              ? 'Psikiater'
+                              : 'Psikolog Klinis'),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.black54, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.star_rounded,
+                            size: 16, color: MalvaColors.amber),
+                        const SizedBox(width: 2),
+                        const Text(
+                          '4.8',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w900, fontSize: 12.5),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '($helpful% terbantu • ${doctor.reviewCount} ulasan)',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: Colors.black54),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  doctor.displayName,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(Icons.local_hospital_rounded,
+                  size: 15, color: MalvaColors.seed),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  doctor.hospitalName.isEmpty
+                      ? 'Faskes tidak dicantumkan'
+                      : doctor.hospitalName,
                   style: const TextStyle(
-                      fontWeight: FontWeight.w900, fontSize: 16),
+                      fontWeight: FontWeight.w700, fontSize: 12.5),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                if (doctor.hospitalName.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      const Icon(Icons.local_hospital_rounded,
-                          size: 14, color: MalvaColors.seed),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          doctor.hospitalName,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Colors.black54,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 2,
+              ),
+              if (km != null) ...[
+                const SizedBox(width: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _Stat(Icons.work_history_rounded,
-                        '${doctor.legacyCount}+ Sesi'),
-                    _Stat(Icons.thumb_up_rounded,
-                        '$helpful% Terbantu (${doctor.reviewCount})'),
-                    _Stat(Icons.workspace_premium_rounded,
-                        '${doctor.yearsExperience} Thn'),
-                    if (doctor.distanceKm != null)
-                      _Stat(Icons.place_rounded,
-                          '${doctor.distanceKm!.toStringAsFixed(1)} km'),
+                    const Icon(Icons.near_me_rounded,
+                        size: 14, color: MalvaColors.orchid),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${km.toStringAsFixed(1)} km',
+                      style: const TextStyle(
+                        color: MalvaColors.orchid,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12.5,
+                      ),
+                    ),
                   ],
                 ),
               ],
-            ),
+            ],
           ),
-          const SizedBox(width: 8),
-          FilledButton(
-            onPressed: onTap,
-            style: FilledButton.styleFrom(
-              backgroundColor: MalvaColors.amber,
-              foregroundColor: MalvaColors.ink,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              minimumSize: Size.zero,
-            ),
-            child: const Text('Lihat',
-                style: TextStyle(fontWeight: FontWeight.w800)),
+          const Divider(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Estimasi biaya',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.black54),
+                    ),
+                    Text(
+                      doctor.priceFrom > 0
+                          ? 'Rp ${_rupiah(doctor.priceFrom)}${doctor.isBpjsSupported ? ' • BPJS tersedia' : ''}'
+                          : (doctor.isBpjsSupported
+                              ? 'BPJS tersedia'
+                              : 'Harga saat booking'),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Lihat profil',
+                    style: TextStyle(
+                        color: MalvaColors.seed,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13),
+                  ),
+                  Icon(Icons.chevron_right_rounded,
+                      size: 20, color: MalvaColors.seed),
+                ],
+              ),
+            ],
           ),
         ],
       ),
     );
   }
-}
 
-class _Stat extends StatelessWidget {
-  const _Stat(this.icon, this.label);
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: MalvaColors.seed),
-        const SizedBox(width: 3),
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-      ],
-    );
+  static String _rupiah(int value) {
+    final s = value.toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      final pos = s.length - i;
+      buf.write(s[i]);
+      if (pos > 1 && pos % 3 == 1) buf.write('.');
+    }
+    return buf.toString();
   }
 }

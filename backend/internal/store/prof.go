@@ -38,6 +38,7 @@ type ProfessionalCredential struct {
 	ReviewCount        int        `json:"review_count"`
 	YearsExperience    int        `json:"years_experience"`
 	PatientCount       int        `json:"patient_count"`
+	PriceFrom          int64      `json:"price_from"`
 	CreatedAt          time.Time  `json:"created_at"`
 }
 
@@ -147,7 +148,7 @@ func (s *Store) GetProfessionalCredential(ctx context.Context, userID string) (P
 		specialization, COALESCE(sub_specialties,'{}'), hospital_lat, hospital_lng, COALESCE(hospital_name,''),
 		COALESCE(address_details,''), is_bpjs_supported, COALESCE(photo_intro_url,''), COALESCE(video_intro_url,''),
 		COALESCE(bio,''), COALESCE(education,'[]'::jsonb), verification_status, COALESCE(rejection_reason,''),
-		COALESCE(document_url,''), legacy_count, helpfulness_count, review_count, years_experience,
+		COALESCE(document_url,''), legacy_count, helpfulness_count, review_count, years_experience, COALESCE(price_from, 0),
 		(SELECT COUNT(*) FROM patient_professional_links WHERE professional_id = professional_credentials.user_id AND status='active') AS patient_count,
 		created_at
 		FROM professional_credentials WHERE user_id = $1`
@@ -156,7 +157,7 @@ func (s *Store) GetProfessionalCredential(ctx context.Context, userID string) (P
 	err := s.db.QueryRowContext(ctx, q, userID).Scan(&c.ID, &c.UserID, &c.STRNumber, &c.SIPNumber, &c.SIPPNumber,
 		&c.Specialization, &sub, &c.HospitalLat, &c.HospitalLng, &c.HospitalName, &c.AddressDetails, &c.IsBPJSSupported,
 		&c.PhotoIntroURL, &c.VideoIntroURL, &c.Bio, &edu, &c.VerificationStatus, &c.RejectionReason, &c.DocumentURL,
-		&c.LegacyCount, &c.HelpfulnessCount, &c.ReviewCount, &c.YearsExperience, &c.PatientCount, &c.CreatedAt)
+		&c.LegacyCount, &c.HelpfulnessCount, &c.ReviewCount, &c.YearsExperience, &c.PriceFrom, &c.PatientCount, &c.CreatedAt)
 	if err != nil { return ProfessionalCredential{}, err }
 	parsePGTextArray(sub, &c.SubSpecialties)
 	_ = json.Unmarshal(edu, &c.Education)
@@ -168,7 +169,7 @@ func (s *Store) ListPendingCredentials(ctx context.Context) ([]ProfessionalCrede
 		specialization, COALESCE(sub_specialties,'{}'), hospital_lat, hospital_lng, COALESCE(hospital_name,''),
 		COALESCE(address_details,''), is_bpjs_supported, COALESCE(photo_intro_url,''), COALESCE(video_intro_url,''),
 		COALESCE(bio,''), COALESCE(education,'[]'::jsonb), verification_status, COALESCE(rejection_reason,''),
-		COALESCE(document_url,''), legacy_count, helpfulness_count, review_count, years_experience, 0, created_at
+		COALESCE(document_url,''), legacy_count, helpfulness_count, review_count, years_experience, COALESCE(price_from, 0), 0, created_at
 		FROM professional_credentials WHERE verification_status = 'PENDING'
 		ORDER BY created_at ASC`
 	rows, err := s.db.QueryContext(ctx, q)
@@ -181,7 +182,7 @@ func (s *Store) ListPendingCredentials(ctx context.Context) ([]ProfessionalCrede
 		if err := rows.Scan(&c.ID, &c.UserID, &c.STRNumber, &c.SIPNumber, &c.SIPPNumber, &c.Specialization, &sub,
 			&c.HospitalLat, &c.HospitalLng, &c.HospitalName, &c.AddressDetails, &c.IsBPJSSupported, &c.PhotoIntroURL,
 			&c.VideoIntroURL, &c.Bio, &edu, &c.VerificationStatus, &c.RejectionReason, &c.DocumentURL,
-			&c.LegacyCount, &c.HelpfulnessCount, &c.ReviewCount, &c.YearsExperience, &c.PatientCount, &c.CreatedAt); err != nil {
+			&c.LegacyCount, &c.HelpfulnessCount, &c.ReviewCount, &c.YearsExperience, &c.PriceFrom, &c.PatientCount, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		parsePGTextArray(sub, &c.SubSpecialties)
@@ -286,6 +287,7 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 		pc.specialization, COALESCE(pc.sub_specialties,'{}'), pc.hospital_lat, pc.hospital_lng, COALESCE(pc.hospital_name,''),
 		COALESCE(pc.address_details,''), pc.is_bpjs_supported, COALESCE(pc.photo_intro_url,''), COALESCE(pc.video_intro_url,''),
 		COALESCE(pc.bio,''), COALESCE(pc.education,'[]'::jsonb), pc.legacy_count, pc.helpfulness_count, pc.review_count, pc.years_experience,
+		COALESCE(pc.price_from, 0),
 		(SELECT COUNT(*) FROM patient_professional_links WHERE professional_id = pc.user_id AND status='active') AS patient_count,
 		CASE WHEN EXISTS (SELECT 1 FROM professional_schedules ps WHERE ps.professional_id = pc.user_id AND ps.day_of_week = EXTRACT(dow FROM CURRENT_DATE)::int AND ps.is_active = true) THEN 1 ELSE 0 END AS is_available_today,
 		%s
@@ -310,7 +312,7 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 		if err := rows.Scan(&r.ID, &r.UserID, &r.DisplayName, &r.STRNumber, &r.SIPNumber, &r.SIPPNumber,
 			&r.Specialization, &sub, &r.HospitalLat, &r.HospitalLng, &r.HospitalName, &r.AddressDetails,
 			&r.IsBPJSSupported, &r.PhotoIntroURL, &r.VideoIntroURL, &r.Bio, &edu, &r.LegacyCount,
-			&r.HelpfulnessCount, &r.ReviewCount, &r.YearsExperience, &r.PatientCount, &available,
+			&r.HelpfulnessCount, &r.ReviewCount, &r.YearsExperience, &r.PriceFrom, &r.PatientCount, &available,
 			&r.DistanceKM); err != nil {
 			return nil, err
 		}

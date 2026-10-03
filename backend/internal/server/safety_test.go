@@ -130,6 +130,7 @@ func TestDoctorDirectoryIsPublic(t *testing.T) {
 	}
 
 	// Filter BPJS + spesialisasi harus benar-benar memfilter.
+	// Seed 008: Rina & Andi = M.Psi + BPJS; Hafid & Sinta = Sp.KJ.
 	rec = doAuthed(t, handler, "GET",
 		"/v1/doctors/search?specialization=M.Psi&is_bpjs_supported=true", "", "")
 	if rec.Code != http.StatusOK {
@@ -140,8 +141,8 @@ func TestDoctorDirectoryIsPublic(t *testing.T) {
 	if !strings.Contains(body, "Rina Prasetyo") {
 		t.Errorf("expected Rina (M.Psi + BPJS) in response, got: %s", body)
 	}
-	if strings.Contains(body, "Andi Wijaya") {
-		t.Errorf("Andi (non-BPJS) harus terfilter, got: %s", body)
+	if !strings.Contains(body, "Andi Wijaya") {
+		t.Errorf("expected Andi (M.Psi + BPJS) in response, got: %s", body)
 	}
 	if strings.Contains(body, "Hafid Algistian") {
 		t.Errorf("Hafid (Sp.KJ) harus terfilter spesialisasi, got: %s", body)
