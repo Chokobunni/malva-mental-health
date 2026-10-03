@@ -19,7 +19,7 @@ func TestSOSBlastUpdateFlowDebug(t *testing.T) {
 	if err != nil {
 		t.Skipf("db unavailable: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	ctxPing, cancelPing := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelPing()
 	if err := db.PingContext(ctxPing); err != nil {

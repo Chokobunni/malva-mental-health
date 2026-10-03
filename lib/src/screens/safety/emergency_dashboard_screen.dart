@@ -217,8 +217,9 @@ class _EmergencyDashboardScreenState
     WidgetRef ref, {
     String message = '',
   }) async {
-    final safety = ref.read(safetyProvider.notifier);
-    if (safety.state.contacts.isEmpty) {
+    final notifier = ref.read(safetyProvider.notifier);
+    final contacts = ref.read(safetyProvider).contacts;
+    if (contacts.isEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -240,7 +241,7 @@ class _EmergencyDashboardScreenState
             color: MalvaColors.amber, size: 42),
         title: const Text('Kirim Silent SOS?'),
         content: Text(
-          'Pesan darurat + lokasi GPS akan dikirim ke ${safety.state.contacts.length} kontak darurat dan profesional tertaut. Lanjutkan?',
+          'Pesan darurat + lokasi GPS akan dikirim ke ${contacts.length} kontak darurat dan profesional tertaut. Lanjutkan?',
         ),
         actions: [
           TextButton(
@@ -282,7 +283,7 @@ class _EmergencyDashboardScreenState
     }
 
     try {
-      final incident = await safety.sendSilentSOS(
+      final incident = await notifier.sendSilentSOS(
         latitude: lat,
         longitude: lng,
         message: message,

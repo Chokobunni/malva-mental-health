@@ -222,8 +222,7 @@ func (s *Store) CreateUser(ctx context.Context, params CreateUserParams) (User, 
 	if err != nil {
 		return User{}, err
 	}
-	defer tx.Rollback()
-
+	defer func() { _ = tx.Rollback() }()
 	var user User
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO users (email, password_hash, role, display_name)
@@ -321,8 +320,7 @@ func (s *Store) RotateRefreshSession(ctx context.Context, oldHash, newHash, user
 	if err != nil {
 		return User{}, err
 	}
-	defer tx.Rollback()
-
+	defer func() { _ = tx.Rollback() }()
 	var user User
 	var sessionID string
 	err = tx.QueryRowContext(ctx, `
@@ -399,8 +397,7 @@ func (s *Store) ListProfessionalsForPatient(ctx context.Context, patientID strin
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
+	defer func() { _ = rows.Close() }()
 	var ids []string
 	for rows.Next() {
 		var id string
@@ -423,8 +420,7 @@ func (s *Store) LinkPatientToProfessional(ctx context.Context, patientID, profes
 	if err != nil {
 		return PatientProfessionalLink{}, err
 	}
-	defer tx.Rollback()
-
+	defer func() { _ = tx.Rollback() }()
 	var link PatientProfessionalLink
 	err = tx.QueryRowContext(ctx, `
 		SELECT u.id, u.display_name, pp.professional_id
@@ -517,8 +513,7 @@ func (s *Store) ListPatientProfessionalLinks(ctx context.Context, userID, role s
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
+	defer func() { _ = rows.Close() }()
 	links := make([]PatientProfessionalLink, 0)
 	for rows.Next() {
 		var link PatientProfessionalLink
@@ -566,8 +561,7 @@ func (s *Store) CreateScreeningBundle(ctx context.Context, params CreateScreenin
 	if err != nil {
 		return ScreeningSession{}, err
 	}
-	defer tx.Rollback()
-
+	defer func() { _ = tx.Rollback() }()
 	session := ScreeningSession{
 		PatientID:    params.PatientID,
 		SubmittedBy:  params.SubmittedBy,
@@ -635,8 +629,7 @@ func (s *Store) ListScreeningSessions(ctx context.Context, patientID string, lim
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
+	defer func() { _ = rows.Close() }()
 	sessions := make([]ScreeningSession, 0)
 	for rows.Next() {
 		var session ScreeningSession
@@ -676,8 +669,7 @@ func (s *Store) loadScreeningResults(ctx context.Context, session *ScreeningSess
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var resultID string
 		var result screening.Result
@@ -717,8 +709,7 @@ func (s *Store) listScreeningAnswers(ctx context.Context, resultID string) ([]sc
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
+	defer func() { _ = rows.Close() }()
 	answers := make([]screening.Answer, 0)
 	for rows.Next() {
 		var answer screening.Answer
@@ -771,8 +762,7 @@ func (s *Store) UpsertScreeningReview(ctx context.Context, professionalID, scree
 	if err != nil {
 		return ScreeningReview{}, err
 	}
-	defer tx.Rollback()
-
+	defer func() { _ = tx.Rollback() }()
 	var patientID string
 	err = tx.QueryRowContext(ctx, `
 		SELECT ss.patient_id
@@ -847,7 +837,7 @@ func (s *Store) ListScreeningReviews(ctx context.Context, patientID, professiona
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var reviews []ScreeningReview
 	for rows.Next() {
 		var review ScreeningReview
@@ -917,7 +907,7 @@ func (s *Store) ListProfessionalNotes(ctx context.Context, patientID, profession
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var notes []ProfessionalNote
 	for rows.Next() {
 		var note ProfessionalNote
@@ -989,7 +979,7 @@ func (s *Store) ListFollowUpMessages(ctx context.Context, patientID, professiona
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var messages []FollowUpMessage
 	for rows.Next() {
 		var message FollowUpMessage
@@ -1069,7 +1059,7 @@ func (s *Store) ListMoodCheckins(ctx context.Context, patientID string, limit in
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []MoodCheckin
 	for rows.Next() {
 		var item MoodCheckin
@@ -1133,7 +1123,7 @@ func (s *Store) ListDiaryEntries(ctx context.Context, patientID string, sharedOn
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []DiaryEntry
 	for rows.Next() {
 		var item DiaryEntry
@@ -1239,7 +1229,7 @@ func (s *Store) ListMedications(ctx context.Context, patientID string, limit int
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []Medication
 	for rows.Next() {
 		var item Medication
@@ -1302,7 +1292,7 @@ func (s *Store) ListMedicationLogs(ctx context.Context, patientID string, limit 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []MedicationLog
 	for rows.Next() {
 		var item MedicationLog
@@ -1469,7 +1459,7 @@ func (s *Store) ListAuditLogs(ctx context.Context, patientID string, limit int) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var logs []AuditLog
 	for rows.Next() {
 		var log AuditLog
@@ -1513,8 +1503,7 @@ func (s *Store) CreateNotification(ctx context.Context, input Notification) (Not
 	if err != nil {
 		return Notification{}, err
 	}
-	defer tx.Rollback()
-
+	defer func() { _ = tx.Rollback() }()
 	var notification Notification
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO notifications (user_id, type, title, body, data)
@@ -1556,8 +1545,7 @@ func (s *Store) ListNotifications(ctx context.Context, userID string, limit int)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
+	defer func() { _ = rows.Close() }()
 	items := make([]Notification, 0)
 	for rows.Next() {
 		var item Notification
@@ -1637,8 +1625,7 @@ func (s *Store) EnabledDeviceTokens(ctx context.Context, userID string) ([]strin
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
+	defer func() { _ = rows.Close() }()
 	var tokens []string
 	for rows.Next() {
 		var token string
@@ -1677,8 +1664,7 @@ func (s *Store) AcquireOutboxJobs(ctx context.Context, limit int) ([]OutboxJob, 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
+	defer func() { _ = rows.Close() }()
 	var jobs []OutboxJob
 	for rows.Next() {
 		var job OutboxJob
@@ -1699,8 +1685,7 @@ func (s *Store) MarkOutboxDelivered(ctx context.Context, jobID string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-
+	defer func() { _ = tx.Rollback() }()
 	var notificationID string
 	err = tx.QueryRowContext(ctx, `
 		UPDATE notification_outbox
@@ -1727,8 +1712,7 @@ func (s *Store) MarkOutboxFailed(ctx context.Context, jobID, message string, ret
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-
+	defer func() { _ = tx.Rollback() }()
 	var notificationID string
 	err = tx.QueryRowContext(ctx, `
 		UPDATE notification_outbox
@@ -1818,7 +1802,7 @@ func (s *Store) ListChatMessages(ctx context.Context, patientID, professionalID 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var messages []ChatMessage
 	for rows.Next() {
 		var msg ChatMessage
@@ -1863,7 +1847,7 @@ func (s *Store) ListLinkedUsers(ctx context.Context, userID string) ([]string, e
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var ids []string
 	for rows.Next() {
 		var id string

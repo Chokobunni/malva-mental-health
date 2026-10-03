@@ -46,7 +46,7 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 
 	isProfessional := claims.Role == "professional"
 	patientID := req.PatientID
-	professionalID := req.ProfessionalID
+	var professionalID string
 
 	if !isProfessional {
 		patientID = claims.Subject

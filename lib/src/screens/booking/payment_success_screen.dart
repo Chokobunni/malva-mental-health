@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
-import '../../widgets/malva_components.dart';
 
 // ============================================================
 // PAYMENT SUCCESS — reference + receipt + continue

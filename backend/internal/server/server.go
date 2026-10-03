@@ -1153,33 +1153,6 @@ func (s *Server) testNotification(w http.ResponseWriter, r *http.Request, claims
 	writeJSON(w, http.StatusCreated, map[string]any{"notification": notification})
 }
 
-func (s *Server) handleCrisisAlert(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
-	var req struct {
-		PatientName string `json:"patient_name"`
-		Message     string `json:"message"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
-		return
-	}
-
-	crisisEvent := map[string]interface{}{
-		"type": "crisis_alert",
-		"data": map[string]interface{}{
-			"patient_name": req.PatientName,
-			"message":      req.Message,
-			"timestamp":    time.Now().UTC().Format(time.RFC3339),
-		},
-	}
-
-	s.hub.Broadcast(crisisEvent)
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"status":  "sent",
-		"message": "Crisis alert dikirim ke profesional",
-	})
-}
-
 func (s *Server) realtimeWS(w http.ResponseWriter, r *http.Request) {
 	claims, err := s.claimsFromRequest(r)
 	if err != nil {
@@ -1533,7 +1506,7 @@ func oneOf(value string, allowed ...string) bool {
 }
 
 func readJSON(r *http.Request, target any) error {
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 	decoder := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20))
 	decoder.DisallowUnknownFields()
 	return decoder.Decode(target)

@@ -173,7 +173,7 @@ func (s *Store) ListPendingCredentials(ctx context.Context) ([]ProfessionalCrede
 		ORDER BY created_at ASC`
 	rows, err := s.db.QueryContext(ctx, q)
 	if err != nil { return nil, err }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []ProfessionalCredential
 	for rows.Next() {
 		var c ProfessionalCredential
@@ -238,8 +238,7 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 		args = append(args, *params.MaxPrice)
 	}
 
-	hasCoords := params.PatientLat != nil && params.PatientLng != nil &&
-		params.PatientLat != nil && params.PatientLng != nil
+	hasCoords := params.PatientLat != nil && params.PatientLng != nil
 
 	// Kolom jarak selalu ada (NULL bila tanpa koordinat) agar Scan stabil.
 	distanceCol := "NULL::numeric AS distance_km"
@@ -261,7 +260,6 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 			where = append(where, haversine+" <= "+maxArg)
 		}
 	}
-	_ = hasCoords
 
 	orderBy := "u.display_name ASC"
 	switch params.SortBy {
@@ -303,8 +301,7 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
+	defer func() { _ = rows.Close() }()
 	var out []DoctorSearchResult
 	for rows.Next() {
 		var r DoctorSearchResult
@@ -351,7 +348,7 @@ func (s *Store) ListSchedulesForProfessional(ctx context.Context, professionalID
 		FROM professional_schedules WHERE professional_id = $1 AND is_active = true ORDER BY day_of_week, start_time`
 	rows, err := s.db.QueryContext(ctx, q, professionalID)
 	if err != nil { return nil, err }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []ProfessionalSchedule
 	for rows.Next() {
 		var sch ProfessionalSchedule
@@ -366,7 +363,7 @@ func (s *Store) ListSchedulesForProfessional(ctx context.Context, professionalID
 func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, schedules []ProfessionalSchedule) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil { return err }
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `UPDATE professional_schedules SET is_active = false WHERE professional_id = $1`, professionalID); err != nil {
 		return err
@@ -399,7 +396,7 @@ func (s *Store) ListServicePackages(ctx context.Context, professionalID string) 
 		FROM service_packages WHERE professional_id = $1 AND is_active = true ORDER BY package_sessions`
 	rows, err := s.db.QueryContext(ctx, q, professionalID)
 	if err != nil { return nil, err }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []ServicePackage
 	for rows.Next() {
 		var p ServicePackage
@@ -414,7 +411,7 @@ func (s *Store) ListServicePackages(ctx context.Context, professionalID string) 
 func (s *Store) UpsertServicePackages(ctx context.Context, professionalID string, packages []ServicePackage) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil { return err }
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `DELETE FROM service_packages WHERE professional_id = $1`, professionalID); err != nil {
 		return err
 	}

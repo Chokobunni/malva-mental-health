@@ -61,7 +61,7 @@ func main() {
 		logger.Error("failed to connect to database", "error", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
@@ -110,7 +110,7 @@ func main() {
 	case <-ctx.Done():
 		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancelShutdown()
-		httpServer.Shutdown(shutdownCtx)
+		_ = httpServer.Shutdown(shutdownCtx)
 	case err := <-errCh:
 		if err != nil {
 			logger.Error("server error", "error", err)
@@ -121,21 +121,21 @@ func main() {
 func (s *AdminServer) dashboardHTML(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, adminDashboardHTML)
+	_, _ = fmt.Fprint(w, adminDashboardHTML)
 }
 
 func (s *AdminServer) getStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	stats := DashboardStats{}
 
-	s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users WHERE disabled_at IS NULL").Scan(&stats.TotalUsers)
-	s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users WHERE role = 'patient' AND disabled_at IS NULL").Scan(&stats.TotalPatients)
-	s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users WHERE role = 'professional' AND disabled_at IS NULL").Scan(&stats.TotalProfessionals)
-	s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM screening_sessions").Scan(&stats.TotalScreenings)
-	s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM mood_checkins").Scan(&stats.TotalMoodCheckins)
-	s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM diary_entries").Scan(&stats.TotalDiaryEntries)
-	s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM medications").Scan(&stats.TotalMedications)
-	s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM notifications").Scan(&stats.TotalNotifications)
+	_ = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users WHERE disabled_at IS NULL").Scan(&stats.TotalUsers)
+	_ = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users WHERE role = 'patient' AND disabled_at IS NULL").Scan(&stats.TotalPatients)
+	_ = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users WHERE role = 'professional' AND disabled_at IS NULL").Scan(&stats.TotalProfessionals)
+	_ = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM screening_sessions").Scan(&stats.TotalScreenings)
+	_ = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM mood_checkins").Scan(&stats.TotalMoodCheckins)
+	_ = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM diary_entries").Scan(&stats.TotalDiaryEntries)
+	_ = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM medications").Scan(&stats.TotalMedications)
+	_ = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM notifications").Scan(&stats.TotalNotifications)
 
 	stats.SystemHealth = SystemHealth{
 		DatabaseStatus: "connected",
@@ -158,7 +158,7 @@ func (s *AdminServer) listUsers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type User struct {
 		ID          string    `json:"id"`
@@ -192,7 +192,7 @@ func (s *AdminServer) listScreenings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type Screening struct {
 		ID           string    `json:"id"`
@@ -226,7 +226,7 @@ func (s *AdminServer) recentActivity(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var activities []ActivityItem
 	for rows.Next() {
@@ -261,7 +261,7 @@ var startTime = time.Now()
 
 func writeJSON(w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(value)
+	_ = json.NewEncoder(w).Encode(value)
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

@@ -21,7 +21,6 @@ func newSafetyTestServer() (*Server, string, string) {
 	srv := New(cfg, mgr, nil, nil, logger)
 	patientToken, _ := mgr.Issue("patient-1", "patient")
 	proToken, _ := mgr.Issue("pro-1", "professional")
-	_ = proToken
 	return srv, patientToken, proToken
 }
 
@@ -81,9 +80,7 @@ func TestSafetyEndpointsRequireAuth(t *testing.T) {
 }
 
 func TestValidateIndonesianPhone(t *testing.T) {
-	valid := []string{"08123456789", "0812-3456-789", "0812 3456 789", "628123456789", "+628123456789"}
-	_ = valid
-	// Catatan: implementasi saat ini menolak '+' dan spasi ganda — uji yang didukung:
+	// Format valid: 9-15 digit diawali 0 atau 62 (longgar by design).
 	ok := []string{"08123456789", "628123456789", "0812345678"}
 	for _, p := range ok {
 		if !validateIndonesianPhone(p) {

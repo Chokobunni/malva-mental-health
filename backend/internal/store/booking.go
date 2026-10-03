@@ -97,7 +97,7 @@ func (s *Store) ListBookingsForUser(ctx context.Context, userID, role string, li
 	}
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil { return nil, err }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Booking
 	for rows.Next() {
 		var b Booking
@@ -134,7 +134,7 @@ func (s *Store) CreatePayment(ctx context.Context, p Payment) (Payment, error) {
 func (s *Store) MarkPaymentPaid(ctx context.Context, reference, externalID string) (Payment, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil { return Payment{}, err }
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	var p Payment
 	const q = `UPDATE payments
@@ -194,7 +194,7 @@ func (s *Store) ListEarningsTransactions(ctx context.Context, professionalID str
 		LIMIT $2`
 	rows, err := s.db.QueryContext(ctx, q, professionalID, limit)
 	if err != nil { return nil, err }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []EarningsTransaction
 	for rows.Next() {
 		var t EarningsTransaction

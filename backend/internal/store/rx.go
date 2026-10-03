@@ -44,7 +44,7 @@ type EPrescriptionFull struct {
 func (s *Store) CreateEPrescription(ctx context.Context, rx EPrescription, items []EPrescriptionItem) (EPrescription, error) {
 	ptx, err := s.db.BeginTx(ctx, nil)
 	if err != nil { return EPrescription{}, err }
-	defer ptx.Rollback()
+	defer func() { _ = ptx.Rollback() }()
 
 	sig, _ := json.Marshal(rx.SignatureData)
 	const q = `INSERT INTO e_prescriptions (professional_id, patient_id, notes, instructions, signature_data, qr_token, status)
@@ -88,7 +88,7 @@ func (s *Store) GetEPrescriptionByQR(ctx context.Context, qrToken string) (EPres
 	if err != nil {
 		return EPrescriptionFull{}, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var item EPrescriptionItem
 		if err := rows.Scan(&item.ID, &item.PrescriptionID, &item.MedicationID, &item.Name, &item.Form, &item.Dosage,
@@ -114,7 +114,7 @@ func (s *Store) GetEPrescription(ctx context.Context, rxID string) (EPrescriptio
 		FROM e_prescription_items WHERE prescription_id = $1 ORDER BY name`
 	rows, err := s.db.QueryContext(ctx, qi, rxID)
 	if err != nil { return EPrescriptionFull{}, err }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var item EPrescriptionItem
 		if err := rows.Scan(&item.ID, &item.PrescriptionID, &item.MedicationID, &item.Name, &item.Form, &item.Dosage,
@@ -140,7 +140,7 @@ func (s *Store) ListEPrescriptionsForUser(ctx context.Context, userID, role stri
 	}
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil { return nil, err }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []EPrescription
 	for rows.Next() {
 		var rx EPrescription
@@ -161,7 +161,7 @@ func (s *Store) ListActiveEPrescriptionsForProfessionalPatients(ctx context.Cont
 		ORDER BY created_at DESC`
 	rows, err := s.db.QueryContext(ctx, q, professionalID)
 	if err != nil { return nil, err }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []EPrescription
 	for rows.Next() {
 		var rx EPrescription
@@ -188,7 +188,7 @@ type DoctorReview struct {
 func (s *Store) AddDoctorReview(ctx context.Context, r DoctorReview) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil { return err }
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	const q = `INSERT INTO doctor_reviews (professional_id, patient_id, booking_id, helpfulness_percent, review_text, helpful)
 		VALUES ($1, $2, $3, $4, $5, $6)`

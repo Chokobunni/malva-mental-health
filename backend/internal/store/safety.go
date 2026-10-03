@@ -73,7 +73,7 @@ func (s *Store) ListEmergencyContacts(ctx context.Context, patientID string) ([]
 		FROM emergency_contacts WHERE patient_id = $1 ORDER BY is_default DESC, created_at ASC`
 	rows, err := s.db.QueryContext(ctx, q, patientID)
 	if err != nil { return nil, err }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []EmergencyContact
 	for rows.Next() {
 		var c EmergencyContact
@@ -116,7 +116,7 @@ func (s *Store) CountEmergencyContacts(ctx context.Context, patientID string) (i
 func (s *Store) CreateCrisisIncident(ctx context.Context, in CrisisIncident) (CrisisIncident, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil { return CrisisIncident{}, err }
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	_, err = tx.ExecContext(ctx, `UPDATE crisis_incidents
 		SET status = 'resolved', resolved_at = now(), resolution_notes = 'superseded oleh incident baru'
@@ -147,7 +147,7 @@ func (s *Store) ListCrisisIncidents(ctx context.Context, patientID string, limit
 		LIMIT $2`
 	rows, err := s.db.QueryContext(ctx, q, patientID, limit)
 	if err != nil { return nil, err }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []CrisisIncident
 	for rows.Next() {
 		var in CrisisIncident
@@ -172,7 +172,7 @@ func (s *Store) ListActiveCrisisIncidentsForProfessional(ctx context.Context, pr
 		ORDER BY i.created_at DESC`
 	rows, err := s.db.QueryContext(ctx, q, professionalID)
 	if err != nil { return nil, err }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []CrisisIncident
 	for rows.Next() {
 		var in CrisisIncident
@@ -203,7 +203,7 @@ func (s *Store) GetCrisisIncident(ctx context.Context, incidentID string) (Crisi
 func (s *Store) ResolveCrisisIncident(ctx context.Context, incidentID, professionalID, resolutionNotes string) (CrisisIncident, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil { return CrisisIncident{}, err }
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	var patientID string
 	const q = `UPDATE crisis_incidents
@@ -233,7 +233,7 @@ func (s *Store) ListActiveCrisisIncidentsOlderThan(ctx context.Context, olderTha
 	interval := fmt.Sprintf("%d seconds", int(olderThan.Seconds()))
 	rows, err := s.db.QueryContext(ctx, q, interval)
 	if err != nil { return nil, err }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []CrisisIncident
 	for rows.Next() {
 		var in CrisisIncident

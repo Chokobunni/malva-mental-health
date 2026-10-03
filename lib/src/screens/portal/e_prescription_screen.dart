@@ -248,6 +248,14 @@ class _PrescriptionCard extends StatelessWidget {
 // E-PRESCRIPTION FORM
 // ============================================================
 
+const _kFrequencies = [
+  '1x daily',
+  '2x daily',
+  '3x daily',
+  '4x daily',
+  'prn',
+];
+
 class EPrescriptionFormScreen extends ConsumerStatefulWidget {
   const EPrescriptionFormScreen({
     super.key,
@@ -287,14 +295,6 @@ class _EPrescriptionFormScreenState
   final List<_ItemDraft> _items = [_ItemDraft()];
   bool _isSubmitting = false;
   String? _error;
-
-  static const _frequencies = [
-    '1x daily',
-    '2x daily',
-    '3x daily',
-    '4x daily',
-    'prn',
-  ];
 
   @override
   void initState() {
@@ -542,16 +542,9 @@ class _ItemEditorState extends State<_ItemEditor> {
                 child: DropdownButtonFormField<String>(
                   initialValue: widget.draft.frequency,
                   decoration: const InputDecoration(labelText: 'Frekuensi'),
-                  items: const [
-                    DropdownMenuItem(
-                        value: '1x daily', child: Text('1x daily')),
-                    DropdownMenuItem(
-                        value: '2x daily', child: Text('2x daily')),
-                    DropdownMenuItem(
-                        value: '3x daily', child: Text('3x daily')),
-                    DropdownMenuItem(
-                        value: '4x daily', child: Text('4x daily')),
-                    DropdownMenuItem(value: 'prn', child: Text('prn')),
+                  items: [
+                    for (final f in _kFrequencies)
+                      DropdownMenuItem(value: f, child: Text(f)),
                   ],
                   onChanged: (v) {
                     if (v == null) return;
