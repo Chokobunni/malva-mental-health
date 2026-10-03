@@ -307,16 +307,16 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
                     ),
                   ),
                   if (entries.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           _ChartLegend(color: MalvaColors.mint, label: 'Mood'),
-                          const SizedBox(width: 16),
+                          SizedBox(width: 16),
                           _ChartLegend(
                               color: MalvaColors.amber, label: 'Kecemasan'),
-                          const SizedBox(width: 16),
+                          SizedBox(width: 16),
                           _ChartLegend(color: MalvaColors.pink, label: 'Tidur'),
                         ],
                       ),

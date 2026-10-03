@@ -22,7 +22,7 @@ class KnowledgeBase {
         // These rules determine the overall depression severity level
         // ============================================================
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'PHQ9_MINIMAL',
           description: 'Gejala depresi minimal (skor 0-4)',
           conditions: [
@@ -49,7 +49,7 @@ class KnowledgeBase {
           ruleCF: 0.95,
         ),
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'PHQ9_MILD',
           description: 'Gejala depresi ringan (skor 5-9)',
           conditions: [
@@ -83,7 +83,7 @@ class KnowledgeBase {
           ruleCF: 0.93,
         ),
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'PHQ9_MODERATE',
           description: 'Gejala depresi sedang (skor 10-14)',
           conditions: [
@@ -117,7 +117,7 @@ class KnowledgeBase {
           ruleCF: 0.95,
         ),
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'PHQ9_SEVERE_MODERATE',
           description: 'Gejala depresi cukup berat (skor 15-19)',
           conditions: [
@@ -151,7 +151,7 @@ class KnowledgeBase {
           ruleCF: 0.96,
         ),
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'PHQ9_SEVERE_HIGH',
           description: 'Gejala depresi berat (skor 20-27)',
           conditions: [
@@ -183,7 +183,7 @@ class KnowledgeBase {
         // This rule fires immediately if any self-harm item is positive
         // ============================================================
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'PHQ9_CRISIS_SELF_HARM',
           description: 'Indikator krisis: pikiran menyakiti diri',
           conditions: [
@@ -217,7 +217,7 @@ class KnowledgeBase {
         // These rules detect specific symptom combinations
         // ============================================================
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'PHQ9_MOTOR_RETARDATION',
           description: 'Pola gejala: perlambatan motorik/bicara',
           conditions: [
@@ -240,7 +240,7 @@ class KnowledgeBase {
           ruleCF: 0.8,
         ),
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'PHQ9_SLEEP_DISRUPTION',
           description: 'Pola gejala: gangguan tidur signifikan',
           conditions: [
@@ -263,7 +263,7 @@ class KnowledgeBase {
           ruleCF: 0.85,
         ),
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'PHQ9_APPETITE_CHANGE',
           description: 'Pola gejala: perubahan nafsu makan',
           conditions: [
@@ -285,7 +285,7 @@ class KnowledgeBase {
           ruleCF: 0.8,
         ),
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'PHQ9_CONCENTRATION_ISSUE',
           description: 'Pola gejala: kesulitan konsentrasi',
           conditions: [
@@ -307,7 +307,7 @@ class KnowledgeBase {
           ruleCF: 0.8,
         ),
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'PHQ9_SELF_WORTH_ISSUE',
           description: 'Pola gejala: perasaan gagal/menyalahkan diri',
           conditions: [
@@ -337,7 +337,7 @@ class KnowledgeBase {
         // SEVERITY LEVEL RULES (based on total score ranges)
         // ============================================================
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'GAD7_MINIMAL',
           description: 'Gejala kecemasan minimal (skor 0-4)',
           conditions: [
@@ -365,7 +365,7 @@ class KnowledgeBase {
           ruleCF: 0.95,
         ),
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'GAD7_MILD',
           description: 'Gejala kecemasan ringan (skor 5-9)',
           conditions: [
@@ -398,7 +398,7 @@ class KnowledgeBase {
           ruleCF: 0.93,
         ),
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'GAD7_MODERATE',
           description: 'Gejala kecemasan sedang (skor 10-14)',
           conditions: [
@@ -432,7 +432,7 @@ class KnowledgeBase {
           ruleCF: 0.95,
         ),
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'GAD7_SEVERE',
           description: 'Gejala kecemasan berat (skor 15-21)',
           conditions: [
@@ -464,7 +464,7 @@ class KnowledgeBase {
         // SYMPTOM PATTERN RULES for GAD-7
         // ============================================================
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'GAD7_WORRY_RUMINATION',
           description: 'Pola gejala: kekhawatiran berlebihan',
           conditions: [
@@ -493,7 +493,7 @@ class KnowledgeBase {
           ruleCF: 0.85,
         ),
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'GAD7_RESTLESSNESS',
           description: 'Pola gejala: gelisah dan sulit rileks',
           conditions: [
@@ -522,7 +522,7 @@ class KnowledgeBase {
           ruleCF: 0.85,
         ),
 
-        ScreeningRule(
+        const ScreeningRule(
           id: 'GAD7_FEAR_ANSWER',
           description: 'Pola gejala: ketakutan akan sesuatu buruk',
           conditions: [

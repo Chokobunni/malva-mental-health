@@ -204,16 +204,16 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                               ],
                             ),
                           ),
-                          SoftCard(
+                          const SoftCard(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Review pasien',
+                                Text('Review pasien',
                                     style: TextStyle(
                                         fontWeight: FontWeight.w900,
                                         fontSize: 15)),
-                                const SizedBox(height: 4),
-                                const Text(
+                                SizedBox(height: 4),
+                                Text(
                                     'Ulasan pasien akan tampil di sini setelah sesi selesai.',
                                     style: TextStyle(color: Colors.black54)),
                               ],

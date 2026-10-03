@@ -177,16 +177,16 @@ class _PostPaymentConsentSheetState
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          SoftCard(
+          const SoftCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Submit & Connect',
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
                 ),
-                const SizedBox(height: 4),
-                const Text(
+                SizedBox(height: 4),
+                Text(
                   'Kamu berhasil berlangganan Continuous Support. Pilih data yang boleh dibaca profesional.',
                 ),
               ],

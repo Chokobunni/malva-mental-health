@@ -1243,7 +1243,7 @@ class MalvaApiClient {
           'Tidak ada koneksi ke server Malva. Periksa internet lalu coba lagi.',
         );
       }
-      throw MalvaApiException('Backend Malva belum dapat dihubungi.');
+      throw const MalvaApiException('Backend Malva belum dapat dihubungi.');
     }
 
     final decoded = response.body.isEmpty

@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'models.dart';
 import 'providers/providers.dart';
-import 'providers/data/sync_provider.dart';
 import 'screens/assessment_screen.dart';
 import 'screens/initial_screening_consent_screen.dart';
 import 'screens/login_screen.dart';

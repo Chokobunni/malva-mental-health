@@ -197,7 +197,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => ConsentManagementScreen()),
+                        builder: (_) => const ConsentManagementScreen()),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -478,7 +478,7 @@ class _ExportTile extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: Colors.black26),
+            const Icon(Icons.chevron_right_rounded, color: Colors.black26),
           ],
         ),
       ),

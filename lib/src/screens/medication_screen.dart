@@ -640,7 +640,7 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
                   'Reminder ${_time.hour.toString().padLeft(2, '0')}:${_time.minute.toString().padLeft(2, '0')}'),
             ),
             DropdownButtonFormField<String>(
-              value: _relation,
+              initialValue: _relation,
               decoration: const InputDecoration(labelText: 'Relasi makan'),
               items: const [
                 DropdownMenuItem(

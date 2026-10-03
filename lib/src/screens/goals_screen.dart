@@ -342,7 +342,7 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
-              value: _frequency,
+              initialValue: _frequency,
               decoration: const InputDecoration(labelText: 'Frequency'),
               items: const [
                 DropdownMenuItem(value: 'Harian', child: Text('Harian')),

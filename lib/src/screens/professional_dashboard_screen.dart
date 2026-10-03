@@ -526,15 +526,15 @@ class _ProfessionalDashboardScreenState
       return _MoodDiaryResult(moods: moods, diaries: diaries);
     } on MalvaApiException catch (error) {
       if (error.statusCode == 403) {
-        return _MoodDiaryResult(
-          moods: const [],
-          diaries: const [],
+        return const _MoodDiaryResult(
+          moods: [],
+          diaries: [],
           restricted: true,
         );
       }
-      return _MoodDiaryResult(moods: const [], diaries: const []);
+      return const _MoodDiaryResult(moods: [], diaries: []);
     } on Object {
-      return _MoodDiaryResult(moods: const [], diaries: const []);
+      return const _MoodDiaryResult(moods: [], diaries: []);
     }
   }
 
@@ -557,15 +557,15 @@ class _ProfessionalDashboardScreenState
       return _MedicationResult(medications: medications, logs: logs);
     } on MalvaApiException catch (error) {
       if (error.statusCode == 403) {
-        return _MedicationResult(
-          medications: const [],
-          logs: const [],
+        return const _MedicationResult(
+          medications: [],
+          logs: [],
           restricted: true,
         );
       }
-      return _MedicationResult(medications: const [], logs: const []);
+      return const _MedicationResult(medications: [], logs: []);
     } on Object {
-      return _MedicationResult(medications: const [], logs: const []);
+      return const _MedicationResult(medications: [], logs: []);
     }
   }
 
@@ -1156,7 +1156,12 @@ class _ProfessionalDashboardScreenState
     }
 
     try {
-      await Share.share(csv.toString(), subject: 'Malva Dashboard Export');
+      await SharePlus.instance.share(
+        ShareParams(
+          text: csv.toString(),
+          subject: 'Malva Dashboard Export',
+        ),
+      );
     } on Object {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

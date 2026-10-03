@@ -153,9 +153,11 @@ class ExportService {
     final tempDir = await getTemporaryDirectory();
     final file = File('${tempDir.path}/$filename');
     await file.writeAsString(csv);
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      subject: filename,
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        subject: filename,
+      ),
     );
   }
 
@@ -163,9 +165,11 @@ class ExportService {
     final tempDir = await getTemporaryDirectory();
     final file = File('${tempDir.path}/$filename');
     await file.writeAsString(json);
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      subject: filename,
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        subject: filename,
+      ),
     );
   }
 }

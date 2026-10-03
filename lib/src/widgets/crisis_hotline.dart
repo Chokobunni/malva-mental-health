@@ -107,7 +107,7 @@ class CrisisHotlineBanner extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Hubungi Darurat?'),
-        content: Text(
+        content: const Text(
           'Menghubungi $crisisHotlineName\n'
           'Nomor: $crisisHotlineNumber extension $crisisHotlineExtension\n\n'
           '$crisisHotlineDescription',
