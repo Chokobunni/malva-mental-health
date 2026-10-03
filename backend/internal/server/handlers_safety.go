@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"malva/backend/internal/auth"
+	"malva/backend/internal/security"
 	"malva/backend/internal/store"
 )
 
@@ -75,6 +76,11 @@ func (s *Server) createEmergencyContact(w http.ResponseWriter, r *http.Request, 
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "contact_name is required"})
 		return
 	}
+	name = security.SanitizeText(name)
+	if name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "contact_name is required"})
+		return
+	}
 	if len(name) > 100 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "contact_name maksimal 100 karakter"})
 		return
@@ -102,7 +108,7 @@ func (s *Server) createEmergencyContact(w http.ResponseWriter, r *http.Request, 
 		PatientID:    claims.Subject,
 		ContactName:  name,
 		ContactPhone: phone,
-		Relationship: strings.TrimSpace(req.Relationship),
+		Relationship: security.SanitizeText(strings.TrimSpace(req.Relationship)),
 		IsDefault:    req.IsDefault,
 	}
 

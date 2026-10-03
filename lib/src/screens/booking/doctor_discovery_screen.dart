@@ -266,9 +266,8 @@ class _DoctorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final helpful = doctor.reviewCount == 0
-        ? 0
-        : ((doctor.helpfulnessPercent)).clamp(0, 100);
+    final helpful =
+        doctor.reviewCount == 0 ? 0 : doctor.helpfulnessPercent.clamp(0, 100);
     return SoftCard(
       onTap: onTap,
       child: Row(

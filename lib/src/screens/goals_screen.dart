@@ -6,11 +6,18 @@ import '../providers/providers.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 
-class GoalsScreen extends ConsumerWidget {
+class GoalsScreen extends ConsumerStatefulWidget {
   const GoalsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GoalsScreen> createState() => _GoalsScreenState();
+}
+
+class _GoalsScreenState extends ConsumerState<GoalsScreen> {
+  String _tab = 'Goals';
+
+  @override
+  Widget build(BuildContext context) {
     final storeState = ref.watch(malvaStoreProvider);
     final store = ref.read(malvaStoreProvider.notifier);
     return Scaffold(
@@ -64,15 +71,75 @@ class GoalsScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 22),
-                const SectionLabel('Today focus'),
-                for (final goal in storeState.goals) ...[
-                  _GoalCard(
-                    goal: goal,
-                    onToggle: () => store.toggleGoal(goal.id),
-                    onEdit: () => _openGoalForm(context, ref, goal: goal),
+                const SizedBox(height: 14),
+                Center(
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'Goals', label: Text('Goals')),
+                      ButtonSegment(value: 'History', label: Text('History')),
+                    ],
+                    selected: {_tab},
+                    onSelectionChanged: (s) => setState(() => _tab = s.first),
                   ),
-                  const SizedBox(height: 12),
+                ),
+                const SizedBox(height: 14),
+                if (_tab == 'History') ...[
+                  if (storeState.goals.isEmpty)
+                    const EmptyState(
+                      icon: Icons.history_rounded,
+                      title: 'Belum ada history',
+                      subtitle: 'Goals yang selesai akan tercatat di sini.',
+                    )
+                  else
+                    for (final goal in storeState.goals) ...[
+                      SoftCard(
+                        child: Row(
+                          children: [
+                            Icon(
+                              goal.completedToday
+                                  ? Icons.check_circle_rounded
+                                  : Icons.radio_button_unchecked_rounded,
+                              color: goal.completedToday
+                                  ? MalvaColors.mint
+                                  : Colors.black38,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(goal.title,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w900)),
+                                  Text(
+                                    '${goal.streakDays} hari streak',
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            StatusPill(
+                              label: goal.completedToday ? 'ACHIEVED' : 'Aktif',
+                              color: goal.completedToday
+                                  ? MalvaColors.mint
+                                  : MalvaColors.amber,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                ] else ...[
+                  const SectionLabel('Today focus'),
+                  for (final goal in storeState.goals) ...[
+                    _GoalCard(
+                      goal: goal,
+                      onToggle: () => store.toggleGoal(goal.id),
+                      onEdit: () => _openGoalForm(context, ref, goal: goal),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                 ],
                 const SizedBox(height: 70),
               ],

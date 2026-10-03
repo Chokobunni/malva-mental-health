@@ -28,7 +28,8 @@ void main() {
     expect(find.textContaining('Terima kasih'), findsOneWidget);
     expect(find.textContaining('PHQ-9'), findsWidgets);
     expect(find.textContaining('GAD-7'), findsWidgets);
-    expect(find.textContaining('BPJS'), findsOneWidget);
+    expect(find.text('Rekomendasi profesional'), findsOneWidget);
+    expect(find.textContaining('BPJS'), findsWidgets);
     expect(find.textContaining('Puskesmas'), findsOneWidget);
   });
 }

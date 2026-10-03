@@ -6,13 +6,16 @@ import '../providers/data/export_provider.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
+import 'abcde_cbt_screen.dart';
 import 'assessment_screen.dart';
 import 'booking/doctor_discovery_screen.dart';
 import 'chat_screen.dart';
 import 'consent_management_screen.dart';
 import 'goals_screen.dart';
+import 'my_care_screen.dart';
 import 'record_screen.dart';
 import 'safety/emergency_contacts_screen.dart';
+import 'settings_screens.dart';
 import 'tests_marketplace_screen.dart';
 
 class MoreScreen extends ConsumerStatefulWidget {
@@ -135,6 +138,21 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 ),
                 const SizedBox(height: 10),
                 ActionTile(
+                  icon: Icons.favorite_rounded,
+                  title: 'My Care',
+                  subtitle: 'Jadwal, profesional & sharing data',
+                  color: MalvaColors.seed,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => MyCareScreen(
+                              session: widget.session,
+                              apiClient: widget.apiClient,
+                            )),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ActionTile(
                   icon: Icons.quiz_rounded,
                   title: 'Tes Psikologi',
                   subtitle: 'Katalog tes kepribadian & wellbeing',
@@ -143,6 +161,31 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                     context,
                     MaterialPageRoute(
                         builder: (_) => const TestsMarketplaceScreen()),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ActionTile(
+                  icon: Icons.psychology_alt_rounded,
+                  title: 'ABCDE CBT',
+                  subtitle: 'Latihan pikiran A-B-C-D-E',
+                  color: MalvaColors.seed,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AbcdeCbtScreen()),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ActionTile(
+                  icon: Icons.settings_rounded,
+                  title: 'Settings',
+                  subtitle: 'Akun, notifikasi, dan keamanan',
+                  color: MalvaColors.seed,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => SettingsScreen(
+                            onLogout: widget.onLogout,
+                            session: widget.session)),
                   ),
                 ),
                 const SizedBox(height: 10),

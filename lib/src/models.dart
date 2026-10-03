@@ -132,6 +132,7 @@ class Medication {
     required this.currentStock,
     required this.alertBelow,
     required this.source,
+    this.lastTakenAt,
   });
 
   final String id;
@@ -142,8 +143,21 @@ class Medication {
   final int currentStock;
   final int alertBelow;
   final String source;
+  final DateTime? lastTakenAt;
 
   bool get needsRefill => currentStock <= alertBelow;
+
+  String get lastTakenLabel {
+    final taken = lastTakenAt;
+    if (taken == null) return 'Belum pernah diminum';
+    final today = DateTime.now();
+    final sameDay = taken.year == today.year &&
+        taken.month == today.month &&
+        taken.day == today.day;
+    final h = taken.hour.toString().padLeft(2, '0');
+    final m = taken.minute.toString().padLeft(2, '0');
+    return sameDay ? 'Taken $h:$m' : 'Taken ${taken.day}/${taken.month} $h:$m';
+  }
 
   Medication copyWith({
     String? id,
@@ -154,6 +168,7 @@ class Medication {
     int? currentStock,
     int? alertBelow,
     String? source,
+    DateTime? lastTakenAt,
   }) {
     return Medication(
       id: id ?? this.id,
@@ -164,6 +179,7 @@ class Medication {
       currentStock: currentStock ?? this.currentStock,
       alertBelow: alertBelow ?? this.alertBelow,
       source: source ?? this.source,
+      lastTakenAt: lastTakenAt ?? this.lastTakenAt,
     );
   }
 }
@@ -304,6 +320,7 @@ class ChatMessage {
     required this.text,
     required this.timestamp,
     required this.isMine,
+    this.kind = 'text',
   });
 
   final String id;
@@ -312,6 +329,7 @@ class ChatMessage {
   final String text;
   final DateTime timestamp;
   final bool isMine;
+  final String kind;
 
   factory ChatMessage.fromJson(Map<String, dynamic> json,
       {required String currentUserId}) {
@@ -323,6 +341,7 @@ class ChatMessage {
       timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ??
           DateTime.now(),
       isMine: json['sender_id']?.toString() == currentUserId,
+      kind: json['kind']?.toString() ?? 'text',
     );
   }
 

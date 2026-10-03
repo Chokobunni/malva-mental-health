@@ -520,11 +520,27 @@ class _MedicationCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: onTake,
-            icon: const Icon(Icons.check_rounded),
-            label: const Text('Take Now'),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  medication.lastTakenLabel,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: onTake,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                ),
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Take Now'),
+              ),
+            ],
           ),
         ],
       ),

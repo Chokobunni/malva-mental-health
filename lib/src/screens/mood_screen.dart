@@ -31,6 +31,8 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
   double _irritability = 2;
   final _noteController = TextEditingController();
   bool _isInitialLoading = true;
+  String _tab = 'mood';
+  String _range = 'weekly';
 
   @override
   void initState() {
@@ -84,6 +86,38 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
   Widget build(BuildContext context) {
     final storeState = ref.watch(malvaStoreProvider);
     final entries = storeState.moodEntries;
+    if (_tab != 'mood') {
+      return Scaffold(
+        body: RefreshIndicator(
+          onRefresh: _refreshData,
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              const GradientHeader(
+                title: 'Medication',
+                subtitle: 'Buka tab Obat untuk detail',
+                leading: Icon(Icons.medication_rounded,
+                    color: Colors.white, size: 34),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _MoodMedToggle(value: 'medication', onChanged: (_) {}),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Buka tab Obat di navigasi bawah untuk tracker obat lengkap.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: _refreshData,
@@ -101,6 +135,11 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  _MoodMedToggle(
+                    value: _tab,
+                    onChanged: (v) => setState(() => _tab = v),
+                  ),
+                  const SizedBox(height: 14),
                   Row(
                     children: [
                       Expanded(
@@ -121,6 +160,21 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 14),
+                  Center(
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'weekly', label: Text('Weekly')),
+                        ButtonSegment(value: 'monthly', label: Text('Monthly')),
+                        ButtonSegment(value: 'yearly', label: Text('Yearly')),
+                        ButtonSegment(
+                            value: 'lifetime', label: Text('Lifetime')),
+                      ],
+                      selected: {_range},
+                      onSelectionChanged: (s) =>
+                          setState(() => _range = s.first),
+                    ),
                   ),
                   const SizedBox(height: 22),
                   const SectionLabel('Check-in hari ini'),
@@ -267,6 +321,12 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
                         ],
                       ),
                     ),
+                  const SizedBox(height: 14),
+                  OutlinedButton.icon(
+                    onPressed: () => _openCalendarDetail(context, entries),
+                    icon: const Icon(Icons.calendar_month_rounded),
+                    label: const Text('Detail Kalender'),
+                  ),
                 ],
               ),
             ),
@@ -274,6 +334,120 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
         ),
       ),
     );
+  }
+
+  void _openCalendarDetail(BuildContext context, List<MoodEntry> entries) {
+    if (entries.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Belum ada data mood.')),
+      );
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.85,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, controller) => ListView(
+          controller: controller,
+          padding: const EdgeInsets.all(20),
+          children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.black26,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Detail Kalender',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+            ),
+            const SizedBox(height: 12),
+            for (final entry in entries.take(14)) ...[
+              SoftCard(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(entry.mood.icon, color: MalvaColors.seed),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${entry.mood.label} • ${_calDate(entry.date)}',
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        StatusPill(
+                          label: 'Energy ${entry.energy}/10',
+                          color: MalvaColors.seed,
+                        ),
+                        StatusPill(
+                          label: 'Anxiety ${entry.anxiety}/10',
+                          color: MalvaColors.amber,
+                        ),
+                        StatusPill(
+                          label: 'Irritability ${entry.irritability}/10',
+                          color: MalvaColors.danger,
+                        ),
+                        StatusPill(
+                          label:
+                              'Sleep ${entry.sleepHours.toStringAsFixed(1)}h',
+                          color: MalvaColors.orchid,
+                        ),
+                      ],
+                    ),
+                    if (entry.note.isNotEmpty &&
+                        entry.note != 'Tidak ada catatan.') ...[
+                      const SizedBox(height: 8),
+                      Text(entry.note),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _calDate(DateTime date) {
+    const months = [
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember'
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
   void _saveEntry() {
@@ -431,6 +605,27 @@ class _ChartLegend extends StatelessWidget {
         const SizedBox(width: 4),
         Text(label, style: const TextStyle(fontSize: 12)),
       ],
+    );
+  }
+}
+
+class _MoodMedToggle extends StatelessWidget {
+  const _MoodMedToggle({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SegmentedButton<String>(
+        segments: const [
+          ButtonSegment(value: 'mood', label: Text('Mood')),
+          ButtonSegment(value: 'medication', label: Text('Medication')),
+        ],
+        selected: {value},
+        onSelectionChanged: (s) => onChanged(s.first),
+      ),
     );
   }
 }

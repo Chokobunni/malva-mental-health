@@ -7,6 +7,7 @@ import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
+import 'safety/emergency_dashboard_screen.dart';
 
 class AssessmentScreen extends ConsumerStatefulWidget {
   const AssessmentScreen({
@@ -613,24 +614,18 @@ class AssessmentResultScreen extends StatelessWidget {
                 ),
                 if (bundle.crisisFlag) ...[
                   const SizedBox(height: 12),
-                  SoftCard(
-                    color: MalvaColors.danger.withValues(alpha: 0.1),
-                    child: const Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.warning_amber_rounded,
-                            color: MalvaColors.danger),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Jika ada dorongan menyakiti diri atau merasa tidak aman, segera hubungi orang terdekat, profesional yang menangani, atau layanan darurat setempat.',
-                            style: TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                        ),
-                      ],
+                  _CrisisSupportCard(
+                    onOpenSafety: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const EmergencyDashboardScreen(
+                            fromCrisisFlag: true),
+                      ),
                     ),
                   ),
                 ],
+                const SizedBox(height: 18),
+                const _RecommendDoctors(),
                 const SizedBox(height: 18),
                 const SectionLabel('Tips dukungan'),
                 const _TipCard(
@@ -667,6 +662,89 @@ class AssessmentResultScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CrisisSupportCard extends StatelessWidget {
+  const _CrisisSupportCard({required this.onOpenSafety});
+
+  final VoidCallback onOpenSafety;
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      color: MalvaColors.danger.withValues(alpha: 0.08),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  color: MalvaColors.danger, size: 28),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Crisis Support: Jika kamu merasa tidak aman, ketuk di sini untuk bantuan.',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Jika ada dorongan menyakiti diri atau merasa tidak aman, segera hubungi orang terdekat, profesional yang menangani, atau layanan darurat setempat.',
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: onOpenSafety,
+            style: FilledButton.styleFrom(
+              backgroundColor: MalvaColors.danger,
+            ),
+            icon: const Icon(Icons.sos_rounded),
+            label: const Text('Buka Safety Protocol'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecommendDoctors extends ConsumerWidget {
+  const _RecommendDoctors();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionLabel('Rekomendasi profesional'),
+        SoftCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Dokter tersedia di halaman Booking. Pilih berdasarkan jarak, harga, dan dukungan BPJS.',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          'Buka menu Lainnya → Booking Konsultasi untuk memilih profesional.'),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.calendar_month_rounded),
+                label: const Text('Cari Profesional'),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

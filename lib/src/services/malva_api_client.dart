@@ -142,6 +142,22 @@ class MalvaApiClient {
     );
   }
 
+  Future<void> changePassword({
+    required String accessToken,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await _send(
+      'POST',
+      '/v1/auth/change-password',
+      accessToken: accessToken,
+      body: {
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      },
+    );
+  }
+
   Future<void> saveDeviceToken({
     required String accessToken,
     required String platform,
@@ -1216,7 +1232,18 @@ class MalvaApiClient {
     } on TimeoutException {
       throw const MalvaApiException('Koneksi ke backend Malva timeout.');
     } on Object catch (error) {
-      throw MalvaApiException('Backend Malva belum dapat dihubungi: $error');
+      final text = error.toString();
+      if (text.contains('SocketException') ||
+          text.contains('ClientException') ||
+          text.contains('Connection refused') ||
+          text.contains('Failed host lookup') ||
+          text.contains('No route to host') ||
+          text.contains('Network is unreachable')) {
+        throw const MalvaApiException(
+          'Tidak ada koneksi ke server Malva. Periksa internet lalu coba lagi.',
+        );
+      }
+      throw MalvaApiException('Backend Malva belum dapat dihubungi.');
     }
 
     final decoded = response.body.isEmpty

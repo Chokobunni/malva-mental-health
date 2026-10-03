@@ -4,26 +4,58 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:malva_mental_health/src/malva_app.dart';
 
 void main() {
-  testWidgets('tombol login merespons: toggle role, isi form, submit',
-      (tester) async {
+  Future<void> pumpToPatientLogin(WidgetTester tester) async {
     await tester.pumpWidget(const ProviderScope(child: MalvaApp()));
 
-    // Splash -> login
+    // Splash -> role gate
     await tester.pump(const Duration(milliseconds: 2000));
     await tester.pumpAndSettle();
-    expect(find.text('Masuk ke Malva'), findsOneWidget);
+    expect(find.text('Are you'), findsOneWidget);
 
-    // Toggle ke Profesional
-    await tester.tap(find.text('Profesional'));
+    // Pilih Patient -> halaman login pasien terpisah
+    await tester.tap(find.text('Patient'));
     await tester.pumpAndSettle();
-    expect(find.text('ID profesi'), findsOneWidget);
+    expect(find.text('Masuk sebagai Pasien'), findsOneWidget);
+  }
 
-    // Kembali ke Pasien
-    await tester.tap(find.text('Pasien'));
+  Future<void> pumpToProfessionalLogin(WidgetTester tester) async {
+    await tester.pumpWidget(const ProviderScope(child: MalvaApp()));
+
+    await tester.pump(const Duration(milliseconds: 2000));
     await tester.pumpAndSettle();
+    expect(find.text('Are you'), findsOneWidget);
+
+    // Pilih Professional -> halaman login profesional terpisah
+    await tester.tap(find.text('Professional'));
+    await tester.pumpAndSettle();
+    expect(find.text('Masuk sebagai Profesional'), findsOneWidget);
+  }
+
+  testWidgets('role gate memisahkan halaman pasien dan profesional',
+      (tester) async {
+    await pumpToPatientLogin(tester);
+
+    // Halaman pasien TIDAK punya field profesional
     expect(find.text('Email pasien'), findsOneWidget);
+    expect(find.text('ID profesi'), findsNothing);
 
-    // Toggle ke mode Daftar lalu kembali ke Masuk
+    // Kembali ke role gate, pilih profesional
+    await tester.tap(find.byTooltip('Kembali pilih peran'));
+    await tester.pumpAndSettle();
+    expect(find.text('Are you'), findsOneWidget);
+
+    await tester.tap(find.text('Professional'));
+    await tester.pumpAndSettle();
+    expect(find.text('Masuk sebagai Profesional'), findsOneWidget);
+
+    // Halaman profesional TIDAK punya field pasien
+    expect(find.text('ID profesi'), findsOneWidget);
+    expect(find.text('Email pasien'), findsNothing);
+  });
+
+  testWidgets('toggle Masuk/Daftar di halaman pasien', (tester) async {
+    await pumpToPatientLogin(tester);
+
     await tester.tap(find.text('Daftar'));
     await tester.pumpAndSettle();
     expect(find.text('Nama pasien'), findsOneWidget);
@@ -31,13 +63,29 @@ void main() {
     await tester.tap(find.text('Masuk').last);
     await tester.pumpAndSettle();
     expect(find.text('Email pasien'), findsOneWidget);
+  });
 
-    // Submit dengan form valid (demo patient) - tombol harus ter-eksekusi
+  testWidgets('toggle Masuk/Daftar di halaman profesional', (tester) async {
+    await pumpToProfessionalLogin(tester);
+
+    await tester.tap(find.text('Daftar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nama profesional'), findsOneWidget);
+
+    await tester.tap(find.text('Masuk').last);
+    await tester.pumpAndSettle();
+    expect(find.text('ID profesi'), findsOneWidget);
+  });
+
+  testWidgets('tombol login pasien merespons: isi form, submit',
+      (tester) async {
+    await pumpToPatientLogin(tester);
+
     final masukButton = find.widgetWithText(FilledButton, 'Masuk');
     expect(masukButton, findsOneWidget);
 
     final textField = find.byType(TextField).first;
-    await tester.enterText(textField, 'pasien@malva.app');
+    await tester.enterText(textField, 'bukan-email-valid');
     await tester.pump();
 
     final pwField = find.byType(TextField).at(1);
@@ -45,25 +93,24 @@ void main() {
     await tester.pump();
 
     await tester.tap(masukButton);
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
 
-    // Tombol submit ter-tap tanpa exception render/gesture
+    // Validasi client-side aktif: error format ditampilkan, tidak ada crash.
+    expect(find.text('Format email pasien tidak valid.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('validasi form menampilkan error saat input salah',
+  testWidgets('validasi ID profesi 16 digit di halaman profesional',
       (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: MalvaApp()));
-
-    await tester.pump(const Duration(milliseconds: 2000));
-    await tester.pumpAndSettle();
+    await pumpToProfessionalLogin(tester);
 
     final textField = find.byType(TextField).first;
-    await tester.enterText(textField, 'bukan-email');
+    await tester.enterText(textField, '123');
     await tester.pump();
 
     final pwField = find.byType(TextField).at(1);
-    await tester.enterText(pwField, 'Malva1234');
+    await tester.enterText(pwField, 'Dokter1234');
     await tester.pump();
 
     final masukButton = find.widgetWithText(FilledButton, 'Masuk');
@@ -74,7 +121,31 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
 
-    expect(find.text('Format email pasien tidak valid.'), findsOneWidget);
+    expect(
+        find.text('ID profesi harus berisi tepat 16 angka.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('forgot password dan google stub merespons', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await pumpToPatientLogin(tester);
+
+    await tester.ensureVisible(find.text('Forgot Password?'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Forgot Password?'));
+    await tester.pumpAndSettle();
+    expect(find.text('Forgot Password?'), findsWidgets);
+    await tester.tap(find.text('Batal'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Continue with Google'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue with Google'));
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 }

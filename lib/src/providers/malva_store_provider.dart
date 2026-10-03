@@ -495,14 +495,16 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     final index = state.medications.indexWhere((m) => m.id == medicationId);
     if (index == -1) return;
     final med = state.medications[index];
+    final now = DateTime.now();
     final updatedMed = med.copyWith(
       currentStock: (med.currentStock - 1).clamp(0, 999).toInt(),
+      lastTakenAt: now,
     );
     final newMeds = [...state.medications]..[index] = updatedMed;
     final newLog = MedicationLog(
       medicationId: medicationId,
       medicationName: med.name,
-      takenAt: DateTime.now(),
+      takenAt: now,
       status: 'taken',
     );
     state = state.copyWith(

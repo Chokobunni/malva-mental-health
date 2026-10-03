@@ -8,6 +8,7 @@ import 'chat_screen.dart';
 import 'diary_screen.dart';
 import 'home_screen.dart';
 import 'medication_screen.dart';
+import 'messages_list_screen.dart';
 import 'mood_screen.dart';
 import 'assessment_screen.dart';
 import 'more_screen.dart';
@@ -98,6 +99,10 @@ class _PatientShellState extends ConsumerState<PatientShell> {
         otherUserName: _professionalName,
         otherUserId: _professionalUserId,
       ),
+      MessagesListScreen(
+        session: widget.session,
+        apiClient: widget.apiClient,
+      ),
       MoreScreen(
           onLogout: widget.onLogout,
           apiClient: widget.apiClient,
@@ -108,7 +113,7 @@ class _PatientShellState extends ConsumerState<PatientShell> {
 
     return Scaffold(
       body: IndexedStack(index: _index, children: pages),
-      floatingActionButton: const SosFab(),
+      floatingActionButton: _index == 4 ? null : const SosFab(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),
@@ -133,6 +138,10 @@ class _PatientShellState extends ConsumerState<PatientShell> {
               icon: Icon(Icons.chat_bubble_outline_rounded),
               selectedIcon: Icon(Icons.chat_bubble_rounded),
               label: 'Chat'),
+          NavigationDestination(
+              icon: Icon(Icons.forum_outlined),
+              selectedIcon: Icon(Icons.forum),
+              label: 'Pesan'),
           NavigationDestination(
               icon: Icon(Icons.grid_view_outlined),
               selectedIcon: Icon(Icons.grid_view),

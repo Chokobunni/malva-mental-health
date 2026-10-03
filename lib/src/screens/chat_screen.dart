@@ -450,6 +450,18 @@ class _ChatBubble extends StatelessWidget {
                   ),
                 ),
               ),
+            if (message.kind == 'file') ...[
+              _FileBubble(message: message, isMine: isMine),
+              const SizedBox(height: 6),
+            ] else if (message.kind == 'voice') ...[
+              _VoiceBubble(message: message, isMine: isMine),
+              const SizedBox(height: 6),
+            ] else if (message.kind == 'diary' ||
+                message.kind == 'goals' ||
+                message.kind == 'progress') ...[
+              _SharedCardBubble(message: message, isMine: isMine),
+              const SizedBox(height: 6),
+            ],
             Text(
               message.text,
               style: TextStyle(
@@ -476,6 +488,158 @@ class _ChatBubble extends StatelessWidget {
     final h = d.hour.toString().padLeft(2, '0');
     final m = d.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+}
+
+class _FileBubble extends StatelessWidget {
+  const _FileBubble({required this.message, required this.isMine});
+
+  final ChatMessage message;
+  final bool isMine;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isMine
+            ? Colors.white.withValues(alpha: 0.2)
+            : MalvaColors.seed.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.picture_as_pdf_rounded,
+              color: MalvaColors.danger, size: 34),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message.text.isEmpty ? 'Dokumen' : message.text,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: isMine ? Colors.white : MalvaColors.ink,
+                  ),
+                ),
+                Text(
+                  'PDF • ketuk untuk buka',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isMine
+                        ? Colors.white.withValues(alpha: 0.75)
+                        : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VoiceBubble extends StatelessWidget {
+  const _VoiceBubble({required this.message, required this.isMine});
+
+  final ChatMessage message;
+  final bool isMine;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isMine
+            ? Colors.white.withValues(alpha: 0.2)
+            : MalvaColors.seed.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.play_circle_fill_rounded,
+              color: isMine ? Colors.white : MalvaColors.seed, size: 32),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isMine
+                        ? Colors.white.withValues(alpha: 0.5)
+                        : MalvaColors.seed.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Voice note • 0:00',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isMine
+                        ? Colors.white.withValues(alpha: 0.75)
+                        : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SharedCardBubble extends StatelessWidget {
+  const _SharedCardBubble({required this.message, required this.isMine});
+
+  final ChatMessage message;
+  final bool isMine;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, label) = switch (message.kind) {
+      'diary' => (Icons.edit_note_rounded, 'Diary'),
+      'goals' => (Icons.flag_rounded, 'Goals'),
+      'progress' => (Icons.show_chart_rounded, 'Progress'),
+      _ => (Icons.insert_drive_file_rounded, 'Lampiran'),
+    };
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isMine
+            ? Colors.white.withValues(alpha: 0.2)
+            : MalvaColors.orchid.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon,
+              color: isMine ? Colors.white : MalvaColors.orchid, size: 28),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              '${label}: ${message.text.isEmpty ? 'terlampir' : message.text}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: isMine ? Colors.white : MalvaColors.ink,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -510,6 +674,23 @@ class _ChatInput extends StatelessWidget {
         top: false,
         child: Row(
           children: [
+            IconButton(
+              tooltip: 'Lampiran',
+              onPressed: enabled ? () => _showAttachments(context) : null,
+              icon: const Icon(Icons.add_rounded),
+            ),
+            IconButton(
+              tooltip: 'Voice note (segera hadir)',
+              onPressed: enabled
+                  ? () => ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              'Voice note segera hadir. Pakai teks dulu ya.'),
+                        ),
+                      )
+                  : null,
+              icon: const Icon(Icons.mic_rounded),
+            ),
             Expanded(
               child: TextField(
                 controller: controller,
@@ -532,6 +713,55 @@ class _ChatInput extends StatelessWidget {
               icon: const Icon(Icons.send_rounded, size: 20),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showAttachments(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Lampiran',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final (label, icon) in [
+                    ('Photo', Icons.photo_rounded),
+                    ('Camera', Icons.camera_alt_rounded),
+                    ('File', Icons.insert_drive_file_rounded),
+                    ('Diary', Icons.edit_note_rounded),
+                    ('Goals', Icons.flag_rounded),
+                    ('Progress', Icons.show_chart_rounded),
+                  ])
+                    ActionChip(
+                      avatar: Icon(icon, size: 16, color: MalvaColors.seed),
+                      label: Text(label,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                              content: Text('Lampiran $label segera hadir.')),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

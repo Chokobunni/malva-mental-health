@@ -242,6 +242,24 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
   }
 }
 
+class _SeverityBadge extends StatelessWidget {
+  const _SeverityBadge({required this.mood});
+
+  final MoodValue mood;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (mood) {
+      MoodValue.awful => ('Severe', MalvaColors.danger),
+      MoodValue.sad => ('Moderate', MalvaColors.amber),
+      MoodValue.okay => ('Mild', MalvaColors.mint),
+      MoodValue.good => ('Baik', MalvaColors.mint),
+      MoodValue.great => ('Stabil', MalvaColors.seed),
+    };
+    return StatusPill(label: label, color: color);
+  }
+}
+
 class _DiaryCard extends StatelessWidget {
   const _DiaryCard({
     required this.entry,
@@ -275,6 +293,7 @@ class _DiaryCard extends StatelessWidget {
                   ],
                 ),
               ),
+              _SeverityBadge(mood: entry.mood),
               IconButton(
                 tooltip: 'Edit diary',
                 onPressed: onEdit,
@@ -340,8 +359,19 @@ class _DiaryFormSheetState extends State<_DiaryFormSheet> {
   late final TextEditingController _title;
   late final TextEditingController _note;
   late MoodValue _mood;
+  bool _medicationTaken = false;
 
   bool get _isEditing => widget.initialEntry != null;
+
+  static String _contextualPrompt(MoodValue mood) {
+    return switch (mood) {
+      MoodValue.awful => 'Apa yang paling berat hari ini?',
+      MoodValue.sad => 'Apa yang membuatmu sedih?',
+      MoodValue.okay => 'Ceritakan harimu secara singkat.',
+      MoodValue.good => 'Hal baik apa yang terjadi hari ini?',
+      MoodValue.great => 'Bagikan momen terbaikmu hari ini!',
+    };
+  }
 
   @override
   void initState() {
@@ -395,11 +425,30 @@ class _DiaryFormSheetState extends State<_DiaryFormSheet> {
               decoration: const InputDecoration(labelText: 'Judul'),
             ),
             const SizedBox(height: 10),
+            Text(
+              _contextualPrompt(_mood),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: MalvaColors.plum,
+                  ),
+            ),
+            const SizedBox(height: 10),
             TextField(
               controller: _note,
               minLines: 5,
               maxLines: 8,
-              decoration: const InputDecoration(labelText: 'Catatan diary'),
+              decoration: const InputDecoration(
+                  labelText: 'Add more details (optional)...'),
+            ),
+            const SizedBox(height: 10),
+            SwitchListTile(
+              value: _medicationTaken,
+              onChanged: (v) => setState(() => _medicationTaken = v),
+              title: const Text('Medication Taken',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('Tandai jika obat hari ini sudah diminum'),
+              activeThumbColor: MalvaColors.mint,
+              contentPadding: EdgeInsets.zero,
             ),
             const SizedBox(height: 16),
             FilledButton(

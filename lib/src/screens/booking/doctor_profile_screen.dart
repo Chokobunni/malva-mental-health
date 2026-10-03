@@ -204,6 +204,49 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                               ],
                             ),
                           ),
+                          SoftCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Review pasien',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 15)),
+                                const SizedBox(height: 4),
+                                const Text(
+                                    'Ulasan pasien akan tampil di sini setelah sesi selesai.',
+                                    style: TextStyle(color: Colors.black54)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          const SectionLabel('Profil'),
+                          SoftCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(Icons.play_circle_fill_rounded,
+                                        color: MalvaColors.seed),
+                                    SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Tonton Intro Video',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w900),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Video perkenalan profesional segera hadir.',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
                           const SizedBox(height: 12),
                           const SectionLabel('Jadwal Tersedia Hari Ini'),
                           SoftCard(
