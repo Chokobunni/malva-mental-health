@@ -411,7 +411,11 @@ func (s *Server) searchDoctors(w http.ResponseWriter, r *http.Request, claims au
 	if v := r.URL.Query().Get("max_km"); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil { params.MaxKM = &f }
 	}
-	if v := r.URL.Query().Get("is_bpjs"); v != "" {
+	// Klien mengirim is_bpjs_supported (is_bpjs dipertahankan sebagai alias).
+	if v := r.URL.Query().Get("is_bpjs_supported"); v != "" {
+		b := v == "true" || v == "1"
+		params.IsBPJSSupported = &b
+	} else if v := r.URL.Query().Get("is_bpjs"); v != "" {
 		b := v == "true" || v == "1"
 		params.IsBPJSSupported = &b
 	}

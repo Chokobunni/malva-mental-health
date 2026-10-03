@@ -173,6 +173,7 @@ class TestsMarketplaceScreen extends StatelessWidget {
                 ),
               );
             },
+            style: compactFilledButtonStyle,
             child: const Text('Mulai Tes'),
           ),
         ],

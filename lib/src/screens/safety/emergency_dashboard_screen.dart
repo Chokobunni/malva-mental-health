@@ -251,7 +251,10 @@ class _EmergencyDashboardScreenState
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: MalvaColors.amber),
+            style: compactFilledButtonStyle.copyWith(
+              backgroundColor: const WidgetStatePropertyAll(MalvaColors.amber),
+              foregroundColor: const WidgetStatePropertyAll(MalvaColors.ink),
+            ),
             child: const Text('Kirim SOS',
                 style: TextStyle(color: MalvaColors.ink)),
           ),

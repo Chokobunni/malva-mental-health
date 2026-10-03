@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import '../widgets/malva_components.dart';
 
 enum AuthMode { login, register }
 
@@ -364,6 +365,7 @@ Future<void> showForgotPasswordDialog(BuildContext context) async {
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, true),
+          style: compactFilledButtonStyle,
           child: const Text('Kirim'),
         ),
       ],

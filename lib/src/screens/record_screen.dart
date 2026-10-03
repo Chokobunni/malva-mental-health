@@ -308,7 +308,6 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
               onPressed: () {
                 final title = titleController.text.trim();
                 if (title.isEmpty) return;
-
                 ref.read(malvaStoreProvider.notifier).addRecord(
                       HealthRecord(
                         id: 'record_${DateTime.now().millisecondsSinceEpoch}',
@@ -325,6 +324,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                   ),
                 );
               },
+              style: compactFilledButtonStyle,
               child: const Text('Simpan'),
             ),
           ],

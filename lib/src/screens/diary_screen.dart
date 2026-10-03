@@ -200,8 +200,10 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
                       ),
                       FilledButton(
                         onPressed: () => Navigator.pop(context, true),
-                        style: FilledButton.styleFrom(
-                            backgroundColor: MalvaColors.danger),
+                        style: compactFilledButtonStyle.copyWith(
+                          backgroundColor:
+                              const WidgetStatePropertyAll(MalvaColors.danger),
+                        ),
                         child: const Text('Hapus'),
                       ),
                     ],

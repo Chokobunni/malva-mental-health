@@ -126,7 +126,9 @@ class _EmergencyContactsScreenState
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: MalvaColors.danger),
+            style: compactFilledButtonStyle.copyWith(
+              backgroundColor: const WidgetStatePropertyAll(MalvaColors.danger),
+            ),
             child: const Text('Hapus'),
           ),
         ],

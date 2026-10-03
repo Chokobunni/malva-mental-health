@@ -19,15 +19,20 @@ void main() {
     );
 
     expect(find.text('Professional'), findsOneWidget);
-    // Tab Dashboard: tanpa penomoran.
+    // Tab Dashboard: tanpa penomoran; antrean kosong di store default.
     expect(find.text('Prioritas pasien'), findsOneWidget);
+    expect(find.text('Tidak ada prioritas urgent'), findsOneWidget);
     expect(find.text('Dashboard'), findsOneWidget);
     expect(find.text('Pasien'), findsOneWidget);
     expect(find.text('Tugas'), findsOneWidget);
     expect(find.text('Lainnya'), findsOneWidget);
 
-    // Tab Pasien: daftar terhubung.
-    await tester.tap(find.text('Pasien'));
+    // Metrik Pasien aktif bisa diklik -> sheet daftar pasien.
+    await tester.tap(find.text('Pasien aktif'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Pasien aktif ('), findsOneWidget);
+    // Pilih pasien demo -> pindah ke tab Pasien.
+    await tester.tap(find.text('Emelie R.'));
     await tester.pumpAndSettle();
     expect(find.text('Pasien terhubung'), findsOneWidget);
 
@@ -42,6 +47,19 @@ void main() {
     expect(find.text('Relasi pasien–profesional'), findsOneWidget);
     expect(find.text('Audit & export ringkasan'), findsOneWidget);
     expect(find.text('Portal Profesional'), findsOneWidget);
+
+    // Kembali ke Dashboard: sheet metrik crisis & review (kosong).
+    await tester.tap(find.text('Dashboard'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Crisis alert'));
+    await tester.pumpAndSettle();
+    expect(find.text('Tidak ada crisis aktif'), findsOneWidget);
+    await tester.tapAt(const Offset(400, 100));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Perlu review'));
+    await tester.pumpAndSettle();
+    expect(find.text('Semua sudah direview'), findsOneWidget);
+
     expect(tester.takeException(), isNull);
   });
 }

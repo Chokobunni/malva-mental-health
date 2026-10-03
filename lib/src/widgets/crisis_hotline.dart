@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/data/crisis_provider.dart';
 import '../theme.dart';
+import 'malva_components.dart';
 
 // ============================================================
 // CRISIS HOTLINE BANNER
@@ -119,7 +120,9 @@ class CrisisHotlineBanner extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: MalvaColors.danger),
+            style: compactFilledButtonStyle.copyWith(
+              backgroundColor: const WidgetStatePropertyAll(MalvaColors.danger),
+            ),
             child: const Text('Hubungi Sekarang'),
           ),
         ],

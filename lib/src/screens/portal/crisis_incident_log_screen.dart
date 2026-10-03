@@ -191,7 +191,9 @@ class _CrisisIncidentLogScreenState
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: MalvaColors.mint),
+            style: compactFilledButtonStyle.copyWith(
+              backgroundColor: const WidgetStatePropertyAll(MalvaColors.mint),
+            ),
             child: const Text('Mark Crisis Resolved'),
           ),
         ],

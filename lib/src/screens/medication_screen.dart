@@ -296,6 +296,9 @@ class MedicationScreen extends ConsumerWidget {
               unawaited(
                   medicationReminderService?.cancelReminder(medication.id));
             },
+            style: compactFilledButtonStyle.copyWith(
+              backgroundColor: const WidgetStatePropertyAll(MalvaColors.danger),
+            ),
             child: const Text('Hapus'),
           ),
         ],

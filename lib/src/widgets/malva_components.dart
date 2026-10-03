@@ -293,6 +293,15 @@ class ProgressStrip extends StatelessWidget {
   }
 }
 
+/// Style FilledButton ringkas untuk Row / dialog actions.
+/// Theme global memakai minimumSize tak-hingga (full-width) yang akan
+/// melahap seluruh lebar Row dan menjepit teks lain — jangan dipakai
+/// di dalam Row tanpa style ini.
+final ButtonStyle compactFilledButtonStyle = FilledButton.styleFrom(
+  minimumSize: Size.zero,
+  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+);
+
 class EmptyState extends StatelessWidget {
   const EmptyState({
     super.key,

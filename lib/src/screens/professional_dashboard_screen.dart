@@ -10,6 +10,7 @@ import '../providers/providers.dart';
 import '../services/dashboard_sync_service.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
+import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import 'booking/credential_screens.dart';
 import 'portal/crisis_incident_log_screen.dart';
@@ -179,6 +180,11 @@ class _ProfessionalDashboardScreenState
                       patientCount: patients.length,
                       crisisCount: _crisisQueue(patients).length,
                       reviewCount: _reviewQueue(patients).length,
+                      onPatientsTap: _showActivePatientsSheet,
+                      onCrisisTap: () =>
+                          _showPriorityListSheet(crisisOnly: true),
+                      onReviewTap: () =>
+                          _showPriorityListSheet(crisisOnly: false),
                     ),
                   if (_tabIndex == 0) const SizedBox(height: 18),
                   // ---- TAB 1: PASIEN ----
@@ -204,6 +210,7 @@ class _ProfessionalDashboardScreenState
                       reviewQueue: _reviewQueue(patients),
                       reviewedIds: _reviewedScreeningIds,
                       onReview: _openScreeningReview,
+                      onOpenDetail: _showPriorityDetail,
                     ),
                   if (_tabIndex == 1) const SectionLabel('Pasien terhubung'),
                   if (_tabIndex == 1)
@@ -672,6 +679,455 @@ class _ProfessionalDashboardScreenState
     return items;
   }
 
+  // ----------------------------------------------------------
+  // BOTTOM SHEETS — metrik & detail prioritas
+  // ----------------------------------------------------------
+
+  void _showActivePatientsSheet() {
+    final storeState = ref.read(malvaStoreProvider);
+    final list = _patientsForDashboard(storeState)
+        .where((patient) => patient.status == 'active')
+        .toList(growable: false);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 12,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Pasien aktif (${list.length})',
+                style: Theme.of(sheetContext)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Ketuk pasien untuk membuka detailnya di tab Pasien.',
+                style: TextStyle(color: Colors.black54),
+              ),
+              const SizedBox(height: 12),
+              if (list.isEmpty)
+                const EmptyState(
+                  icon: Icons.people_outline_rounded,
+                  title: 'Belum ada pasien aktif',
+                  subtitle: 'Pasien terhubung akan tercatat di sini.',
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: list.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (_, index) {
+                      final patient = list[index];
+                      return SoftCard(
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          setState(() {
+                            _selectedPatientId = patient.patientId;
+                            _tabIndex = 1;
+                          });
+                        },
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: patient.hasCrisis
+                                  ? MalvaColors.danger
+                                  : MalvaColors.seed.withValues(alpha: 0.12),
+                              child: Text(
+                                patient.displayName.isEmpty
+                                    ? '?'
+                                    : patient.displayName.characters.first
+                                        .toUpperCase(),
+                                style: TextStyle(
+                                  color: patient.hasCrisis
+                                      ? Colors.white
+                                      : MalvaColors.seed,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    patient.displayName,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w900),
+                                  ),
+                                  Text(
+                                    '${patient.sourceLabel} • ${_riskLabel(patient.latestLevel)}',
+                                    style: Theme.of(sheetContext)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(color: Colors.black54),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right_rounded),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showPriorityListSheet({required bool crisisOnly}) {
+    final storeState = ref.read(malvaStoreProvider);
+    final patients = _patientsForDashboard(storeState);
+    final items = crisisOnly ? _crisisQueue(patients) : _reviewQueue(patients);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 12,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                crisisOnly
+                    ? 'Crisis alert (${items.length})'
+                    : 'Perlu review (${items.length})',
+                style: Theme.of(sheetContext)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                crisisOnly
+                    ? 'Pasien dengan crisis flag — prioritaskan penilaian keselamatan.'
+                    : 'Screening terbaru yang menunggu review klinis.',
+                style: const TextStyle(color: Colors.black54),
+              ),
+              const SizedBox(height: 12),
+              if (items.isEmpty)
+                EmptyState(
+                  icon: crisisOnly
+                      ? Icons.check_circle_outline_rounded
+                      : Icons.inbox_rounded,
+                  title: crisisOnly
+                      ? 'Tidak ada crisis aktif'
+                      : 'Semua sudah direview',
+                  subtitle: crisisOnly
+                      ? 'Flag krisis baru akan muncul di sini.'
+                      : 'Screening baru akan muncul di sini.',
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (_, index) {
+                      final item = items[index];
+                      return SoftCard(
+                        onTap: () {
+                          Navigator.pop(sheetContext);
+                          _showPriorityDetail(item);
+                        },
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor:
+                                  item.color.withValues(alpha: 0.16),
+                              child: Icon(
+                                crisisOnly
+                                    ? Icons.priority_high_rounded
+                                    : Icons.fact_check_rounded,
+                                color: item.color,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.patient.displayName,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w900),
+                                  ),
+                                  Text(
+                                    '${item.title} • ${_formatDate(item.screening.createdAt)}',
+                                    style: Theme.of(sheetContext)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(color: Colors.black54),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right_rounded),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showPriorityDetail(_PriorityItem item) {
+    final screening = item.screening;
+    final isCrisis = screening.crisisFlag;
+    final phqMax = screening.phq9MaxScore <= 0 ? 27 : screening.phq9MaxScore;
+    final gadMax = screening.gad7MaxScore <= 0 ? 21 : screening.gad7MaxScore;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 12,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 26,
+                      backgroundColor: item.color.withValues(alpha: 0.16),
+                      child: Icon(
+                        isCrisis
+                            ? Icons.priority_high_rounded
+                            : Icons.fact_check_rounded,
+                        color: item.color,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.title,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w900, fontSize: 17),
+                          ),
+                          Text(
+                            '${item.patient.displayName} • ${_formatDate(screening.createdAt)}',
+                            style: Theme.of(sheetContext)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: Colors.black54),
+                          ),
+                        ],
+                      ),
+                    ),
+                    StatusPill(
+                      label: isCrisis
+                          ? 'Krisis'
+                          : _riskLabel(screening.overallLevel),
+                      color: item.color,
+                    ),
+                  ],
+                ),
+                if (isCrisis) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: MalvaColors.danger.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: MalvaColors.danger.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                            color: MalvaColors.danger),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Crisis flag aktif. Prioritaskan penilaian keselamatan dan follow-up sesuai SOP klinis.',
+                            style: TextStyle(
+                              color: MalvaColors.danger,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                SoftCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'PHQ-9: ${screening.phq9Score}/$phqMax',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                          Text(
+                            _riskLabel(screening.phq9Level),
+                            style: TextStyle(
+                              color: _riskColor(screening.phq9Level),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ProgressStrip(
+                        value: screening.phq9Score / phqMax,
+                        color: _riskColor(screening.phq9Level),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'GAD-7: ${screening.gad7Score}/$gadMax',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                          Text(
+                            _riskLabel(screening.gad7Level),
+                            style: TextStyle(
+                              color: _riskColor(screening.gad7Level),
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ProgressStrip(
+                        value: screening.gad7Score / gadMax,
+                        color: _riskColor(screening.gad7Level),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Overall: ${_riskLabel(screening.overallLevel)}',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Catatan: hasil screening adalah alat bantu, bukan diagnosis final.',
+                        style: TextStyle(color: Colors.black54, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(item.body),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    _openScreeningReview(item.patient, screening);
+                  },
+                  icon: const Icon(Icons.fact_check_rounded),
+                  label: const Text('Review screening'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    unawaited(
+                        _reviewScreening(screening.id).catchError((_) {}));
+                  },
+                  icon: const Icon(Icons.check_rounded),
+                  label: const Text('Tandai direview'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _openScreeningReview(
     _ProfessionalPatient patient,
     _ScreeningView screening,
@@ -768,6 +1224,7 @@ class _ProfessionalDashboardScreenState
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
+            style: compactFilledButtonStyle,
             child: const Text('Ya, Tandai'),
           ),
         ],
@@ -902,7 +1359,7 @@ class _ProfessionalDashboardScreenState
         } on Object catch (error) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Feedback gagal disimpan: $error')),
+            SnackBar(content: Text(friendlyErrorMessage(error))),
           );
         }
       },
@@ -916,7 +1373,7 @@ class _ProfessionalDashboardScreenState
     _openTextSheet(
       title: 'Catatan profesional',
       subtitle:
-          'Catatan internal untuk ${patient.displayName}. Jika backend aktif, catatan ini tersimpan di server klinis.',
+          'Catatan internal untuk ${patient.displayName}. Tersimpan otomatis di perangkat ini dan disinkronkan ke server klinis saat terhubung.',
       controller: controller,
       label: 'Catatan internal',
       actionLabel: 'Simpan catatan',
@@ -958,7 +1415,7 @@ class _ProfessionalDashboardScreenState
     _openTextSheet(
       title: 'Follow-up message',
       subtitle:
-          'Arahan untuk ${patient.displayName}. Jika backend aktif, pesan ini masuk ke Home pasien dan notifikasi realtime.',
+          'Arahan untuk ${patient.displayName}. Pesan terkirim ke Home pasien dan muncul sebagai notifikasi. Bila offline, tersimpan sebagai draf dan dikirim otomatis saat terhubung.',
       controller: controller,
       label: 'Pesan follow-up',
       actionLabel: 'Kirim follow-up',
@@ -1019,11 +1476,12 @@ class _ProfessionalDashboardScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Catatan tersimpan ke backend.')),
       );
-    } on Object catch (error) {
+    } on Object catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Catatan tersimpan lokal, sync backend gagal: $error'),
+        const SnackBar(
+          content: Text(
+              'Catatan tersimpan di perangkat ini. Sinkronisasi ke server dicoba otomatis saat terhubung.'),
         ),
       );
     }
@@ -1054,12 +1512,12 @@ class _ProfessionalDashboardScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Follow-up terkirim ke pasien.')),
       );
-    } on Object catch (error) {
+    } on Object catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text('Follow-up tersimpan lokal, sync backend gagal: $error'),
+        const SnackBar(
+          content: Text(
+              'Follow-up tersimpan di perangkat ini. Pengiriman ke pasien dicoba otomatis saat terhubung.'),
         ),
       );
     }
@@ -1415,11 +1873,17 @@ class _PriorityMetrics extends StatelessWidget {
     required this.patientCount,
     required this.crisisCount,
     required this.reviewCount,
+    required this.onPatientsTap,
+    required this.onCrisisTap,
+    required this.onReviewTap,
   });
 
   final int patientCount;
   final int crisisCount;
   final int reviewCount;
+  final VoidCallback onPatientsTap;
+  final VoidCallback onCrisisTap;
+  final VoidCallback onReviewTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1432,6 +1896,7 @@ class _PriorityMetrics extends StatelessWidget {
             value: '$patientCount',
             label: 'Pasien aktif',
             color: MalvaColors.seed,
+            onTap: onPatientsTap,
           ),
         ),
         const SizedBox(width: 10),
@@ -1441,6 +1906,7 @@ class _PriorityMetrics extends StatelessWidget {
             value: '$crisisCount',
             label: 'Crisis alert',
             color: crisisCount == 0 ? MalvaColors.mint : MalvaColors.danger,
+            onTap: onCrisisTap,
           ),
         ),
         const SizedBox(width: 10),
@@ -1450,6 +1916,7 @@ class _PriorityMetrics extends StatelessWidget {
             value: '$reviewCount',
             label: 'Perlu review',
             color: reviewCount == 0 ? MalvaColors.mint : MalvaColors.orchid,
+            onTap: onReviewTap,
           ),
         ),
       ],
@@ -1465,16 +1932,19 @@ class _MetricCard extends StatelessWidget {
     required this.value,
     required this.label,
     required this.color,
+    required this.onTap,
   });
 
   final IconData icon;
   final String value;
   final String label;
   final Color color;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return SoftCard(
+      onTap: onTap,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1537,6 +2007,7 @@ class _PriorityQueue extends StatelessWidget {
     required this.reviewQueue,
     required this.reviewedIds,
     required this.onReview,
+    required this.onOpenDetail,
   });
 
   final List<_PriorityItem> crisisQueue;
@@ -1544,6 +2015,7 @@ class _PriorityQueue extends StatelessWidget {
   final Set<String> reviewedIds;
   final void Function(_ProfessionalPatient patient, _ScreeningView screening)
       onReview;
+  final void Function(_PriorityItem item) onOpenDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -1560,12 +2032,11 @@ class _PriorityQueue extends StatelessWidget {
     return Column(
       children: [
         for (final item in queue) ...[
-          _ReviewItem(
-            title: item.title,
-            body: item.body,
-            color: item.color,
+          _PriorityCard(
+            item: item,
             reviewed: reviewedIds.contains(item.screening.id),
             onReview: () => onReview(item.patient, item.screening),
+            onTap: () => onOpenDetail(item),
           ),
           const SizedBox(height: 10),
         ],
@@ -1813,6 +2284,7 @@ class _ScreeningHistorySection extends StatelessWidget {
                       const Spacer(),
                       FilledButton(
                         onPressed: () => onReview(patient, screening),
+                        style: compactFilledButtonStyle,
                         child: const Text('Review'),
                       ),
                     ],
@@ -2577,73 +3049,129 @@ class _ProfessionalPortalSection extends StatelessWidget {
   }
 }
 
-class _ReviewItem extends StatelessWidget {
-  const _ReviewItem({
-    required this.title,
-    required this.body,
-    required this.color,
+/// Kartu prioritas vertikal: header (avatar + judul + pill),
+/// ringkasan, lalu skor + aksi. Ketuk untuk detail lengkap.
+class _PriorityCard extends StatelessWidget {
+  const _PriorityCard({
+    required this.item,
     required this.reviewed,
     required this.onReview,
+    required this.onTap,
   });
 
-  final String title;
-  final String body;
-  final Color color;
+  final _PriorityItem item;
   final bool reviewed;
   final VoidCallback onReview;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final screening = item.screening;
+    final isCrisis = screening.crisisFlag;
     return SoftCard(
-      color: color.withValues(alpha: 0.08),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final avatar = CircleAvatar(
-            backgroundColor: color.withValues(alpha: 0.16),
-            child: Icon(
-              reviewed ? Icons.check_rounded : Icons.priority_high_rounded,
-              color: color,
-            ),
-          );
-          final texts = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+      onTap: onTap,
+      color: item.color.withValues(alpha: 0.08),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-              Text(body),
-            ],
-          );
-          final action = FilledButton(
-            onPressed: onReview,
-            child: Text(reviewed ? 'Lihat' : 'Review'),
-          );
-          // Layar sempit: susun vertikal agar teks tidak terjepit.
-          if (constraints.maxWidth < 320) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
+              CircleAvatar(
+                backgroundColor: item.color.withValues(alpha: 0.16),
+                child: Icon(
+                  reviewed
+                      ? Icons.check_rounded
+                      : isCrisis
+                          ? Icons.priority_high_rounded
+                          : Icons.fact_check_rounded,
+                  color: item.color,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    avatar,
-                    const SizedBox(width: 12),
-                    Expanded(child: texts),
+                    Text(item.title,
+                        style: const TextStyle(fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${item.patient.displayName} • ${_formatDate(screening.createdAt)}',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.black54),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                action,
-              ],
-            );
-          }
-          return Row(
-            children: [
-              avatar,
-              const SizedBox(width: 12),
-              Expanded(child: texts),
+              ),
               const SizedBox(width: 8),
-              action,
+              StatusPill(
+                label: isCrisis ? 'Krisis' : _riskLabel(screening.overallLevel),
+                color: item.color,
+              ),
             ],
-          );
-        },
+          ),
+          const SizedBox(height: 8),
+          Text(
+            item.body,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    _ScoreChip(
+                      label: 'PHQ-9',
+                      value: '${screening.phq9Score}/${screening.phq9MaxScore}',
+                    ),
+                    _ScoreChip(
+                      label: 'GAD-7',
+                      value: '${screening.gad7Score}/${screening.gad7MaxScore}',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: onReview,
+                style: compactFilledButtonStyle,
+                child: Text(reviewed ? 'Lihat' : 'Review'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScoreChip extends StatelessWidget {
+  const _ScoreChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: MalvaColors.seed.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '$label $value',
+        style: const TextStyle(
+          color: MalvaColors.seed,
+          fontWeight: FontWeight.w800,
+          fontSize: 12,
+        ),
       ),
     );
   }

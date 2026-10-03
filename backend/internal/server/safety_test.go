@@ -128,6 +128,24 @@ func TestDoctorDirectoryIsPublic(t *testing.T) {
 			t.Errorf("GET %s: direktori harus publik, got 401", path)
 		}
 	}
+
+	// Filter BPJS + spesialisasi harus benar-benar memfilter.
+	rec = doAuthed(t, handler, "GET",
+		"/v1/doctors/search?specialization=M.Psi&is_bpjs_supported=true", "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("filter search: expected 200, got %d (%s)",
+			rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Rina Prasetyo") {
+		t.Errorf("expected Rina (M.Psi + BPJS) in response, got: %s", body)
+	}
+	if strings.Contains(body, "Andi Wijaya") {
+		t.Errorf("Andi (non-BPJS) harus terfilter, got: %s", body)
+	}
+	if strings.Contains(body, "Hafid Algistian") {
+		t.Errorf("Hafid (Sp.KJ) harus terfilter spesialisasi, got: %s", body)
+	}
 }
 
 func TestValidateIndonesianPhone(t *testing.T) {
