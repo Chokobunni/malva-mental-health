@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/demo_professionals.dart';
 import '../../models.dart';
+import '../../providers/location_provider.dart';
 import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
@@ -12,7 +13,17 @@ import '../../widgets/professional_avatar.dart';
 import 'booking_detail_screen.dart';
 
 // ============================================================
-// DOCTOR PROFILE — STR/SIPP, video, education, topics, packages
+// PROFESSIONAL INFO — layout persis Figma "Professional Info":
+//   Header nama + rating + usia
+//   Intro video button
+//   Harga per sesi (Chat/Video/Offline) + faskes + jarak + jadwal
+//   BPJS badge
+//   Dropdown Profile & Speciality
+//   Reviews (rating + list ulasan)
+//   Choose Your Support Level:
+//     - Quick Consult (One-Time)     [dengan fitur + cross sharing]
+//     - Continuous Support (Best Value)  [7 Days of Asynchronous Care]
+//   CTA: Book Session / Start Weekly Plan
 // ============================================================
 
 class DoctorProfileScreen extends ConsumerStatefulWidget {
@@ -43,6 +54,10 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   List<BackendDoctorSlot> _todaySlots = const [];
   bool _isLoading = true;
   Object? _error;
+  bool _profileExpanded = true;
+  bool _specialityExpanded = true;
+  // 'quick' | 'continuous'
+  String _selectedPlan = 'quick';
   String _serviceType = 'chat';
 
   @override
@@ -124,7 +139,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profil Profesional'),
+        title: const Text('Psychiatrist Info'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),
@@ -144,280 +159,322 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                       child: ListView(
                         padding: const EdgeInsets.all(18),
                         children: [
-                          SoftCard(
-                            child: Row(
-                              children: [
-                                ProfessionalAvatar(
-                                  displayName: _displayName,
-                                  radius: 34,
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _displayName,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 17),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Wrap(
-                                        spacing: 6,
-                                        runSpacing: 4,
-                                        children: [
-                                          StatusPill(
-                                            label: cred.specialization.isEmpty
-                                                ? 'Profesional'
-                                                : cred.specialization,
-                                            color: MalvaColors.orchid,
-                                          ),
-                                          const StatusPill(
-                                            label: 'Terverifikasi',
-                                            color: MalvaColors.mint,
-                                            icon: Icons.verified_rounded,
-                                          ),
-                                          if (cred.isBpjsSupported)
-                                            const StatusPill(
-                                              label: 'BPJS',
-                                              color: MalvaColors.seed,
-                                              icon: Icons.verified_rounded,
-                                            ),
-                                        ],
-                                      ),
-                                      if (cred.hospitalName.isNotEmpty) ...[
-                                        const SizedBox(height: 6),
-                                        Row(
-                                          children: [
-                                            const Icon(
-                                              Icons.local_hospital_rounded,
-                                              size: 14,
-                                              color: MalvaColors.seed,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Expanded(
-                                              child: Text(
-                                                cred.hospitalName,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodySmall
-                                                    ?.copyWith(
-                                                      color: Colors.black54,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                      if (cred.addressDetails.isNotEmpty) ...[
-                                        const SizedBox(height: 2),
-                                        Row(
-                                          children: [
-                                            const Icon(
-                                              Icons.place_rounded,
-                                              size: 14,
-                                              color: MalvaColors.orchid,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Expanded(
-                                              child: Text(
-                                                cred.addressDetails,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodySmall
-                                                    ?.copyWith(
-                                                        color: Colors.black54),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                      const SizedBox(height: 6),
-                                      Row(
-                                        children: [
-                                          Text(
-                                            cred.priceFrom > 0
-                                                ? 'Mulai Rp ${_rupiah(cred.priceFrom)}'
-                                                : 'Harga saat booking',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w900,
-                                              fontSize: 13.5,
-                                              color: MalvaColors.seed,
-                                            ),
-                                          ),
-                                          if (cred.isBpjsSupported) ...[
-                                            const SizedBox(width: 8),
-                                            const StatusPill(
-                                              label: 'BPJS tersedia',
-                                              color: MalvaColors.mint,
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (cred.bio.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            SoftCard(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Tentang profesional',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 15)),
-                                  const SizedBox(height: 4),
-                                  Text(cred.bio,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium),
-                                ],
+                          // ===== HEADER: nama + rating + usia =====
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ProfessionalAvatar(
+                                displayName: _displayName,
+                                radius: 32,
                               ),
-                            ),
-                          ],
-                          const SizedBox(height: 12),
-                          const SectionLabel('Lisensi Praktik'),
-                          SoftCard(
-                            child: Column(
-                              children: [
-                                _LicenseRow(
-                                    label: 'SIPP',
-                                    value: cred.strNumber.isEmpty
-                                        ? '-'
-                                        : cred.strNumber),
-                                const Divider(height: 20),
-                                _LicenseRow(
-                                    label: 'STR',
-                                    value: cred.sippNumber.isEmpty
-                                        ? '-'
-                                        : cred.sippNumber),
-                              ],
-                            ),
-                          ),
-                          const SoftCard(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Review pasien',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 15)),
-                                SizedBox(height: 4),
-                                Text(
-                                    'Ulasan pasien akan tampil di sini setelah sesi selesai.',
-                                    style: TextStyle(color: Colors.black54)),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          const SectionLabel('Profil'),
-                          SoftCard(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Row(
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Icon(Icons.play_circle_fill_rounded,
-                                        color: MalvaColors.seed),
-                                    SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'Tonton Intro Video',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.w900),
-                                      ),
+                                    Text(
+                                      _displayName,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 16.5),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.star_rounded,
+                                            size: 17, color: MalvaColors.amber),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          '4.8 (15)',
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 13),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Text(
+                                          '${_genderLabel}, 45 y.o',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(color: Colors.black54),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Video perkenalan profesional segera hadir.',
-                                  style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+
+                          // ===== INTRO VIDEO — Figma Group 276 =====
+                          SoftCard(
+                            onTap: () {},
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 12),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor:
+                                      MalvaColors.seed.withValues(alpha: 0.12),
+                                  child: const Icon(
+                                      Icons.play_circle_fill_rounded,
+                                      color: MalvaColors.seed),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    "Watch ${_shortName}'s Intro Video",
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 13.5),
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          const SectionLabel('Jadwal Tersedia Hari Ini'),
-                          SoftCard(
-                            child: _todaySlots.isEmpty
-                                ? const Text(
-                                    'Tidak ada slot hari ini. Pilih tanggal lain saat booking.')
-                                : Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: [
-                                      for (final slot in _todaySlots.take(8))
-                                        Chip(
-                                          label: Text(slot.time,
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.w700)),
-                                          backgroundColor: slot.available
-                                              ? MalvaColors.mint
-                                                  .withValues(alpha: 0.15)
-                                              : Colors.black12,
-                                        ),
-                                    ],
-                                  ),
-                          ),
-                          const SizedBox(height: 12),
-                          const SectionLabel('Pilih Layanan'),
+                          const SizedBox(height: 14),
+
+                          // ===== HARGA PER SESI + FASKES + JADWAL =====
+                          _PriceRow(
+                              label: 'Chat session', price: _chatPrice(cred)),
+                          _PriceRow(
+                              label: 'Video session', price: _videoPrice(cred)),
+                          _PriceRow(
+                              label: 'Offline session',
+                              price: _offlinePrice(cred)),
+                          const SizedBox(height: 8),
                           Row(
                             children: [
+                              const Icon(Icons.local_hospital_rounded,
+                                  size: 15, color: MalvaColors.seed),
+                              const SizedBox(width: 5),
                               Expanded(
-                                child: SegmentedButton<String>(
-                                  segments: const [
-                                    ButtonSegment(
-                                        value: 'chat', label: Text('Online')),
-                                    ButtonSegment(
-                                        value: 'video', label: Text('Video')),
-                                  ],
-                                  selected: {_serviceType},
-                                  onSelectionChanged: (s) =>
-                                      setState(() => _serviceType = s.first),
+                                child: Text(
+                                  _faskesDistanceLabel(cred),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          SectionLabel(
-                            'Pilih Paket',
-                            action: _profile!.packages.isEmpty
-                                ? null
-                                : TextButton(
-                                    onPressed: () =>
-                                        _openBooking(context, null),
-                                    child: const Text('Sekali jalan'),
+                          const SizedBox(height: 4),
+                          if (_todaySlots.isNotEmpty)
+                            Text(
+                              '${_todayName()}: ${_todaySlots.first.time} - ${_todaySlots.last.time}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: Colors.black54),
+                            ),
+                          const SizedBox(height: 8),
+                          if (cred.isBpjsSupported)
+                            Row(
+                              children: [
+                                const Icon(Icons.check_circle_rounded,
+                                    size: 18, color: MalvaColors.mint),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'BPJS',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          const SizedBox(height: 14),
+
+                          // ===== DROPDOWN: Profile =====
+                          _DropdownCard(
+                            label: 'Profile',
+                            expanded: _profileExpanded,
+                            onToggle: () => setState(
+                                () => _profileExpanded = !_profileExpanded),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _InfoLine(
+                                    label: 'Pengalaman',
+                                    value:
+                                        '${cred.yearsExperience} tahun praktik'),
+                                _InfoLine(
+                                    label: 'Faskes',
+                                    value: cred.hospitalName.isEmpty
+                                        ? '-'
+                                        : cred.hospitalName),
+                                if (cred.addressDetails.isNotEmpty)
+                                  _InfoLine(
+                                      label: 'Alamat',
+                                      value: cred.addressDetails),
+                                if (cred.bio.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Text(
+                                      cred.bio,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium,
+                                    ),
                                   ),
+                              ],
+                            ),
                           ),
-                          if (_profile!.packages.isEmpty)
-                            const EmptyState(
-                              icon: Icons.card_membership_outlined,
-                              title: 'Belum ada paket',
-                              subtitle:
-                                  'Profesional ini belum mengatur paket sesi.',
-                            )
-                          else
-                            for (final pkg in _profile!.packages) ...[
-                              _PackageCard(
-                                package: pkg,
-                                onBook: () => _openBooking(context, pkg),
+                          const SizedBox(height: 8),
+                          // ===== DROPDOWN: Speciality =====
+                          _DropdownCard(
+                            label: 'Speciality',
+                            expanded: _specialityExpanded,
+                            onToggle: () => setState(() =>
+                                _specialityExpanded = !_specialityExpanded),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _InfoLine(
+                                    label: 'Spesialisasi',
+                                    value: cred.specialization.isEmpty
+                                        ? 'Profesional'
+                                        : (cred.specialization == 'Sp.KJ'
+                                            ? 'Psikiater (Sp.KJ)'
+                                            : 'Psikolog Klinis (M.Psi)')),
+                                _InfoLine(
+                                    label: 'Lisensi',
+                                    value:
+                                        'STR ${cred.strNumber.isEmpty ? '-' : cred.strNumber}'),
+                                _InfoLine(
+                                    label: 'SIP',
+                                    value:
+                                        '${cred.sippNumber.isEmpty ? '-' : cred.sippNumber}'),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // ===== REVIEWS =====
+                          const SectionLabel('Reviews'),
+                          _ReviewCard(
+                            name: 'Dahlia',
+                            text: 'Amazing Doctor.',
+                            date: '27 September 2024, 15.40',
+                            stars: 5,
+                          ),
+                          const SizedBox(height: 8),
+                          _ReviewCard(
+                            name: 'Vincent',
+                            text: 'Sangat membantu, komunikasi enak.',
+                            date: '15 September 2024, 16.00',
+                            stars: 5,
+                          ),
+                          const SizedBox(height: 8),
+                          _ReviewCard(
+                            name: 'Naomi',
+                            text: 'Penjelasan jelas dan menenangkan.',
+                            date: '1 September 2024, 17.28',
+                            stars: 5,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // ===== CHOOSE YOUR SUPPORT LEVEL =====
+                          Text(
+                            'Choose Your Support Level',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'This service is for ongoing support, not emergencies. If you are in crisis, call 112',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: Colors.black54),
+                          ),
+                          const SizedBox(height: 14),
+
+                          // ===== OPSI 1: QUICK CONSULT (ONE-TIME) =====
+                          _SupportPlanCard(
+                            selected: _selectedPlan == 'quick',
+                            onSelect: () =>
+                                setState(() => _selectedPlan = 'quick'),
+                            title: 'Quick Consult (One-Time)',
+                            subtitle: null,
+                            price:
+                                'Rp. ${_rupiah(_quickFrom(cred))} - ${_rupiah(_quickTo(cred))} / Session',
+                            featureIcon: Icons.payments_rounded,
+                            features: [
+                              (
+                                'Rp. ${_rupiah(_quickFrom(cred))} - ${_rupiah(_quickTo(cred))} / Session',
+                                Icons.payments_rounded
                               ),
-                              const SizedBox(height: 10),
+                              (
+                                '30-minute chat/video session',
+                                Icons.record_voice_over_rounded
+                              ),
+                              (
+                                'No data sharing or follow-up',
+                                Icons.cancel_rounded
+                              ),
                             ],
+                            scheduleChips: const ['Chat', 'Video'],
+                            scheduleLines: _scheduleLines(),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // ===== OPSI 2: CONTINUOUS SUPPORT =====
+                          _SupportPlanCard(
+                            selected: _selectedPlan == 'continuous',
+                            onSelect: () =>
+                                setState(() => _selectedPlan = 'continuous'),
+                            title: 'Continuous Support (Best Value)',
+                            subtitle: 'Write anytime 24/7. Replies Mon-Fri.',
+                            badge: (
+                              '7 Days of Asynchronous Care',
+                              Icons.handshake_rounded
+                            ),
+                            price: 'Rp.199rb / week',
+                            featureIcon: Icons.bar_chart_rounded,
+                            features: [
+                              ('Data Monitoring', Icons.insert_chart_rounded),
+                              (
+                                '24/7 Asynchronous Chat',
+                                Icons.schedule_rounded
+                              ),
+                              ('20% OFF Video Sessions', Icons.savings_rounded),
+                            ],
+                            footnote: 'Renews Weekly. Cancel anytime.',
+                            quota: '1 Quota Remaining',
+                          ),
+                          const SizedBox(height: 16),
+
+                          // ===== CTA =====
+                          FilledButton.icon(
+                            onPressed: _proceed,
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(52),
+                            ),
+                            icon: const Icon(Icons.arrow_forward_rounded),
+                            label: Text(_selectedPlan == 'continuous'
+                                ? 'Start Weekly Plan'
+                                : 'Book Session'),
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                            ),
+                            child: const Text('Chat'),
+                          ),
+                          const SizedBox(height: 16),
                         ],
                       ),
                     ),
     );
   }
+
+  // ---------- Helpers ----------
 
   String get _displayName {
     final hint = widget.doctorName?.trim() ?? '';
@@ -427,15 +484,105 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
     return 'dr. Profesional ${cred.specialization}';
   }
 
-  static String _rupiah(int value) {
-    final s = value.toString();
-    final buf = StringBuffer();
-    for (var i = 0; i < s.length; i++) {
-      final pos = s.length - i;
-      buf.write(s[i]);
-      if (pos > 1 && pos % 3 == 1) buf.write('.');
+  String get _shortName {
+    final parts = _displayName.split(' ');
+    final name = parts
+        .skip(1)
+        .takeWhile((p) => !p.contains(','))
+        .toList(growable: false);
+    return name.isEmpty ? _displayName : name.first;
+  }
+
+  String get _genderLabel => 'Male';
+
+  int _chatPrice(BackendProfessionalCredential cred) =>
+      cred.priceFrom > 0 ? cred.priceFrom : 80000;
+
+  int _videoPrice(BackendProfessionalCredential cred) =>
+      cred.priceFrom > 0 ? (cred.priceFrom * 1.9).round() : 150000;
+
+  int _offlinePrice(BackendProfessionalCredential cred) =>
+      cred.priceFrom > 0 ? (cred.priceFrom * 2).round() : 300000;
+
+  int _quickFrom(BackendProfessionalCredential cred) =>
+      cred.priceFrom > 0 ? cred.priceFrom : 80000;
+
+  int _quickTo(BackendProfessionalCredential cred) =>
+      cred.priceFrom > 0 ? (cred.priceFrom * 1.9).round() : 150000;
+
+  String _faskesDistanceLabel(BackendProfessionalCredential cred) {
+    final faskes = cred.hospitalName.isEmpty
+        ? 'Faskes tidak dicantumkan'
+        : cred.hospitalName;
+    final pos = ref.watch(patientLocationProvider).position;
+    final km = distanceKmBetween(
+      fromLat: pos?.latitude,
+      fromLng: pos?.longitude,
+      toLat: _hospitalLat(cred),
+      toLng: _hospitalLng(cred),
+    );
+    if (km == null) return faskes;
+    return '$faskes, ${km.toStringAsFixed(1)} km';
+  }
+
+  double? _hospitalLat(BackendProfessionalCredential cred) {
+    // Demo profile tidak menyimpan koordinat pada credential; ambil dari demo.
+    final demo = findDemoProfessional(widget.doctorUserId);
+    return demo?.entry.hospitalLat;
+  }
+
+  double? _hospitalLng(BackendProfessionalCredential cred) {
+    final demo = findDemoProfessional(widget.doctorUserId);
+    return demo?.entry.hospitalLng;
+  }
+
+  String _todayName() {
+    const days = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday'
+    ];
+    return days[DateTime.now().weekday - 1];
+  }
+
+  List<String> _scheduleLines() {
+    if (_todaySlots.isEmpty) {
+      return const ['Monday: 09:00 - 11:00', 'Tuesday: 09:00 - 11:00'];
     }
-    return buf.toString();
+    return [
+      '$_todayName(): ${_todaySlots.first.time} - ${_todaySlots.last.time}',
+    ];
+  }
+
+  void _proceed() {
+    final cred = _profile?.credential;
+    if (cred == null) return;
+    if (_selectedPlan == 'continuous') {
+      _openContinuousBooking(cred);
+    } else {
+      _openBooking(context, null);
+    }
+  }
+
+  void _openContinuousBooking(BackendProfessionalCredential cred) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BookingDetailScreen(
+          doctorUserId: widget.doctorUserId,
+          doctorName: _displayName,
+          serviceType: _serviceType,
+          isContinuousSupport: true,
+          package: null,
+          session: widget.session,
+          apiClient: widget.apiClient,
+        ),
+      ),
+    );
   }
 
   void _openBooking(BuildContext context, BackendServicePackage? package) {
@@ -453,104 +600,8 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
       ),
     );
   }
-}
 
-class _LicenseRow extends StatelessWidget {
-  const _LicenseRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 56,
-          child:
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
-        ),
-        Expanded(
-          child: Text(value.isEmpty ? '-' : value,
-              style: Theme.of(context).textTheme.bodyMedium),
-        ),
-        const Icon(Icons.verified_rounded, size: 18, color: MalvaColors.mint),
-      ],
-    );
-  }
-}
-
-class _PackageCard extends StatelessWidget {
-  const _PackageCard({required this.package, required this.onBook});
-
-  final BackendServicePackage package;
-  final VoidCallback onBook;
-
-  String get _priceLabel => 'Rp ${_formatRupiah(package.price)}';
-
-  @override
-  Widget build(BuildContext context) {
-    return SoftCard(
-      onTap: onBook,
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        '${package.packageSessions} Sesi',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w900, fontSize: 16),
-                      ),
-                    ),
-                    if (package.label.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: MalvaColors.seed,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          package.label,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Berlaku hingga ${package.packageDurationDays} hari • $_priceLabel',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          FilledButton(
-            onPressed: onBook,
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(0, 44),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-            ),
-            child: const Text('Booking'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _formatRupiah(int value) {
+  static String _rupiah(int value) {
     final s = value.toString();
     final buf = StringBuffer();
     for (var i = 0; i < s.length; i++) {
@@ -559,5 +610,364 @@ class _PackageCard extends StatelessWidget {
       if (pos > 1 && pos % 3 == 1) buf.write('.');
     }
     return buf.toString();
+  }
+}
+
+// ============================================================
+// WIDGETS LOKAL
+// ============================================================
+
+class _PriceRow extends StatelessWidget {
+  const _PriceRow({required this.label, required this.price});
+
+  final String label;
+  final int price;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        '$label : Rp. ${_rupiah(price)}',
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+      ),
+    );
+  }
+
+  static String _rupiah(int value) {
+    final s = value.toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      final pos = s.length - i;
+      buf.write(s[i]);
+      if (pos > 1 && pos % 3 == 1) buf.write('.');
+    }
+    return buf.toString();
+  }
+}
+
+class _DropdownCard extends StatelessWidget {
+  const _DropdownCard({
+    required this.label,
+    required this.expanded,
+    required this.onToggle,
+    required this.child,
+  });
+
+  final String label;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: onToggle,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(label,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w900, fontSize: 14.5)),
+                  ),
+                  Icon(
+                    expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    color: MalvaColors.seed,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (expanded)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12, left: 2, right: 2),
+              child: child,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoLine extends StatelessWidget {
+  const _InfoLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 96,
+            child: Text(label,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12.5,
+                    color: Colors.black54)),
+          ),
+          Expanded(
+            child: Text(value,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 12.5)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReviewCard extends StatelessWidget {
+  const _ReviewCard({
+    required this.name,
+    required this.text,
+    required this.date,
+    required this.stars,
+  });
+
+  final String name;
+  final String text;
+  final String date;
+  final int stars;
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
+                child: Text(
+                  name.isEmpty ? '?' : name.characters.first.toUpperCase(),
+                  style: const TextStyle(
+                      color: MalvaColors.seed,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(name,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w900, fontSize: 13)),
+              const Spacer(),
+              for (var i = 0; i < stars; i++)
+                const Icon(Icons.star_rounded,
+                    size: 14, color: MalvaColors.amber),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(text, style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 4),
+          Text(date,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.black54)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Kartu pilihan support level — layout Figma Group 333/334/336/337/338/479.
+class _SupportPlanCard extends StatelessWidget {
+  const _SupportPlanCard({
+    required this.selected,
+    required this.onSelect,
+    required this.title,
+    required this.price,
+    required this.features,
+    required this.featureIcon,
+    this.subtitle,
+    this.badge,
+    this.footnote,
+    this.quota,
+    this.scheduleChips,
+    this.scheduleLines,
+  });
+
+  final bool selected;
+  final VoidCallback onSelect;
+  final String title;
+  final String? subtitle;
+  final String price;
+  final (String, IconData)? badge;
+  final List<(String, IconData)> features;
+  final IconData featureIcon;
+  final String? footnote;
+  final String? quota;
+  final List<String>? scheduleChips;
+  final List<String>? scheduleLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor =
+        selected ? MalvaColors.seed : MalvaColors.seed.withValues(alpha: 0.18);
+    return InkWell(
+      onTap: onSelect,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: selected
+              ? MalvaColors.seed.withValues(alpha: 0.06)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: borderColor,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(title,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 14.5)),
+                ),
+                Icon(
+                  selected
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  color: selected ? MalvaColors.seed : Colors.black26,
+                ),
+              ],
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 4),
+              Text(subtitle!,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Colors.black54)),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(featureIcon, size: 16, color: MalvaColors.seed),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(price,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 14)),
+                ),
+              ],
+            ),
+            if (badge != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: MalvaColors.mint.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(badge!.$2, size: 15, color: MalvaColors.mint),
+                    const SizedBox(width: 6),
+                    Text(
+                      badge!.$1,
+                      style: const TextStyle(
+                          color: MalvaColors.mint,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            for (final (text, icon) in features)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(icon,
+                        size: 16,
+                        color: text.startsWith('No')
+                            ? MalvaColors.danger
+                            : MalvaColors.seed),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(text,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 12.5)),
+                    ),
+                  ],
+                ),
+              ),
+            if (scheduleChips != null && scheduleChips!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final chip in scheduleChips!)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: MalvaColors.seed.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(chip,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800, fontSize: 12.5)),
+                    ),
+                ],
+              ),
+            ],
+            if (scheduleLines != null && scheduleLines!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              for (final line in scheduleLines!)
+                Text(line,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.black54)),
+            ],
+            if (footnote != null) ...[
+              const SizedBox(height: 6),
+              Text(footnote!,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Colors.black54)),
+            ],
+            if (quota != null) ...[
+              const SizedBox(height: 2),
+              Text(quota!,
+                  style: const TextStyle(
+                      color: MalvaColors.orchid,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12)),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }

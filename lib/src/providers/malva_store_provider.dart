@@ -8,6 +8,7 @@ import '../services/malva_api_client.dart';
 import 'auth_providers.dart';
 
 const _sessionKey = 'malva_active_session';
+const _continuousConsentKey = 'malva_continuous_support_consent';
 const _secureStorage = FlutterSecureStorage();
 
 // ============================================================
@@ -522,6 +523,37 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       newMeds.add(medication);
     }
     state = state.copyWith(medications: newMeds);
+  }
+
+  /// Simpan izin monitoring Continuous Support (7 hari) secara lokal.
+  /// Dipakai sebagai sumber kebenaran offline + audit consent pasien.
+  Future<void> setContinuousSupportConsent({
+    required bool diary,
+    required bool goals,
+    required bool healthRecord,
+    required bool moodCheckin,
+    required bool medicationCheckin,
+  }) async {
+    final data = jsonEncode({
+      'diary': diary,
+      'goals': goals,
+      'health_record': healthRecord,
+      'mood_checkin': moodCheckin,
+      'medication_checkin': medicationCheckin,
+      'granted_at': DateTime.now().toIso8601String(),
+    });
+    await _secureStorage.write(key: _continuousConsentKey, value: data);
+  }
+
+  /// Baca izin Continuous Support yang tersimpan lokal (null bila belum ada).
+  Future<Map<String, dynamic>?> readContinuousSupportConsent() async {
+    try {
+      final raw = await _secureStorage.read(key: _continuousConsentKey);
+      if (raw == null || raw.isEmpty) return null;
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } on Object {
+      return null;
+    }
   }
 
   void deleteMedication(String id) {

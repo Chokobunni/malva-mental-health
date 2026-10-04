@@ -6,10 +6,11 @@ import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
+import 'consent_request_sheet.dart';
 import 'payment_screen.dart';
 
 // ============================================================
-// BOOKING DETAIL — tanggal + slot + paket
+// BOOKING DETAIL â€” tanggal + slot + paket
 // ============================================================
 
 class BookingDetailScreen extends ConsumerStatefulWidget {
@@ -19,6 +20,7 @@ class BookingDetailScreen extends ConsumerStatefulWidget {
     required this.doctorName,
     required this.serviceType,
     this.package,
+    this.isContinuousSupport = false,
     this.session,
     this.apiClient,
   });
@@ -27,6 +29,9 @@ class BookingDetailScreen extends ConsumerStatefulWidget {
   final String doctorName;
   final String serviceType;
   final BackendServicePackage? package;
+
+  /// True = Continuous Support 7 Days (async care + data monitoring).
+  final bool isContinuousSupport;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
@@ -81,6 +86,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
   }
 
   int get _price {
+    if (widget.isContinuousSupport) return 199000; // Rp.199rb / week
     final pkg = widget.package;
     if (pkg != null) return pkg.price;
     return widget.serviceType == 'video' ? 150000 : 80000;
@@ -202,42 +208,139 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
               ],
             ),
           const SizedBox(height: 14),
-          SoftCard(
-            color: MalvaColors.plum,
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    '30 menit',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w700),
+          if (widget.isContinuousSupport) ...[
+            // === CONTINUOUS SUPPORT: tanpa slot, 7 hari + badge ===
+            SoftCard(
+              color: MalvaColors.mint.withValues(alpha: 0.10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.handshake_rounded,
+                          color: MalvaColors.mint),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          '7 Days of Asynchronous Care',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w900, fontSize: 14),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                Text(
-                  'Rp ${_formatRupiah(_price)}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 20,
+                  const SizedBox(height: 6),
+                  Text(
+                    'Write anytime 24/7. Replies Mon-Fri. Terhubung selama 7 hari '
+                    'berturut-turut sejak pembayaran berhasil.',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.black54),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.insert_chart_rounded,
+                          size: 16, color: MalvaColors.seed),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Profesional dapat memantau progresmu (sesuai izin).',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 12.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 10),
-            Text(_error!,
-                style: const TextStyle(
-                    color: MalvaColors.danger, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            SoftCard(
+              color: MalvaColors.plum,
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      '7 hari continuous care',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Text(
+                    'Rp ${_formatRupiah(_price)} / week',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(_error!,
+                  style: const TextStyle(
+                      color: MalvaColors.danger, fontWeight: FontWeight.w700)),
+            ],
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: _isSubmitting ? null : _submitBooking,
+              icon: const Icon(Icons.handshake_rounded),
+              label: Text(_isSubmitting
+                  ? 'Memproses...'
+                  : 'Start Weekly Plan — Rp.199rb/week'),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Renews Weekly. Cancel anytime.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.black54),
+            ),
+          ] else ...[
+            SoftCard(
+              color: MalvaColors.plum,
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      '30 menit',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Text(
+                    'Rp ${_formatRupiah(_price)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 20,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(_error!,
+                  style: const TextStyle(
+                      color: MalvaColors.danger, fontWeight: FontWeight.w700)),
+            ],
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: (_selectedSlot == null || _isSubmitting)
+                  ? null
+                  : _submitBooking,
+              icon: const Icon(Icons.arrow_forward_rounded),
+              label:
+                  Text(_isSubmitting ? 'Memproses...' : 'Proceed to Payment'),
+            ),
           ],
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: (_selectedSlot == null || _isSubmitting)
-                ? null
-                : _submitBooking,
-            icon: const Icon(Icons.arrow_forward_rounded),
-            label: Text(_isSubmitting ? 'Memproses...' : 'Proceed to Payment'),
-          ),
         ],
       ),
     );
@@ -260,16 +363,23 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
         accessToken: accessToken,
         professionalId: widget.doctorUserId,
         packageId: widget.package?.id,
-        serviceType: widget.serviceType == 'video'
-            ? 'quick_consult_video'
-            : 'quick_consult',
+        serviceType: widget.isContinuousSupport
+            ? 'continuous_support'
+            : (widget.serviceType == 'video'
+                ? 'quick_consult_video'
+                : 'quick_consult'),
         sessionType: widget.serviceType,
         bookingDate: _dateStr,
         slotTime: _selectedSlot!,
-        durationMinutes: 30,
+        durationMinutes: widget.isContinuousSupport ? 7 * 24 * 60 : 30,
         price: _price,
       );
       if (!mounted) return;
+      // Continuous Support: minta izin monitoring data dulu (7 hari).
+      if (widget.isContinuousSupport) {
+        final granted = await showConsentRequestSheet(context: context);
+        if (!granted || !mounted) return;
+      }
       Navigator.push(
         context,
         MaterialPageRoute(

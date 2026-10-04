@@ -74,7 +74,11 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 
 	duration := req.DurationMinutes
 	if duration <= 0 { duration = 30 }
-	if duration > 120 { duration = 120 }
+	// Continuous Support 7 hari: 7*24*60 menit (10080).
+	const continuousDuration = 7 * 24 * 60
+	if duration > 120 && duration != continuousDuration {
+		duration = 120
+	}
 
 	b, err := s.store.CreateBooking(r.Context(), store.Booking{
 		PatientID:       patientID,
