@@ -34,8 +34,15 @@ class GradientHeader extends StatelessWidget {
         child: Row(
           children: [
             leading ??
-                const Icon(Icons.local_florist_rounded,
-                    color: Colors.white, size: 34),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.asset(
+                    'assets/images/malva_logo.png',
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.cover,
+                  ),
+                ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(

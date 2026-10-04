@@ -38,8 +38,15 @@ class RoleGateScreen extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.local_florist_rounded,
-                        color: Colors.white, size: 76),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.asset(
+                        'assets/images/malva_logo.png',
+                        width: 76,
+                        height: 76,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
                     const SizedBox(height: 18),
                     Text(
                       'Malva',
@@ -166,8 +173,15 @@ class AuthScaffold extends StatelessWidget {
                                       color: Colors.white,
                                     ),
                                   ),
-                                const Icon(Icons.local_florist_rounded,
-                                    color: Colors.white, size: 40),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(9),
+                                  child: Image.asset(
+                                    'assets/images/malva_logo.png',
+                                    width: 40,
+                                    height: 40,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
                                 const SizedBox(width: 10),
                                 Text(
                                   'Malva',

@@ -5,16 +5,22 @@ import 'package:malva_mental_health/src/theme.dart';
 
 void main() {
   testWidgets('splash screen shows Malva welcome branding', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildMalvaTheme(),
-        home: const SplashScreen(),
-      ),
-    );
+    await tester.runAsync(() async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildMalvaTheme(),
+          home: const SplashScreen(),
+        ),
+      );
+      // Beri waktu asset logo termuat.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('Hello!'), findsOneWidget);
-    expect(find.text('Welcome to'), findsOneWidget);
-    expect(find.text('Malva'), findsOneWidget);
-    expect(find.byIcon(Icons.local_florist_rounded), findsOneWidget);
+      expect(find.text('Hello!'), findsOneWidget);
+      expect(find.text('Welcome to'), findsOneWidget);
+      expect(find.text('Malva'), findsOneWidget);
+      // Logo resmi Malva sebagai asset (bukan icon Material).
+      expect(find.byType(Image), findsOneWidget);
+    });
   });
 }
