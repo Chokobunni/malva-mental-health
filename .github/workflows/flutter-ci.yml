@@ -6,14 +6,21 @@ on:
     paths:
       - 'lib/**'
       - 'test/**'
+      - 'assets/**'
+      - 'web/**'
+      - 'windows/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - 'android/**'
+      - '.github/workflows/flutter-ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'lib/**'
       - 'test/**'
+      - 'assets/**'
+      - 'web/**'
+      - 'windows/**'
       - 'pubspec.yaml'
       - 'pubspec.lock'
       - 'android/**'
