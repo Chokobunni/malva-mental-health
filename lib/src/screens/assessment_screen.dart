@@ -581,18 +581,11 @@ class AssessmentResultScreen extends StatelessWidget {
       body: ListView(
         padding: EdgeInsets.zero,
         children: [
-          GradientHeader(
+          const GradientHeader(
             title: 'Terima Kasih',
             subtitle: 'Hasil screening sudah tersimpan',
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.asset(
-                'assets/images/malva_logo.png',
-                width: 40,
-                height: 40,
-                fit: BoxFit.cover,
-              ),
-            ),
+            leading: Icon(Icons.local_florist_rounded,
+                color: Colors.white, size: 34),
           ),
           Padding(
             padding: const EdgeInsets.all(18),

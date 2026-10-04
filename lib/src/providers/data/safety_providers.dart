@@ -145,6 +145,45 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
     }
   }
 
+  /// Edit kontak darurat (nama/nomor/hubungan/default).
+  Future<BackendEmergencyContact> editContact({
+    required String contactId,
+    required String name,
+    required String phone,
+    String relationship = '',
+    bool isDefault = false,
+  }) async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      throw const AuthFailure('Harus login untuk mengelola kontak darurat.');
+    }
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final updated = await _api.updateEmergencyContact(
+        accessToken: token,
+        contactId: contactId,
+        contactName: name,
+        contactPhone: phone,
+        relationship: relationship,
+        isDefault: isDefault,
+      );
+      // Muat ulang agar urutan default & data konsisten dengan server.
+      await load();
+      if (!mounted) return updated;
+      state = state.copyWith(isLoading: false, error: null);
+      return updated;
+    } on MalvaApiException catch (e) {
+      if (mounted) state = state.copyWith(isLoading: false, error: e.message);
+      rethrow;
+    } on Object catch (e) {
+      if (mounted) {
+        state =
+            state.copyWith(isLoading: false, error: friendlyErrorMessage(e));
+      }
+      rethrow;
+    }
+  }
+
   /// Kirim silent SOS. Wajib ada minimal 1 kontak; GPS opsional.
   /// Mengembalikan incident yang dibuat.
   Future<BackendCrisisIncident> sendSilentSOS({

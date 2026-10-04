@@ -94,6 +94,7 @@ class _EmergencyContactsScreenState
                 _ContactCard(
                   contact: contact,
                   onDelete: () => _delete(context, ref, contact),
+                  onEdit: () => _openEditor(context, ref, contact),
                 ),
             if (safety.error != null) ...[
               const SizedBox(height: 12),
@@ -170,10 +171,15 @@ class _EmergencyContactsScreenState
 }
 
 class _ContactCard extends StatelessWidget {
-  const _ContactCard({required this.contact, required this.onDelete});
+  const _ContactCard({
+    required this.contact,
+    required this.onDelete,
+    required this.onEdit,
+  });
 
   final BackendEmergencyContact contact;
   final VoidCallback onDelete;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -223,6 +229,11 @@ class _ContactCard extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+            IconButton(
+              tooltip: 'Edit',
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined, color: MalvaColors.seed),
             ),
             IconButton(
               tooltip: 'Panggil',
@@ -392,16 +403,30 @@ class _ContactFormState extends ConsumerState<_ContactForm> {
       _error = null;
     });
     try {
-      await ref.read(safetyProvider.notifier).addContact(
-            name: name,
-            phone: phone,
-            relationship: _relation.text.trim(),
-            isDefault: _isDefault,
-          );
+      if (widget.existing == null) {
+        await ref.read(safetyProvider.notifier).addContact(
+              name: name,
+              phone: phone,
+              relationship: _relation.text.trim(),
+              isDefault: _isDefault,
+            );
+      } else {
+        await ref.read(safetyProvider.notifier).editContact(
+              contactId: widget.existing!.id,
+              name: name,
+              phone: phone,
+              relationship: _relation.text.trim(),
+              isDefault: _isDefault,
+            );
+      }
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kontak darurat tersimpan.')),
+        SnackBar(
+          content: Text(widget.existing == null
+              ? 'Kontak darurat tersimpan.'
+              : 'Kontak darurat diperbarui.'),
+        ),
       );
     } on AuthFailure catch (e) {
       if (mounted) setState(() => _error = e.message);

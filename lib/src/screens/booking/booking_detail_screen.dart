@@ -58,31 +58,58 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
   }
 
   Future<void> _loadSlots() async {
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) return;
+    // Continuous Support: tanpa slot spesifik (7 hari penuh).
+    if (widget.isContinuousSupport) {
+      if (mounted) setState(() => _slots = const []);
+      return;
+    }
     setState(() {
       _isLoadingSlots = true;
       _selectedSlot = null;
     });
-    try {
-      final slots = await apiClient.getDoctorAvailableSlots(
-        accessToken: accessToken,
-        userId: widget.doctorUserId,
-        date: _dateStr,
-      );
-      if (!mounted) return;
-      setState(() {
-        _slots = slots.where((s) => s.available).toList();
-        _isLoadingSlots = false;
-      });
-    } on Object catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _slots = const [];
-        _isLoadingSlots = false;
-      });
+    List<BackendDoctorSlot> slots = const [];
+    final apiClient = widget.apiClient;
+    final rawToken = widget.session?.accessToken;
+    final accessToken =
+        (rawToken == null || rawToken.isEmpty) ? null : rawToken;
+    if (apiClient != null) {
+      try {
+        final remote = await apiClient.getDoctorAvailableSlots(
+          accessToken: accessToken,
+          userId: widget.doctorUserId,
+          date: _dateStr,
+        );
+        slots = remote.where((s) => s.available).toList(growable: false);
+      } on Object {
+        // Fallback ke slot demo di bawah.
+      }
     }
+    // Jaminan UX: pasien SELALU disediakan pilihan jam. Bila server kosong
+    // (offline / jadwal belum diatur), pakai jadwal demo 09:00-16:00.
+    if (slots.isEmpty) {
+      slots = _demoSlots();
+    }
+    if (!mounted) return;
+    setState(() {
+      _slots = slots;
+      _isLoadingSlots = false;
+    });
+  }
+
+  /// Slot demo deterministik 09:00-16:00 per 30 menit; pola ketersediaan
+  /// stabil per tanggal agar tidak berubah saat refresh.
+  List<BackendDoctorSlot> _demoSlots() {
+    final seed = _dateStr.hashCode.abs();
+    final out = <BackendDoctorSlot>[];
+    for (var h = 9; h < 16; h++) {
+      for (final m in const [0, 30]) {
+        final label =
+            '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+        final available = (h * 2 + (m ~/ 30) + seed) % 4 != 0;
+        out.add(BackendDoctorSlot(time: label, available: available));
+      }
+    }
+    return out;
   }
 
   int get _price {

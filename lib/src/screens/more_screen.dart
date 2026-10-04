@@ -6,17 +6,10 @@ import '../providers/data/export_provider.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
-import 'abcde_cbt_screen.dart';
-import 'assessment_screen.dart';
-import 'booking/doctor_discovery_screen.dart';
-import 'chat_screen.dart';
 import 'consent_management_screen.dart';
-import 'goals_screen.dart';
-import 'my_care_screen.dart';
 import 'record_screen.dart';
 import 'safety/emergency_contacts_screen.dart';
 import 'settings_screens.dart';
-import 'tests_marketplace_screen.dart';
 
 class MoreScreen extends ConsumerStatefulWidget {
   const MoreScreen({
@@ -63,32 +56,6 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
             child: Column(
               children: [
                 ActionTile(
-                  icon: Icons.fact_check_rounded,
-                  title: 'Self Assessments',
-                  subtitle: 'PHQ-9, GAD-7, dan forward chaining result',
-                  color: MalvaColors.amber,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => AssessmentScreen(
-                              session: widget.session,
-                              apiClient: widget.apiClient,
-                            )),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.flag_rounded,
-                  title: 'Goals & Habits',
-                  subtitle: 'Target harian, streak, reminder',
-                  color: MalvaColors.seed,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const GoalsScreen()),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
                   icon: Icons.folder_shared_rounded,
                   title: 'Health Record',
                   subtitle: 'Diagnosis, obat, dan file klinis',
@@ -96,36 +63,6 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const RecordScreen()),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.chat_bubble_outline_rounded,
-                  title: 'Chat dengan Profesional',
-                  subtitle: 'Kirim pesan langsung ke profesional Anda',
-                  color: MalvaColors.orchid,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => ChatScreen(
-                              otherUserName: widget.professionalName,
-                              otherUserId: widget.professionalUserId,
-                            )),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.calendar_month_rounded,
-                  title: 'Booking Konsultasi',
-                  subtitle: 'Cari profesional & jadwal sesi',
-                  color: MalvaColors.seed,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => DoctorDiscoveryScreen(
-                              session: widget.session,
-                              apiClient: widget.apiClient,
-                            )),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -138,44 +75,6 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                     context,
                     MaterialPageRoute(
                         builder: (_) => const EmergencyContactsScreen()),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.favorite_rounded,
-                  title: 'My Care',
-                  subtitle: 'Jadwal, profesional & sharing data',
-                  color: MalvaColors.seed,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => MyCareScreen(
-                              session: widget.session,
-                              apiClient: widget.apiClient,
-                            )),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.quiz_rounded,
-                  title: 'Tes Psikologi',
-                  subtitle: 'Katalog tes kepribadian & wellbeing',
-                  color: MalvaColors.orchid,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const TestsMarketplaceScreen()),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.psychology_alt_rounded,
-                  title: 'ABCDE CBT',
-                  subtitle: 'Latihan pikiran A-B-C-D-E',
-                  color: MalvaColors.seed,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AbcdeCbtScreen()),
                   ),
                 ),
                 const SizedBox(height: 10),

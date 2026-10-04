@@ -76,17 +76,9 @@ class _SplashLogo extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Logo resmi Malva (asset, dipakai juga sebagai ikon aplikasi).
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Image.asset(
-              'assets/images/malva_logo.png',
-              width: 64,
-              height: 64,
-              fit: BoxFit.cover,
-            ),
-          ),
-          const SizedBox(width: 12),
+          const Icon(Icons.local_florist_rounded,
+              color: Colors.white, size: 58),
+          const SizedBox(width: 8),
           Text('Malva', style: logoStyle),
         ],
       ),

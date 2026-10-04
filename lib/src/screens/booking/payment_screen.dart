@@ -29,22 +29,35 @@ class PaymentScreen extends ConsumerStatefulWidget {
 }
 
 class _PaymentScreenState extends ConsumerState<PaymentScreen> {
-  String _method = 'gopay';
+  String _method = 'malva_bank';
   bool _isPaying = false;
   String? _error;
 
+  /// Malva Bank — payment dummy internal (transaksi tetap tercatat di DB).
+  static const _malvaBank =
+      ('malva_bank', 'Malva Bank', Icons.account_balance_rounded);
+
+  /// Semua e-wallet utama Indonesia.
   static const _wallets = [
     ('gopay', 'GoPay', Icons.account_balance_wallet_rounded),
     ('ovo', 'OVO', Icons.wallet_rounded),
     ('dana', 'DANA', Icons.payments_rounded),
     ('shopeepay', 'ShopeePay', Icons.shopping_bag_rounded),
+    ('linkaja', 'LinkAja', Icons.link_rounded),
+    ('isaku', 'i.Saku', Icons.credit_score_rounded),
+    ('jenius', 'Jenius', Icons.bolt_rounded),
+    ('sakuku', 'Sakuku', Icons.paypal_rounded),
   ];
 
   static const _banks = [
     ('bca_va', 'BCA Virtual Account', Icons.account_balance_rounded),
     ('mandiri_va', 'Mandiri VA', Icons.account_balance_rounded),
+    ('bni_va', 'BNI VA', Icons.account_balance_rounded),
     ('bri_va', 'BRI VA', Icons.account_balance_rounded),
+    ('permata_va', 'Permata VA', Icons.account_balance_rounded),
+    ('cimb_va', 'CIMB Niaga VA', Icons.account_balance_rounded),
     ('cc', 'Credit Card', Icons.credit_card_rounded),
+    ('qris', 'QRIS', Icons.qr_code_2_rounded),
   ];
 
   @override
@@ -87,6 +100,17 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ),
           ),
           const SizedBox(height: 14),
+          // === MALVA BANK (dummy tapi berjalan) — paling atas ===
+          const SectionLabel('Metode Utama'),
+          _MethodTile(
+            label: _malvaBank.$2,
+            icon: _malvaBank.$3,
+            selected: _method == _malvaBank.$1,
+            onTap: () => setState(() => _method = _malvaBank.$1),
+            highlight: true,
+            subtitle: 'Saldo Malva — instan & tanpa biaya',
+          ),
+          const SizedBox(height: 12),
           const SectionLabel('E-Wallet'),
           GridView.count(
             crossAxisCount: 4,
@@ -106,7 +130,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          const SectionLabel('Virtual Account & Bank'),
+          const SectionLabel('Virtual Account, Bank & QRIS'),
           GridView.count(
             crossAxisCount: 4,
             shrinkWrap: true,
@@ -224,6 +248,8 @@ class _MethodTile extends StatelessWidget {
     required this.icon,
     required this.selected,
     required this.onTap,
+    this.highlight = false,
+    this.subtitle,
   });
 
   final String label;
@@ -231,8 +257,61 @@ class _MethodTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  /// Tampil menonjol (Malva Bank) — full width + subtitle.
+  final bool highlight;
+  final String? subtitle;
+
   @override
   Widget build(BuildContext context) {
+    if (highlight) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: selected
+                ? MalvaColors.seed.withValues(alpha: 0.12)
+                : MalvaColors.seed.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? MalvaColors.seed
+                  : MalvaColors.seed.withValues(alpha: 0.35),
+              width: selected ? 2 : 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: MalvaColors.seed,
+                child: Icon(icon, color: Colors.white),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w900, fontSize: 15)),
+                    if (subtitle != null)
+                      Text(subtitle!,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: Colors.black54)),
+                  ],
+                ),
+              ),
+              if (selected)
+                const Icon(Icons.check_circle_rounded, color: MalvaColors.seed),
+            ],
+          ),
+        ),
+      );
+    }
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),

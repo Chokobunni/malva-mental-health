@@ -35,22 +35,25 @@ void main() {
     expect(find.text('Find Professionals'), findsOneWidget);
 
     // Figma section labels.
-    expect(find.text('Self-care'), findsOneWidget);
+    expect(find.text('Self Care'), findsOneWidget);
     expect(find.text('Professional Care'), findsOneWidget);
 
-    // Figma grid Self-care: Goals / Diary History / Record / History Log.
-    expect(find.text('Goals'), findsOneWidget);
+    // Figma grid Self Care: Goals & Habits / Diary History /
+    // Psychological Therapy / Health Record.
+    expect(find.text('Goals & Habits'), findsOneWidget);
     expect(find.textContaining('Diary'), findsOneWidget);
-    expect(find.text('Record'), findsOneWidget);
+    expect(find.text('Health Record'), findsOneWidget);
+    expect(find.text('Psychological Therapy'), findsOneWidget);
 
-    // Figma grid Professional Care: Assessment / Medication / Chat / More.
+    // Figma grid Professional Care: Assessment / History Log.
     expect(find.text('Assessment'), findsOneWidget);
-    expect(find.text('Medication'), findsOneWidget);
-    expect(find.text('Chat'), findsOneWidget);
-    expect(find.text('More'), findsOneWidget);
+    expect(find.text('History Log'), findsOneWidget);
 
-    // Figma Group 411/412: banner Full Check In.
-    expect(find.text('Full Check In'), findsOneWidget);
+    // Tombol Find Professionals.
+    expect(find.text('Find Professionals'), findsOneWidget);
+
+    // Banner Mood Medication Check-in.
+    expect(find.text('Mood Medication Check-in'), findsOneWidget);
 
     // Tanpa booking aktif: kartu sesi tidak tampil.
     expect(find.text('Join'), findsNothing);

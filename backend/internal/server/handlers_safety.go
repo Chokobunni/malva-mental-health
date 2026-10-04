@@ -129,6 +129,61 @@ func (s *Server) deleteEmergencyContact(w http.ResponseWriter, r *http.Request, 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"deleted": true})
 }
 
+// updateEmergencyContact mengubah nama/nomor/hubungan kontak milik pasien.
+func (s *Server) updateEmergencyContact(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	contactID := r.PathValue("id")
+	var req emergencyContactRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	name := strings.TrimSpace(req.ContactName)
+	phone := strings.TrimSpace(req.ContactPhone)
+	if name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "contact_name is required"})
+		return
+	}
+	name = security.SanitizeText(name)
+	if name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "contact_name is required"})
+		return
+	}
+	if len(name) > 100 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "contact_name maksimal 100 karakter"})
+		return
+	}
+	if !validateIndonesianPhone(phone) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "format nomor telepon tidak valid (gunakan 08xxxxxxxxxx atau 62xxxxxxxxxx)"})
+		return
+	}
+	if len(strings.TrimSpace(req.Relationship)) > 50 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "relationship maksimal 50 karakter"})
+		return
+	}
+
+	// Beralih ke default: reset default lama lalu set.
+	if req.IsDefault {
+		if err := s.store.ClearDefaultEmergencyContact(r.Context(), claims.Subject); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+
+	c := store.EmergencyContact{
+		ID:           contactID,
+		PatientID:    claims.Subject,
+		ContactName:  name,
+		ContactPhone: phone,
+		Relationship: security.SanitizeText(strings.TrimSpace(req.Relationship)),
+		IsDefault:    req.IsDefault,
+	}
+	if err := s.store.UpdateEmergencyContact(r.Context(), c); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "contact not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"contact": c})
+}
+
 // handleCrisisAlertV2 menerima SOS + persist + notifikasi high-priority + blast ke kontak.
 func (s *Server) handleCrisisAlertV2(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	// Rate-limit: 1x per 10 menit per pasien (anti-spam)

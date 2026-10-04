@@ -58,6 +58,12 @@ type SOSBlastStatus struct {
 
 // CreateEmergencyContact menambahkan kontak (max 5 per pasien, enforced di handler).
 func (s *Store) CreateEmergencyContact(ctx context.Context, c EmergencyContact) (EmergencyContact, error) {
+	// Beralih ke default: reset default lama dulu.
+	if c.IsDefault {
+		if err := s.ClearDefaultEmergencyContact(ctx, c.PatientID); err != nil {
+			return EmergencyContact{}, err
+		}
+	}
 	const q = `INSERT INTO emergency_contacts (patient_id, contact_name, contact_phone, relationship, is_default)
 		VALUES ($1, $2, $3, $4, $5) RETURNING id`
 	err := s.db.QueryRowContext(ctx, q, c.PatientID, c.ContactName, c.ContactPhone, c.Relationship, c.IsDefault).Scan(&c.ID)
@@ -66,6 +72,13 @@ func (s *Store) CreateEmergencyContact(ctx context.Context, c EmergencyContact) 
 	}
 	_ = s.AddAuditLog(ctx, c.PatientID, c.PatientID, "emergency_contact.created", "emergency_contacts", c.ID, map[string]any{"name": c.ContactName})
 	return c, nil
+}
+
+// ClearDefaultEmergencyContact me-reset is_default semua kontak pasien.
+func (s *Store) ClearDefaultEmergencyContact(ctx context.Context, patientID string) error {
+	const q = `UPDATE emergency_contacts SET is_default = false WHERE patient_id = $1 AND is_default = true`
+	_, err := s.db.ExecContext(ctx, q, patientID)
+	return err
 }
 
 func (s *Store) ListEmergencyContacts(ctx context.Context, patientID string) ([]EmergencyContact, error) {

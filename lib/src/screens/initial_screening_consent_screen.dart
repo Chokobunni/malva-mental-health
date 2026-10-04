@@ -32,15 +32,8 @@ class InitialScreeningConsentScreen extends ConsumerWidget {
             child: Column(
               children: [
                 const Spacer(),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.asset(
-                    'assets/images/malva_logo.png',
-                    width: 56,
-                    height: 56,
-                    fit: BoxFit.cover,
-                  ),
-                ),
+                const Icon(Icons.local_florist_rounded,
+                    color: Colors.white, size: 54),
                 const SizedBox(height: 20),
                 Text(
                   'Symptoms Assessment',

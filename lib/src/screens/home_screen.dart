@@ -6,13 +6,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
+import '../services/medication_reminder_service.dart';
 import '../theme.dart';
 import '../widgets/crisis_hotline.dart';
-import '../widgets/home_personalization.dart';
+import '../widgets/daily_checkin_flow.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/sync_status.dart';
 import 'booking/doctor_discovery_screen.dart';
+import 'goals_screen.dart';
+import 'mood_medication_checkin_screen.dart';
 import 'notifications_screen.dart';
+import 'record_screen.dart';
+
+// ============================================================
+// HOME — layout final:
+//   [Sesi booking aktif]      (bila ada, Join/Cancel)
+//   Daily Check-in interaktif (emoji -> obat -> tidur -> energi -> streak)
+//   Self Care:                Goals & Habits / Diary History /
+//                             Psychological Therapy / Health Record
+//   Professional Care:        tombol Find Professionals
+//                             Assessment / History Log
+//   Mood Medication Check-in  (banner -> screen Mood+Medication)
+// ============================================================
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({
@@ -23,6 +38,7 @@ class HomeScreen extends ConsumerStatefulWidget {
     required this.onOpenChat,
     required this.onOpenMore,
     required this.onOpenAssessment,
+    this.medicationReminderService,
     this.session,
     this.apiClient,
   });
@@ -33,6 +49,7 @@ class HomeScreen extends ConsumerStatefulWidget {
   final VoidCallback onOpenChat;
   final VoidCallback onOpenMore;
   final VoidCallback onOpenAssessment;
+  final MedicationReminderService? medicationReminderService;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
@@ -47,10 +64,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    unawaited(_loadFollowUps().then((_) {
-      if (mounted) setState(() => _isInitialLoading = false);
-    }));
-    unawaited(_loadUpcomingBooking());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_loadUpcomingBooking());
+      Future<void>.delayed(const Duration(milliseconds: 400)).then((_) {
+        if (mounted) setState(() => _isInitialLoading = false);
+      });
+    });
   }
 
   @override
@@ -58,20 +77,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.session?.accessToken != widget.session?.accessToken ||
         oldWidget.apiClient != widget.apiClient) {
-      unawaited(_loadFollowUps());
       unawaited(_loadUpcomingBooking());
     }
   }
 
   Future<void> _refreshAll() async {
-    await _loadFollowUps();
     await _loadUpcomingBooking();
-  }
-
-  Future<void> _loadFollowUps() async {
-    // Follow-up profesional dimuat notifikasi via bell; tidak perlu di home.
-    await Future<void>.delayed(Duration.zero);
-    if (mounted) setState(() => _isInitialLoading = false);
   }
 
   Future<void> _loadUpcomingBooking() async {
@@ -141,7 +152,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // === SESI BOOKING (paling atas) — Figma Group 238 ===
+                  // === 1. SESI BOOKING AKTIF (paling atas) ===
                   if (upcoming != null) ...[
                     _UpcomingSessionCard(
                       session: upcoming,
@@ -150,49 +161,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     const SizedBox(height: 18),
                   ],
-                  // === Welcome + mood check-in (Figma: "Welcome, Emelie R!") ===
-                  InlineMoodCheckIn(
+
+                  // === 2. DAILY CHECK-IN interaktif ===
+                  // emoji -> obat -> tidur -> energi -> popup streak
+                  DailyCheckInFlow(
                     onSaved: () => setState(() {}),
                   ),
-                  const SizedBox(height: 20),
-                  // === Find Professionals — Figma Group 242 ===
-                  _FindProfessionalsTile(
-                    onTap: () => _openDoctorDiscovery(context),
-                  ),
                   const SizedBox(height: 22),
-                  // === Self-care grid — Figma (Diary/Record/Goals/History) ===
-                  const SectionLabel('Self-care'),
+
+                  // === 3. SELF CARE ===
+                  const SectionLabel('Self Care'),
                   _HomeSectionGrid(
                     items: [
                       _GridItem(
-                        icon: Icons.face_retouching_natural_rounded,
-                        label: 'Goals',
+                        icon: Icons.flag_rounded,
+                        label: 'Goals & Habits',
                         color: MalvaColors.seed,
-                        onTap: widget.onOpenMore,
+                        onTap: () => _push(const GoalsScreen()),
                       ),
                       _GridItem(
                         icon: Icons.edit_note_rounded,
-                        label: 'Diary\nHistory',
+                        label: 'Diary History',
                         color: MalvaColors.orchid,
                         onTap: widget.onOpenDiary,
                       ),
                       _GridItem(
-                        icon: Icons.folder_shared_rounded,
-                        label: 'Record',
-                        color: MalvaColors.mint,
+                        icon: Icons.psychology_rounded,
+                        label: 'Psychological Therapy',
+                        color: MalvaColors.pink,
                         onTap: widget.onOpenMore,
                       ),
                       _GridItem(
-                        icon: Icons.timeline_rounded,
-                        label: 'History\nLog',
-                        color: MalvaColors.amber,
-                        onTap: widget.onOpenMood,
+                        icon: Icons.folder_shared_rounded,
+                        label: 'Health Record',
+                        color: MalvaColors.mint,
+                        onTap: () => _push(const RecordScreen()),
                       ),
                     ],
                   ),
                   const SizedBox(height: 22),
-                  // === Professional Care grid — Figma (Assessment/Obat/Chat) ===
+
+                  // === 4. PROFESSIONAL CARE ===
                   const SectionLabel('Professional Care'),
+                  _FindProfessionalsButton(
+                    onTap: () => _openDoctorDiscovery(context),
+                  ),
+                  const SizedBox(height: 12),
                   _HomeSectionGrid(
                     items: [
                       _GridItem(
@@ -202,29 +216,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         onTap: widget.onOpenAssessment,
                       ),
                       _GridItem(
-                        icon: Icons.medication_rounded,
-                        label: 'Medication',
-                        color: MalvaColors.mint,
-                        onTap: widget.onOpenMedication,
-                      ),
-                      _GridItem(
-                        icon: Icons.chat_bubble_outline_rounded,
-                        label: 'Chat',
-                        color: MalvaColors.orchid,
-                        onTap: widget.onOpenChat,
-                      ),
-                      _GridItem(
-                        icon: Icons.grid_view_rounded,
-                        label: 'More',
+                        icon: Icons.timeline_rounded,
+                        label: 'History Log',
                         color: MalvaColors.amber,
-                        onTap: widget.onOpenMore,
+                        onTap: widget.onOpenMood,
                       ),
                     ],
                   ),
                   const SizedBox(height: 22),
-                  // === Full Check In banner — Figma Group 411/412 ===
-                  _FullCheckInBanner(
-                    onTap: widget.onOpenAssessment,
+
+                  // === 5. MOOD MEDICATION CHECK-IN ===
+                  _MoodMedicationBanner(
+                    onTap: () => _push(
+                      MoodMedicationCheckinScreen(
+                        session: widget.session,
+                        apiClient: widget.apiClient,
+                        medicationReminderService:
+                            widget.medicationReminderService,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 24),
                 ],
@@ -233,6 +243,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  void _push(Widget screen) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => screen),
     );
   }
 
@@ -279,89 +296,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-class _NotificationBell extends StatefulWidget {
-  const _NotificationBell({this.session, this.apiClient});
+// ============================================================
+// WIDGET LOKAL
+// ============================================================
 
-  final AuthSession? session;
-  final MalvaApiClient? apiClient;
-
-  @override
-  State<_NotificationBell> createState() => _NotificationBellState();
-}
-
-class _NotificationBellState extends State<_NotificationBell> {
-  int _unread = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
-      return;
-    }
-    try {
-      final items = await apiClient.listNotifications(accessToken: accessToken);
-      if (!mounted) return;
-      setState(() {
-        _unread = items.where((n) => !n.isRead).length;
-      });
-    } on Object catch (_) {
-      // Badge opsional â€” jangan ganggu home bila gagal.
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        IconButton(
-          tooltip: 'Notifikasi',
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => NotificationsScreen(
-                  session: widget.session,
-                  apiClient: widget.apiClient,
-                ),
-              ),
-            ).then((_) => _load());
-          },
-          icon: const Icon(Icons.notifications_rounded, color: Colors.white),
-        ),
-        if (_unread > 0)
-          Positioned(
-            right: 6,
-            top: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: MalvaColors.danger,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: Colors.white, width: 1.5),
-              ),
-              child: Text(
-                _unread > 9 ? '9+' : '$_unread',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// Kartu sesi mendatang — Figma Group 238.
+/// Kartu sesi mendatang: nama, Video/Chat Session 30 minutes, tanggal,
+/// tombol Join / Cancel (Figma Group 238).
 class _UpcomingSessionCard extends StatelessWidget {
   const _UpcomingSessionCard({
     required this.session,
@@ -482,9 +422,28 @@ class _UpcomingSessionCard extends StatelessWidget {
   }
 }
 
-/// Tile "Find Professionals" — Figma Group 242.
-class _FindProfessionalsTile extends StatelessWidget {
-  const _FindProfessionalsTile({required this.onTap});
+/// Tombol "Find Professionals" di bawah label Professional Care.
+class _FindProfessionalsButton extends StatelessWidget {
+  const _FindProfessionalsButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      onPressed: onTap,
+      style: FilledButton.styleFrom(
+        minimumSize: const Size.fromHeight(50),
+      ),
+      icon: const Icon(Icons.search_rounded),
+      label: const Text('Find Professionals'),
+    );
+  }
+}
+
+/// Banner Mood Medication Check-in (Mood + Medication Tracker).
+class _MoodMedicationBanner extends StatelessWidget {
+  const _MoodMedicationBanner({required this.onTap});
 
   final VoidCallback onTap;
 
@@ -492,29 +451,39 @@ class _FindProfessionalsTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return SoftCard(
       onTap: onTap,
-      color: MalvaColors.seed.withValues(alpha: 0.06),
-      child: const Row(
+      color: MalvaColors.orchid.withValues(alpha: 0.10),
+      child: Row(
         children: [
           CircleAvatar(
             radius: 22,
-            backgroundColor: MalvaColors.seed,
-            child: Icon(Icons.search_rounded, color: Colors.white),
+            backgroundColor: MalvaColors.orchid.withValues(alpha: 0.18),
+            child: const Icon(Icons.monitor_heart_rounded,
+                color: MalvaColors.orchid),
           ),
-          SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              'Find Professionals',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Mood Medication Check-in',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                ),
+                Text(
+                  'Mood Tracker & Medication Tracker',
+                  style: TextStyle(color: Colors.black54, fontSize: 12),
+                ),
+              ],
             ),
           ),
-          Icon(Icons.chevron_right_rounded, color: MalvaColors.seed),
+          const Icon(Icons.chevron_right_rounded, color: MalvaColors.orchid),
         ],
       ),
     );
   }
 }
 
-/// Grid 2 kolom ala Figma (Frame 427321847).
+/// Grid 2 kolom: ikon + label.
 class _HomeSectionGrid extends StatelessWidget {
   const _HomeSectionGrid({required this.items});
 
@@ -581,34 +550,84 @@ class _HomeGridTile extends StatelessWidget {
   }
 }
 
-/// Banner "Full Check In" — Figma Group 411/412.
-class _FullCheckInBanner extends StatelessWidget {
-  const _FullCheckInBanner({required this.onTap});
+class _NotificationBell extends StatefulWidget {
+  const _NotificationBell({this.session, this.apiClient});
 
-  final VoidCallback onTap;
+  final AuthSession? session;
+  final MalvaApiClient? apiClient;
+
+  @override
+  State<_NotificationBell> createState() => _NotificationBellState();
+}
+
+class _NotificationBellState extends State<_NotificationBell> {
+  int _unread = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final apiClient = widget.apiClient;
+    final accessToken = widget.session?.accessToken;
+    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+      return;
+    }
+    try {
+      final items = await apiClient.listNotifications(accessToken: accessToken);
+      if (!mounted) return;
+      setState(() {
+        _unread = items.where((n) => !n.isRead).length;
+      });
+    } on Object catch (_) {
+      // Badge opsional - jangan ganggu home bila gagal.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SoftCard(
-      onTap: onTap,
-      color: MalvaColors.orchid.withValues(alpha: 0.10),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: MalvaColors.orchid.withValues(alpha: 0.18),
-            child: const Icon(Icons.edit_rounded, color: MalvaColors.orchid),
-          ),
-          const SizedBox(width: 14),
-          const Expanded(
-            child: Text(
-              'Full Check In',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          tooltip: 'Notifikasi',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => NotificationsScreen(
+                  session: widget.session,
+                  apiClient: widget.apiClient,
+                ),
+              ),
+            ).then((_) => _load());
+          },
+          icon: const Icon(Icons.notifications_rounded, color: Colors.white),
+        ),
+        if (_unread > 0)
+          Positioned(
+            right: 6,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: MalvaColors.danger,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+              child: Text(
+                _unread > 9 ? '9+' : '$_unread',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: MalvaColors.orchid),
-        ],
-      ),
+      ],
     );
   }
 }

@@ -827,6 +827,29 @@ class MalvaApiClient {
         accessToken: accessToken);
   }
 
+  Future<BackendEmergencyContact> updateEmergencyContact({
+    required String accessToken,
+    required String contactId,
+    required String contactName,
+    required String contactPhone,
+    String relationship = '',
+    bool isDefault = false,
+  }) async {
+    final payload = await _send(
+      'PUT',
+      '/v1/emergency-contacts/$contactId',
+      accessToken: accessToken,
+      body: {
+        'contact_name': contactName,
+        'contact_phone': contactPhone,
+        'relationship': relationship,
+        'is_default': isDefault,
+      },
+    );
+    return BackendEmergencyContact.fromJson(
+        _expectMap(payload['contact'], 'Respons kontak tidak valid.'));
+  }
+
   Future<BackendCrisisIncident> createCrisisAlertV2({
     required String accessToken,
     String triggeredBy = 'sos_button',

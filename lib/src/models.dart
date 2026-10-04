@@ -71,6 +71,15 @@ extension MoodValueText on MoodValue {
         MoodValue.awful => 'Buruk',
       };
 
+  /// Emoticon lucu untuk Daily Check-in di Home.
+  String get emoji => switch (this) {
+        MoodValue.great => '😄',
+        MoodValue.good => '🙂',
+        MoodValue.okay => '😐',
+        MoodValue.sad => '😢',
+        MoodValue.awful => '😫',
+      };
+
   IconData get icon => switch (this) {
         MoodValue.great => Icons.sentiment_very_satisfied_rounded,
         MoodValue.good => Icons.sentiment_satisfied_alt_rounded,

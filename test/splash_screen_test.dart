@@ -19,8 +19,7 @@ void main() {
       expect(find.text('Hello!'), findsOneWidget);
       expect(find.text('Welcome to'), findsOneWidget);
       expect(find.text('Malva'), findsOneWidget);
-      // Logo resmi Malva sebagai asset (bukan icon Material).
-      expect(find.byType(Image), findsOneWidget);
+      expect(find.byIcon(Icons.local_florist_rounded), findsOneWidget);
     });
   });
 }

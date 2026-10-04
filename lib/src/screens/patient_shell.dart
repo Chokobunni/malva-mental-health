@@ -4,15 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../services/malva_api_client.dart';
 import '../services/medication_reminder_service.dart';
-import 'chat_screen.dart';
-import 'diary_screen.dart';
-import 'home_screen.dart';
-import 'medication_screen.dart';
-import 'messages_list_screen.dart';
-import 'mood_screen.dart';
 import 'assessment_screen.dart';
+import 'home_screen.dart';
+import 'messages_list_screen.dart';
 import 'more_screen.dart';
+import 'my_care_screen.dart';
 import '../widgets/sos_fab.dart';
+
+// ============================================================
+// PATIENT SHELL — Navbar bawah baru (4 ikon, tanpa label):
+//   Home  |  My Care  |  Messages  |  Lainnya (smile)
+// MyCare = jadwal profesional; Messages = chat dengan profesional
+// (tersedia bila terhubung Continuous Support); Smile = sidebar.
+// ============================================================
 
 class PatientShell extends ConsumerStatefulWidget {
   const PatientShell({
@@ -46,7 +50,9 @@ class _PatientShellState extends ConsumerState<PatientShell> {
   Future<void> _fetchLinkedProfessional() async {
     final apiClient = widget.apiClient;
     final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) return;
+    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+      return;
+    }
     try {
       final links = await apiClient.listPatientProfessionalLinks(
         accessToken: accessToken,
@@ -63,14 +69,16 @@ class _PatientShellState extends ConsumerState<PatientShell> {
   @override
   Widget build(BuildContext context) {
     final pages = [
+      // 0. HOME
       HomeScreen(
         session: widget.session,
         apiClient: widget.apiClient,
-        onOpenMood: () => setState(() => _index = 1),
-        onOpenMedication: () => setState(() => _index = 2),
-        onOpenDiary: () => setState(() => _index = 3),
-        onOpenChat: () => setState(() => _index = 4),
-        onOpenMore: () => setState(() => _index = 5),
+        medicationReminderService: widget.medicationReminderService,
+        onOpenMood: () => setState(() => _index = 0),
+        onOpenMedication: () => setState(() => _index = 0),
+        onOpenDiary: () => setState(() => _index = 0),
+        onOpenChat: () => setState(() => _index = 2),
+        onOpenMore: () => setState(() => _index = 3),
         onOpenAssessment: () {
           Navigator.push(
             context,
@@ -83,71 +91,56 @@ class _PatientShellState extends ConsumerState<PatientShell> {
           );
         },
       ),
-      MoodScreen(
+      // 1. MY CARE (jadwal profesional)
+      MyCareScreen(
         session: widget.session,
         apiClient: widget.apiClient,
       ),
-      MedicationScreen(
-        session: widget.session,
-        apiClient: widget.apiClient,
-        medicationReminderService: widget.medicationReminderService,
-      ),
-      DiaryScreen(
-        session: widget.session,
-        apiClient: widget.apiClient,
-      ),
-      ChatScreen(
-        otherUserName: _professionalName,
-        otherUserId: _professionalUserId,
-      ),
+      // 2. MESSAGES (chat dengan profesional)
       MessagesListScreen(
         session: widget.session,
         apiClient: widget.apiClient,
       ),
+      // 3. LAINNYA (sidebar)
       MoreScreen(
-          onLogout: widget.onLogout,
-          apiClient: widget.apiClient,
-          session: widget.session,
-          professionalUserId: _professionalUserId,
-          professionalName: _professionalName),
+        onLogout: widget.onLogout,
+        apiClient: widget.apiClient,
+        session: widget.session,
+        professionalUserId: _professionalUserId,
+        professionalName: _professionalName,
+      ),
     ];
 
     return Scaffold(
       body: IndexedStack(index: _index, children: pages),
-      // SOS hanya di Home — tidak stay di halaman lain.
+      // SOS hanya di Home.
       floatingActionButton: _index == 0 ? const SosFab() : null,
       bottomNavigationBar: NavigationBar(
+        height: 64,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),
         destinations: const [
           NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
-              label: 'Home'),
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: '',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.mood_outlined),
-              selectedIcon: Icon(Icons.mood),
-              label: 'Mood'),
+            icon: Icon(Icons.event_note_outlined),
+            selectedIcon: Icon(Icons.event_note_rounded),
+            label: '',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.medication_outlined),
-              selectedIcon: Icon(Icons.medication),
-              label: 'Obat'),
+            icon: Icon(Icons.chat_bubble_outline_rounded),
+            selectedIcon: Icon(Icons.chat_bubble_rounded),
+            label: '',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.edit_note_outlined),
-              selectedIcon: Icon(Icons.edit_note),
-              label: 'Diary'),
-          NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline_rounded),
-              selectedIcon: Icon(Icons.chat_bubble_rounded),
-              label: 'Chat'),
-          NavigationDestination(
-              icon: Icon(Icons.forum_outlined),
-              selectedIcon: Icon(Icons.forum),
-              label: 'Pesan'),
-          NavigationDestination(
-              icon: Icon(Icons.grid_view_outlined),
-              selectedIcon: Icon(Icons.grid_view),
-              label: 'Lainnya'),
+            icon: Icon(Icons.sentiment_satisfied_alt_outlined),
+            selectedIcon: Icon(Icons.sentiment_satisfied_alt_rounded),
+            label: '',
+          ),
         ],
       ),
     );

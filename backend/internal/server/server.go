@@ -198,6 +198,7 @@ func (s *Server) Routes() http.Handler {
 	// Safety Protocol — new endpoints
 	mux.HandleFunc("GET /v1/emergency-contacts", s.requireAuth(s.listEmergencyContacts))
 	mux.HandleFunc("POST /v1/emergency-contacts", s.requireAuth(s.createEmergencyContact))
+	mux.HandleFunc("PUT /v1/emergency-contacts/{id}", s.requireAuth(s.updateEmergencyContact))
 	mux.HandleFunc("DELETE /v1/emergency-contacts/{id}", s.requireAuth(s.deleteEmergencyContact))
 	mux.HandleFunc("POST /v1/crisis-alerts", s.requireAuth(s.handleCrisisAlertV2))
 	mux.HandleFunc("GET /v1/crisis-incidents", s.requireAuth(s.listCrisisIncidents))
