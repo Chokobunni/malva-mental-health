@@ -493,21 +493,21 @@ class _FindProfessionalsTile extends StatelessWidget {
     return SoftCard(
       onTap: onTap,
       color: MalvaColors.seed.withValues(alpha: 0.06),
-      child: Row(
+      child: const Row(
         children: [
           CircleAvatar(
             radius: 22,
             backgroundColor: MalvaColors.seed,
-            child: const Icon(Icons.search_rounded, color: Colors.white),
+            child: Icon(Icons.search_rounded, color: Colors.white),
           ),
-          const SizedBox(width: 14),
-          const Expanded(
+          SizedBox(width: 14),
+          Expanded(
             child: Text(
               'Find Professionals',
               style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: MalvaColors.seed),
+          Icon(Icons.chevron_right_rounded, color: MalvaColors.seed),
         ],
       ),
     );

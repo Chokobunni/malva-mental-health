@@ -215,12 +215,11 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  const Row(
                     children: [
-                      const Icon(Icons.handshake_rounded,
-                          color: MalvaColors.mint),
-                      const SizedBox(width: 8),
-                      const Expanded(
+                      Icon(Icons.handshake_rounded, color: MalvaColors.mint),
+                      SizedBox(width: 8),
+                      Expanded(
                         child: Text(
                           '7 Days of Asynchronous Care',
                           style: TextStyle(
@@ -239,15 +238,15 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                         ?.copyWith(color: Colors.black54),
                   ),
                   const SizedBox(height: 6),
-                  Row(
+                  const Row(
                     children: [
-                      const Icon(Icons.insert_chart_rounded,
+                      Icon(Icons.insert_chart_rounded,
                           size: 16, color: MalvaColors.seed),
-                      const SizedBox(width: 6),
+                      SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           'Profesional dapat memantau progresmu (sesuai izin).',
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontWeight: FontWeight.w700, fontSize: 12.5),
                         ),
                       ),

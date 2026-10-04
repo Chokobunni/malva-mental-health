@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/demo_professionals.dart';
 import '../../models.dart';
-import '../../providers/location_provider.dart';
 import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
@@ -184,9 +183,9 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                                         const Icon(Icons.star_rounded,
                                             size: 17, color: MalvaColors.amber),
                                         const SizedBox(width: 3),
-                                        Text(
+                                        const Text(
                                           '4.8 (15)',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                               fontWeight: FontWeight.w800,
                                               fontSize: 13),
                                         ),
@@ -271,14 +270,14 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             ),
                           const SizedBox(height: 8),
                           if (cred.isBpjsSupported)
-                            Row(
+                            const Row(
                               children: [
-                                const Icon(Icons.check_circle_rounded,
+                                Icon(Icons.check_circle_rounded,
                                     size: 18, color: MalvaColors.mint),
-                                const SizedBox(width: 6),
+                                SizedBox(width: 6),
                                 Text(
                                   'BPJS',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       fontWeight: FontWeight.w900,
                                       fontSize: 13),
                                 ),
@@ -353,21 +352,21 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
 
                           // ===== REVIEWS =====
                           const SectionLabel('Reviews'),
-                          _ReviewCard(
+                          const _ReviewCard(
                             name: 'Dahlia',
                             text: 'Amazing Doctor.',
                             date: '27 September 2024, 15.40',
                             stars: 5,
                           ),
                           const SizedBox(height: 8),
-                          _ReviewCard(
+                          const _ReviewCard(
                             name: 'Vincent',
                             text: 'Sangat membantu, komunikasi enak.',
                             date: '15 September 2024, 16.00',
                             stars: 5,
                           ),
                           const SizedBox(height: 8),
-                          _ReviewCard(
+                          const _ReviewCard(
                             name: 'Naomi',
                             text: 'Penjelasan jelas dan menenangkan.',
                             date: '1 September 2024, 17.28',
@@ -435,7 +434,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             ),
                             price: 'Rp.199rb / week',
                             featureIcon: Icons.bar_chart_rounded,
-                            features: [
+                            features: const [
                               ('Data Monitoring', Icons.insert_chart_rounded),
                               (
                                 '24/7 Asynchronous Chat',
