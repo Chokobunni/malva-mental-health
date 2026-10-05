@@ -8,8 +8,59 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/friendly_error.dart';
+import '../widgets/therapy_library.dart';
 import 'booking/doctor_discovery_screen.dart';
 import 'safety/emergency_dashboard_screen.dart';
+
+/// Tile modul terapi/assessment (dipakai di hasil screening).
+class _TherapyModuleTile extends StatelessWidget {
+  const _TherapyModuleTile(this.module);
+
+  final TherapyModule module;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = module.color ?? MalvaColors.seed;
+    return SoftCard(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TherapyDetailScreen(module: module),
+        ),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 21,
+            backgroundColor: color.withValues(alpha: 0.12),
+            child: Icon(module.icon ?? Icons.assignment_rounded, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(module.title,
+                    style: const TextStyle(fontWeight: FontWeight.w900)),
+                const SizedBox(height: 2),
+                Text(
+                  module.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, color: color),
+        ],
+      ),
+    );
+  }
+}
 
 class AssessmentScreen extends ConsumerStatefulWidget {
   const AssessmentScreen({
@@ -644,6 +695,12 @@ class AssessmentResultScreen extends StatelessWidget {
                   session: session,
                   apiClient: apiClient,
                 ),
+                const SizedBox(height: 18),
+                // Screening lanjutan: DASS-21 & WHO-5 (edukasi + tutorial).
+                const SectionLabel('Assessment lanjutan'),
+                const _TherapyModuleTile(dass21Module),
+                const SizedBox(height: 10),
+                const _TherapyModuleTile(who5Module),
                 const SizedBox(height: 18),
                 const SectionLabel('Tips dukungan'),
                 const _TipCard(

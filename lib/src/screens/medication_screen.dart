@@ -69,12 +69,13 @@ class MedicationScreen extends ConsumerWidget {
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          const GradientHeader(
-            title: 'Medication',
-            subtitle: 'Reminder, stok, dan adherence',
-            leading:
-                Icon(Icons.medication_rounded, color: Colors.white, size: 34),
-          ),
+          if (!embedded)
+            const GradientHeader(
+              title: 'Medication',
+              subtitle: 'Reminder, stok, dan adherence',
+              leading:
+                  Icon(Icons.medication_rounded, color: Colors.white, size: 34),
+            ),
           Padding(
             padding: const EdgeInsets.all(18),
             child: Column(

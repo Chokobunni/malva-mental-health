@@ -12,8 +12,11 @@ import '../widgets/crisis_hotline.dart';
 import '../widgets/daily_checkin_flow.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/sync_status.dart';
+import '../widgets/therapy_library.dart';
 import 'booking/doctor_discovery_screen.dart';
+import 'diary_history_screen.dart';
 import 'goals_screen.dart';
+import 'history_log_screen.dart';
 import 'mood_medication_checkin_screen.dart';
 import 'notifications_screen.dart';
 import 'record_screen.dart';
@@ -183,13 +186,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         icon: Icons.edit_note_rounded,
                         label: 'Diary History',
                         color: MalvaColors.orchid,
-                        onTap: widget.onOpenDiary,
+                        onTap: () => _push(DiaryHistoryScreen(
+                          session: widget.session,
+                          apiClient: widget.apiClient,
+                        )),
                       ),
                       _GridItem(
                         icon: Icons.psychology_rounded,
                         label: 'Psychological Therapy',
                         color: MalvaColors.pink,
-                        onTap: widget.onOpenMore,
+                        onTap: () => _push(const TherapyCatalogScreen()),
                       ),
                       _GridItem(
                         icon: Icons.folder_shared_rounded,
@@ -219,7 +225,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         icon: Icons.timeline_rounded,
                         label: 'History Log',
                         color: MalvaColors.amber,
-                        onTap: widget.onOpenMood,
+                        onTap: () => _push(HistoryLogScreen(
+                          session: widget.session,
+                          apiClient: widget.apiClient,
+                        )),
                       ),
                     ],
                   ),

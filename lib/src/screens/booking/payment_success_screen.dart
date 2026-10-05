@@ -6,6 +6,7 @@ import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
+import '../my_care_screen.dart';
 
 // ============================================================
 // PAYMENT SUCCESS — reference + receipt + continue
@@ -15,11 +16,16 @@ class PaymentSuccessScreen extends ConsumerWidget {
   const PaymentSuccessScreen({
     super.key,
     required this.reference,
+    this.isContinuousSupport = false,
     this.session,
     this.apiClient,
   });
 
   final String reference;
+
+  /// true = Continuous Support: setelah Continue, tawarkan data sharing
+  /// lalu arahkan ke My Care. Quick Consult langsung pulang (tanpa sharing).
+  final bool isContinuousSupport;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
@@ -71,29 +77,49 @@ class PaymentSuccessScreen extends ConsumerWidget {
               ),
               const Spacer(),
               FilledButton(
-                onPressed: () =>
-                    Navigator.popUntil(context, (route) => route.isFirst),
+                onPressed: () => _onContinue(context),
                 style: FilledButton.styleFrom(
                   backgroundColor: MalvaColors.mint,
                   minimumSize: const Size.fromHeight(54),
                 ),
                 child: const Text('Continue'),
               ),
-              const SizedBox(height: 10),
-              OutlinedButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => PostPaymentConsentSheet(
-                      session: session,
-                      apiClient: apiClient,
+              // Data sharing HANYA untuk Continuous Support.
+              if (isContinuousSupport) ...[
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PostPaymentConsentSheet(
+                        session: session,
+                        apiClient: apiClient,
+                      ),
                     ),
                   ),
+                  child: const Text('Atur Data Sharing'),
                 ),
-                child: const Text('Atur Data Sharing'),
-              ),
+              ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _onContinue(BuildContext context) {
+    if (!isContinuousSupport) {
+      // Quick Consult: selesai, pulang ke Home.
+      Navigator.popUntil(context, (route) => route.isFirst);
+      return;
+    }
+    // Continuous: langsung ke consent (atur sharing) -> My Care.
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PostPaymentConsentSheet(
+          session: session,
+          apiClient: apiClient,
         ),
       ),
     );
@@ -273,6 +299,17 @@ class _PostPaymentConsentSheetState
       Navigator.popUntil(context, (route) => route.isFirst);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Berhasil terhubung. Selamat datang!')),
+      );
+      // Flow Continuous Support: setelah connect, buka My Care
+      // (jadwal & sesi continuous tampil di sana).
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MyCareScreen(
+            session: session,
+            apiClient: apiClient,
+          ),
+        ),
       );
     } on MalvaApiException catch (e) {
       if (mounted) setState(() => _error = e.message);

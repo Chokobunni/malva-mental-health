@@ -187,6 +187,7 @@ class ActionTile extends StatelessWidget {
     required this.subtitle,
     required this.onTap,
     this.color = MalvaColors.seed,
+    this.maxSubtitleLines,
   });
 
   final IconData icon;
@@ -194,6 +195,9 @@ class ActionTile extends StatelessWidget {
   final String subtitle;
   final VoidCallback onTap;
   final Color color;
+
+  /// Batas baris subtitle (null = tanpa batas).
+  final int? maxSubtitleLines;
 
   @override
   Widget build(BuildContext context) {
@@ -216,6 +220,9 @@ class ActionTile extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   subtitle,
+                  maxLines: maxSubtitleLines,
+                  overflow:
+                      maxSubtitleLines != null ? TextOverflow.ellipsis : null,
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall

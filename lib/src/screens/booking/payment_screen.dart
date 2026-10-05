@@ -199,6 +199,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         MaterialPageRoute(
           builder: (_) => PaymentSuccessScreen(
             reference: reference,
+            isContinuousSupport:
+                widget.booking.serviceType == 'continuous_support',
             session: widget.session,
             apiClient: widget.apiClient,
           ),

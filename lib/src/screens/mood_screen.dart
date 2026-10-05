@@ -132,20 +132,24 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
         padding: EdgeInsets.zero,
         children: [
           if (_isInitialLoading) const LinearProgressIndicator(),
-          const GradientHeader(
-            title: 'Mood Tracker',
-            subtitle: 'Mood, tidur, energi, kecemasan',
-            leading: Icon(Icons.mood_rounded, color: Colors.white, size: 34),
-          ),
+          if (!widget.embedded) ...[
+            const GradientHeader(
+              title: 'Mood Tracker',
+              subtitle: 'Mood, tidur, energi, kecemasan',
+              leading: Icon(Icons.mood_rounded, color: Colors.white, size: 34),
+            ),
+          ],
           Padding(
             padding: const EdgeInsets.all(18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _MoodMedToggle(
-                  value: _tab,
-                  onChanged: (v) => setState(() => _tab = v),
-                ),
+                if (!widget.embedded) ...[
+                  _MoodMedToggle(
+                    value: _tab,
+                    onChanged: (v) => setState(() => _tab = v),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 Row(
                   children: [
