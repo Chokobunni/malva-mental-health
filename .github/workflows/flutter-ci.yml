@@ -53,10 +53,16 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter test --coverage
-      - uses: codecov/codecov-action@v4
+      # Upload coverage opsional: token codecov tidak diset di repo publik
+      # ini, jadi lewati bila tidak tersedia (jangan gagalkan CI).
+      - name: Upload coverage (optional)
+        if: ${{ env.CODECOV_TOKEN != '' }}
+        uses: codecov/codecov-action@v4
         with:
           file: coverage/lcov.info
           fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   build-android:
     name: Build Android
