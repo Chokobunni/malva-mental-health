@@ -1,4 +1,5 @@
 # Dart and Flutter generated files
+coverage/
 .dart_tool/
 .packages
 .flutter-plugins
