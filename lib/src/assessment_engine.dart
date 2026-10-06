@@ -52,6 +52,7 @@ class AssessmentResult {
     required this.rulesFired,
     required this.createdAt,
     required this.ruleVersion,
+    this.certaintyFactor = 0.0,
   });
 
   final AssessmentType type;
@@ -63,6 +64,17 @@ class AssessmentResult {
   final List<RuleTrace> rulesFired;
   final DateTime createdAt;
   final String ruleVersion;
+
+  /// Certainty Factor akhir (0.0-1.0) dari Forward Chaining + CF.
+  final double certaintyFactor;
+
+  /// Ringkasan rule yang menembak (untuk tampilan & persist).
+  String get ruleTrace => rulesFired.isEmpty
+      ? ''
+      : rulesFired
+          .take(5)
+          .map((r) => '${r.label} (${r.level.label})')
+          .join('; ');
 }
 
 class ScreeningBundle {
@@ -270,6 +282,7 @@ class AssessmentEngine {
       rulesFired: rulesFired,
       createdAt: DateTime.now(),
       ruleVersion: ruleVersion,
+      certaintyFactor: inferenceResult.certaintyFactor,
     );
   }
 

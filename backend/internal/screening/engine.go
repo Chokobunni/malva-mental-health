@@ -3,9 +3,11 @@ package screening
 import (
 	"errors"
 	"fmt"
+
+	"malva/backend/internal/inference"
 )
 
-const RuleVersion = "2026.1.FC" // FC = Forward Chaining
+const RuleVersion = inference.RuleVersion // "2026.1.FC" — Forward Chaining + CF
 
 type Answer struct {
 	QuestionID string `json:"question_id"`
@@ -22,6 +24,7 @@ type Result struct {
 	CrisisFlag bool     `json:"crisis_flag"`
 	Answers    []Answer `json:"answers"`
 	CF         float64  `json:"cf"`
+	RuleTrace  string   `json:"rule_trace,omitempty"`
 }
 
 type Bundle struct {
@@ -75,13 +78,16 @@ func ScoreBundle(phq9Answers, gad7Answers []int) (Bundle, error) {
 func Score(kind string, values []int) (Result, error) {
 	var questions []string
 	var maxScore int
+	var rules []inference.Rule
 	switch kind {
 	case "phq9":
 		questions = phq9Questions
 		maxScore = 27
+		rules = inference.PHQ9Rules()
 	case "gad7":
 		questions = gad7Questions
 		maxScore = 21
+		rules = inference.GAD7Rules()
 	default:
 		return Result{}, fmt.Errorf("unsupported assessment type %q", kind)
 	}
@@ -102,14 +108,33 @@ func Score(kind string, values []int) (Result, error) {
 		})
 	}
 
-	level, summary, crisis, cf := riskFor(kind, total)
+	// ============================================================
+	// FORWARD CHAINING + CERTAINTY FACTOR (server-side).
+	// Source of truth: engine di server menjalankan rule base yang
+	// sama dengan client, menghasilkan level + CF yang identik.
+	// ============================================================
+	engine := inference.NewEngine()
+	inferenceRes, err := engine.Infer(questions, values, rules)
+	if err != nil {
+		return Result{}, err
+	}
 
-	// Check for crisis flag: PHQ-9 item 9 (self-harm) positive
-	if kind == "phq9" && len(values) == 9 && values[8] > 0 {
-		crisis = true
-		level = "crisis"
-		summary = "Ada indikator keselamatan diri. Tampilkan crisis flow dan hubungi profesional."
-		cf = 0.95
+	level := inferenceRes.Level
+	summary := inferenceRes.Summary
+	cf := inferenceRes.CF
+	crisis := inferenceRes.IsCrisis
+
+	// Rangkum jejak audit rule yang menembak (maks 5 agar JSON ringkas).
+	audit := ""
+	shown := 0
+	for _, tr := range inferenceRes.Trace {
+		if tr.Fired && shown < 5 {
+			if audit != "" {
+				audit += "; "
+			}
+			audit += fmt.Sprintf("%s (%.2f)", tr.RuleID, tr.ResultCF)
+			shown++
+		}
 	}
 
 	return Result{
@@ -121,34 +146,13 @@ func Score(kind string, values []int) (Result, error) {
 		CrisisFlag: crisis,
 		Answers:    answers,
 		CF:         cf,
+		RuleTrace:  audit,
 	}, nil
 }
 
-func riskFor(kind string, total int) (string, string, bool, float64) {
-	if kind == "phq9" {
-		switch {
-		case total <= 4:
-			return "minimal", "Gejala depresi minimal. Pantau pola mood dan rutinitas.", false, 0.9
-		case total <= 9:
-			return "mild", "Gejala ringan. Ulangi asesmen dan diskusikan bila menetap.", false, 0.85
-		case total <= 14:
-			return "moderate", "Gejala sedang. Perlu review profesional dan rencana tindak lanjut.", false, 0.9
-		case total <= 19:
-			return "severe", "Gejala cukup berat. Prioritaskan evaluasi profesional.", false, 0.92
-		default:
-			return "severe", "Gejala berat. Butuh review klinis segera.", false, 0.95
-		}
-	}
-	switch {
-	case total <= 4:
-		return "minimal", "Gejala kecemasan minimal. Lanjutkan pemantauan rutin.", false, 0.9
-	case total <= 9:
-		return "mild", "Gejala ringan. Ulangi asesmen pada follow-up.", false, 0.85
-	case total <= 14:
-		return "moderate", "Gejala sedang. Perlu evaluasi profesional.", false, 0.9
-	default:
-		return "severe", "Gejala berat. Prioritaskan review klinis dan rencana dukungan.", false, 0.92
-	}
+// ruleTraceFrom mengembalikan jejak rule hasil inference utk persist.
+func ruleTraceFrom(result Result) string {
+	return result.RuleTrace
 }
 
 func overallLevel(phq9, gad7 Result) string {

@@ -1157,6 +1157,21 @@ class _ProfessionalDashboardScreenState
               ),
               const SizedBox(height: 8),
               Text('Overall: ${screening.overallLevelLabel}'),
+              const SizedBox(height: 8),
+              // === Certainty Factor (FC + CF) ===
+              Text(
+                'CF PHQ-9: ${(screening.phq9CF * 100).toStringAsFixed(0)}% — '
+                'CF GAD-7: ${(screening.gad7CF * 100).toStringAsFixed(0)}%',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              if (screening.ruleTrace.isNotEmpty)
+                Text(
+                  'Rule: ${screening.ruleTrace}',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Colors.black54),
+                ),
               if (screening.crisisFlag) ...[
                 const SizedBox(height: 8),
                 const Text(
@@ -3214,6 +3229,9 @@ class _ScreeningView {
     required this.gad7Score,
     required this.gad7MaxScore,
     required this.gad7Level,
+    this.phq9CF = 0.0,
+    this.gad7CF = 0.0,
+    this.ruleTrace = '',
   });
 
   factory _ScreeningView.fromBackend(BackendScreeningSession session) {
@@ -3228,6 +3246,9 @@ class _ScreeningView {
       gad7Score: session.gad7.score,
       gad7MaxScore: session.gad7.maxScore == 0 ? 21 : session.gad7.maxScore,
       gad7Level: session.gad7.level,
+      phq9CF: session.phq9.certaintyFactor,
+      gad7CF: session.gad7.certaintyFactor,
+      ruleTrace: session.phq9.ruleTrace,
     );
   }
 
@@ -3243,6 +3264,9 @@ class _ScreeningView {
       gad7Score: bundle.gad7.score,
       gad7MaxScore: bundle.gad7.maxScore,
       gad7Level: bundle.gad7.level.name,
+      phq9CF: bundle.phq9.certaintyFactor,
+      gad7CF: bundle.gad7.certaintyFactor,
+      ruleTrace: bundle.phq9.ruleTrace,
     );
   }
 
@@ -3256,6 +3280,11 @@ class _ScreeningView {
   final int gad7Score;
   final int gad7MaxScore;
   final String gad7Level;
+
+  /// CF Forward Chaining (0-1) dari server / engine lokal.
+  final double phq9CF;
+  final double gad7CF;
+  final String ruleTrace;
 
   String get overallLevelLabel => _riskLabel(overallLevel);
   String get phq9LevelLabel => _riskLabel(phq9Level);

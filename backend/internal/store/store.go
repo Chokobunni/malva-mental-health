@@ -661,7 +661,8 @@ func (s *Store) ListScreeningSessions(ctx context.Context, patientID string, lim
 
 func (s *Store) loadScreeningResults(ctx context.Context, session *ScreeningSession) error {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, type::text, score, max_score, level::text, summary, crisis_flag
+		SELECT id, type::text, score, max_score, level::text, summary, crisis_flag,
+		       COALESCE(cf, 0), COALESCE(rule_trace, '')
 		FROM screening_results
 		WHERE session_id = $1
 		ORDER BY type
@@ -681,6 +682,8 @@ func (s *Store) loadScreeningResults(ctx context.Context, session *ScreeningSess
 			&result.Level,
 			&result.Summary,
 			&result.CrisisFlag,
+			&result.CF,
+			&result.RuleTrace,
 		); err != nil {
 			return err
 		}
@@ -725,11 +728,13 @@ func insertScreeningResult(ctx context.Context, tx *sql.Tx, sessionID string, re
 	var resultID string
 	err := tx.QueryRowContext(ctx, `
 		INSERT INTO screening_results (
-			session_id, type, score, max_score, level, summary, crisis_flag
+			session_id, type, score, max_score, level, summary, crisis_flag,
+			cf, rule_trace
 		)
-		VALUES ($1, $2::assessment_type, $3, $4, $5::risk_level, $6, $7)
+		VALUES ($1, $2::assessment_type, $3, $4, $5::risk_level, $6, $7, $8, $9)
 		RETURNING id
-	`, sessionID, result.Type, result.Score, result.MaxScore, result.Level, result.Summary, result.CrisisFlag).
+	`, sessionID, result.Type, result.Score, result.MaxScore, result.Level, result.Summary,
+		result.CrisisFlag, result.CF, ruleTraceFrom(result)).
 		Scan(&resultID)
 	if err != nil {
 		return err
@@ -744,6 +749,11 @@ func insertScreeningResult(ctx context.Context, tx *sql.Tx, sessionID string, re
 		}
 	}
 	return nil
+}
+
+// ruleTraceFrom mengembalikan jejak rule dari hasil screening utk persist.
+func ruleTraceFrom(result screening.Result) string {
+	return result.RuleTrace
 }
 
 func (s *Store) UpsertScreeningReview(ctx context.Context, professionalID, screeningSessionID, status, note string) (ScreeningReview, error) {

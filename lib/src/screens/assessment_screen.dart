@@ -675,6 +675,60 @@ class AssessmentResultScreen extends StatelessWidget {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 12),
+                      // === Forward Chaining + Certainty Factor ===
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: MalvaColors.seed.withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.psychology_rounded,
+                                    size: 18, color: MalvaColors.seed),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Analisa Pakar (Forward Chaining + CF)',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 12.5,
+                                    color: MalvaColors.seed,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            _CFBar(
+                              label: 'PHQ-9 Depresi',
+                              cf: bundle.phq9.certaintyFactor,
+                              color: bundle.phq9.level.color,
+                            ),
+                            const SizedBox(height: 6),
+                            _CFBar(
+                              label: 'GAD-7 Kecemasan',
+                              cf: bundle.gad7.certaintyFactor,
+                              color: bundle.gad7.level.color,
+                            ),
+                            if (bundle.phq9.rulesFired.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                'Rule aktif: ${bundle.phq9.rulesFired.take(3).map((r) => r.label).join('; ')}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: Colors.black54),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -827,6 +881,63 @@ class _RecommendDoctors extends ConsumerWidget {
         ),
       ],
     );
+  }
+}
+
+/// Bar visual CF: label + progress 0-100% + label kategori.
+class _CFBar extends StatelessWidget {
+  const _CFBar({
+    required this.label,
+    required this.cf,
+    required this.color,
+  });
+
+  final String label;
+  final double cf;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = (cf.clamp(0.0, 1.0) * 100);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style:
+                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+              ),
+            ),
+            Text(
+              '${pct.toStringAsFixed(0)}% (${_cfLabel(cf)})',
+              style: TextStyle(
+                  fontWeight: FontWeight.w900, fontSize: 11.5, color: color),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: cf.clamp(0.0, 1.0),
+            minHeight: 8,
+            color: color,
+            backgroundColor: Colors.black.withValues(alpha: 0.08),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _cfLabel(double cf) {
+    if (cf >= 0.8) return 'Sangat Pasti';
+    if (cf >= 0.6) return 'Pasti';
+    if (cf >= 0.4) return 'Cukup Pasti';
+    if (cf >= 0.2) return 'Tidak Pasti';
+    return 'Sangat Tidak Pasti';
   }
 }
 

@@ -1370,6 +1370,8 @@ class BackendAssessmentSummary {
     required this.level,
     required this.summary,
     required this.crisisFlag,
+    this.certaintyFactor = 0.0,
+    this.ruleTrace = '',
   });
 
   factory BackendAssessmentSummary.fromJson(Map<String, dynamic> json) {
@@ -1380,6 +1382,8 @@ class BackendAssessmentSummary {
       level: json['level']?.toString() ?? '',
       summary: json['summary']?.toString() ?? '',
       crisisFlag: json['crisis_flag'] == true,
+      certaintyFactor: (json['cf'] as num?)?.toDouble() ?? 0.0,
+      ruleTrace: json['rule_trace']?.toString() ?? '',
     );
   }
 
@@ -1389,6 +1393,12 @@ class BackendAssessmentSummary {
   final String level;
   final String summary;
   final bool crisisFlag;
+
+  /// CF hasil Forward Chaining server-side (0.0-1.0).
+  final double certaintyFactor;
+
+  /// Jejak rule yang menembak (audit trail ringkas).
+  final String ruleTrace;
 }
 
 class BackendScreeningSession {
