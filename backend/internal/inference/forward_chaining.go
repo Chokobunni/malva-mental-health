@@ -28,12 +28,12 @@ const RuleVersion = "2026.1.FC"
 type ConditionOperator string
 
 const (
-	OpEquals        ConditionOperator = "equals"
-	OpNotEquals     ConditionOperator = "notEquals"
-	OpGreaterThan   ConditionOperator = "greaterThan"
-	OpGreaterOrEq   ConditionOperator = "greaterOrEqual"
-	OpLessThan      ConditionOperator = "lessThan"
-	OpLessOrEqual   ConditionOperator = "lessOrEqual"
+	OpEquals      ConditionOperator = "equals"
+	OpNotEquals   ConditionOperator = "notEquals"
+	OpGreaterThan ConditionOperator = "greaterThan"
+	OpGreaterOrEq ConditionOperator = "greaterOrEqual"
+	OpLessThan    ConditionOperator = "lessThan"
+	OpLessOrEqual ConditionOperator = "lessOrEqual"
 )
 
 // Condition kondisi IF pada rule.
@@ -73,13 +73,13 @@ type Fact struct {
 
 // Trace jejak audit satu rule (fired atau tidak).
 type Trace struct {
-	RuleID       string   `json:"rule_id"`
-	Description  string   `json:"description"`
-	Fired        bool     `json:"fired"`
-	ConditionCF  float64  `json:"condition_cf"`
-	ResultCF     float64  `json:"result_cf"`
-	Satisfied    []string `json:"satisfied,omitempty"`
-	Failed       []string `json:"failed,omitempty"`
+	RuleID      string   `json:"rule_id"`
+	Description string   `json:"description"`
+	Fired       bool     `json:"fired"`
+	ConditionCF float64  `json:"condition_cf"`
+	ResultCF    float64  `json:"result_cf"`
+	Satisfied   []string `json:"satisfied,omitempty"`
+	Failed      []string `json:"failed,omitempty"`
 }
 
 // InferenceResult hasil akhir inference.

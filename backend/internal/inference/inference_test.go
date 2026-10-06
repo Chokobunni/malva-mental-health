@@ -140,6 +140,13 @@ func TestCFScoreMapping(t *testing.T) {
 			t.Errorf("ScoreToCF(%d) = %.2f, want %.2f", score, got, expect)
 		}
 	}
+	// Label kategori CF harus konsisten dgn skala (dipakai di audit).
+	if LabelFor(0.95) != "Sangat Pasti" {
+		t.Errorf("LabelFor(0.95) = %s, want Sangat Pasti", LabelFor(0.95))
+	}
+	if LabelFor(0.5) != "Pasti" {
+		t.Errorf("LabelFor(0.5) = %s, want Pasti", LabelFor(0.5))
+	}
 }
 
 func TestErrors(t *testing.T) {

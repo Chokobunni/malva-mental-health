@@ -89,7 +89,8 @@ func ApplyRuleCF(ruleCF, conditionsCF float64) float64 {
 	return ruleCF * conditionsCF
 }
 
-// LabelFor memberi label keterangan CF (untuk audit/log).
+// LabelFor memberi label keterangan CF (untuk audit/log). Dipakai
+// handler bila ingin menyertakan label dalam rule_trace.
 func LabelFor(cf float64) string {
 	normalized := (cf + 1.0) / 2.0
 	switch {
