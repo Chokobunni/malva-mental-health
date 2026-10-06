@@ -34,6 +34,7 @@ class AuthState {
   bool get isAuthenticated => session != null;
   bool get isPatient => session?.role == UserRole.patient;
   bool get isProfessional => session?.role == UserRole.professional;
+  bool get isAdmin => session?.role == UserRole.admin;
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {

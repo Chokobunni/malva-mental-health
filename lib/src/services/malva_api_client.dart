@@ -104,6 +104,21 @@ class MalvaApiClient {
     );
   }
 
+  /// Menukar Google ID Token menjadi sesi Malva.
+  /// Backend: find-or-create + tautan SSO otomatis.
+  Future<BackendAuthResult> googleLogin({
+    required String idToken,
+  }) async {
+    return _sendAuth(
+      'POST',
+      '/v1/auth/google',
+      {
+        'id_token': idToken,
+        'role': UserRole.patient.name,
+      },
+    );
+  }
+
   Future<BackendAuthResult> refreshSession({
     required String refreshToken,
   }) async {
@@ -1197,9 +1212,11 @@ class MalvaApiClient {
           'Respons autentikasi dari server tidak valid.');
     }
     final roleName = user['role']?.toString();
-    final role = roleName == UserRole.professional.name
-        ? UserRole.professional
-        : UserRole.patient;
+    final role = switch (roleName) {
+      'professional' => UserRole.professional,
+      'admin' => UserRole.admin,
+      _ => UserRole.patient,
+    };
     return BackendAuthResult(
       userId: user['id']?.toString() ?? '',
       email: user['email']?.toString() ?? '',

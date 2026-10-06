@@ -1,9 +1,48 @@
 import 'package:flutter/material.dart';
 
+import '../models.dart';
+import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 
 enum AuthMode { login, register }
+
+/// Validasi password mode daftar, SELARAS dengan policy server
+/// (backend/internal/security/password_policy.go).
+/// Mengembalikan null bila valid, pesan Bahasa Indonesia bila tidak.
+String? validatePasswordForRegister(String password) {
+  if (password.length < 8) return 'Password minimal 8 karakter.';
+  if (!RegExp(r'[A-Z]').hasMatch(password)) {
+    return 'Password harus mengandung minimal 1 huruf besar (A-Z).';
+  }
+  if (!RegExp(r'[a-z]').hasMatch(password)) {
+    return 'Password harus mengandung minimal 1 huruf kecil (a-z).';
+  }
+  if (!RegExp(r'[0-9]').hasMatch(password)) {
+    return 'Password harus mengandung minimal 1 angka (0-9).';
+  }
+  if (!RegExp(r'[^A-Za-z0-9]').hasMatch(password)) {
+    return 'Password harus mengandung minimal 1 simbol (mis. #?!@\$).';
+  }
+  return null;
+}
+
+/// Petunjuk syarat password yang ditampilkan di bawah field.
+const passwordRequirementHint =
+    'Min. 8 karakter: huruf besar + kecil + angka + simbol.';
+
+/// Menampilkan error apapun dari proses autentikasi sebagai dialog ramah.
+void showAuthFailure(BuildContext context, Object error) {
+  if (error is AuthFailure) {
+    showAuthError(context, error.message);
+    return;
+  }
+  if (error is MalvaApiException) {
+    showAuthError(context, error.message);
+    return;
+  }
+  showAuthError(context, 'Terjadi kesalahan tak terduga. Silakan coba lagi.');
+}
 
 /// Halaman gerbang peran — langkah pertama setelah splash.
 /// Memisahkan alur login pasien dan profesional ke halaman berbeda.
@@ -296,7 +335,7 @@ class GoogleSignInButton extends StatelessWidget {
   });
 
   final bool isLogin;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -380,16 +419,6 @@ Future<void> showForgotPasswordDialog(BuildContext context) async {
       ),
     );
   }
-}
-
-/// Snackbar stub Google SSO yang jujur.
-void showGoogleComingSoon(BuildContext context) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text(
-          'Login Google segera hadir. Silakan pakai email & password dulu ya.'),
-    ),
-  );
 }
 
 /// Dialog error autentikasi bersama.

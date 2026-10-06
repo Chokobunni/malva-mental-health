@@ -241,23 +241,31 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   // AUTH METHODS
   // ============================================================
 
+  // ============================================================
+  // AUTH METHODS — selalu ke server (tanpa sesi lokal palsu).
+  // Error jaringan/server diteruskan apa adanya agar UI menampilkannya.
+  // ============================================================
+
+  static const _noServerFailure = AuthFailure(
+    'Tidak terhubung ke server Malva. Periksa koneksi dan alamat server, lalu coba lagi.',
+  );
+
   Future<AuthSession> loginPatientOnline({
     required String email,
     required String password,
   }) async {
-    if (_apiClient == null) {
-      return loginPatient(email: email, password: password);
-    }
+    final api = _apiClient;
+    if (api == null) throw _noServerFailure;
     try {
-      final result = await _apiClient.login(
+      final result = await api.login(
         email: email.trim().toLowerCase(),
         password: password,
       );
-      if (result.role != UserRole.patient) {
+      if (result.role != UserRole.patient && result.role != UserRole.admin) {
         throw const AuthFailure('Akun ini bukan akun pasien.');
       }
       return AuthSession(
-        role: UserRole.patient,
+        role: result.role,
         identifier: result.email,
         displayName: result.displayName,
         backendUserId: result.userId,
@@ -267,7 +275,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       );
     } on MalvaApiException catch (e) {
       if (e.statusCode != null) rethrow;
-      return loginPatient(email: email, password: password);
+      throw _noServerFailure;
     }
   }
 
@@ -276,12 +284,10 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     required String password,
     required String displayName,
   }) async {
-    if (_apiClient == null) {
-      return registerPatient(
-          email: email, password: password, displayName: displayName);
-    }
+    final api = _apiClient;
+    if (api == null) throw _noServerFailure;
     try {
-      final result = await _apiClient.register(
+      final result = await api.register(
         role: UserRole.patient,
         email: email.trim().toLowerCase(),
         password: password,
@@ -298,8 +304,34 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       );
     } on MalvaApiException catch (e) {
       if (e.statusCode != null) rethrow;
-      return registerPatient(
-          email: email, password: password, displayName: displayName);
+      throw _noServerFailure;
+    }
+  }
+
+  /// Login pasien via Google (ID Token sudah diverifikasi google_sign_in).
+  /// Akun baru otomatis dibuat + tersimpan di database server.
+  Future<AuthSession> loginPatientWithGoogle({
+    required String idToken,
+  }) async {
+    final api = _apiClient;
+    if (api == null) throw _noServerFailure;
+    try {
+      final result = await api.googleLogin(idToken: idToken);
+      if (result.role != UserRole.patient && result.role != UserRole.admin) {
+        throw const AuthFailure('Akun ini bukan akun pasien.');
+      }
+      return AuthSession(
+        role: result.role,
+        identifier: result.email,
+        displayName: result.displayName,
+        backendUserId: result.userId,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        backendSynced: true,
+      );
+    } on MalvaApiException catch (e) {
+      if (e.statusCode != null) rethrow;
+      throw _noServerFailure;
     }
   }
 
@@ -307,12 +339,10 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     required String professionalId,
     required String password,
   }) async {
-    if (_apiClient == null) {
-      return loginProfessional(
-          professionalId: professionalId, password: password);
-    }
+    final api = _apiClient;
+    if (api == null) throw _noServerFailure;
     try {
-      final result = await _apiClient.login(
+      final result = await api.login(
         email: '$professionalId@professional.malva.local',
         password: password,
       );
@@ -330,8 +360,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       );
     } on MalvaApiException catch (e) {
       if (e.statusCode != null) rethrow;
-      return loginProfessional(
-          professionalId: professionalId, password: password);
+      throw _noServerFailure;
     }
   }
 
@@ -340,14 +369,10 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     required String password,
     required String displayName,
   }) async {
-    if (_apiClient == null) {
-      return registerProfessional(
-          professionalId: professionalId,
-          password: password,
-          displayName: displayName);
-    }
+    final api = _apiClient;
+    if (api == null) throw _noServerFailure;
     try {
-      final result = await _apiClient.register(
+      final result = await api.register(
         role: UserRole.professional,
         email: '$professionalId@professional.malva.local',
         password: password,
@@ -365,10 +390,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       );
     } on MalvaApiException catch (e) {
       if (e.statusCode != null) rethrow;
-      return registerProfessional(
-          professionalId: professionalId,
-          password: password,
-          displayName: displayName);
+      throw _noServerFailure;
     }
   }
 
@@ -467,9 +489,11 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       final data = await _secureStorage.read(key: _sessionKey);
       if (data == null || data.isEmpty) return null;
       final map = jsonDecode(data) as Map<String, dynamic>;
-      final role = map['role'] == UserRole.professional.name
-          ? UserRole.professional
-          : UserRole.patient;
+      final role = switch (map['role']) {
+        'professional' => UserRole.professional,
+        'admin' => UserRole.admin,
+        _ => UserRole.patient,
+      };
       return AuthSession(
         role: role,
         identifier: map['identifier']?.toString() ?? '',

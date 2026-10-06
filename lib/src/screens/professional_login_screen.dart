@@ -62,9 +62,9 @@ class _ProfessionalLoginScreenState
             );
       if (!mounted) return;
       widget.onAuthenticated(session);
-    } on AuthFailure catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      showAuthError(context, error.message);
+      showAuthFailure(context, error);
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -79,11 +79,18 @@ class _ProfessionalLoginScreenState
     if (!_isLogin && _nameController.text.trim().isEmpty) {
       throw const AuthFailure('Nama profesional harus diisi.');
     }
-    if (_passwordController.text.length < 8) {
-      throw const AuthFailure('Password minimal 8 karakter.');
+    if (_isLogin) {
+      if (_passwordController.text.isEmpty) {
+        throw const AuthFailure('Password harus diisi.');
+      }
+      return;
     }
-    if (!_isLogin &&
-        _passwordController.text != _confirmPasswordController.text) {
+    final passwordError =
+        validatePasswordForRegister(_passwordController.text);
+    if (passwordError != null) {
+      throw AuthFailure(passwordError);
+    }
+    if (_passwordController.text != _confirmPasswordController.text) {
       throw const AuthFailure('Konfirmasi password tidak sama.');
     }
   }
@@ -173,6 +180,11 @@ class _ProfessionalLoginScreenState
                       prefixIcon: Icon(Icons.lock_reset_rounded),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    passwordRequirementHint,
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
                 ],
                 const SizedBox(height: 14),
                 FilledButton.icon(
@@ -198,9 +210,13 @@ class _ProfessionalLoginScreenState
                     onForgotPassword: () => showForgotPasswordDialog(context),
                   ),
                 ],
-                GoogleSignInButton(
-                  isLogin: _isLogin,
-                  onPressed: () => showGoogleComingSoon(context),
+                // Akun profesional dibuat oleh admin (email + password);
+                // tidak ada login Google untuk profesional.
+                const SizedBox(height: 8),
+                const Text(
+                  'Akun profesional dibuat oleh admin. Hubungi admin bila belum punya akun.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
               ],
             ),

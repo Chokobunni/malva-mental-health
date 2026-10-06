@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
-enum UserRole { patient, professional }
+enum UserRole { patient, professional, admin }
 
 extension UserRoleLabel on UserRole {
   String get label => switch (this) {
         UserRole.patient => 'Pasien',
         UserRole.professional => 'Profesional',
+        UserRole.admin => 'Admin',
       };
 }
 

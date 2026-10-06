@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
+import '../services/google_auth_service.dart';
 import '../theme.dart';
 import 'auth_widgets.dart';
 
@@ -60,9 +61,31 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
             );
       if (!mounted) return;
       widget.onAuthenticated(session);
-    } on AuthFailure catch (error) {
+    } catch (error) {
       if (!mounted) return;
-      showAuthError(context, error.message);
+      showAuthFailure(context, error);
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  /// Login Google asli: Google Sign-In -> ID Token -> sesi Malva dari server.
+  /// Akun baru otomatis didaftarkan & tersimpan di database.
+  Future<void> _signInWithGoogle() async {
+    if (_isSubmitting) return;
+    try {
+      setState(() => _isSubmitting = true);
+      final idToken = await GoogleAuthService.signInIdToken();
+      if (idToken == null) return; // Pengguna membatalkan, diam saja.
+      if (!mounted) return;
+      final session = await ref
+          .read(malvaStoreProvider.notifier)
+          .loginPatientWithGoogle(idToken: idToken);
+      if (!mounted) return;
+      widget.onAuthenticated(session);
+    } catch (error) {
+      if (!mounted) return;
+      showAuthFailure(context, error);
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -77,11 +100,18 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
     if (!_isLogin && _nameController.text.trim().isEmpty) {
       throw const AuthFailure('Nama pasien harus diisi.');
     }
-    if (_passwordController.text.length < 8) {
-      throw const AuthFailure('Password minimal 8 karakter.');
+    if (_isLogin) {
+      if (_passwordController.text.isEmpty) {
+        throw const AuthFailure('Password harus diisi.');
+      }
+      return;
     }
-    if (!_isLogin &&
-        _passwordController.text != _confirmPasswordController.text) {
+    final passwordError =
+        validatePasswordForRegister(_passwordController.text);
+    if (passwordError != null) {
+      throw AuthFailure(passwordError);
+    }
+    if (_passwordController.text != _confirmPasswordController.text) {
       throw const AuthFailure('Konfirmasi password tidak sama.');
     }
   }
@@ -167,6 +197,11 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
                       prefixIcon: Icon(Icons.lock_reset_rounded),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    passwordRequirementHint,
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
                 ],
                 const SizedBox(height: 14),
                 FilledButton.icon(
@@ -194,7 +229,7 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
                 ],
                 GoogleSignInButton(
                   isLogin: _isLogin,
-                  onPressed: () => showGoogleComingSoon(context),
+                  onPressed: _isSubmitting ? null : _signInWithGoogle,
                 ),
               ],
             ),
