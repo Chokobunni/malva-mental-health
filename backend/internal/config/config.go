@@ -16,6 +16,9 @@ type Config struct {
 	MaxLoginAttempts   int
 	LockoutDuration    int
 	MaxRequestBodySize int64
+	// GoogleClientID adalah Web OAuth Client ID untuk verifikasi Google Sign-In.
+	// Kosong = endpoint /v1/auth/google nonaktif dengan pesan yang jelas.
+	GoogleClientID string
 }
 
 func Load() (Config, error) {
@@ -29,6 +32,7 @@ func Load() (Config, error) {
 		MaxLoginAttempts:   5,
 		LockoutDuration:    15,
 		MaxRequestBodySize: 1 << 20,
+		GoogleClientID:     os.Getenv("MALVA_GOOGLE_CLIENT_ID"),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("MALVA_DATABASE_URL is required")

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -14,32 +15,32 @@ import (
 // ============================================================
 
 type ProfessionalCredential struct {
-	ID                 string     `json:"id"`
-	UserID             string     `json:"user_id"`
-	STRNumber          string     `json:"str_number"`
-	SIPNumber          string     `json:"sip_number"`
-	SIPPNumber         string     `json:"sipp_number"`
-	Specialization     string     `json:"specialization"`
-	SubSpecialties     []string   `json:"sub_specialties"`
-	HospitalLat        *float64   `json:"hospital_lat,omitempty"`
-	HospitalLng        *float64   `json:"hospital_lng,omitempty"`
-	HospitalName       string     `json:"hospital_name"`
-	AddressDetails     string     `json:"address_details"`
-	IsBPJSSupported    bool       `json:"is_bpjs_supported"`
-	PhotoIntroURL      string     `json:"photo_intro_url,omitempty"`
-	VideoIntroURL      string     `json:"video_intro_url,omitempty"`
-	Bio                string     `json:"bio,omitempty"`
+	ID                 string        `json:"id"`
+	UserID             string        `json:"user_id"`
+	STRNumber          string        `json:"str_number"`
+	SIPNumber          string        `json:"sip_number"`
+	SIPPNumber         string        `json:"sipp_number"`
+	Specialization     string        `json:"specialization"`
+	SubSpecialties     []string      `json:"sub_specialties"`
+	HospitalLat        *float64      `json:"hospital_lat,omitempty"`
+	HospitalLng        *float64      `json:"hospital_lng,omitempty"`
+	HospitalName       string        `json:"hospital_name"`
+	AddressDetails     string        `json:"address_details"`
+	IsBPJSSupported    bool          `json:"is_bpjs_supported"`
+	PhotoIntroURL      string        `json:"photo_intro_url,omitempty"`
+	VideoIntroURL      string        `json:"video_intro_url,omitempty"`
+	Bio                string        `json:"bio,omitempty"`
 	Education          []interface{} `json:"education"`
-	VerificationStatus string     `json:"verification_status"`
-	RejectionReason    string     `json:"rejection_reason,omitempty"`
-	DocumentURL        string     `json:"document_url,omitempty"`
-	LegacyCount        int        `json:"legacy_count"`
-	HelpfulnessCount   int        `json:"helpfulness_count"`
-	ReviewCount        int        `json:"review_count"`
-	YearsExperience    int        `json:"years_experience"`
-	PatientCount       int        `json:"patient_count"`
-	PriceFrom          int64      `json:"price_from"`
-	CreatedAt          time.Time  `json:"created_at"`
+	VerificationStatus string        `json:"verification_status"`
+	RejectionReason    string        `json:"rejection_reason,omitempty"`
+	DocumentURL        string        `json:"document_url,omitempty"`
+	LegacyCount        int           `json:"legacy_count"`
+	HelpfulnessCount   int           `json:"helpfulness_count"`
+	ReviewCount        int           `json:"review_count"`
+	YearsExperience    int           `json:"years_experience"`
+	PatientCount       int           `json:"patient_count"`
+	PriceFrom          int64         `json:"price_from"`
+	CreatedAt          time.Time     `json:"created_at"`
 }
 
 type DoctorSearchResult struct {
@@ -113,11 +114,12 @@ func (s *Store) UpsertProfessionalCredential(ctx context.Context, c Professional
 		str_number=$2, sip_number=$3, sipp_number=$4, specialization=$5, sub_specialties=$6,
 		hospital_lat=$7, hospital_lng=$8, hospital_name=$9, address_details=$10, is_bpjs_supported=$11,
 		photo_intro_url=$12, video_intro_url=$13, bio=$14, education=$15::jsonb, document_url=$16,
+		years_experience=$17, price_from=$18,
 		verification_status='PENDING', verified_at=NULL
 		WHERE user_id = $1`
 	res, err := s.db.ExecContext(ctx, upd, c.UserID, c.STRNumber, c.SIPNumber, c.SIPPNumber, c.Specialization, sub,
 		c.HospitalLat, c.HospitalLng, c.HospitalName, c.AddressDetails, c.IsBPJSSupported,
-		c.PhotoIntroURL, c.VideoIntroURL, c.Bio, edu, c.DocumentURL)
+		c.PhotoIntroURL, c.VideoIntroURL, c.Bio, edu, c.DocumentURL, c.YearsExperience, c.PriceFrom)
 	if err != nil {
 		return ProfessionalCredential{}, err
 	}
@@ -125,11 +127,11 @@ func (s *Store) UpsertProfessionalCredential(ctx context.Context, c Professional
 		const ins = `INSERT INTO professional_credentials
 			(user_id, str_number, sip_number, sipp_number, specialization, sub_specialties,
 			 hospital_lat, hospital_lng, hospital_name, address_details, is_bpjs_supported,
-			 photo_intro_url, video_intro_url, bio, education, document_url, verification_status)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16,'PENDING')`
+			 photo_intro_url, video_intro_url, bio, education, document_url, years_experience, price_from, verification_status)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16,$17,$18,'PENDING')`
 		if _, err := s.db.ExecContext(ctx, ins, c.UserID, c.STRNumber, c.SIPNumber, c.SIPPNumber, c.Specialization, sub,
 			c.HospitalLat, c.HospitalLng, c.HospitalName, c.AddressDetails, c.IsBPJSSupported,
-			c.PhotoIntroURL, c.VideoIntroURL, c.Bio, edu, c.DocumentURL); err != nil {
+			c.PhotoIntroURL, c.VideoIntroURL, c.Bio, edu, c.DocumentURL, c.YearsExperience, c.PriceFrom); err != nil {
 			return ProfessionalCredential{}, err
 		}
 	}
@@ -158,7 +160,9 @@ func (s *Store) GetProfessionalCredential(ctx context.Context, userID string) (P
 		&c.Specialization, &sub, &c.HospitalLat, &c.HospitalLng, &c.HospitalName, &c.AddressDetails, &c.IsBPJSSupported,
 		&c.PhotoIntroURL, &c.VideoIntroURL, &c.Bio, &edu, &c.VerificationStatus, &c.RejectionReason, &c.DocumentURL,
 		&c.LegacyCount, &c.HelpfulnessCount, &c.ReviewCount, &c.YearsExperience, &c.PriceFrom, &c.PatientCount, &c.CreatedAt)
-	if err != nil { return ProfessionalCredential{}, err }
+	if err != nil {
+		return ProfessionalCredential{}, err
+	}
 	parsePGTextArray(sub, &c.SubSpecialties)
 	_ = json.Unmarshal(edu, &c.Education)
 	return c, nil
@@ -173,7 +177,9 @@ func (s *Store) ListPendingCredentials(ctx context.Context) ([]ProfessionalCrede
 		FROM professional_credentials WHERE verification_status = 'PENDING'
 		ORDER BY created_at ASC`
 	rows, err := s.db.QueryContext(ctx, q)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer func() { _ = rows.Close() }()
 	var out []ProfessionalCredential
 	for rows.Next() {
@@ -207,11 +213,16 @@ func (s *Store) VerifyProfessionalCredential(ctx context.Context, credentialID, 
 			rejection_reason = COALESCE(NULLIF($3,''), rejection_reason)
 		WHERE id = $4`
 	res, err := s.db.ExecContext(ctx, q, status, adminID, rejectionReason, credentialID)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	aff, _ := res.RowsAffected()
-	if aff == 0 { return errors.New("credential not found") }
+	if aff == 0 {
+		return errors.New("credential not found")
+	}
 	return nil
 }
+
 // SearchDoctors mencari profesional terverifikasi dengan stats + Haversine jarak.
 func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([]DoctorSearchResult, error) {
 	var where []string
@@ -323,6 +334,7 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 	}
 	return out, rows.Err()
 }
+
 type DoctorSearchParams struct {
 	PatientLat      *float64
 	PatientLng      *float64
@@ -336,20 +348,22 @@ type DoctorSearchParams struct {
 
 // Availability scheduling
 type ProfessionalSchedule struct {
-	ID                    string    `json:"id"`
-	ProfessionalID        string    `json:"professional_id"`
-	DayOfWeek             int       `json:"day_of_week"`
-	StartTime             string    `json:"start_time"`
-	EndTime               string    `json:"end_time"`
-	SlotDurationMinutes   int       `json:"slot_duration_minutes"`
-	IsActive              bool      `json:"is_active"`
+	ID                  string `json:"id"`
+	ProfessionalID      string `json:"professional_id"`
+	DayOfWeek           int    `json:"day_of_week"`
+	StartTime           string `json:"start_time"`
+	EndTime             string `json:"end_time"`
+	SlotDurationMinutes int    `json:"slot_duration_minutes"`
+	IsActive            bool   `json:"is_active"`
 }
 
 func (s *Store) ListSchedulesForProfessional(ctx context.Context, professionalID string) ([]ProfessionalSchedule, error) {
 	const q = `SELECT id, professional_id, day_of_week, start_time::text, end_time::text, slot_duration_minutes, is_active
 		FROM professional_schedules WHERE professional_id = $1 AND is_active = true ORDER BY day_of_week, start_time`
 	rows, err := s.db.QueryContext(ctx, q, professionalID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer func() { _ = rows.Close() }()
 	var out []ProfessionalSchedule
 	for rows.Next() {
@@ -364,17 +378,31 @@ func (s *Store) ListSchedulesForProfessional(ctx context.Context, professionalID
 
 func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, schedules []ProfessionalSchedule) error {
 	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(ctx, `UPDATE professional_schedules SET is_active = false WHERE professional_id = $1`, professionalID); err != nil {
 		return err
 	}
+	// Dedup entri identik dalam satu batch (tidak ada unique constraint di DB).
+	seen := make(map[string]ProfessionalSchedule)
+	var order []string
 	for _, sch := range schedules {
+		key := strings.Join([]string{strconv.Itoa(sch.DayOfWeek), strings.TrimSpace(sch.StartTime), strings.TrimSpace(sch.EndTime)}, "|")
+		if _, ok := seen[key]; !ok {
+			order = append(order, key)
+		}
+		if sch.SlotDurationMinutes <= 0 {
+			sch.SlotDurationMinutes = 30
+		}
+		seen[key] = sch
+	}
+	for _, key := range order {
+		sch := seen[key]
 		const q = `INSERT INTO professional_schedules (professional_id, day_of_week, start_time, end_time, slot_duration_minutes, is_active)
-			VALUES ($1, $2, $3, $4, $5, true)
-			ON CONFLICT (professional_id, day_of_week, start_time, end_time) DO UPDATE
-			SET slot_duration_minutes = $5, is_active = true`
+			VALUES ($1, $2, $3, $4, $5, true)`
 		if _, err := tx.ExecContext(ctx, q, professionalID, sch.DayOfWeek, sch.StartTime, sch.EndTime, sch.SlotDurationMinutes); err != nil {
 			return err
 		}
@@ -397,7 +425,9 @@ func (s *Store) ListServicePackages(ctx context.Context, professionalID string) 
 	const q = `SELECT id, professional_id, package_sessions, package_duration_days, price, label, is_active
 		FROM service_packages WHERE professional_id = $1 AND is_active = true ORDER BY package_sessions`
 	rows, err := s.db.QueryContext(ctx, q, professionalID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer func() { _ = rows.Close() }()
 	var out []ServicePackage
 	for rows.Next() {
@@ -412,7 +442,9 @@ func (s *Store) ListServicePackages(ctx context.Context, professionalID string) 
 
 func (s *Store) UpsertServicePackages(ctx context.Context, professionalID string, packages []ServicePackage) error {
 	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `DELETE FROM service_packages WHERE professional_id = $1`, professionalID); err != nil {
 		return err

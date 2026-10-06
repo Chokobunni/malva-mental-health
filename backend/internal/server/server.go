@@ -160,6 +160,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("POST /v1/auth/register", s.rateLimit(s.register))
 	mux.HandleFunc("POST /v1/auth/login", s.rateLimit(s.login))
+	mux.HandleFunc("POST /v1/auth/google", s.rateLimit(s.googleLogin))
 	mux.HandleFunc("POST /v1/auth/refresh", s.rateLimit(s.refresh))
 	mux.HandleFunc("POST /v1/auth/logout", s.rateLimit(s.logout))
 	mux.HandleFunc("POST /v1/auth/change-password", s.requireAuth(s.changePassword))
@@ -224,6 +225,14 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/e-prescriptions/{id}", s.requireAuth(s.getEPrescription))
 	// QR verification (public - one-time token)
 	mux.HandleFunc("GET /v1/e-prescriptions/verify", s.verifyEPrescriptionQR)
+	// Administrasi penuh (khusus role admin): kelola pengguna & dokter.
+	mux.HandleFunc("GET /v1/admin/users", s.requireAdmin(s.listAdminUsers))
+	mux.HandleFunc("PATCH /v1/admin/users/{user_id}", s.requireAdmin(s.updateAdminUser))
+	mux.HandleFunc("DELETE /v1/admin/users/{user_id}", s.requireAdmin(s.deleteAdminUser))
+	mux.HandleFunc("GET /v1/admin/credentials/pending", s.requireAdmin(s.listPendingCredentials))
+	mux.HandleFunc("POST /v1/admin/credentials/{id}/verify", s.requireAdmin(s.verifyCredential))
+	mux.HandleFunc("POST /v1/admin/doctors", s.requireAdmin(s.createAdminDoctor))
+	mux.HandleFunc("PUT /v1/admin/doctors/{user_id}", s.requireAdmin(s.updateAdminDoctor))
 	return s.recover(s.securityHeaders(s.inputSanitize(s.cors(mux))))
 }
 
@@ -311,15 +320,15 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	}
 	role, err := auth.NormalizeRole(req.Role)
 	if err != nil || role == "admin" {
-		writeError(w, http.StatusBadRequest, errors.New("role must be patient or professional"))
+		writeError(w, http.StatusBadRequest, errors.New("Role harus patient atau professional."))
 		return
 	}
 	if err := security.ValidatePassword(req.Password, req.Email); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeError(w, http.StatusBadRequest, errors.New(security.IndonesianMessage(err)))
 		return
 	}
 	if !security.ValidateEmail(req.Email) {
-		writeError(w, http.StatusBadRequest, errors.New("invalid email format"))
+		writeError(w, http.StatusBadRequest, errors.New("Format email tidak valid."))
 		return
 	}
 	hash, err := auth.HashPassword(req.Password)
@@ -335,6 +344,10 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		ProfessionalID: req.ProfessionalID,
 	})
 	if err != nil {
+		if isDuplicateKeyError(err) {
+			writeError(w, http.StatusConflict, errors.New("Email ini sudah terdaftar. Silakan masuk dengan akun tersebut."))
+			return
+		}
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -351,14 +364,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	lockoutKey := clientIP(r) + ":" + req.Email
 	if s.lockout.IsLocked(lockoutKey) {
 		s.secLogger.LogAccountLocked(r, req.Email)
-		writeError(w, http.StatusTooManyRequests, errors.New("account temporarily locked due to too many failed attempts"))
+		writeError(w, http.StatusTooManyRequests, errors.New("Akun dikunci sementara karena terlalu banyak percobaan gagal. Coba lagi dalam 15 menit."))
 		return
 	}
 	user, err := s.store.GetUserByEmail(r.Context(), req.Email)
 	if errors.Is(err, sql.ErrNoRows) {
 		s.lockout.RecordFailure(lockoutKey)
 		s.secLogger.LogAuthFailure(r, req.Email, "user not found")
-		writeError(w, http.StatusUnauthorized, errors.New("email or password is invalid"))
+		writeError(w, http.StatusUnauthorized, errors.New("Email atau password salah."))
 		return
 	}
 	if err != nil {
@@ -368,7 +381,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	if !auth.CheckPassword(user.PasswordHash, req.Password) {
 		s.lockout.RecordFailure(lockoutKey)
 		s.secLogger.LogAuthFailure(r, req.Email, "invalid password")
-		writeError(w, http.StatusUnauthorized, errors.New("email or password is invalid"))
+		writeError(w, http.StatusUnauthorized, errors.New("Email atau password salah."))
 		return
 	}
 	s.lockout.Reset(lockoutKey)

@@ -32,6 +32,9 @@ type CreateUserParams struct {
 	Role           string
 	DisplayName    string
 	ProfessionalID string
+	// SSOProvider/SSOID diisi saat akun dibuat via login sosial (mis. google).
+	SSOProvider string
+	SSOID       string
 }
 
 type PatientProfessionalLink struct {
@@ -225,10 +228,10 @@ func (s *Store) CreateUser(ctx context.Context, params CreateUserParams) (User, 
 	defer func() { _ = tx.Rollback() }()
 	var user User
 	err = tx.QueryRowContext(ctx, `
-		INSERT INTO users (email, password_hash, role, display_name)
-		VALUES ($1, $2, $3::user_role, $4)
+		INSERT INTO users (email, password_hash, role, display_name, sso_provider, sso_id)
+		VALUES ($1, $2, $3::user_role, $4, NULLIF($5, ''), NULLIF($6, ''))
 		RETURNING id, email, role::text, display_name, password_hash
-	`, email, params.PasswordHash, role, displayName).
+	`, email, params.PasswordHash, role, displayName, strings.TrimSpace(params.SSOProvider), strings.TrimSpace(params.SSOID)).
 		Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.PasswordHash)
 	if err != nil {
 		return User{}, err

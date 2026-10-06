@@ -90,6 +90,31 @@ func ValidatePassword(password, email string) error {
 	return nil
 }
 
+// IndonesianMessage memetakan error validasi password ke pesan Bahasa Indonesia
+// yang ramah ditampilkan langsung di aplikasi.
+func IndonesianMessage(err error) string {
+	switch err {
+	case ErrPasswordTooShort:
+		return "Password minimal 8 karakter."
+	case ErrPasswordTooLong:
+		return "Password maksimal 128 karakter."
+	case ErrPasswordNoUpper:
+		return "Password harus mengandung minimal 1 huruf besar (A-Z)."
+	case ErrPasswordNoLower:
+		return "Password harus mengandung minimal 1 huruf kecil (a-z)."
+	case ErrPasswordNoDigit:
+		return "Password harus mengandung minimal 1 angka (0-9)."
+	case ErrPasswordNoSpecial:
+		return "Password harus mengandung minimal 1 simbol (mis. #?!@$)."
+	case ErrPasswordCommon:
+		return "Password terlalu umum, gunakan kombinasi yang lebih unik."
+	case ErrPasswordHasEmail:
+		return "Password tidak boleh mengandung alamat email Anda."
+	default:
+		return "Password tidak memenuhi syarat keamanan."
+	}
+}
+
 func PasswordStrengthScore(password string) int {
 	score := 0
 	if len(password) >= 8 {

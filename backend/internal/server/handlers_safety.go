@@ -412,6 +412,12 @@ func (s *Server) uploadCredentials(w http.ResponseWriter, r *http.Request, claim
 		}
 	}
 
+	// Pertahankan harga & pengalaman yang diset admin agar tidak ter-nol-kan
+	// saat profesional memperbarui kredensialnya sendiri.
+	yearsExperience, priceFrom := 0, int64(0)
+	if existing, err := s.store.GetProfessionalCredential(r.Context(), claims.Subject); err == nil {
+		yearsExperience, priceFrom = existing.YearsExperience, existing.PriceFrom
+	}
 	cred, err := s.store.UpsertProfessionalCredential(r.Context(), store.ProfessionalCredential{
 		UserID:           claims.Subject,
 		STRNumber:        req.STRNumber,
@@ -429,6 +435,8 @@ func (s *Server) uploadCredentials(w http.ResponseWriter, r *http.Request, claim
 		Bio:              req.Bio,
 		Education:        req.Education,
 		DocumentURL:      req.DocumentURL,
+		YearsExperience:  yearsExperience,
+		PriceFrom:        priceFrom,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
