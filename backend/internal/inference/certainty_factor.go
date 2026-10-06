@@ -59,23 +59,29 @@ func Combine(cf1, cf2 float64) float64 {
 }
 
 // CombineConditions menggabungkan CF antar-kondisi (AND logika).
-// Kondisi dengan CF <= 0 dianggap gagal dan menghasilkan 0.
+//
+// Untuk konjungsi (AND) dalam teori Certainty Factor, gabungan
+// keyakinan diambil dari nilai TERKECIL:
+//
+//	CF(A AND B AND ...) = min(CF(A), CF(B), ...)
+//
+// Ini berbeda dari Combine (kombinasi paralel) yang dipakai untuk
+// menumpuk bukti bebas yang mendukung hipotesis yang sama.
 func CombineConditions(cfs []float64) float64 {
 	if len(cfs) == 0 {
 		return 0.0
 	}
-	positive := make([]float64, 0, len(cfs))
+	result := 0.0
+	found := false
 	for _, cf := range cfs {
-		if cf > 0 {
-			positive = append(positive, cf)
+		if cf <= 0 {
+			// Kondisi gagal memblokir rule.
+			return 0.0
 		}
-	}
-	if len(positive) == 0 {
-		return 0.0
-	}
-	result := positive[0]
-	for _, cf := range positive[1:] {
-		result = Combine(result, cf)
+		if !found || cf < result {
+			result = cf
+			found = true
+		}
 	}
 	return result
 }

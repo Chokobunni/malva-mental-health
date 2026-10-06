@@ -94,7 +94,7 @@ func PHQ9Rules() []Rule {
 				{FactID: "depression_summary", Value: "severe", CF: 0.9,
 					Explanation: "Gejala cukup berat. Prioritaskan evaluasi profesional."},
 			},
-			RuleCF: 0.95,
+			RuleCF: 0.96,
 		},
 		{
 			ID:          "PHQ9_SEVERE_HIGH",
@@ -108,14 +108,14 @@ func PHQ9Rules() []Rule {
 				{FactID: "depression_summary", Value: "severe", CF: 0.95,
 					Explanation: "Gejala berat. Butuh review klinis segera."},
 			},
-			RuleCF: 0.97,
+			RuleCF: 0.98,
 		},
 		{
 			// DSM-5 red flag: item 9 > 0 selalu krisis.
 			ID:          "PHQ9_CRISIS_SELF_HARM",
 			Description: "Red flag keselamatan: pikiran menyakiti diri (item 9 > 0)",
 			Conditions: []Condition{
-				{FactID: "phq_self_harm", Op: OpGreaterThan, Value: 0, MinCF: 0.1},
+				{FactID: "phq_self_harm", Op: OpGreaterThan, Value: 0, MinCF: 0.0},
 			},
 			Conclusions: []Conclusion{
 				{FactID: "crisis_flag", Value: "crisis", CF: 0.95,
@@ -123,67 +123,67 @@ func PHQ9Rules() []Rule {
 				{FactID: "crisis_level", Value: "crisis", CF: 0.95,
 					Explanation: "Ada indikator keselamatan diri. Tampilkan crisis flow dan hubungi profesional."},
 			},
-			RuleCF: 0.98,
+			RuleCF: 1.0,
 		},
 		{
 			ID:          "PHQ9_MOTOR_RETARDATION",
 			Description: "Pola gejala: retardasi/agitasi psikomotor",
 			Conditions: []Condition{
-				{FactID: "phq_motor", Op: OpGreaterOrEq, Value: 2, MinCF: 0.5},
+				{FactID: "phq_motor", Op: OpGreaterOrEq, Value: 2, MinCF: 0.0},
 			},
 			Conclusions: []Conclusion{
 				{FactID: "motor_retardation_present", Value: "present", CF: 0.8,
 					Explanation: "Gejala psikomotor hadir (≥ 2)"},
 			},
-			RuleCF: 0.9,
+			RuleCF: 0.8,
 		},
 		{
 			ID:          "PHQ9_SLEEP_DISRUPTION",
 			Description: "Pola gejala: gangguan tidur",
 			Conditions: []Condition{
-				{FactID: "phq_sleep", Op: OpGreaterOrEq, Value: 2, MinCF: 0.5},
+				{FactID: "phq_sleep", Op: OpGreaterOrEq, Value: 2, MinCF: 0.0},
 			},
 			Conclusions: []Conclusion{
 				{FactID: "sleep_disruption_present", Value: "present", CF: 0.8,
 					Explanation: "Gangguan tidur hadir (≥ 2)"},
 			},
-			RuleCF: 0.9,
+			RuleCF: 0.85,
 		},
 		{
 			ID:          "PHQ9_APPETITE_CHANGE",
 			Description: "Pola gejala: perubahan nafsu makan",
 			Conditions: []Condition{
-				{FactID: "phq_appetite", Op: OpGreaterOrEq, Value: 2, MinCF: 0.5},
+				{FactID: "phq_appetite", Op: OpGreaterOrEq, Value: 2, MinCF: 0.0},
 			},
 			Conclusions: []Conclusion{
 				{FactID: "appetite_change_present", Value: "present", CF: 0.8,
 					Explanation: "Perubahan nafsu makan hadir (≥ 2)"},
 			},
-			RuleCF: 0.9,
+			RuleCF: 0.8,
 		},
 		{
 			ID:          "PHQ9_CONCENTRATION_ISSUE",
 			Description: "Pola gejala: gangguan konsentrasi",
 			Conditions: []Condition{
-				{FactID: "phq_focus", Op: OpGreaterOrEq, Value: 2, MinCF: 0.5},
+				{FactID: "phq_focus", Op: OpGreaterOrEq, Value: 2, MinCF: 0.0},
 			},
 			Conclusions: []Conclusion{
 				{FactID: "concentration_issue_present", Value: "present", CF: 0.8,
 					Explanation: "Gangguan konsentrasi hadir (≥ 2)"},
 			},
-			RuleCF: 0.9,
+			RuleCF: 0.8,
 		},
 		{
 			ID:          "PHQ9_SELF_WORTH_ISSUE",
 			Description: "Pola gejala: harga diri rendah / rasa bersalah",
 			Conditions: []Condition{
-				{FactID: "phq_self_worth", Op: OpGreaterOrEq, Value: 2, MinCF: 0.5},
+				{FactID: "phq_self_worth", Op: OpGreaterOrEq, Value: 2, MinCF: 0.0},
 			},
 			Conclusions: []Conclusion{
 				{FactID: "self_worth_issue_present", Value: "present", CF: 0.8,
 					Explanation: "Masalah harga diri / rasa bersalah hadir (≥ 2)"},
 			},
-			RuleCF: 0.9,
+			RuleCF: 0.85,
 		},
 	}
 }
@@ -247,45 +247,45 @@ func GAD7Rules() []Rule {
 				{FactID: "anxiety_summary", Value: "severe", CF: 0.92,
 					Explanation: "Gejala berat. Prioritaskan review klinis dan rencana dukungan."},
 			},
-			RuleCF: 0.95,
+			RuleCF: 0.97,
 		},
 		{
 			ID:          "GAD7_WORRY_RUMINATION",
 			Description: "Pola gejala: ruminasi / sulit mengontrol khawatir",
 			Conditions: []Condition{
-				{FactID: "gad_worry", Op: OpGreaterOrEq, Value: 2, MinCF: 0.5},
-				{FactID: "gad_control", Op: OpGreaterOrEq, Value: 2, MinCF: 0.5},
+				{FactID: "gad_worry", Op: OpGreaterOrEq, Value: 2, MinCF: 0.0},
+				{FactID: "gad_control", Op: OpGreaterOrEq, Value: 2, MinCF: 0.0},
 			},
 			Conclusions: []Conclusion{
 				{FactID: "worry_rumination_present", Value: "present", CF: 0.85,
 					Explanation: "Ruminasi & khawatir sulit dikontrol hadir"},
 			},
-			RuleCF: 0.92,
+			RuleCF: 0.85,
 		},
 		{
 			ID:          "GAD7_RESTLESSNESS",
 			Description: "Pola gejala: gelisah & sulit rileks",
 			Conditions: []Condition{
-				{FactID: "gad_restless", Op: OpGreaterOrEq, Value: 2, MinCF: 0.5},
-				{FactID: "gad_relax", Op: OpGreaterOrEq, Value: 2, MinCF: 0.5},
+				{FactID: "gad_restless", Op: OpGreaterOrEq, Value: 2, MinCF: 0.0},
+				{FactID: "gad_relax", Op: OpGreaterOrEq, Value: 2, MinCF: 0.0},
 			},
 			Conclusions: []Conclusion{
 				{FactID: "restlessness_present", Value: "present", CF: 0.85,
 					Explanation: "Gelisah & sulit rileks hadir"},
 			},
-			RuleCF: 0.92,
+			RuleCF: 0.85,
 		},
 		{
 			ID:          "GAD7_FEAR_ANSWER",
 			Description: "Pola gejala: ketakutan sesuatu buruk terjadi",
 			Conditions: []Condition{
-				{FactID: "gad_fear", Op: OpGreaterOrEq, Value: 2, MinCF: 0.5},
+				{FactID: "gad_fear", Op: OpGreaterOrEq, Value: 2, MinCF: 0.0},
 			},
 			Conclusions: []Conclusion{
 				{FactID: "fear_present", Value: "present", CF: 0.8,
 					Explanation: "Perasaan takut sesuatu buruk terjadi hadir"},
 			},
-			RuleCF: 0.9,
+			RuleCF: 0.8,
 		},
 	}
 }

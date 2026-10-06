@@ -128,25 +128,31 @@ class CertaintyFactorCalculator {
 
   /// Calculate the combined CF of multiple conditions (AND logic).
   ///
-  /// For AND conditions, we combine CFs sequentially. All conditions
-  /// must have positive CF (be satisfied) for the rule to fire.
+  /// Untuk konjungsi (AND) dalam teori Certainty Factor, gabungan
+  /// keyakinan diambil dari nilai TERKECIL:
+  ///   CF(A AND B AND ...) = min(CF(A), CF(B), ...)
+  ///
+  /// Ini berbeda dari [combine] (kombinasi paralel) yang dipakai untuk
+  /// menumpuk BUKTI BEBAS yang mendukung hipotesis yang sama.
   ///
   /// Parameters:
   ///   [conditionCFs] - List of CFs from individual conditions
   ///
   /// Returns:
-  ///   Combined CF representing all conditions together
+  ///   min dari CF kondisi; 0.0 bila tidak ada kondisi terpenuhi
   static double combineConditions(List<double> conditionCFs) {
     if (conditionCFs.isEmpty) return 0.0;
 
-    // Filter out negative CFs (failed conditions)
-    final positiveCFs = conditionCFs.where((cf) => cf > 0).toList();
-    if (positiveCFs.isEmpty) return 0.0;
-
-    // Combine sequentially
-    double result = positiveCFs.first;
-    for (int i = 1; i < positiveCFs.length; i++) {
-      result = combine(result, positiveCFs[i]);
+    // Bila ada kondisi yang tidak terpenuhi (CF <= 0), rule tidak boleh
+    // menembak — hasil gabungan 0.0.
+    var result = 0.0;
+    var found = false;
+    for (final cf in conditionCFs) {
+      if (cf <= 0) return 0.0;
+      if (!found || cf < result) {
+        result = cf;
+        found = true;
+      }
     }
     return result;
   }

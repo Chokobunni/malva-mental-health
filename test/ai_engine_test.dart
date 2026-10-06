@@ -70,6 +70,19 @@ void main() {
         expect(result, lessThan(1.0));
       });
 
+      test('AND logic memakai nilai TERKECIL (min), bukan kombinasi paralel',
+          () {
+        // Konjungsi: CF(A AND B) = min(CF(A), CF(B)) = 0.4
+        expect(
+          CertaintyFactorCalculator.combineConditions([0.9, 0.4]),
+          closeTo(0.4, 0.0001),
+        );
+        expect(
+          CertaintyFactorCalculator.combineConditions([0.6, 0.4, 0.5]),
+          closeTo(0.4, 0.0001),
+        );
+      });
+
       test('returns 0.0 for empty list', () {
         expect(CertaintyFactorCalculator.combineConditions([]), 0.0);
       });
@@ -77,6 +90,13 @@ void main() {
       test('returns 0.0 when all conditions are 0', () {
         expect(
             CertaintyFactorCalculator.combineConditions([0.0, 0.0, 0.0]), 0.0);
+      });
+
+      test('kondisi gagal (<= 0) memblokir rule', () {
+        expect(
+          CertaintyFactorCalculator.combineConditions([0.9, 0.0]),
+          0.0,
+        );
       });
     });
 
@@ -325,6 +345,42 @@ void main() {
 
         expect(result.level, 'minimal');
         expect(result.certaintyFactor, greaterThan(0.8));
+      });
+    });
+
+    group('Parity vektor (kunci hasil client = server)', () {
+      // Nilai harapan ini SAMA dengan TestParityVector di
+      // backend/internal/inference/inference_test.go. Bila salah satu
+      // engine berubah tanpa menyamakan yang lain, test ini gagal.
+      final engine = ForwardChainingEngine();
+
+      void check(
+          String name, List<int> answers, String level, double cf, int fired) {
+        final result = engine.infer(
+          questionIds: KnowledgeBase.phq9QuestionIds,
+          answers: answers,
+          rules: KnowledgeBase.phq9Rules,
+        );
+        expect(result.level, level, reason: '$name: level');
+        expect(result.certaintyFactor, closeTo(cf, 0.001), reason: '$name: CF');
+        expect(result.trace.where((t) => t.fired).length, fired,
+            reason: '$name: jumlah rule menembak');
+      }
+
+      test('all zero -> minimal CF 0.9025, 1 rule', () {
+        check('all zero', [0, 0, 0, 0, 0, 0, 0, 0, 0], 'minimal', 0.9025, 1);
+      });
+
+      test('item9 = 1 -> crisis CF 0.95, 2 rule', () {
+        check('item9=1', [0, 0, 0, 0, 0, 0, 0, 0, 1], 'crisis', 0.9500, 2);
+      });
+
+      test('moderate -> moderate CF 0.9025, 1 rule', () {
+        check('moderate', [2, 2, 1, 2, 1, 1, 1, 0, 0], 'moderate', 0.9025, 1);
+      });
+
+      test('all two -> crisis CF 0.95, 7 rule', () {
+        check('all two', [2, 2, 2, 2, 2, 2, 2, 2, 2], 'crisis', 0.9500, 7);
       });
     });
 

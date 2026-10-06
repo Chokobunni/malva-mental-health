@@ -133,6 +133,39 @@ func TestCFCombineMatchesReference(t *testing.T) {
 	}
 }
 
+func TestCombineConditionsUsesMin(t *testing.T) {
+	// Konjungsi (AND): CF(A AND B) = min(CF(A), CF(B)).
+	if got := CombineConditions([]float64{0.9, 0.4}); math.Abs(got-0.4) > 1e-9 {
+		t.Errorf("CombineConditions([0.9,0.4]) = %.4f, want 0.4 (min)", got)
+	}
+	if got := CombineConditions([]float64{0.6, 0.4, 0.5}); math.Abs(got-0.4) > 1e-9 {
+		t.Errorf("CombineConditions([0.6,0.4,0.5]) = %.4f, want 0.4 (min)", got)
+	}
+	// Kondisi gagal memblokir rule.
+	if got := CombineConditions([]float64{0.9, 0.0}); got != 0.0 {
+		t.Errorf("CombineConditions([0.9,0.0]) = %.4f, want 0.0", got)
+	}
+}
+
+func TestNoRepeatedFiring(t *testing.T) {
+	// Rule tidak boleh menembak berulang: CF hasil akhir harus wajar
+	// (bukan konvergen ke 1.0 karena penggabungan berulang).
+	res := runPHQ9(t, []int{0, 0, 0, 0, 0, 0, 0, 0, 0})
+	if res.CF >= 1.0 {
+		t.Errorf("CF = %.4f, seharusnya < 1.0 (tidak menembak berulang)", res.CF)
+	}
+	seen := map[string]bool{}
+	for _, tr := range res.Trace {
+		if !tr.Fired {
+			continue
+		}
+		if seen[tr.RuleID] {
+			t.Errorf("rule %s menembak lebih dari sekali (fire-once dilanggar)", tr.RuleID)
+		}
+		seen[tr.RuleID] = true
+	}
+}
+
 func TestCFScoreMapping(t *testing.T) {
 	want := []float64{0.0, 0.3, 0.6, 0.9}
 	for score, expect := range want {
@@ -159,6 +192,39 @@ func TestErrors(t *testing.T) {
 	}
 	if _, err := engine.Infer(PHQ9QuestionIDs, []int{0, 0, 0, 0, 0, 0, 0, 0, -1}, PHQ9Rules()); err == nil {
 		t.Errorf("answer < 0 harus error")
+	}
+}
+
+// TestParityVector mengunci hasil engine Go agar identik dengan engine
+// Dart (client). Nilai harapan diambil dari test Dart
+// test/ai_engine_test.dart (group 'Parity vektor') — kedua engine wajib
+// menghasilkan level, CF, dan jumlah rule yang menembak yang sama persis.
+func TestParityVector(t *testing.T) {
+	cases := []struct {
+		name      string
+		answers   []int
+		wantLevel string
+		wantCF    float64
+		wantFired int
+	}{
+		{"all zero", []int{0, 0, 0, 0, 0, 0, 0, 0, 0}, "minimal", 0.9025, 1},
+		{"item9 = 1", []int{0, 0, 0, 0, 0, 0, 0, 0, 1}, "crisis", 0.9500, 2},
+		{"moderate", []int{2, 2, 1, 2, 1, 1, 1, 0, 0}, "moderate", 0.9025, 1},
+		{"all two", []int{2, 2, 2, 2, 2, 2, 2, 2, 2}, "crisis", 0.9500, 7},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := runPHQ9(t, tc.answers)
+			if res.Level != tc.wantLevel {
+				t.Errorf("level = %s, want %s", res.Level, tc.wantLevel)
+			}
+			if math.Abs(res.CF-tc.wantCF) > 0.001 {
+				t.Errorf("CF = %.4f, want %.4f", res.CF, tc.wantCF)
+			}
+			if res.FiredRuleCount != tc.wantFired {
+				t.Errorf("fired = %d, want %d", res.FiredRuleCount, tc.wantFired)
+			}
+		})
 	}
 }
 

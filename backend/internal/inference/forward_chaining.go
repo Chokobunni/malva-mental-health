@@ -24,6 +24,18 @@ import (
 // RuleVersion versi rule base FC+CF (samakan dengan client).
 const RuleVersion = "2026.1.FC"
 
+// Keandalan instrumen terstandar (PHQ-9/GAD-7) sebagai sumber bukti.
+// Total skor adalah keluaran kuesioner baku & tervalidasi, sehingga CF-nya
+// mencerminkan keandalan instrumen — bukan rata-rata jawaban pasien.
+const instrumentCF = 0.95
+
+// safetyEvidenceCF: CF bukti minimum untuk item keselamatan (PHQ-9 item 9).
+// DSM-5: ide menyakiti diri bermakna klinis apa pun frekuensinya.
+const safetyEvidenceCF = 0.95
+
+// selfHarmFactID: item keselamatan yang memakai CF floor di atas.
+const selfHarmFactID = "phq_self_harm"
+
 // ConditionOperator operator pembanding kondisi rule.
 type ConditionOperator string
 
@@ -118,10 +130,15 @@ func (e *Engine) Infer(questionIDs []string, answers []int, rules []Rule) (Infer
 		if raw < 0 || raw > 3 {
 			return InferenceResult{}, fmt.Errorf("answer for %s must be between 0 and 3", qid)
 		}
+		// Item keselamatan memakai CF floor (ide bermakna klinis).
+		cf := ScoreToCF(raw)
+		if qid == selfHarmFactID && raw > 0 {
+			cf = safetyEvidenceCF
+		}
 		wm[qid] = Fact{
 			FactID: qid,
 			Value:  raw,
-			CF:     ScoreToCF(raw),
+			CF:     cf,
 			Note:   fmt.Sprintf("Jawaban langsung dari pasien (skor %d)", raw),
 		}
 	}
@@ -130,6 +147,7 @@ func (e *Engine) Infer(questionIDs []string, answers []int, rules []Rule) (Infer
 	calcTotals(wm, questionIDs, "gad7", "gad_")
 
 	trace := make([]Trace, 0, len(rules))
+	firedRules := make(map[string]bool, len(rules))
 	firedAny := true
 	iterations := 0
 	firedCount := 0
@@ -137,11 +155,18 @@ func (e *Engine) Infer(questionIDs []string, answers []int, rules []Rule) (Infer
 		firedAny = false
 		iterations++
 		for _, rule := range rules {
+			// Fire-once: rule yang sudah menembak tidak dievaluasi ulang
+			// (menembak ulang akan menggabungkan CF yang sama berulang
+			// kali sehingga nilai konvergen ke 1.0).
+			if firedRules[rule.ID] {
+				continue
+			}
 			tr := evaluateRule(rule, wm)
 			trace = append(trace, tr)
 			if tr.Fired {
 				firedAny = true
 				firedCount++
+				firedRules[rule.ID] = true
 				applyConclusions(rule, wm)
 			}
 		}
@@ -150,15 +175,16 @@ func (e *Engine) Infer(questionIDs []string, answers []int, rules []Rule) (Infer
 	return buildResult(wm, trace, firedCount), nil
 }
 
+// calcTotals menghitung total skor per instrumen. CF fakta total memakai
+// keandalan instrumen (instrumentCF) karena skor total adalah keluaran
+// kuesioner baku, bukan keyakinan pasien per item.
 func calcTotals(wm map[string]Fact, questionIDs []string, prefix, questionPrefix string) {
 	total := 0
-	totalCF := 0.0
 	count := 0
 	for _, qid := range questionIDs {
 		if len(qid) >= len(questionPrefix) && qid[:len(questionPrefix)] == questionPrefix {
 			if fact, ok := wm[qid]; ok {
 				total += fact.Value
-				totalCF += fact.CF
 				count++
 			}
 		}
@@ -167,7 +193,7 @@ func calcTotals(wm map[string]Fact, questionIDs []string, prefix, questionPrefix
 		wm[prefix+"_total_score"] = Fact{
 			FactID: prefix + "_total_score",
 			Value:  total,
-			CF:     totalCF / float64(count),
+			CF:     instrumentCF,
 			Note:   fmt.Sprintf("Total skor %s: %d dari %d item", prefix, total, count),
 		}
 	}

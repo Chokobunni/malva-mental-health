@@ -16,6 +16,20 @@ class ForwardChainingEngine {
   /// Maximum number of inference cycles to prevent infinite loops.
   static const int _maxIterations = 100;
 
+  /// Keandalan instrumen terstandar (PHQ-9/GAD-7) sebagai sumber bukti.
+  /// Total skor berasal dari kuesioner baku & tervalidasi, sehingga CF-nya
+  /// mencerminkan keandalan instrumen — bukan rata-rata jawaban pasien
+  /// (yang akan mendilusi rule saat semua jawaban 0).
+  static const double _instrumentCF = 0.95;
+
+  /// CF bukti minimum untuk item keselamatan (PHQ-9 item 9).
+  /// DSM-5: adanya ide menyakiti diri bermakna klinis apa pun
+  /// frekuensinya, jadi CF bukti tidak boleh rendah.
+  static const double _safetyEvidenceCF = 0.95;
+
+  /// ID item keselamatan yang memakai CF floor di atas.
+  static const String _selfHarmFactId = 'phq_self_harm';
+
   /// Run forward chaining inference on the given answers.
   ///
   /// This is the main entry point for the inference engine. It:
@@ -23,6 +37,10 @@ class ForwardChainingEngine {
   /// 2. Calculates total scores
   /// 3. Iteratively applies rules until no more fire
   /// 4. Returns the final inference result with audit trail
+  ///
+  /// Setiap rule hanya boleh menembak SEKALI (fire-once) sesuai kaidah
+  /// forward chaining: menembak ulang rule yang sama akan menggabungkan
+  /// CF yang sama berulang kali sehingga nilai konvergen ke 1.0.
   ///
   /// Parameters:
   ///   [questionIds] - List of question identifiers in order
@@ -52,10 +70,16 @@ class ForwardChainingEngine {
         throw ArgumentError('Answer for $questionId must be between 0 and 3');
       }
 
+      // Item keselamatan memakai CF floor (ide bermakna klinis).
+      var cf = CertaintyFactorCalculator.scoreToCF(rawValue);
+      if (questionId == _selfHarmFactId && rawValue > 0) {
+        cf = _safetyEvidenceCF;
+      }
+
       workingMemory[questionId] = ClinicalFact(
         factId: questionId,
         value: rawValue,
-        certaintyFactor: CertaintyFactorCalculator.scoreToCF(rawValue),
+        certaintyFactor: cf,
         explanation: 'Jawaban langsung dari pasien (skor $rawValue)',
       );
     }
@@ -66,6 +90,7 @@ class ForwardChainingEngine {
 
     // Run forward chaining
     final trace = <RuleFiredTrace>[];
+    final firedRuleIds = <String>{};
     bool rulesFired = true;
     int iterations = 0;
 
@@ -74,11 +99,18 @@ class ForwardChainingEngine {
       iterations++;
 
       for (final rule in rules) {
+        // Fire-once: rule yang sudah menembak tidak dievaluasi ulang.
+        if (firedRuleIds.contains(rule.id)) continue;
+
         final result = _evaluateRule(rule, workingMemory);
 
         if (result.fired) {
           rulesFired = true;
+          firedRuleIds.add(rule.id);
           trace.add(result);
+
+          // CF kesimpulan = CF(rule) x CF(bukti) — dihitung di _evaluateRule.
+          final conclusionCF = result.resultCF;
 
           // Apply conclusions to working memory
           for (final conclusion in rule.conclusions) {
@@ -88,7 +120,7 @@ class ForwardChainingEngine {
               // Combine CFs if fact already exists
               final combinedCF = CertaintyFactorCalculator.combine(
                 existingFact.certaintyFactor,
-                conclusion.cf,
+                conclusionCF,
               );
               workingMemory[conclusion.factId] = ClinicalFact(
                 factId: conclusion.factId,
@@ -102,7 +134,7 @@ class ForwardChainingEngine {
               workingMemory[conclusion.factId] = ClinicalFact(
                 factId: conclusion.factId,
                 value: conclusion.value,
-                certaintyFactor: conclusion.cf,
+                certaintyFactor: conclusionCF,
                 explanation: conclusion.explanation,
               );
             }
@@ -116,6 +148,9 @@ class ForwardChainingEngine {
   }
 
   /// Calculate total scores and add to working memory.
+  ///
+  /// CF fakta total memakai keandalan instrumen (0.95) karena skor total
+  /// adalah keluaran kuesioner baku, bukan keyakinan pasien per item.
   void _calculateTotalScores(
     Map<String, ClinicalFact> workingMemory,
     List<String> questionIds,
@@ -123,7 +158,6 @@ class ForwardChainingEngine {
     String questionPrefix,
   ) {
     int total = 0;
-    double totalCF = 0.0;
     int count = 0;
 
     for (final questionId in questionIds) {
@@ -131,19 +165,16 @@ class ForwardChainingEngine {
         final fact = workingMemory[questionId];
         if (fact != null) {
           total += fact.value as int;
-          totalCF += fact.certaintyFactor;
           count++;
         }
       }
     }
 
     if (count > 0) {
-      final avgCF = totalCF / count;
-
       workingMemory['${prefix}_total_score'] = ClinicalFact(
         factId: '${prefix}_total_score',
         value: total,
-        certaintyFactor: avgCF,
+        certaintyFactor: _instrumentCF,
         explanation: 'Total skor $prefix: $total dari $count item',
       );
     }
