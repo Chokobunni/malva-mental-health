@@ -232,6 +232,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/admin/credentials/pending", s.requireAdmin(s.listPendingCredentials))
 	mux.HandleFunc("POST /v1/admin/credentials/{id}/verify", s.requireAdmin(s.verifyCredential))
 	mux.HandleFunc("POST /v1/admin/doctors", s.requireAdmin(s.createAdminDoctor))
+	mux.HandleFunc("GET /v1/admin/doctors/{user_id}", s.requireAdmin(s.getAdminDoctor))
 	mux.HandleFunc("PUT /v1/admin/doctors/{user_id}", s.requireAdmin(s.updateAdminDoctor))
 	return s.recover(s.securityHeaders(s.inputSanitize(s.cors(mux))))
 }

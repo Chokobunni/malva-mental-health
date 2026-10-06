@@ -45,6 +45,7 @@ func TestAdminEndpointsGuard(t *testing.T) {
 		{"GET", "/v1/admin/credentials/pending"},
 		{"POST", "/v1/admin/credentials/c1/verify"},
 		{"POST", "/v1/admin/doctors"},
+		{"GET", "/v1/admin/doctors/u1"},
 		{"PUT", "/v1/admin/doctors/u1"},
 	}
 	for _, tc := range adminPaths {

@@ -92,6 +92,50 @@ func (s *Server) deleteAdminUser(w http.ResponseWriter, r *http.Request, claims 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// getAdminDoctor mengembalikan profil lengkap satu dokter untuk form edit:
+// akun + kredensial + jadwal + paket (khusus admin).
+func (s *Server) getAdminDoctor(w http.ResponseWriter, r *http.Request, _ auth.Claims) {
+	userID := r.PathValue("user_id")
+	if strings.TrimSpace(userID) == "" {
+		writeError(w, http.StatusBadRequest, errors.New("user_id wajib diisi."))
+		return
+	}
+	user, err := s.store.GetUserByID(r.Context(), userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, errors.New("Dokter tidak ditemukan."))
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if user.Role != "professional" {
+		writeError(w, http.StatusBadRequest, errors.New("Akun ini bukan profesional."))
+		return
+	}
+	cred, err := s.store.GetProfessionalCredential(r.Context(), userID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	schedules, err := s.store.ListSchedulesForProfessional(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	packages, err := s.store.ListServicePackages(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user":       user,
+		"credential": cred,
+		"schedules":  schedules,
+		"packages":   packages,
+	})
+}
+
 func (s *Server) listPendingCredentials(w http.ResponseWriter, r *http.Request, _ auth.Claims) {
 	pending, err := s.store.ListPendingCredentials(r.Context())
 	if err != nil {

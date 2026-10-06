@@ -8,6 +8,7 @@ import '../theme.dart';
 import '../widgets/malva_components.dart';
 import 'consent_management_screen.dart';
 import 'record_screen.dart';
+import 'admin/admin_panel_screen.dart';
 import 'safety/emergency_contacts_screen.dart';
 import 'settings_screens.dart';
 
@@ -103,6 +104,23 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                         builder: (_) => const ConsentManagementScreen()),
                   ),
                 ),
+                if (widget.session?.role == UserRole.admin) ...[
+                  const SizedBox(height: 10),
+                  ActionTile(
+                    icon: Icons.admin_panel_settings_rounded,
+                    title: 'Panel Admin',
+                    subtitle: 'Kelola pengguna, dokter & verifikasi',
+                    color: MalvaColors.danger,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => AdminPanelScreen(
+                                apiClient: widget.apiClient,
+                                session: widget.session,
+                              )),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 const SectionLabel('Export Data'),
                 _ExportSection(),

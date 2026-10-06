@@ -119,6 +119,123 @@ class MalvaApiClient {
     );
   }
 
+  // ============================================================
+  // ADMIN: pengguna & dokter (membutuhkan token role admin)
+  // ============================================================
+
+  Future<List<AdminUser>> listAdminUsers({
+    required String accessToken,
+  }) async {
+    final payload =
+        await _send('GET', '/v1/admin/users', accessToken: accessToken);
+    return (payload['users'] as List?)
+            ?.map((e) => AdminUser.fromJson(
+                _expectMap(e, 'Data pengguna tidak valid.')))
+            .toList() ??
+        const [];
+  }
+
+  Future<AdminUser> updateAdminUser({
+    required String accessToken,
+    required String userId,
+    String? displayName,
+    String? role,
+    bool? disabled,
+  }) async {
+    final payload = await _send('PATCH', '/v1/admin/users/$userId',
+        accessToken: accessToken,
+        body: {
+          if (displayName != null) 'display_name': displayName,
+          if (role != null) 'role': role,
+          if (disabled != null) 'disabled': disabled,
+        });
+    return AdminUser.fromJson(
+        _expectMap(payload['user'], 'Respons pengguna tidak valid.'));
+  }
+
+  Future<void> deleteAdminUser({
+    required String accessToken,
+    required String userId,
+  }) async {
+    await _send('DELETE', '/v1/admin/users/$userId', accessToken: accessToken);
+  }
+
+  Future<List<BackendProfessionalCredential>> listPendingCredentials({
+    required String accessToken,
+  }) async {
+    final payload = await _send('GET', '/v1/admin/credentials/pending',
+        accessToken: accessToken);
+    return (payload['pending'] as List?)
+            ?.map((e) => BackendProfessionalCredential.fromJson(
+                _expectMap(e, 'Data kredensial tidak valid.')))
+            .toList() ??
+        const [];
+  }
+
+  Future<void> verifyCredential({
+    required String accessToken,
+    required String credentialId,
+    required String action,
+    String rejectionReason = '',
+  }) async {
+    await _send('POST', '/v1/admin/credentials/$credentialId/verify',
+        accessToken: accessToken,
+        body: {
+          'action': action,
+          'rejection_reason': rejectionReason,
+        });
+  }
+
+  /// Membuat akun dokter + profil + jadwal + paket (langsung terverifikasi).
+  Future<Map<String, dynamic>> createDoctor({
+    required String accessToken,
+    required String email,
+    required String password,
+    required String displayName,
+    required String professionalId,
+    required Map<String, Object?> credentials,
+    List<Map<String, Object?>> schedules = const [],
+    List<Map<String, Object?>> packages = const [],
+  }) async {
+    final payload = await _send('POST', '/v1/admin/doctors',
+        accessToken: accessToken,
+        body: {
+          'email': email.trim().toLowerCase(),
+          'password': password,
+          'display_name': displayName.trim(),
+          'professional_id': professionalId.trim(),
+          'credentials': credentials,
+          'schedules': schedules,
+          'packages': packages,
+        });
+    return payload;
+  }
+
+  Future<Map<String, dynamic>> updateDoctor({
+    required String accessToken,
+    required String userId,
+    required Map<String, Object?> credentials,
+    List<Map<String, Object?>>? schedules,
+    List<Map<String, Object?>>? packages,
+  }) async {
+    final payload = await _send('PUT', '/v1/admin/doctors/$userId',
+        accessToken: accessToken,
+        body: {
+          'credentials': credentials,
+          if (schedules != null) 'schedules': schedules,
+          if (packages != null) 'packages': packages,
+        });
+    return payload;
+  }
+
+  /// Detail lengkap dokter untuk form edit admin.
+  Future<Map<String, dynamic>> getAdminDoctor({
+    required String accessToken,
+    required String userId,
+  }) async {
+    return _send('GET', '/v1/admin/doctors/$userId', accessToken: accessToken);
+  }
+
   Future<BackendAuthResult> refreshSession({
     required String refreshToken,
   }) async {
@@ -1984,6 +2101,37 @@ class BackendProfessionalCredential {
   final int yearsExperience;
   final String addressDetails;
   final int priceFrom;
+}
+
+class AdminUser {
+  const AdminUser({
+    required this.id,
+    required this.email,
+    required this.role,
+    required this.displayName,
+    this.ssoProvider,
+    this.disabled = false,
+  });
+
+  factory AdminUser.fromJson(Map<String, dynamic> json) {
+    return AdminUser(
+      id: json['id']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      role: json['role']?.toString() ?? 'patient',
+      displayName: json['display_name']?.toString() ?? '',
+      ssoProvider: json['sso_provider']?.toString(),
+      disabled: json['disabled_at'] != null,
+    );
+  }
+
+  final String id;
+  final String email;
+  final String role;
+  final String displayName;
+  final String? ssoProvider;
+  final bool disabled;
+
+  bool get isGoogleLinked => (ssoProvider ?? '').isNotEmpty;
 }
 
 class BackendDoctorSearchResult {
