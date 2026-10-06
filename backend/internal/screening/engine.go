@@ -150,15 +150,12 @@ func Score(kind string, values []int) (Result, error) {
 	}, nil
 }
 
-// ruleTraceFrom mengembalikan jejak rule hasil inference utk persist.
-func ruleTraceFrom(result Result) string {
-	return result.RuleTrace
-}
 
 func overallLevel(phq9, gad7 Result) string {
 	if phq9.CrisisFlag || gad7.CrisisFlag {
 		return "crisis"
 	}
+
 	priority := map[string]int{
 		"minimal":  0,
 		"mild":     1,
