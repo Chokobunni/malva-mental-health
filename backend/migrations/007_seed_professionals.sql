@@ -1,6 +1,8 @@
 -- Migration 007: Seed direktori profesional demo + akun pasien demo.
 -- Idempoten: aman dijalankan ulang (ON CONFLICT / NOT EXISTS).
--- Password profesional demo: Dokter12345 (bcrypt).
+-- Password profesional demo: Dokter1234 (bcrypt) — untuk 4 akun:
+--   1234567890123456@ / 8888777766665555@ / 7777666655554444@ /
+--   6666555544443333@ professional.malva.local
 -- Password pasien demo preview_pasien@malva.app: Malva1234! (bcrypt).
 
 -- ============================================================

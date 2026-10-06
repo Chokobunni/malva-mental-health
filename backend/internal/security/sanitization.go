@@ -7,11 +7,11 @@ import (
 )
 
 var (
-	scriptTagRe  = regexp.MustCompile(`(?i)<script[^>]*>.*?</script>`)
-	onEventRe    = regexp.MustCompile(`(?i)\bon\w+\s*=`)
-	javascriptRe = regexp.MustCompile(`(?i)javascript:`)
-	dataRe       = regexp.MustCompile(`(?i)data:[^,]*;base64`)
-	sqlInjectRe  = regexp.MustCompile(`(?i)(\b(union|select|insert|update|delete|drop|alter|create|exec|execute)\b\s)|(\b(or|and)\b\s+\d+\s*=\s*\d+)|(-{2})|(/\*)|(\*/)|(\bwaitfor\b\s+delay)`)
+	scriptTagRe   = regexp.MustCompile(`(?i)<script[^>]*>.*?</script>`)
+	onEventRe     = regexp.MustCompile(`(?i)\bon\w+\s*=`)
+	javascriptRe  = regexp.MustCompile(`(?i)javascript:`)
+	dataRe        = regexp.MustCompile(`(?i)data:[^,]*;base64`)
+	sqlInjectRe   = regexp.MustCompile(`(?i)(\b(union|select|insert|update|delete|drop|alter|create|exec|execute)\b\s)|(\b(or|and)\b\s+\d+\s*=\s*\d+)|(-{2})|(/\*)|(\*/)|(\bwaitfor\b\s+delay)`)
 	pathTraversRe = regexp.MustCompile(`(\.\./|\.\.\\)`)
 )
 

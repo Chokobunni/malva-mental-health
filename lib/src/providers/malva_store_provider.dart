@@ -283,6 +283,9 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     required String email,
     required String password,
     required String displayName,
+    String? phone,
+    String? dateOfBirth,
+    String? gender,
   }) async {
     final api = _apiClient;
     if (api == null) throw _noServerFailure;
@@ -292,6 +295,9 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         email: email.trim().toLowerCase(),
         password: password,
         displayName: displayName,
+        phone: phone,
+        dateOfBirth: dateOfBirth,
+        gender: gender,
       );
       return AuthSession(
         role: UserRole.patient,
@@ -465,6 +471,46 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       displayName:
           displayName.trim().isEmpty ? 'Profesional Malva' : displayName.trim(),
     );
+  }
+
+  /// Menukar refresh token dengan sesi baru (dipakai saat restore sesi
+  /// di cold start maupun refresh proaktif). Error jaringan dilempar apa
+  /// adanya agar pemanggil bisa memutuskan fallback.
+  Future<AuthSession> refreshSessionOnline(String refreshToken) async {
+    final api = _apiClient;
+    if (api == null) throw _noServerFailure;
+    try {
+      final result = await api.refreshSession(refreshToken: refreshToken);
+      final session = AuthSession(
+        role: result.role,
+        identifier: result.email,
+        displayName: result.displayName,
+        backendUserId: result.userId,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        backendSynced: true,
+      );
+      await persistSession(session); // simpan token baru
+      return session;
+    } on MalvaApiException catch (e) {
+      if (e.statusCode != null) rethrow;
+      throw _noServerFailure;
+    }
+  }
+
+  /// Logout sesuai server: cabut refresh token di backend, lalu bersihkan
+  /// sesi lokal. Dipanggil oleh MalvaApp saat user menekan keluar.
+  Future<void> logoutSession(AuthSession? session) async {
+    final api = _apiClient;
+    final refreshToken = session?.refreshToken;
+    if (api != null && refreshToken != null && refreshToken.isNotEmpty) {
+      try {
+        await api.logout(refreshToken: refreshToken);
+      } on Object {
+        // Offline / token sudah dicabut: tetap lanjut bersihkan lokal.
+      }
+    }
+    await clearSession();
   }
 
   // ============================================================

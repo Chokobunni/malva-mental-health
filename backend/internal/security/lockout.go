@@ -6,16 +6,16 @@ import (
 )
 
 type AccountLockout struct {
-	mu             sync.Mutex
-	maxAttempts    int
-	lockoutWindow  time.Duration
+	mu              sync.Mutex
+	maxAttempts     int
+	lockoutWindow   time.Duration
 	lockoutDuration time.Duration
-	attempts       map[string]*attemptRecord
+	attempts        map[string]*attemptRecord
 }
 
 type attemptRecord struct {
-	count     int
-	firstAt   time.Time
+	count       int
+	firstAt     time.Time
 	lockedUntil time.Time
 }
 

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -22,15 +23,15 @@ import (
 )
 
 type Server struct {
-	cfg           config.Config
-	auth          auth.Manager
-	store         *store.Store
-	hub           *realtime.Hub
-	logger        *slog.Logger
-	limits        *rateLimiter
-	secLogger     *security.SecurityLogger
-	lockout       *security.AccountLockout
-	sessions      *security.SessionManager
+	cfg       config.Config
+	auth      auth.Manager
+	store     *store.Store
+	hub       *realtime.Hub
+	logger    *slog.Logger
+	limits    *rateLimiter
+	secLogger *security.SecurityLogger
+	lockout   *security.AccountLockout
+	sessions  *security.SessionManager
 }
 
 type registerRequest struct {
@@ -39,6 +40,9 @@ type registerRequest struct {
 	DisplayName    string `json:"display_name"`
 	Role           string `json:"role"`
 	ProfessionalID string `json:"professional_id"`
+	Phone          string `json:"phone"`
+	DateOfBirth    string `json:"date_of_birth"`
+	Gender         string `json:"gender"`
 }
 
 type loginRequest struct {
@@ -85,13 +89,14 @@ type followUpRequest struct {
 }
 
 type moodCheckinRequest struct {
-	Mood         string  `json:"mood"`
-	SleepHours   float64 `json:"sleep_hours"`
-	Energy       int     `json:"energy"`
-	Anxiety      int     `json:"anxiety"`
-	Irritability int     `json:"irritability"`
-	Note         string  `json:"note"`
-	OccurredAt   string  `json:"occurred_at"`
+	Mood            string  `json:"mood"`
+	SleepHours      float64 `json:"sleep_hours"`
+	Energy          int     `json:"energy"`
+	Anxiety         int     `json:"anxiety"`
+	Irritability    int     `json:"irritability"`
+	Note            string  `json:"note"`
+	MedicationTaken bool    `json:"medication_taken"`
+	OccurredAt      string  `json:"occurred_at"`
 }
 
 type diaryEntryRequest struct {
@@ -165,6 +170,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/auth/logout", s.rateLimit(s.logout))
 	mux.HandleFunc("POST /v1/auth/change-password", s.requireAuth(s.changePassword))
 	mux.HandleFunc("GET /v1/me", s.requireAuth(s.me))
+	mux.HandleFunc("PATCH /v1/me", s.requireAuth(s.updateMe))
 	mux.HandleFunc("POST /v1/device-tokens", s.requireAuth(s.upsertDeviceToken))
 	mux.HandleFunc("POST /v1/screenings", s.requireAuth(s.createScreening))
 	mux.HandleFunc("GET /v1/screenings", s.requireAuth(s.listScreenings))
@@ -191,6 +197,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/privacy/consents", s.requireAuth(s.getPrivacyConsent))
 	mux.HandleFunc("PUT /v1/privacy/consents", s.requireAuth(s.updatePrivacyConsent))
 	mux.HandleFunc("GET /v1/messages", s.requireAuth(s.listMessages))
+	mux.HandleFunc("POST /v1/messages", s.requireAuth(s.sendMessage))
 	mux.HandleFunc("GET /v1/notifications", s.requireAuth(s.listNotifications))
 	mux.HandleFunc("PATCH /v1/notifications/read-all", s.requireAuth(s.markAllNotificationsRead))
 	mux.HandleFunc("PATCH /v1/notifications/{notification_id}/read", s.requireAuth(s.markNotificationRead))
@@ -225,6 +232,19 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/e-prescriptions/{id}", s.requireAuth(s.getEPrescription))
 	// QR verification (public - one-time token)
 	mux.HandleFunc("GET /v1/e-prescriptions/verify", s.verifyEPrescriptionQR)
+	// GOALS & HABITS — tersimpan server, tidak hilang saat app ditutup.
+	mux.HandleFunc("GET /v1/goals", s.requireAuth(s.listGoals))
+	mux.HandleFunc("POST /v1/goals", s.requireAuth(s.createGoal))
+	mux.HandleFunc("PATCH /v1/goals/{goal_id}", s.requireAuth(s.updateGoal))
+	mux.HandleFunc("DELETE /v1/goals/{goal_id}", s.requireAuth(s.deleteGoal))
+	mux.HandleFunc("GET /v1/habit-logs", s.requireAuth(s.listHabitLogs))
+	mux.HandleFunc("POST /v1/habit-logs", s.requireAuth(s.logHabit))
+	// THERAPY SUBMISSIONS — simpan, unduh, bagikan ke profesional.
+	mux.HandleFunc("GET /v1/therapy-submissions", s.requireAuth(s.listTherapySubmissions))
+	mux.HandleFunc("POST /v1/therapy-submissions", s.requireAuth(s.createTherapySubmission))
+	mux.HandleFunc("GET /v1/therapy-submissions/{submission_id}", s.requireAuth(s.getTherapySubmission))
+	mux.HandleFunc("POST /v1/therapy-submissions/{submission_id}/share", s.requireAuth(s.shareTherapySubmission))
+	mux.HandleFunc("DELETE /v1/therapy-submissions/{submission_id}", s.requireAuth(s.deleteTherapySubmission))
 	// Administrasi penuh (khusus role admin): kelola pengguna & dokter.
 	mux.HandleFunc("GET /v1/admin/users", s.requireAdmin(s.listAdminUsers))
 	mux.HandleFunc("PATCH /v1/admin/users/{user_id}", s.requireAdmin(s.updateAdminUser))
@@ -232,6 +252,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/admin/credentials/pending", s.requireAdmin(s.listPendingCredentials))
 	mux.HandleFunc("POST /v1/admin/credentials/{id}/verify", s.requireAdmin(s.verifyCredential))
 	mux.HandleFunc("POST /v1/admin/doctors", s.requireAdmin(s.createAdminDoctor))
+	mux.HandleFunc("GET /v1/admin/doctors", s.requireAdmin(s.listAdminDoctors))
 	mux.HandleFunc("GET /v1/admin/doctors/{user_id}", s.requireAdmin(s.getAdminDoctor))
 	mux.HandleFunc("PUT /v1/admin/doctors/{user_id}", s.requireAdmin(s.updateAdminDoctor))
 	return s.recover(s.securityHeaders(s.inputSanitize(s.cors(mux))))
@@ -332,6 +353,24 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("Format email tidak valid."))
 		return
 	}
+	// Field profil opsional (pasien): nomor telepon, tanggal lahir, gender.
+	phone := strings.TrimSpace(req.Phone)
+	if phone != "" && !validateIndonesianPhone(phone) {
+		writeError(w, http.StatusBadRequest, errors.New("Format nomor telepon tidak valid (gunakan 08xxxxxxxxxx atau 62xxxxxxxxxx)."))
+		return
+	}
+	dateOfBirth := strings.TrimSpace(req.DateOfBirth)
+	if dateOfBirth != "" {
+		if d, err := time.Parse("2006-01-02", dateOfBirth); err != nil || d.After(time.Now()) {
+			writeError(w, http.StatusBadRequest, errors.New("Format tanggal lahir tidak valid (YYYY-MM-DD)."))
+			return
+		}
+	}
+	gender := strings.ToLower(strings.TrimSpace(req.Gender))
+	if gender != "" && gender != "male" && gender != "female" && gender != "other" {
+		writeError(w, http.StatusBadRequest, errors.New("Gender harus male, female, atau other."))
+		return
+	}
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -342,6 +381,9 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		PasswordHash:   hash,
 		Role:           role,
 		DisplayName:    req.DisplayName,
+		Phone:          phone,
+		DateOfBirth:    dateOfBirth,
+		Gender:         gender,
 		ProfessionalID: req.ProfessionalID,
 	})
 	if err != nil {
@@ -474,6 +516,62 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request, claims auth.Claims) 
 		writeError(w, http.StatusUnauthorized, errors.New("user not found"))
 		return
 	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": user})
+}
+
+type profileUpdateRequest struct {
+	Phone       *string `json:"phone"`
+	DateOfBirth *string `json:"date_of_birth"`
+	Gender      *string `json:"gender"`
+	DisplayName *string `json:"display_name"`
+}
+
+// updateMe memperbarui profil pengguna yang sedang login (self-service):
+// nomor telepon, tanggal lahir, gender, nama tampilan.
+func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	var req profileUpdateRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	phone, dateOfBirth, gender := "", "", ""
+	if req.Phone != nil {
+		phone = strings.TrimSpace(*req.Phone)
+		if phone != "" && !validateIndonesianPhone(phone) {
+			writeError(w, http.StatusBadRequest, errors.New("Format nomor telepon tidak valid (gunakan 08xxxxxxxxxx atau 62xxxxxxxxxx)."))
+			return
+		}
+	}
+	if req.DateOfBirth != nil {
+		dateOfBirth = strings.TrimSpace(*req.DateOfBirth)
+		if dateOfBirth != "" {
+			if d, err := time.Parse("2006-01-02", dateOfBirth); err != nil || d.After(time.Now()) {
+				writeError(w, http.StatusBadRequest, errors.New("Format tanggal lahir tidak valid (YYYY-MM-DD)."))
+				return
+			}
+		}
+	}
+	if req.Gender != nil {
+		gender = strings.ToLower(strings.TrimSpace(*req.Gender))
+		if gender != "" && gender != "male" && gender != "female" && gender != "other" {
+			writeError(w, http.StatusBadRequest, errors.New("Gender harus male, female, atau other."))
+			return
+		}
+	}
+	if req.DisplayName != nil {
+		name := strings.TrimSpace(*req.DisplayName)
+		if name != "" {
+			if err := s.store.UpdateDisplayName(r.Context(), claims.Subject, name); err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+		}
+	}
+	user, err := s.store.UpdateProfileFields(r.Context(), claims.Subject, phone, dateOfBirth, gender)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -786,14 +884,15 @@ func (s *Server) createMoodCheckin(w http.ResponseWriter, r *http.Request, claim
 		return
 	}
 	item, err := s.store.UpsertMoodCheckin(r.Context(), store.MoodCheckin{
-		PatientID:    claims.Subject,
-		Mood:         req.Mood,
-		SleepHours:   req.SleepHours,
-		Energy:       req.Energy,
-		Anxiety:      req.Anxiety,
-		Irritability: req.Irritability,
-		Note:         req.Note,
-		OccurredAt:   parseOptionalTime(req.OccurredAt),
+		PatientID:       claims.Subject,
+		Mood:            req.Mood,
+		SleepHours:      req.SleepHours,
+		Energy:          req.Energy,
+		Anxiety:         req.Anxiety,
+		Irritability:    req.Irritability,
+		Note:            req.Note,
+		MedicationTaken: req.MedicationTaken,
+		OccurredAt:      parseOptionalTime(req.OccurredAt),
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -1099,7 +1198,7 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request, claims aut
 		writeError(w, http.StatusForbidden, errors.New("not authorized to view this conversation"))
 		return
 	}
- canonicalPatientID, canonicalProfessionalID, linked, err := s.store.AreUsersLinked(r.Context(), patientID, professionalID)
+	canonicalPatientID, canonicalProfessionalID, linked, err := s.store.AreUsersLinked(r.Context(), patientID, professionalID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -1119,6 +1218,101 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request, claims aut
 	}
 	_ = s.store.AddAuditLog(r.Context(), claims.Subject, canonicalPatientID, "chat_messages.viewed", "chat_message", "", nil)
 	writeJSON(w, http.StatusOK, map[string]any{"messages": messages})
+}
+
+type sendMessageRequest struct {
+	RecipientID string          `json:"recipient_id"`
+	Text        string          `json:"text"`
+	Kind        string          `json:"kind"`
+	Metadata    json.RawMessage `json:"metadata"`
+}
+
+// sendMessage mengirim pesan (teks atau share terstruktur) lewat REST.
+// Berguna sebagai fallback saat WebSocket tidak tersambung dan untuk
+// membagikan ringkasan/assessment/resep/goals ke chat.
+func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	var req sendMessageRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	recipientID := strings.TrimSpace(req.RecipientID)
+	if recipientID == "" {
+		writeError(w, http.StatusBadRequest, errors.New("recipient_id wajib diisi."))
+		return
+	}
+	if recipientID == claims.Subject {
+		writeError(w, http.StatusBadRequest, errors.New("Tidak bisa mengirim pesan ke diri sendiri."))
+		return
+	}
+	hasMetadata := len(req.Metadata) > 0 && string(req.Metadata) != "null"
+	text := strings.TrimSpace(req.Text)
+	if text == "" && !hasMetadata {
+		writeError(w, http.StatusBadRequest, errors.New("text atau metadata wajib diisi."))
+		return
+	}
+	if len(text) > 5000 {
+		text = text[:5000]
+	}
+	patientID, professionalID, linked, err := s.store.AreUsersLinked(r.Context(), claims.Subject, recipientID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !linked {
+		writeError(w, http.StatusForbidden, errors.New("Kamu belum terhubung dengan pengguna tersebut."))
+		return
+	}
+	senderName := ""
+	if user, err := s.store.GetUserByID(r.Context(), claims.Subject); err == nil {
+		senderName = user.DisplayName
+	}
+	messageID := generateChatMessageID()
+	saved, err := s.store.CreateChatMessage(r.Context(), store.ChatMessage{
+		ID:             messageID,
+		PatientID:      patientID,
+		ProfessionalID: professionalID,
+		SenderID:       claims.Subject,
+		SenderName:     senderName,
+		Text:           text,
+		Kind:           req.Kind,
+		Metadata:       req.Metadata,
+		CreatedAt:      time.Now(),
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	// Siarkan realtime ke kedua pihak (bila online).
+	if s.hub != nil {
+		data := map[string]any{
+			"id":           saved.ID,
+			"sender_id":    saved.SenderID,
+			"sender_name":  saved.SenderName,
+			"recipient_id": recipientID,
+			"text":         saved.Text,
+			"kind":         saved.Kind,
+			"timestamp":    saved.CreatedAt.Format(time.RFC3339),
+		}
+		if len(saved.Metadata) > 0 {
+			data["metadata"] = json.RawMessage(saved.Metadata)
+		}
+		event := realtime.Event{Type: "chat_message", Data: data}
+		s.hub.Publish(saved.SenderID, event)
+		s.hub.Publish(recipientID, event)
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"message": saved})
+}
+
+// generateChatMessageID membuat id unik untuk pesan chat (uuid v4 sederhana).
+func generateChatMessageID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("msg-%d", time.Now().UnixNano())
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
 func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request, claims auth.Claims) {

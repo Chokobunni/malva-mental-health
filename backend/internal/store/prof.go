@@ -224,10 +224,14 @@ func (s *Store) VerifyProfessionalCredential(ctx context.Context, credentialID, 
 }
 
 // SearchDoctors mencari profesional terverifikasi dengan stats + Haversine jarak.
+// Bila params.IncludeUnverified=true (dipakai panel admin), sertakan semua
+// dokter termasuk yang masih PENDING/REJECTED atau dinonaktifkan.
 func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([]DoctorSearchResult, error) {
 	var where []string
-	where = append(where, "pc.verification_status = 'VERIFIED'")
-	where = append(where, "u.disabled_at IS NULL")
+	if !params.IncludeUnverified {
+		where = append(where, "pc.verification_status = 'VERIFIED'")
+		where = append(where, "u.disabled_at IS NULL")
+	}
 	var args []interface{}
 	nextArg := func() string {
 		arg := fmt.Sprintf("$%d", len(args)+1)
@@ -294,6 +298,11 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 		limit = 50
 	}
 
+	whereClause := "TRUE"
+	if len(where) > 0 {
+		whereClause = strings.Join(where, " AND ")
+	}
+
 	query := fmt.Sprintf(`SELECT pc.id, pc.user_id, u.display_name, COALESCE(pc.str_number,''), COALESCE(pc.sip_number,''), COALESCE(pc.sipp_number,''),
 		pc.specialization, COALESCE(pc.sub_specialties,'{}'), pc.hospital_lat, pc.hospital_lng, COALESCE(pc.hospital_name,''),
 		COALESCE(pc.address_details,''), pc.is_bpjs_supported, COALESCE(pc.photo_intro_url,''), COALESCE(pc.video_intro_url,''),
@@ -307,7 +316,7 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 		WHERE %s
 		ORDER BY %s
 		LIMIT %d`,
-		distanceCol, strings.Join(where, " AND "), orderBy, limit,
+		distanceCol, whereClause, orderBy, limit,
 	)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -336,14 +345,15 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 }
 
 type DoctorSearchParams struct {
-	PatientLat      *float64
-	PatientLng      *float64
-	Specialization  string
-	MaxPrice        *int64
-	MaxKM           *float64
-	IsBPJSSupported *bool
-	SortBy          string // name_asc|name_desc|sessions|popular|distance|availability
-	Limit           int
+	PatientLat        *float64
+	PatientLng        *float64
+	Specialization    string
+	MaxPrice          *int64
+	MaxKM             *float64
+	IsBPJSSupported   *bool
+	SortBy            string
+	Limit             int
+	IncludeUnverified bool
 }
 
 // Availability scheduling

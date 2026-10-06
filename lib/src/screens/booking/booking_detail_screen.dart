@@ -51,6 +51,29 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
   String get _dateStr =>
       '${_date.year.toString().padLeft(4, '0')}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}';
 
+  /// Continuous care: tanggal mulai + 6 hari = periode 7 hari.
+  DateTime get _endDate => _date.add(const Duration(days: 6));
+
+  /// Kalender asli: pilih tanggal mulai, 7 hari berikutnya otomatis terpilih.
+  Future<void> _pickStartDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date.isBefore(today) ? today : _date,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 90)),
+      helpText: 'Pilih tanggal mulai',
+      cancelText: 'Batal',
+      confirmText: 'Pilih',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _date = DateTime(picked.year, picked.month, picked.day);
+      _selectedSlot = null;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -174,66 +197,108 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          const SectionLabel('Pilih Tanggal'),
-          SoftCard(
-            child: Row(
-              children: [
-                IconButton(
-                  onPressed: () {
-                    final next = _date.subtract(const Duration(days: 1));
-                    if (next.isAfter(
-                        DateTime.now().subtract(const Duration(days: 1)))) {
-                      setState(() => _date = next);
+          if (widget.isContinuousSupport) ...[
+            const SectionLabel('Tanggal Mulai'),
+            SoftCard(
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: MalvaColors.mint.withValues(alpha: 0.15),
+                    child: const Icon(Icons.calendar_month_rounded,
+                        color: MalvaColors.mint),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Mulai: ${_prettyDate(_date)}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w900, fontSize: 15),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Berakhir: ${_prettyDate(_endDate)} • 7 hari perawatan',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: Colors.black54),
+                        ),
+                      ],
+                    ),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed: _pickStartDate,
+                    icon: const Icon(Icons.edit_calendar_rounded, size: 18),
+                    label: const Text('Pilih'),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            const SectionLabel('Pilih Tanggal'),
+            SoftCard(
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () {
+                      final next = _date.subtract(const Duration(days: 1));
+                      if (next.isAfter(
+                          DateTime.now().subtract(const Duration(days: 1)))) {
+                        setState(() => _date = next);
+                        _loadSlots();
+                      }
+                    },
+                    icon: const Icon(Icons.chevron_left_rounded),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _prettyDate(_date),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 16),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      setState(
+                          () => _date = _date.add(const Duration(days: 1)));
                       _loadSlots();
-                    }
-                  },
-                  icon: const Icon(Icons.chevron_left_rounded),
-                ),
-                Expanded(
-                  child: Text(
-                    _prettyDate(_date),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w900, fontSize: 16),
+                    },
+                    icon: const Icon(Icons.chevron_right_rounded),
                   ),
-                ),
-                IconButton(
-                  onPressed: () {
-                    setState(() => _date = _date.add(const Duration(days: 1)));
-                    _loadSlots();
-                  },
-                  icon: const Icon(Icons.chevron_right_rounded),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
-          const SectionLabel('Pilih Jam'),
-          if (_isLoadingSlots)
-            const Center(child: CircularProgressIndicator())
-          else if (_slots.isEmpty)
-            const EmptyState(
-              icon: Icons.event_busy_rounded,
-              title: 'Tidak ada slot',
-              subtitle:
-                  'Tidak ada jadwal tersedia pada tanggal ini. Coba tanggal lain.',
-            )
-          else
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final slot in _slots)
-                  ChoiceChip(
-                    label: Text(slot.time,
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
-                    selected: _selectedSlot == slot.time,
-                    onSelected: (_) =>
-                        setState(() => _selectedSlot = slot.time),
-                    selectedColor: MalvaColors.seed.withValues(alpha: 0.2),
-                  ),
-              ],
-            ),
+            const SizedBox(height: 14),
+            const SectionLabel('Pilih Jam'),
+            if (_isLoadingSlots)
+              const Center(child: CircularProgressIndicator())
+            else if (_slots.isEmpty)
+              const EmptyState(
+                icon: Icons.event_busy_rounded,
+                title: 'Tidak ada slot',
+                subtitle:
+                    'Tidak ada jadwal tersedia pada tanggal ini. Coba tanggal lain.',
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final slot in _slots)
+                    ChoiceChip(
+                      label: Text(slot.time,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      selected: _selectedSlot == slot.time,
+                      onSelected: (_) =>
+                          setState(() => _selectedSlot = slot.time),
+                      selectedColor: MalvaColors.seed.withValues(alpha: 0.2),
+                    ),
+                ],
+              ),
+          ],
           const SizedBox(height: 14),
           if (widget.isContinuousSupport) ...[
             // === CONTINUOUS SUPPORT: tanpa slot, 7 hari + badge ===
@@ -312,16 +377,17 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                       color: MalvaColors.danger, fontWeight: FontWeight.w700)),
             ],
             const SizedBox(height: 14),
+            // SATU tombol: 7 Days Continuous Care -> consent -> payment.
             FilledButton.icon(
               onPressed: _isSubmitting ? null : _submitBooking,
               icon: const Icon(Icons.handshake_rounded),
               label: Text(_isSubmitting
                   ? 'Memproses...'
-                  : 'Start Weekly Plan — Rp.199rb/week'),
+                  : '7 Days Continuous Care — Rp ${_formatRupiah(_price)}'),
             ),
             const SizedBox(height: 6),
             Text(
-              'Renews Weekly. Cancel anytime.',
+              'Chat 24/7 selama 7 hari (${_prettyDate(_date)} – ${_prettyDate(_endDate)}). Batalkan kapan saja.',
               textAlign: TextAlign.center,
               style: Theme.of(context)
                   .textTheme
@@ -380,6 +446,16 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
           'Hubungkan ke server untuk membuat booking.');
       return;
     }
+    // Continuous Support: consent checklist DULU (sesuai Figma flow:
+    // pilih paket -> isi consent -> bayar -> connected). Batal = tidak ada
+    // booking yatim di server.
+    if (widget.isContinuousSupport) {
+      final granted = await showConsentRequestSheet(
+        context: context,
+        professionalId: widget.doctorUserId,
+      );
+      if (!granted || !mounted) return;
+    }
     setState(() {
       _isSubmitting = true;
       _error = null;
@@ -396,21 +472,18 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                 : 'quick_consult'),
         sessionType: widget.serviceType,
         bookingDate: _dateStr,
-        slotTime: _selectedSlot!,
+        // Continuous: tanpa slot (server simpan NULL). Quick: slot wajib.
+        slotTime: widget.isContinuousSupport ? null : _selectedSlot,
         durationMinutes: widget.isContinuousSupport ? 7 * 24 * 60 : 30,
         price: _price,
       );
       if (!mounted) return;
-      // Continuous Support: minta izin monitoring data dulu (7 hari).
-      if (widget.isContinuousSupport) {
-        final granted = await showConsentRequestSheet(context: context);
-        if (!granted || !mounted) return;
-      }
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => PaymentScreen(
             booking: booking,
+            doctorName: widget.doctorName,
             session: widget.session,
             apiClient: widget.apiClient,
           ),

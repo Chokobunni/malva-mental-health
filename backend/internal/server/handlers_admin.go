@@ -34,6 +34,9 @@ func (s *Server) listAdminUsers(w http.ResponseWriter, r *http.Request, _ auth.C
 type adminUpdateUserRequest struct {
 	DisplayName *string `json:"display_name"`
 	Role        *string `json:"role"`
+	Phone       *string `json:"phone"`
+	DateOfBirth *string `json:"date_of_birth"`
+	Gender      *string `json:"gender"`
 	Disabled    *bool   `json:"disabled"`
 }
 
@@ -52,14 +55,23 @@ func (s *Server) updateAdminUser(w http.ResponseWriter, r *http.Request, claims 
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	displayName, role := "", ""
+	displayName, role, phone, dateOfBirth, gender := "", "", "", "", ""
 	if req.DisplayName != nil {
 		displayName = *req.DisplayName
 	}
 	if req.Role != nil {
 		role = *req.Role
 	}
-	updated, err := s.store.UpdateUserAdmin(r.Context(), userID, displayName, role, req.Disabled)
+	if req.Phone != nil {
+		phone = *req.Phone
+	}
+	if req.DateOfBirth != nil {
+		dateOfBirth = *req.DateOfBirth
+	}
+	if req.Gender != nil {
+		gender = *req.Gender
+	}
+	updated, err := s.store.UpdateUserAdmin(r.Context(), userID, displayName, role, phone, dateOfBirth, gender, req.Disabled)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusNotFound, errors.New("Pengguna tidak ditemukan."))
@@ -90,6 +102,22 @@ func (s *Server) deleteAdminUser(w http.ResponseWriter, r *http.Request, claims 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// listAdminDoctors mengembalikan SEMUA dokter (termasuk PENDING/REJECTED dan
+// yang dinonaktifkan) untuk tab Dokter di panel admin.
+func (s *Server) listAdminDoctors(w http.ResponseWriter, r *http.Request, _ auth.Claims) {
+	params := store.DoctorSearchParams{
+		Limit:             200,
+		IncludeUnverified: true,
+		Specialization:    strings.TrimSpace(r.URL.Query().Get("specialization")),
+	}
+	results, err := s.store.SearchDoctors(r.Context(), params)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"doctors": results})
 }
 
 // getAdminDoctor mengembalikan profil lengkap satu dokter untuk form edit:
@@ -183,7 +211,7 @@ type adminDoctorCredential struct {
 	HospitalLng     *float64      `json:"hospital_lng"`
 	HospitalName    string        `json:"hospital_name"`
 	AddressDetails  string        `json:"address_details"`
-	IsBPJSSupported bool          `json:"is_bpjs_supported"`
+	IsBPJSSupported *bool         `json:"is_bpjs_supported"`
 	PhotoIntroURL   string        `json:"photo_intro_url"`
 	VideoIntroURL   string        `json:"video_intro_url"`
 	Bio             string        `json:"bio"`
@@ -203,8 +231,26 @@ type adminDoctorRequest struct {
 	Packages       []store.ServicePackage       `json:"packages"`
 }
 
+// validSpecialization menerima spesialisasi psikiatri/psikologi yang lazim
+// di Indonesia, plus sub-spesialisasi psikiatri (Sp.*) agar admin fleksibel.
 func validSpecialization(spec string) bool {
-	return spec == "Sp.KJ" || spec == "M.Psi"
+	s := strings.ToUpper(strings.TrimSpace(spec))
+	switch s {
+	case "SP.KJ", "M.PSI", "SP.PSI", "SP.AN", "SP.K", "SP.KK" /* psikologi klinis */ :
+		return true
+	}
+	// Sub-spesialisasi psikiatri lain (mis. "Sp.KJ(K)" atau "Sp.KP").
+	if strings.HasPrefix(s, "SP.") && len(s) <= 12 {
+		return true
+	}
+	// Psikolog dengan gelar lain (mis. "M.Psi," atau "Psikolog Klinis").
+	psikolog := []string{"M.PSI", "M PSI", "PSIKOLOG", "M.A", "M.PSI."}
+	for _, p := range psikolog {
+		if s == p || strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // createAdminDoctor membuat akun profesional + profil kredensial yang
@@ -278,7 +324,7 @@ func (s *Server) createAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 		HospitalLng:     req.Credentials.HospitalLng,
 		HospitalName:    strings.TrimSpace(req.Credentials.HospitalName),
 		AddressDetails:  strings.TrimSpace(req.Credentials.AddressDetails),
-		IsBPJSSupported: req.Credentials.IsBPJSSupported,
+		IsBPJSSupported: req.Credentials.IsBPJSSupported != nil && *req.Credentials.IsBPJSSupported,
 		PhotoIntroURL:   strings.TrimSpace(req.Credentials.PhotoIntroURL),
 		VideoIntroURL:   strings.TrimSpace(req.Credentials.VideoIntroURL),
 		Bio:             strings.TrimSpace(req.Credentials.Bio),
@@ -327,6 +373,13 @@ func (s *Server) updateAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 		writeError(w, http.StatusBadRequest, errors.New("Spesialisasi harus Sp.KJ (psikiater) atau M.Psi (psikolog)."))
 		return
 	}
+	// Nama dokter bisa diubah dari form edit (dulu terbuang diam-diam).
+	if name := strings.TrimSpace(req.DisplayName); name != "" {
+		if err := s.store.UpdateDisplayName(r.Context(), userID, name); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
 	existing, err := s.store.GetProfessionalCredential(r.Context(), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -355,7 +408,11 @@ func (s *Server) updateAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 	if req.Credentials.HospitalLng != nil {
 		merged.HospitalLng = req.Credentials.HospitalLng
 	}
-	merged.IsBPJSSupported = req.Credentials.IsBPJSSupported
+	// BPJS hanya berubah bila field dikirim (penting agar PUT parsial
+	// dari form edit tidak menghapus status BPJS yang ada).
+	if req.Credentials.IsBPJSSupported != nil {
+		merged.IsBPJSSupported = *req.Credentials.IsBPJSSupported
+	}
 	if strings.TrimSpace(req.Credentials.Bio) != "" {
 		merged.Bio = strings.TrimSpace(req.Credentials.Bio)
 	}

@@ -85,8 +85,7 @@ class _ProfessionalLoginScreenState
       }
       return;
     }
-    final passwordError =
-        validatePasswordForRegister(_passwordController.text);
+    final passwordError = validatePasswordForRegister(_passwordController.text);
     if (passwordError != null) {
       throw AuthFailure(passwordError);
     }

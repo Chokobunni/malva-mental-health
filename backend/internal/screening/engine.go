@@ -150,7 +150,6 @@ func Score(kind string, values []int) (Result, error) {
 	}, nil
 }
 
-
 func overallLevel(phq9, gad7 Result) string {
 	if phq9.CrisisFlag || gad7.CrisisFlag {
 		return "crisis"

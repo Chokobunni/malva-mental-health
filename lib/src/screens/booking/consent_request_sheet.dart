@@ -18,7 +18,12 @@ import '../../widgets/malva_components.dart';
 // ============================================================
 
 /// Tampilkan sheet permintaan izin. Return true bila pasien setuju.
-Future<bool> showConsentRequestSheet({required BuildContext context}) async {
+/// [professionalId] adalah user ID dokter yang di-booking — izin dikirim
+/// ke dokter tersebut (bukan ke ID sendiri).
+Future<bool> showConsentRequestSheet({
+  required BuildContext context,
+  required String professionalId,
+}) async {
   final result = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
@@ -27,13 +32,16 @@ Future<bool> showConsentRequestSheet({required BuildContext context}) async {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
     ),
-    builder: (sheetContext) => const _ConsentRequestSheet(),
+    builder: (sheetContext) =>
+        _ConsentRequestSheet(professionalId: professionalId),
   );
   return result == true;
 }
 
 class _ConsentRequestSheet extends ConsumerStatefulWidget {
-  const _ConsentRequestSheet();
+  const _ConsentRequestSheet({required this.professionalId});
+
+  final String professionalId;
 
   @override
   ConsumerState<_ConsentRequestSheet> createState() =>
@@ -182,9 +190,8 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
     final rawToken = ref.read(currentSessionProvider)?.accessToken;
     final accessToken =
         (rawToken == null || rawToken.isEmpty) ? null : rawToken;
-    final professionalId = _resolveProfessionalId();
-    if (accessToken == null || professionalId == null) {
-      // Offline / tanpa link profesional: izin disimpan lokal (pref).
+    if (accessToken == null || widget.professionalId.isEmpty) {
+      // Offline: izin disimpan lokal (pref).
       await _saveLocalPreferences();
       if (!mounted) return;
       setState(() {
@@ -202,7 +209,7 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
     try {
       await ref.read(apiClientProvider).updatePrivacyConsent(
             accessToken: accessToken,
-            professionalId: professionalId,
+            professionalId: widget.professionalId,
             shareScreenings: true,
             shareMoodDiary: _moodCheckin || _diary,
             shareMedications: _medicationCheckin,
@@ -229,18 +236,6 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
       });
       Navigator.pop(context, true);
     }
-  }
-
-  String? _resolveProfessionalId() {
-    final rawToken = ref.read(currentSessionProvider)?.accessToken;
-    if (rawToken == null || rawToken.isEmpty) return null;
-    // Ambil dari sesi yang aktif: identifier profesional bila role-nya cocok.
-    final session = ref.read(currentSessionProvider);
-    if (session?.backendUserId != null &&
-        (session?.backendUserId?.isNotEmpty ?? false)) {
-      return session!.backendUserId;
-    }
-    return null;
   }
 
   Future<void> _saveLocalPreferences() async {

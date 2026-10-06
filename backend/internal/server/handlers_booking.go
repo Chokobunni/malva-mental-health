@@ -15,15 +15,15 @@ import (
 // ============================================================
 
 type createBookingRequest struct {
-	PatientID       string `json:"patient_id"`
-	ProfessionalID  string `json:"professional_id"`
+	PatientID       string  `json:"patient_id"`
+	ProfessionalID  string  `json:"professional_id"`
 	PackageID       *string `json:"package_id,omitempty"`
-	ServiceType     string `json:"service_type"`
-	SessionType     string `json:"session_type"`
-	BookingDate     string `json:"booking_date"`
-	SlotTime        string `json:"slot_time"`
-	DurationMinutes int    `json:"duration_minutes"`
-	Price           int64  `json:"price"`
+	ServiceType     string  `json:"service_type"`
+	SessionType     string  `json:"session_type"`
+	BookingDate     string  `json:"booking_date"`
+	SlotTime        string  `json:"slot_time"`
+	DurationMinutes int     `json:"duration_minutes"`
+	Price           int64   `json:"price"`
 }
 
 type createPaymentRequest struct {
@@ -73,7 +73,9 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 	}
 
 	duration := req.DurationMinutes
-	if duration <= 0 { duration = 30 }
+	if duration <= 0 {
+		duration = 30
+	}
 	// Continuous Support 7 hari: 7*24*60 menit (10080).
 	const continuousDuration = 7 * 24 * 60
 	if duration > 120 && duration != continuousDuration {
@@ -105,7 +107,7 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, claims au
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
-// Generate reference: TXN-YYYYMMDDHHMMSS-RANDOM6
+	// Generate reference: TXN-YYYYMMDDHHMMSS-RANDOM6
 	reference := fmt.Sprintf("TXN-%s-%06d",
 		time.Now().Format("20060102150405"),
 		(int64)(time.Now().UnixNano()%1000000),
@@ -142,10 +144,10 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, claims au
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"payment": p,
 		"breakdown": map[string]interface{}{
-			"consultation": bookingPrice,
-			"service_fee":  serviceFee,
-			"total":        gross + serviceFee,
-			"platform_fee": platformFee,
+			"consultation":  bookingPrice,
+			"service_fee":   serviceFee,
+			"total":         gross + serviceFee,
+			"platform_fee":  platformFee,
 			"net_to_doctor": net,
 		},
 	})
@@ -191,7 +193,7 @@ func (s *Server) earningsSummary(w http.ResponseWriter, r *http.Request, claims 
 	}
 	transactions, _ := s.store.ListEarningsTransactions(r.Context(), claims.Subject, 20)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"summary": summary,
+		"summary":      summary,
 		"transactions": transactions,
 	})
 }
@@ -213,18 +215,18 @@ func (s *Server) requestPayout(w http.ResponseWriter, r *http.Request, claims au
 // ============================================================
 
 type createEPrescriptionRequest struct {
-	PatientID    string `json:"patient_id"`
-	Instructions string `json:"instructions"`
-	Notes       string `json:"notes"`
+	PatientID    string           `json:"patient_id"`
+	Instructions string           `json:"instructions"`
+	Notes        string           `json:"notes"`
 	Items        []eRxItemRequest `json:"items"`
 }
 
 type eRxItemRequest struct {
-	Name        string  `json:"name"`
-	Dosage      string  `json:"dosage"`
-	Frequency   string  `json:"frequency"`
-	Days        int     `json:"days"`
-	UnitsPerDay int     `json:"units_per_day"`
+	Name         string  `json:"name"`
+	Dosage       string  `json:"dosage"`
+	Frequency    string  `json:"frequency"`
+	Days         int     `json:"days"`
+	UnitsPerDay  int     `json:"units_per_day"`
 	MedicationID *string `json:"medication_id,omitempty"`
 }
 
@@ -253,10 +255,10 @@ func (s *Server) createEPrescription(w http.ResponseWriter, r *http.Request, cla
 	}
 
 	sig := map[string]interface{}{
-		"str_number": cred.STRNumber,
-		"sip_number": cred.SIPNumber,
+		"str_number":  cred.STRNumber,
+		"sip_number":  cred.SIPNumber,
 		"sipp_number": cred.SIPPNumber,
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"timestamp":   time.Now().UTC().Format(time.RFC3339),
 	}
 
 	qrToken := fmt.Sprintf("RX-%s-%d", claims.Subject[:8], time.Now().UnixNano()/1e6)
@@ -285,8 +287,12 @@ func rxItemsFromRequest(items []eRxItemRequest) []store.EPrescriptionItem {
 			Days:         item.Days,
 			UnitsPerDay:  item.UnitsPerDay,
 		}
-		if item.UnitsPerDay <= 0 { out[i].UnitsPerDay = 1 }
-		if item.Days <= 0 { out[i].Days = 30 }
+		if item.UnitsPerDay <= 0 {
+			out[i].UnitsPerDay = 1
+		}
+		if item.Days <= 0 {
+			out[i].Days = 30
+		}
 	}
 	return out
 }
@@ -332,8 +338,8 @@ func (s *Server) verifyEPrescriptionQR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"valid":          true,
-		"prescription":   rx,
-		"verified_by":    "Malva QR Verification",
+		"valid":        true,
+		"prescription": rx,
+		"verified_by":  "Malva QR Verification",
 	})
 }

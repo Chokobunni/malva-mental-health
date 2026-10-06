@@ -150,14 +150,14 @@ func TestDoctorDirectoryIsPublic(t *testing.T) {
 }
 
 func TestValidateIndonesianPhone(t *testing.T) {
-	// Format valid: 9-15 digit diawali 0 atau 62 (longgar by design).
-	ok := []string{"08123456789", "628123456789", "0812345678"}
+	// Format valid: 9-15 digit diawali 0 atau 62, boleh pakai awalan +62.
+	ok := []string{"08123456789", "628123456789", "0812345678", "+628123456789", "62 812-3456-789"}
 	for _, p := range ok {
 		if !validateIndonesianPhone(p) {
 			t.Errorf("expected valid: %s", p)
 		}
 	}
-	bad := []string{"", "123", "08123456789012345", "07123456", "08abcd5678", "+628123456789"}
+	bad := []string{"", "123", "08123456789012345", "07123456", "08abcd5678", "+123456789"}
 	for _, p := range bad {
 		if validateIndonesianPhone(p) {
 			t.Errorf("expected invalid: %s", p)

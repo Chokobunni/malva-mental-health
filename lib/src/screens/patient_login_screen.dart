@@ -28,6 +28,9 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
   final _nameController = TextEditingController(text: '');
   final _passwordController = TextEditingController(text: '');
   final _confirmPasswordController = TextEditingController(text: '');
+  final _phoneController = TextEditingController(text: '');
+  DateTime? _birthDate;
+  String? _gender; // male | female | other
   AuthMode _mode = AuthMode.login;
   bool _isSubmitting = false;
   bool _rememberMe = false;
@@ -38,6 +41,7 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
     _nameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -58,6 +62,11 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
               email: _emailController.text,
               password: _passwordController.text,
               displayName: _nameController.text,
+              phone: _phoneController.text.trim(),
+              dateOfBirth: _birthDate != null
+                  ? _birthDate!.toIso8601String().substring(0, 10)
+                  : null,
+              gender: _gender,
             );
       if (!mounted) return;
       widget.onAuthenticated(session);
@@ -100,20 +109,43 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
     if (!_isLogin && _nameController.text.trim().isEmpty) {
       throw const AuthFailure('Nama pasien harus diisi.');
     }
+    if (!_isLogin && _birthDate == null) {
+      throw const AuthFailure('Tanggal lahir harus dipilih.');
+    }
+    if (!_isLogin && (_gender == null || _gender!.isEmpty)) {
+      throw const AuthFailure('Gender harus dipilih.');
+    }
     if (_isLogin) {
       if (_passwordController.text.isEmpty) {
         throw const AuthFailure('Password harus diisi.');
       }
       return;
     }
-    final passwordError =
-        validatePasswordForRegister(_passwordController.text);
+    final passwordError = validatePasswordForRegister(_passwordController.text);
     if (passwordError != null) {
       throw AuthFailure(passwordError);
     }
     if (_passwordController.text != _confirmPasswordController.text) {
       throw const AuthFailure('Konfirmasi password tidak sama.');
     }
+  }
+
+  Future<void> _pickBirthDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _birthDate ?? DateTime(now.year - 18, now.month, now.day),
+      firstDate: DateTime(now.year - 100),
+      lastDate: now,
+      helpText: 'Pilih tanggal lahir',
+    );
+    if (picked != null) setState(() => _birthDate = picked);
+  }
+
+  String get _birthDateLabel {
+    final b = _birthDate;
+    if (b == null) return '';
+    return '${b.day.toString().padLeft(2, '0')}/${b.month.toString().padLeft(2, '0')}/${b.year}';
   }
 
   @override
@@ -158,6 +190,61 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Nama pasien',
                       prefixIcon: Icon(Icons.badge_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Birth date (wajib, dari date picker).
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: _isSubmitting ? null : _pickBirthDate,
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Birth date',
+                        prefixIcon: Icon(Icons.cake_rounded),
+                        suffixIcon: Icon(Icons.calendar_month_rounded),
+                      ),
+                      child: Text(
+                        _birthDate == null
+                            ? 'Pilih tanggal lahir'
+                            : _birthDateLabel,
+                        style: TextStyle(
+                          color: _birthDate == null
+                              ? Theme.of(context)
+                                      .inputDecorationTheme
+                                      .hintStyle
+                                      ?.color ??
+                                  Colors.black38
+                              : Theme.of(context).textTheme.bodyLarge?.color,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Gender (wajib, pilihan cepat).
+                  DropdownButtonFormField<String>(
+                    initialValue: _gender,
+                    decoration: const InputDecoration(
+                      labelText: 'Gender',
+                      prefixIcon: Icon(Icons.wc_rounded),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'female', child: Text('Perempuan')),
+                      DropdownMenuItem(value: 'male', child: Text('Laki-laki')),
+                      DropdownMenuItem(value: 'other', child: Text('Lainnya')),
+                    ],
+                    onChanged: (v) => setState(() => _gender = v),
+                  ),
+                  const SizedBox(height: 10),
+                  // Phone (opsional tapi disarankan; dinormalisasi server).
+                  TextField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone number (opsional)',
+                      prefixIcon: Icon(Icons.phone_rounded),
+                      hintText: '08xxxxxxxxxx',
                     ),
                   ),
                   const SizedBox(height: 10),

@@ -46,12 +46,14 @@ type wsEnvelope struct {
 }
 
 type chatMessageData struct {
-	ID          string `json:"id"`
-	SenderID    string `json:"sender_id"`
-	SenderName  string `json:"sender_name"`
-	RecipientID string `json:"recipient_id"`
-	Text        string `json:"text"`
-	Timestamp   string `json:"timestamp"`
+	ID          string          `json:"id"`
+	SenderID    string          `json:"sender_id"`
+	SenderName  string          `json:"sender_name"`
+	RecipientID string          `json:"recipient_id"`
+	Text        string          `json:"text"`
+	Kind        string          `json:"kind,omitempty"`
+	Metadata    json.RawMessage `json:"metadata,omitempty"`
+	Timestamp   string          `json:"timestamp"`
 }
 
 type typingIndicatorData struct {
@@ -231,7 +233,8 @@ func (c *client) handleChatMessage(raw json.RawMessage) {
 		return
 	}
 	msg.Text = strings.TrimSpace(msg.Text)
-	if msg.Text == "" || msg.ID == "" || msg.RecipientID == "" {
+	hasMetadata := len(msg.Metadata) > 0 && string(msg.Metadata) != "null"
+	if (msg.Text == "" && !hasMetadata) || msg.ID == "" || msg.RecipientID == "" {
 		return
 	}
 	if msg.SenderID != c.userID {
@@ -271,6 +274,8 @@ func (c *client) handleChatMessage(raw json.RawMessage) {
 		SenderID:       c.userID,
 		SenderName:     senderName,
 		Text:           msg.Text,
+		Kind:           msg.Kind,
+		Metadata:       msg.Metadata,
 		CreatedAt:      timestamp,
 	})
 	if err != nil {
@@ -285,6 +290,8 @@ func (c *client) handleChatMessage(raw json.RawMessage) {
 			SenderName:  saved.SenderName,
 			RecipientID: msg.RecipientID,
 			Text:        saved.Text,
+			Kind:        saved.Kind,
+			Metadata:    saved.Metadata,
 			Timestamp:   saved.CreatedAt.Format(time.RFC3339),
 		},
 	}

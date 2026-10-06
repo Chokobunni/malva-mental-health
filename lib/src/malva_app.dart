@@ -15,6 +15,7 @@ import 'screens/safety/emergency_dashboard_screen.dart';
 import 'screens/safety/guided_grounding_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/dashboard_sync_service.dart';
+import 'services/google_auth_service.dart';
 import 'services/medication_reminder_service.dart';
 import 'services/push_notification_service.dart';
 import 'theme.dart';
@@ -53,6 +54,9 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     // Initialize offline sync service
     unawaited(ref.read(offlineSyncServiceProvider).initialize());
 
+    // Restore sesi tersimpan (login bertahan setelah app ditutup).
+    unawaited(_restorePersistedSession());
+
     // Izin lokasi saat aplikasi dibuka — untuk jarak faskes (km).
     // Ditunda ke post-frame agar tidak setState saat build/tes.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -81,6 +85,37 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     }
   }
 
+  /// Restore sesi dari secure storage saat aplikasi dibuka kembali.
+  /// Sesi dipakai langsung; refresh token ditukar di belakang agar tetap valid.
+  Future<void> _restorePersistedSession() async {
+    try {
+      final store = ref.read(malvaStoreProvider.notifier);
+      final stored = await store.restoreSession();
+      if (stored == null) return;
+      if (!mounted) return;
+      ref.read(apiClientProvider).setRefreshToken(stored.refreshToken);
+      ref.read(authStateProvider.notifier).setSession(stored);
+      _scheduleAllMedicationReminders();
+      unawaited(_pushNotifications.registerDeviceToken(stored));
+      final refreshToken = stored.refreshToken;
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        try {
+          final refreshed = await store.refreshSessionOnline(refreshToken);
+          if (!mounted) return;
+          // Jangan timpa bila user sudah logout saat refresh berjalan.
+          if (ref.read(authStateProvider).session == null) return;
+          ref.read(apiClientProvider).setRefreshToken(refreshed.refreshToken);
+          ref.read(authStateProvider.notifier).setSession(refreshed);
+        } on Object {
+          // Refresh gagal (offline / token dicabut): sesi tersimpan tetap
+          // dipakai; request yang gagal 401 akan memicu login ulang.
+        }
+      }
+    } on Object {
+      // Gagal membaca secure storage: biarkan user login manual.
+    }
+  }
+
   void _handleAuthenticated(AuthSession session) {
     setState(() => _isTakingInitialScreening = false);
     ref.read(authStateProvider.notifier).setSession(session);
@@ -97,8 +132,12 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
 
   void _handleLogout() {
     _dashboardSyncService.stopSync();
+    final session = ref.read(authStateProvider).session;
+    // Cabut refresh token di server (best-effort), lalu bersihkan lokal.
+    unawaited(ref.read(malvaStoreProvider.notifier).logoutSession(session));
     ref.read(authStateProvider.notifier).clearSession();
-    ref.read(malvaStoreProvider.notifier).clearSession();
+    ref.read(apiClientProvider).setRefreshToken(null);
+    unawaited(GoogleAuthService.signOut());
     setState(() => _isTakingInitialScreening = false);
   }
 

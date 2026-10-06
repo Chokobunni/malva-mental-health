@@ -7,6 +7,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
+import 'chat_screen.dart';
 
 // ============================================================
 // MY CARE — jadwal sesi + daftar profesional (Active/Ended)
@@ -159,19 +160,20 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   }
 
   List<Widget> _scheduleBody() {
-    final list = _tab == 'Upcoming' ? _upcoming : _past;
+    // Tab "Schedule" menampilkan sesi mendatang (default), bukan riwayat.
+    final list = _tab == 'Past History' ? _past : _upcoming;
     if (list.isEmpty) {
       return [
         EmptyState(
-          icon: _tab == 'Upcoming'
-              ? Icons.event_available_outlined
-              : Icons.history_rounded,
-          title: _tab == 'Upcoming'
-              ? 'Tidak ada sesi mendatang'
-              : 'Belum ada riwayat sesi',
-          subtitle: _tab == 'Upcoming'
-              ? 'Booking konsultasi untuk menjadwalkan sesi.'
-              : 'Sesi yang selesai akan tercatat di sini.',
+          icon: _tab == 'Past History'
+              ? Icons.history_rounded
+              : Icons.event_available_outlined,
+          title: _tab == 'Past History'
+              ? 'Belum ada riwayat sesi'
+              : 'Tidak ada sesi mendatang',
+          subtitle: _tab == 'Past History'
+              ? 'Sesi yang selesai akan tercatat di sini.'
+              : 'Booking konsultasi untuk menjadwalkan sesi.',
         ),
       ];
     }
@@ -199,7 +201,12 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
       if (active.isNotEmpty) ...[
         const SectionLabel('Active'),
         for (final link in active) ...[
-          _ProfessionalLinkCard(link: link, active: true),
+          _ProfessionalLinkCard(
+            link: link,
+            active: true,
+            onChat: () => _openChat(link),
+            onManage: () => _openManageData(link),
+          ),
           const SizedBox(height: 10),
         ],
       ],
@@ -212,6 +219,38 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
       ],
     ];
   }
+
+  void _openChat(BackendPatientProfessionalLink link) {
+    final name = link.professionalDisplayName.isEmpty
+        ? 'Profesional'
+        : link.professionalDisplayName;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          otherUserName: name,
+          otherUserId: link.professionalUserId,
+        ),
+      ),
+    );
+  }
+
+  void _openManageData(BackendPatientProfessionalLink link) {
+    final name = link.professionalDisplayName.isEmpty
+        ? 'Profesional'
+        : link.professionalDisplayName;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (_) => ManageDataSheet(
+        professionalId: link.professionalUserId,
+        professionalName: name,
+      ),
+    );
+  }
 }
 
 class _SessionCard extends StatelessWidget {
@@ -221,12 +260,21 @@ class _SessionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isContinuous = booking.serviceType == 'continuous_support';
+    final icon = isContinuous
+        ? Icons.handshake_rounded
+        : (booking.serviceType.contains('video')
+            ? Icons.videocam_rounded
+            : Icons.chat_bubble_rounded);
+    final label = isContinuous
+        ? '7 Days Continuous Care'
+        : '${booking.serviceType} • 30 minutes';
     return SoftCard(
       child: Row(
         children: [
           CircleAvatar(
             backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
-            child: const Icon(Icons.videocam_rounded, color: MalvaColors.seed),
+            child: Icon(icon, color: MalvaColors.seed),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -234,7 +282,7 @@ class _SessionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${booking.serviceType} • 30 minutes',
+                  label,
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
                 Text(
@@ -251,45 +299,80 @@ class _SessionCard extends StatelessWidget {
 }
 
 class _ProfessionalLinkCard extends StatelessWidget {
-  const _ProfessionalLinkCard({required this.link, required this.active});
+  const _ProfessionalLinkCard({
+    required this.link,
+    required this.active,
+    this.onChat,
+    this.onManage,
+  });
 
   final BackendPatientProfessionalLink link;
   final bool active;
+  final VoidCallback? onChat;
+  final VoidCallback? onManage;
 
   @override
   Widget build(BuildContext context) {
     return SoftCard(
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            backgroundColor: active
-                ? MalvaColors.mint.withValues(alpha: 0.12)
-                : Colors.black12,
-            child: Icon(Icons.person_rounded,
-                color: active ? MalvaColors.mint : Colors.black45),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  link.professionalDisplayName.isEmpty
-                      ? 'Profesional'
-                      : link.professionalDisplayName,
-                  style: const TextStyle(fontWeight: FontWeight.w900),
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: active
+                    ? MalvaColors.mint.withValues(alpha: 0.12)
+                    : Colors.black12,
+                child: Icon(Icons.person_rounded,
+                    color: active ? MalvaColors.mint : Colors.black45),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      link.professionalDisplayName.isEmpty
+                          ? 'Profesional'
+                          : link.professionalDisplayName,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    Text(
+                      'Status: ${link.status}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
-                Text(
-                  'Status: ${link.status}',
-                  style: Theme.of(context).textTheme.bodySmall,
+              ),
+              StatusPill(
+                label: active ? 'Terhubung' : link.status,
+                color: active ? MalvaColors.mint : Colors.black45,
+              ),
+            ],
+          ),
+          if (active) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: onChat,
+                    style: compactFilledButtonStyle,
+                    icon: const Icon(Icons.chat_bubble_rounded, size: 16),
+                    label: const Text('Chat'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onManage,
+                    icon: const Icon(Icons.tune_rounded, size: 16),
+                    label: const Text('Sharing'),
+                  ),
                 ),
               ],
             ),
-          ),
-          StatusPill(
-            label: 'Sharing',
-            color: active ? MalvaColors.mint : Colors.black45,
-          ),
+          ],
         ],
       ),
     );

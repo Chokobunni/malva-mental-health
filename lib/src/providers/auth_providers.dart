@@ -37,19 +37,11 @@ class AuthState {
   bool get isAdmin => session?.role == UserRole.admin;
 }
 
+/// Menyimpan sesi aktif (in-memory). Restore sesi tersimpan dilakukan oleh
+/// [MalvaApp] saat boot (lihat `_restorePersistedSession`) agar tidak ada
+/// import siklik antara provider store dan provider auth.
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier() : super(const AuthState()) {
-    _restoreSession();
-  }
-
-  Future<void> _restoreSession() async {
-    try {
-      state = state.copyWith(isLoading: true);
-      state = state.copyWith(isLoading: false);
-    } on Object {
-      state = const AuthState();
-    }
-  }
+  AuthNotifier() : super(const AuthState());
 
   void setSession(AuthSession session) {
     state = AuthState(session: session);

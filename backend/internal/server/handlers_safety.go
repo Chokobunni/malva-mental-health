@@ -43,12 +43,17 @@ func validateIndonesianPhone(phone string) bool {
 	ph = strings.ReplaceAll(ph, "-", "")
 	ph = strings.ReplaceAll(ph, "(", "")
 	ph = strings.ReplaceAll(ph, ")", "")
-	if len(ph) < 9 || len(ph) > 15 { return false }
+	ph = strings.TrimPrefix(ph, "+")
+	if len(ph) < 9 || len(ph) > 15 {
+		return false
+	}
 	if !strings.HasPrefix(ph, "0") && !strings.HasPrefix(ph, "62") {
 		return false
 	}
 	for _, c := range ph {
-		if c < '0' || c > '9' { return false }
+		if c < '0' || c > '9' {
+			return false
+		}
 	}
 	return true
 }
@@ -207,7 +212,9 @@ func (s *Server) handleCrisisAlertV2(w http.ResponseWriter, r *http.Request, cla
 	}
 
 	triggeredBy := req.TriggeredBy
-	if triggeredBy == "" { triggeredBy = "sos_button" }
+	if triggeredBy == "" {
+		triggeredBy = "sos_button"
+	}
 	if !s.validTriggeredBy(triggeredBy) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid triggered_by"})
 		return
@@ -231,15 +238,15 @@ func (s *Server) handleCrisisAlertV2(w http.ResponseWriter, r *http.Request, cla
 	event := map[string]interface{}{
 		"type": "crisis_alert",
 		"data": map[string]interface{}{
-			"incident_id":      created.ID,
-			"patient_id":       claims.Subject,
-			"patient_name":     claims.Subject,
-			"triggered_by":     triggeredBy,
-			"phq9_q9_score":    req.PHQ9Q9Score,
-			"latitude":         req.Latitude,
-			"longitude":        req.Longitude,
-			"message":          req.Message,
-			"timestamp":        time.Now().UTC().Format(time.RFC3339),
+			"incident_id":   created.ID,
+			"patient_id":    claims.Subject,
+			"patient_name":  claims.Subject,
+			"triggered_by":  triggeredBy,
+			"phq9_q9_score": req.PHQ9Q9Score,
+			"latitude":      req.Latitude,
+			"longitude":     req.Longitude,
+			"message":       req.Message,
+			"timestamp":     time.Now().UTC().Format(time.RFC3339),
 		},
 	}
 	s.hub.Broadcast(event)
@@ -254,7 +261,7 @@ func (s *Server) handleCrisisAlertV2(w http.ResponseWriter, r *http.Request, cla
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		contacts, listErr := s.store.ListEmergencyContacts(ctx, patientID)
-		if (listErr != nil) {
+		if listErr != nil {
 			s.logger.Error("sos list contacts failed", "error", listErr)
 		}
 		for _, contact := range contacts {
@@ -289,7 +296,9 @@ func (s *Server) handleCrisisAlertV2(w http.ResponseWriter, r *http.Request, cla
 }
 
 func mapLink(lat, lng *float64) string {
-	if lat == nil || lng == nil { return "" }
+	if lat == nil || lng == nil {
+		return ""
+	}
 	return fmt.Sprintf("https://maps.google.com/?q=%.5f,%.5f", *lat, *lng)
 }
 
@@ -371,21 +380,21 @@ func (s *Server) listBlastStatus(w http.ResponseWriter, r *http.Request, claims 
 // ============================================================
 
 type uploadCredentialsRequest struct {
-	STRNumber        string      `json:"str_number"`
-	SIPNumber        string      `json:"sip_number"`
-	SIPPNumber       string      `json:"sipp_number"`
-	Specialization   string      `json:"specialization"`
-	SubSpecialties   []string    `json:"sub_specialties"`
-	HospitalLat      *float64    `json:"hospital_lat"`
-	HospitalLng      *float64    `json:"hospital_lng"`
-	HospitalName     string      `json:"hospital_name"`
-	AddressDetails   string      `json:"address_details"`
-	IsBPJSSupported  bool        `json:"is_bpjs_supported"`
-	PhotoIntroURL    string      `json:"photo_intro_url"`
-	VideoIntroURL    string      `json:"video_intro_url"`
-	Bio              string      `json:"bio"`
-	Education        []interface{} `json:"education"`
-	DocumentURL      string      `json:"document_url"`
+	STRNumber       string        `json:"str_number"`
+	SIPNumber       string        `json:"sip_number"`
+	SIPPNumber      string        `json:"sipp_number"`
+	Specialization  string        `json:"specialization"`
+	SubSpecialties  []string      `json:"sub_specialties"`
+	HospitalLat     *float64      `json:"hospital_lat"`
+	HospitalLng     *float64      `json:"hospital_lng"`
+	HospitalName    string        `json:"hospital_name"`
+	AddressDetails  string        `json:"address_details"`
+	IsBPJSSupported bool          `json:"is_bpjs_supported"`
+	PhotoIntroURL   string        `json:"photo_intro_url"`
+	VideoIntroURL   string        `json:"video_intro_url"`
+	Bio             string        `json:"bio"`
+	Education       []interface{} `json:"education"`
+	DocumentURL     string        `json:"document_url"`
 }
 
 func (s *Server) uploadCredentials(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -401,8 +410,8 @@ func (s *Server) uploadCredentials(w http.ResponseWriter, r *http.Request, claim
 	if req.Specialization == "" {
 		req.Specialization = "M.Psi"
 	}
-	if req.Specialization != "Sp.KJ" && req.Specialization != "M.Psi" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "specialization must be Sp.KJ or M.Psi"})
+	if !validSpecialization(req.Specialization) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "specialization tidak dikenal (contoh: Sp.KJ, M.Psi)"})
 		return
 	}
 	if req.HospitalLat != nil && req.HospitalLng != nil {
@@ -419,31 +428,31 @@ func (s *Server) uploadCredentials(w http.ResponseWriter, r *http.Request, claim
 		yearsExperience, priceFrom = existing.YearsExperience, existing.PriceFrom
 	}
 	cred, err := s.store.UpsertProfessionalCredential(r.Context(), store.ProfessionalCredential{
-		UserID:           claims.Subject,
-		STRNumber:        req.STRNumber,
-		SIPNumber:        req.SIPNumber,
-		SIPPNumber:       req.SIPPNumber,
-		Specialization:   req.Specialization,
-		SubSpecialties:   req.SubSpecialties,
-		HospitalLat:      req.HospitalLat,
-		HospitalLng:      req.HospitalLng,
-		HospitalName:     req.HospitalName,
-		AddressDetails:   req.AddressDetails,
-		IsBPJSSupported:  req.IsBPJSSupported,
-		PhotoIntroURL:    req.PhotoIntroURL,
-		VideoIntroURL:    req.VideoIntroURL,
-		Bio:              req.Bio,
-		Education:        req.Education,
-		DocumentURL:      req.DocumentURL,
-		YearsExperience:  yearsExperience,
-		PriceFrom:        priceFrom,
+		UserID:          claims.Subject,
+		STRNumber:       req.STRNumber,
+		SIPNumber:       req.SIPNumber,
+		SIPPNumber:      req.SIPPNumber,
+		Specialization:  req.Specialization,
+		SubSpecialties:  req.SubSpecialties,
+		HospitalLat:     req.HospitalLat,
+		HospitalLng:     req.HospitalLng,
+		HospitalName:    req.HospitalName,
+		AddressDetails:  req.AddressDetails,
+		IsBPJSSupported: req.IsBPJSSupported,
+		PhotoIntroURL:   req.PhotoIntroURL,
+		VideoIntroURL:   req.VideoIntroURL,
+		Bio:             req.Bio,
+		Education:       req.Education,
+		DocumentURL:     req.DocumentURL,
+		YearsExperience: yearsExperience,
+		PriceFrom:       priceFrom,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"credential":        cred,
+		"credential":          cred,
 		"verification_status": cred.VerificationStatus,
 	})
 }
@@ -461,18 +470,26 @@ func (s *Server) searchDoctors(w http.ResponseWriter, r *http.Request, claims au
 	_ = claims
 	params := store.DoctorSearchParams{Limit: parseQueryInt(r, "limit", 50, 100)}
 	if v := r.URL.Query().Get("patient_lat"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil { params.PatientLat = &f }
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			params.PatientLat = &f
+		}
 	}
 	if v := r.URL.Query().Get("patient_lng"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil { params.PatientLng = &f }
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			params.PatientLng = &f
+		}
 	}
 	params.Specialization = r.URL.Query().Get("specialization")
 	params.SortBy = r.URL.Query().Get("sort_by")
 	if v := r.URL.Query().Get("max_price"); v != "" {
-		if p, err := strconv.ParseInt(v, 10, 64); err == nil { params.MaxPrice = &p }
+		if p, err := strconv.ParseInt(v, 10, 64); err == nil {
+			params.MaxPrice = &p
+		}
 	}
 	if v := r.URL.Query().Get("max_km"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil { params.MaxKM = &f }
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			params.MaxKM = &f
+		}
 	}
 	// Klien mengirim is_bpjs_supported (is_bpjs dipertahankan sebagai alias).
 	if v := r.URL.Query().Get("is_bpjs_supported"); v != "" {
@@ -537,13 +554,15 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 
 	var slots []interface{}
 	for _, sch := range schedules {
-		if sch.DayOfWeek != dayOfWeek { continue }
+		if sch.DayOfWeek != dayOfWeek {
+			continue
+		}
 		start, _ := time.Parse("15:04", sch.StartTime)
 		end, _ := time.Parse("15:04", sch.EndTime)
 		for t := start; t.Before(end); t = t.Add(time.Duration(sch.SlotDurationMinutes) * time.Minute) {
 			slot := t.Format("15:04")
 			slots = append(slots, map[string]interface{}{
-				"time":   slot,
+				"time":      slot,
 				"available": true,
 			})
 		}
@@ -559,7 +578,7 @@ func (s *Server) requireVerifiedProfessional(w http.ResponseWriter, r *http.Requ
 	cred, err := s.store.GetProfessionalCredential(r.Context(), claims.Subject)
 	if err != nil || cred.VerificationStatus != "VERIFIED" {
 		writeJSON(w, http.StatusForbidden, map[string]string{
-			"error": "Your STR/SIP are still PENDING. Please wait for admin verification.",
+			"error":               "Your STR/SIP are still PENDING. Please wait for admin verification.",
 			"verification_status": cred.VerificationStatus,
 		})
 		return false

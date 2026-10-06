@@ -22,11 +22,11 @@ func (s *Store) GetUserBySSO(ctx context.Context, provider, ssoID string) (User,
 		return User{}, errors.New("sso provider and sso id are required")
 	}
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, email, role::text, display_name, password_hash
+		SELECT id, email, role::text, display_name, phone, date_of_birth, gender, password_hash
 		FROM users
 		WHERE sso_provider = $1 AND sso_id = $2 AND disabled_at IS NULL
 	`, provider, ssoID).
-		Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.PasswordHash)
+		Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.Phone, &user.DateOfBirth, &user.Gender, &user.PasswordHash)
 	return user, err
 }
 
@@ -59,9 +59,22 @@ type AdminUser struct {
 	Email       string     `json:"email"`
 	Role        string     `json:"role"`
 	DisplayName string     `json:"display_name"`
+	Phone       *string    `json:"phone,omitempty"`
+	DateOfBirth *string    `json:"date_of_birth,omitempty"`
+	Gender      *string    `json:"gender,omitempty"`
 	SSOProvider *string    `json:"sso_provider,omitempty"`
 	DisabledAt  *time.Time `json:"disabled_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
+}
+
+// adminUserColumns adalah daftar kolom yang di-scan ke AdminUser (tanpa created_at).
+const adminUserColumns = `id, email, role::text, display_name, phone, date_of_birth, gender, sso_provider, disabled_at`
+
+// scanAdminUser meng-scan kolom adminUserColumns + created_at (di akhir) ke AdminUser.
+func scanAdminUser(row interface{ Scan(...any) error }) (AdminUser, error) {
+	var u AdminUser
+	err := row.Scan(&u.ID, &u.Email, &u.Role, &u.DisplayName, &u.Phone, &u.DateOfBirth, &u.Gender, &u.SSOProvider, &u.DisabledAt, &u.CreatedAt)
+	return u, err
 }
 
 // ListUsers mengembalikan semua pengguna (khusus admin), terbaru dulu.
@@ -70,7 +83,7 @@ func (s *Store) ListUsers(ctx context.Context, limit int) ([]AdminUser, error) {
 		limit = 200
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, email, role::text, display_name, sso_provider, disabled_at, created_at
+		SELECT `+adminUserColumns+`, created_at
 		FROM users
 		ORDER BY created_at DESC
 		LIMIT $1
@@ -81,8 +94,8 @@ func (s *Store) ListUsers(ctx context.Context, limit int) ([]AdminUser, error) {
 	defer func() { _ = rows.Close() }()
 	var out []AdminUser
 	for rows.Next() {
-		var u AdminUser
-		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.DisplayName, &u.SSOProvider, &u.DisabledAt, &u.CreatedAt); err != nil {
+		u, err := scanAdminUser(rows)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, u)
@@ -90,9 +103,10 @@ func (s *Store) ListUsers(ctx context.Context, limit int) ([]AdminUser, error) {
 	return out, rows.Err()
 }
 
-// UpdateUserAdmin mengubah display name, role, dan/atau status nonaktif
-// pengguna (khusus admin). Nilai kosong/nil = tidak diubah.
-func (s *Store) UpdateUserAdmin(ctx context.Context, userID, displayName, role string, disabled *bool) (AdminUser, error) {
+// UpdateUserAdmin mengubah display name, role, status nonaktif, dan field
+// profil (phone/date_of_birth/gender) pengguna (khusus admin).
+// Nilai kosong/nil = tidak diubah.
+func (s *Store) UpdateUserAdmin(ctx context.Context, userID, displayName, role, phone, dateOfBirth, gender string, disabled *bool) (AdminUser, error) {
 	userID = strings.TrimSpace(userID)
 	if userID == "" {
 		return AdminUser{}, errors.New("user_id is required")
@@ -112,6 +126,21 @@ func (s *Store) UpdateUserAdmin(ctx context.Context, userID, displayName, role s
 			return AdminUser{}, err
 		}
 	}
+	if phone = normalizePhoneInput(phone); phone != "" {
+		if _, err := s.db.ExecContext(ctx, `UPDATE users SET phone = $2, updated_at = now() WHERE id = $1`, userID, phone); err != nil {
+			return AdminUser{}, err
+		}
+	}
+	if dateOfBirth = normalizeDateInput(dateOfBirth); dateOfBirth != "" {
+		if _, err := s.db.ExecContext(ctx, `UPDATE users SET date_of_birth = $2::date, updated_at = now() WHERE id = $1`, userID, dateOfBirth); err != nil {
+			return AdminUser{}, err
+		}
+	}
+	if gender = normalizeGenderInput(gender); gender != "" {
+		if _, err := s.db.ExecContext(ctx, `UPDATE users SET gender = $2, updated_at = now() WHERE id = $1`, userID, gender); err != nil {
+			return AdminUser{}, err
+		}
+	}
 	if disabled != nil {
 		if *disabled {
 			if _, err := s.db.ExecContext(ctx, `UPDATE users SET disabled_at = now(), updated_at = now() WHERE id = $1`, userID); err != nil {
@@ -125,9 +154,9 @@ func (s *Store) UpdateUserAdmin(ctx context.Context, userID, displayName, role s
 	}
 	var u AdminUser
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, email, role::text, display_name, sso_provider, disabled_at, created_at
+		SELECT `+adminUserColumns+`, created_at
 		FROM users WHERE id = $1
-	`, userID).Scan(&u.ID, &u.Email, &u.Role, &u.DisplayName, &u.SSOProvider, &u.DisabledAt, &u.CreatedAt)
+	`, userID).Scan(&u.ID, &u.Email, &u.Role, &u.DisplayName, &u.Phone, &u.DateOfBirth, &u.Gender, &u.SSOProvider, &u.DisabledAt, &u.CreatedAt)
 	return u, err
 }
 

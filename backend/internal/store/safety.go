@@ -21,39 +21,39 @@ type EmergencyContact struct {
 }
 
 type CrisisIncident struct {
-	ID               string     `json:"id"`
-	PatientID        string     `json:"patient_id"`
-	TriggeredBy      string     `json:"triggered_by"`
-	PHQ9Q9Score      *int       `json:"phq9_q9_score,omitempty"`
-	Latitude         *float64   `json:"latitude,omitempty"`
-	Longitude        *float64   `json:"longitude,omitempty"`
-	Status           string     `json:"status"`
-	ResolutionNotes  string     `json:"resolution_notes"`
-	ResponsibleBy    string     `json:"resolved_by"`
-	DoctorNotifiedAt *time.Time `json:"doctor_notified_at,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
-	ResolvedAt       *time.Time `json:"resolved_at,omitempty"`
-	PatientName      string     `json:"patient_name,omitempty"`
+	ID                 string     `json:"id"`
+	PatientID          string     `json:"patient_id"`
+	TriggeredBy        string     `json:"triggered_by"`
+	PHQ9Q9Score        *int       `json:"phq9_q9_score,omitempty"`
+	Latitude           *float64   `json:"latitude,omitempty"`
+	Longitude          *float64   `json:"longitude,omitempty"`
+	Status             string     `json:"status"`
+	ResolutionNotes    string     `json:"resolution_notes"`
+	ResponsibleBy      string     `json:"resolved_by"`
+	DoctorNotifiedAt   *time.Time `json:"doctor_notified_at,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
+	ResolvedAt         *time.Time `json:"resolved_at,omitempty"`
+	PatientName        string     `json:"patient_name,omitempty"`
 	PatientNameDisplay string     `json:"patient_display_name,omitempty"`
 }
 
 type SOSBlastLog struct {
-	ID                string     `json:"id"`
-	CrisisIncidentID  string     `json:"crisis_incident_id"`
-	ContactPhone      string     `json:"contact_phone"`
-	Channel           string     `json:"channel"`
-	Status            string     `json:"status"`
-	MessageID         string     `json:"message_id,omitempty"`
-	CreatedAt         time.Time  `json:"created_at"`
-	DeliveredAt       *time.Time `json:"delivered_at,omitempty"`
+	ID               string     `json:"id"`
+	CrisisIncidentID string     `json:"crisis_incident_id"`
+	ContactPhone     string     `json:"contact_phone"`
+	Channel          string     `json:"channel"`
+	Status           string     `json:"status"`
+	MessageID        string     `json:"message_id,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	DeliveredAt      *time.Time `json:"delivered_at,omitempty"`
 }
 
 type SOSBlastStatus struct {
-	Total      int `json:"total"`
-	Sent       int `json:"sent"`
-	Delivered  int `json:"delivered"`
-	Pending    int `json:"pending"`
-	Failed     int `json:"failed"`
+	Total     int `json:"total"`
+	Sent      int `json:"sent"`
+	Delivered int `json:"delivered"`
+	Pending   int `json:"pending"`
+	Failed    int `json:"failed"`
 }
 
 // CreateEmergencyContact menambahkan kontak (max 5 per pasien, enforced di handler).
@@ -85,7 +85,9 @@ func (s *Store) ListEmergencyContacts(ctx context.Context, patientID string) ([]
 	const q = `SELECT id, patient_id, contact_name, contact_phone, relationship, is_default
 		FROM emergency_contacts WHERE patient_id = $1 ORDER BY is_default DESC, created_at ASC`
 	rows, err := s.db.QueryContext(ctx, q, patientID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer func() { _ = rows.Close() }()
 	var out []EmergencyContact
 	for rows.Next() {
@@ -101,9 +103,13 @@ func (s *Store) ListEmergencyContacts(ctx context.Context, patientID string) ([]
 func (s *Store) DeleteEmergencyContact(ctx context.Context, patientID, contactID string) error {
 	const q = `DELETE FROM emergency_contacts WHERE patient_id = $1 AND id = $2`
 	res, err := s.db.ExecContext(ctx, q, patientID, contactID)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	aff, _ := res.RowsAffected()
-	if aff == 0 { return errors.New("contact not found") }
+	if aff == 0 {
+		return errors.New("contact not found")
+	}
 	_ = s.AddAuditLog(ctx, patientID, patientID, "emergency_contact.deleted", "emergency_contacts", contactID, nil)
 	return nil
 }
@@ -112,9 +118,13 @@ func (s *Store) UpdateEmergencyContact(ctx context.Context, c EmergencyContact) 
 	const q = `UPDATE emergency_contacts SET contact_name = $1, contact_phone = $2, relationship = $3, is_default = $4
 		WHERE id = $5 AND patient_id = $6`
 	res, err := s.db.ExecContext(ctx, q, c.ContactName, c.ContactPhone, c.Relationship, c.IsDefault, c.ID, c.PatientID)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	aff, _ := res.RowsAffected()
-	if aff == 0 { return errors.New("contact not found") }
+	if aff == 0 {
+		return errors.New("contact not found")
+	}
 	return nil
 }
 
@@ -128,13 +138,17 @@ func (s *Store) CountEmergencyContacts(ctx context.Context, patientID string) (i
 // CreateCrisisIncident mencatat incident dan menutup incident lama yang masih aktif.
 func (s *Store) CreateCrisisIncident(ctx context.Context, in CrisisIncident) (CrisisIncident, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil { return CrisisIncident{}, err }
+	if err != nil {
+		return CrisisIncident{}, err
+	}
 	defer func() { _ = tx.Rollback() }()
 
 	_, err = tx.ExecContext(ctx, `UPDATE crisis_incidents
 		SET status = 'resolved', resolved_at = now(), resolution_notes = 'superseded oleh incident baru'
 		WHERE patient_id = $1 AND status = 'active'`, in.PatientID)
-	if err != nil { return CrisisIncident{}, err }
+	if err != nil {
+		return CrisisIncident{}, err
+	}
 
 	const q = `INSERT INTO crisis_incidents
 		(patient_id, triggered_by, phq9_q9_score, latitude, longitude, doctor_notified_at, contacts_notified_at, status)
@@ -142,9 +156,13 @@ func (s *Store) CreateCrisisIncident(ctx context.Context, in CrisisIncident) (Cr
 		RETURNING id, status, created_at`
 	err = tx.QueryRowContext(ctx, q, in.PatientID, in.TriggeredBy, in.PHQ9Q9Score, in.Latitude, in.Longitude).
 		Scan(&in.ID, &in.Status, &in.CreatedAt)
-	if err != nil { return CrisisIncident{}, err }
+	if err != nil {
+		return CrisisIncident{}, err
+	}
 
-	if err := tx.Commit(); err != nil { return CrisisIncident{}, err }
+	if err := tx.Commit(); err != nil {
+		return CrisisIncident{}, err
+	}
 	return in, nil
 }
 
@@ -159,7 +177,9 @@ func (s *Store) ListCrisisIncidents(ctx context.Context, patientID string, limit
 		ORDER BY i.created_at DESC
 		LIMIT $2`
 	rows, err := s.db.QueryContext(ctx, q, patientID, limit)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer func() { _ = rows.Close() }()
 	var out []CrisisIncident
 	for rows.Next() {
@@ -184,7 +204,9 @@ func (s *Store) ListActiveCrisisIncidentsForProfessional(ctx context.Context, pr
 		WHERE l.professional_id = $1 AND i.status = 'active'
 		ORDER BY i.created_at DESC`
 	rows, err := s.db.QueryContext(ctx, q, professionalID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer func() { _ = rows.Close() }()
 	var out []CrisisIncident
 	for rows.Next() {
@@ -215,7 +237,9 @@ func (s *Store) GetCrisisIncident(ctx context.Context, incidentID string) (Crisi
 
 func (s *Store) ResolveCrisisIncident(ctx context.Context, incidentID, professionalID, resolutionNotes string) (CrisisIncident, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil { return CrisisIncident{}, err }
+	if err != nil {
+		return CrisisIncident{}, err
+	}
 	defer func() { _ = tx.Rollback() }()
 
 	var patientID string
@@ -233,7 +257,9 @@ func (s *Store) ResolveCrisisIncident(ctx context.Context, incidentID, professio
 		return CrisisIncident{}, err
 	}
 
-	if err := tx.Commit(); err != nil { return CrisisIncident{}, err }
+	if err := tx.Commit(); err != nil {
+		return CrisisIncident{}, err
+	}
 	return CrisisIncident{ID: incidentID, PatientID: patientID, Status: "resolved"}, nil
 }
 
@@ -245,7 +271,9 @@ func (s *Store) ListActiveCrisisIncidentsOlderThan(ctx context.Context, olderTha
 		ORDER BY i.created_at ASC`
 	interval := fmt.Sprintf("%d seconds", int(olderThan.Seconds()))
 	rows, err := s.db.QueryContext(ctx, q, interval)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer func() { _ = rows.Close() }()
 	var out []CrisisIncident
 	for rows.Next() {
@@ -263,7 +291,9 @@ func (s *Store) PurgeResolvedCrisisGPS(ctx context.Context, olderThan time.Durat
 		WHERE status = 'resolved' AND resolved_at < now() - $1::interval AND latitude IS NOT NULL`
 	interval := fmt.Sprintf("%d seconds", int(olderThan.Seconds()))
 	res, err := s.db.ExecContext(ctx, q, interval)
-	if err != nil { return 0, err }
+	if err != nil {
+		return 0, err
+	}
 	return res.RowsAffected()
 }
 

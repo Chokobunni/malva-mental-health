@@ -119,6 +119,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final storeState = ref.watch(malvaStoreProvider);
     final upcoming = _upcomingBooking;
+    // Nama sapaan diambil dari sesi login asli, fallback ke store.
+    final displayName = (widget.session?.displayName.trim().isNotEmpty ?? false)
+        ? widget.session!.displayName
+        : storeState.patient.name;
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: _refreshAll,
@@ -128,7 +132,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             if (_isInitialLoading) const LinearProgressIndicator(),
             GradientHeader(
               title: 'Home',
-              subtitle: 'Halo, ${storeState.patient.name}',
+              subtitle: 'Halo, $displayName',
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

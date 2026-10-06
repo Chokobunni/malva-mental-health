@@ -101,10 +101,31 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
   @override
   void dispose() {
     for (final c in [
-      _email, _password, _name, _profId, _subSpec, _hospital, _address,
-      _lat, _lng, _bio, _years, _price, _str, _sip, _sipp, _photo, _video,
-      _education, _newStart, _newEnd, _newDur, _pkgSessions, _pkgDays,
-      _pkgPrice, _pkgLabel,
+      _email,
+      _password,
+      _name,
+      _profId,
+      _subSpec,
+      _hospital,
+      _address,
+      _lat,
+      _lng,
+      _bio,
+      _years,
+      _price,
+      _str,
+      _sip,
+      _sipp,
+      _photo,
+      _video,
+      _education,
+      _newStart,
+      _newEnd,
+      _newDur,
+      _pkgSessions,
+      _pkgDays,
+      _pkgPrice,
+      _pkgLabel,
     ]) {
       c.dispose();
     }
@@ -214,8 +235,7 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
       return;
     }
     if (!widget.isEdit) {
-      if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
-          .hasMatch(_email.text.trim())) {
+      if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(_email.text.trim())) {
         _snack('Format email tidak valid.');
         return;
       }
@@ -234,6 +254,7 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
         await widget.apiClient.updateDoctor(
           accessToken: widget.accessToken,
           userId: widget.userId!,
+          displayName: _name.text.trim(),
           credentials: _credentialsBody(),
           schedules: [
             for (final s in _schedules)
@@ -283,7 +304,9 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
         );
       }
       if (!mounted) return;
-      _snack(widget.isEdit ? 'Dokter diperbarui.' : 'Dokter ditambahkan & terverifikasi.');
+      _snack(widget.isEdit
+          ? 'Dokter diperbarui.'
+          : 'Dokter ditambahkan & terverifikasi.');
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
@@ -299,8 +322,8 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-          title: Text(widget.isEdit ? 'Edit Dokter' : 'Tambah Dokter')),
+      appBar:
+          AppBar(title: Text(widget.isEdit ? 'Edit Dokter' : 'Tambah Dokter')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -312,13 +335,15 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                       controller: _email,
                       keyboardType: TextInputType.emailAddress,
                       decoration: const InputDecoration(
-                          labelText: 'Email akun', prefixIcon: Icon(Icons.email_rounded))),
+                          labelText: 'Email akun',
+                          prefixIcon: Icon(Icons.email_rounded))),
                   const SizedBox(height: 10),
                   TextField(
                       controller: _password,
                       obscureText: true,
                       decoration: const InputDecoration(
-                          labelText: 'Password akun (min. 8, besar+kecil+angka+simbol)',
+                          labelText:
+                              'Password akun (min. 8, besar+kecil+angka+simbol)',
                           prefixIcon: Icon(Icons.lock_rounded))),
                   const SizedBox(height: 10),
                   TextField(
@@ -352,6 +377,12 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                     DropdownMenuItem(
                         value: 'M.Psi',
                         child: Text('M.Psi — Psikolog (terapi)')),
+                    DropdownMenuItem(
+                        value: 'Sp.Psi',
+                        child: Text('Sp.Psi — Psikolog spesialis')),
+                    DropdownMenuItem(
+                        value: 'Sp.An',
+                        child: Text('Sp.An — Psikiater subspesialis lain')),
                   ],
                   onChanged: (v) => setState(() => _spec = v ?? _spec),
                 ),
@@ -369,7 +400,9 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                         child: TextField(
                             controller: _years,
                             keyboardType: TextInputType.number,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly
+                            ],
                             decoration: const InputDecoration(
                                 labelText: 'Pengalaman (thn)'))),
                     const SizedBox(width: 10),
@@ -377,7 +410,9 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                         child: TextField(
                             controller: _price,
                             keyboardType: TextInputType.number,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly
+                            ],
                             decoration: const InputDecoration(
                                 labelText: 'Harga mulai (Rp)'))),
                   ],
@@ -417,16 +452,16 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                             controller: _lat,
                             keyboardType: const TextInputType.numberWithOptions(
                                 signed: true, decimal: true),
-                            decoration: const InputDecoration(
-                                labelText: 'Latitude'))),
+                            decoration:
+                                const InputDecoration(labelText: 'Latitude'))),
                     const SizedBox(width: 10),
                     Expanded(
                         child: TextField(
                             controller: _lng,
                             keyboardType: const TextInputType.numberWithOptions(
                                 signed: true, decimal: true),
-                            decoration: const InputDecoration(
-                                labelText: 'Longitude'))),
+                            decoration:
+                                const InputDecoration(labelText: 'Longitude'))),
                   ],
                 ),
                 SwitchListTile(
@@ -438,18 +473,15 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                 const SectionLabel('Legalitas & Media'),
                 TextField(
                     controller: _str,
-                    decoration:
-                        const InputDecoration(labelText: 'No. STR')),
+                    decoration: const InputDecoration(labelText: 'No. STR')),
                 const SizedBox(height: 10),
                 TextField(
                     controller: _sip,
-                    decoration:
-                        const InputDecoration(labelText: 'No. SIP')),
+                    decoration: const InputDecoration(labelText: 'No. SIP')),
                 const SizedBox(height: 10),
                 TextField(
                     controller: _sipp,
-                    decoration:
-                        const InputDecoration(labelText: 'No. SIPP')),
+                    decoration: const InputDecoration(labelText: 'No. SIPP')),
                 const SizedBox(height: 10),
                 TextField(
                     controller: _photo,
@@ -467,13 +499,11 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                     child: ListTile(
                       title: Text(
                           '${_dayNames[_schedules[i].day]} ${_schedules[i].start}–${_schedules[i].end}'),
-                      subtitle: Text(
-                          'Slot ${_schedules[i].duration} mnt'),
+                      subtitle: Text('Slot ${_schedules[i].duration} mnt'),
                       trailing: IconButton(
                         icon: const Icon(Icons.delete_rounded,
                             color: MalvaColors.danger),
-                        onPressed: () =>
-                            setState(() => _schedules.removeAt(i)),
+                        onPressed: () => setState(() => _schedules.removeAt(i)),
                       ),
                     ),
                   ),
@@ -482,8 +512,7 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                     Expanded(
                       child: DropdownButtonFormField<int>(
                         initialValue: _newDay,
-                        decoration:
-                            const InputDecoration(labelText: 'Hari'),
+                        decoration: const InputDecoration(labelText: 'Hari'),
                         items: [
                           for (var d = 0; d < 7; d++)
                             DropdownMenuItem(
@@ -496,8 +525,8 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                     Expanded(
                         child: TextField(
                             controller: _newStart,
-                            decoration: const InputDecoration(
-                                labelText: 'Mulai'))),
+                            decoration:
+                                const InputDecoration(labelText: 'Mulai'))),
                     const SizedBox(width: 8),
                     Expanded(
                         child: TextField(
@@ -509,8 +538,8 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                         child: TextField(
                             controller: _newDur,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                                labelText: 'mnt'))),
+                            decoration:
+                                const InputDecoration(labelText: 'mnt'))),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -527,8 +556,7 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                           day: _newDay,
                           start: _newStart.text.trim(),
                           end: _newEnd.text.trim(),
-                          duration:
-                              int.tryParse(_newDur.text.trim()) ?? 30,
+                          duration: int.tryParse(_newDur.text.trim()) ?? 30,
                         )));
                   },
                   icon: const Icon(Icons.add_rounded),
@@ -547,8 +575,7 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                       trailing: IconButton(
                         icon: const Icon(Icons.delete_rounded,
                             color: MalvaColors.danger),
-                        onPressed: () =>
-                            setState(() => _packages.removeAt(i)),
+                        onPressed: () => setState(() => _packages.removeAt(i)),
                       ),
                     ),
                   ),
@@ -558,8 +585,8 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                         child: TextField(
                             controller: _pkgSessions,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                                labelText: 'Sesi'))),
+                            decoration:
+                                const InputDecoration(labelText: 'Sesi'))),
                     const SizedBox(width: 8),
                     Expanded(
                         child: TextField(
@@ -585,8 +612,7 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: () => setState(() => _packages.add(_PackageRow(
-                        sessions:
-                            int.tryParse(_pkgSessions.text.trim()) ?? 1,
+                        sessions: int.tryParse(_pkgSessions.text.trim()) ?? 1,
                         days: int.tryParse(_pkgDays.text.trim()) ?? 7,
                         price: int.tryParse(_pkgPrice.text.trim()) ?? 0,
                         label: _pkgLabel.text.trim(),
@@ -600,8 +626,7 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                   icon: _saving
                       ? const SizedBox.square(
                           dimension: 18,
-                          child:
-                              CircularProgressIndicator(strokeWidth: 2))
+                          child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.save_rounded),
                   label: Text(_saving
                       ? 'Menyimpan...'

@@ -6,6 +6,7 @@ import '../providers/data/export_provider.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/therapy_library.dart';
 import 'consent_management_screen.dart';
 import 'record_screen.dart';
 import 'admin/admin_panel_screen.dart';
@@ -64,6 +65,18 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const RecordScreen()),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ActionTile(
+                  icon: Icons.folder_copy_rounded,
+                  title: 'Folder Therapy',
+                  subtitle: 'Worksheet terapi tersimpan — unduh & kirim',
+                  color: MalvaColors.orchid,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const TherapySubmissionsScreen()),
                   ),
                 ),
                 const SizedBox(height: 10),

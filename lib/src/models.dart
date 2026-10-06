@@ -331,6 +331,7 @@ class ChatMessage {
     required this.timestamp,
     required this.isMine,
     this.kind = 'text',
+    this.metadata,
   });
 
   final String id;
@@ -340,6 +341,9 @@ class ChatMessage {
   final DateTime timestamp;
   final bool isMine;
   final String kind;
+
+  /// Data terstruktur untuk pesan share (summary/assessment/resep/goals/dll).
+  final Map<String, dynamic>? metadata;
 
   factory ChatMessage.fromJson(Map<String, dynamic> json,
       {required String currentUserId}) {
@@ -352,6 +356,8 @@ class ChatMessage {
           DateTime.now(),
       isMine: json['sender_id']?.toString() == currentUserId,
       kind: json['kind']?.toString() ?? 'text',
+      metadata: (json['metadata'] as Map?)?.cast<String, dynamic>() ??
+          (json['attachment_meta'] as Map?)?.cast<String, dynamic>(),
     );
   }
 
@@ -360,6 +366,8 @@ class ChatMessage {
         'sender_id': senderId,
         'sender_name': senderName,
         'text': text,
+        'kind': kind,
+        if (metadata != null) 'metadata': metadata,
         'timestamp': timestamp.toIso8601String(),
       };
 }

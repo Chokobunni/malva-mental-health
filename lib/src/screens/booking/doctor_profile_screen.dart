@@ -9,6 +9,7 @@ import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 import '../../widgets/professional_avatar.dart';
+import '../chat_screen.dart';
 import 'booking_detail_screen.dart';
 
 // ============================================================
@@ -22,7 +23,7 @@ import 'booking_detail_screen.dart';
 //   Choose Your Support Level:
 //     - Quick Consult (One-Time)     [dengan fitur + cross sharing]
 //     - Continuous Support (Best Value)  [7 Days of Asynchronous Care]
-//   CTA: Book Session / Start Weekly Plan
+//   CTA: Book Session / 7 Days Continuous Care (+ tombol Chat bila terhubung)
 // ============================================================
 
 class DoctorProfileScreen extends ConsumerStatefulWidget {
@@ -58,6 +59,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   // 'quick' | 'continuous'
   String _selectedPlan = 'quick';
   String _serviceType = 'chat';
+  bool _checkingLink = false;
 
   @override
   void initState() {
@@ -442,12 +444,13 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                               ),
                               ('20% OFF Video Sessions', Icons.savings_rounded),
                             ],
-                            footnote: 'Renews Weekly. Cancel anytime.',
-                            quota: '1 Quota Remaining',
+                            footnote:
+                                '7 hari penuh sejak tanggal mulai. Tanpa perpanjangan otomatis.',
+                            quota: 'Termasuk monitoring data 7 hari',
                           ),
                           const SizedBox(height: 16),
 
-                          // ===== CTA =====
+                          // ===== CTA: 1 tombol per plan terpilih =====
                           FilledButton.icon(
                             onPressed: _proceed,
                             style: FilledButton.styleFrom(
@@ -455,16 +458,25 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             ),
                             icon: const Icon(Icons.arrow_forward_rounded),
                             label: Text(_selectedPlan == 'continuous'
-                                ? 'Start Weekly Plan'
+                                ? '7 Days Continuous Care'
                                 : 'Book Session'),
                           ),
                           const SizedBox(height: 8),
-                          OutlinedButton(
-                            onPressed: () => Navigator.pop(context),
+                          OutlinedButton.icon(
+                            onPressed:
+                                _checkingLink ? null : () => _openChat(context),
                             style: OutlinedButton.styleFrom(
                               minimumSize: const Size.fromHeight(48),
                             ),
-                            child: const Text('Chat'),
+                            icon: _checkingLink
+                                ? const SizedBox.square(
+                                    dimension: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.chat_bubble_rounded),
+                            label:
+                                Text(_checkingLink ? 'Memeriksa...' : 'Chat'),
                           ),
                           const SizedBox(height: 16),
                         ],
@@ -564,6 +576,57 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
       _openContinuousBooking(cred);
     } else {
       _openBooking(context, null);
+    }
+  }
+
+  /// Tombol Chat: bila sudah terhubung (link aktif) langsung buka chat
+  /// dengan dokter ini; bila belum, arahkan mulai 7 Days Continuous Care.
+  Future<void> _openChat(BuildContext context) async {
+    final MalvaApiClient apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
+    final accessToken = widget.session?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Masuk dulu untuk chat dengan profesional.')),
+      );
+      return;
+    }
+    setState(() => _checkingLink = true);
+    try {
+      final links = await apiClient.listPatientProfessionalLinks(
+        accessToken: accessToken,
+      );
+      final linked = links.any((l) =>
+          l.status == 'active' &&
+          (l.professionalUserId == widget.doctorUserId ||
+              l.professionalId == widget.doctorUserId));
+      if (!mounted) return;
+      setState(() => _checkingLink = false);
+      if (!linked) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Kamu belum terhubung dengan dokter ini. Mulai 7 Days Continuous Care untuk chat 24/7.')),
+        );
+        return;
+      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            otherUserName: _displayName,
+            otherUserId: widget.doctorUserId,
+          ),
+        ),
+      );
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() => _checkingLink = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyErrorMessage(e))),
+      );
     }
   }
 

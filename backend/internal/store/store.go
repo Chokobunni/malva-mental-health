@@ -19,11 +19,14 @@ type Store struct {
 }
 
 type User struct {
-	ID           string `json:"id"`
-	Email        string `json:"email"`
-	Role         string `json:"role"`
-	DisplayName  string `json:"display_name"`
-	PasswordHash string `json:"-"`
+	ID           string  `json:"id"`
+	Email        string  `json:"email"`
+	Role         string  `json:"role"`
+	DisplayName  string  `json:"display_name"`
+	Phone        *string `json:"phone,omitempty"`
+	DateOfBirth  *string `json:"date_of_birth,omitempty"` // format YYYY-MM-DD
+	Gender       *string `json:"gender,omitempty"`
+	PasswordHash string  `json:"-"`
 }
 
 type CreateUserParams struct {
@@ -31,6 +34,9 @@ type CreateUserParams struct {
 	PasswordHash   string
 	Role           string
 	DisplayName    string
+	Phone          string
+	DateOfBirth    string // YYYY-MM-DD, kosongkan bila tidak ada
+	Gender         string // male/female/other, kosongkan bila tidak ada
 	ProfessionalID string
 	// SSOProvider/SSOID diisi saat akun dibuat via login sosial (mis. google).
 	SSOProvider string
@@ -124,16 +130,18 @@ type FollowUpMessage struct {
 }
 
 type MoodCheckin struct {
-	ID           string    `json:"id"`
-	PatientID    string    `json:"patient_id"`
-	Mood         string    `json:"mood"`
-	SleepHours   float64   `json:"sleep_hours"`
-	Energy       int       `json:"energy"`
-	Anxiety      int       `json:"anxiety"`
-	Irritability int       `json:"irritability"`
-	Note         string    `json:"note"`
-	OccurredAt   time.Time `json:"occurred_at"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID                   string    `json:"id"`
+	PatientID            string    `json:"patient_id"`
+	Mood                 string    `json:"mood"`
+	SleepHours           float64   `json:"sleep_hours"`
+	Energy               int       `json:"energy"`
+	Anxiety              int       `json:"anxiety"`
+	Irritability         int       `json:"irritability"`
+	Note                 string    `json:"note"`
+	MedicationTaken      bool      `json:"medication_taken"`
+	ProfessionalFeedback string    `json:"professional_feedback,omitempty"`
+	OccurredAt           time.Time `json:"occurred_at"`
+	CreatedAt            time.Time `json:"created_at"`
 }
 
 type DiaryEntry struct {
@@ -228,11 +236,13 @@ func (s *Store) CreateUser(ctx context.Context, params CreateUserParams) (User, 
 	defer func() { _ = tx.Rollback() }()
 	var user User
 	err = tx.QueryRowContext(ctx, `
-		INSERT INTO users (email, password_hash, role, display_name, sso_provider, sso_id)
-		VALUES ($1, $2, $3::user_role, $4, NULLIF($5, ''), NULLIF($6, ''))
-		RETURNING id, email, role::text, display_name, password_hash
-	`, email, params.PasswordHash, role, displayName, strings.TrimSpace(params.SSOProvider), strings.TrimSpace(params.SSOID)).
-		Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.PasswordHash)
+		INSERT INTO users (email, password_hash, role, display_name, phone, date_of_birth, gender, sso_provider, sso_id)
+		VALUES ($1, $2, $3::user_role, $4, NULLIF($5, ''), NULLIF($6, '')::date, NULLIF($7, ''), NULLIF($8, ''), NULLIF($9, ''))
+		RETURNING id, email, role::text, display_name, phone, date_of_birth, gender, password_hash
+	`, email, params.PasswordHash, role, displayName,
+		normalizePhoneInput(params.Phone), normalizeDateInput(params.DateOfBirth), normalizeGenderInput(params.Gender),
+		strings.TrimSpace(params.SSOProvider), strings.TrimSpace(params.SSOID)).
+		Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.Phone, &user.DateOfBirth, &user.Gender, &user.PasswordHash)
 	if err != nil {
 		return User{}, err
 	}
@@ -271,22 +281,100 @@ func (s *Store) CreateUser(ctx context.Context, params CreateUserParams) (User, 
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (User, error) {
 	var user User
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, email, role::text, display_name, password_hash
+		SELECT id, email, role::text, display_name, phone, date_of_birth, gender, password_hash
 		FROM users
 		WHERE email = $1 AND disabled_at IS NULL
 	`, strings.ToLower(strings.TrimSpace(email))).
-		Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.PasswordHash)
+		Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.Phone, &user.DateOfBirth, &user.Gender, &user.PasswordHash)
 	return user, err
 }
 
 func (s *Store) GetUserByID(ctx context.Context, id string) (User, error) {
 	var user User
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, email, role::text, display_name, password_hash
+		SELECT id, email, role::text, display_name, phone, date_of_birth, gender, password_hash
 		FROM users
 		WHERE id = $1 AND disabled_at IS NULL
-	`, id).Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.PasswordHash)
+	`, id).Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.Phone, &user.DateOfBirth, &user.Gender, &user.PasswordHash)
 	return user, err
+}
+
+// UpdateDisplayName mengubah nama tampilan pengguna.
+func (s *Store) UpdateDisplayName(ctx context.Context, userID, displayName string) error {
+	userID = strings.TrimSpace(userID)
+	displayName = strings.TrimSpace(displayName)
+	if userID == "" || displayName == "" {
+		return errors.New("user_id and display_name are required")
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET display_name = $2, updated_at = now() WHERE id = $1 AND disabled_at IS NULL`, userID, displayName)
+	return err
+}
+
+// UpdateProfileFields mengubah nomor telepon, tanggal lahir, dan/atau gender
+// pengguna. Nilai kosong = tidak diubah (bukan menghapus data).
+func (s *Store) UpdateProfileFields(ctx context.Context, userID, phone, dateOfBirth, gender string) (User, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return User{}, errors.New("user_id is required")
+	}
+	if phone = normalizePhoneInput(phone); phone != "" {
+		if _, err := s.db.ExecContext(ctx, `UPDATE users SET phone = $2, updated_at = now() WHERE id = $1`, userID, phone); err != nil {
+			return User{}, err
+		}
+	}
+	if dateOfBirth = normalizeDateInput(dateOfBirth); dateOfBirth != "" {
+		if _, err := s.db.ExecContext(ctx, `UPDATE users SET date_of_birth = $2::date, updated_at = now() WHERE id = $1`, userID, dateOfBirth); err != nil {
+			return User{}, err
+		}
+	}
+	if gender = normalizeGenderInput(gender); gender != "" {
+		if _, err := s.db.ExecContext(ctx, `UPDATE users SET gender = $2, updated_at = now() WHERE id = $1`, userID, gender); err != nil {
+			return User{}, err
+		}
+	}
+	return s.GetUserByID(ctx, userID)
+}
+
+// normalizePhoneInput merapikan input nomor telepon: spasi/dash/kurung dibuang.
+// Tidak melakukan validasi format (validasi dilakukan di layer server).
+func normalizePhoneInput(phone string) string {
+	ph := strings.TrimSpace(phone)
+	ph = strings.ReplaceAll(ph, " ", "")
+	ph = strings.ReplaceAll(ph, "-", "")
+	ph = strings.ReplaceAll(ph, "(", "")
+	ph = strings.ReplaceAll(ph, ")", "")
+	return ph
+}
+
+// normalizeDateInput memvalidasi format tanggal lahir YYYY-MM-DD; mengembalikan
+// string kosong bila tidak valid.
+func normalizeDateInput(dateOfBirth string) string {
+	d := strings.TrimSpace(dateOfBirth)
+	if d == "" {
+		return ""
+	}
+	t, err := time.Parse("2006-01-02", d)
+	if err != nil {
+		return ""
+	}
+	return t.Format("2006-01-02")
+}
+
+// normalizeGenderInput memetakan input gender ke nilai kanonis:
+// male/female/other. Nilai lain dikembalikan apa adanya (lowercase) bila
+// masuk daftar, atau string kosong bila tidak dikenal.
+func normalizeGenderInput(gender string) string {
+	g := strings.ToLower(strings.TrimSpace(gender))
+	switch g {
+	case "male", "m", "laki-laki", "pria":
+		return "male"
+	case "female", "f", "perempuan", "wanita":
+		return "female"
+	case "other", "lainnya", "nonbinary", "non-binary":
+		return "other"
+	default:
+		return ""
+	}
 }
 
 func (s *Store) UpdatePassword(ctx context.Context, userID, passwordHash string) error {
@@ -327,7 +415,7 @@ func (s *Store) RotateRefreshSession(ctx context.Context, oldHash, newHash, user
 	var user User
 	var sessionID string
 	err = tx.QueryRowContext(ctx, `
-		SELECT s.id, u.id, u.email, u.role::text, u.display_name, u.password_hash
+		SELECT s.id, u.id, u.email, u.role::text, u.display_name, u.phone, u.date_of_birth, u.gender, u.password_hash
 		FROM auth_sessions s
 		JOIN users u ON u.id = s.user_id
 		WHERE s.refresh_token_hash = $1
@@ -335,7 +423,7 @@ func (s *Store) RotateRefreshSession(ctx context.Context, oldHash, newHash, user
 		  AND s.expires_at > now()
 		  AND u.disabled_at IS NULL
 		FOR UPDATE OF s
-	`, oldHash).Scan(&sessionID, &user.ID, &user.Email, &user.Role, &user.DisplayName, &user.PasswordHash)
+	`, oldHash).Scan(&sessionID, &user.ID, &user.Email, &user.Role, &user.DisplayName, &user.Phone, &user.DateOfBirth, &user.Gender, &user.PasswordHash)
 	if err != nil {
 		return User{}, err
 	}
@@ -425,11 +513,14 @@ func (s *Store) LinkPatientToProfessional(ctx context.Context, patientID, profes
 	}
 	defer func() { _ = tx.Rollback() }()
 	var link PatientProfessionalLink
+	// professionalCode bisa berupa kode 16 digit ATAU user UUID dokter.
+	// Guard regex mencegah error cast uuid saat input berupa kode digit.
 	err = tx.QueryRowContext(ctx, `
 		SELECT u.id, u.display_name, pp.professional_id
 		FROM users u
 		JOIN professional_profiles pp ON pp.user_id = u.id
-		WHERE pp.professional_id = $1
+		WHERE (pp.professional_id = $1
+		   OR ($1 ~ '^[0-9a-fA-F-]{36}$' AND u.id = $1::uuid))
 		  AND u.role = 'professional'
 		  AND u.disabled_at IS NULL
 	`, professionalCode).Scan(&link.ProfessionalID, &link.ProfessionalDisplayName, &link.ProfessionalCode)
@@ -1044,15 +1135,17 @@ func (s *Store) UpsertMoodCheckin(ctx context.Context, input MoodCheckin) (MoodC
 	var saved MoodCheckin
 	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO mood_checkins (
-			patient_id, mood, sleep_hours, energy, anxiety, irritability, note, occurred_at
+			patient_id, mood, sleep_hours, energy, anxiety, irritability, note, medication_taken, occurred_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id, patient_id, mood, sleep_hours, energy, anxiety, irritability, note, occurred_at, created_at
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, patient_id, mood, sleep_hours, energy, anxiety, irritability, note,
+		          medication_taken, COALESCE(professional_feedback, ''), occurred_at, created_at
 	`, input.PatientID, input.Mood, input.SleepHours, input.Energy,
-		input.Anxiety, input.Irritability, input.Note, input.OccurredAt).
+		input.Anxiety, input.Irritability, input.Note, input.MedicationTaken, input.OccurredAt).
 		Scan(&saved.ID, &saved.PatientID, &saved.Mood, &saved.SleepHours,
 			&saved.Energy, &saved.Anxiety, &saved.Irritability,
-			&saved.Note, &saved.OccurredAt, &saved.CreatedAt)
+			&saved.Note, &saved.MedicationTaken, &saved.ProfessionalFeedback,
+			&saved.OccurredAt, &saved.CreatedAt)
 	if err != nil {
 		return MoodCheckin{}, err
 	}
@@ -1063,7 +1156,8 @@ func (s *Store) UpsertMoodCheckin(ctx context.Context, input MoodCheckin) (MoodC
 func (s *Store) ListMoodCheckins(ctx context.Context, patientID string, limit int) ([]MoodCheckin, error) {
 	limit = normalizeLimit(limit, 20, 100)
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, patient_id, mood, sleep_hours, energy, anxiety, irritability, note, occurred_at, created_at
+		SELECT id, patient_id, mood, sleep_hours, energy, anxiety, irritability, note,
+		       medication_taken, COALESCE(professional_feedback, ''), occurred_at, created_at
 		FROM mood_checkins
 		WHERE patient_id = $1
 		ORDER BY occurred_at DESC
@@ -1078,7 +1172,8 @@ func (s *Store) ListMoodCheckins(ctx context.Context, patientID string, limit in
 		var item MoodCheckin
 		if err := rows.Scan(&item.ID, &item.PatientID, &item.Mood,
 			&item.SleepHours, &item.Energy, &item.Anxiety,
-			&item.Irritability, &item.Note, &item.OccurredAt,
+			&item.Irritability, &item.Note, &item.MedicationTaken,
+			&item.ProfessionalFeedback, &item.OccurredAt,
 			&item.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -1768,34 +1863,74 @@ func normalizeLimit(value, fallback, max int) int {
 }
 
 type ChatMessage struct {
-	ID             string    `json:"id"`
-	PatientID      string    `json:"patient_id"`
-	ProfessionalID string    `json:"professional_id"`
-	SenderID       string    `json:"sender_id"`
-	SenderName     string    `json:"sender_name"`
-	Text           string    `json:"text"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID             string          `json:"id"`
+	PatientID      string          `json:"patient_id"`
+	ProfessionalID string          `json:"professional_id"`
+	SenderID       string          `json:"sender_id"`
+	SenderName     string          `json:"sender_name"`
+	Text           string          `json:"text"`
+	Kind           string          `json:"kind"`
+	Metadata       json.RawMessage `json:"metadata,omitempty"`
+	CreatedAt      time.Time       `json:"created_at"`
+}
+
+var validChatKinds = map[string]bool{
+	"text": true, "summary": true, "assessment": true, "prescription": true,
+	"goals": true, "habits": true, "diary": true, "progress": true, "file": true, "voice": true,
+}
+
+func normalizeChatKind(kind string) string {
+	k := strings.ToLower(strings.TrimSpace(kind))
+	if validChatKinds[k] {
+		return k
+	}
+	return "text"
 }
 
 func (s *Store) CreateChatMessage(ctx context.Context, msg ChatMessage) (ChatMessage, error) {
 	msg.Text = strings.TrimSpace(msg.Text)
 	msg.SenderName = strings.TrimSpace(msg.SenderName)
-	if msg.ID == "" || msg.PatientID == "" || msg.ProfessionalID == "" || msg.SenderID == "" || msg.Text == "" {
-		return ChatMessage{}, errors.New("id, patient_id, professional_id, sender_id, and text are required")
+	msg.Kind = normalizeChatKind(msg.Kind)
+	// Pesan terstruktur (share) boleh tanpa teks bila ada metadata.
+	hasMetadata := len(msg.Metadata) > 0 && string(msg.Metadata) != "null"
+	if msg.ID == "" || msg.PatientID == "" || msg.ProfessionalID == "" || msg.SenderID == "" {
+		return ChatMessage{}, errors.New("id, patient_id, professional_id, and sender_id are required")
+	}
+	if msg.Text == "" && !hasMetadata {
+		return ChatMessage{}, errors.New("text is required")
+	}
+	if len(msg.Text) > 5000 {
+		msg.Text = msg.Text[:5000]
+	}
+	if !hasMetadata {
+		msg.Metadata = nil
 	}
 	var saved ChatMessage
 	err := s.db.QueryRowContext(ctx, `
-		INSERT INTO chat_messages (id, patient_id, professional_id, sender_id, sender_name, text)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, patient_id, professional_id, sender_id, sender_name, text, created_at
-	`, msg.ID, msg.PatientID, msg.ProfessionalID, msg.SenderID, msg.SenderName, msg.Text).
+		INSERT INTO chat_messages (id, patient_id, professional_id, sender_id, sender_name, text, kind, attachment_meta)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+		RETURNING id, patient_id, professional_id, sender_id, sender_name, text, kind,
+		          COALESCE(attachment_meta, '{}'::jsonb), created_at
+	`, msg.ID, msg.PatientID, msg.ProfessionalID, msg.SenderID, msg.SenderName, msg.Text,
+		msg.Kind, metadataOrNull(msg.Metadata)).
 		Scan(&saved.ID, &saved.PatientID, &saved.ProfessionalID, &saved.SenderID,
-			&saved.SenderName, &saved.Text, &saved.CreatedAt)
+			&saved.SenderName, &saved.Text, &saved.Kind, &saved.Metadata, &saved.CreatedAt)
 	if err != nil {
 		return ChatMessage{}, err
 	}
+	if string(saved.Metadata) == "{}" {
+		saved.Metadata = nil
+	}
 	_ = s.AddAuditLog(ctx, msg.SenderID, msg.PatientID, "chat_message.sent", "chat_message", saved.ID, nil)
 	return saved, nil
+}
+
+// metadataOrNull mengembalikan string JSON atau nil agar kolom jsonb bisa NULL.
+func metadataOrNull(raw json.RawMessage) any {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	return string(raw)
 }
 
 func (s *Store) ListChatMessages(ctx context.Context, patientID, professionalID string, limit int) ([]ChatMessage, error) {
@@ -1806,7 +1941,8 @@ func (s *Store) ListChatMessages(ctx context.Context, patientID, professionalID 
 	}
 	limit = normalizeLimit(limit, 50, 200)
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, patient_id, professional_id, sender_id, sender_name, text, created_at
+		SELECT id, patient_id, professional_id, sender_id, sender_name, text, kind,
+		       COALESCE(attachment_meta, '{}'::jsonb), created_at
 		FROM chat_messages
 		WHERE patient_id = $1 AND professional_id = $2
 		ORDER BY created_at DESC
@@ -1820,8 +1956,11 @@ func (s *Store) ListChatMessages(ctx context.Context, patientID, professionalID 
 	for rows.Next() {
 		var msg ChatMessage
 		if err := rows.Scan(&msg.ID, &msg.PatientID, &msg.ProfessionalID,
-			&msg.SenderID, &msg.SenderName, &msg.Text, &msg.CreatedAt); err != nil {
+			&msg.SenderID, &msg.SenderName, &msg.Text, &msg.Kind, &msg.Metadata, &msg.CreatedAt); err != nil {
 			return nil, err
+		}
+		if string(msg.Metadata) == "{}" {
+			msg.Metadata = nil
 		}
 		messages = append(messages, msg)
 	}

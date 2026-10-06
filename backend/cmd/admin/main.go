@@ -250,9 +250,9 @@ func (s *AdminServer) healthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]any{
-		"status":   "ok",
-		"database": dbStatus,
-		"uptime":   time.Since(startTime).String(),
+		"status":    "ok",
+		"database":  dbStatus,
+		"uptime":    time.Since(startTime).String(),
 		"timestamp": time.Now().UTC(),
 	})
 }

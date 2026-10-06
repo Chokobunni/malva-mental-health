@@ -16,11 +16,13 @@ class PaymentScreen extends ConsumerStatefulWidget {
   const PaymentScreen({
     super.key,
     required this.booking,
+    this.doctorName = 'Profesional',
     this.session,
     this.apiClient,
   });
 
   final BackendBooking booking;
+  final String doctorName;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
@@ -60,6 +62,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     ('qris', 'QRIS', Icons.qr_code_2_rounded),
   ];
 
+  int get _consultationPrice =>
+      widget.booking.price > 0 ? widget.booking.price : 150000;
+  static const int _serviceFee = 2000;
+  int get _total => _consultationPrice + _serviceFee;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -75,9 +82,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           SoftCard(
             child: Column(
               children: [
-                _Line(label: 'Konsultasi', value: 'Rp ${_rupiah(150000)}'),
+                _Line(
+                    label:
+                        'Konsultasi (${widget.booking.serviceType == 'continuous_support' ? '7 hari' : '30 mnt'}) • ${widget.doctorName}',
+                    value: 'Rp ${_rupiah(_consultationPrice)}'),
                 const SizedBox(height: 6),
-                _Line(label: 'Service Fee', value: 'Rp ${_rupiah(2000)}'),
+                _Line(
+                    label: 'Service Fee', value: 'Rp ${_rupiah(_serviceFee)}'),
                 const Divider(height: 20),
                 Row(
                   children: [
@@ -87,7 +98,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                               fontWeight: FontWeight.w900, fontSize: 16)),
                     ),
                     Text(
-                      'Rp ${_rupiah(152000)}',
+                      'Rp ${_rupiah(_total)}',
                       style: const TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 18,
@@ -201,6 +212,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             reference: reference,
             isContinuousSupport:
                 widget.booking.serviceType == 'continuous_support',
+            doctorUserId: widget.booking.professionalId,
+            doctorName: widget.doctorName,
+            periodLabel: widget.booking.serviceType == 'continuous_support'
+                ? _periodLabel(widget.booking.bookingDate)
+                : '',
             session: widget.session,
             apiClient: widget.apiClient,
           ),
@@ -216,6 +232,35 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   }
 
   static String _rupiah(int value) {
+    return _rupiahFmt(value);
+  }
+
+  /// "2026-10-07" -> "7 Okt 2026 – 13 Okt 2026" (periode 7 hari).
+  static String _periodLabel(String yyyyMmDd) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des'
+    ];
+    final parts = yyyyMmDd.split('-');
+    if (parts.length != 3) return yyyyMmDd;
+    final start = DateTime.tryParse(yyyyMmDd);
+    if (start == null) return yyyyMmDd;
+    final end = start.add(const Duration(days: 6));
+    String fmt(DateTime d) => '${d.day} ${months[d.month - 1]} ${d.year}';
+    return '${fmt(start)} – ${fmt(end)}';
+  }
+
+  static String _rupiahFmt(int value) {
     final s = value.toString();
     final buf = StringBuffer();
     for (var i = 0; i < s.length; i++) {

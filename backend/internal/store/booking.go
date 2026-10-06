@@ -26,57 +26,59 @@ type Booking struct {
 }
 
 type Payment struct {
-	ID                   string     `json:"id"`
-	BookingID            string     `json:"booking_id"`
-	PaymentMethod        string     `json:"payment_method"`
-	GrossAmount          int64      `json:"gross_amount"`
-	ServiceFeeAmount     int64      `json:"service_fee_amount"`
-	PlatformFeeAmount    int64      `json:"platform_fee_amount"`
-	NetAmount            int64      `json:"net_amount"`
-	Reference            string     `json:"reference"`
-	ExternalID           string     `json:"external_id,omitempty"`
-	Status               string     `json:"status"`
-	PaidAt               *time.Time `json:"paid_at,omitempty"`
-	ExpiresAt            *time.Time `json:"expires_at,omitempty"`
-	CreatedAt            time.Time  `json:"created_at"`
+	ID                string     `json:"id"`
+	BookingID         string     `json:"booking_id"`
+	PaymentMethod     string     `json:"payment_method"`
+	GrossAmount       int64      `json:"gross_amount"`
+	ServiceFeeAmount  int64      `json:"service_fee_amount"`
+	PlatformFeeAmount int64      `json:"platform_fee_amount"`
+	NetAmount         int64      `json:"net_amount"`
+	Reference         string     `json:"reference"`
+	ExternalID        string     `json:"external_id,omitempty"`
+	Status            string     `json:"status"`
+	PaidAt            *time.Time `json:"paid_at,omitempty"`
+	ExpiresAt         *time.Time `json:"expires_at,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
 }
 
 type EarningsSummary struct {
-	TotalSessions  int    `json:"total_sessions"`
-	GrossAmount    int64  `json:"gross_amount"`
-	PlatformFee    int64  `json:"platform_fee"`
-	NetAmount      int64  `json:"net_amount"`
-	PayoutBalance  string `json:"payout_balance"`
-	PayoutAccount  string `json:"payout_account"`
+	TotalSessions int    `json:"total_sessions"`
+	GrossAmount   int64  `json:"gross_amount"`
+	PlatformFee   int64  `json:"platform_fee"`
+	NetAmount     int64  `json:"net_amount"`
+	PayoutBalance string `json:"payout_balance"`
+	PayoutAccount string `json:"payout_account"`
 }
 
 type EarningsTransaction struct {
-	ID          string     `json:"id"`
-	PaymentID   string     `json:"payment_id"`
-	Reference   string     `json:"reference"`
-	PaymentMethod string   `json:"payment_method"`
-	Gross       int64      `json:"gross"`
-	PlatformFee int64      `json:"platform_fee"`
-	Net         int64      `json:"net"`
-	PaidAt      time.Time  `json:"paid_at"`
-	PayoutStatus string    `json:"payout_status"`
+	ID            string    `json:"id"`
+	PaymentID     string    `json:"payment_id"`
+	Reference     string    `json:"reference"`
+	PaymentMethod string    `json:"payment_method"`
+	Gross         int64     `json:"gross"`
+	PlatformFee   int64     `json:"platform_fee"`
+	Net           int64     `json:"net"`
+	PaidAt        time.Time `json:"paid_at"`
+	PayoutStatus  string    `json:"payout_status"`
 }
 
 type PayoutInfo struct {
-	PayoutBank     string `json:"payout_bank"`
-	PayoutAccount  string `json:"payout_account"`
-	PayoutBalance  int64  `json:"payout_balance"`
+	PayoutBank    string `json:"payout_bank"`
+	PayoutAccount string `json:"payout_account"`
+	PayoutBalance int64  `json:"payout_balance"`
 }
 
 func (s *Store) CreateBooking(ctx context.Context, b Booking) (Booking, error) {
 	const q = `INSERT INTO bookings
 		(patient_id, professional_id, package_id, service_type, session_type, booking_date, slot_time, duration_minutes, price, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
+		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::time, $8, $9, 'pending')
 		RETURNING id, status, created_at`
 	err := s.db.QueryRowContext(ctx, q, b.PatientID, b.ProfessionalID, b.PackageID, b.ServiceType, b.SessionType,
 		b.BookingDate, b.SlotTime, b.DurationMinutes, b.Price).
 		Scan(&b.ID, &b.Status, &b.CreatedAt)
-	if err != nil { return Booking{}, err }
+	if err != nil {
+		return Booking{}, err
+	}
 	_ = s.AddAuditLog(ctx, b.PatientID, b.PatientID, "booking.created", "bookings", b.ID,
 		map[string]any{"professional_id": b.ProfessionalID, "price": b.Price})
 	return b, nil
@@ -87,16 +89,18 @@ func (s *Store) ListBookingsForUser(ctx context.Context, userID, role string, li
 	var q string
 	var args []interface{}
 	if role == "professional" {
-		q = `SELECT id, patient_id, professional_id, package_id, service_type, session_type, booking_date::text, slot_time::text, duration_minutes, price, status, created_at
+		q = `SELECT id, patient_id, professional_id, package_id, service_type, session_type, booking_date::text, COALESCE(slot_time::text, ''), duration_minutes, price, status, created_at
 			FROM bookings WHERE professional_id = $1 ORDER BY booking_date, slot_time LIMIT $2`
 		args = []interface{}{userID, limit}
 	} else {
-		q = `SELECT id, patient_id, professional_id, package_id, service_type, session_type, booking_date::text, slot_time::text, duration_minutes, price, status, created_at
+		q = `SELECT id, patient_id, professional_id, package_id, service_type, session_type, booking_date::text, COALESCE(slot_time::text, ''), duration_minutes, price, status, created_at
 			FROM bookings WHERE patient_id = $1 ORDER BY booking_date, slot_time LIMIT $2`
 		args = []interface{}{userID, limit}
 	}
 	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer func() { _ = rows.Close() }()
 	var out []Booking
 	for rows.Next() {
@@ -113,9 +117,13 @@ func (s *Store) ListBookingsForUser(ctx context.Context, userID, role string, li
 func (s *Store) UpdateBookingStatus(ctx context.Context, bookingID, status string) error {
 	const q = `UPDATE bookings SET status = $1 WHERE id = $2`
 	res, err := s.db.ExecContext(ctx, q, status, bookingID)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	aff, _ := res.RowsAffected()
-	if aff == 0 { return errors.New("booking not found") }
+	if aff == 0 {
+		return errors.New("booking not found")
+	}
 	return nil
 }
 
@@ -127,13 +135,17 @@ func (s *Store) CreatePayment(ctx context.Context, p Payment) (Payment, error) {
 	err := s.db.QueryRowContext(ctx, q, p.BookingID, p.PaymentMethod, p.GrossAmount, p.ServiceFeeAmount, p.PlatformFeeAmount,
 		p.PlatformFeeAmount, p.NetAmount, p.Reference).
 		Scan(&p.ID, &p.Status, &p.CreatedAt)
-	if err != nil { return Payment{}, err }
+	if err != nil {
+		return Payment{}, err
+	}
 	return p, nil
 }
 
 func (s *Store) MarkPaymentPaid(ctx context.Context, reference, externalID string) (Payment, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil { return Payment{}, err }
+	if err != nil {
+		return Payment{}, err
+	}
 	defer func() { _ = tx.Rollback() }()
 
 	var p Payment
@@ -143,11 +155,15 @@ func (s *Store) MarkPaymentPaid(ctx context.Context, reference, externalID strin
 		RETURNING id, booking_id, payment_method, gross_amount, service_fee_amount, platform_fee_amount, net_amount, created_at`
 	err = tx.QueryRowContext(ctx, q, externalID, reference).
 		Scan(&p.ID, &p.BookingID, &p.PaymentMethod, &p.GrossAmount, &p.ServiceFeeAmount, &p.PlatformFeeAmount, &p.NetAmount, &p.CreatedAt)
-	if err != nil { return Payment{}, errors.New("payment not found or already paid") }
+	if err != nil {
+		return Payment{}, errors.New("payment not found or already paid")
+	}
 
 	var professionalID string
 	err = tx.QueryRowContext(ctx, `SELECT professional_id FROM bookings WHERE id = $1`, p.BookingID).Scan(&professionalID)
-	if err != nil { return Payment{}, err }
+	if err != nil {
+		return Payment{}, err
+	}
 
 	if _, err := tx.ExecContext(ctx, `UPDATE bookings SET status = 'paid' WHERE id = $1`, p.BookingID); err != nil {
 		return Payment{}, err
@@ -159,7 +175,9 @@ func (s *Store) MarkPaymentPaid(ctx context.Context, reference, externalID strin
 		return Payment{}, err
 	}
 
-	if err := tx.Commit(); err != nil { return Payment{}, err }
+	if err := tx.Commit(); err != nil {
+		return Payment{}, err
+	}
 	p.Reference = reference
 	p.Status = "paid"
 	now := time.Now()
@@ -193,7 +211,9 @@ func (s *Store) ListEarningsTransactions(ctx context.Context, professionalID str
 		ORDER BY e.created_at DESC
 		LIMIT $2`
 	rows, err := s.db.QueryContext(ctx, q, professionalID, limit)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer func() { _ = rows.Close() }()
 	var out []EarningsTransaction
 	for rows.Next() {
@@ -211,9 +231,13 @@ func (s *Store) RequestPayout(ctx context.Context, earningID, bank, account stri
 		SET payout_status = 'payout_requested', payout_bank = $1, payout_account = $2, payout_requested_at = now()
 		WHERE id = $3 AND payout_status = 'pending'`
 	res, err := s.db.ExecContext(ctx, q, bank, account, earningID)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	aff, _ := res.RowsAffected()
-	if aff == 0 { return errors.New("earning not found or already requested") }
+	if aff == 0 {
+		return errors.New("earning not found or already requested")
+	}
 	return nil
 }
 
@@ -222,8 +246,12 @@ func (s *Store) MarkEarningPayoutPaid(ctx context.Context, earningID string) err
 		SET payout_status = 'paid_out', paid_out_at = now()
 		WHERE id = $1 AND payout_status = 'payout_requested'`
 	res, err := s.db.ExecContext(ctx, q, earningID)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	aff, _ := res.RowsAffected()
-	if aff == 0 { return errors.New("earning not found or not in payout queue") }
+	if aff == 0 {
+		return errors.New("earning not found or not in payout queue")
+	}
 	return nil
 }

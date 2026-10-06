@@ -161,9 +161,10 @@ class ChatService {
     _reconnectTimer = Timer(delay, connect);
   }
 
-  void sendMessage(String text) {
+  void sendMessage(String text,
+      {String kind = 'text', Map<String, dynamic>? metadata}) {
     final trimmed = text.trim();
-    if (trimmed.isEmpty) return;
+    if (trimmed.isEmpty && metadata == null) return;
 
     final event = {
       'type': 'chat_message',
@@ -173,6 +174,8 @@ class ChatService {
         'sender_name': senderName,
         'recipient_id': recipientId,
         'text': trimmed,
+        'kind': kind,
+        if (metadata != null) 'metadata': metadata,
         'timestamp': DateTime.now().toIso8601String(),
       },
     };

@@ -64,3 +64,8 @@ firebase-service-account.json
 # OS files
 .DS_Store
 Thumbs.db
+
+# Temp file build backend (jangan di-commit)
+backend/*.exe~
+backend/api.exe
+backend/admin.exe

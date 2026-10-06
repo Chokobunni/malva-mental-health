@@ -12,28 +12,28 @@ import (
 // ============================================================
 
 type EPrescription struct {
-	ID             string    `json:"id"`
-	ProfessionalID string    `json:"professional_id"`
-	PatientID      string    `json:"patient_id"`
-	Notes          string    `json:"notes"`
-	Instructions   string    `json:"instructions"`
+	ID             string      `json:"id"`
+	ProfessionalID string      `json:"professional_id"`
+	PatientID      string      `json:"patient_id"`
+	Notes          string      `json:"notes"`
+	Instructions   string      `json:"instructions"`
 	SignatureData  interface{} `json:"signature_data"`
-	QRToken        string    `json:"qr_token"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"created_at"`
+	QRToken        string      `json:"qr_token"`
+	Status         string      `json:"status"`
+	CreatedAt      time.Time   `json:"created_at"`
 }
 
 type EPrescriptionItem struct {
-	ID            string `json:"id"`
-	PrescriptionID string `json:"prescription_id"`
-	MedicationID  *string `json:"medication_id,omitempty"`
-	Name          string `json:"name"`
-	Form          string `json:"form"`
-	Dosage        string `json:"dosage"`
-	Frequency     string `json:"frequency"`
-	Days          int    `json:"days"`
-	UnitsPerDay   int    `json:"units_per_day"`
-	Unit          string `json:"unit"`
+	ID             string  `json:"id"`
+	PrescriptionID string  `json:"prescription_id"`
+	MedicationID   *string `json:"medication_id,omitempty"`
+	Name           string  `json:"name"`
+	Form           string  `json:"form"`
+	Dosage         string  `json:"dosage"`
+	Frequency      string  `json:"frequency"`
+	Days           int     `json:"days"`
+	UnitsPerDay    int     `json:"units_per_day"`
+	Unit           string  `json:"unit"`
 }
 
 type EPrescriptionFull struct {
@@ -43,7 +43,9 @@ type EPrescriptionFull struct {
 
 func (s *Store) CreateEPrescription(ctx context.Context, rx EPrescription, items []EPrescriptionItem) (EPrescription, error) {
 	ptx, err := s.db.BeginTx(ctx, nil)
-	if err != nil { return EPrescription{}, err }
+	if err != nil {
+		return EPrescription{}, err
+	}
 	defer func() { _ = ptx.Rollback() }()
 
 	sig, _ := json.Marshal(rx.SignatureData)
@@ -52,7 +54,9 @@ func (s *Store) CreateEPrescription(ctx context.Context, rx EPrescription, items
 		RETURNING id, status, created_at`
 	err = ptx.QueryRowContext(ctx, q, rx.ProfessionalID, rx.PatientID, rx.Notes, rx.Instructions, sig, rx.QRToken).
 		Scan(&rx.ID, &rx.Status, &rx.CreatedAt)
-	if err != nil { return EPrescription{}, err }
+	if err != nil {
+		return EPrescription{}, err
+	}
 
 	for _, item := range items {
 		const qi = `INSERT INTO e_prescription_items
@@ -64,7 +68,9 @@ func (s *Store) CreateEPrescription(ctx context.Context, rx EPrescription, items
 		}
 	}
 
-	if err := ptx.Commit(); err != nil { return EPrescription{}, err }
+	if err := ptx.Commit(); err != nil {
+		return EPrescription{}, err
+	}
 	_ = s.AddAuditLog(ctx, rx.ProfessionalID, rx.PatientID, "eprescription.issued", "e_prescriptions", rx.ID,
 		map[string]any{"items_count": len(items)})
 	return rx, nil
@@ -107,13 +113,17 @@ func (s *Store) GetEPrescription(ctx context.Context, rxID string) (EPrescriptio
 	var sig []byte
 	err := s.db.QueryRowContext(ctx, q, rxID).
 		Scan(&rx.ID, &rx.ProfessionalID, &rx.PatientID, &rx.Notes, &rx.Instructions, &sig, &rx.QRToken, &rx.Status, &rx.CreatedAt)
-	if err != nil { return EPrescriptionFull{}, err }
+	if err != nil {
+		return EPrescriptionFull{}, err
+	}
 	_ = json.Unmarshal(sig, &rx.SignatureData)
 
 	const qi = `SELECT id, prescription_id, medication_id, name, form, dosage, frequency, days, units_per_day, unit
 		FROM e_prescription_items WHERE prescription_id = $1 ORDER BY name`
 	rows, err := s.db.QueryContext(ctx, qi, rxID)
-	if err != nil { return EPrescriptionFull{}, err }
+	if err != nil {
+		return EPrescriptionFull{}, err
+	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var item EPrescriptionItem
@@ -139,7 +149,9 @@ func (s *Store) ListEPrescriptionsForUser(ctx context.Context, userID, role stri
 		args = []interface{}{userID}
 	}
 	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer func() { _ = rows.Close() }()
 	var out []EPrescription
 	for rows.Next() {
@@ -160,7 +172,9 @@ func (s *Store) ListActiveEPrescriptionsForProfessionalPatients(ctx context.Cont
 		WHERE professional_id = $1 AND status = 'issued'
 		ORDER BY created_at DESC`
 	rows, err := s.db.QueryContext(ctx, q, professionalID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer func() { _ = rows.Close() }()
 	var out []EPrescription
 	for rows.Next() {
@@ -176,18 +190,20 @@ func (s *Store) ListActiveEPrescriptionsForProfessionalPatients(ctx context.Cont
 
 // Doctor reviews
 type DoctorReview struct {
-	ID             string `json:"id"`
-	ProfessionalID string `json:"professional_id"`
-	PatientID      string `json:"patient_id"`
-	BookingID      *string `json:"booking_id,omitempty"`
-	HelpfulnessPercent int `json:"helpfulness_percent"`
-	ReviewText     string `json:"review_text"`
-	Helpful        bool   `json:"helpful"`
+	ID                 string  `json:"id"`
+	ProfessionalID     string  `json:"professional_id"`
+	PatientID          string  `json:"patient_id"`
+	BookingID          *string `json:"booking_id,omitempty"`
+	HelpfulnessPercent int     `json:"helpfulness_percent"`
+	ReviewText         string  `json:"review_text"`
+	Helpful            bool    `json:"helpful"`
 }
 
 func (s *Store) AddDoctorReview(ctx context.Context, r DoctorReview) error {
 	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer func() { _ = tx.Rollback() }()
 
 	const q = `INSERT INTO doctor_reviews (professional_id, patient_id, booking_id, helpfulness_percent, review_text, helpful)

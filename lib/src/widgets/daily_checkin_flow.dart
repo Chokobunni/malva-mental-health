@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -150,17 +152,20 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
 
   void _save(MalvaStoreState store) {
     final mood = _mood ?? MoodValue.okay;
-    ref.read(malvaStoreProvider.notifier).addMood(
-          MoodEntry(
-            date: DateTime.now(),
-            mood: mood,
-            sleepHours: _sleepHours + _sleepMinutes / 60.0,
-            energy: switch (_energyLevel) { 0 => 2, 1 => 5, _ => 9 },
-            anxiety: 5,
-            irritability: 5,
-            note: 'Daily check-in',
-          ),
-        );
+    final energy = switch (_energyLevel) { 0 => 2, 1 => 5, _ => 9 };
+    final sleep = _sleepHours + _sleepMinutes / 60.0;
+    final entry = MoodEntry(
+      date: DateTime.now(),
+      mood: mood,
+      sleepHours: sleep,
+      energy: energy,
+      anxiety: 5,
+      irritability: 5,
+      note: 'Daily check-in',
+    );
+    ref.read(malvaStoreProvider.notifier).addMood(entry);
+    // Simpan ke server agar riwayat tidak hilang saat aplikasi ditutup.
+    _syncToServer(entry, medicationTaken: _takenMeds.isNotEmpty);
     // Tandai obat yang dicentang sudah diminum hari ini.
     final notifier = ref.read(malvaStoreProvider.notifier);
     for (final id in _takenMeds) {
@@ -169,6 +174,37 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
     widget.onSaved();
     setState(() => _step = 4);
     _showStreakPopup();
+  }
+
+  /// Kirim check-in ke server (online) atau antre untuk sync (offline).
+  void _syncToServer(MoodEntry entry, {required bool medicationTaken}) {
+    final session = ref.read(currentSessionProvider);
+    final accessToken = session?.accessToken;
+    final apiClient = ref.read(apiClientProvider);
+    if (accessToken == null || accessToken.isEmpty) return;
+    final isOnline = ref.read(isOnlineProvider);
+    if (!isOnline) {
+      unawaited(ref.read(offlineSyncServiceProvider).enqueueMood(entry));
+      return;
+    }
+    unawaited(() async {
+      try {
+        await apiClient.createMoodCheckin(
+          accessToken: accessToken,
+          mood: entry.mood.name,
+          sleepHours: entry.sleepHours,
+          energy: entry.energy,
+          anxiety: entry.anxiety,
+          irritability: entry.irritability,
+          note: entry.note,
+          medicationTaken: medicationTaken,
+          occurredAt: entry.date,
+        );
+      } on Object {
+        // Gagal (offline mendadak): antre agar tidak hilang.
+        unawaited(ref.read(offlineSyncServiceProvider).enqueueMood(entry));
+      }
+    }());
   }
 
   void _showStreakPopup() {

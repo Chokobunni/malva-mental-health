@@ -64,7 +64,7 @@ func (sm *SessionManager) cleanup() {
 }
 
 type IPWhitelist struct {
-	mu       sync.RWMutex
+	mu        sync.RWMutex
 	whitelist map[string]bool
 }
 

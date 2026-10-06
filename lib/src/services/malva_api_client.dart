@@ -76,6 +76,9 @@ class MalvaApiClient {
     required String password,
     required String displayName,
     String? professionalId,
+    String? phone,
+    String? dateOfBirth,
+    String? gender,
   }) async {
     return _sendAuth(
       'POST',
@@ -86,8 +89,40 @@ class MalvaApiClient {
         'password': password,
         'display_name': displayName.trim(),
         if (professionalId != null) 'professional_id': professionalId.trim(),
+        if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+        if (dateOfBirth != null && dateOfBirth.trim().isNotEmpty)
+          'date_of_birth': dateOfBirth.trim(),
+        if (gender != null && gender.trim().isNotEmpty) 'gender': gender.trim(),
       },
     );
+  }
+
+  /// Profil pengguna yang sedang login (GET /v1/me).
+  Future<BackendUserProfile> fetchUserProfile({
+    required String accessToken,
+  }) async {
+    final payload = await _send('GET', '/v1/me', accessToken: accessToken);
+    return BackendUserProfile.fromJson(
+        _expectMap(payload['user'], 'Respons profil tidak valid.'));
+  }
+
+  /// Memperbarui profil sendiri (PATCH /v1/me): phone, birth date, gender, nama.
+  Future<BackendUserProfile> updateMe({
+    required String accessToken,
+    String? phone,
+    String? dateOfBirth,
+    String? gender,
+    String? displayName,
+  }) async {
+    final payload =
+        await _send('PATCH', '/v1/me', accessToken: accessToken, body: {
+      if (phone != null) 'phone': phone,
+      if (dateOfBirth != null) 'date_of_birth': dateOfBirth,
+      if (gender != null) 'gender': gender,
+      if (displayName != null) 'display_name': displayName,
+    });
+    return BackendUserProfile.fromJson(
+        _expectMap(payload['user'], 'Respons profil tidak valid.'));
   }
 
   Future<BackendAuthResult> login({
@@ -129,8 +164,8 @@ class MalvaApiClient {
     final payload =
         await _send('GET', '/v1/admin/users', accessToken: accessToken);
     return (payload['users'] as List?)
-            ?.map((e) => AdminUser.fromJson(
-                _expectMap(e, 'Data pengguna tidak valid.')))
+            ?.map((e) =>
+                AdminUser.fromJson(_expectMap(e, 'Data pengguna tidak valid.')))
             .toList() ??
         const [];
   }
@@ -140,6 +175,9 @@ class MalvaApiClient {
     required String userId,
     String? displayName,
     String? role,
+    String? phone,
+    String? dateOfBirth,
+    String? gender,
     bool? disabled,
   }) async {
     final payload = await _send('PATCH', '/v1/admin/users/$userId',
@@ -147,6 +185,9 @@ class MalvaApiClient {
         body: {
           if (displayName != null) 'display_name': displayName,
           if (role != null) 'role': role,
+          if (phone != null) 'phone': phone,
+          if (dateOfBirth != null) 'date_of_birth': dateOfBirth,
+          if (gender != null) 'gender': gender,
           if (disabled != null) 'disabled': disabled,
         });
     return AdminUser.fromJson(
@@ -158,6 +199,19 @@ class MalvaApiClient {
     required String userId,
   }) async {
     await _send('DELETE', '/v1/admin/users/$userId', accessToken: accessToken);
+  }
+
+  /// Daftar SEMUA dokter (termasuk PENDING & nonaktif) untuk panel admin.
+  Future<List<BackendDoctorSearchResult>> listAdminDoctors({
+    required String accessToken,
+  }) async {
+    final payload =
+        await _send('GET', '/v1/admin/doctors', accessToken: accessToken);
+    return (payload['doctors'] as List?)
+            ?.map((e) => BackendDoctorSearchResult.fromJson(
+                _expectMap(e, 'Data dokter tidak valid.')))
+            .toList() ??
+        const [];
   }
 
   Future<List<BackendProfessionalCredential>> listPendingCredentials({
@@ -215,12 +269,15 @@ class MalvaApiClient {
     required String accessToken,
     required String userId,
     required Map<String, Object?> credentials,
+    String? displayName,
     List<Map<String, Object?>>? schedules,
     List<Map<String, Object?>>? packages,
   }) async {
     final payload = await _send('PUT', '/v1/admin/doctors/$userId',
         accessToken: accessToken,
         body: {
+          if (displayName != null && displayName.trim().isNotEmpty)
+            'display_name': displayName.trim(),
           'credentials': credentials,
           if (schedules != null) 'schedules': schedules,
           if (packages != null) 'packages': packages,
@@ -569,6 +626,7 @@ class MalvaApiClient {
     required int anxiety,
     required int irritability,
     required String note,
+    bool medicationTaken = false,
     DateTime? occurredAt,
   }) async {
     final payload = await _send(
@@ -582,6 +640,7 @@ class MalvaApiClient {
         'anxiety': anxiety,
         'irritability': irritability,
         'note': note,
+        'medication_taken': medicationTaken,
         if (occurredAt != null) 'occurred_at': occurredAt.toIso8601String(),
       },
     );
@@ -678,6 +737,254 @@ class MalvaApiClient {
     );
     return BackendDiaryEntry.fromJson(
       _expectMap(payload['diary'], 'Respons feedback diary tidak valid.'),
+    );
+  }
+
+  // ============================================================
+  // GOALS & HABITS (tersimpan server — tidak hilang saat app ditutup)
+  // ============================================================
+
+  Future<List<BackendGoal>> listGoals({
+    required String accessToken,
+    String? patientId,
+    bool includeInactive = false,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/goals',
+        queryParameters: {
+          if (patientId != null && patientId.trim().isNotEmpty)
+            'patient_id': patientId.trim(),
+          if (includeInactive) 'include_inactive': 'true',
+        },
+      ),
+      accessToken: accessToken,
+    );
+    return _expectList(payload['goals'], 'Respons goals tidak valid.')
+        .whereType<Map<String, dynamic>>()
+        .map(BackendGoal.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<BackendGoal> createGoal({
+    required String accessToken,
+    required String title,
+    String category = 'general',
+    int targetPerWeek = 3,
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/goals',
+      accessToken: accessToken,
+      body: {
+        'title': title.trim(),
+        'category': category,
+        'target_per_week': targetPerWeek,
+      },
+    );
+    return BackendGoal.fromJson(
+      _expectMap(payload['goal'], 'Respons goal tidak valid.'),
+    );
+  }
+
+  Future<BackendGoal> updateGoal({
+    required String accessToken,
+    required String goalId,
+    String? title,
+    String? category,
+    int? targetPerWeek,
+    bool? isActive,
+  }) async {
+    final payload = await _send(
+      'PATCH',
+      '/v1/goals/$goalId',
+      accessToken: accessToken,
+      body: {
+        if (title != null) 'title': title,
+        if (category != null) 'category': category,
+        if (targetPerWeek != null) 'target_per_week': targetPerWeek,
+        if (isActive != null) 'is_active': isActive,
+      },
+    );
+    return BackendGoal.fromJson(
+      _expectMap(payload['goal'], 'Respons goal tidak valid.'),
+    );
+  }
+
+  Future<void> deleteGoal({
+    required String accessToken,
+    required String goalId,
+  }) async {
+    await _send('DELETE', '/v1/goals/$goalId', accessToken: accessToken);
+  }
+
+  Future<List<BackendHabitLog>> listHabitLogs({
+    required String accessToken,
+    String? patientId,
+    String? from,
+    String? to,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/habit-logs',
+        queryParameters: {
+          if (patientId != null && patientId.trim().isNotEmpty)
+            'patient_id': patientId.trim(),
+          if (from != null && from.isNotEmpty) 'from': from,
+          if (to != null && to.isNotEmpty) 'to': to,
+        },
+      ),
+      accessToken: accessToken,
+    );
+    return _expectList(payload['logs'], 'Respons habit log tidak valid.')
+        .whereType<Map<String, dynamic>>()
+        .map(BackendHabitLog.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<BackendHabitLog> logHabit({
+    required String accessToken,
+    required String goalId,
+    String? loggedOn,
+    bool done = true,
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/habit-logs',
+      accessToken: accessToken,
+      body: {
+        'goal_id': goalId,
+        if (loggedOn != null) 'logged_on': loggedOn,
+        'done': done,
+      },
+    );
+    return BackendHabitLog.fromJson(
+      _expectMap(payload['log'], 'Respons habit log tidak valid.'),
+    );
+  }
+
+  // ============================================================
+  // THERAPY SUBMISSIONS (worksheet: simpan, unduh, bagikan)
+  // ============================================================
+
+  Future<List<BackendTherapySubmission>> listTherapySubmissions({
+    required String accessToken,
+    String? patientId,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/therapy-submissions',
+        queryParameters: {
+          if (patientId != null && patientId.trim().isNotEmpty)
+            'patient_id': patientId.trim(),
+        },
+      ),
+      accessToken: accessToken,
+    );
+    return _expectList(payload['submissions'], 'Respons worksheet tidak valid.')
+        .whereType<Map<String, dynamic>>()
+        .map(BackendTherapySubmission.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<BackendTherapySubmission> createTherapySubmission({
+    required String accessToken,
+    required String moduleId,
+    required String title,
+    required Map<String, dynamic> answers,
+    String summary = '',
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/therapy-submissions',
+      accessToken: accessToken,
+      body: {
+        'module_id': moduleId,
+        'title': title.trim(),
+        'answers': answers,
+        'summary': summary,
+      },
+    );
+    return BackendTherapySubmission.fromJson(
+      _expectMap(payload['submission'], 'Respons worksheet tidak valid.'),
+    );
+  }
+
+  Future<BackendTherapySubmission> shareTherapySubmission({
+    required String accessToken,
+    required String submissionId,
+    required String professionalId,
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/therapy-submissions/$submissionId/share',
+      accessToken: accessToken,
+      body: {'professional_id': professionalId},
+    );
+    return BackendTherapySubmission.fromJson(
+      _expectMap(payload['submission'], 'Respons worksheet tidak valid.'),
+    );
+  }
+
+  Future<void> deleteTherapySubmission({
+    required String accessToken,
+    required String submissionId,
+  }) async {
+    await _send('DELETE', '/v1/therapy-submissions/$submissionId',
+        accessToken: accessToken);
+  }
+
+  // ============================================================
+  // CHAT — riwayat & kirim pesan via REST (fallback WS + share)
+  // ============================================================
+
+  Future<List<BackendChatMessage>> listMessages({
+    required String accessToken,
+    required String patientId,
+    required String professionalId,
+    int limit = 100,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/messages',
+        queryParameters: {
+          'patient_id': patientId,
+          'professional_id': professionalId,
+          'limit': limit.toString(),
+        },
+      ),
+      accessToken: accessToken,
+    );
+    return _expectList(payload['messages'], 'Respons pesan tidak valid.')
+        .whereType<Map<String, dynamic>>()
+        .map(BackendChatMessage.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<BackendChatMessage> sendChatMessage({
+    required String accessToken,
+    required String recipientId,
+    required String text,
+    String kind = 'text',
+    Map<String, dynamic>? metadata,
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/messages',
+      accessToken: accessToken,
+      body: {
+        'recipient_id': recipientId,
+        'text': text,
+        'kind': kind,
+        if (metadata != null) 'metadata': metadata,
+      },
+    );
+    return BackendChatMessage.fromJson(
+      _expectMap(payload['message'], 'Respons pesan tidak valid.'),
     );
   }
 
@@ -1167,7 +1474,7 @@ class MalvaApiClient {
     String serviceType = 'quick_consult',
     String sessionType = 'chat',
     required String bookingDate,
-    required String slotTime,
+    String? slotTime,
     int durationMinutes = 30,
     required int price,
   }) async {
@@ -1179,7 +1486,8 @@ class MalvaApiClient {
       'service_type': serviceType,
       'session_type': sessionType,
       'booking_date': bookingDate,
-      'slot_time': slotTime,
+      // Continuous Support 7 hari: tanpa slot jam (async) -> server simpan NULL.
+      if (slotTime != null && slotTime.isNotEmpty) 'slot_time': slotTime,
       'duration_minutes': durationMinutes,
       'price': price,
     });
@@ -1496,6 +1804,46 @@ class BackendScreeningResult {
   final DateTime? createdAt;
 }
 
+/// Profil pengguna dari GET/PATCH /v1/me.
+class BackendUserProfile {
+  const BackendUserProfile({
+    required this.id,
+    required this.email,
+    required this.role,
+    required this.displayName,
+    this.phone,
+    this.dateOfBirth,
+    this.gender,
+  });
+
+  factory BackendUserProfile.fromJson(Map<String, dynamic> json) {
+    return BackendUserProfile(
+      id: json['id']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      role: json['role']?.toString() ?? 'patient',
+      displayName: json['display_name']?.toString() ?? '',
+      phone: json['phone']?.toString(),
+      dateOfBirth: json['date_of_birth']?.toString(),
+      gender: json['gender']?.toString(),
+    );
+  }
+
+  final String id;
+  final String email;
+  final String role;
+  final String displayName;
+  final String? phone;
+  final String? dateOfBirth;
+  final String? gender;
+
+  /// Tanggal lahir sebagai DateTime (null bila kosong / tidak valid).
+  DateTime? get birthDateTime {
+    final raw = dateOfBirth;
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse(raw);
+  }
+}
+
 class BackendAssessmentSummary {
   const BackendAssessmentSummary({
     required this.type,
@@ -1725,6 +2073,8 @@ class BackendMoodCheckin {
     required this.energy,
     required this.anxiety,
     required this.irritability,
+    this.medicationTaken = false,
+    this.professionalFeedback = '',
   });
 
   factory BackendMoodCheckin.fromJson(Map<String, dynamic> json) {
@@ -1737,6 +2087,8 @@ class BackendMoodCheckin {
       energy: (json['energy'] as num?)?.toInt() ?? 0,
       anxiety: (json['anxiety'] as num?)?.toInt() ?? 0,
       irritability: (json['irritability'] as num?)?.toInt() ?? 0,
+      medicationTaken: json['medication_taken'] == true,
+      professionalFeedback: json['professional_feedback']?.toString() ?? '',
     );
   }
 
@@ -1748,6 +2100,8 @@ class BackendMoodCheckin {
   final int energy;
   final int anxiety;
   final int irritability;
+  final bool medicationTaken;
+  final String professionalFeedback;
 }
 
 class BackendDiaryEntry {
@@ -2109,6 +2463,9 @@ class AdminUser {
     required this.email,
     required this.role,
     required this.displayName,
+    this.phone,
+    this.dateOfBirth,
+    this.gender,
     this.ssoProvider,
     this.disabled = false,
   });
@@ -2119,6 +2476,9 @@ class AdminUser {
       email: json['email']?.toString() ?? '',
       role: json['role']?.toString() ?? 'patient',
       displayName: json['display_name']?.toString() ?? '',
+      phone: json['phone']?.toString(),
+      dateOfBirth: json['date_of_birth']?.toString(),
+      gender: json['gender']?.toString(),
       ssoProvider: json['sso_provider']?.toString(),
       disabled: json['disabled_at'] != null,
     );
@@ -2128,6 +2488,9 @@ class AdminUser {
   final String email;
   final String role;
   final String displayName;
+  final String? phone;
+  final String? dateOfBirth;
+  final String? gender;
   final String? ssoProvider;
   final bool disabled;
 
@@ -2236,6 +2599,142 @@ class BackendDoctorSlot {
   final bool available;
 }
 
+/// Goal pasien tersimpan di server (GET/POST/PATCH /v1/goals).
+class BackendGoal {
+  const BackendGoal({
+    required this.id,
+    required this.title,
+    required this.category,
+    required this.targetPerWeek,
+    required this.isActive,
+    this.doneThisWeek = 0,
+    this.lastLoggedOn,
+  });
+
+  factory BackendGoal.fromJson(Map<String, dynamic> json) {
+    return BackendGoal(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      category: json['category']?.toString() ?? 'general',
+      targetPerWeek: (json['target_per_week'] as num?)?.toInt() ?? 3,
+      isActive: json['is_active'] != false,
+      doneThisWeek: (json['done_this_week'] as num?)?.toInt() ?? 0,
+      lastLoggedOn: json['last_logged_on']?.toString(),
+    );
+  }
+
+  final String id;
+  final String title;
+  final String category;
+  final int targetPerWeek;
+  final bool isActive;
+  final int doneThisWeek;
+  final String? lastLoggedOn;
+}
+
+/// Log habit (centang) dari POST/GET /v1/habit-logs.
+class BackendHabitLog {
+  const BackendHabitLog({
+    required this.id,
+    required this.goalId,
+    required this.loggedOn,
+    required this.done,
+  });
+
+  factory BackendHabitLog.fromJson(Map<String, dynamic> json) {
+    return BackendHabitLog(
+      id: json['id']?.toString() ?? '',
+      goalId: json['goal_id']?.toString() ?? '',
+      loggedOn: json['logged_on']?.toString() ?? '',
+      done: json['done'] == true,
+    );
+  }
+
+  final String id;
+  final String goalId;
+  final String loggedOn;
+  final bool done;
+}
+
+/// Worksheet terapi yang tersimpan (GET/POST /v1/therapy-submissions).
+class BackendTherapySubmission {
+  const BackendTherapySubmission({
+    required this.id,
+    required this.moduleId,
+    required this.title,
+    required this.answers,
+    required this.summary,
+    this.sharedWithProfessionalId,
+    this.sharedAt,
+    this.createdAt,
+  });
+
+  factory BackendTherapySubmission.fromJson(Map<String, dynamic> json) {
+    return BackendTherapySubmission(
+      id: json['id']?.toString() ?? '',
+      moduleId: json['module_id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      answers: (json['answers'] as Map?)?.cast<String, dynamic>() ??
+          const <String, dynamic>{},
+      summary: json['summary']?.toString() ?? '',
+      sharedWithProfessionalId: json['shared_with_professional_id']?.toString(),
+      sharedAt: json['shared_at']?.toString(),
+      createdAt: json['created_at']?.toString(),
+    );
+  }
+
+  final String id;
+  final String moduleId;
+  final String title;
+  final Map<String, dynamic> answers;
+  final String summary;
+  final String? sharedWithProfessionalId;
+  final String? sharedAt;
+  final String? createdAt;
+
+  bool get isShared => (sharedWithProfessionalId ?? '').isNotEmpty;
+
+  DateTime? get createdDateTime =>
+      createdAt == null ? null : DateTime.tryParse(createdAt!);
+}
+
+/// Pesan chat dari GET/POST /v1/messages.
+class BackendChatMessage {
+  const BackendChatMessage({
+    required this.id,
+    required this.senderId,
+    required this.senderName,
+    required this.text,
+    required this.kind,
+    this.metadata,
+    this.createdAt,
+  });
+
+  factory BackendChatMessage.fromJson(Map<String, dynamic> json) {
+    return BackendChatMessage(
+      id: json['id']?.toString() ?? '',
+      senderId: json['sender_id']?.toString() ?? '',
+      senderName: json['sender_name']?.toString() ?? '',
+      text: json['text']?.toString() ?? '',
+      kind: json['kind']?.toString() ?? 'text',
+      metadata: (json['metadata'] as Map?)?.cast<String, dynamic>() ??
+          (json['attachment_meta'] as Map?)?.cast<String, dynamic>(),
+      createdAt: json['created_at']?.toString(),
+    );
+  }
+
+  final String id;
+  final String senderId;
+  final String senderName;
+  final String text;
+  final String kind;
+  final Map<String, dynamic>? metadata;
+  final String? createdAt;
+
+  DateTime? get createdDateTime =>
+      createdAt == null ? null : DateTime.tryParse(createdAt!);
+}
+
 class BackendDoctorProfile {
   const BackendDoctorProfile({
     required this.credential,
@@ -2292,6 +2791,7 @@ class BackendBooking {
     required this.serviceType,
     required this.bookingDate,
     required this.status,
+    this.price = 0,
   });
 
   factory BackendBooking.fromJson(Map<String, dynamic> json) {
@@ -2302,6 +2802,7 @@ class BackendBooking {
       serviceType: json['service_type']?.toString() ?? 'quick_consult',
       bookingDate: json['booking_date']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
+      price: (json['price'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -2311,6 +2812,7 @@ class BackendBooking {
   final String serviceType;
   final String bookingDate;
   final String status;
+  final int price;
 }
 
 class BackendPaymentResponse {

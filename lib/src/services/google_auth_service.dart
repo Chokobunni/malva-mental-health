@@ -51,14 +51,13 @@ class GoogleAuthService {
 
   static String _friendlySignInError(GoogleSignInExceptionCode code) {
     return switch (code) {
-      GoogleSignInExceptionCode.canceled =>
-        'Login Google dibatalkan.',
+      GoogleSignInExceptionCode.canceled => 'Login Google dibatalkan.',
       GoogleSignInExceptionCode.interrupted =>
         'Login Google terputus. Periksa koneksi lalu coba lagi.',
       GoogleSignInExceptionCode.clientConfigurationError ||
       GoogleSignInExceptionCode.providerConfigurationError =>
         'Konfigurasi Login Google di aplikasi belum benar. '
-        'Hubungi admin atau pakai email & password.',
+            'Hubungi admin atau pakai email & password.',
       GoogleSignInExceptionCode.uiUnavailable =>
         'Tidak bisa menampilkan layar login Google saat ini. Coba lagi.',
       _ =>

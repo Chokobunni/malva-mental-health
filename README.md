@@ -47,12 +47,25 @@ Run migrations:
 
 ```powershell
 $env:PGPASSWORD='malva_dev_password'
-& 'C:\Program Files\PostgreSQL\18\bin\psql.exe' -h localhost -U malva -d malva -f .\migrations\001_initial.sql
-& 'C:\Program Files\PostgreSQL\18\bin\psql.exe' -h localhost -U malva -d malva -f .\migrations\002_auth_sessions.sql
-& 'C:\Program Files\PostgreSQL\18\bin\psql.exe' -h localhost -U malva -d malva -f .\migrations\003_professional_features.sql
-& 'C:\Program Files\PostgreSQL\18\bin\psql.exe' -h localhost -U malva -d malva -f .\migrations\004_notification_center.sql
-& 'C:\Program Files\PostgreSQL\18\bin\psql.exe' -h localhost -U malva -d malva -f .\migrations\005_chat.sql
+Get-ChildItem .\migrations\*.sql | Sort-Object Name | ForEach-Object {
+  & 'C:\Program Files\PostgreSQL\18\bin\psql.exe' -h localhost -U malva -d malva -f $_.FullName
+}
 ```
+
+> Migrasi saat ini: `001` s.d. `011` (auth, clinical, safety, chat, seed dokter,
+> faskes Surabaya, kolom FC/CF, goals/therapy, field profil pengguna).
+> Semua idempoten — aman dijalankan ulang.
+
+### Akses database untuk admin
+
+- **Backup & restore**: lihat `backend/admin_scripts/README_ADMIN_DATABASE.md`.
+- **Kelola kontak darurat pasien**: `backend/admin_scripts/manage_emergency_contacts.sql`
+  (monitor, tambah, edit, hapus, set kontak utama).
+- **Kelola dokter & profilnya**: `backend/admin_scripts/manage_doctors.sql`
+  (tambah profesional, atur spesialisasi/sub-spesialisasi, jadwal, paket,
+  nonaktifkan/aktifkan, hapus).
+- **Lewat aplikasi**: login sebagai admin → More → **Panel Admin**
+  (kelola pengguna, dokter, dan verifikasi kredensial).
 
 ### Flutter
 
@@ -72,22 +85,39 @@ flutter run --dart-define=MALVA_API_BASE_URL=http://10.0.2.2:8080
 
 ### Patient
 
-- PHQ-9 + GAD-7 screening (server-side scoring)
-- Mood tracking (great/good/okay/sad/awful + sleep, energy, anxiety, irritability)
-- Diary with professional feedback
-- Medication management with reminders
-- Real-time chat with professional
-- Consent management (per-professional data sharing)
+- Real register/login (email + password) & **Login with Google** — akun
+  tersimpan di database (phone, birth date, gender tersimpan saat daftar)
+- PHQ-9 + GAD-7 screening (server-side scoring + Forward Chaining &
+  Certainty Factor, 18 rule pakar)
+- Mood & Daily Check-in (great/good/okay/sad/awful + sleep, energy,
+  anxiety, irritability) — tersimpan ke server
+- My Diary History (mood + diary + catatan profesional, sesuai Figma)
+- Goals & Habits dengan target mingguan + streak (tersimpan di server)
+- Psychological Therapy lengkap (CBT/DBT/Relaksasi/Psikoedukasi) dengan
+  worksheet yang bisa disimpan ke **folder therapy**, diunduh, dan
+  dikirim ke profesional
+- Continuous Support **7 Days** (pilih tanggal mulai, konsen sharing,
+  pembayaran, terhubung ke chat dengan psikiater)
+- Real-time chat + bagikan ringkasan/assessment/resep/goals/habits
+- Kontak darurat (sampai 5, CRUD penuh + kontak utama) & Silent SOS
+- Emergency contacts full CRUD
 
 ### Professional
 
 - Patient dashboard with priority view
-- Screening review (status + note)
+- Screening review (status + note, CF & rule trace)
 - Professional notes (private / shared with patient)
 - Follow-up messages
 - Patient timeline
 - CSV data export
 - Crisis alerts
+
+### Admin
+
+- Panel Admin di aplikasi: kelola pengguna (nama/role/phone/birth
+  date/gender/nonaktif), dokter (tambah/edit lengkap: spesialisasi,
+  jadwal, paket, BPJS, koordinat), verifikasi kredensial
+- Script SQL di `backend/admin_scripts/` untuk akses langsung database
 
 ## File Structure
 
@@ -109,7 +139,8 @@ flutter run --dart-define=MALVA_API_BASE_URL=http://10.0.2.2:8080
 │   │   ├── realtime/         # WebSocket hub
 │   │   ├── auth/             # JWT + password
 │   │   └── screening/        # Assessment engine
-│   ├── migrations/           # SQL migrations (001-005)
+│   ├── migrations/           # SQL migrations (001-011)
+│   ├── admin_scripts/        # Script SQL admin (kontak darurat, dokter)
 │   └── .env                  # Environment config
 ├── docs/                     # All documentation
 └── test/                     # Flutter tests

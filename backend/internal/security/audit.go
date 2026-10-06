@@ -7,16 +7,16 @@ import (
 )
 
 type SecurityEvent struct {
-	Timestamp  time.Time `json:"timestamp"`
-	EventType  string    `json:"event_type"`
-	Severity   string    `json:"severity"`
-	UserID     string    `json:"user_id,omitempty"`
-	IP         string    `json:"ip"`
-	UserAgent  string    `json:"user_agent,omitempty"`
-	Path       string    `json:"path,omitempty"`
-	Method     string    `json:"method,omitempty"`
-	Details    string    `json:"details,omitempty"`
-	Blocked    bool      `json:"blocked"`
+	Timestamp time.Time `json:"timestamp"`
+	EventType string    `json:"event_type"`
+	Severity  string    `json:"severity"`
+	UserID    string    `json:"user_id,omitempty"`
+	IP        string    `json:"ip"`
+	UserAgent string    `json:"user_agent,omitempty"`
+	Path      string    `json:"path,omitempty"`
+	Method    string    `json:"method,omitempty"`
+	Details   string    `json:"details,omitempty"`
+	Blocked   bool      `json:"blocked"`
 }
 
 type SecurityLogger struct {

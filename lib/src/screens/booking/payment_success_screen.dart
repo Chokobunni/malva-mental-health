@@ -6,31 +6,63 @@ import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
-import '../my_care_screen.dart';
+import '../chat_screen.dart';
+import 'consent_request_sheet.dart';
 
 // ============================================================
-// PAYMENT SUCCESS — reference + receipt + continue
+// PAYMENT SUCCESS — reference + receipt + connect + chat
 // ============================================================
 
-class PaymentSuccessScreen extends ConsumerWidget {
+class PaymentSuccessScreen extends ConsumerStatefulWidget {
   const PaymentSuccessScreen({
     super.key,
     required this.reference,
     this.isContinuousSupport = false,
+    this.doctorUserId = '',
+    this.doctorName = 'Profesional',
+    this.periodLabel = '',
     this.session,
     this.apiClient,
   });
 
   final String reference;
 
-  /// true = Continuous Support: setelah Continue, tawarkan data sharing
-  /// lalu arahkan ke My Care. Quick Consult langsung pulang (tanpa sharing).
+  /// true = Continuous Support: Continue -> link profesional ->
+  /// dialog "You're Connected!" -> chat dengan psikiater.
+  /// Quick Consult langsung pulang (tanpa sharing).
   final bool isContinuousSupport;
+  final String doctorUserId;
+  final String doctorName;
+  final String periodLabel;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PaymentSuccessScreen> createState() =>
+      _PaymentSuccessScreenState();
+}
+
+class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen> {
+  bool _connecting = false;
+  bool _connected = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Continuous Support: begitu pembayaran sukses, langsung hubungkan ke
+    // profesional & tampilkan "You're Connected!" -> chat (tanpa klik ulang).
+    if (widget.isContinuousSupport) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_connected && !_connecting) {
+          _onContinue(context);
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -60,10 +92,30 @@ class PaymentSuccessScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'Transaction reference: #$reference',
+                'Transaction reference: #${widget.reference}',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
+              if (widget.isContinuousSupport &&
+                  widget.periodLabel.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                SoftCard(
+                  color: MalvaColors.mint.withValues(alpha: 0.10),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_month_rounded,
+                          color: MalvaColors.mint),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '${widget.doctorName}\n${widget.periodLabel}',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               TextButton(
                 onPressed: () => _showReceipt(context),
                 child: const Text(
@@ -76,27 +128,40 @@ class PaymentSuccessScreen extends ConsumerWidget {
                 ),
               ),
               const Spacer(),
+              if (_error != null) ...[
+                Text(_error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        color: MalvaColors.danger,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 10),
+              ],
               FilledButton(
-                onPressed: () => _onContinue(context),
+                onPressed: (_connecting || _connected)
+                    ? null
+                    : () => _onContinue(context),
                 style: FilledButton.styleFrom(
                   backgroundColor: MalvaColors.mint,
                   minimumSize: const Size.fromHeight(54),
                 ),
-                child: const Text('Continue'),
+                child: Text(_connecting
+                    ? 'Menghubungkan...'
+                    : _connected
+                        ? 'Terhubung ✓'
+                        : widget.isContinuousSupport
+                            ? 'Connect & Continue'
+                            : 'Continue'),
               ),
-              // Data sharing HANYA untuk Continuous Support.
-              if (isContinuousSupport) ...[
+              // Ubah izin sharing kapan saja (satu UI consent yang sama).
+              if (widget.isContinuousSupport) ...[
                 const SizedBox(height: 10),
                 OutlinedButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => PostPaymentConsentSheet(
-                        session: session,
-                        apiClient: apiClient,
-                      ),
-                    ),
-                  ),
+                  onPressed: _connecting
+                      ? null
+                      : () => showConsentRequestSheet(
+                            context: context,
+                            professionalId: widget.doctorUserId,
+                          ),
                   child: const Text('Atur Data Sharing'),
                 ),
               ],
@@ -107,20 +172,104 @@ class PaymentSuccessScreen extends ConsumerWidget {
     );
   }
 
-  void _onContinue(BuildContext context) {
-    if (!isContinuousSupport) {
+  Future<void> _onContinue(BuildContext context) async {
+    if (!widget.isContinuousSupport) {
       // Quick Consult: selesai, pulang ke Home.
       Navigator.popUntil(context, (route) => route.isFirst);
       return;
     }
-    // Continuous: langsung ke consent (atur sharing) -> My Care.
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PostPaymentConsentSheet(
-          session: session,
-          apiClient: apiClient,
+    final apiClient = widget.apiClient;
+    final accessToken = widget.session?.accessToken;
+    if (apiClient == null ||
+        accessToken == null ||
+        accessToken.isEmpty ||
+        widget.doctorUserId.isEmpty) {
+      setState(() => _error =
+          'Tidak bisa terhubung: sesi atau data dokter tidak lengkap.');
+      return;
+    }
+    setState(() {
+      _connecting = true;
+      _error = null;
+    });
+    try {
+      // Pastikan link pasien-profesional aktif (idempotent di server).
+      await apiClient.linkProfessional(
+        accessToken: accessToken,
+        professionalId: widget.doctorUserId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _connecting = false;
+        _connected = true;
+      });
+      _showConnectedDialog(context);
+    } on MalvaApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _connecting = false;
+          _error = e.message;
+        });
+      }
+    } on Object catch (e) {
+      if (mounted) {
+        setState(() {
+          _connecting = false;
+          _error = friendlyErrorMessage(e);
+        });
+      }
+    }
+  }
+
+  /// Notifikasi "You're Connected!" -> langsung chat dengan psikiater.
+  void _showConnectedDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        icon: Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: MalvaColors.mint.withValues(alpha: 0.15),
+          ),
+          child: const Icon(Icons.handshake_rounded,
+              color: MalvaColors.mint, size: 40),
         ),
+        title: const Text("You're Connected!"),
+        content: Text(
+          'Kamu terhubung dengan ${widget.doctorName}'
+          '${widget.periodLabel.isEmpty ? '' : '\n${widget.periodLabel}'}\n\n'
+          'Chat 24/7 selama 7 hari. Kamu bisa berbagi ringkasan, '
+          'hasil assessment, resep, goals & habits langsung di chat.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.popUntil(context, (route) => route.isFirst);
+            },
+            child: const Text('Nanti'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ChatScreen(
+                    otherUserName: widget.doctorName,
+                    otherUserId: widget.doctorUserId,
+                  ),
+                ),
+              );
+            },
+            style: compactFilledButtonStyle,
+            child: const Text('Chat Sekarang'),
+          ),
+        ],
       ),
     );
   }
@@ -134,7 +283,7 @@ class PaymentSuccessScreen extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _row('Reference', '#$reference'),
+            _row('Reference', '#${widget.reference}'),
             _row('Status', 'PAID'),
             _row(
                 'Tanggal',
@@ -167,181 +316,6 @@ class PaymentSuccessScreen extends ConsumerWidget {
           Expanded(child: Text(label)),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
         ],
-      ),
-    );
-  }
-}
-
-class PostPaymentConsentSheet extends ConsumerStatefulWidget {
-  const PostPaymentConsentSheet({super.key, this.session, this.apiClient});
-
-  final AuthSession? session;
-  final MalvaApiClient? apiClient;
-
-  @override
-  ConsumerState<PostPaymentConsentSheet> createState() =>
-      _PostPaymentConsentSheetState();
-}
-
-class _PostPaymentConsentSheetState
-    extends ConsumerState<PostPaymentConsentSheet> {
-  bool _mood = true;
-  bool _diary = true;
-  bool _medication = true;
-  bool _healthRecord = true;
-  bool _goals = true;
-  bool _isSaving = false;
-  String? _error;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Data Sharing'),
-        backgroundColor: MalvaColors.seed,
-        foregroundColor: Colors.white,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          const SoftCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Submit & Connect',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Kamu berhasil berlangganan Continuous Support. Pilih data yang boleh dibaca profesional.',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          _ConsentRow(
-            label: 'Mood Check-In',
-            value: _mood,
-            onChanged: (v) => setState(() => _mood = v),
-          ),
-          _ConsentRow(
-            label: 'Diary',
-            value: _diary,
-            onChanged: (v) => setState(() => _diary = v),
-          ),
-          _ConsentRow(
-            label: 'Medication Check-In',
-            value: _medication,
-            onChanged: (v) => setState(() => _medication = v),
-          ),
-          _ConsentRow(
-            label: 'Health Record',
-            value: _healthRecord,
-            onChanged: (v) => setState(() => _healthRecord = v),
-          ),
-          _ConsentRow(
-            label: 'Goals',
-            value: _goals,
-            onChanged: (v) => setState(() => _goals = v),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 10),
-            Text(_error!,
-                style: const TextStyle(
-                    color: MalvaColors.danger, fontWeight: FontWeight.w700)),
-          ],
-          const SizedBox(height: 14),
-          FilledButton(
-            onPressed: _isSaving ? null : _save,
-            child: Text(_isSaving ? 'Menyimpan...' : 'Submit & Connect'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _save() async {
-    final apiClient = widget.apiClient;
-    final session = widget.session;
-    if (apiClient == null || session == null) {
-      if (!mounted) return;
-      Navigator.popUntil(context, (route) => route.isFirst);
-      return;
-    }
-    final accessToken = session.accessToken;
-    if (accessToken == null || accessToken.isEmpty) {
-      if (!mounted) return;
-      Navigator.popUntil(context, (route) => route.isFirst);
-      return;
-    }
-    setState(() {
-      _isSaving = true;
-      _error = null;
-    });
-    try {
-      final links = await apiClient.listPatientProfessionalLinks(
-        accessToken: accessToken,
-      );
-      for (final link in links) {
-        await apiClient.updatePrivacyConsent(
-          accessToken: accessToken,
-          professionalId: link.professionalUserId.isEmpty
-              ? link.professionalId
-              : link.professionalUserId,
-          shareScreenings: _healthRecord,
-          shareMoodDiary: _mood || _diary,
-          shareMedications: _medication,
-          shareTimeline: true,
-        );
-      }
-      if (!mounted) return;
-      Navigator.popUntil(context, (route) => route.isFirst);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Berhasil terhubung. Selamat datang!')),
-      );
-      // Flow Continuous Support: setelah connect, buka My Care
-      // (jadwal & sesi continuous tampil di sana).
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => MyCareScreen(
-            session: session,
-            apiClient: apiClient,
-          ),
-        ),
-      );
-    } on MalvaApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
-    } on Object catch (e) {
-      if (mounted) setState(() => _error = friendlyErrorMessage(e));
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
-  }
-}
-
-class _ConsentRow extends StatelessWidget {
-  const _ConsentRow({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SoftCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      child: SwitchListTile(
-        value: value,
-        onChanged: onChanged,
-        title: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
-        activeThumbColor: MalvaColors.seed,
-        contentPadding: EdgeInsets.zero,
       ),
     );
   }

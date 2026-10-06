@@ -62,7 +62,8 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
     });
     try {
       final users = await _api.listAdminUsers(accessToken: _token);
-      final doctors = await _api.searchDoctors(limit: 100);
+      // Admin melihat SEMUA dokter (termasuk pending & nonaktif).
+      final doctors = await _api.listAdminDoctors(accessToken: _token);
       final pending = await _api.listPendingCredentials(accessToken: _token);
       if (!mounted) return;
       setState(() {
@@ -91,10 +92,12 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
           controller: _tabs,
           tabs: [
             const Tab(text: 'Pengguna', icon: Icon(Icons.people_rounded)),
-            const Tab(text: 'Dokter', icon: Icon(Icons.medical_services_rounded)),
+            const Tab(
+                text: 'Dokter', icon: Icon(Icons.medical_services_rounded)),
             Tab(
               icon: const Icon(Icons.verified_rounded),
-              text: 'Verifikasi${_pending.isEmpty ? '' : ' (${_pending.length})'}',
+              text:
+                  'Verifikasi${_pending.isEmpty ? '' : ' (${_pending.length})'}',
             ),
           ],
         ),
@@ -178,9 +181,10 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: ['patient', 'professional', 'admin'].contains(role)
-                    ? role
-                    : 'patient',
+                initialValue:
+                    ['patient', 'professional', 'admin'].contains(role)
+                        ? role
+                        : 'patient',
                 decoration: const InputDecoration(labelText: 'Role'),
                 items: const [
                   DropdownMenuItem(value: 'patient', child: Text('Pasien')),
@@ -229,9 +233,8 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(e is MalvaApiException
-                ? e.message
-                : 'Gagal menyimpan.')),
+            content:
+                Text(e is MalvaApiException ? e.message : 'Gagal menyimpan.')),
       );
     }
   }
@@ -249,8 +252,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
               child: const Text('Batal')),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-                backgroundColor: MalvaColors.danger),
+            style: FilledButton.styleFrom(backgroundColor: MalvaColors.danger),
             child: const Text('Nonaktifkan'),
           ),
         ],
@@ -268,9 +270,8 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(e is MalvaApiException
-                ? e.message
-                : 'Gagal menonaktifkan.')),
+            content: Text(
+                e is MalvaApiException ? e.message : 'Gagal menonaktifkan.')),
       );
     }
   }
@@ -311,9 +312,8 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(e is MalvaApiException
-                ? e.message
-                : 'Gagal memverifikasi.')),
+            content: Text(
+                e is MalvaApiException ? e.message : 'Gagal memverifikasi.')),
       );
     }
   }
@@ -335,8 +335,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen>
               child: const Text('Batal')),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-                backgroundColor: MalvaColors.danger),
+            style: FilledButton.styleFrom(backgroundColor: MalvaColors.danger),
             child: const Text('Tolak'),
           ),
         ],
@@ -415,8 +414,7 @@ class _UsersTab extends StatelessWidget {
                         const SizedBox(width: 6),
                         const Icon(Icons.link_rounded,
                             size: 14, color: Colors.black54),
-                        const Text('Google',
-                            style: TextStyle(fontSize: 11)),
+                        const Text('Google', style: TextStyle(fontSize: 11)),
                       ],
                       if (user.disabled) ...[
                         const SizedBox(width: 6),
@@ -434,9 +432,8 @@ class _UsersTab extends StatelessWidget {
                   ? const Text('(Anda)',
                       style: TextStyle(fontSize: 12, color: Colors.black54))
                   : PopupMenuButton<String>(
-                      onSelected: (v) => v == 'edit'
-                          ? onEdit(user)
-                          : onDelete(user),
+                      onSelected: (v) =>
+                          v == 'edit' ? onEdit(user) : onDelete(user),
                       itemBuilder: (_) => const [
                         PopupMenuItem(value: 'edit', child: Text('Kelola')),
                         PopupMenuItem(
@@ -491,8 +488,16 @@ class _DoctorsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final filtered =
-        filter.isEmpty ? doctors : doctors.where((d) => d.specialization == filter).toList();
+    final filtered = filter.isEmpty
+        ? doctors
+        : doctors.where((d) => d.specialization == filter).toList();
+    // Filter spesialisasi dibuat dinamis dari data yang ada di database.
+    final specializations = doctors
+        .map((d) => d.specialization)
+        .where((s) => s.trim().isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
@@ -505,8 +510,9 @@ class _DoctorsTab extends StatelessWidget {
         children: [
           Wrap(
             spacing: 8,
+            runSpacing: 6,
             children: [
-              for (final f in const ['', 'Sp.KJ', 'M.Psi'])
+              for (final f in <String>['', ...specializations])
                 ChoiceChip(
                   label: Text(f.isEmpty ? 'Semua' : f),
                   selected: filter == f,
@@ -522,8 +528,7 @@ class _DoctorsTab extends StatelessWidget {
             Card(
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor:
-                      MalvaColors.mint.withValues(alpha: 0.15),
+                  backgroundColor: MalvaColors.mint.withValues(alpha: 0.15),
                   child: const Icon(Icons.medical_services_rounded,
                       color: MalvaColors.mint),
                 ),
@@ -532,8 +537,8 @@ class _DoctorsTab extends StatelessWidget {
                 subtitle: Text(
                     '${d.specialization} • ${d.hospitalName}\nRp${d.priceFrom} • ⭐ ${d.helpfulnessCount} terbantu'),
                 isThreeLine: true,
-                trailing:
-                    const Icon(Icons.chevron_right_rounded, color: Colors.black26),
+                trailing: const Icon(Icons.chevron_right_rounded,
+                    color: Colors.black26),
                 onTap: () => onEdit(d),
               ),
             ),
@@ -579,7 +584,8 @@ class _VerifyTab extends StatelessWidget {
                   Text('${cred.specialization} • ${cred.hospitalName}',
                       style: const TextStyle(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
-                  Text('STR: ${cred.strNumber}\nSIPP: ${cred.sippNumber}\n${cred.bio}'),
+                  Text(
+                      'STR: ${cred.strNumber}\nSIPP: ${cred.sippNumber}\n${cred.bio}'),
                   const SizedBox(height: 10),
                   Row(
                     children: [
