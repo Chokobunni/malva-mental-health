@@ -1,5 +1,7 @@
 # Malva Mental Health App
 
+> 🌿 **Website resmi: [malva.web.id](https://malva.web.id)** — info produk, kebijakan privasi & status layanan.
+
 Aplikasi mobile mental health yang menghubungkan pasien dengan profesional kesehatan mental. Built with Flutter + Go backend + PostgreSQL.
 
 ## Documentation
