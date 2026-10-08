@@ -69,3 +69,4 @@ Thumbs.db
 backend/*.exe~
 backend/api.exe
 backend/admin.exe
+backend/malva-api

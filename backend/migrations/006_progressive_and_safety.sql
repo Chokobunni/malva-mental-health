@@ -4,7 +4,14 @@
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS sso_provider VARCHAR(50);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS sso_id VARCHAR(255);
-ALTER TABLE users ALTER COLUMN phone DROP NOT NULL;
+-- phone column ditambahkan oleh migration 011; DROP NOT NULL hanya bila kolom ada.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'users' AND column_name = 'phone') THEN
+    ALTER TABLE users ALTER COLUMN phone DROP NOT NULL;
+  END IF;
+END $$;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS emergency_contacts (
