@@ -1,3 +1,9 @@
+malva.web.id {
+	root * /var/www/malva
+	encode zstd gzip
+	file_server
+}
+
 api.malva.web.id {
 	encode zstd gzip
 	reverse_proxy 127.0.0.1:8080
