@@ -65,28 +65,42 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
   }
 
   /// Muat kontak darurat + incident aktif. Aman dipanggil offline.
+  ///
+  /// Kedua sumber data di-fetch secara INDEPENDEN: bila salah satu gagal
+  /// (mis. incidents error), data yang berhasil tetap ditampilkan —
+  /// kontak darurat tidak boleh hilang gara-gara incident gagal dimuat.
   Future<void> load() async {
     if (!_hasBackend) {
       state = state.copyWith(error: null, isLoading: false);
       return;
     }
     state = state.copyWith(isLoading: true, error: null);
+
+    List<BackendEmergencyContact>? contacts;
+    List<BackendCrisisIncident>? incidents;
+    String? error;
+
     try {
-      final contacts = await _api.listEmergencyContacts(accessToken: _token!);
-      final incidents = await _api.listCrisisIncidents(accessToken: _token!);
-      if (!mounted) return;
-      state = state.copyWith(
-        contacts: contacts,
-        incidents: incidents,
-        isLoading: false,
-      );
+      contacts = await _api.listEmergencyContacts(accessToken: _token!);
     } on MalvaApiException catch (e) {
-      if (!mounted) return;
-      state = state.copyWith(isLoading: false, error: e.message);
+      error = e.message;
     } on Object catch (e) {
-      if (!mounted) return;
-      state = state.copyWith(isLoading: false, error: friendlyErrorMessage(e));
+      error = friendlyErrorMessage(e);
     }
+
+    try {
+      incidents = await _api.listCrisisIncidents(accessToken: _token!);
+    } on Object {
+      // Incident opsional: kontak tetap dipertahankan.
+    }
+
+    if (!mounted) return;
+    state = state.copyWith(
+      contacts: contacts ?? state.contacts,
+      incidents: incidents ?? state.incidents,
+      isLoading: false,
+      error: error,
+    );
   }
 
   Future<BackendEmergencyContact> addContact({

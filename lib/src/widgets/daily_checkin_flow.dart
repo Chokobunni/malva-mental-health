@@ -329,11 +329,13 @@ class _MoodPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         const Text('How are you today?',
+            textAlign: TextAlign.center,
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
         const Text('Bagaimana perasaanmu hari ini?',
+            textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: Colors.black54)),
         const SizedBox(height: 10),
         Row(

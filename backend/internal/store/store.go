@@ -1239,6 +1239,60 @@ func (s *Store) UpsertDiaryEntry(ctx context.Context, input DiaryEntry) (DiaryEn
 	return saved, nil
 }
 
+// UpdateDiaryEntry memperbarui isi diary milik pasien (mood/title/note).
+// Hanya pemilik yang boleh; entry yang di-soft-delete tidak ikut.
+func (s *Store) UpdateDiaryEntry(ctx context.Context, patientID, diaryID string, input DiaryEntry) (DiaryEntry, error) {
+	if patientID == "" || diaryID == "" {
+		return DiaryEntry{}, errors.New("patient_id and diary_id are required")
+	}
+	if input.Title == "" || input.Note == "" {
+		return DiaryEntry{}, errors.New("title and note are required")
+	}
+	if input.Mood == "" {
+		input.Mood = "okay"
+	}
+	var saved DiaryEntry
+	var feedback sql.NullString
+	err := s.db.QueryRowContext(ctx, `
+		UPDATE diary_entries
+		SET mood = $3, title = $4, note = $5, updated_at = now()
+		WHERE id = $2 AND patient_id = $1 AND deleted_at IS NULL
+		RETURNING id, patient_id, mood, title, note, shared_with_professionals,
+		          professional_feedback, occurred_at, created_at, updated_at
+	`, patientID, diaryID, input.Mood, input.Title, input.Note).
+		Scan(&saved.ID, &saved.PatientID, &saved.Mood, &saved.Title,
+			&saved.Note, &saved.SharedWithProfessionals, &feedback,
+			&saved.OccurredAt, &saved.CreatedAt, &saved.UpdatedAt)
+	if err != nil {
+		return DiaryEntry{}, err
+	}
+	if feedback.Valid {
+		saved.ProfessionalFeedback = feedback.String
+	}
+	_ = s.AddAuditLog(ctx, patientID, patientID, "diary.updated", "diary_entry", saved.ID, nil)
+	return saved, nil
+}
+
+// DeleteDiaryEntry soft-delete diary milik pasien.
+func (s *Store) DeleteDiaryEntry(ctx context.Context, patientID, diaryID string) error {
+	if patientID == "" || diaryID == "" {
+		return errors.New("patient_id and diary_id are required")
+	}
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE diary_entries
+		SET deleted_at = now(), updated_at = now()
+		WHERE id = $2 AND patient_id = $1 AND deleted_at IS NULL
+	`, patientID, diaryID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	_ = s.AddAuditLog(ctx, patientID, patientID, "diary.deleted", "diary_entry", diaryID, nil)
+	return nil
+}
+
 func (s *Store) ListDiaryEntries(ctx context.Context, patientID string, sharedOnly bool, limit int) ([]DiaryEntry, error) {
 	limit = normalizeLimit(limit, 20, 100)
 	rows, err := s.db.QueryContext(ctx, `

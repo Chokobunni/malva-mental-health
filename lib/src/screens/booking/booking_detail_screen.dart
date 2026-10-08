@@ -218,6 +218,43 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
             ),
           ),
           const SizedBox(height: 14),
+          // === RINGKASAN JADWAL: kapan sesi/perawatan dimulai ===
+          SoftCard(
+            color: MalvaColors.seed.withValues(alpha: 0.06),
+            child: Row(
+              children: [
+                const Icon(Icons.event_available_rounded,
+                    color: MalvaColors.seed),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.isContinuousSupport
+                            ? 'Continuous Support dimulai'
+                            : 'Sesi dimulai',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w900, fontSize: 13.5),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.isContinuousSupport
+                            ? '${_prettyDate(_date)} — berakhir ${_prettyDate(_endDate)} (7 hari)'
+                            : '${_prettyDate(_date)}'
+                                '${_selectedSlot == null ? ' • pilih jam di bawah' : ' • pukul $_selectedSlot'}',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: Colors.black87),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
           if (widget.isContinuousSupport) ...[
             const SectionLabel('Tanggal Mulai'),
             SoftCard(

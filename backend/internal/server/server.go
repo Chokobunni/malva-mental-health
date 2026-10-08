@@ -197,6 +197,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/mood-checkins", s.requireAuth(s.createMoodCheckin))
 	mux.HandleFunc("GET /v1/diary-entries", s.requireAuth(s.listDiaryEntries))
 	mux.HandleFunc("POST /v1/diary-entries", s.requireAuth(s.createDiaryEntry))
+	mux.HandleFunc("PUT /v1/diary-entries/{diary_id}", s.requireAuth(s.updateDiaryEntry))
+	mux.HandleFunc("DELETE /v1/diary-entries/{diary_id}", s.requireAuth(s.deleteDiaryEntry))
 	mux.HandleFunc("PATCH /v1/diary-entries/{diary_id}/feedback", s.requireAuth(s.updateDiaryFeedback))
 	mux.HandleFunc("GET /v1/medications", s.requireAuth(s.listMedications))
 	mux.HandleFunc("POST /v1/medications", s.requireAuth(s.createMedication))
@@ -1056,6 +1058,63 @@ func (s *Server) listDiaryEntries(w http.ResponseWriter, r *http.Request, claims
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"diaries": items})
+}
+
+func (s *Server) updateDiaryEntry(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "patient" {
+		writeError(w, http.StatusForbidden, errors.New("only patients can update diary entries"))
+		return
+	}
+	var req diaryEntryRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	req.Mood = strings.ToLower(strings.TrimSpace(req.Mood))
+	req.Title = trimMax(req.Title, 160)
+	req.Note = trimMax(req.Note, 6000)
+	if req.Mood != "" && !oneOf(req.Mood, "great", "good", "okay", "sad", "awful") {
+		writeError(w, http.StatusBadRequest, errors.New("invalid diary mood value"))
+		return
+	}
+	if req.Title == "" {
+		req.Title = "Catatan harian"
+	}
+	if req.Note == "" {
+		req.Note = "Tidak ada catatan."
+	}
+	diaryID := r.PathValue("diary_id")
+	item, err := s.store.UpdateDiaryEntry(r.Context(), claims.Subject, diaryID, store.DiaryEntry{
+		Mood:  req.Mood,
+		Title: req.Title,
+		Note:  req.Note,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, errors.New("Diary tidak ditemukan."))
+			return
+		}
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"diary": item})
+}
+
+func (s *Server) deleteDiaryEntry(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "patient" {
+		writeError(w, http.StatusForbidden, errors.New("only patients can delete diary entries"))
+		return
+	}
+	diaryID := r.PathValue("diary_id")
+	if err := s.store.DeleteDiaryEntry(r.Context(), claims.Subject, diaryID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, errors.New("Diary tidak ditemukan."))
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 func (s *Server) updateDiaryFeedback(w http.ResponseWriter, r *http.Request, claims auth.Claims) {

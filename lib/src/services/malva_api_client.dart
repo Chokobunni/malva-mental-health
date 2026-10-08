@@ -744,6 +744,41 @@ class MalvaApiClient {
         .toList(growable: false);
   }
 
+  /// Perbarui diary milik pasien (PUT /v1/diary-entries/{id}).
+  Future<BackendDiaryEntry> updateDiaryEntry({
+    required String accessToken,
+    required String diaryId,
+    required String mood,
+    required String title,
+    required String note,
+  }) async {
+    final payload = await _send(
+      'PUT',
+      '/v1/diary-entries/$diaryId',
+      accessToken: accessToken,
+      body: {
+        'mood': mood,
+        'title': title,
+        'note': note,
+      },
+    );
+    return BackendDiaryEntry.fromJson(
+      _expectMap(payload['diary'], 'Respons diary tidak valid.'),
+    );
+  }
+
+  /// Hapus diary milik pasien (DELETE /v1/diary-entries/{id}).
+  Future<void> deleteDiaryEntry({
+    required String accessToken,
+    required String diaryId,
+  }) async {
+    await _send(
+      'DELETE',
+      '/v1/diary-entries/$diaryId',
+      accessToken: accessToken,
+    );
+  }
+
   Future<BackendDiaryEntry> updateDiaryFeedback({
     required String accessToken,
     required String patientId,

@@ -98,6 +98,8 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
       // Fresh start: data akun tersimpan tidak boleh tercampur akun lain.
       store.applySession(stored);
       _scheduleAllMedicationReminders();
+      // Muat kontak darurat dengan token yang sudah valid.
+      unawaited(ref.read(safetyProvider.notifier).load());
       unawaited(_pushNotifications.registerDeviceToken(stored));
       final refreshToken = stored.refreshToken;
       if (refreshToken != null && refreshToken.isNotEmpty) {
@@ -126,6 +128,8 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     ref.read(malvaStoreProvider.notifier).persistSession(session);
     // Fresh start: bersihkan data akun sebelumnya, set identitas akun baru.
     ref.read(malvaStoreProvider.notifier).applySession(session);
+    // Muat kontak darurat untuk akun yang baru login.
+    unawaited(ref.read(safetyProvider.notifier).load());
     _scheduleAllMedicationReminders();
 
     // Sync any pending offline data

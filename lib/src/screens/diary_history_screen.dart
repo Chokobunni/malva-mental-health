@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +9,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
+import 'diary_screen.dart';
 
 // ============================================================
 // MY DIARY HISTORY — sesuai Figma frame "Diary History":
@@ -23,6 +26,7 @@ import '../widgets/malva_components.dart';
 /// Satu baris riwayat: gabungan mood check-in & diary entry.
 class _HistoryRow {
   const _HistoryRow({
+    required this.id,
     required this.at,
     required this.mood,
     required this.moodScore,
@@ -37,6 +41,7 @@ class _HistoryRow {
     this.isDiary = false,
   });
 
+  final String id;
   final DateTime at;
   final MoodValue mood;
   final int moodScore; // 1-10 untuk tampilan "(x/10)"
@@ -114,6 +119,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
       final rows = <_HistoryRow>[
         for (final item in moods)
           _HistoryRow(
+            id: item.id,
             at: item.occurredAt ?? DateTime.now(),
             mood: _moodFromString(item.mood),
             moodScore: _moodScore(item.mood, item.energy),
@@ -128,6 +134,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
           ),
         for (final entry in diaries)
           _HistoryRow(
+            id: entry.id,
             at: entry.occurredAt ?? DateTime.now(),
             mood: _moodFromString(entry.mood),
             moodScore: _moodFromString(entry.mood).score * 2,
@@ -158,6 +165,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
     final rows = <_HistoryRow>[
       for (final entry in store.moodEntries)
         _HistoryRow(
+          id: 'mood_',
           at: entry.date,
           mood: entry.mood,
           moodScore: entry.mood.score * 2,
@@ -172,6 +180,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
         ),
       for (final entry in store.diaryEntries)
         _HistoryRow(
+          id: entry.id,
           at: entry.createdAt,
           mood: entry.mood,
           moodScore: entry.mood.score * 2,
@@ -239,6 +248,15 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'diary_history_add_fab',
+        onPressed: () => _openAddDiary(context),
+        backgroundColor: MalvaColors.seed,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_rounded),
+        label:
+            const Text('Tambah', style: TextStyle(fontWeight: FontWeight.w800)),
+      ),
       body: Column(
         children: [
           Padding(
@@ -293,7 +311,15 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                               ),
                               const SizedBox(height: 8),
                               for (final row in group.value)
-                                _DiaryEntryCard(row: row),
+                                _DiaryEntryCard(
+                                  row: row,
+                                  onEdit: row.isDiary
+                                      ? () => _openEditDiary(context, row)
+                                      : null,
+                                  onDelete: row.isDiary
+                                      ? () => _deleteDiary(context, row)
+                                      : null,
+                                ),
                               const SizedBox(height: 14),
                             ],
                           ],
@@ -322,12 +348,173 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
     ];
     return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
+
+  // ----------------------------------------------------------
+  // CRUD (sesuai Figma: Add Diary / Edit Diary / Diary History Info)
+  // ----------------------------------------------------------
+
+  /// Buka form Tambah Diary (mood, judul, catatan, medication taken).
+  void _openAddDiary(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => DiaryFormSheet(
+        onSave: (entry) {
+          ref.read(malvaStoreProvider.notifier).upsertDiary(entry);
+          unawaited(_syncDiary(entry, isUpdate: false));
+          Navigator.pop(sheetContext);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Diary tersimpan.'),
+              backgroundColor: MalvaColors.mint,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Buka form Edit Diary untuk entry yang sudah ada.
+  void _openEditDiary(BuildContext context, _HistoryRow row) {
+    final entry = DiaryEntry(
+      id: row.id,
+      createdAt: row.at,
+      mood: row.mood,
+      title: row.title,
+      note: row.note,
+      professionalFeedback:
+          row.professionalFeedback.isEmpty ? null : row.professionalFeedback,
+    );
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => DiaryFormSheet(
+        initialEntry: entry,
+        onSave: (updated) {
+          ref.read(malvaStoreProvider.notifier).upsertDiary(updated);
+          unawaited(_syncDiary(updated, isUpdate: true));
+          Navigator.pop(sheetContext);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Diary diperbarui.'),
+              backgroundColor: MalvaColors.mint,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Konfirmasi + hapus diary dari server (soft delete) & lokal.
+  Future<void> _deleteDiary(BuildContext context, _HistoryRow row) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.delete_rounded, color: MalvaColors.danger),
+        title: const Text('Hapus Diary?'),
+        content: Text(
+            '"${row.title.isEmpty ? row.mood.label : row.title}" akan dihapus permanen dari daftar.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: compactFilledButtonStyle.copyWith(
+              backgroundColor: const WidgetStatePropertyAll(MalvaColors.danger),
+            ),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final session = ref.read(currentSessionProvider) ?? widget.session;
+    final apiClient = ref.read(apiClientProvider);
+    final token = session?.accessToken;
+    try {
+      if (token != null && token.isNotEmpty && widget.apiClient == null) {
+        await apiClient.deleteDiaryEntry(accessToken: token, diaryId: row.id);
+      } else if (token != null &&
+          token.isNotEmpty &&
+          widget.apiClient != null) {
+        await widget.apiClient!
+            .deleteDiaryEntry(accessToken: token, diaryId: row.id);
+      }
+    } on Object catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menghapus di server: ${e.toString()}')),
+        );
+      }
+    }
+    if (!mounted) return;
+    ref.read(malvaStoreProvider.notifier).deleteDiary(row.id);
+    unawaited(_loadFromServer());
+  }
+
+  /// Sinkronisasi diary ke server (create untuk baru, update untuk edit).
+  Future<void> _syncDiary(DiaryEntry entry, {required bool isUpdate}) async {
+    final session = ref.read(currentSessionProvider) ?? widget.session;
+    final MalvaApiClient? apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
+    final token = session?.accessToken;
+    if (apiClient == null || token == null || token.isEmpty) return;
+    try {
+      if (isUpdate) {
+        await apiClient.updateDiaryEntry(
+          accessToken: token,
+          diaryId: entry.id,
+          mood: entry.mood.name,
+          title: entry.title,
+          note: entry.note,
+        );
+      } else {
+        final created = await apiClient.createDiaryEntry(
+          accessToken: token,
+          mood: entry.mood.name,
+          title: entry.title,
+          note: entry.note,
+          sharedWithProfessionals: true,
+          occurredAt: entry.createdAt,
+        );
+        // Ganti ID lokal dengan ID server agar edit/delete berikutnya valid.
+        if (created.id.isNotEmpty && created.id != entry.id) {
+          if (!mounted) return;
+          ref.read(malvaStoreProvider.notifier).upsertDiary(DiaryEntry(
+                id: created.id,
+                createdAt: entry.createdAt,
+                mood: entry.mood,
+                title: entry.title,
+                note: entry.note,
+                professionalFeedback: entry.professionalFeedback,
+              ));
+        }
+      }
+      if (mounted) unawaited(_loadFromServer());
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal menyinkronkan diary: ${e.toString()}')),
+      );
+    }
+  }
 }
 
 class _DiaryEntryCard extends StatelessWidget {
-  const _DiaryEntryCard({required this.row});
+  const _DiaryEntryCard({
+    required this.row,
+    this.onEdit,
+    this.onDelete,
+  });
 
   final _HistoryRow row;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   String _severityLabel(int score) {
     if (score >= 7) return 'Severe';
@@ -374,6 +561,40 @@ class _DiaryEntryCard extends StatelessWidget {
                         .textTheme
                         .bodySmall
                         ?.copyWith(color: Colors.black54)),
+                if (onEdit != null || onDelete != null)
+                  PopupMenuButton<String>(
+                    tooltip: 'Aksi diary',
+                    icon: const Icon(Icons.more_vert_rounded,
+                        color: Colors.black54),
+                    onSelected: (value) {
+                      if (value == 'edit') onEdit?.call();
+                      if (value == 'delete') onDelete?.call();
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit_rounded, size: 20),
+                            SizedBox(width: 10),
+                            Text('Edit Diary'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline_rounded,
+                                size: 20, color: MalvaColors.danger),
+                            SizedBox(width: 10),
+                            Text('Hapus Diary',
+                                style: TextStyle(color: MalvaColors.danger)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
             if (row.isDiary && row.title.isNotEmpty) ...[

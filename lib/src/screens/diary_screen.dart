@@ -175,7 +175,7 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => _DiaryFormSheet(
+      builder: (context) => DiaryFormSheet(
         initialEntry: entry,
         onSave: (savedEntry) {
           ref.read(malvaStoreProvider.notifier).upsertDiary(savedEntry);
@@ -342,8 +342,8 @@ class _DiaryCard extends StatelessWidget {
   }
 }
 
-class _DiaryFormSheet extends StatefulWidget {
-  const _DiaryFormSheet({
+class DiaryFormSheet extends StatefulWidget {
+  const DiaryFormSheet({
     this.initialEntry,
     required this.onSave,
     this.onDelete,
@@ -354,10 +354,10 @@ class _DiaryFormSheet extends StatefulWidget {
   final VoidCallback? onDelete;
 
   @override
-  State<_DiaryFormSheet> createState() => _DiaryFormSheetState();
+  State<DiaryFormSheet> createState() => _DiaryFormSheetState();
 }
 
-class _DiaryFormSheetState extends State<_DiaryFormSheet> {
+class _DiaryFormSheetState extends State<DiaryFormSheet> {
   late final TextEditingController _title;
   late final TextEditingController _note;
   late MoodValue _mood;
