@@ -552,17 +552,34 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 	}
 	dayOfWeek := int(target.Weekday())
 
-	var slots []interface{}
+	// Beberapa driver mengembalikan TIME sebagai "15:04:05"; terima keduanya.
+	parseClock := func(v string) (time.Time, bool) {
+		v = strings.TrimSpace(v)
+		for _, layout := range []string{"15:04:05", "15:04"} {
+			if t, err := time.Parse(layout, v); err == nil {
+				return t, true
+			}
+		}
+		return time.Time{}, false
+	}
+
+	slots := make([]interface{}, 0)
 	for _, sch := range schedules {
 		if sch.DayOfWeek != dayOfWeek {
 			continue
 		}
-		start, _ := time.Parse("15:04", sch.StartTime)
-		end, _ := time.Parse("15:04", sch.EndTime)
-		for t := start; t.Before(end); t = t.Add(time.Duration(sch.SlotDurationMinutes) * time.Minute) {
-			slot := t.Format("15:04")
+		start, okStart := parseClock(sch.StartTime)
+		end, okEnd := parseClock(sch.EndTime)
+		if !okStart || !okEnd || !start.Before(end) {
+			continue
+		}
+		step := time.Duration(sch.SlotDurationMinutes) * time.Minute
+		if step <= 0 {
+			step = 30 * time.Minute
+		}
+		for t := start; t.Before(end); t = t.Add(step) {
 			slots = append(slots, map[string]interface{}{
-				"time":      slot,
+				"time":      t.Format("15:04"),
 				"available": true,
 			})
 		}
