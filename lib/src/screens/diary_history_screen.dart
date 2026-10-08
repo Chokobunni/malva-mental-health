@@ -434,16 +434,12 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
     if (confirmed != true || !context.mounted) return;
 
     final session = ref.read(currentSessionProvider) ?? widget.session;
-    final apiClient = ref.read(apiClientProvider);
+    final MalvaApiClient? apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
     final token = session?.accessToken;
     try {
-      if (token != null && token.isNotEmpty && widget.apiClient == null) {
+      if (apiClient != null && token != null && token.isNotEmpty) {
         await apiClient.deleteDiaryEntry(accessToken: token, diaryId: row.id);
-      } else if (token != null &&
-          token.isNotEmpty &&
-          widget.apiClient != null) {
-        await widget.apiClient!
-            .deleteDiaryEntry(accessToken: token, diaryId: row.id);
       }
     } on Object catch (e) {
       if (context.mounted) {
