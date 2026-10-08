@@ -97,7 +97,8 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Akun baru -> buat dengan hash acak yang tidak bisa dipakai login password.
-	random := make([]byte, 32)
+	// 30 byte random -> 60 hex + prefiks 11 = 71 byte, di bawah batas bcrypt 72.
+	random := make([]byte, 30)
 	if _, err := rand.Read(random); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
