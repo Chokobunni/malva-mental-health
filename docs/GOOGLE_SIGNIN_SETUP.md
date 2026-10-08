@@ -27,6 +27,15 @@ SHA-1 debug APK saat ini:
 C3:09:B8:22:F4:D0:2F:B3:D5:4A:88:B0:9C:ED:08:E9:0E:20:AA:01
 ```
 
+## Client ID terpasang (produksi, Oktober 2026)
+
+| Jenis | Client ID | Dipasang di |
+|---|---|---|
+| **Web** (server client ID) | `910496426601-thlkor62046ftqplmon364p3qhobkntv.apps.googleusercontent.com` | ✅ Server Azure (`/etc/malva/malva-api.env` → `MALVA_GOOGLE_CLIENT_ID`) + dart-define APK |
+| **Android** (fingerprint) | `910496426601-p7o8i299fjpi2k4eae1innvv0sah3m6v.apps.googleusercontent.com` | Tidak perlu dipasang — Google mengenalinya otomatis dari package `id.malva.app` + SHA-1 |
+
+Catatan: client ID bukan rahasia (bukan kredensial); aman didokumentasikan.
+
 ---
 
 ## STEP 1 — Buka project yang benar
