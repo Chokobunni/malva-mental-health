@@ -3,9 +3,57 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Malva — Mental Health App</title>
-  <meta name="description" content="Malva menghubungkan pasien dengan profesional kesehatan mental. Screening PHQ-9/GAD-7, diary, dan pendampingan profesional.">
+  <title>Malva — Aplikasi Kesehatan Mental: Screening, Diary & Konsultasi Psikolog</title>
+  <meta name="description" content="Malva membantu kamu merawat kesehatan mental: screening PHQ-9 & GAD-7, diary harian, modul terapi, dan konsultasi dengan psikolog & psikiater terverifikasi.">
+  <link rel="canonical" href="https://malva.web.id/">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#5D2E7E">
+  <meta name="author" content="Malva">
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Malva">
+  <meta property="og:title" content="Malva — Aplikasi Kesehatan Mental">
+  <meta property="og:description" content="Screening PHQ-9 & GAD-7, diary harian, modul terapi, dan konsultasi dengan psikolog & psikiater terverifikasi.">
+  <meta property="og:url" content="https://malva.web.id/">
+  <meta property="og:image" content="https://malva.web.id/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:locale" content="id_ID">
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Malva — Aplikasi Kesehatan Mental">
+  <meta name="twitter:description" content="Screening, diary, terapi, dan konsultasi psikolog & psikiater terverifikasi dalam satu aplikasi.">
+  <meta name="twitter:image" content="https://malva.web.id/og-image.png">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "name": "Malva",
+        "alternateName": "Malva Mental Health",
+        "url": "https://malva.web.id/",
+        "inLanguage": "id"
+      },
+      {
+        "@type": "Organization",
+        "name": "Malva",
+        "url": "https://malva.web.id/",
+        "email": "halo@malva.web.id"
+      },
+      {
+        "@type": "MobileApplication",
+        "name": "Malva",
+        "operatingSystem": "ANDROID",
+        "applicationCategory": "HealthApplication",
+        "inLanguage": "id",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "IDR" },
+        "url": "https://malva.web.id/"
+      }
+    ]
+  }
+  </script>
   <style>
     :root {
       --plum: #5D2E7E;
@@ -24,7 +72,7 @@
       line-height: 1.6;
     }
     .hero {
-      min-height: 70vh;
+      min-height: 64vh;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -34,12 +82,12 @@
       background: linear-gradient(160deg, #3F205B 0%, #B75ECB 60%, #EFA0EC 100%);
       color: white;
     }
-    .logo { font-size: 3.5rem; margin-bottom: 1rem; }
+    .logo { font-size: 3.2rem; margin-bottom: 0.8rem; }
     h1 { font-size: 2.6rem; font-weight: 900; letter-spacing: -0.5px; }
-    .tagline { font-size: 1.15rem; opacity: 0.92; max-width: 34rem; margin-top: 0.75rem; }
+    .tagline { font-size: 1.15rem; opacity: 0.92; max-width: 36rem; margin-top: 0.75rem; }
     .badge {
       display: inline-block;
-      margin-top: 1.5rem;
+      margin-top: 1.4rem;
       padding: 0.5rem 1.1rem;
       border-radius: 999px;
       background: rgba(255,255,255,0.16);
@@ -49,6 +97,7 @@
     }
     main { max-width: 62rem; margin: 0 auto; padding: 3rem 1.5rem 4rem; }
     h2 { color: var(--plum); font-size: 1.5rem; margin-bottom: 1.25rem; }
+    section { margin-bottom: 3rem; }
     .grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
     .card {
       background: white;
@@ -59,8 +108,33 @@
     }
     .card h3 { color: var(--seed); font-size: 1.02rem; margin-bottom: 0.35rem; }
     .card p { font-size: 0.94rem; color: #4c4354; }
+    .steps { counter-reset: step; }
+    .step { display: flex; gap: 1rem; align-items: flex-start; margin-bottom: 1rem; }
+    .step::before {
+      counter-increment: step;
+      content: counter(step);
+      flex: 0 0 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      background: var(--seed);
+      color: white;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .step h3 { font-size: 1rem; color: var(--plum); }
+    .step p { font-size: 0.94rem; color: #4c4354; }
+    details {
+      background: white;
+      border: 1px solid rgba(93,46,126,0.12);
+      border-radius: 12px;
+      padding: 0.9rem 1.1rem;
+      margin-bottom: 0.7rem;
+    }
+    summary { font-weight: 700; color: var(--plum); cursor: pointer; }
+    details p { margin-top: 0.5rem; font-size: 0.94rem; color: #4c4354; }
     .status {
-      margin-top: 2.5rem;
       padding: 1rem 1.25rem;
       border-radius: 14px;
       background: rgba(54,199,166,0.10);
@@ -75,6 +149,8 @@
       color: #6c6376;
       border-top: 1px solid rgba(93,46,126,0.10);
     }
+    footer nav { margin-bottom: 0.5rem; }
+    footer a { color: var(--seed); margin: 0 0.6rem; }
     a { color: var(--seed); }
   </style>
 </head>
@@ -82,19 +158,48 @@
   <section class="hero">
     <div class="logo">🌿</div>
     <h1>Malva</h1>
-    <p class="tagline">Menghubungkan pasien dengan profesional kesehatan mental — screening, diary, dan pendampingan dalam satu aplikasi.</p>
-    <div class="badge">Aplikasi Android • v2.11</div>
+    <p class="tagline">Aplikasi kesehatan mental Indonesia — screening mandiri, diary harian, modul terapi, dan pendampingan oleh psikolog &amp; psikiater terverifikasi.</p>
+    <div class="badge">Aplikasi Android • Bahasa Indonesia</div>
   </section>
   <main>
-    <h2>Fitur Utama</h2>
-    <div class="grid">
-      <div class="card"><h3>Screening PHQ-9 &amp; GAD-7</h3><p>Deteksi dini depresi &amp; kecemasan dengan Forward Chaining + Certainty Factor (18 rule pakar).</p></div>
-      <div class="card"><h3>Daily Check-in</h3><p>Catat mood, tidur, energi, dan kepatuhan obat setiap hari — tersimpan aman di server.</p></div>
-      <div class="card"><h3>My Diary &amp; Goals</h3><p>Riwayat harian, kebiasaan, dan target mingguan yang bisa dibagikan ke profesional.</p></div>
-      <div class="card"><h3>Psychological Therapy</h3><p>Modul CBT, DBT, relaksasi &amp; psikoedukasi dengan worksheet yang dapat diunduh.</p></div>
-      <div class="card"><h3>Continuous Support 7 Hari</h3><p>Pendampingan profesional via chat asinkron plus berbagi ringkasan &amp; hasil asesmen.</p></div>
-      <div class="card"><h3>Kontak Darurat &amp; SOS</h3><p>Hotline 119 ext 8, kontak darurat, dan protokol keselamatan (silent SOS).</p></div>
-    </div>
+    <section>
+      <h2>Fitur Utama</h2>
+      <div class="grid">
+        <div class="card"><h3>Screening PHQ-9 &amp; GAD-7</h3><p>Deteksi dini gejala depresi &amp; kecemasan dengan metode Forward Chaining + Certainty Factor berbasis 18 rule pakar.</p></div>
+        <div class="card"><h3>Daily Check-in</h3><p>Catat mood, kualitas tidur, energi, dan kepatuhan obat setiap hari — tersimpan aman di server.</p></div>
+        <div class="card"><h3>My Diary &amp; Goals</h3><p>Riwayat harian, kebiasaan, dan target mingguan yang bisa dibagikan ke profesional pendampingmu.</p></div>
+        <div class="card"><h3>Psychological Therapy</h3><p>Modul CBT, DBT, relaksasi, dan psikoedukasi dengan worksheet yang dapat diunduh.</p></div>
+        <div class="card"><h3>Continuous Support 7 Hari</h3><p>Pendampingan profesional via chat asinkron, berbagi ringkasan &amp; hasil asesmen.</p></div>
+        <div class="card"><h3>Kontak Darurat &amp; SOS</h3><p>Hotline 119 ext 8, daftar kontak darurat, dan protokol keselamatan.</p></div>
+      </div>
+    </section>
+    <section>
+      <h2>Bagaimana Malva Bekerja</h2>
+      <div class="steps">
+        <div class="step"><div><h3>Isi profil &amp; screening</h3><p>Jawab kuesioner PHQ-9 dan GAD-7 untuk memetakan kondisimu saat ini.</p></div></div>
+        <div class="step"><div><h3>Rawat kebiasaan harian</h3><p>Check-in mood, tulis diary, dan kejar target mingguanmu.</p></div></div>
+        <div class="step"><div><h3>Hubungi profesional</h3><p>Pilih psikolog atau psikiater terverifikasi (STR/SIP), pesan jadwal, dan mulai pendampingan 7 hari.</p></div></div>
+      </div>
+    </section>
+    <section>
+      <h2>Pertanyaan Umum</h2>
+      <details open>
+        <summary>Apa itu Malva?</summary>
+        <p>Malva adalah aplikasi kesehatan mental yang menghubungkan pengguna dengan profesional kesehatan mental terverifikasi (psikolog dan psikiater), dilengkapi screening mandiri, diary, dan modul terapi dalam Bahasa Indonesia.</p>
+      </details>
+      <details>
+        <summary>Apakah screening di Malva adalah diagnosis?</summary>
+        <p>Tidak. Screening PHQ-9 dan GAD-7 adalah alat bantu deteksi dini, bukan diagnosis medis. Untuk diagnosis dan penanganan, konsultasikan dengan psikolog atau psikiater.</p>
+      </details>
+      <details>
+        <summary>Apakah Malva gratis?</summary>
+        <p>Mengunduh dan menggunakan fitur mandiri (screening, diary, check-in) gratis. Konsultasi dengan profesional memiliki tarif yang tercantum jelas sebelum pemesanan.</p>
+      </details>
+      <details>
+        <summary>Bagaimana keamanan data saya?</summary>
+        <p>Data tersimpan di server dengan enkripsi TLS, password di-hash, dan hanya dapat diakses oleh kamu serta profesional yang kamu izinkan. Baca <a href="/privacy.html">Kebijakan Privasi</a>.</p>
+      </details>
+    </section>
     <div class="status">
       <strong>Status layanan:</strong> API backend aktif di
       <a href="https://api.malva.web.id/healthz">api.malva.web.id</a>.
@@ -102,7 +207,12 @@
     </div>
   </main>
   <footer>
-    © 2026 Malva Mental Health · <a href="mailto:halo@malva.web.id">halo@malva.web.id</a>
+    <nav>
+      <a href="/">Beranda</a>
+      <a href="/privacy.html">Kebijakan Privasi</a>
+      <a href="mailto:halo@malva.web.id">halo@malva.web.id</a>
+    </nav>
+    © 2026 Malva Mental Health
   </footer>
 </body>
 </html>
