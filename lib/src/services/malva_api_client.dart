@@ -79,6 +79,9 @@ class MalvaApiClient {
     String? phone,
     String? dateOfBirth,
     String? gender,
+    String? strNumber,
+    String? sipNumber,
+    String? specialization,
   }) async {
     return _sendAuth(
       'POST',
@@ -93,6 +96,12 @@ class MalvaApiClient {
         if (dateOfBirth != null && dateOfBirth.trim().isNotEmpty)
           'date_of_birth': dateOfBirth.trim(),
         if (gender != null && gender.trim().isNotEmpty) 'gender': gender.trim(),
+        if (strNumber != null && strNumber.trim().isNotEmpty)
+          'str_number': strNumber.trim(),
+        if (sipNumber != null && sipNumber.trim().isNotEmpty)
+          'sip_number': sipNumber.trim(),
+        if (specialization != null && specialization.trim().isNotEmpty)
+          'specialization': specialization.trim(),
       },
     );
   }
@@ -134,6 +143,21 @@ class MalvaApiClient {
       '/v1/auth/login',
       {
         'email': email.trim().toLowerCase(),
+        'password': password,
+      },
+    );
+  }
+
+  /// Login profesional mandiri via nomor STR/SIP/kode profesi.
+  Future<BackendAuthResult> loginProfessional({
+    required String identifier,
+    required String password,
+  }) async {
+    return _sendAuth(
+      'POST',
+      '/v1/auth/login',
+      {
+        'professional_identifier': identifier.trim(),
         'password': password,
       },
     );

@@ -299,6 +299,28 @@ func (s *Store) GetUserByID(ctx context.Context, id string) (User, error) {
 	return user, err
 }
 
+// FindUserByProfessionalIdentifier mencari akun profesional berdasarkan
+// kode profesi (professional_id / 16 digit), nomor STR, atau nomor SIP.
+// Dipakai login profesional mandiri.
+func (s *Store) FindUserByProfessionalIdentifier(ctx context.Context, identifier string) (User, error) {
+	var user User
+	identifier = strings.TrimSpace(identifier)
+	if identifier == "" {
+		return User{}, sql.ErrNoRows
+	}
+	err := s.db.QueryRowContext(ctx, `
+		SELECT u.id, u.email, u.role::text, u.display_name, u.phone, u.date_of_birth, u.gender, u.password_hash
+		FROM users u
+		LEFT JOIN professional_profiles pp ON pp.user_id = u.id
+		LEFT JOIN professional_credentials pc ON pc.user_id = u.id
+		WHERE u.role = 'professional'
+		  AND u.disabled_at IS NULL
+		  AND (pp.professional_id = $1 OR pc.str_number = $1 OR pc.sip_number = $1)
+		LIMIT 1
+	`, identifier).Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.Phone, &user.DateOfBirth, &user.Gender, &user.PasswordHash)
+	return user, err
+}
+
 // UpdateDisplayName mengubah nama tampilan pengguna.
 func (s *Store) UpdateDisplayName(ctx context.Context, userID, displayName string) error {
 	userID = strings.TrimSpace(userID)

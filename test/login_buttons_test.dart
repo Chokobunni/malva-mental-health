@@ -49,7 +49,7 @@ void main() {
     expect(find.text('Masuk sebagai Profesional'), findsOneWidget);
 
     // Halaman profesional TIDAK punya field pasien
-    expect(find.text('ID profesi'), findsOneWidget);
+    expect(find.text('Nomor STR / SIP / ID profesi'), findsOneWidget);
     expect(find.text('Email pasien'), findsNothing);
   });
 
@@ -66,15 +66,24 @@ void main() {
   });
 
   testWidgets('toggle Masuk/Daftar di halaman profesional', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await pumpToProfessionalLogin(tester);
 
     await tester.tap(find.text('Daftar'));
     await tester.pumpAndSettle();
-    expect(find.text('Nama profesional'), findsOneWidget);
+    expect(find.text('Nama lengkap (dengan gelar)'), findsOneWidget);
+    expect(find.text('Nomor STR'), findsOneWidget);
+    expect(find.text('Nomor SIP'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Masuk').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Masuk').last);
     await tester.pumpAndSettle();
-    expect(find.text('ID profesi'), findsOneWidget);
+    expect(find.text('Nomor STR / SIP / ID profesi'), findsOneWidget);
   });
 
   testWidgets('tombol login pasien merespons: isi form, submit',
@@ -101,18 +110,10 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('validasi ID profesi 16 digit di halaman profesional',
-      (tester) async {
+  testWidgets('validasi field wajib di halaman profesional', (tester) async {
     await pumpToProfessionalLogin(tester);
 
-    final textField = find.byType(TextField).first;
-    await tester.enterText(textField, '123');
-    await tester.pump();
-
-    final pwField = find.byType(TextField).at(1);
-    await tester.enterText(pwField, 'Dokter1234');
-    await tester.pump();
-
+    // Login: identifier kosong harus memunculkan error client-side.
     final masukButton = find.widgetWithText(FilledButton, 'Masuk');
     await tester.ensureVisible(masukButton);
     await tester.pumpAndSettle();
@@ -121,8 +122,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
 
-    expect(
-        find.text('ID profesi harus berisi tepat 16 angka.'), findsOneWidget);
+    expect(find.text('Nomor STR/SIP atau kode profesi harus diisi.'),
+        findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

@@ -43,11 +43,19 @@ type registerRequest struct {
 	Phone          string `json:"phone"`
 	DateOfBirth    string `json:"date_of_birth"`
 	Gender         string `json:"gender"`
+	// Pendaftaran profesional mandiri dengan nomor STR & SIP (KKI).
+	STRNumber      string `json:"str_number"`
+	SIPNumber      string `json:"sip_number"`
+	Specialization string `json:"specialization"`
 }
 
 type loginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	// Login profesional mandiri: bisa nomor STR, SIP, atau kode profesi.
+	ProfessionalIdentifier string `json:"professional_identifier"`
+	// Role opsional untuk membedakan jalur pasien/profesional.
+	Role string `json:"role"`
 }
 
 type refreshTokenRequest struct {
@@ -371,6 +379,28 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("Gender harus male, female, atau other."))
 		return
 	}
+	// Profesional boleh mendaftar mandiri dengan STR & SIP.
+	professionalID := strings.TrimSpace(req.ProfessionalID)
+	strNumber := strings.TrimSpace(req.STRNumber)
+	sipNumber := strings.TrimSpace(req.SIPNumber)
+	specialization := strings.TrimSpace(req.Specialization)
+	if role == "professional" {
+		if strNumber == "" || sipNumber == "" {
+			writeError(w, http.StatusBadRequest, errors.New("Nomor STR dan SIP wajib diisi untuk pendaftaran profesional."))
+			return
+		}
+		if !validSpecialization(specialization) {
+			writeError(w, http.StatusBadRequest, errors.New("Spesialisasi harus Sp.KJ (psikiater) atau M.Psi (psikolog)."))
+			return
+		}
+		// Kode profesi (16 digit) = nomor STR bila tidak diisi eksplisit.
+		if professionalID == "" {
+			professionalID = strNumber
+			if len(professionalID) > 32 {
+				professionalID = professionalID[:32]
+			}
+		}
+	}
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -384,7 +414,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		Phone:          phone,
 		DateOfBirth:    dateOfBirth,
 		Gender:         gender,
-		ProfessionalID: req.ProfessionalID,
+		ProfessionalID: professionalID,
 	})
 	if err != nil {
 		if isDuplicateKeyError(err) {
@@ -394,6 +424,22 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	// Simpan kredensial STR/SIP (status PENDING sampai diverifikasi admin).
+	if role == "professional" {
+		if _, err := s.store.UpsertProfessionalCredential(r.Context(), store.ProfessionalCredential{
+			UserID:         user.ID,
+			STRNumber:      strNumber,
+			SIPNumber:      sipNumber,
+			Specialization: specialization,
+		}); err != nil {
+			s.logger.Warn("simpan kredensial pendaftaran gagal", "error", err, "user", user.ID)
+		} else {
+			s.notifyPatient(r, user.ID, "credential_pending",
+				"Pendaftaran diterima",
+				"Kredensial STR/SIP kamu sedang ditinjau admin. Kamu akan dihubungi setelah terverifikasi.",
+				map[string]string{"str_number": strNumber})
+		}
+	}
 	s.secLogger.LogAuthSuccess(r, user.ID)
 	s.writeAuthResponse(w, r, http.StatusCreated, user)
 }
@@ -402,6 +448,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	// Login profesional mandiri via STR/SIP/kode profesi.
+	if identifier := strings.TrimSpace(req.ProfessionalIdentifier); identifier != "" {
+		s.loginProfessionalByIdentifier(w, r, identifier, req.Password)
 		return
 	}
 	lockoutKey := clientIP(r) + ":" + req.Email
@@ -425,6 +476,37 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		s.lockout.RecordFailure(lockoutKey)
 		s.secLogger.LogAuthFailure(r, req.Email, "invalid password")
 		writeError(w, http.StatusUnauthorized, errors.New("Email atau password salah."))
+		return
+	}
+	s.lockout.Reset(lockoutKey)
+	s.secLogger.LogAuthSuccess(r, user.ID)
+	s.writeAuthResponse(w, r, http.StatusOK, user)
+}
+
+// loginProfessionalByIdentifier menangani login profesional mandiri
+// menggunakan nomor STR, SIP, atau kode profesi (16 digit).
+func (s *Server) loginProfessionalByIdentifier(w http.ResponseWriter, r *http.Request, identifier, password string) {
+	lockoutKey := clientIP(r) + ":pro:" + identifier
+	if s.lockout.IsLocked(lockoutKey) {
+		s.secLogger.LogAccountLocked(r, identifier)
+		writeError(w, http.StatusTooManyRequests, errors.New("Akun dikunci sementara karena terlalu banyak percobaan gagal. Coba lagi dalam 15 menit."))
+		return
+	}
+	user, err := s.store.FindUserByProfessionalIdentifier(r.Context(), identifier)
+	if errors.Is(err, sql.ErrNoRows) {
+		s.lockout.RecordFailure(lockoutKey)
+		s.secLogger.LogAuthFailure(r, identifier, "professional not found")
+		writeError(w, http.StatusUnauthorized, errors.New("Nomor STR/SIP atau password salah."))
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !auth.CheckPassword(user.PasswordHash, password) {
+		s.lockout.RecordFailure(lockoutKey)
+		s.secLogger.LogAuthFailure(r, user.Email, "invalid password")
+		writeError(w, http.StatusUnauthorized, errors.New("Nomor STR/SIP atau password salah."))
 		return
 	}
 	s.lockout.Reset(lockoutKey)

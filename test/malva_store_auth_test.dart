@@ -5,46 +5,29 @@ import 'package:malva_mental_health/src/providers/providers.dart';
 
 void main() {
   group('MalvaStore auth', () {
-    test('logs in seeded patient with email and password', () {
+    test('auth selalu melalui server (online), bukan sesi lokal dummy', () {
       final container = ProviderContainer();
       final store = container.read(malvaStoreProvider.notifier);
 
-      final session =
-          store.loginPatient(email: 'pasien@malva.app', password: 'Malva1234');
-
-      expect(session.role, UserRole.patient);
-      expect(session.identifier, 'pasien@malva.app');
-    });
-
-    test('rejects unknown patient email and wrong password', () {
-      final container = ProviderContainer();
-      final store = container.read(malvaStoreProvider.notifier);
-
+      // Tanpa server: login pasien ditolak (tidak ada sesi palsu).
       expect(
-        () =>
-            store.loginPatient(email: 'wrong@malva.app', password: 'Malva1234'),
+        () => store.loginPatientOnline(
+            email: 'pasien@malva.app', password: 'Malva1234'),
         throwsA(isA<AuthFailure>()),
       );
+      // Registrasi pasien pun butuh server.
       expect(
-        () => store.loginPatient(
-            email: 'pasien@malva.app', password: 'wrongpass'),
+        () => store.registerPatientOnline(
+            email: 'baru@malva.app',
+            password: 'Malva1234!',
+            displayName: 'Pasien Baru'),
         throwsA(isA<AuthFailure>()),
       );
-    });
-
-    test('requires professional id to contain exactly 16 digits', () {
-      final container = ProviderContainer();
-      final store = container.read(malvaStoreProvider.notifier);
-
+      // Login profesional via STR/SIP juga butuh server.
       expect(
-        () => store.loginProfessional(
-            professionalId: '12345', password: 'Dokter1234'),
+        () => store.loginProfessionalOnline(
+            professionalId: 'STR-123', password: 'Dokter12345'),
         throwsA(isA<AuthFailure>()),
-      );
-      expect(
-        () => store.loginProfessional(
-            professionalId: '1234567890123456', password: 'Dokter1234'),
-        returnsNormally,
       );
     });
   });

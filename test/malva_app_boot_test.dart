@@ -35,7 +35,7 @@ void main() {
 
     expect(find.text('Masuk sebagai Pasien'), findsOneWidget);
     expect(find.text('Email pasien'), findsOneWidget);
-    expect(find.text('ID profesi'), findsNothing);
+    expect(find.text('Nomor STR / SIP / ID profesi'), findsNothing);
     expect(find.text('Forgot Password?'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
   });
@@ -52,7 +52,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Masuk sebagai Profesional'), findsOneWidget);
-    expect(find.text('ID profesi'), findsOneWidget);
+    expect(find.text('Nomor STR / SIP / ID profesi'), findsOneWidget);
     expect(find.text('Email pasien'), findsNothing);
   });
 }

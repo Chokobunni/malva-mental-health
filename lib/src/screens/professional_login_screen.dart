@@ -7,7 +7,8 @@ import '../theme.dart';
 import 'auth_widgets.dart';
 
 /// Halaman login/daftar KHUSUS PROFESIONAL.
-/// ID profesi 16 digit + nama + password. Tidak ada field pasien di sini.
+/// Login: nomor STR / SIP / kode profesi (16 digit) + password.
+/// Daftar: nama, STR, SIP, spesialisasi, email, password (+ Google opsional).
 class ProfessionalLoginScreen extends ConsumerStatefulWidget {
   const ProfessionalLoginScreen({
     super.key,
@@ -27,9 +28,14 @@ class _ProfessionalLoginScreenState
     extends ConsumerState<ProfessionalLoginScreen> {
   final _idController = TextEditingController(text: '');
   final _nameController = TextEditingController(text: '');
+  final _strController = TextEditingController(text: '');
+  final _sipController = TextEditingController(text: '');
+  final _emailController = TextEditingController(text: '');
+  final _phoneController = TextEditingController(text: '');
   final _passwordController = TextEditingController(text: '');
   final _confirmPasswordController = TextEditingController(text: '');
   AuthMode _mode = AuthMode.login;
+  String _specialization = 'Sp.KJ';
   bool _isSubmitting = false;
   bool _rememberMe = false;
 
@@ -37,6 +43,10 @@ class _ProfessionalLoginScreenState
   void dispose() {
     _idController.dispose();
     _nameController.dispose();
+    _strController.dispose();
+    _sipController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -56,9 +66,14 @@ class _ProfessionalLoginScreenState
               password: _passwordController.text,
             )
           : await store.registerProfessionalOnline(
-              professionalId: _idController.text,
+              professionalId: _strController.text,
               password: _passwordController.text,
               displayName: _nameController.text,
+              strNumber: _strController.text,
+              sipNumber: _sipController.text,
+              specialization: _specialization,
+              email: _emailController.text,
+              phone: _phoneController.text,
             );
       if (!mounted) return;
       widget.onAuthenticated(session);
@@ -71,19 +86,29 @@ class _ProfessionalLoginScreenState
   }
 
   void _validateFields() {
-    final professionalId = _idController.text.trim();
-    final validProfessionalId = RegExp(r'^\d{16}$').hasMatch(professionalId);
-    if (!validProfessionalId) {
-      throw const AuthFailure('ID profesi harus berisi tepat 16 angka.');
-    }
-    if (!_isLogin && _nameController.text.trim().isEmpty) {
-      throw const AuthFailure('Nama profesional harus diisi.');
-    }
     if (_isLogin) {
+      final identifier = _idController.text.trim();
+      if (identifier.isEmpty) {
+        throw const AuthFailure('Nomor STR/SIP atau kode profesi harus diisi.');
+      }
       if (_passwordController.text.isEmpty) {
         throw const AuthFailure('Password harus diisi.');
       }
       return;
+    }
+    // Registrasi: STR & SIP wajib (sesuai ketentuan KKI).
+    if (_nameController.text.trim().isEmpty) {
+      throw const AuthFailure('Nama profesional harus diisi.');
+    }
+    if (_strController.text.trim().isEmpty) {
+      throw const AuthFailure('Nomor STR wajib diisi.');
+    }
+    if (_sipController.text.trim().isEmpty) {
+      throw const AuthFailure('Nomor SIP wajib diisi.');
+    }
+    final email = _emailController.text.trim();
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      throw const AuthFailure('Format email profesional tidak valid.');
     }
     final passwordError = validatePasswordForRegister(_passwordController.text);
     if (passwordError != null) {
@@ -135,25 +160,84 @@ class _ProfessionalLoginScreenState
                     textInputAction: TextInputAction.next,
                     textCapitalization: TextCapitalization.words,
                     decoration: const InputDecoration(
-                      labelText: 'Nama profesional',
+                      labelText: 'Nama lengkap (dengan gelar)',
+                      hintText: 'dr. Ayu Pratama, Sp.KJ',
                       prefixIcon: Icon(Icons.badge_rounded),
                     ),
                   ),
                   const SizedBox(height: 10),
-                ],
-                TextField(
-                  controller: _idController,
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.next,
-                  maxLength: 16,
-                  decoration: const InputDecoration(
-                    labelText: 'ID profesi',
-                    hintText: '16 digit angka STR/SIP',
-                    prefixIcon: Icon(Icons.verified_user_rounded),
-                    counterText: '',
+                  TextField(
+                    controller: _strController,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Nomor STR',
+                      hintText: 'STR-1234567890',
+                      prefixIcon: Icon(Icons.verified_user_rounded),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _sipController,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Nomor SIP',
+                      hintText: 'SIP-1234567890',
+                      prefixIcon: Icon(Icons.assignment_ind_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: _specialization,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Spesialisasi',
+                      prefixIcon: Icon(Icons.school_rounded),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'Sp.KJ', child: Text('Sp.KJ — Psikiater')),
+                      DropdownMenuItem(
+                          value: 'M.Psi', child: Text('M.Psi — Psikolog')),
+                    ],
+                    onChanged: (v) =>
+                        setState(() => _specialization = v ?? _specialization),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Email profesional',
+                      hintText: 'ayu@malva.web.id',
+                      prefixIcon: Icon(Icons.email_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Nomor telepon (opsional)',
+                      hintText: '08xxxxxxxxxx',
+                      prefixIcon: Icon(Icons.phone_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                if (_isLogin) ...[
+                  TextField(
+                    controller: _idController,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Nomor STR / SIP / ID profesi',
+                      hintText: 'STR-1234567890',
+                      prefixIcon: Icon(Icons.verified_user_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 TextField(
                   controller: _passwordController,
                   obscureText: true,
@@ -184,6 +268,12 @@ class _ProfessionalLoginScreenState
                     passwordRequirementHint,
                     style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Kredensial STR/SIP akan diverifikasi admin sebelum profil '
+                    'kamu tampil di direktori pasien.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
                 ],
                 const SizedBox(height: 14),
                 FilledButton.icon(
@@ -209,14 +299,6 @@ class _ProfessionalLoginScreenState
                     onForgotPassword: () => showForgotPasswordDialog(context),
                   ),
                 ],
-                // Akun profesional dibuat oleh admin (email + password);
-                // tidak ada login Google untuk profesional.
-                const SizedBox(height: 8),
-                const Text(
-                  'Akun profesional dibuat oleh admin. Hubungi admin bila belum punya akun.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: Colors.black54),
-                ),
               ],
             ),
           ),

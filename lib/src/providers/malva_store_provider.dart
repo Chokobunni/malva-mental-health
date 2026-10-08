@@ -348,8 +348,10 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     final api = _apiClient;
     if (api == null) throw _noServerFailure;
     try {
-      final result = await api.login(
-        email: '$professionalId@professional.malva.local',
+      // Login profesional mandiri: nomor STR/SIP/kode profesi diverifikasi
+      // langsung oleh server (bukan email sintetis).
+      final result = await api.loginProfessional(
+        identifier: professionalId.trim(),
         password: password,
       );
       if (result.role != UserRole.professional) {
@@ -357,7 +359,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       }
       return AuthSession(
         role: UserRole.professional,
-        identifier: professionalId,
+        identifier: professionalId.trim(),
         displayName: result.displayName,
         backendUserId: result.userId,
         accessToken: result.accessToken,
@@ -374,20 +376,35 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     required String professionalId,
     required String password,
     required String displayName,
+    String? strNumber,
+    String? sipNumber,
+    String? specialization,
+    String? email,
+    String? phone,
   }) async {
     final api = _apiClient;
     if (api == null) throw _noServerFailure;
+    final normalizedId = professionalId.trim();
+    final str = (strNumber ?? normalizedId).trim();
+    // Email profesional asli (bila diisi) atau email sintetis dari STR.
+    final accountEmail = (email != null && email.trim().isNotEmpty)
+        ? email.trim().toLowerCase()
+        : '$str@professional.malva.local';
     try {
       final result = await api.register(
         role: UserRole.professional,
-        email: '$professionalId@professional.malva.local',
+        email: accountEmail,
         password: password,
         displayName: displayName,
-        professionalId: professionalId,
+        professionalId: normalizedId,
+        phone: phone,
+        strNumber: str,
+        sipNumber: (sipNumber ?? '').trim(),
+        specialization: (specialization ?? '').trim(),
       );
       return AuthSession(
         role: UserRole.professional,
-        identifier: professionalId,
+        identifier: normalizedId,
         displayName: result.displayName,
         backendUserId: result.userId,
         accessToken: result.accessToken,
@@ -400,78 +417,9 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     }
   }
 
-  AuthSession loginPatient({
-    required String email,
-    required String password,
-  }) {
-    final normalizedEmail = email.trim().toLowerCase();
-    if (normalizedEmail.isEmpty || password.isEmpty) {
-      throw const AuthFailure('Email dan password harus diisi');
-    }
-    if (normalizedEmail != 'pasien@malva.app' || password != 'Malva1234') {
-      throw const AuthFailure('Email atau password salah');
-    }
-    return AuthSession(
-      role: UserRole.patient,
-      identifier: normalizedEmail,
-      displayName: 'Emelie R.',
-    );
-  }
-
-  AuthSession registerPatient({
-    required String email,
-    required String password,
-    required String displayName,
-  }) {
-    final normalizedEmail = email.trim().toLowerCase();
-    if (normalizedEmail.isEmpty || password.isEmpty) {
-      throw const AuthFailure('Email dan password harus diisi');
-    }
-    return AuthSession(
-      role: UserRole.patient,
-      identifier: normalizedEmail,
-      displayName:
-          displayName.trim().isEmpty ? 'Pasien Malva' : displayName.trim(),
-    );
-  }
-
-  AuthSession loginProfessional({
-    required String professionalId,
-    required String password,
-  }) {
-    final normalizedId = professionalId.trim();
-    if (normalizedId.isEmpty || password.isEmpty) {
-      throw const AuthFailure('ID profesi dan password harus diisi');
-    }
-    if (normalizedId.length != 16 || !RegExp(r'^\d+$').hasMatch(normalizedId)) {
-      throw const AuthFailure('ID profesi harus tepat 16 digit angka');
-    }
-    if (normalizedId != '1234567890123456' || password != 'Dokter1234') {
-      throw const AuthFailure('ID profesi atau password salah');
-    }
-    return AuthSession(
-      role: UserRole.professional,
-      identifier: normalizedId,
-      displayName: 'dr. Hafid Algistian, Sp.KJ.',
-    );
-  }
-
-  AuthSession registerProfessional({
-    required String professionalId,
-    required String password,
-    required String displayName,
-  }) {
-    final normalizedId = professionalId.trim();
-    if (normalizedId.isEmpty || password.isEmpty) {
-      throw const AuthFailure('ID profesi dan password harus diisi');
-    }
-    return AuthSession(
-      role: UserRole.professional,
-      identifier: normalizedId,
-      displayName:
-          displayName.trim().isEmpty ? 'Profesional Malva' : displayName.trim(),
-    );
-  }
+  // Metode login/daftar lokal lama (kredensial hardcoded) DIHAPUS:
+  // semua autentikasi kini melalui server Malva (Azure), termasuk
+  // profesional mandiri via nomor STR/SIP.
 
   /// Menukar refresh token dengan sesi baru (dipakai saat restore sesi
   /// di cold start maupun refresh proaktif). Error jaringan dilempar apa
