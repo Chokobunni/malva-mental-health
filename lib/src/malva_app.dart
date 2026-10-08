@@ -98,8 +98,6 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
       // Fresh start: data akun tersimpan tidak boleh tercampur akun lain.
       store.applySession(stored);
       _scheduleAllMedicationReminders();
-      // Muat kontak darurat dengan token yang sudah valid.
-      unawaited(ref.read(safetyProvider.notifier).load());
       unawaited(_pushNotifications.registerDeviceToken(stored));
       final refreshToken = stored.refreshToken;
       if (refreshToken != null && refreshToken.isNotEmpty) {
@@ -114,6 +112,11 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
           // Refresh gagal (offline / token dicabut): sesi tersimpan tetap
           // dipakai; request yang gagal 401 akan memicu login ulang.
         }
+      }
+      // Muat kontak darurat SETELAH refresh — token dijamin terbaru,
+      // sehingga kontak tidak hilang karena 401 token kedaluwarsa.
+      if (mounted) {
+        unawaited(ref.read(safetyProvider.notifier).load());
       }
     } on Object {
       // Gagal membaca secure storage: biarkan user login manual.
