@@ -1022,6 +1022,7 @@ class MalvaApiClient {
     required int currentStock,
     required int alertBelow,
     required String source,
+    String? patientId,
   }) async {
     final payload = await _send(
       'POST',
@@ -1036,10 +1037,56 @@ class MalvaApiClient {
         'current_stock': currentStock,
         'alert_below': alertBelow,
         'source': source,
+        if (patientId != null && patientId.trim().isNotEmpty)
+          'patient_id': patientId.trim(),
       },
     );
     return BackendMedication.fromJson(
       _expectMap(payload['medication'], 'Respons obat tidak valid.'),
+    );
+  }
+
+  /// Health record pasien (GET /v1/health-record).
+  /// Pasien: dirinya sendiri. Profesional: pasien terhubung (konsen).
+  Future<BackendHealthRecord> getHealthRecord({
+    required String accessToken,
+    String? patientId,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/health-record',
+        queryParameters: {
+          if (patientId != null && patientId.trim().isNotEmpty)
+            'patient_id': patientId.trim(),
+        },
+      ),
+      accessToken: accessToken,
+    );
+    return BackendHealthRecord.fromJson(
+      _expectMap(
+          payload['health_record'], 'Respons health record tidak valid.'),
+    );
+  }
+
+  /// Profesional memperbarui diagnosis pasien (PUT /v1/health-record).
+  Future<BackendHealthRecord> updateHealthRecordDiagnosis({
+    required String accessToken,
+    required String patientId,
+    required String diagnosisSummary,
+  }) async {
+    final payload = await _send(
+      'PUT',
+      '/v1/health-record',
+      accessToken: accessToken,
+      body: {
+        'patient_id': patientId.trim(),
+        'diagnosis_summary': diagnosisSummary,
+      },
+    );
+    return BackendHealthRecord.fromJson(
+      _expectMap(
+          payload['health_record'], 'Respons health record tidak valid.'),
     );
   }
 
@@ -1183,6 +1230,7 @@ class MalvaApiClient {
     required bool shareMoodDiary,
     required bool shareMedications,
     required bool shareTimeline,
+    bool shareHealthRecord = true,
   }) async {
     final payload = await _send(
       'PUT',
@@ -1194,6 +1242,7 @@ class MalvaApiClient {
         'share_mood_diary': shareMoodDiary,
         'share_medications': shareMedications,
         'share_timeline': shareTimeline,
+        'share_health_record': shareHealthRecord,
       },
     );
     return BackendPatientDataConsent.fromJson(
@@ -2166,6 +2215,7 @@ class BackendMedication {
     required this.alertBelow,
     required this.form,
     required this.reminderTime,
+    this.source = '',
   });
 
   factory BackendMedication.fromJson(Map<String, dynamic> json) {
@@ -2177,6 +2227,7 @@ class BackendMedication {
       alertBelow: (json['alert_below'] as num?)?.toInt() ?? 0,
       form: json['form']?.toString() ?? '',
       reminderTime: json['reminder_time']?.toString() ?? '',
+      source: json['source']?.toString() ?? '',
     );
   }
 
@@ -2187,8 +2238,39 @@ class BackendMedication {
   final int alertBelow;
   final String form;
   final String reminderTime;
+  final String source;
 
   bool get needsRefill => currentStock <= alertBelow;
+}
+
+/// Health record pasien (diagnosis summary yang diisi profesional).
+class BackendHealthRecord {
+  const BackendHealthRecord({
+    required this.patientId,
+    required this.diagnosisSummary,
+    required this.hasDiagnosis,
+    this.primaryProfessional = '',
+    this.updatedAt,
+    this.medicationCount = 0,
+  });
+
+  factory BackendHealthRecord.fromJson(Map<String, dynamic> json) {
+    return BackendHealthRecord(
+      patientId: json['patient_id']?.toString() ?? '',
+      diagnosisSummary: json['diagnosis_summary']?.toString() ?? '',
+      hasDiagnosis: json['has_diagnosis'] == true,
+      primaryProfessional: json['primary_professional']?.toString() ?? '',
+      updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? ''),
+      medicationCount: (json['medication_count'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final String patientId;
+  final String diagnosisSummary;
+  final bool hasDiagnosis;
+  final String primaryProfessional;
+  final DateTime? updatedAt;
+  final int medicationCount;
 }
 
 class BackendMedicationLog {
@@ -2270,6 +2352,7 @@ class BackendPatientDataConsent {
     required this.shareMoodDiary,
     required this.shareMedications,
     required this.shareTimeline,
+    this.shareHealthRecord = true,
   });
 
   factory BackendPatientDataConsent.fromJson(Map<String, dynamic> json) {
@@ -2279,6 +2362,7 @@ class BackendPatientDataConsent {
       shareMoodDiary: json['share_mood_diary'] != false,
       shareMedications: json['share_medications'] != false,
       shareTimeline: json['share_timeline'] != false,
+      shareHealthRecord: json['share_health_record'] != false,
     );
   }
 
@@ -2287,6 +2371,7 @@ class BackendPatientDataConsent {
   final bool shareMoodDiary;
   final bool shareMedications;
   final bool shareTimeline;
+  final bool shareHealthRecord;
 }
 
 class BackendNotification {

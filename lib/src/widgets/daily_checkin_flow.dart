@@ -98,6 +98,16 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
                 const Icon(Icons.check_circle_rounded, color: MalvaColors.mint),
             ],
           ),
+          const SizedBox(height: 4),
+          const Text(
+            'Mood • Obat • Tidur • Energi',
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                color: Colors.black54),
+          ),
+          const SizedBox(height: 10),
+          _StepIndicator(current: _step),
           const SizedBox(height: 12),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
@@ -246,6 +256,69 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
 
 // ---------------- Step widgets ----------------
 
+/// Indikator langkah check-in: 1 Mood, 2 Obat, 3 Tidur, 4 Energi.
+class _StepIndicator extends StatelessWidget {
+  const _StepIndicator({required this.current});
+
+  /// 0=mood, 1=meds, 2=sleep, 3=energy, 4=done.
+  final int current;
+
+  static const _labels = ['Mood', 'Obat', 'Tidur', 'Energi'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        for (var i = 0; i < _labels.length; i++) ...[
+          if (i > 0)
+            Expanded(
+              child: Container(
+                height: 2,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                color: i <= current
+                    ? MalvaColors.seed
+                    : Colors.black.withValues(alpha: 0.10),
+              ),
+            ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(
+                radius: 11,
+                backgroundColor: i <= current || current == 4
+                    ? MalvaColors.seed
+                    : Colors.black.withValues(alpha: 0.08),
+                child: current == 4 || i < current
+                    ? const Icon(Icons.check_rounded,
+                        size: 13, color: Colors.white)
+                    : Text(
+                        '${i + 1}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          color: i <= current ? Colors.white : Colors.black45,
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                _labels[i],
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  color: i <= current || current == 4
+                      ? MalvaColors.plum
+                      : Colors.black45,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _MoodPicker extends StatelessWidget {
   const _MoodPicker(
       {super.key, required this.selected, required this.onSelect});
@@ -260,6 +333,8 @@ class _MoodPicker extends StatelessWidget {
       children: [
         const Text('How are you today?',
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
+        const Text('Bagaimana perasaanmu hari ini?',
+            style: TextStyle(fontSize: 12, color: Colors.black54)),
         const SizedBox(height: 10),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -267,16 +342,32 @@ class _MoodPicker extends StatelessWidget {
             for (final mood in MoodValue.values)
               InkWell(
                 onTap: () => onSelect(mood),
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: BorderRadius.circular(16),
                 child: Container(
-                  padding: const EdgeInsets.all(6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: selected == mood
                         ? MalvaColors.seed.withValues(alpha: 0.14)
                         : Colors.transparent,
                   ),
-                  child: Text(mood.emoji, style: const TextStyle(fontSize: 30)),
+                  child: Column(
+                    children: [
+                      Text(mood.emoji, style: const TextStyle(fontSize: 30)),
+                      const SizedBox(height: 2),
+                      Text(
+                        mood.label,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: selected == mood
+                              ? MalvaColors.seed
+                              : Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
           ],
@@ -360,6 +451,8 @@ class _SleepPicker extends StatelessWidget {
       children: [
         const Text('How long did you sleep?',
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
+        const Text('Berapa lama kamu tidur?',
+            style: TextStyle(fontSize: 12, color: Colors.black54)),
         const SizedBox(height: 10),
         Row(
           children: [
@@ -475,6 +568,8 @@ class _EnergyPicker extends StatelessWidget {
       children: [
         const Text('How is your energy?',
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
+        const Text('Bagaimana energimu hari ini?',
+            style: TextStyle(fontSize: 12, color: Colors.black54)),
         const SizedBox(height: 10),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,

@@ -184,13 +184,14 @@ type MedicationLog struct {
 }
 
 type PatientDataConsent struct {
-	PatientID        string    `json:"patient_id"`
-	ProfessionalID   string    `json:"professional_id"`
-	ShareScreenings  bool      `json:"share_screenings"`
-	ShareMoodDiary   bool      `json:"share_mood_diary"`
-	ShareMedications bool      `json:"share_medications"`
-	ShareTimeline    bool      `json:"share_timeline"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	PatientID         string    `json:"patient_id"`
+	ProfessionalID    string    `json:"professional_id"`
+	ShareScreenings   bool      `json:"share_screenings"`
+	ShareMoodDiary    bool      `json:"share_mood_diary"`
+	ShareMedications  bool      `json:"share_medications"`
+	ShareTimeline     bool      `json:"share_timeline"`
+	ShareHealthRecord bool      `json:"share_health_record"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 type TimelineEvent struct {
@@ -1448,10 +1449,11 @@ func (s *Store) GetPatientDataConsent(ctx context.Context, patientID, profession
 		ON CONFLICT (patient_id, professional_id) DO UPDATE
 		SET updated_at = patient_data_consents.updated_at
 		RETURNING patient_id, professional_id, share_screenings, share_mood_diary,
-		          share_medications, share_timeline, updated_at
+		          share_medications, share_timeline, share_health_record, updated_at
 	`, patientID, professionalID).Scan(&consent.PatientID, &consent.ProfessionalID,
 		&consent.ShareScreenings, &consent.ShareMoodDiary,
-		&consent.ShareMedications, &consent.ShareTimeline, &consent.UpdatedAt)
+		&consent.ShareMedications, &consent.ShareTimeline,
+		&consent.ShareHealthRecord, &consent.UpdatedAt)
 	return consent, err
 }
 
@@ -1460,22 +1462,24 @@ func (s *Store) UpdatePatientDataConsent(ctx context.Context, consent PatientDat
 	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO patient_data_consents (
 			patient_id, professional_id, share_screenings, share_mood_diary,
-			share_medications, share_timeline
+			share_medications, share_timeline, share_health_record
 		)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (patient_id, professional_id) DO UPDATE
 		SET share_screenings = EXCLUDED.share_screenings,
 		    share_mood_diary = EXCLUDED.share_mood_diary,
 		    share_medications = EXCLUDED.share_medications,
 		    share_timeline = EXCLUDED.share_timeline,
+		    share_health_record = EXCLUDED.share_health_record,
 		    updated_at = now()
 		RETURNING patient_id, professional_id, share_screenings, share_mood_diary,
-		          share_medications, share_timeline, updated_at
+		          share_medications, share_timeline, share_health_record, updated_at
 	`, consent.PatientID, consent.ProfessionalID, consent.ShareScreenings,
-		consent.ShareMoodDiary, consent.ShareMedications, consent.ShareTimeline).
+		consent.ShareMoodDiary, consent.ShareMedications, consent.ShareTimeline,
+		consent.ShareHealthRecord).
 		Scan(&saved.PatientID, &saved.ProfessionalID, &saved.ShareScreenings,
 			&saved.ShareMoodDiary, &saved.ShareMedications,
-			&saved.ShareTimeline, &saved.UpdatedAt)
+			&saved.ShareTimeline, &saved.ShareHealthRecord, &saved.UpdatedAt)
 	if err != nil {
 		return PatientDataConsent{}, err
 	}

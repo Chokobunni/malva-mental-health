@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../assessment_engine.dart';
@@ -115,131 +114,74 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   MalvaStoreNotifier(this._apiClient) : super(_seededState());
 
   static MalvaStoreState _seededState() {
-    final now = DateTime.now();
-    return MalvaStoreState(
-      patient: const PatientProfile(
-        id: 'patient_emelie',
-        name: 'Emelie R.',
-        age: 26,
-        primaryProfessional: 'dr. Hafid Algistian, Sp.KJ.',
-        diagnosisSummary:
-            'F31.4 Bipolar affective disorder, current episode severe depression without psychotic symptom',
+    // Fresh start: TIDAK ada data demo (diagnosis, obat, mood, diary, goals,
+    // record). Semua data berasal dari server per akun yang login — akun baru
+    // melihat kondisi kosong sampai profesional mengisi diagnosis/obat.
+    return const MalvaStoreState(
+      patient: PatientProfile(
+        id: 'patient_local',
+        name: 'Pasien',
+        age: 0,
+        primaryProfessional: '',
+        diagnosisSummary: '',
       ),
-      medications: const [
-        Medication(
-          id: 'med_sertraline',
-          name: 'Sertraline',
-          dosage: '50 mg',
-          form: 'Tablet',
-          reminders: [
-            MedicationReminder(
-              time: TimeOfDay(hour: 8, minute: 0),
-              relationToMeal: 'Setelah makan',
-            ),
-          ],
-          currentStock: 24,
-          alertBelow: 5,
-          source: 'Profesional',
-        ),
-        Medication(
-          id: 'med_alprazolam',
-          name: 'Alprazolam',
-          dosage: '0.5 mg',
-          form: 'Tablet',
-          reminders: [
-            MedicationReminder(
-              time: TimeOfDay(hour: 21, minute: 0),
-              relationToMeal: 'Sebelum tidur',
-            ),
-          ],
-          currentStock: 3,
-          alertBelow: 5,
-          source: 'Pasien',
-        ),
-      ],
-      medicationLogs: [
-        MedicationLog(
-          medicationId: 'med_sertraline',
-          medicationName: 'Sertraline',
-          takenAt: DateTime(now.year, now.month, now.day, 8, 5),
-          status: 'taken',
-        ),
-      ],
-      moodEntries: [
-        MoodEntry(
-          date: DateTime(now.year, now.month, now.day),
-          mood: MoodValue.okay,
-          sleepHours: 6.5,
-          energy: 5,
-          anxiety: 8,
-          irritability: 0,
-          note:
-              'Deadline project membuat cemas, tapi masih bisa dipecah menjadi tugas kecil.',
-        ),
-        MoodEntry(
-          date: now.subtract(const Duration(days: 1)),
-          mood: MoodValue.good,
-          sleepHours: 7.5,
-          energy: 7,
-          anxiety: 4,
-          irritability: 2,
-          note: 'Bangun lebih segar dan minum obat tepat waktu.',
-        ),
-      ],
-      diaryEntries: [
-        DiaryEntry(
-          id: 'diary_1',
-          createdAt: DateTime(now.year, now.month, now.day, 13, 5),
-          mood: MoodValue.sad,
-          title: 'Anxious (8/10)',
-          note:
-              'Deadline besar terasa dekat. Saya akan membagi pekerjaan menjadi langkah kecil.',
-          professionalFeedback:
-              'Cocok dengan pola anticipatory anxiety. Bahas coping mechanism pada sesi berikutnya.',
-        ),
-        DiaryEntry(
-          id: 'diary_2',
-          createdAt: now.subtract(const Duration(days: 1)),
-          mood: MoodValue.good,
-          title: 'Okay',
-          note: 'Tidur cukup dan energi lebih stabil.',
-        ),
-      ],
-      goals: const [
-        GoalItem(
-          id: 'goal_mindfulness',
-          title: 'Latihan mindfulness',
-          frequency: 'Harian',
-          streakDays: 6,
-          completedToday: true,
-          reminder: TimeOfDay(hour: 20, minute: 0),
-          note: 'Latihan napas 5 menit sebelum tidur.',
-        ),
-        GoalItem(
-          id: 'goal_diary',
-          title: 'Jurnal mood harian',
-          frequency: 'Harian',
-          streakDays: 4,
-          completedToday: false,
-          reminder: TimeOfDay(hour: 21, minute: 15),
-          note: 'Catat trigger, pikiran otomatis, dan respons tubuh.',
-        ),
-      ],
-      records: [
-        HealthRecord(
-          id: 'record_mmpi',
-          date: now.subtract(const Duration(days: 14)),
-          title: 'MMPI_Test.pdf',
-          type: 'PDF',
-          lockedByProfessional: true,
-        ),
-      ],
     );
   }
 
   // ============================================================
   // AUTH METHODS
   // ============================================================
+
+  /// Reset seluruh data akun ke kondisi fresh (kosong). Dipanggil saat
+  /// login akun baru & logout agar data akun sebelumnya tidak bocor.
+  void resetForAccount() {
+    state = _seededState();
+  }
+
+  /// Terapkan sesi login: reset data lama, lalu set nama tampilan akun.
+  void applySession(AuthSession session) {
+    final name = session.displayName.trim().isEmpty
+        ? 'Pasien'
+        : session.displayName.trim();
+    state = MalvaStoreState(
+      patient: PatientProfile(
+        id: session.backendUserId ?? 'patient_local',
+        name: name,
+        age: 0,
+        primaryProfessional: '',
+        diagnosisSummary: '',
+      ),
+    );
+  }
+
+  /// Perbarui nama pasien di store (dipakai setelah profil dimuat server).
+  void setPatientIdentity({String? name, String? primaryProfessional}) {
+    state = state.copyWith(
+      patient: PatientProfile(
+        id: state.patient.id,
+        name: (name ?? state.patient.name).trim().isEmpty
+            ? 'Pasien'
+            : (name ?? state.patient.name).trim(),
+        age: state.patient.age,
+        primaryProfessional:
+            primaryProfessional ?? state.patient.primaryProfessional,
+        diagnosisSummary: state.patient.diagnosisSummary,
+      ),
+    );
+  }
+
+  /// Perbarui diagnosis summary (dari Health Record server) untuk pasien.
+  void setPatientDiagnosis(String diagnosis) {
+    state = state.copyWith(
+      patient: PatientProfile(
+        id: state.patient.id,
+        name: state.patient.name,
+        age: state.patient.age,
+        primaryProfessional: state.patient.primaryProfessional,
+        diagnosisSummary: diagnosis,
+      ),
+    );
+  }
 
   // ============================================================
   // AUTH METHODS — selalu ke server (tanpa sesi lokal palsu).

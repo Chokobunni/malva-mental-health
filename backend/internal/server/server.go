@@ -124,6 +124,7 @@ type medicationRequest struct {
 	CurrentStock   int    `json:"current_stock"`
 	AlertBelow     int    `json:"alert_below"`
 	Source         string `json:"source"`
+	PatientID      string `json:"patient_id"`
 }
 
 type medicationLogRequest struct {
@@ -134,11 +135,12 @@ type medicationLogRequest struct {
 }
 
 type privacyConsentRequest struct {
-	ProfessionalID   string `json:"professional_id"`
-	ShareScreenings  bool   `json:"share_screenings"`
-	ShareMoodDiary   bool   `json:"share_mood_diary"`
-	ShareMedications bool   `json:"share_medications"`
-	ShareTimeline    bool   `json:"share_timeline"`
+	ProfessionalID    string `json:"professional_id"`
+	ShareScreenings   bool   `json:"share_screenings"`
+	ShareMoodDiary    bool   `json:"share_mood_diary"`
+	ShareMedications  bool   `json:"share_medications"`
+	ShareTimeline     bool   `json:"share_timeline"`
+	ShareHealthRecord *bool  `json:"share_health_record"`
 }
 
 type passwordChangeRequest struct {
@@ -240,6 +242,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/e-prescriptions/{id}", s.requireAuth(s.getEPrescription))
 	// QR verification (public - one-time token)
 	mux.HandleFunc("GET /v1/e-prescriptions/verify", s.verifyEPrescriptionQR)
+	// Health Record — pasien read-only; profesional terverifikasi menulis diagnosis.
+	mux.HandleFunc("GET /v1/health-record", s.requireAuth(s.getHealthRecord))
+	mux.HandleFunc("PUT /v1/health-record", s.requireAuth(s.updateHealthRecord))
 	// GOALS & HABITS — tersimpan server, tidak hilang saat app ditutup.
 	mux.HandleFunc("GET /v1/goals", s.requireAuth(s.listGoals))
 	mux.HandleFunc("POST /v1/goals", s.requireAuth(s.createGoal))
@@ -1083,13 +1088,30 @@ func (s *Server) updateDiaryFeedback(w http.ResponseWriter, r *http.Request, cla
 }
 
 func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
-	if claims.Role != "patient" {
-		writeError(w, http.StatusForbidden, errors.New("only patients can create medications"))
-		return
-	}
 	var req medicationRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	// Profesional terverifikasi boleh meresepkan obat ke pasien terhubung
+	// (dengan konsen medications). Pasien menambah obat untuk dirinya sendiri.
+	patientID := claims.Subject
+	if claims.Role == "professional" {
+		if !s.requireVerifiedProfessional(w, r, claims) {
+			return
+		}
+		resolved, err := s.authorizePatientAccess(r, claims, req.PatientID)
+		if err != nil {
+			writeError(w, http.StatusForbidden, err)
+			return
+		}
+		if !s.consentAllows(r, resolved, claims.Subject, "medications") {
+			writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data Medication"))
+			return
+		}
+		patientID = resolved
+	} else if claims.Role != "patient" {
+		writeError(w, http.StatusForbidden, errors.New("only patients and professionals can create medications"))
 		return
 	}
 	req.Name = trimMax(req.Name, 160)
@@ -1098,12 +1120,19 @@ func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims
 	req.ReminderTime = trimMax(req.ReminderTime, 16)
 	req.RelationToMeal = trimMax(req.RelationToMeal, 80)
 	req.Source = trimMax(req.Source, 80)
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, errors.New("nama obat wajib diisi."))
+		return
+	}
+	if req.Source == "" {
+		req.Source = "Profesional"
+	}
 	if req.CurrentStock < 0 || req.AlertBelow < 0 {
 		writeError(w, http.StatusBadRequest, errors.New("medication stock values cannot be negative"))
 		return
 	}
 	item, err := s.store.UpsertMedication(r.Context(), store.Medication{
-		PatientID:      claims.Subject,
+		PatientID:      patientID,
 		Name:           req.Name,
 		Dosage:         req.Dosage,
 		Form:           req.Form,
@@ -1116,6 +1145,12 @@ func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
+	}
+	if claims.Role == "professional" {
+		s.notifyPatient(r, patientID, "medication_prescribed",
+			"Obat baru ditambahkan",
+			"Profesional menambahkan obat baru ke rencana pengobatanmu.",
+			map[string]string{"medication_id": item.ID})
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"medication": item})
 }
@@ -1254,13 +1289,18 @@ func (s *Server) updatePrivacyConsent(w http.ResponseWriter, r *http.Request, cl
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	shareHealthRecord := true // default aktif; pasien boleh mematikan.
+	if req.ShareHealthRecord != nil {
+		shareHealthRecord = *req.ShareHealthRecord
+	}
 	consent, err := s.store.UpdatePatientDataConsent(r.Context(), store.PatientDataConsent{
-		PatientID:        claims.Subject,
-		ProfessionalID:   req.ProfessionalID,
-		ShareScreenings:  req.ShareScreenings,
-		ShareMoodDiary:   req.ShareMoodDiary,
-		ShareMedications: req.ShareMedications,
-		ShareTimeline:    req.ShareTimeline,
+		PatientID:         claims.Subject,
+		ProfessionalID:    req.ProfessionalID,
+		ShareScreenings:   req.ShareScreenings,
+		ShareMoodDiary:    req.ShareMoodDiary,
+		ShareMedications:  req.ShareMedications,
+		ShareTimeline:     req.ShareTimeline,
+		ShareHealthRecord: shareHealthRecord,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -1523,6 +1563,8 @@ func (s *Server) consentAllows(r *http.Request, patientID, professionalID, scope
 		return consent.ShareMedications
 	case "timeline":
 		return consent.ShareTimeline
+	case "health_record":
+		return consent.ShareHealthRecord
 	default:
 		return false
 	}

@@ -56,12 +56,25 @@ class TherapyWorksheetField {
     required this.label,
     this.hint = '',
     this.multiline = true,
+    this.minValue,
+    this.maxValue,
   });
 
   final String id;
   final String label;
   final String hint;
   final bool multiline;
+
+  /// Bila diisi, field menjadi pilihan angka rentang [minValue, maxValue]
+  /// (mis. DASS-21 0-3, WHO-5 0-5) dengan pilihan tombol — bukan essay.
+  final int? minValue;
+  final int? maxValue;
+
+  bool get isNumericRange => minValue != null && maxValue != null;
+
+  List<int> get rangeValues => isNumericRange
+      ? [for (var v = minValue!; v <= maxValue!; v++) v]
+      : const [];
 }
 
 const dass21Module = TherapyModule(
@@ -92,106 +105,169 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
     id: 'q1',
     label: '1. Saya merasa sulit untuk menenangkan diri',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q2',
     label: '2. Saya menyadari mulut saya terasa kering',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q3',
     label: '3. Saya tidak dapat merasakan perasaan positif sama sekali',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q4',
     label: '4. Saya mengalami kesulitan bernapas',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q5',
     label: '5. Saya merasa sulit berinisiatif mengerjakan sesuatu',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q6',
     label: '6. Saya cenderung bereaksi berlebihan terhadap situasi',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q7',
     label: '7. Saya mengalami gemetar (mis. di tangan)',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q8',
     label: '8. Saya merasa banyak menggunakan energi untuk cemas',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q9',
     label: '9. Saya khawatir akan situasi di mana saya panik',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q10',
     label: '10. Saya merasa tidak ada hal yang dapat saya nantikan',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q11',
     label: '11. Saya merasa gelisah',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q12',
     label: '12. Saya sulit untuk rileks',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q13',
     label: '13. Saya merasa sedih dan tertekan',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q14',
     label: '14. Saya tidak sabar terhadap hal yang menghalangi pekerjaan',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q15',
     label: '15. Saya merasa hampir panik',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q16',
     label: '16. Saya tidak bisa menjadi antusias terhadap apa pun',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q17',
     label: '17. Saya merasa tidak berharga',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q18',
     label: '18. Saya merasa mudah tersinggung',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q19',
     label: '19. Saya menyadari perubahan detak jantung saat cemas',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q20',
     label: '20. Saya merasa takut tanpa alasan yang jelas',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
   TherapyWorksheetField(
     id: 'q21',
     label: '21. Saya merasa hidup tidak berarti',
     hint: '0 = tidak sama sekali … 3 = sangat sering',
+    multiline: false,
+    minValue: 0,
+    maxValue: 3,
   ),
 ];
 
@@ -223,26 +299,41 @@ const who5WorksheetFields = <TherapyWorksheetField>[
     id: 'q1',
     label: '1. Saya merasa cerah dan bersemangat',
     hint: '0 = tidak pernah … 5 = setiap saat',
+    multiline: false,
+    minValue: 0,
+    maxValue: 5,
   ),
   TherapyWorksheetField(
     id: 'q2',
     label: '2. Saya merasa tenang dan rileks',
     hint: '0 = tidak pernah … 5 = setiap saat',
+    multiline: false,
+    minValue: 0,
+    maxValue: 5,
   ),
   TherapyWorksheetField(
     id: 'q3',
     label: '3. Saya merasa aktif dan penuh energi',
     hint: '0 = tidak pernah … 5 = setiap saat',
+    multiline: false,
+    minValue: 0,
+    maxValue: 5,
   ),
   TherapyWorksheetField(
     id: 'q4',
     label: '4. Saya bangun dengan perasaan segar',
     hint: '0 = tidak pernah … 5 = setiap saat',
+    multiline: false,
+    minValue: 0,
+    maxValue: 5,
   ),
   TherapyWorksheetField(
     id: 'q5',
     label: '5. Hidup saya dipenuhi hal-hal yang menarik',
     hint: '0 = tidak pernah … 5 = setiap saat',
+    multiline: false,
+    minValue: 0,
+    maxValue: 5,
   ),
 ];
 
@@ -660,6 +751,7 @@ class TherapyDetailScreen extends ConsumerStatefulWidget {
 
 class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
   final _controllers = <String, TextEditingController>{};
+  final _numericValues = <String, int>{};
   bool _isSaving = false;
   bool _saved = false;
   String? _error;
@@ -670,7 +762,9 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
   void initState() {
     super.initState();
     for (final field in module.worksheetFields) {
-      _controllers[field.id] = TextEditingController();
+      if (!field.isNumericRange) {
+        _controllers[field.id] = TextEditingController();
+      }
     }
   }
 
@@ -685,10 +779,12 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
   Map<String, dynamic> _answers() => {
         for (final entry in _controllers.entries)
           entry.key: entry.value.text.trim(),
+        for (final entry in _numericValues.entries) entry.key: entry.value,
       };
 
   bool get _hasAnyAnswer =>
-      _controllers.values.any((c) => c.text.trim().isNotEmpty);
+      _controllers.values.any((c) => c.text.trim().isNotEmpty) ||
+      _numericValues.isNotEmpty;
 
   Future<void> _submit({bool share = false}) async {
     if (!_hasAnyAnswer) {
@@ -822,7 +918,9 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
       ..writeln('Tanggal: ${DateTime.now().toIso8601String()}')
       ..writeln('----------------------------------------');
     for (final field in module.worksheetFields) {
-      final answer = _controllers[field.id]?.text.trim() ?? '';
+      final answer = field.isNumericRange
+          ? (_numericValues[field.id]?.toString() ?? '')
+          : (_controllers[field.id]?.text.trim() ?? '');
       buffer
         ..writeln(field.label)
         ..writeln(answer.isEmpty ? '(belum diisi)' : answer)
@@ -960,15 +1058,33 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                     Text(field.label,
                         style: const TextStyle(
                             fontWeight: FontWeight.w800, fontSize: 13.5)),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _controllers[field.id],
-                      minLines: field.multiline ? 2 : 1,
-                      maxLines: field.multiline ? 5 : 1,
-                      decoration: InputDecoration(
-                        hintText: field.hint.isEmpty ? null : field.hint,
+                    if (field.hint.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        field.hint,
+                        style: const TextStyle(
+                            fontSize: 11.5, color: Colors.black54),
                       ),
-                    ),
+                    ],
+                    const SizedBox(height: 6),
+                    if (field.isNumericRange)
+                      _NumericRangeField(
+                        field: field,
+                        value: _numericValues[field.id],
+                        onSelect: (v) => setState(() {
+                          _numericValues[field.id] = v;
+                          _saved = false;
+                        }),
+                      )
+                    else
+                      TextField(
+                        controller: _controllers[field.id],
+                        minLines: field.multiline ? 2 : 1,
+                        maxLines: field.multiline ? 5 : 1,
+                        decoration: InputDecoration(
+                          hintText: field.hint.isEmpty ? null : field.hint,
+                        ),
+                      ),
                     const SizedBox(height: 12),
                   ],
                 ],
@@ -1304,6 +1420,71 @@ class _TherapySubmissionsScreenState
                         },
                       ),
                     ),
+    );
+  }
+}
+
+/// Field pilihan angka rentang (seperti GAD/PHQ): tombol 0..max.
+class _NumericRangeField extends StatelessWidget {
+  const _NumericRangeField({
+    required this.field,
+    required this.value,
+    required this.onSelect,
+  });
+
+  final TherapyWorksheetField field;
+  final int? value;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = MalvaColors.seed;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final v in field.rangeValues)
+              InkWell(
+                onTap: () => onSelect(v),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: 46,
+                  height: 42,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: value == v ? color : color.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: value == v ? color : color.withValues(alpha: 0.22),
+                    ),
+                  ),
+                  child: Text(
+                    '$v',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
+                      color: value == v ? Colors.white : color,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        if (value != null) ...[
+          const SizedBox(height: 5),
+          Text(
+            'Skor dipilih: $value',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

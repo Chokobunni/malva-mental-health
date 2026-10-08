@@ -95,6 +95,8 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
       if (!mounted) return;
       ref.read(apiClientProvider).setRefreshToken(stored.refreshToken);
       ref.read(authStateProvider.notifier).setSession(stored);
+      // Fresh start: data akun tersimpan tidak boleh tercampur akun lain.
+      store.applySession(stored);
       _scheduleAllMedicationReminders();
       unawaited(_pushNotifications.registerDeviceToken(stored));
       final refreshToken = stored.refreshToken;
@@ -122,6 +124,8 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     ref.read(apiClientProvider).setRefreshToken(session.refreshToken);
     unawaited(_pushNotifications.registerDeviceToken(session));
     ref.read(malvaStoreProvider.notifier).persistSession(session);
+    // Fresh start: bersihkan data akun sebelumnya, set identitas akun baru.
+    ref.read(malvaStoreProvider.notifier).applySession(session);
     _scheduleAllMedicationReminders();
 
     // Sync any pending offline data
@@ -135,6 +139,7 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     final session = ref.read(authStateProvider).session;
     // Cabut refresh token di server (best-effort), lalu bersihkan lokal.
     unawaited(ref.read(malvaStoreProvider.notifier).logoutSession(session));
+    ref.read(malvaStoreProvider.notifier).resetForAccount();
     ref.read(authStateProvider.notifier).clearSession();
     ref.read(apiClientProvider).setRefreshToken(null);
     unawaited(GoogleAuthService.signOut());

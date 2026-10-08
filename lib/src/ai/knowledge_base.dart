@@ -46,7 +46,9 @@ class KnowledgeBase {
               cf: 0.9,
             ),
           ],
-          ruleCF: 0.95,
+          // Kalibrasi CF pakar berjenjang per tingkat keparahan: makin berat
+          // tingkatnya, makin kuat dukungan bukti klinis sehingga CF naik.
+          ruleCF: 0.60,
         ),
 
         const ScreeningRule(
@@ -80,7 +82,7 @@ class KnowledgeBase {
               cf: 0.85,
             ),
           ],
-          ruleCF: 0.93,
+          ruleCF: 0.72,
         ),
 
         const ScreeningRule(
@@ -114,7 +116,7 @@ class KnowledgeBase {
               cf: 0.9,
             ),
           ],
-          ruleCF: 0.95,
+          ruleCF: 0.84,
         ),
 
         const ScreeningRule(
@@ -148,7 +150,7 @@ class KnowledgeBase {
               cf: 0.92,
             ),
           ],
-          ruleCF: 0.96,
+          ruleCF: 0.90,
         ),
 
         const ScreeningRule(
@@ -175,7 +177,7 @@ class KnowledgeBase {
               cf: 0.95,
             ),
           ],
-          ruleCF: 0.98,
+          ruleCF: 0.95,
         ),
 
         // ============================================================
@@ -362,7 +364,7 @@ class KnowledgeBase {
               cf: 0.9,
             ),
           ],
-          ruleCF: 0.95,
+          ruleCF: 0.60,
         ),
 
         const ScreeningRule(
@@ -395,7 +397,7 @@ class KnowledgeBase {
               cf: 0.85,
             ),
           ],
-          ruleCF: 0.93,
+          ruleCF: 0.72,
         ),
 
         const ScreeningRule(
@@ -429,7 +431,7 @@ class KnowledgeBase {
               cf: 0.9,
             ),
           ],
-          ruleCF: 0.95,
+          ruleCF: 0.84,
         ),
 
         const ScreeningRule(
@@ -457,7 +459,7 @@ class KnowledgeBase {
               cf: 0.92,
             ),
           ],
-          ruleCF: 0.97,
+          ruleCF: 0.90,
         ),
 
         // ============================================================

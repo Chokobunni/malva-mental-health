@@ -207,9 +207,9 @@ func TestParityVector(t *testing.T) {
 		wantCF    float64
 		wantFired int
 	}{
-		{"all zero", []int{0, 0, 0, 0, 0, 0, 0, 0, 0}, "minimal", 0.9025, 1},
+		{"all zero", []int{0, 0, 0, 0, 0, 0, 0, 0, 0}, "minimal", 0.5700, 1},
 		{"item9 = 1", []int{0, 0, 0, 0, 0, 0, 0, 0, 1}, "crisis", 0.9500, 2},
-		{"moderate", []int{2, 2, 1, 2, 1, 1, 1, 0, 0}, "moderate", 0.9025, 1},
+		{"moderate", []int{2, 2, 1, 2, 1, 1, 1, 0, 0}, "moderate", 0.7980, 1},
 		{"all two", []int{2, 2, 2, 2, 2, 2, 2, 2, 2}, "crisis", 0.9500, 7},
 	}
 	for _, tc := range cases {

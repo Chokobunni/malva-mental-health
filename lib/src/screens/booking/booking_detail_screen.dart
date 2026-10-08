@@ -41,7 +41,7 @@ class BookingDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
-  DateTime _date = DateTime.now().add(const Duration(days: 1));
+  DateTime _date = DateTime.now();
   String? _selectedSlot;
   List<BackendDoctorSlot> _slots = const [];
   bool _isLoadingSlots = false;
@@ -54,7 +54,18 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
   /// Continuous care: tanggal mulai + 6 hari = periode 7 hari.
   DateTime get _endDate => _date.add(const Duration(days: 6));
 
-  /// Kalender asli: pilih tanggal mulai, 7 hari berikutnya otomatis terpilih.
+  /// 7 hari pilihan (hari ini s/d +6). Hari lampau tidak pernah muncul.
+  List<DateTime> get _next7Days {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return [for (var i = 0; i < 7; i++) today.add(Duration(days: i))];
+  }
+
+  /// Tanggal unik yang tersedia pada range 7 hari (untuk continuous).
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// Kalender asli: pilih tanggal mulai dalam range 7 hari ke depan.
   Future<void> _pickStartDate() async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -62,8 +73,8 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
       context: context,
       initialDate: _date.isBefore(today) ? today : _date,
       firstDate: today,
-      lastDate: today.add(const Duration(days: 90)),
-      helpText: 'Pilih tanggal mulai',
+      lastDate: today.add(const Duration(days: 6)),
+      helpText: 'Pilih tanggal mulai (7 hari ke depan)',
       cancelText: 'Batal',
       confirmText: 'Pilih',
     );
@@ -72,11 +83,21 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
       _date = DateTime(picked.year, picked.month, picked.day);
       _selectedSlot = null;
     });
+    _loadSlots();
   }
 
   @override
   void initState() {
     super.initState();
+    _loadSlots();
+  }
+
+  /// Set pilihan tanggal dari chip 7 hari.
+  void _selectDay(DateTime day) {
+    setState(() {
+      _date = DateTime(day.year, day.month, day.day);
+      _selectedSlot = null;
+    });
     _loadSlots();
   }
 
@@ -237,36 +258,41 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
               ),
             ),
           ] else ...[
-            const SectionLabel('Pilih Tanggal'),
+            const SectionLabel('Pilih Tanggal (7 hari ke depan)'),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final day in _next7Days)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: _DayChip(
+                        day: day,
+                        selected: _isSameDay(day, _date),
+                        onTap: () => _selectDay(day),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             SoftCard(
               child: Row(
                 children: [
-                  IconButton(
-                    onPressed: () {
-                      final next = _date.subtract(const Duration(days: 1));
-                      if (next.isAfter(
-                          DateTime.now().subtract(const Duration(days: 1)))) {
-                        setState(() => _date = next);
-                        _loadSlots();
-                      }
-                    },
-                    icon: const Icon(Icons.chevron_left_rounded),
-                  ),
+                  const Icon(Icons.event_rounded,
+                      color: MalvaColors.seed, size: 20),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       _prettyDate(_date),
-                      textAlign: TextAlign.center,
                       style: const TextStyle(
-                          fontWeight: FontWeight.w900, fontSize: 16),
+                          fontWeight: FontWeight.w900, fontSize: 15),
                     ),
                   ),
-                  IconButton(
-                    onPressed: () {
-                      setState(
-                          () => _date = _date.add(const Duration(days: 1)));
-                      _loadSlots();
-                    },
-                    icon: const Icon(Icons.chevron_right_rounded),
+                  FilledButton.tonalIcon(
+                    onPressed: _pickStartDate,
+                    icon: const Icon(Icons.edit_calendar_rounded, size: 18),
+                    label: const Text('Kalender'),
                   ),
                 ],
               ),
@@ -348,28 +374,6 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            SoftCard(
-              color: MalvaColors.plum,
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      '7 hari continuous care',
-                      style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  Text(
-                    'Rp ${_formatRupiah(_price)} / week',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 18,
-                    ),
-                  ),
-                ],
-              ),
-            ),
             if (_error != null) ...[
               const SizedBox(height: 10),
               Text(_error!,
@@ -377,13 +381,13 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                       color: MalvaColors.danger, fontWeight: FontWeight.w700)),
             ],
             const SizedBox(height: 14),
-            // SATU tombol: 7 Days Continuous Care -> consent -> payment.
+            // SATU tombol: continuous support -> consent -> payment.
             FilledButton.icon(
               onPressed: _isSubmitting ? null : _submitBooking,
               icon: const Icon(Icons.handshake_rounded),
               label: Text(_isSubmitting
                   ? 'Memproses...'
-                  : '7 Days Continuous Care — Rp ${_formatRupiah(_price)}'),
+                  : 'Mulai Continuous Support — Rp ${_formatRupiah(_price)}'),
             ),
             const SizedBox(height: 6),
             Text(
@@ -534,5 +538,98 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
       if (pos > 1 && pos % 3 == 1) buf.write('.');
     }
     return buf.toString();
+  }
+}
+
+/// Chip satu hari pada pemilih 7 hari (hanya hari ini s/d +6).
+class _DayChip extends StatelessWidget {
+  const _DayChip({
+    required this.day,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final DateTime day;
+  final bool selected;
+  final VoidCallback onTap;
+
+  static const _dayNames = [
+    'Sen',
+    'Sel',
+    'Rab',
+    'Kam',
+    'Jum',
+    'Sab',
+    'Min',
+  ];
+
+  static const _monthNames = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'Mei',
+    'Jun',
+    'Jul',
+    'Agu',
+    'Sep',
+    'Okt',
+    'Nov',
+    'Des',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final isToday =
+        day.year == now.year && day.month == now.month && day.day == now.day;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: 66,
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? MalvaColors.seed
+              : MalvaColors.seed.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected
+                ? MalvaColors.seed
+                : MalvaColors.seed.withValues(alpha: 0.18),
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              isToday ? 'Hari ini' : _dayNames[day.weekday - 1],
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: selected ? Colors.white : Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${day.day}',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: selected ? Colors.white : MalvaColors.plum,
+              ),
+            ),
+            Text(
+              _monthNames[day.month - 1],
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: selected ? Colors.white70 : Colors.black45,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

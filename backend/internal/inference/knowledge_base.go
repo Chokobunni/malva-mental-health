@@ -49,7 +49,7 @@ func PHQ9Rules() []Rule {
 				{FactID: "depression_summary", Value: "minimal", CF: 0.9,
 					Explanation: "Gejala depresi minimal. Pantau pola mood dan rutinitas."},
 			},
-			RuleCF: 0.95,
+			RuleCF: 0.60,
 		},
 		{
 			ID:          "PHQ9_MILD",
@@ -64,7 +64,7 @@ func PHQ9Rules() []Rule {
 				{FactID: "depression_summary", Value: "mild", CF: 0.85,
 					Explanation: "Gejala ringan. Ulangi asesmen dan diskusikan bila menetap."},
 			},
-			RuleCF: 0.93,
+			RuleCF: 0.72,
 		},
 		{
 			ID:          "PHQ9_MODERATE",
@@ -79,7 +79,7 @@ func PHQ9Rules() []Rule {
 				{FactID: "depression_summary", Value: "moderate", CF: 0.9,
 					Explanation: "Gejala sedang. Perlu review profesional dan rencana tindak lanjut."},
 			},
-			RuleCF: 0.95,
+			RuleCF: 0.84,
 		},
 		{
 			ID:          "PHQ9_SEVERE_MODERATE",
@@ -94,7 +94,7 @@ func PHQ9Rules() []Rule {
 				{FactID: "depression_summary", Value: "severe", CF: 0.9,
 					Explanation: "Gejala cukup berat. Prioritaskan evaluasi profesional."},
 			},
-			RuleCF: 0.96,
+			RuleCF: 0.90,
 		},
 		{
 			ID:          "PHQ9_SEVERE_HIGH",
@@ -108,7 +108,7 @@ func PHQ9Rules() []Rule {
 				{FactID: "depression_summary", Value: "severe", CF: 0.95,
 					Explanation: "Gejala berat. Butuh review klinis segera."},
 			},
-			RuleCF: 0.98,
+			RuleCF: 0.95,
 		},
 		{
 			// DSM-5 red flag: item 9 > 0 selalu krisis.
@@ -203,7 +203,7 @@ func GAD7Rules() []Rule {
 				{FactID: "anxiety_summary", Value: "minimal", CF: 0.9,
 					Explanation: "Gejala kecemasan minimal. Lanjutkan pemantauan rutin."},
 			},
-			RuleCF: 0.95,
+			RuleCF: 0.60,
 		},
 		{
 			ID:          "GAD7_MILD",
@@ -218,7 +218,7 @@ func GAD7Rules() []Rule {
 				{FactID: "anxiety_summary", Value: "mild", CF: 0.85,
 					Explanation: "Gejala ringan. Ulangi asesmen pada follow-up."},
 			},
-			RuleCF: 0.93,
+			RuleCF: 0.72,
 		},
 		{
 			ID:          "GAD7_MODERATE",
@@ -233,7 +233,7 @@ func GAD7Rules() []Rule {
 				{FactID: "anxiety_summary", Value: "moderate", CF: 0.9,
 					Explanation: "Gejala sedang. Perlu evaluasi profesional."},
 			},
-			RuleCF: 0.95,
+			RuleCF: 0.84,
 		},
 		{
 			ID:          "GAD7_SEVERE",
@@ -247,7 +247,7 @@ func GAD7Rules() []Rule {
 				{FactID: "anxiety_summary", Value: "severe", CF: 0.92,
 					Explanation: "Gejala berat. Prioritaskan review klinis dan rencana dukungan."},
 			},
-			RuleCF: 0.97,
+			RuleCF: 0.90,
 		},
 		{
 			ID:          "GAD7_WORRY_RUMINATION",

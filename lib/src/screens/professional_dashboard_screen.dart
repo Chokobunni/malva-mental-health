@@ -52,6 +52,8 @@ class _ProfessionalDashboardScreenState
   Map<String, List<BackendMedicationLog>> _medicationLogsByPatient = const {};
   Set<String> _moodDiaryRestrictedPatients = const {};
   Set<String> _medicationRestrictedPatients = const {};
+  Set<String> _healthRecordRestrictedPatients = const {};
+  Map<String, BackendHealthRecord> _healthRecordsByPatient = const {};
   List<_AuditEntry> _serverAuditEntries = const [];
   String? _selectedPatientId;
   String _searchQuery = '';
@@ -234,6 +236,16 @@ class _ProfessionalDashboardScreenState
                       professionalCode: widget.session?.identifier,
                     ),
                     const SizedBox(height: 22),
+                    _HealthRecordManagerSection(
+                      patient: selected,
+                      online: selected.sourceLabel == 'Backend',
+                      restricted: _healthRecordRestrictedPatients
+                          .contains(selected.patientId),
+                      diagnosis: _healthRecordsByPatient[selected.patientId],
+                      onEdit: () => _openHealthRecordEdit(selected),
+                      onPrescribe: () => _openPrescribeMedication(selected),
+                    ),
+                    const SizedBox(height: 22),
                     _ScreeningHistorySection(
                       patient: selected,
                       screenings: selected.screenings,
@@ -382,6 +394,8 @@ class _ProfessionalDashboardScreenState
       final medicationLogsByPatient = <String, List<BackendMedicationLog>>{};
       final moodDiaryRestrictedPatients = <String>{};
       final medicationRestrictedPatients = <String>{};
+      final healthRecordRestrictedPatients = <String>{};
+      final healthRecordsByPatient = <String, BackendHealthRecord>{};
       final notesByPatient = <String, List<BackendProfessionalNote>>{};
       final followUpsByPatient = <String, List<BackendFollowUpMessage>>{};
       final reviewedScreeningIds = <String>{};
@@ -418,6 +432,7 @@ class _ProfessionalDashboardScreenState
               )),
           _loadMoodDiaryData(apiClient, accessToken, patientId),
           _loadMedicationData(apiClient, accessToken, patientId),
+          _loadHealthRecordData(apiClient, accessToken, patientId),
           safely(() => apiClient.listAuditLogs(
                 accessToken: accessToken,
                 patientId: patientId,
@@ -470,8 +485,16 @@ class _ProfessionalDashboardScreenState
           medicationRestrictedPatients.add(patientId);
         }
 
+        final healthRecordResult = results[7] as _HealthRecordResult;
+        if (healthRecordResult.record != null) {
+          healthRecordsByPatient[patientId] = healthRecordResult.record!;
+        }
+        if (healthRecordResult.restricted) {
+          healthRecordRestrictedPatients.add(patientId);
+        }
+
         final auditLogs =
-            results[7] as List<BackendAuditLog>? ?? const <BackendAuditLog>[];
+            results[8] as List<BackendAuditLog>? ?? const <BackendAuditLog>[];
         serverAuditEntries.addAll(
           auditLogs.map(
             (entry) => _AuditEntry(
@@ -493,6 +516,8 @@ class _ProfessionalDashboardScreenState
         _medicationLogsByPatient = medicationLogsByPatient;
         _moodDiaryRestrictedPatients = moodDiaryRestrictedPatients;
         _medicationRestrictedPatients = medicationRestrictedPatients;
+        _healthRecordRestrictedPatients = healthRecordRestrictedPatients;
+        _healthRecordsByPatient = healthRecordsByPatient;
         _serverAuditEntries = serverAuditEntries;
         _professionalNotes
           ..clear()
@@ -580,6 +605,350 @@ class _ProfessionalDashboardScreenState
     } on Object {
       return const _MedicationResult(medications: [], logs: []);
     }
+  }
+
+  Future<_HealthRecordResult> _loadHealthRecordData(
+    MalvaApiClient apiClient,
+    String accessToken,
+    String patientId,
+  ) async {
+    try {
+      final record = await apiClient.getHealthRecord(
+        accessToken: accessToken,
+        patientId: patientId,
+      );
+      return _HealthRecordResult(record: record);
+    } on MalvaApiException catch (error) {
+      if (error.statusCode == 403) {
+        return const _HealthRecordResult(restricted: true);
+      }
+      return const _HealthRecordResult();
+    } on Object {
+      return const _HealthRecordResult();
+    }
+  }
+
+  /// Sheet edit diagnosis pasien (profesional terverifikasi).
+  void _openHealthRecordEdit(_ProfessionalPatient patient) {
+    final existing =
+        _healthRecordsByPatient[patient.patientId]?.diagnosisSummary ?? '';
+    final controller = TextEditingController(text: existing);
+    final apiClient = widget.apiClient;
+    final accessToken = widget.session?.accessToken;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        var saving = false;
+        String? error;
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                0,
+                20,
+                MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Health Record — ${patient.displayName}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 17),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Diagnosis diisi profesional. Pasien melihat read-only '
+                      'dan akan mendapat notifikasi.',
+                      style: TextStyle(color: Colors.black54, fontSize: 12.5),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: controller,
+                      minLines: 4,
+                      maxLines: 10,
+                      decoration: const InputDecoration(
+                        labelText: 'Diagnosis summary',
+                        hintText:
+                            'contoh: F41.1 Generalized anxiety disorder, moderate',
+                      ),
+                    ),
+                    if (error != null) ...[
+                      const SizedBox(height: 8),
+                      Text(error!,
+                          style: const TextStyle(
+                              color: MalvaColors.danger,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                    const SizedBox(height: 14),
+                    FilledButton.icon(
+                      onPressed: saving
+                          ? null
+                          : () async {
+                              if (apiClient == null ||
+                                  accessToken == null ||
+                                  accessToken.isEmpty) {
+                                setSheetState(() => error =
+                                    'Mode offline: hubungkan ke server.');
+                                return;
+                              }
+                              setSheetState(() {
+                                saving = true;
+                                error = null;
+                              });
+                              try {
+                                final updated =
+                                    await apiClient.updateHealthRecordDiagnosis(
+                                  accessToken: accessToken,
+                                  patientId: patient.patientId,
+                                  diagnosisSummary: controller.text.trim(),
+                                );
+                                if (!mounted || !sheetContext.mounted) return;
+                                setState(() {
+                                  _healthRecordsByPatient = {
+                                    ..._healthRecordsByPatient,
+                                    patient.patientId: updated,
+                                  };
+                                  _auditEntries.insert(
+                                    0,
+                                    _AuditEntry(
+                                      title: 'Diagnosis diperbarui',
+                                      body: patient.displayName,
+                                      createdAt: DateTime.now(),
+                                    ),
+                                  );
+                                });
+                                Navigator.pop(sheetContext);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Diagnosis tersimpan.'),
+                                    backgroundColor: MalvaColors.mint,
+                                  ),
+                                );
+                              } on MalvaApiException catch (e) {
+                                setSheetState(() {
+                                  saving = false;
+                                  error = e.message;
+                                });
+                              } on Object catch (e) {
+                                setSheetState(() {
+                                  saving = false;
+                                  error = e.toString();
+                                });
+                              }
+                            },
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(50),
+                      ),
+                      icon: const Icon(Icons.save_rounded),
+                      label: Text(saving ? 'Menyimpan...' : 'Simpan Diagnosis'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Sheet resep/tambah obat pasien (muncul di Medication Tracker pasien).
+  void _openPrescribeMedication(_ProfessionalPatient patient) {
+    final nameController = TextEditingController();
+    final dosageController = TextEditingController(text: '50 mg');
+    final formController = TextEditingController(text: 'Tablet');
+    final timeController = TextEditingController(text: '08:00');
+    final mealController = TextEditingController(text: 'Setelah makan');
+    final stockController = TextEditingController(text: '30');
+    final apiClient = widget.apiClient;
+    final accessToken = widget.session?.accessToken;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        var saving = false;
+        String? error;
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                0,
+                20,
+                MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Resepkan Obat — ${patient.displayName}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 17),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Obat muncul di Medication Tracker pasien sebagai '
+                      'resep profesional.',
+                      style: TextStyle(color: Colors.black54, fontSize: 12.5),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                          labelText: 'Nama obat', hintText: 'Sertraline'),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: dosageController,
+                            decoration:
+                                const InputDecoration(labelText: 'Dosis'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: formController,
+                            decoration:
+                                const InputDecoration(labelText: 'Bentuk'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: timeController,
+                            decoration: const InputDecoration(
+                                labelText: 'Jam minum', hintText: '08:00'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: mealController,
+                            decoration: const InputDecoration(
+                                labelText: 'Kaitan makan'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: stockController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Stok awal'),
+                    ),
+                    if (error != null) ...[
+                      const SizedBox(height: 8),
+                      Text(error!,
+                          style: const TextStyle(
+                              color: MalvaColors.danger,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                    const SizedBox(height: 14),
+                    FilledButton.icon(
+                      onPressed: saving
+                          ? null
+                          : () async {
+                              if (apiClient == null ||
+                                  accessToken == null ||
+                                  accessToken.isEmpty) {
+                                setSheetState(() => error =
+                                    'Mode offline: hubungkan ke server.');
+                                return;
+                              }
+                              if (nameController.text.trim().isEmpty) {
+                                setSheetState(
+                                    () => error = 'Nama obat wajib diisi.');
+                                return;
+                              }
+                              setSheetState(() {
+                                saving = true;
+                                error = null;
+                              });
+                              try {
+                                final created =
+                                    await apiClient.createMedication(
+                                  accessToken: accessToken,
+                                  patientId: patient.patientId,
+                                  name: nameController.text.trim(),
+                                  dosage: dosageController.text.trim(),
+                                  form: formController.text.trim(),
+                                  reminderTime: timeController.text.trim(),
+                                  relationToMeal: mealController.text.trim(),
+                                  currentStock:
+                                      int.tryParse(stockController.text) ?? 0,
+                                  alertBelow: 5,
+                                  source: 'Profesional',
+                                );
+                                if (!mounted || !sheetContext.mounted) return;
+                                setState(() {
+                                  _medicationsByPatient = {
+                                    ..._medicationsByPatient,
+                                    patient.patientId: [
+                                      ...(_medicationsByPatient[
+                                              patient.patientId] ??
+                                          const <BackendMedication>[]),
+                                      created,
+                                    ],
+                                  };
+                                  _auditEntries.insert(
+                                    0,
+                                    _AuditEntry(
+                                      title: 'Obat diresepkan',
+                                      body: '${created.name} ${created.dosage}',
+                                      createdAt: DateTime.now(),
+                                    ),
+                                  );
+                                });
+                                Navigator.pop(sheetContext);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content:
+                                        Text('Obat ditambahkan ke pasien.'),
+                                    backgroundColor: MalvaColors.mint,
+                                  ),
+                                );
+                              } on MalvaApiException catch (e) {
+                                setSheetState(() {
+                                  saving = false;
+                                  error = e.message;
+                                });
+                              } on Object catch (e) {
+                                setSheetState(() {
+                                  saving = false;
+                                  error = e.toString();
+                                });
+                              }
+                            },
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(50),
+                      ),
+                      icon: const Icon(Icons.medication_rounded),
+                      label: Text(saving ? 'Menyimpan...' : 'Resepkan Obat'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   List<_ProfessionalPatient> _patientsForDashboard(MalvaStoreState storeState) {
@@ -2606,6 +2975,125 @@ class _MoodDiaryReviewSection extends StatelessWidget {
   }
 }
 
+class _HealthRecordManagerSection extends StatelessWidget {
+  const _HealthRecordManagerSection({
+    required this.patient,
+    required this.online,
+    required this.restricted,
+    required this.diagnosis,
+    required this.onEdit,
+    required this.onPrescribe,
+  });
+
+  final _ProfessionalPatient patient;
+  final bool online;
+  final bool restricted;
+  final BackendHealthRecord? diagnosis;
+  final VoidCallback onEdit;
+  final VoidCallback onPrescribe;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasDiagnosis = diagnosis?.hasDiagnosis == true;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionLabel('Health Record (isi klinis)'),
+        if (restricted)
+          const EmptyState(
+            icon: Icons.lock_outline_rounded,
+            title: 'Akses Health Record dibatasi pasien',
+            subtitle: 'Pasien dapat mengubah izin dari menu Akses profesional.',
+          )
+        else
+          SoftCard(
+            color: hasDiagnosis
+                ? MalvaColors.plum
+                : MalvaColors.amber.withValues(alpha: 0.10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      hasDiagnosis
+                          ? Icons.medical_information_rounded
+                          : Icons.medical_information_outlined,
+                      color: hasDiagnosis ? Colors.white : MalvaColors.amber,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        hasDiagnosis
+                            ? 'Diagnosis aktif'
+                            : 'Belum ada diagnosis',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 14.5,
+                          color: hasDiagnosis ? Colors.white : null,
+                        ),
+                      ),
+                    ),
+                    if (hasDiagnosis)
+                      const StatusPill(
+                        label: 'Live',
+                        color: MalvaColors.mint,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  hasDiagnosis
+                      ? diagnosis!.diagnosisSummary
+                      : 'Isi diagnosis setelah sesi meeting dengan pasien. '
+                          'Pasien akan melihatnya di Health Record (read-only).',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: hasDiagnosis ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: online ? onEdit : null,
+                        style: FilledButton.styleFrom(
+                          backgroundColor:
+                              hasDiagnosis ? Colors.white : MalvaColors.seed,
+                          foregroundColor:
+                              hasDiagnosis ? MalvaColors.plum : Colors.white,
+                          minimumSize: const Size(0, 46),
+                        ),
+                        icon: const Icon(Icons.edit_note_rounded),
+                        label: Text(hasDiagnosis ? 'Edit' : 'Isi Diagnosis'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: online ? onPrescribe : null,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: hasDiagnosis
+                              ? MalvaColors.mint
+                              : MalvaColors.seed,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(0, 46),
+                        ),
+                        icon: const Icon(Icons.medication_rounded),
+                        label: const Text('Resepkan Obat'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _MedicationMonitoringSection extends StatelessWidget {
   const _MedicationMonitoringSection({
     required this.storeState,
@@ -3427,6 +3915,13 @@ class _MedicationResult {
 
   final List<BackendMedication> medications;
   final List<BackendMedicationLog> logs;
+  final bool restricted;
+}
+
+class _HealthRecordResult {
+  const _HealthRecordResult({this.record, this.restricted = false});
+
+  final BackendHealthRecord? record;
   final bool restricted;
 }
 

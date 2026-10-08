@@ -205,7 +205,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         icon: Icons.folder_shared_rounded,
                         label: 'Health Record',
                         color: MalvaColors.mint,
-                        onTap: () => _push(const RecordScreen()),
+                        onTap: () => _push(RecordScreen(
+                          session: widget.session,
+                          apiClient: widget.apiClient,
+                        )),
                       ),
                     ],
                   ),

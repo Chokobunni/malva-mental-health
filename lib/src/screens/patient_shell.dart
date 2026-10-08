@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../services/malva_api_client.dart';
 import '../services/medication_reminder_service.dart';
-import 'assessment_screen.dart';
+import 'assessment_list_screen.dart';
 import 'home_screen.dart';
 import 'messages_list_screen.dart';
 import 'more_screen.dart';
@@ -80,10 +80,11 @@ class _PatientShellState extends ConsumerState<PatientShell> {
         onOpenChat: () => setState(() => _index = 2),
         onOpenMore: () => setState(() => _index = 3),
         onOpenAssessment: () {
+          // Ke halaman LIST asesmen — bukan langsung PHQ-9/GAD-7.
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => AssessmentScreen(
+              builder: (_) => AssessmentListScreen(
                 session: widget.session,
                 apiClient: widget.apiClient,
               ),

@@ -344,7 +344,8 @@ void main() {
         );
 
         expect(result.level, 'minimal');
-        expect(result.certaintyFactor, greaterThan(0.8));
+        // CF kalibrasi: 0.60 (ruleCF) x 0.95 (instrument) = 0.57.
+        expect(result.certaintyFactor, closeTo(0.57, 0.001));
       });
     });
 
@@ -367,19 +368,19 @@ void main() {
             reason: '$name: jumlah rule menembak');
       }
 
-      test('all zero -> minimal CF 0.9025, 1 rule', () {
-        check('all zero', [0, 0, 0, 0, 0, 0, 0, 0, 0], 'minimal', 0.9025, 1);
+      test('all zero -> minimal CF 0.5700, 1 rule', () {
+        check('all zero', [0, 0, 0, 0, 0, 0, 0, 0, 0], 'minimal', 0.5700, 1);
       });
 
-      test('item9 = 1 -> crisis CF 0.95, 2 rule', () {
+      test('item9 = 1 -> crisis CF 0.9500, 2 rule', () {
         check('item9=1', [0, 0, 0, 0, 0, 0, 0, 0, 1], 'crisis', 0.9500, 2);
       });
 
-      test('moderate -> moderate CF 0.9025, 1 rule', () {
-        check('moderate', [2, 2, 1, 2, 1, 1, 1, 0, 0], 'moderate', 0.9025, 1);
+      test('moderate -> moderate CF 0.7980, 1 rule', () {
+        check('moderate', [2, 2, 1, 2, 1, 1, 1, 0, 0], 'moderate', 0.7980, 1);
       });
 
-      test('all two -> crisis CF 0.95, 7 rule', () {
+      test('all two -> crisis CF 0.9500, 7 rule', () {
         check('all two', [2, 2, 2, 2, 2, 2, 2, 2, 2], 'crisis', 0.9500, 7);
       });
     });
