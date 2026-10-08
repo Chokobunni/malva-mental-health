@@ -1,7 +1,16 @@
+{
+	email admin@malva.web.id
+	acme_ca https://acme-v02.api.letsencrypt.org/directory
+}
+
 malva.web.id {
 	root * /var/www/malva
 	encode zstd gzip
 	file_server
+}
+
+www.malva.web.id {
+	redir https://malva.web.id{uri} permanent
 }
 
 api.malva.web.id {
