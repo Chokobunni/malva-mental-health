@@ -455,14 +455,22 @@ class MalvaApiClient {
     List<int>? gad7Answers,
     String? patientId,
   }) async {
+    // Jawaban wajib lengkap dari UI (PHQ-9 = 9, GAD-7 = 7). Tanpa fallback
+    // skor nol agar tidak ada screening palsu tersimpan.
+    if (phq9Answers == null || phq9Answers.length != 9) {
+      throw const MalvaApiException('Jawaban PHQ-9 belum lengkap (9 soal).');
+    }
+    if (gad7Answers == null || gad7Answers.length != 7) {
+      throw const MalvaApiException('Jawaban GAD-7 belum lengkap (7 soal).');
+    }
     final payload = await _send(
       'POST',
       '/v1/screenings',
       accessToken: accessToken,
       body: {
         if (patientId != null && patientId.isNotEmpty) 'patient_id': patientId,
-        'phq9': phq9Answers ?? List.filled(9, 0),
-        'gad7': gad7Answers ?? List.filled(7, 0),
+        'phq9': phq9Answers,
+        'gad7': gad7Answers,
         'source': bundle.source,
         'is_initial': bundle.isInitial,
       },
@@ -480,21 +488,22 @@ class MalvaApiClient {
     );
   }
 
+  /// Detail screening diambil dari daftar (server tidak punya
+  /// GET /v1/screenings/{id}) agar tidak pernah 404.
   Future<BackendScreeningSession> getScreeningDetail({
     required String accessToken,
     required String screeningId,
+    String patientId = '',
   }) async {
-    final payload = await _send(
-      'GET',
-      '/v1/screenings/$screeningId',
+    final sessions = await listScreenings(
       accessToken: accessToken,
+      patientId: patientId,
+      limit: 100,
     );
-    final screening = payload['screening'];
-    if (screening is! Map<String, dynamic>) {
-      throw const MalvaApiException(
-          'Respons detail screening dari server tidak valid.');
+    for (final s in sessions) {
+      if (s.id == screeningId) return s;
     }
-    return BackendScreeningSession.fromJson(screening);
+    throw const MalvaApiException('Screening tidak ditemukan.');
   }
 
   Future<BackendScreeningReview> reviewScreening({
@@ -925,6 +934,21 @@ class MalvaApiClient {
   }
 
   // ============================================================
+  // PSYCH TESTS CATALOG (server; boleh kosong)
+  // ============================================================
+
+  Future<List<BackendPsychTest>> listPsychTests({
+    String? accessToken,
+  }) async {
+    final payload = await _send('GET', '/v1/psych-tests',
+        accessToken: accessToken);
+    return _expectList(payload['tests'], 'Respons katalog tidak valid.')
+        .whereType<Map<String, dynamic>>()
+        .map(BackendPsychTest.fromJson)
+        .toList(growable: false);
+  }
+
+  // ============================================================
   // THERAPY SUBMISSIONS (worksheet: simpan, unduh, bagikan)
   // ============================================================
 
@@ -1266,6 +1290,7 @@ class MalvaApiClient {
     required bool shareMedications,
     required bool shareTimeline,
     bool shareHealthRecord = true,
+    bool shareGoals = true,
   }) async {
     final payload = await _send(
       'PUT',
@@ -1278,11 +1303,391 @@ class MalvaApiClient {
         'share_medications': shareMedications,
         'share_timeline': shareTimeline,
         'share_health_record': shareHealthRecord,
+        'share_goals': shareGoals,
       },
     );
     return BackendPatientDataConsent.fromJson(
       _expectMap(payload['consent'], 'Respons consent tidak valid.'),
     );
+  }
+
+  // ============================================================
+  // CARE PACKAGES & SESSIONS — paket 4 sesi / 6 minggu.
+  // ============================================================
+
+  Future<BackendCarePackage> createCarePackage({
+    required String accessToken,
+    required String professionalId,
+  }) async {
+    final payload = await _send('POST', '/v1/care-packages',
+        accessToken: accessToken,
+        body: {'professional_id': professionalId});
+    return BackendCarePackage.fromJson(
+      _expectMap(payload['package'], 'Respons paket tidak valid.'),
+    );
+  }
+
+  Future<List<BackendCarePackage>> listCarePackages({
+    required String accessToken,
+    String? patientId,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/care-packages',
+        queryParameters: {
+          if (patientId != null && patientId.trim().isNotEmpty)
+            'patient_id': patientId.trim(),
+        },
+      ),
+      accessToken: accessToken,
+    );
+    return _expectList(payload['packages'], 'Respons paket tidak valid.')
+        .whereType<Map<String, dynamic>>()
+        .map(BackendCarePackage.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<BackendCareSession> scheduleSession({
+    required String accessToken,
+    required String packageId,
+    required String scheduledAt,
+    String sessionType = 'chat',
+    int durationMinutes = 30,
+    String meetingUrl = '',
+  }) async {
+    final payload = await _send('POST', '/v1/care-sessions',
+        accessToken: accessToken,
+        body: {
+          'package_id': packageId,
+          'scheduled_at': scheduledAt,
+          'session_type': sessionType,
+          'duration_minutes': durationMinutes,
+          if (meetingUrl.isNotEmpty) 'meeting_url': meetingUrl,
+        });
+    return BackendCareSession.fromJson(
+      _expectMap(payload['session'], 'Respons sesi tidak valid.'),
+    );
+  }
+
+  /// Booking sesi pertama paket (payment pembungkus aktivasi paket).
+  /// Server: membuat booking paket, dan saat dibayar mengaktifkan paket
+  /// + menjadwalkan sesi pertama. session_type & durasi mengikuti pilihan
+  /// pasien; harga & durasi final dihitung ulang server.
+  Future<BackendBooking> createPackageSessionBooking({
+    required String accessToken,
+    required String packageId,
+    required String bookingDate,
+    required String slotTime,
+    String sessionType = 'chat',
+  }) async {
+    final payload =
+        await _send('POST', '/v1/bookings', accessToken: accessToken, body: {
+      'package_id': packageId,
+      'service_type': 'package_session',
+      'session_type': sessionType,
+      'booking_date': bookingDate,
+      'slot_time': slotTime,
+      'duration_minutes': 30,
+      'price': 0,
+    });
+    return BackendBooking.fromJson(
+        _expectMap(payload['booking'], 'Respons booking tidak valid.'));
+  }
+
+  Future<List<BackendCareSession>> listCareSessions({
+    required String accessToken,
+    String scope = 'all',
+    String? patientId,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/care-sessions',
+        queryParameters: {
+          'scope': scope,
+          if (patientId != null && patientId.trim().isNotEmpty)
+            'patient_id': patientId.trim(),
+        },
+      ),
+      accessToken: accessToken,
+    );
+    return _expectList(payload['sessions'], 'Respons sesi tidak valid.')
+        .whereType<Map<String, dynamic>>()
+        .map(BackendCareSession.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<BackendCareSession> updateCareSession({
+    required String accessToken,
+    required String sessionId,
+    String? status,
+    String? cancelReason,
+    String? meetingUrl,
+    String? summaryForPatient,
+    String? privateNote,
+  }) async {
+    final payload = await _send(
+      'PATCH',
+      '/v1/care-sessions/$sessionId',
+      accessToken: accessToken,
+      body: {
+        if (status != null) 'status': status,
+        if (cancelReason != null) 'cancel_reason': cancelReason,
+        if (meetingUrl != null) 'meeting_url': meetingUrl,
+        if (summaryForPatient != null)
+          'summary_for_patient': summaryForPatient,
+        if (privateNote != null) 'private_note': privateNote,
+      },
+    );
+    return BackendCareSession.fromJson(
+      _expectMap(payload['session'], 'Respons sesi tidak valid.'),
+    );
+  }
+
+  Future<BackendCareSession> rescheduleCareSession({
+    required String accessToken,
+    required String sessionId,
+    required String scheduledAt,
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/care-sessions/$sessionId/reschedule',
+      accessToken: accessToken,
+      body: {'scheduled_at': scheduledAt},
+    );
+    return BackendCareSession.fromJson(
+      _expectMap(payload['session'], 'Respons sesi tidak valid.'),
+    );
+  }
+
+  /// Minta/mencatat refund paket (POST /v1/care-sessions/{id}/refund).
+  ///
+  /// [kind] = `'refund'` (uang kembali, diproses manual) atau `'credit'`
+  /// (kredit kuota). Idempoten via header opsional `Idempotency-Key`.
+  /// Respons berisi `{refund, package}`.
+  Future<BackendCareRefundResult> requestCareRefund({
+    required String accessToken,
+    required String sessionId,
+    String kind = 'refund',
+    String reason = '',
+    String? idempotencyKey,
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/care-sessions/$sessionId/refund',
+      accessToken: accessToken,
+      extraHeaders: (idempotencyKey == null || idempotencyKey.isEmpty)
+          ? null
+          : {'Idempotency-Key': idempotencyKey},
+      body: {
+        'kind': kind,
+        'reason': reason,
+      },
+    );
+    final refund = payload['refund'];
+    if (refund is! Map<String, dynamic>) {
+      throw const MalvaApiException('Respons refund tidak valid.');
+    }
+    final pkg = payload['package'];
+    return BackendCareRefundResult(
+      refund: BackendCareRefund.fromJson(refund),
+      package:
+          pkg is Map<String, dynamic> ? BackendCarePackage.fromJson(pkg) : null,
+    );
+  }
+
+  /// Riwayat refund/kredit (GET /v1/care-refunds).
+  /// Pasien → miliknya; profesional → miliknya; admin → semua.
+  Future<List<BackendCareRefund>> listCareRefunds({
+    required String accessToken,
+    String? patientId,
+    String? packageId,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/care-refunds',
+        queryParameters: {
+          if (patientId != null && patientId.trim().isNotEmpty)
+            'patient_id': patientId.trim(),
+          if (packageId != null && packageId.trim().isNotEmpty)
+            'package_id': packageId.trim(),
+        },
+      ),
+      accessToken: accessToken,
+    );
+    return _expectList(payload['refunds'], 'Respons refund tidak valid.')
+        .whereType<Map<String, dynamic>>()
+        .map(BackendCareRefund.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<BackendChatAccess> chatPermission({
+    required String accessToken,
+    String? patientId,
+    String? professionalId,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/chat-permission',
+        queryParameters: {
+          if (patientId != null && patientId.trim().isNotEmpty)
+            'patient_id': patientId.trim(),
+          if (professionalId != null && professionalId.trim().isNotEmpty)
+            'professional_id': professionalId.trim(),
+        },
+      ),
+      accessToken: accessToken,
+    );
+    return BackendChatAccess.fromJson(
+      _expectMap(payload['access'], 'Respons izin chat tidak valid.'),
+    );
+  }
+
+  Future<BackendProfessionalPricing> getPricing({
+    required String accessToken,
+    String? professionalId,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/pricing',
+        queryParameters: {
+          if (professionalId != null && professionalId.trim().isNotEmpty)
+            'professional_id': professionalId.trim(),
+        },
+      ),
+      accessToken: accessToken,
+    );
+    return BackendProfessionalPricing.fromJson(
+      _expectMap(payload['pricing'], 'Respons harga tidak valid.'),
+    );
+  }
+
+  Future<BackendProfessionalPricing> updatePricing({
+    required String accessToken,
+    int? quickChatPrice,
+    int? quickVideoPrice,
+    int? packagePrice,
+  }) async {
+    final payload = await _send('PUT', '/v1/professional/pricing',
+        accessToken: accessToken,
+        body: {
+          if (quickChatPrice != null) 'quick_chat_price': quickChatPrice,
+          if (quickVideoPrice != null) 'quick_video_price': quickVideoPrice,
+          if (packagePrice != null) 'package_price': packagePrice,
+        });
+    return BackendProfessionalPricing.fromJson(
+      _expectMap(payload['pricing'], 'Respons harga tidak valid.'),
+    );
+  }
+
+  Future<List<BackendProfessionalSchedule>> listMySchedules({
+    required String accessToken,
+  }) async {
+    final payload = await _send('GET', '/v1/professional/schedules',
+        accessToken: accessToken);
+    return _expectList(payload['schedules'], 'Respons jadwal tidak valid.')
+        .whereType<Map<String, dynamic>>()
+        .map(BackendProfessionalSchedule.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<List<BackendProfessionalSchedule>> updateMySchedules({
+    required String accessToken,
+    required List<Map<String, Object?>> schedules,
+  }) async {
+    final payload = await _send('PUT', '/v1/professional/schedules',
+        accessToken: accessToken, body: {'schedules': schedules});
+    return _expectList(payload['schedules'], 'Respons jadwal tidak valid.')
+        .whereType<Map<String, dynamic>>()
+        .map(BackendProfessionalSchedule.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<List<BackendTimeOff>> listTimeOff({
+    required String accessToken,
+    String? professionalId,
+    String? from,
+    String? to,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/professional/time-off',
+        queryParameters: {
+          if (professionalId != null && professionalId.trim().isNotEmpty)
+            'professional_id': professionalId.trim(),
+          if (from != null && from.isNotEmpty) 'from': from,
+          if (to != null && to.isNotEmpty) 'to': to,
+        },
+      ),
+      accessToken: accessToken,
+    );
+    return _expectList(payload['time_off'], 'Respons libur tidak valid.')
+        .whereType<Map<String, dynamic>>()
+        .map(BackendTimeOff.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<BackendTimeOff> addTimeOff({
+    required String accessToken,
+    required String offDate,
+    String reason = '',
+  }) async {
+    final payload = await _send('POST', '/v1/professional/time-off',
+        accessToken: accessToken,
+        body: {'off_date': offDate, 'reason': reason});
+    return BackendTimeOff.fromJson(
+      _expectMap(payload['time_off'], 'Respons libur tidak valid.'),
+    );
+  }
+
+  Future<void> deleteTimeOff({
+    required String accessToken,
+    required String id,
+  }) async {
+    await _send('DELETE', '/v1/professional/time-off/$id',
+        accessToken: accessToken);
+  }
+
+  Future<List<BackendAvailabilityDay>> getDoctorAvailability({
+    String? accessToken,
+    required String userId,
+  }) async {
+    final payload = await _send('GET', '/v1/doctors/$userId/availability',
+        accessToken: accessToken);
+    return _expectList(payload['days'], 'Respons ketersediaan tidak valid.')
+        .whereType<Map<String, dynamic>>()
+        .map(BackendAvailabilityDay.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<BackendDoctorReviews> listDoctorReviews({
+    String? accessToken,
+    required String userId,
+  }) async {
+    final payload = await _send('GET', '/v1/doctors/$userId/reviews',
+        accessToken: accessToken);
+    return BackendDoctorReviews.fromJson(payload);
+  }
+
+  Future<void> createDoctorReview({
+    required String accessToken,
+    required String userId,
+    required int stars,
+    String reviewText = '',
+    bool helpful = true,
+  }) async {
+    await _send('POST', '/v1/doctors/$userId/reviews',
+        accessToken: accessToken,
+        body: {
+          'stars': stars,
+          'review_text': reviewText,
+          'helpful': helpful,
+        });
   }
 
   Future<List<BackendNotification>> listNotifications({
@@ -1663,9 +2068,12 @@ class MalvaApiClient {
   Future<void> requestPayout({
     required String accessToken,
     required String earningId,
+    String bank = '',
+    String account = '',
   }) async {
     await _send('POST', '/v1/earnings/$earningId/payout',
-        accessToken: accessToken);
+        accessToken: accessToken,
+        body: {'bank': bank, 'account': account});
   }
 
   Future<BackendEPrescription> createEPrescription({
@@ -1765,9 +2173,11 @@ class MalvaApiClient {
     String path, {
     String? accessToken,
     Map<String, Object?>? body,
+    Map<String, String>? extraHeaders,
   }) async {
     final uri = baseUri.replace(path: path);
-    return _sendUri(method, uri, accessToken: accessToken, body: body);
+    return _sendUri(method, uri,
+        accessToken: accessToken, body: body, extraHeaders: extraHeaders);
   }
 
   Future<Map<String, dynamic>> _sendUri(
@@ -1775,12 +2185,14 @@ class MalvaApiClient {
     Uri uri, {
     String? accessToken,
     Map<String, Object?>? body,
+    Map<String, String>? extraHeaders,
     bool retryOnAuth = true,
   }) async {
     final headers = <String, String>{
       'Accept': 'application/json',
       if (body != null) 'Content-Type': 'application/json',
       if (accessToken != null) 'Authorization': 'Bearer $accessToken',
+      if (extraHeaders != null) ...extraHeaders,
     };
     late final http.Response response;
     try {
@@ -1850,7 +2262,10 @@ class MalvaApiClient {
       try {
         await _handleTokenRefresh();
         return _sendUri(method, uri,
-            accessToken: accessToken, body: body, retryOnAuth: false);
+            accessToken: accessToken,
+            body: body,
+            extraHeaders: extraHeaders,
+            retryOnAuth: false);
       } on Object {
         throw MalvaApiException(
           decoded['error']?.toString() ??
@@ -2388,6 +2803,8 @@ class BackendPatientDataConsent {
     required this.shareMedications,
     required this.shareTimeline,
     this.shareHealthRecord = true,
+    this.shareGoals = true,
+    this.shareDiaryCheckin = true,
   });
 
   factory BackendPatientDataConsent.fromJson(Map<String, dynamic> json) {
@@ -2398,6 +2815,8 @@ class BackendPatientDataConsent {
       shareMedications: json['share_medications'] != false,
       shareTimeline: json['share_timeline'] != false,
       shareHealthRecord: json['share_health_record'] != false,
+      shareGoals: json['share_goals'] != false,
+      shareDiaryCheckin: json['share_diary_checkin'] != false,
     );
   }
 
@@ -2407,6 +2826,8 @@ class BackendPatientDataConsent {
   final bool shareMedications;
   final bool shareTimeline;
   final bool shareHealthRecord;
+  final bool shareGoals;
+  final bool shareDiaryCheckin;
 }
 
 class BackendNotification {
@@ -2568,9 +2989,14 @@ class BackendProfessionalCredential {
     this.yearsExperience = 0,
     this.addressDetails = '',
     this.priceFrom = 0,
+    this.videoIntroUrl = '',
+    this.hospitalLat,
+    this.hospitalLng,
+    this.subSpecialties = const [],
   });
 
   factory BackendProfessionalCredential.fromJson(Map<String, dynamic> json) {
+    double? numOrNull(Object? v) => (v as num?)?.toDouble();
     return BackendProfessionalCredential(
       id: json['id']?.toString() ?? '',
       userId: json['user_id']?.toString() ?? '',
@@ -2584,6 +3010,12 @@ class BackendProfessionalCredential {
       yearsExperience: (json['years_experience'] as num?)?.toInt() ?? 0,
       addressDetails: json['address_details']?.toString() ?? '',
       priceFrom: (json['price_from'] as num?)?.toInt() ?? 0,
+      videoIntroUrl: json['video_intro_url']?.toString() ?? '',
+      hospitalLat: numOrNull(json['hospital_lat']),
+      hospitalLng: numOrNull(json['hospital_lng']),
+      subSpecialties: ((json['sub_specialties'] as List?) ?? const [])
+          .map((e) => e.toString())
+          .toList(growable: false),
     );
   }
 
@@ -2599,6 +3031,10 @@ class BackendProfessionalCredential {
   final int yearsExperience;
   final String addressDetails;
   final int priceFrom;
+  final String videoIntroUrl;
+  final double? hospitalLat;
+  final double? hospitalLng;
+  final List<String> subSpecialties;
 }
 
 class AdminUser {
@@ -2743,6 +3179,424 @@ class BackendDoctorSlot {
   final bool available;
 }
 
+class BackendAvailabilityDay {
+  const BackendAvailabilityDay({
+    required this.date,
+    required this.dayOfWeek,
+    required this.off,
+    required this.freeSlots,
+  });
+
+  factory BackendAvailabilityDay.fromJson(Map<String, dynamic> json) {
+    return BackendAvailabilityDay(
+      date: json['date']?.toString() ?? '',
+      dayOfWeek: (json['day_of_week'] as num?)?.toInt() ?? 0,
+      off: json['off'] == true,
+      freeSlots: (json['free_slots'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final String date;
+  final int dayOfWeek;
+  final bool off;
+  final int freeSlots;
+
+  bool get bookable => !off && freeSlots > 0;
+}
+
+class BackendProfessionalSchedule {
+  const BackendProfessionalSchedule({
+    required this.id,
+    required this.professionalId,
+    required this.dayOfWeek,
+    required this.startTime,
+    required this.endTime,
+    required this.slotDurationMinutes,
+    required this.isActive,
+  });
+
+  factory BackendProfessionalSchedule.fromJson(Map<String, dynamic> json) {
+    String clock(Object? v) {
+      final s = v?.toString() ?? '';
+      return s.length >= 5 ? s.substring(0, 5) : s;
+    }
+
+    return BackendProfessionalSchedule(
+      id: json['id']?.toString() ?? '',
+      professionalId: json['professional_id']?.toString() ?? '',
+      dayOfWeek: (json['day_of_week'] as num?)?.toInt() ?? 0,
+      startTime: clock(json['start_time']),
+      endTime: clock(json['end_time']),
+      slotDurationMinutes:
+          (json['slot_duration_minutes'] as num?)?.toInt() ?? 30,
+      isActive: json['is_active'] != false,
+    );
+  }
+
+  final String id;
+  final String professionalId;
+  final int dayOfWeek;
+  final String startTime;
+  final String endTime;
+  final int slotDurationMinutes;
+  final bool isActive;
+}
+
+class BackendTimeOff {
+  const BackendTimeOff({
+    required this.id,
+    required this.professionalId,
+    required this.offDate,
+    this.reason = '',
+  });
+
+  factory BackendTimeOff.fromJson(Map<String, dynamic> json) {
+    return BackendTimeOff(
+      id: json['id']?.toString() ?? '',
+      professionalId: json['professional_id']?.toString() ?? '',
+      offDate: json['off_date']?.toString() ?? '',
+      reason: json['reason']?.toString() ?? '',
+    );
+  }
+
+  final String id;
+  final String professionalId;
+  final String offDate;
+  final String reason;
+}
+
+class BackendProfessionalPricing {
+  const BackendProfessionalPricing({
+    this.quickChatPrice = 0,
+    this.quickVideoPrice = 0,
+    this.packagePrice = 0,
+  });
+
+  factory BackendProfessionalPricing.fromJson(Map<String, dynamic> json) {
+    return BackendProfessionalPricing(
+      quickChatPrice: (json['quick_chat_price'] as num?)?.toInt() ?? 0,
+      quickVideoPrice: (json['quick_video_price'] as num?)?.toInt() ?? 0,
+      packagePrice: (json['package_price'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final int quickChatPrice;
+  final int quickVideoPrice;
+  final int packagePrice;
+}
+
+class BackendPsychTest {
+  const BackendPsychTest({
+    required this.id,
+    required this.title,
+    this.description = '',
+    this.disclaimer = '',
+    this.price = 0,
+  });
+
+  factory BackendPsychTest.fromJson(Map<String, dynamic> json) {
+    return BackendPsychTest(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      disclaimer: json['disclaimer']?.toString() ?? '',
+      price: (json['price'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final String id;
+  final String title;
+  final String description;
+  final String disclaimer;
+  final int price;
+}
+
+class BackendCarePackage {
+  const BackendCarePackage({
+    required this.id,
+    required this.patientId,
+    required this.professionalId,
+    this.professionalName = '',
+    this.patientName = '',
+    this.totalSessions = 4,
+    this.usedSessions = 0,
+    this.remainingSessions = 4,
+    this.refundValue = 0,
+    this.refundedAmount = 0,
+    this.validityDays = 42,
+    this.price = 0,
+    this.status = '',
+    this.startsAt,
+    this.expiresAt,
+    this.createdAt,
+  });
+
+  factory BackendCarePackage.fromJson(Map<String, dynamic> json) {
+    return BackendCarePackage(
+      id: json['id']?.toString() ?? '',
+      patientId: json['patient_id']?.toString() ?? '',
+      professionalId: json['professional_id']?.toString() ?? '',
+      professionalName: json['professional_name']?.toString() ?? '',
+      patientName: json['patient_name']?.toString() ?? '',
+      totalSessions: (json['total_sessions'] as num?)?.toInt() ?? 4,
+      usedSessions: (json['used_sessions'] as num?)?.toInt() ?? 0,
+      remainingSessions: (json['remaining_sessions'] as num?)?.toInt() ?? 0,
+      refundValue: (json['refund_value'] as num?)?.toInt() ?? 0,
+      refundedAmount: (json['refunded_amount'] as num?)?.toInt() ?? 0,
+      validityDays: (json['validity_days'] as num?)?.toInt() ?? 42,
+      price: (json['price'] as num?)?.toInt() ?? 0,
+      status: json['status']?.toString() ?? '',
+      startsAt: json['starts_at']?.toString(),
+      expiresAt: json['expires_at']?.toString(),
+      createdAt: json['created_at']?.toString(),
+    );
+  }
+
+  final String id;
+  final String patientId;
+  final String professionalId;
+  final String professionalName;
+  final String patientName;
+  final int totalSessions;
+  final int usedSessions;
+  final int remainingSessions;
+  final int refundValue;
+
+  /// Akumulasi refund uang pada paket (kolom `refunded_amount`).
+  final int refundedAmount;
+  final int validityDays;
+  final int price;
+  final String status;
+  final String? startsAt;
+  final String? expiresAt;
+  final String? createdAt;
+
+  bool get isActive => status == 'active';
+  DateTime? get expiresDateTime =>
+      expiresAt == null ? null : DateTime.tryParse(expiresAt!);
+}
+
+class BackendCareSession {
+  const BackendCareSession({
+    required this.id,
+    this.packageId,
+    this.bookingId,
+    required this.patientId,
+    required this.professionalId,
+    this.patientName = '',
+    this.professionalName = '',
+    this.sessionType = 'chat',
+    this.scheduledAt,
+    this.durationMinutes = 30,
+    this.status = '',
+    this.meetingUrl = '',
+    this.summaryForPatient = '',
+    this.privateNote = '',
+    this.cancelReason = '',
+    this.rescheduleCount = 0,
+    this.cancelledBy = '',
+  });
+
+  factory BackendCareSession.fromJson(Map<String, dynamic> json) {
+    return BackendCareSession(
+      id: json['id']?.toString() ?? '',
+      packageId: json['package_id']?.toString(),
+      bookingId: json['booking_id']?.toString(),
+      patientId: json['patient_id']?.toString() ?? '',
+      professionalId: json['professional_id']?.toString() ?? '',
+      patientName: json['patient_name']?.toString() ?? '',
+      professionalName: json['professional_name']?.toString() ?? '',
+      sessionType: json['session_type']?.toString() ?? 'chat',
+      scheduledAt: json['scheduled_at']?.toString(),
+      durationMinutes: (json['duration_minutes'] as num?)?.toInt() ?? 30,
+      status: json['status']?.toString() ?? '',
+      meetingUrl: json['meeting_url']?.toString() ?? '',
+      summaryForPatient: json['summary_for_patient']?.toString() ?? '',
+      privateNote: json['private_note']?.toString() ?? '',
+      cancelReason: json['cancel_reason']?.toString() ?? '',
+      rescheduleCount: (json['reschedule_count'] as num?)?.toInt() ?? 0,
+      cancelledBy: json['cancelled_by']?.toString() ?? '',
+    );
+  }
+
+  final String id;
+  final String? packageId;
+  final String? bookingId;
+  final String patientId;
+  final String professionalId;
+  final String patientName;
+  final String professionalName;
+  final String sessionType;
+  final String? scheduledAt;
+  final int durationMinutes;
+  final String status;
+  final String meetingUrl;
+  final String summaryForPatient;
+  final String privateNote;
+  final String cancelReason;
+  final int rescheduleCount;
+
+  /// Aktor pembatal (audit `cancelled_by`): id pasien/profesional/admin.
+  final String cancelledBy;
+
+  DateTime? get scheduledDateTime =>
+      scheduledAt == null ? null : DateTime.tryParse(scheduledAt!);
+
+  bool get isScheduled => status == 'scheduled';
+  bool get isVideo => sessionType == 'video';
+
+  bool get cancelledByProfessional => status == 'cancelled_by_professional';
+  bool get cancelledByPatient => status == 'cancelled_by_patient';
+}
+
+/// Ledger refund/kredit pembatalan sesi (tabel `care_refunds`).
+class BackendCareRefund {
+  const BackendCareRefund({
+    required this.id,
+    this.packageId = '',
+    this.sessionId = '',
+    this.patientId = '',
+    this.professionalId = '',
+    this.amount = 0,
+    this.kind = 'credit',
+    this.status = '',
+    this.reason = '',
+    this.idempotencyKey = '',
+    this.externalId = '',
+    this.createdAt,
+  });
+
+  factory BackendCareRefund.fromJson(Map<String, dynamic> json) {
+    return BackendCareRefund(
+      id: json['id']?.toString() ?? '',
+      packageId: json['package_id']?.toString() ?? '',
+      sessionId: json['session_id']?.toString() ?? '',
+      patientId: json['patient_id']?.toString() ?? '',
+      professionalId: json['professional_id']?.toString() ?? '',
+      amount: (json['amount'] as num?)?.toInt() ?? 0,
+      kind: json['kind']?.toString() ?? 'credit',
+      status: json['status']?.toString() ?? '',
+      reason: json['reason']?.toString() ?? '',
+      idempotencyKey: json['idempotency_key']?.toString() ?? '',
+      externalId: json['external_id']?.toString() ?? '',
+      createdAt: json['created_at']?.toString(),
+    );
+  }
+
+  final String id;
+  final String packageId;
+  final String sessionId;
+  final String patientId;
+  final String professionalId;
+  final int amount;
+
+  /// `'credit'` (kredit kuota) atau `'refund'` (uang kembali).
+  final String kind;
+
+  /// `recorded` / `processing` / `paid` / `failed` / `cancelled`.
+  final String status;
+  final String reason;
+  final String idempotencyKey;
+  final String externalId;
+  final String? createdAt;
+
+  bool get isMoney => kind == 'refund';
+  bool get isCredit => kind == 'credit';
+
+  String get kindLabel => isMoney ? 'Refund uang' : 'Kredit sesi';
+}
+
+/// Hasil `POST /v1/care-sessions/{id}/refund`: ledger + kondisi paket.
+class BackendCareRefundResult {
+  const BackendCareRefundResult({required this.refund, this.package});
+
+  final BackendCareRefund refund;
+  final BackendCarePackage? package;
+}
+
+class BackendChatAccess {
+  const BackendChatAccess({
+    this.canSendText = false,
+    this.canShare = false,
+    this.inSession = false,
+    this.reason = '',
+    this.nextSessionAt,
+    this.hasActivePackage = false,
+  });
+
+  factory BackendChatAccess.fromJson(Map<String, dynamic> json) {
+    return BackendChatAccess(
+      canSendText: json['can_send_text'] == true,
+      canShare: json['can_share'] == true,
+      inSession: json['in_session'] == true,
+      reason: json['reason']?.toString() ?? '',
+      nextSessionAt: json['next_session_at']?.toString(),
+      hasActivePackage: json['has_active_package'] == true,
+    );
+  }
+
+  final bool canSendText;
+  final bool canShare;
+  final bool inSession;
+  final String reason;
+  final String? nextSessionAt;
+  final bool hasActivePackage;
+}
+
+class BackendDoctorReviewItem {
+  const BackendDoctorReviewItem({
+    required this.id,
+    this.patientName = 'Pasien',
+    this.stars = 5,
+    this.reviewText = '',
+    this.createdAt,
+  });
+
+  factory BackendDoctorReviewItem.fromJson(Map<String, dynamic> json) {
+    return BackendDoctorReviewItem(
+      id: json['id']?.toString() ?? '',
+      patientName: json['patient_name']?.toString() ?? 'Pasien',
+      stars: (json['stars'] as num?)?.toInt() ?? 5,
+      reviewText: json['review_text']?.toString() ?? '',
+      createdAt: json['created_at']?.toString(),
+    );
+  }
+
+  final String id;
+  final String patientName;
+  final int stars;
+  final String reviewText;
+  final String? createdAt;
+}
+
+class BackendDoctorReviews {
+  const BackendDoctorReviews({
+    this.reviews = const [],
+    this.averageStars = 0,
+    this.reviewCount = 0,
+    this.helpfulPercent = 0,
+  });
+
+  factory BackendDoctorReviews.fromJson(Map<String, dynamic> json) {
+    final rating = json['rating'] as Map<String, dynamic>? ?? const {};
+    return BackendDoctorReviews(
+      reviews: ((json['reviews'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(BackendDoctorReviewItem.fromJson)
+          .toList(growable: false),
+      averageStars:
+          (rating['average_stars'] as num?)?.toDouble() ?? 0,
+      reviewCount: (rating['review_count'] as num?)?.toInt() ?? 0,
+      helpfulPercent: (rating['helpful_percent'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final List<BackendDoctorReviewItem> reviews;
+  final double averageStars;
+  final int reviewCount;
+  final int helpfulPercent;
+}
+
 /// Goal pasien tersimpan di server (GET/POST/PATCH /v1/goals).
 class BackendGoal {
   const BackendGoal({
@@ -2883,6 +3737,9 @@ class BackendDoctorProfile {
   const BackendDoctorProfile({
     required this.credential,
     this.packages = const [],
+    this.schedules = const [],
+    this.pricing = const BackendProfessionalPricing(),
+    this.reviews = const BackendDoctorReviews(),
   });
 
   factory BackendDoctorProfile.fromJson(Map<String, dynamic> json) {
@@ -2893,11 +3750,26 @@ class BackendDoctorProfile {
                 BackendServicePackage.fromJson(e as Map<String, dynamic>))
             .toList() ??
         const [];
-    return BackendDoctorProfile(credential: cred, packages: pkgs);
+    final sch = (json['schedules'] as List?)
+            ?.map((e) => BackendProfessionalSchedule.fromJson(
+                (e as Map).cast<String, dynamic>()))
+            .toList() ??
+        const [];
+    return BackendDoctorProfile(
+      credential: cred,
+      packages: pkgs,
+      schedules: sch,
+      pricing: BackendProfessionalPricing.fromJson(
+          (json['pricing'] as Map?)?.cast<String, dynamic>() ?? const {}),
+      reviews: BackendDoctorReviews.fromJson(json),
+    );
   }
 
   final BackendProfessionalCredential credential;
   final List<BackendServicePackage> packages;
+  final List<BackendProfessionalSchedule> schedules;
+  final BackendProfessionalPricing pricing;
+  final BackendDoctorReviews reviews;
 }
 
 class BackendServicePackage {

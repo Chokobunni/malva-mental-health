@@ -11,9 +11,11 @@ import '../theme.dart';
 import '../widgets/crisis_hotline.dart';
 import '../widgets/daily_checkin_flow.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/friendly_error.dart';
 import '../widgets/sync_status.dart';
 import '../widgets/therapy_library.dart';
 import 'booking/doctor_discovery_screen.dart';
+import 'chat_screen.dart';
 import 'diary_history_screen.dart';
 import 'goals_screen.dart';
 import 'history_log_screen.dart';
@@ -62,13 +64,13 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isInitialLoading = true;
-  BackendBooking? _upcomingBooking;
+  BackendCareSession? _upcomingSession;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_loadUpcomingBooking());
+      unawaited(_loadUpcomingSession());
       Future<void>.delayed(const Duration(milliseconds: 400)).then((_) {
         if (mounted) setState(() => _isInitialLoading = false);
       });
@@ -80,45 +82,46 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.session?.accessToken != widget.session?.accessToken ||
         oldWidget.apiClient != widget.apiClient) {
-      unawaited(_loadUpcomingBooking());
+      unawaited(_loadUpcomingSession());
     }
   }
 
   Future<void> _refreshAll() async {
-    await _loadUpcomingBooking();
+    await _loadUpcomingSession();
   }
 
-  Future<void> _loadUpcomingBooking() async {
+  Future<void> _loadUpcomingSession() async {
     final apiClient = widget.apiClient;
+    if (apiClient == null) {
+      if (mounted) setState(() => _upcomingSession = null);
+      return;
+    }
     final rawToken = widget.session?.accessToken;
     final accessToken =
         (rawToken == null || rawToken.isEmpty) ? null : rawToken;
-    if (apiClient == null || accessToken == null) {
-      if (mounted) setState(() => _upcomingBooking = null);
+    if (accessToken == null) {
+      if (mounted) setState(() => _upcomingSession = null);
       return;
     }
     try {
-      final bookings = await apiClient.listBookings(
+      final sessions = await apiClient.listCareSessions(
         accessToken: accessToken,
-        limit: 20,
+        scope: 'upcoming',
       );
       if (!mounted) return;
-      final active = bookings
-          .where((b) =>
-              b.status == 'paid' ||
-              b.status == 'pending' ||
-              b.status == 'active')
-          .toList(growable: false);
-      setState(() => _upcomingBooking = active.isEmpty ? null : active.first);
+      sessions.sort((a, b) =>
+          (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
+      setState(
+          () => _upcomingSession = sessions.isEmpty ? null : sessions.first);
     } on Object {
-      if (mounted) setState(() => _upcomingBooking = null);
+      if (mounted) setState(() => _upcomingSession = null);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final storeState = ref.watch(malvaStoreProvider);
-    final upcoming = _upcomingBooking;
+    final upcoming = _upcomingSession;
     // Nama sapaan diambil dari sesi login asli, fallback ke store.
     final displayName = (widget.session?.displayName.trim().isNotEmpty ?? false)
         ? widget.session!.displayName
@@ -159,11 +162,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // === 1. SESI BOOKING AKTIF (paling atas) ===
+                  // === 1. SESI MENDATANG (paling atas) ===
                   if (upcoming != null) ...[
                     _UpcomingSessionCard(
                       session: upcoming,
-                      onJoin: widget.onOpenChat,
+                      onJoin: () => _joinSession(context, upcoming),
                       onCancel: () => _cancelSession(context, upcoming),
                     ),
                     const SizedBox(height: 18),
@@ -269,15 +272,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  void _joinSession(BuildContext context, BackendCareSession session) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          otherUserName: session.professionalName.isEmpty
+              ? 'Profesional'
+              : session.professionalName,
+          otherUserId: session.professionalId,
+        ),
+      ),
+    );
+  }
+
   Future<void> _cancelSession(
     BuildContext context,
-    BackendBooking booking,
+    BackendCareSession session,
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Batalkan sesi?'),
-        content: const Text('Sesi konsultasi ini akan dibatalkan. Lanjutkan?'),
+        content: const Text(
+            'Pembatalan minimal 24 jam sebelum sesi. Kurang dari itu sesi hangus.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -294,9 +312,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
     );
     if (confirmed != true || !context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Permintaan pembatalan sesi dikirim.')),
-    );
+    final apiClient = widget.apiClient;
+    final token = widget.session?.accessToken;
+    if (apiClient == null || token == null || token.isEmpty) return;
+    try {
+      await apiClient.updateCareSession(
+        accessToken: token,
+        sessionId: session.id,
+        status: 'cancelled_by_patient',
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sesi dibatalkan.')),
+      );
+      await _loadUpcomingSession();
+      setState(() {});
+    } on Object catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(friendlyErrorMessage(e)),
+            backgroundColor: MalvaColors.danger),
+      );
+    }
   }
 
   void _openDoctorDiscovery(BuildContext context) {
@@ -316,8 +354,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 // WIDGET LOKAL
 // ============================================================
 
-/// Kartu sesi mendatang: nama, Video/Chat Session 30 minutes, tanggal,
-/// tombol Join / Cancel (Figma Group 238).
+/// Kartu sesi mendatang: nama profesional riil, tipe & durasi riil,
+/// tanggal, tombol Join / Cancel.
 class _UpcomingSessionCard extends StatelessWidget {
   const _UpcomingSessionCard({
     required this.session,
@@ -325,42 +363,46 @@ class _UpcomingSessionCard extends StatelessWidget {
     required this.onCancel,
   });
 
-  final BackendBooking session;
+  final BackendCareSession session;
   final VoidCallback onJoin;
   final VoidCallback onCancel;
 
   static const _days = [
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Sunday'
+    'Senin',
+    'Selasa',
+    'Rabu',
+    'Kamis',
+    'Jumat',
+    'Sabtu',
+    'Minggu'
   ];
   static const _months = [
-    'January',
-    'February',
-    'March',
+    'Januari',
+    'Februari',
+    'Maret',
     'April',
-    'May',
-    'June',
-    'July',
-    'August',
+    'Mei',
+    'Juni',
+    'Juli',
+    'Agustus',
     'September',
-    'October',
+    'Oktober',
     'November',
-    'December'
+    'Desember'
   ];
 
   @override
   Widget build(BuildContext context) {
-    final isVideo = session.serviceType.contains('video');
-    final date = DateTime.tryParse(session.bookingDate);
+    final isVideo = session.isVideo;
+    final date = session.scheduledDateTime?.toLocal();
     final dateLabel = date != null
         ? '${_days[date.weekday - 1]}, ${date.day.toString().padLeft(2, '0')} '
-            '${_months[date.month - 1]} ${date.year}'
-        : session.bookingDate;
+            '${_months[date.month - 1]} ${date.year} • '
+            '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}'
+        : '-';
+    final name = session.professionalName.isEmpty
+        ? 'Profesional'
+        : session.professionalName;
     return SoftCard(
       color: MalvaColors.seed.withValues(alpha: 0.06),
       child: Column(
@@ -380,7 +422,7 @@ class _UpcomingSessionCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      session.professionalId,
+                      name,
                       style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
                     const SizedBox(height: 2),
@@ -395,7 +437,7 @@ class _UpcomingSessionCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '${isVideo ? 'Video' : 'Chat'} Session, 30 minutes',
+                          '${isVideo ? 'Video' : 'Chat'} Session, ${session.durationMinutes} menit',
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall

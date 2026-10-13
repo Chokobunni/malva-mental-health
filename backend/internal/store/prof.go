@@ -247,10 +247,18 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 		args = append(args, *params.IsBPJSSupported)
 	}
 	if params.MaxPrice != nil {
-		where = append(where, `EXISTS (
-			SELECT 1 FROM service_packages sp WHERE sp.professional_id = pc.user_id
-			AND sp.price <= `+nextArg()+` AND sp.is_active = true
-		)`)
+		// Harga acuan = tarif profesional sendiri (professional_pricing),
+		// bukan tabel service_packages lama. Termurah dari ketiga tarif.
+		where = append(where, `COALESCE((
+			SELECT LEAST(
+				NULLIF(quick_chat_price, 0),
+				NULLIF(quick_video_price, 0),
+				NULLIF(package_price, 0)
+			) FROM professional_pricing pp WHERE pp.professional_id = pc.user_id
+		), (
+			SELECT MIN(price) FROM service_packages sp
+			WHERE sp.professional_id = pc.user_id AND sp.is_active = true
+		), 0) <= `+nextArg())
 		args = append(args, *params.MaxPrice)
 	}
 
@@ -367,9 +375,26 @@ type ProfessionalSchedule struct {
 	IsActive            bool   `json:"is_active"`
 }
 
+// ListSchedulesForProfessional mengembalikan SEMUA baris jadwal mingguan
+// milik profesional (aktif maupun nonaktif) — dipakai untuk pengelolaan
+// jadwal di aplikasi profesional agar baris nonaktif tetap tampil.
 func (s *Store) ListSchedulesForProfessional(ctx context.Context, professionalID string) ([]ProfessionalSchedule, error) {
-	const q = `SELECT id, professional_id, day_of_week, start_time::text, end_time::text, slot_duration_minutes, is_active
-		FROM professional_schedules WHERE professional_id = $1 AND is_active = true ORDER BY day_of_week, start_time`
+	return s.listSchedules(ctx, professionalID, false)
+}
+
+// ListActiveSchedulesForProfessional hanya mengembalikan jadwal aktif —
+// dipakai untuk penentuan slot booking & ketersediaan sisi pasien.
+func (s *Store) ListActiveSchedulesForProfessional(ctx context.Context, professionalID string) ([]ProfessionalSchedule, error) {
+	return s.listSchedules(ctx, professionalID, true)
+}
+
+func (s *Store) listSchedules(ctx context.Context, professionalID string, activeOnly bool) ([]ProfessionalSchedule, error) {
+	q := `SELECT id, professional_id, day_of_week, start_time::text, end_time::text, slot_duration_minutes, is_active
+		FROM professional_schedules WHERE professional_id = $1 ORDER BY day_of_week, start_time`
+	if activeOnly {
+		q = `SELECT id, professional_id, day_of_week, start_time::text, end_time::text, slot_duration_minutes, is_active
+			FROM professional_schedules WHERE professional_id = $1 AND is_active = true ORDER BY day_of_week, start_time`
+	}
 	rows, err := s.db.QueryContext(ctx, q, professionalID)
 	if err != nil {
 		return nil, err
@@ -393,6 +418,9 @@ func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, sche
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Reset: semua baris lama dinonaktifkan lebih dulu. Baris yang tidak
+	// dikirim klien tetap tersimpan sebagai nonaktif agar bisa diaktifkan
+	// kembali dari aplikasi (bukan terhapus).
 	if _, err := tx.ExecContext(ctx, `UPDATE professional_schedules SET is_active = false WHERE professional_id = $1`, professionalID); err != nil {
 		return err
 	}
@@ -411,10 +439,22 @@ func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, sche
 	}
 	for _, key := range order {
 		sch := seen[key]
-		const q = `INSERT INTO professional_schedules (professional_id, day_of_week, start_time, end_time, slot_duration_minutes, is_active)
-			VALUES ($1, $2, $3, $4, $5, true)`
-		if _, err := tx.ExecContext(ctx, q, professionalID, sch.DayOfWeek, sch.StartTime, sch.EndTime, sch.SlotDurationMinutes); err != nil {
+		// Upsert per baris: perbarui baris identik yang sudah ada
+		// (menghormati is_active dari payload), jika belum ada insert baru.
+		// Ini mencegah penumpukan baris duplikat setiap kali menyimpan.
+		res, err := tx.ExecContext(ctx, `UPDATE professional_schedules
+			SET slot_duration_minutes = $4, is_active = $5
+			WHERE professional_id = $1 AND day_of_week = $2 AND start_time = $3::time AND end_time = $6::time`,
+			professionalID, sch.DayOfWeek, sch.StartTime, sch.SlotDurationMinutes, sch.IsActive, sch.EndTime)
+		if err != nil {
 			return err
+		}
+		if affected, _ := res.RowsAffected(); affected == 0 {
+			const q = `INSERT INTO professional_schedules (professional_id, day_of_week, start_time, end_time, slot_duration_minutes, is_active)
+				VALUES ($1, $2, $3, $4, $5, $6)`
+			if _, err := tx.ExecContext(ctx, q, professionalID, sch.DayOfWeek, sch.StartTime, sch.EndTime, sch.SlotDurationMinutes, sch.IsActive); err != nil {
+				return err
+			}
 		}
 	}
 	return tx.Commit()
@@ -429,6 +469,103 @@ type ServicePackage struct {
 	Price               int64  `json:"price"`
 	Label               string `json:"label"`
 	IsActive            bool   `json:"is_active"`
+}
+
+// DoctorReview ulasan pasien setelah sesi (nama disamarkan).
+type DoctorReview struct {
+	ID             string    `json:"id"`
+	ProfessionalID string    `json:"professional_id,omitempty"`
+	PatientID      string    `json:"patient_id"`
+	PatientName    string    `json:"patient_name,omitempty"`
+	Helpful        bool      `json:"helpful"`
+	Stars          int       `json:"stars"`
+	ReviewText     string    `json:"review_text,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+type DoctorRating struct {
+	AverageStars float64 `json:"average_stars"`
+	ReviewCount  int     `json:"review_count"`
+	HelpfulPct   int     `json:"helpful_percent"`
+}
+
+func (s *Store) ListDoctorReviews(ctx context.Context, professionalID string, limit int) ([]DoctorReview, error) {
+	limit = normalizeLimit(limit, 10, 50)
+	rows, err := s.db.QueryContext(ctx, `SELECT r.id, r.patient_id, COALESCE(u.display_name,''),
+		r.helpful, COALESCE((r.helpfulness_percent+19)/20, 5), COALESCE(r.review_text,''), r.created_at
+		FROM doctor_reviews r
+		LEFT JOIN users u ON u.id = r.patient_id
+		WHERE r.professional_id = $1
+		ORDER BY r.created_at DESC LIMIT $2`, professionalID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]DoctorReview, 0)
+	for rows.Next() {
+		var rv DoctorReview
+		var name, text string
+		if err := rows.Scan(&rv.ID, &rv.PatientID, &name, &rv.Helpful, &rv.Stars, &text, &rv.CreatedAt); err != nil {
+			return nil, err
+		}
+		rv.PatientName = maskName(name)
+		rv.ReviewText = text
+		out = append(out, rv)
+	}
+	return out, rows.Err()
+}
+
+func maskName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "Pasien"
+	}
+	parts := strings.Fields(name)
+	first := parts[0]
+	if len([]rune(first)) <= 2 {
+		return first + "***"
+	}
+	runes := []rune(first)
+	return string(runes[:2]) + "***"
+}
+
+func (s *Store) DoctorRating(ctx context.Context, professionalID string) (DoctorRating, error) {
+	var r DoctorRating
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*),
+		COALESCE(AVG((helpfulness_percent+19)/20), 0),
+		COALESCE(ROUND(AVG(CASE WHEN helpful THEN 100 ELSE 0 END)), 0)
+		FROM doctor_reviews WHERE professional_id = $1`, professionalID).
+		Scan(&r.ReviewCount, &r.AverageStars, &r.HelpfulPct)
+	return r, err
+}
+
+func (s *Store) CreateDoctorReview(ctx context.Context, professionalID, patientID string, stars int, reviewText string, helpful bool) (DoctorReview, error) {
+	if stars < 1 {
+		stars = 5
+	}
+	if stars > 5 {
+		stars = 5
+	}
+	pct := stars * 20
+	if !helpful {
+		pct = 0
+	}
+	var rv DoctorReview
+	err := s.db.QueryRowContext(ctx, `INSERT INTO doctor_reviews
+		(professional_id, patient_id, helpfulness_percent, review_text, helpful)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, created_at`,
+		professionalID, patientID, pct, strings.TrimSpace(reviewText), helpful).
+		Scan(&rv.ID, &rv.CreatedAt)
+	if err != nil {
+		return DoctorReview{}, err
+	}
+	rv.ProfessionalID = professionalID
+	rv.PatientID = patientID
+	rv.Stars = stars
+	rv.Helpful = helpful
+	rv.ReviewText = strings.TrimSpace(reviewText)
+	return rv, nil
 }
 
 func (s *Store) ListServicePackages(ctx context.Context, professionalID string) ([]ServicePackage, error) {

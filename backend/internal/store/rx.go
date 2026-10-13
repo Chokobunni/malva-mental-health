@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 )
 
@@ -188,17 +187,7 @@ func (s *Store) ListActiveEPrescriptionsForProfessionalPatients(ctx context.Cont
 	return out, rows.Err()
 }
 
-// Doctor reviews
-type DoctorReview struct {
-	ID                 string  `json:"id"`
-	ProfessionalID     string  `json:"professional_id"`
-	PatientID          string  `json:"patient_id"`
-	BookingID          *string `json:"booking_id,omitempty"`
-	HelpfulnessPercent int     `json:"helpfulness_percent"`
-	ReviewText         string  `json:"review_text"`
-	Helpful            bool    `json:"helpful"`
-}
-
+// AddDoctorReview menyimpan ulasan (bentuk lama, dipertahankan untuk kompatibilitas).
 func (s *Store) AddDoctorReview(ctx context.Context, r DoctorReview) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -206,12 +195,13 @@ func (s *Store) AddDoctorReview(ctx context.Context, r DoctorReview) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	const q = `INSERT INTO doctor_reviews (professional_id, patient_id, booking_id, helpfulness_percent, review_text, helpful)
-		VALUES ($1, $2, $3, $4, $5, $6)`
-	if _, err := tx.ExecContext(ctx, q, r.ProfessionalID, r.PatientID, r.BookingID, r.HelpfulnessPercent, r.ReviewText, r.Helpful); err != nil {
-		if err.Error() == "ErrNoRows" {
-			return errors.New("review already submitted for this booking")
-		}
+	pct := r.Stars * 20
+	if pct <= 0 {
+		pct = 100
+	}
+	const q = `INSERT INTO doctor_reviews (professional_id, patient_id, helpfulness_percent, review_text, helpful)
+		VALUES ($1, $2, $3, $4, $5)`
+	if _, err := tx.ExecContext(ctx, q, r.ProfessionalID, r.PatientID, pct, r.ReviewText, r.Helpful); err != nil {
 		return err
 	}
 

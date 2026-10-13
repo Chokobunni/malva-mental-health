@@ -264,15 +264,21 @@ class _ProfessionalLoginScreenState
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     passwordRequirementHint,
-                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color:
+                            Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Kredensial STR/SIP akan diverifikasi admin sebelum profil '
                     'kamu tampil di direktori pasien.',
-                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color:
+                            Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                 ],
                 const SizedBox(height: 14),

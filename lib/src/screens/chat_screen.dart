@@ -7,6 +7,7 @@ import '../assessment_engine.dart';
 import '../models.dart';
 import '../providers/providers.dart';
 import '../services/chat_service.dart';
+import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/mini_summary.dart';
@@ -33,6 +34,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   ChatState _chatState = ChatState.disconnected;
   bool _otherTyping = false;
   bool _isLoadingHistory = false;
+  BackendChatAccess _access = const BackendChatAccess();
+  bool _accessLoaded = false;
   StreamSubscription<ChatState>? _stateSub;
   StreamSubscription<ChatMessage>? _messageSub;
   StreamSubscription<bool>? _typingSub;
@@ -44,7 +47,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.initState();
     _initChat();
     _loadHistory();
+    _loadAccess();
   }
+
+  /// Muat izin chat: teks hanya saat sesi berjalan; share data milik
+  /// pasien butuh paket aktif; profesional membahas saat sesi.
+  Future<void> _loadAccess() async {
+    final session = ref.read(currentSessionProvider);
+    final token = session?.accessToken;
+    final myId = session?.backendUserId ?? session?.identifier;
+    if (token == null || token.isEmpty || myId == null || myId.isEmpty) return;
+    final isPatient = session?.role == UserRole.patient;
+    try {
+      final access = await ref.read(apiClientProvider).chatPermission(
+            accessToken: token,
+            patientId: isPatient ? myId : widget.otherUserId,
+            professionalId: isPatient ? widget.otherUserId : myId,
+          );
+      if (!mounted) return;
+      setState(() {
+        _access = access;
+        _accessLoaded = true;
+      });
+    } on Object {
+      // Izin gagal dimuat: server tetap menegakkan aturan saat kirim.
+    }
+  }
+
+  bool get _isPatient =>
+      ref.read(currentSessionProvider)?.role == UserRole.patient;
+
+  bool get _canSendText => _access.canSendText;
+
+  bool get _canShare => _isPatient && _access.canShare;
 
   /// Muat riwayat chat dari server (GET /v1/messages) agar percakapan
   /// sebelumnya tidak hilang saat layar dibuka ulang.
@@ -164,6 +199,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _send() {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
+    if (!_canSendText) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(_access.reason.isEmpty
+                ? 'Chat teks aktif saat sesi berjalan.'
+                : _access.reason)),
+      );
+      return;
+    }
     _sendText(text);
     _inputController.clear();
     _chatService?.stopTyping();
@@ -180,11 +224,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   /// Kirim pesan terstruktur (share) agar pasti tersimpan di server.
+  /// Share hanya untuk pasien dengan paket aktif (server menegakkan).
   Future<void> _sendShare({
     required String kind,
     required String text,
     Map<String, dynamic>? metadata,
   }) async {
+    if (!_canShare) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Berbagi data butuh paket sesi aktif dengan profesional ini.')),
+        );
+      }
+      return;
+    }
     if (_chatState == ChatState.connected && metadata == null) {
       _chatService?.sendMessage(text, kind: kind);
       return;
@@ -247,6 +302,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _showShareSheet(BuildContext context) {
+    if (!_isPatient) return; // hanya pasien yang bisa share data.
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -501,6 +557,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
       body: Column(
         children: [
+          if (_accessLoaded && !_access.inSession)
+            Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              color: MalvaColors.amber.withValues(alpha: 0.15),
+              child: Text(
+                _access.reason.isEmpty
+                    ? 'Chat teks aktif saat sesi berjalan.'
+                    : _access.reason,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+            ),
+          if (_accessLoaded && _access.inSession)
+            Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: MalvaColors.mint.withValues(alpha: 0.15),
+              child: const Text(
+                'Sesi berjalan — kamu & profesional bisa chat di sini.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: MalvaColors.mint),
+              ),
+            ),
           if (_chatState == ChatState.connecting)
             const LinearProgressIndicator(),
           if (_isLoadingHistory)
@@ -538,10 +624,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
           _ChatInput(
             controller: _inputController,
-            enabled: true,
+            enabled: _canSendText,
             onChanged: _onInputChanged,
             onSend: _send,
-            onShareTap: () => _showShareSheet(context),
+            onShareTap: _canShare ? () => _showShareSheet(context) : null,
+            disabledHint: _accessLoaded
+                ? (_access.reason.isEmpty
+                    ? 'Chat aktif saat sesi berjalan'
+                    : _access.reason)
+                : null,
           ),
         ],
       ),
@@ -991,14 +1082,20 @@ class _ChatInput extends StatelessWidget {
     required this.enabled,
     required this.onChanged,
     required this.onSend,
-    required this.onShareTap,
+    this.onShareTap,
+    this.disabledHint,
   });
 
   final TextEditingController controller;
+
+  /// True = chat teks boleh dikirim (sesi berjalan).
   final bool enabled;
   final ValueChanged<String> onChanged;
   final VoidCallback onSend;
-  final VoidCallback onShareTap;
+
+  /// Null = tombol share disembunyikan (profesional / tanpa paket).
+  final VoidCallback? onShareTap;
+  final String? disabledHint;
 
   @override
   Widget build(BuildContext context) {
@@ -1018,23 +1115,12 @@ class _ChatInput extends StatelessWidget {
         top: false,
         child: Row(
           children: [
-            IconButton(
-              tooltip: 'Bagikan data',
-              onPressed: enabled ? onShareTap : null,
-              icon: const Icon(Icons.add_rounded),
-            ),
-            IconButton(
-              tooltip: 'Voice note (segera hadir)',
-              onPressed: enabled
-                  ? () => ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              'Voice note segera hadir. Pakai teks dulu ya.'),
-                        ),
-                      )
-                  : null,
-              icon: const Icon(Icons.mic_rounded),
-            ),
+            if (onShareTap != null)
+              IconButton(
+                tooltip: 'Bagikan data',
+                onPressed: onShareTap,
+                icon: const Icon(Icons.add_rounded),
+              ),
             Expanded(
               child: TextField(
                 controller: controller,
@@ -1045,7 +1131,9 @@ class _ChatInput extends StatelessWidget {
                 minLines: 1,
                 maxLines: 4,
                 decoration: InputDecoration(
-                  hintText: enabled ? 'Ketik pesan...' : 'Menunggu koneksi...',
+                  hintText: enabled
+                      ? 'Ketik pesan...'
+                      : (disabledHint ?? 'Chat aktif saat sesi berjalan'),
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),

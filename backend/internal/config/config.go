@@ -19,7 +19,21 @@ type Config struct {
 	// GoogleClientID adalah Web OAuth Client ID untuk verifikasi Google Sign-In.
 	// Kosong = endpoint /v1/auth/google nonaktif dengan pesan yang jelas.
 	GoogleClientID string
+	// PaymentMode memilih jalur pembayaran: "simulation" (default, dev/test)
+	// atau "gateway" (produksi, wajib + server key Midtrans).
+	PaymentMode string
+	// Midtrans — kredensial gateway pembayaran produksi.
+	MidtransServerKey string // auth Basic Snap + verifikasi signature
+	MidtransClientKey string // dipakai klien (opsional di server)
+	MidtransEnv       string // sandbox | production
+	MidtransSnapBase  string // override base URL Snap (test/mock)
 }
+
+// PaymentModeSimulation / PaymentModeGateway nilai valid MALVA_PAYMENT_MODE.
+const (
+	PaymentModeSimulation = "simulation"
+	PaymentModeGateway    = "gateway"
+)
 
 func Load() (Config, error) {
 	cfg := Config{
@@ -33,12 +47,22 @@ func Load() (Config, error) {
 		LockoutDuration:    15,
 		MaxRequestBodySize: 1 << 20,
 		GoogleClientID:     os.Getenv("MALVA_GOOGLE_CLIENT_ID"),
+		PaymentMode:        strings.ToLower(getenv("MALVA_PAYMENT_MODE", PaymentModeSimulation)),
+		MidtransServerKey:  os.Getenv("MALVA_MIDTRANS_SERVER_KEY"),
+		MidtransClientKey:  os.Getenv("MALVA_MIDTRANS_CLIENT_KEY"),
+		MidtransEnv:        strings.ToLower(getenv("MALVA_MIDTRANS_ENV", "sandbox")),
+		MidtransSnapBase:   strings.TrimRight(os.Getenv("MALVA_MIDTRANS_SNAP_BASE"), "/"),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("MALVA_DATABASE_URL is required")
 	}
 	if len(cfg.JWTSecret) < 32 {
 		return Config{}, errors.New("MALVA_JWT_SECRET must be at least 32 characters")
+	}
+	// Mode gateway wajib punya server key (dipakai auth Snap + verifikasi
+	// signature webhook). Gagal saat boot agar salah konfigurasi terdeteksi dini.
+	if cfg.PaymentMode == PaymentModeGateway && strings.TrimSpace(cfg.MidtransServerKey) == "" {
+		return Config{}, errors.New("MALVA_MIDTRANS_SERVER_KEY is required when MALVA_PAYMENT_MODE=gateway")
 	}
 	return cfg, nil
 }

@@ -309,6 +309,113 @@ final ButtonStyle compactFilledButtonStyle = FilledButton.styleFrom(
   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
 );
 
+/// Kartu yang bisa dilipat (expand/collapse): header selalu terlihat dan
+/// bisa di-tap untuk membuka/menutup, sedangkan isi detail disembunyikan
+/// secara default. Dipakai untuk daftar screening & jawaban worksheet agar
+/// kartu tidak menumpuk memperlihatkan semua detail sekaligus.
+class CollapsibleCard extends StatefulWidget {
+  const CollapsibleCard({
+    super.key,
+    required this.header,
+    required this.child,
+    this.body,
+    this.initiallyExpanded = false,
+    this.color,
+    this.padding = const EdgeInsets.all(16),
+    this.semanticLabel,
+  });
+
+  /// Header ringkas yang selalu terlihat dan menjadi area tap.
+  final Widget header;
+
+  /// Isi detail yang hanya muncul saat kartu dibuka.
+  final Widget child;
+
+  /// Isi yang selalu terlihat namun tidak ikut terlipat dan tidak
+  /// menjadi area tap (mis. kartu hasil skor assessment).
+  final Widget? body;
+
+  /// Status awal (default tertutup).
+  final bool initiallyExpanded;
+
+  final Color? color;
+  final EdgeInsetsGeometry padding;
+
+  /// Label aksesibilitas untuk pembaca layar (opsional).
+  final String? semanticLabel;
+
+  @override
+  State<CollapsibleCard> createState() => _CollapsibleCardState();
+}
+
+class _CollapsibleCardState extends State<CollapsibleCard> {
+  late bool _expanded = widget.initiallyExpanded;
+
+  void _toggle() => setState(() => _expanded = !_expanded);
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+    return SoftCard(
+      color: widget.color,
+      padding: widget.padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            button: true,
+            expanded: _expanded,
+            label: widget.semanticLabel,
+            child: Tooltip(
+              message: _expanded ? 'Tutup detail' : 'Lihat detail',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: _toggle,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: widget.header),
+                      const SizedBox(width: 8),
+                      AnimatedRotation(
+                        turns: _expanded ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeInOut,
+                        child: Icon(
+                          Icons.expand_more_rounded,
+                          color: onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (widget.body != null) ...[
+            const SizedBox(height: 10),
+            widget.body!,
+          ],
+          ClipRect(
+            child: AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeInOut,
+              alignment: Alignment.topCenter,
+              child: _expanded
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: widget.child,
+                    )
+                  : const SizedBox(width: double.infinity, height: 0),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class EmptyState extends StatelessWidget {
   const EmptyState({
     super.key,

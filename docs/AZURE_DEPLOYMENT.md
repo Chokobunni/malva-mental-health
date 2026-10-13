@@ -37,7 +37,22 @@ Indonesia Central = Jakarta).
 
 ## Database
 
-- Migrasi dijalankan dari `backend/migrations/001–011` (idempoten).
+- Migrasi dijalankan dari `backend/migrations/001–013` (idempoten).
+  - **Migrasi 012 FK-free**: tabel `care_packages`, `care_sessions`,
+    `professional_pricing`, `professional_time_off` SENGAJA tanpa
+    FOREIGN KEY karena `malva_app` tidak punya hak REFERENCES ke tabel
+    milik `malva`. Migrasi 012 bisa & harus dijalankan sebagai `malva_app`.
+    Integritas referensial ditegakkan di application layer.
+  - **Migrasi 013 — langkah 5 butuh role `malva`**: langkah 1–4
+    (`care_refunds`, `payment_events`, `care_packages.refunded_amount`,
+    `care_sessions.cancelled_by`) aman dijalankan sebagai `malva_app`.
+    Tetapi langkah 5 menambah kolom ke tabel **`payments` yang dimiliki
+    `malva`** → `malva_app` akan gagal dengan
+    `ERROR: must be owner of table payments` (role `malva_app` bukan
+    member dari `malva`; `pg_has_role('malva_app','malva','USAGE')` = false).
+    Jalankan `backend/admin_scripts/apply_013_step5_payments_columns.sql`
+    sebagai `malva` (Azure Portal → Query editor) — hanya perlu saat
+    `MALVA_PAYMENT_MODE=gateway`; di mode `simulation` kolom itu tidak dipakai.
   - **Catatan Azure**: ekstensi `pgcrypto` **tidak di-allowlist** Azure
     Flexible Server. Tidak diperlukan: `gen_random_uuid()` sudah bawaan
     PG 13+, dan tidak ada kolom yang memakai `crypt()`/`digest()`.

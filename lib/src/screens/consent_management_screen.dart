@@ -18,12 +18,16 @@ class ConsentManagementScreen extends ConsumerStatefulWidget {
 
 class _ConsentManagementScreenState
     extends ConsumerState<ConsentManagementScreen> {
-  bool _shareScreenings = true;
-  bool _shareMoodDiary = true;
-  bool _shareMedications = true;
-  bool _shareTimeline = true;
+  bool _shareScreenings = false;
+  bool _shareMoodDiary = false;
+  bool _shareMedications = false;
+  bool _shareTimeline = false;
+  bool _shareHealthRecord = false;
+  bool _shareGoals = false;
   bool _isLoading = false;
   String? _error;
+  List<BackendPatientProfessionalLink> _links = const [];
+  String? _selectedProfessionalId;
 
   @override
   void initState() {
@@ -45,9 +49,23 @@ class _ConsentManagementScreenState
     });
 
     try {
+      // Daftar profesional terhubung DULU — consent bersifat per profesional,
+      // bukan ke ID sendiri (bug lama memakai session.identifier).
+      final links = await apiClient.listPatientProfessionalLinks(
+        accessToken: accessToken,
+      );
+      final active =
+          links.where((l) => l.status == 'active').toList(growable: false);
+      if (!mounted) return;
+      setState(() => _links = active);
+      if (active.isEmpty) {
+        setState(() => _isLoading = false);
+        return;
+      }
+      _selectedProfessionalId ??= active.first.professionalUserId;
       final consent = await apiClient.getPrivacyConsent(
         accessToken: accessToken,
-        professionalId: session?.identifier ?? '',
+        professionalId: _selectedProfessionalId!,
       );
       if (mounted) {
         setState(() {
@@ -55,6 +73,8 @@ class _ConsentManagementScreenState
           _shareMoodDiary = consent.shareMoodDiary;
           _shareMedications = consent.shareMedications;
           _shareTimeline = consent.shareTimeline;
+          _shareHealthRecord = consent.shareHealthRecord;
+          _shareGoals = consent.shareGoals;
           _isLoading = false;
         });
       }
@@ -83,16 +103,25 @@ class _ConsentManagementScreenState
       return;
     }
 
+    if (_selectedProfessionalId == null || _selectedProfessionalId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Belum ada profesional terhubung untuk diatur.')),
+      );
+      return;
+    }
     setState(() => _isLoading = true);
 
     try {
       await apiClient.updatePrivacyConsent(
         accessToken: accessToken,
-        professionalId: session?.identifier ?? '',
+        professionalId: _selectedProfessionalId!,
         shareScreenings: _shareScreenings,
         shareMoodDiary: _shareMoodDiary,
         shareMedications: _shareMedications,
         shareTimeline: _shareTimeline,
+        shareHealthRecord: _shareHealthRecord,
+        shareGoals: _shareGoals,
       );
       if (mounted) {
         setState(() => _isLoading = false);
@@ -151,9 +180,38 @@ class _ConsentManagementScreenState
                   ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Pilih data yang ingin Anda bagikan dengan profesional:',
+                  'Pilih profesional, lalu atur data yang dibagikan (default mati — aktifkan yang kamu setujui):',
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
+                const SizedBox(height: 12),
+                if (_links.isEmpty && !_isLoading)
+                  const SoftCard(
+                    child: Text(
+                        'Belum ada profesional terhubung. Beli paket / booking sesi dulu untuk mengatur sharing.'),
+                  )
+                else if (_links.isNotEmpty)
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedProfessionalId,
+                    decoration: const InputDecoration(
+                      labelText: 'Profesional',
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    items: [
+                      for (final l in _links)
+                        DropdownMenuItem(
+                          value: l.professionalUserId,
+                          child: Text(l.professionalDisplayName.isEmpty
+                              ? 'Profesional'
+                              : l.professionalDisplayName),
+                        ),
+                    ],
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() => _selectedProfessionalId = v);
+                      _loadConsent();
+                    },
+                  ),
                 const SizedBox(height: 16),
                 _ConsentSwitch(
                   icon: Icons.fact_check_rounded,
@@ -192,6 +250,26 @@ class _ConsentManagementScreenState
                   value: _shareTimeline,
                   onChanged: (value) {
                     setState(() => _shareTimeline = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                _ConsentSwitch(
+                  icon: Icons.folder_shared_rounded,
+                  title: 'Health Record',
+                  subtitle: 'Diagnosis & catatan klinis',
+                  value: _shareHealthRecord,
+                  onChanged: (value) {
+                    setState(() => _shareHealthRecord = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                _ConsentSwitch(
+                  icon: Icons.flag_rounded,
+                  title: 'Goals & Habits',
+                  subtitle: 'Target harian & streak',
+                  value: _shareGoals,
+                  onChanged: (value) {
+                    setState(() => _shareGoals = value);
                   },
                 ),
                 const SizedBox(height: 24),

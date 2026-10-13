@@ -7,12 +7,15 @@ import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 
 // ============================================================
-// CONSENT REQUEST SHEET â€” Continuous Support 7 Days.
-// Pasien memberi izin kepada profesional untuk memantau progres:
-//   - Diary (riwayat harian)
-//   - Goals (target & streak)
-//   - Health Record (dokumen klinis)
-//   - Mood & Medication check-in tracker
+// CONSENT REQUEST SHEET — Paket Continuous 4 sesi / 6 minggu.
+// Pasien memberi izin kepada profesional untuk memantau progres
+// selama paket aktif:
+//   - Assessment (PHQ-9/GAD-7)
+//   - Mood & Diary
+//   - Medication
+//   - Goals & Habits
+//   - Health Record
+//   - Timeline
 // Izin disimpan ke /v1/privacy/consents (backend) bila online.
 // Bila offline: disimpan lokal dan disinkronkan saat terhubung.
 // ============================================================
@@ -49,11 +52,14 @@ class _ConsentRequestSheet extends ConsumerStatefulWidget {
 }
 
 class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
-  bool _diary = true;
-  bool _goals = true;
-  bool _healthRecord = true;
-  bool _moodCheckin = true;
-  bool _medicationCheckin = true;
+  // Default MATI: pasien memberi izin eksplisit per kategori (opt-in),
+  // bukan opt-out diam-diam.
+  bool _screenings = false;
+  bool _moodDiary = false;
+  bool _medications = false;
+  bool _goals = false;
+  bool _healthRecord = false;
+  bool _timeline = false;
   bool _isSaving = false;
   String? _error;
 
@@ -102,9 +108,9 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Your professional can follow your progress for the next 7 days '
-              '(Continuous Support). Choose what you want to share â€” you can '
-              'change this anytime.',
+              'Profesional dapat memantau progresmu selama paket aktif '
+              '(4 sesi / 6 minggu). Pilih yang ingin dibagikan — bisa '
+              'diubah kapan saja.',
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -112,44 +118,52 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
             ),
             const SizedBox(height: 14),
             _ConsentToggle(
-              icon: Icons.edit_note_rounded,
+              icon: Icons.fact_check_rounded,
               color: MalvaColors.seed,
-              title: 'Diary',
-              subtitle: 'Riwayat catatan harianmu',
-              value: _diary,
-              onChanged: (v) => setState(() => _diary = v),
+              title: 'Assessment',
+              subtitle: 'Hasil PHQ-9 & GAD-7',
+              value: _screenings,
+              onChanged: (v) => setState(() => _screenings = v),
+            ),
+            _ConsentToggle(
+              icon: Icons.edit_note_rounded,
+              color: MalvaColors.orchid,
+              title: 'Mood & Diary',
+              subtitle: 'Tren mood & catatan harian',
+              value: _moodDiary,
+              onChanged: (v) => setState(() => _moodDiary = v),
+            ),
+            _ConsentToggle(
+              icon: Icons.medication_rounded,
+              color: MalvaColors.mint,
+              title: 'Medication',
+              subtitle: 'Obat & kepatuhan minum obat',
+              value: _medications,
+              onChanged: (v) => setState(() => _medications = v),
             ),
             _ConsentToggle(
               icon: Icons.flag_rounded,
               color: MalvaColors.amber,
-              title: 'Goals',
+              title: 'Goals & Habits',
               subtitle: 'Target harian & streak',
               value: _goals,
               onChanged: (v) => setState(() => _goals = v),
             ),
             _ConsentToggle(
               icon: Icons.folder_shared_rounded,
-              color: MalvaColors.mint,
+              color: MalvaColors.seed,
               title: 'Health Record',
-              subtitle: 'Dokumen & catatan klinis',
+              subtitle: 'Diagnosis & catatan klinis',
               value: _healthRecord,
               onChanged: (v) => setState(() => _healthRecord = v),
             ),
             _ConsentToggle(
-              icon: Icons.mood_rounded,
-              color: MalvaColors.orchid,
-              title: 'Mood Check-in Tracker',
-              subtitle: 'Tren mood harian',
-              value: _moodCheckin,
-              onChanged: (v) => setState(() => _moodCheckin = v),
-            ),
-            _ConsentToggle(
-              icon: Icons.medication_rounded,
-              color: MalvaColors.seed,
-              title: 'Medication Check-in Tracker',
-              subtitle: 'Kepatuhan minum obat',
-              value: _medicationCheckin,
-              onChanged: (v) => setState(() => _medicationCheckin = v),
+              icon: Icons.timeline_rounded,
+              color: MalvaColors.plum,
+              title: 'Timeline',
+              subtitle: 'Linimasa aktivitas kesehatanmu',
+              value: _timeline,
+              onChanged: (v) => setState(() => _timeline = v),
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
@@ -210,10 +224,12 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
       await ref.read(apiClientProvider).updatePrivacyConsent(
             accessToken: accessToken,
             professionalId: widget.professionalId,
-            shareScreenings: true,
-            shareMoodDiary: _moodCheckin || _diary,
-            shareMedications: _medicationCheckin,
-            shareTimeline: true,
+            shareScreenings: _screenings,
+            shareMoodDiary: _moodDiary,
+            shareMedications: _medications,
+            shareTimeline: _timeline,
+            shareHealthRecord: _healthRecord,
+            shareGoals: _goals,
           );
       await _saveLocalPreferences();
       if (!mounted) return;
@@ -221,7 +237,7 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'Izin monitoring 7 hari aktif. Profesional dapat memantau progresmu.'),
+              'Izin monitoring paket aktif. Profesional dapat memantau progresmu.'),
           backgroundColor: MalvaColors.mint,
         ),
       );
@@ -241,11 +257,11 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
   Future<void> _saveLocalPreferences() async {
     final store = ref.read(malvaStoreProvider.notifier);
     await store.setContinuousSupportConsent(
-      diary: _diary,
+      diary: _moodDiary,
       goals: _goals,
       healthRecord: _healthRecord,
-      moodCheckin: _moodCheckin,
-      medicationCheckin: _medicationCheckin,
+      moodCheckin: _moodDiary,
+      medicationCheckin: _medications,
     );
   }
 }

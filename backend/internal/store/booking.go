@@ -36,6 +36,9 @@ type Payment struct {
 	Reference         string     `json:"reference"`
 	ExternalID        string     `json:"external_id,omitempty"`
 	Status            string     `json:"status"`
+	Gateway           string     `json:"gateway,omitempty"`
+	SnapToken         string     `json:"snap_token,omitempty"`
+	RedirectURL       string     `json:"redirect_url,omitempty"`
 	PaidAt            *time.Time `json:"paid_at,omitempty"`
 	ExpiresAt         *time.Time `json:"expires_at,omitempty"`
 	CreatedAt         time.Time  `json:"created_at"`
@@ -114,6 +117,35 @@ func (s *Store) ListBookingsForUser(ctx context.Context, userID, role string, li
 	return out, rows.Err()
 }
 
+func (s *Store) GetBooking(ctx context.Context, bookingID string) (Booking, error) {
+	const q = `SELECT id, patient_id, professional_id, package_id, service_type, session_type,
+		booking_date::text, COALESCE(slot_time::text, ''), duration_minutes, price, status, created_at
+		FROM bookings WHERE id = $1`
+	var b Booking
+	err := s.db.QueryRowContext(ctx, q, bookingID).
+		Scan(&b.ID, &b.PatientID, &b.ProfessionalID, &b.PackageID, &b.ServiceType, &b.SessionType,
+			&b.BookingDate, &b.SlotTime, &b.DurationMinutes, &b.Price, &b.Status, &b.CreatedAt)
+	if err != nil {
+		return Booking{}, err
+	}
+	return b, nil
+}
+
+// AuthorizePaymentOwner memastikan hanya pemilik booking yang
+// mengonfirmasi pembayarannya (tidak bisa oleh pihak lain).
+func (s *Store) AuthorizePaymentOwner(ctx context.Context, paymentID, subject, role string) error {
+	var patientID string
+	err := s.db.QueryRowContext(ctx, `SELECT b.patient_id FROM payments p
+		JOIN bookings b ON b.id = p.booking_id WHERE p.id = $1`, paymentID).Scan(&patientID)
+	if err != nil {
+		return err
+	}
+	if role != "patient" || patientID != subject {
+		return errors.New("only the booking owner can confirm this payment")
+	}
+	return nil
+}
+
 func (s *Store) UpdateBookingStatus(ctx context.Context, bookingID, status string) error {
 	const q = `UPDATE bookings SET status = $1 WHERE id = $2`
 	res, err := s.db.ExecContext(ctx, q, status, bookingID)
@@ -128,11 +160,13 @@ func (s *Store) UpdateBookingStatus(ctx context.Context, bookingID, status strin
 }
 
 func (s *Store) CreatePayment(ctx context.Context, p Payment) (Payment, error) {
+	// platform_fee_pct SMALLINT (maks 32767): fee 10% disimpan sebagai 10,
+	// bukan nominal rupiah (nominal ada di platform_fee_amount BIGINT).
 	const q = `INSERT INTO payments
 		(booking_id, payment_method, gross_amount, service_fee_amount, platform_fee_pct, platform_fee_amount, net_amount, reference, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
+		VALUES ($1, $2, $3, $4, 10, $5, $6, $7, 'pending')
 		RETURNING id, status, created_at`
-	err := s.db.QueryRowContext(ctx, q, p.BookingID, p.PaymentMethod, p.GrossAmount, p.ServiceFeeAmount, p.PlatformFeeAmount,
+	err := s.db.QueryRowContext(ctx, q, p.BookingID, p.PaymentMethod, p.GrossAmount, p.ServiceFeeAmount,
 		p.PlatformFeeAmount, p.NetAmount, p.Reference).
 		Scan(&p.ID, &p.Status, &p.CreatedAt)
 	if err != nil {
@@ -185,8 +219,27 @@ func (s *Store) MarkPaymentPaid(ctx context.Context, reference, externalID strin
 	return p, nil
 }
 
-func (s *Store) CreateEarning(ctx context.Context, professionalID string, p Payment) (string, error) {
-	const q = `INSERT INTO earnings (professional_id, payment_id, gross, platform_fee, net)
+// UpdatePaymentGateway menyimpan referensi gateway (token/redirect) ke payment.
+func (s *Store) UpdatePaymentGateway(ctx context.Context, reference, gateway, snapToken, redirectURL string) (Payment, error) {
+	const q = `UPDATE payments
+		SET gateway = $2, snap_token = $3, redirect_url = $4
+		WHERE reference = $1
+		RETURNING id, booking_id, payment_method, gross_amount, service_fee_amount,
+			platform_fee_amount, net_amount, reference, COALESCE(external_id, ''), status,
+			COALESCE(gateway, ''), COALESCE(snap_token, ''), COALESCE(redirect_url, ''),
+			paid_at, created_at`
+	var p Payment
+	err := s.db.QueryRowContext(ctx, q, reference, gateway, snapToken, redirectURL).
+		Scan(&p.ID, &p.BookingID, &p.PaymentMethod, &p.GrossAmount, &p.ServiceFeeAmount,
+			&p.PlatformFeeAmount, &p.NetAmount, &p.Reference, &p.ExternalID, &p.Status,
+			&p.Gateway, &p.SnapToken, &p.RedirectURL, &p.PaidAt, &p.CreatedAt)
+	if err != nil {
+		return Payment{}, err
+	}
+	return p, nil
+}
+
+func (s *Store) CreateEarning(ctx context.Context, professionalID string, p Payment) (string, error) {	const q = `INSERT INTO earnings (professional_id, payment_id, gross, platform_fee, net)
 		VALUES ($1, $2, $3, $4, $5) RETURNING id`
 	var id string
 	err := s.db.QueryRowContext(ctx, q, professionalID, p.ID, p.GrossAmount, p.PlatformFeeAmount, p.NetAmount).Scan(&id)

@@ -33,6 +33,8 @@ type habitLogRequest struct {
 
 // resolvePatientScope menentukan patient_id yang boleh diakses:
 // pasien = dirinya sendiri; profesional = pasien yang terhubung.
+// Untuk bacaan klinis pasien lain, profesional wajib lulus consent
+// (scope "goals" / "mood" / "diary") kecuali data miliknya sendiri.
 func (s *Server) resolvePatientScope(r *http.Request, claims auth.Claims, requested string) (string, bool, error) {
 	requested = strings.TrimSpace(requested)
 	if claims.Role == "patient" || claims.Role == "admin" {
@@ -62,6 +64,10 @@ func (s *Server) listGoals(w http.ResponseWriter, r *http.Request, claims auth.C
 	patientID, _, err := s.resolvePatientScope(r, claims, r.URL.Query().Get("patient_id"))
 	if err != nil {
 		writeError(w, http.StatusForbidden, err)
+		return
+	}
+	if claims.Role == "professional" && !s.consentAllows(r, patientID, claims.Subject, "goals") {
+		writeError(w, http.StatusForbidden, errors.New("patient has not shared goals data"))
 		return
 	}
 	includeInactive := r.URL.Query().Get("include_inactive") == "true"
@@ -174,6 +180,10 @@ func (s *Server) listHabitLogs(w http.ResponseWriter, r *http.Request, claims au
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
+	if claims.Role == "professional" && !s.consentAllows(r, patientID, claims.Subject, "goals") {
+		writeError(w, http.StatusForbidden, errors.New("patient has not shared goals data"))
+		return
+	}
 	logs, err := s.store.ListHabitLogs(r.Context(), patientID,
 		r.URL.Query().Get("from"), r.URL.Query().Get("to"))
 	if err != nil {
@@ -217,6 +227,38 @@ func (s *Server) logHabit(w http.ResponseWriter, r *http.Request, claims auth.Cl
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"log": log})
+}
+
+// ============================================================
+// PSYCH TESTS CATALOG — daftar tes dari server (bisa kosong).
+// ============================================================
+
+type psychTestItem struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Disclaimer  string `json:"disclaimer"`
+	Price       int64  `json:"price"`
+}
+
+func (s *Server) listPsychTests(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	_ = claims
+	rows, err := s.store.DB().QueryContext(r.Context(), `SELECT id, title, description, disclaimer, price
+		FROM psychological_tests_catalog WHERE is_active = true ORDER BY title`)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"tests": []psychTestItem{}})
+		return
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]psychTestItem, 0)
+	for rows.Next() {
+		var t psychTestItem
+		if err := rows.Scan(&t.ID, &t.Title, &t.Description, &t.Disclaimer, &t.Price); err != nil {
+			continue
+		}
+		out = append(out, t)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tests": out})
 }
 
 // ============================================================
@@ -329,13 +371,12 @@ func (s *Server) shareTherapySubmission(w http.ResponseWriter, r *http.Request, 
 	}
 	professionalID := strings.TrimSpace(req.ProfessionalID)
 	if professionalID != "" {
-		_, _, linked, err := s.store.AreUsersLinked(r.Context(), claims.Subject, professionalID)
-		if err != nil {
+		// Sharing worksheet butuh paket continuous aktif (bukan sekadar link).
+		if _, has, err := s.store.ActivePackageBetween(r.Context(), claims.Subject, professionalID); err != nil {
 			writeError(w, http.StatusInternalServerError, err)
 			return
-		}
-		if !linked {
-			writeError(w, http.StatusForbidden, errors.New("Kamu belum terhubung dengan profesional tersebut."))
+		} else if !has {
+			writeError(w, http.StatusForbidden, errors.New("Berbagi worksheet butuh paket sesi aktif dengan profesional tersebut."))
 			return
 		}
 	}

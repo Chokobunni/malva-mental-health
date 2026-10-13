@@ -146,7 +146,7 @@ func (s *Server) getAdminDoctor(w http.ResponseWriter, r *http.Request, _ auth.C
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	schedules, err := s.store.ListSchedulesForProfessional(r.Context(), userID)
+	schedules, err := s.store.ListActiveSchedulesForProfessional(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -343,6 +343,11 @@ func (s *Server) createAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 		return
 	}
 	if len(req.Schedules) > 0 {
+		// Admin tidak mengirim is_active; jadwal dokter buatan admin
+		// langsung aktif (perilaku lama dipertahankan).
+		for i := range req.Schedules {
+			req.Schedules[i].IsActive = true
+		}
 		if err := s.store.UpsertSchedules(r.Context(), user.ID, req.Schedules); err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
@@ -454,6 +459,11 @@ func (s *Server) updateAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 		return
 	}
 	if req.Schedules != nil {
+		// Admin tidak mengirim is_active; jadwal yang disimpan admin
+		// dianggap aktif (perilaku lama dipertahankan).
+		for i := range req.Schedules {
+			req.Schedules[i].IsActive = true
+		}
 		if err := s.store.UpsertSchedules(r.Context(), userID, req.Schedules); err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../../data/demo_professionals.dart';
 import '../../models.dart';
 import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
@@ -10,19 +10,20 @@ import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 import '../../widgets/professional_avatar.dart';
 import 'booking_detail_screen.dart';
+import 'package_booking_screen.dart';
 
 // ============================================================
-// PROFESSIONAL INFO — layout persis Figma "Professional Info":
-//   Header nama + rating + usia
-//   Intro video button
-//   Harga per sesi (Chat/Video/Offline) + faskes + jarak + jadwal
+// PROFESSIONAL INFO:
+//   Header nama + rating riil + spesialisasi
+//   Intro video (hanya bila profesional mengisi URL)
+//   Harga per sesi dari tarif profesional + faskes + jarak + jadwal
 //   BPJS badge
 //   Dropdown Profile & Speciality
-//   Reviews (rating + list ulasan)
+//   Reviews riil dari DB (atau "Belum ada ulasan")
 //   Choose Your Support Level:
-//     - Quick Consult (One-Time)     [dengan fitur + cross sharing]
-//     - Continuous Support (Best Value)  [7 Days of Asynchronous Care]
-//   CTA: Book Session / 7 Days Continuous Care (+ tombol Chat bila terhubung)
+//     - Quick Consult (One-Time)
+//     - Continuous Package (4 sesi / 6 minggu)
+//   CTA: Book Session / Beli Paket 4 Sesi
 // ============================================================
 
 class DoctorProfileScreen extends ConsumerStatefulWidget {
@@ -32,16 +33,12 @@ class DoctorProfileScreen extends ConsumerStatefulWidget {
     this.doctorName,
     this.session,
     this.apiClient,
-    this.demoProfile,
   });
 
   final String doctorUserId;
   final String? doctorName;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
-
-  /// Profil demo (offline) — bila diisi, tidak ada panggilan jaringan.
-  final BackendDoctorProfile? demoProfile;
 
   @override
   ConsumerState<DoctorProfileScreen> createState() =>
@@ -50,7 +47,8 @@ class DoctorProfileScreen extends ConsumerStatefulWidget {
 
 class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   BackendDoctorProfile? _profile;
-  List<BackendDoctorSlot> _todaySlots = const [];
+  List<BackendAvailabilityDay> _availability = const [];
+  BackendCarePackage? _activePackage;
   bool _isLoading = true;
   Object? _error;
   bool _profileExpanded = true;
@@ -66,20 +64,6 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   }
 
   Future<void> _load() async {
-    // Jalur demo/offline: data lokal langsung tampil.
-    final demoOverride = widget.demoProfile ??
-        findDemoProfessional(widget.doctorUserId)?.toProfile();
-    if (demoOverride != null) {
-      final demo = findDemoProfessional(widget.doctorUserId);
-      if (!mounted) return;
-      setState(() {
-        _profile = demoOverride;
-        _todaySlots = demo?.demoSlotsFor(DateTime.now()) ?? const [];
-        _isLoading = false;
-        _error = null;
-      });
-      return;
-    }
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
     final rawToken = widget.session?.accessToken;
@@ -94,41 +78,43 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
         accessToken: accessToken,
         userId: widget.doctorUserId,
       );
-      final today = DateTime.now();
-      final dateStr =
-          '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-      List<BackendDoctorSlot> slots = const [];
+      List<BackendAvailabilityDay> availability = const [];
       try {
-        slots = await apiClient.getDoctorAvailableSlots(
+        availability = await apiClient.getDoctorAvailability(
           accessToken: accessToken,
           userId: widget.doctorUserId,
-          date: dateStr,
         );
       } on Object catch (_) {
-        // Slot opsional — profil tetap tampil.
+        // Ketersediaan opsional — profil tetap tampil.
+      }
+      BackendCarePackage? activePackage;
+      if (accessToken != null) {
+        try {
+          final pkgs =
+              await apiClient.listCarePackages(accessToken: accessToken);
+          for (final p in pkgs) {
+            if (p.professionalId == widget.doctorUserId && p.isActive) {
+              activePackage = p;
+              break;
+            }
+          }
+        } on Object catch (_) {
+          // Paket aktif opsional.
+        }
       }
       if (!mounted) return;
       setState(() {
         _profile = profile;
-        _todaySlots = slots;
+        _availability = availability;
+        _activePackage = activePackage;
         _isLoading = false;
       });
     } on Object catch (e) {
       if (!mounted) return;
-      // Fallback terakhir: direktori demo agar tidak kosong.
-      final demo = findDemoProfessional(widget.doctorUserId);
-      if (demo != null) {
-        setState(() {
-          _profile = demo.toProfile();
-          _todaySlots = demo.demoSlotsFor(DateTime.now());
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _error = e;
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _error = e;
+        _isLoading = false;
+      });
     }
   }
 
@@ -158,91 +144,106 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                       child: ListView(
                         padding: const EdgeInsets.all(18),
                         children: [
-                          // ===== HEADER: nama + rating + usia =====
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ProfessionalAvatar(
-                                displayName: _displayName,
-                                radius: 32,
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _displayName,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 16.5),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.star_rounded,
-                                            size: 17, color: MalvaColors.amber),
-                                        const SizedBox(width: 3),
-                                        const Text(
-                                          '4.8 (15)',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.w800,
-                                              fontSize: 13),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Text(
-                                          '${_genderLabel}, 45 y.o',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(color: Colors.black54),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-
-                          // ===== INTRO VIDEO — Figma Group 276 =====
-                          SoftCard(
-                            onTap: () {},
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 12),
-                            child: Row(
+                          // ===== HEADER: nama + rating riil + spesialisasi =====
+                          Builder(builder: (context) {
+                            final reviews = _profile?.reviews ??
+                                const BackendDoctorReviews();
+                            final ratingLabel = reviews.reviewCount > 0
+                                ? '${reviews.averageStars.toStringAsFixed(1)} (${reviews.reviewCount})'
+                                : 'Belum ada ulasan';
+                            final specLabel = cred.specialization == 'Sp.KJ'
+                                ? 'Psikiater (Sp.KJ)'
+                                : 'Psikolog Klinis (M.Psi)';
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                CircleAvatar(
-                                  radius: 18,
-                                  backgroundColor:
-                                      MalvaColors.seed.withValues(alpha: 0.12),
-                                  child: const Icon(
-                                      Icons.play_circle_fill_rounded,
-                                      color: MalvaColors.seed),
+                                ProfessionalAvatar(
+                                  displayName: _displayName,
+                                  radius: 32,
                                 ),
-                                const SizedBox(width: 10),
+                                const SizedBox(width: 14),
                                 Expanded(
-                                  child: Text(
-                                    "Watch ${_shortName}'s Intro Video",
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 13.5),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _displayName,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 16.5),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.star_rounded,
+                                              size: 17,
+                                              color: MalvaColors.amber),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            ratingLabel,
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 13),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        specLabel,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                                color: Colors.black54),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
-                            ),
-                          ),
+                            );
+                          }),
                           const SizedBox(height: 14),
 
+                          // ===== INTRO VIDEO (hanya bila ada URL) =====
+                          if (cred.videoIntroUrl.trim().isNotEmpty) ...[
+                            SoftCard(
+                              onTap: () =>
+                                  _openIntroVideo(cred.videoIntroUrl),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 12),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 18,
+                                    backgroundColor: MalvaColors.seed
+                                        .withValues(alpha: 0.12),
+                                    child: const Icon(
+                                        Icons.play_circle_fill_rounded,
+                                        color: MalvaColors.seed),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      "Watch ${_shortName}'s Intro Video",
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 13.5),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                          ],
+
                           // ===== HARGA PER SESI + FASKES + JADWAL =====
+                          _PriceRow(label: 'Chat session', price: _chatPrice()),
                           _PriceRow(
-                              label: 'Chat session', price: _chatPrice(cred)),
+                              label: 'Video session', price: _videoPrice()),
                           _PriceRow(
-                              label: 'Video session', price: _videoPrice(cred)),
-                          _PriceRow(
-                              label: 'Offline session',
-                              price: _offlinePrice(cred)),
+                              label: 'Paket 4 sesi / 6 minggu',
+                              price: _packagePrice()),
                           const SizedBox(height: 8),
                           Row(
                             children: [
@@ -260,9 +261,9 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             ],
                           ),
                           const SizedBox(height: 4),
-                          if (_todaySlots.isNotEmpty)
+                          if (_bookableDays.isNotEmpty)
                             Text(
-                              '${_todayName()}: ${_todaySlots.first.time} - ${_todaySlots.last.time}',
+                              'Tersedia: ${_bookableDays.take(3).map((d) => _shortDate(d.date)).join(', ')}',
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall
@@ -350,29 +351,67 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          // ===== REVIEWS =====
-                          const SectionLabel('Reviews'),
-                          const _ReviewCard(
-                            name: 'Dahlia',
-                            text: 'Amazing Doctor.',
-                            date: '27 September 2024, 15.40',
-                            stars: 5,
-                          ),
-                          const SizedBox(height: 8),
-                          const _ReviewCard(
-                            name: 'Vincent',
-                            text: 'Sangat membantu, komunikasi enak.',
-                            date: '15 September 2024, 16.00',
-                            stars: 5,
-                          ),
-                          const SizedBox(height: 8),
-                          const _ReviewCard(
-                            name: 'Naomi',
-                            text: 'Penjelasan jelas dan menenangkan.',
-                            date: '1 September 2024, 17.28',
-                            stars: 5,
-                          ),
+                          // ===== REVIEWS (riil dari DB) =====
+                          Builder(builder: (context) {
+                            final reviews = _profile?.reviews ??
+                                const BackendDoctorReviews();
+                            if (reviews.reviews.isEmpty) {
+                              return const EmptyState(
+                                icon: Icons.rate_review_outlined,
+                                title: 'Belum ada ulasan',
+                                subtitle:
+                                    'Jadilah yang pertama memberi ulasan setelah sesi selesai.',
+                              );
+                            }
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const SectionLabel('Reviews'),
+                                for (var i = 0;
+                                    i < reviews.reviews.length;
+                                    i++) ...[
+                                  _ReviewCard(
+                                    name: reviews
+                                        .reviews[i].patientName,
+                                    text: reviews.reviews[i].reviewText
+                                            .isEmpty
+                                        ? 'Membantu.'
+                                        : reviews
+                                            .reviews[i].reviewText,
+                                    date: _reviewDate(
+                                        reviews.reviews[i].createdAt),
+                                    stars: reviews.reviews[i].stars,
+                                  ),
+                                  if (i < reviews.reviews.length - 1)
+                                    const SizedBox(height: 8),
+                                ],
+                              ],
+                            );
+                          }),
                           const SizedBox(height: 16),
+
+                          // ===== PAKET AKTIF (bila ada) =====
+                          if (_activePackage != null)
+                            SoftCard(
+                              color:
+                                  MalvaColors.mint.withValues(alpha: 0.10),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.card_membership_rounded,
+                                      color: MalvaColors.mint),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Paket aktif: ${_activePackage!.remainingSessions}/${_activePackage!.totalSessions} sesi tersisa',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w800),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (_activePackage != null)
+                            const SizedBox(height: 12),
 
                           // ===== CHOOSE YOUR SUPPORT LEVEL =====
                           Text(
@@ -384,7 +423,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'This service is for ongoing support, not emergencies. If you are in crisis, call 112',
+                            'Layanan ini untuk dukungan berkelanjutan, bukan darurat. Jika krisis, hubungi 112.',
                             style: Theme.of(context)
                                 .textTheme
                                 .bodySmall
@@ -398,53 +437,80 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             onSelect: () =>
                                 setState(() => _selectedPlan = 'quick'),
                             title: 'Quick Consult (One-Time)',
-                            subtitle: null,
-                            price:
-                                'Rp. ${_rupiah(_quickFrom(cred))} - ${_rupiah(_quickTo(cred))} / Session',
+                            subtitle: _serviceType == 'video'
+                                ? 'Sesi video sekali pertemuan'
+                                : 'Sesi chat sekali pertemuan',
+                            price: _chatPrice() <= 0 && _videoPrice() <= 0
+                                ? 'Harga belum diatur'
+                                : 'Rp. ${_rupiah(_serviceType == 'video' ? _videoPrice() : _chatPrice())} / sesi',
                             featureIcon: Icons.payments_rounded,
                             features: [
                               (
-                                'Rp. ${_rupiah(_quickFrom(cred))} - ${_rupiah(_quickTo(cred))} / Session',
-                                Icons.payments_rounded
-                              ),
-                              (
-                                '30-minute chat/video session',
+                                _serviceType == 'video'
+                                    ? 'Sesi video terjadwal'
+                                    : 'Sesi chat terjadwal',
                                 Icons.record_voice_over_rounded
                               ),
                               (
-                                'No data sharing or follow-up',
+                                'Jadwal sesuai ketersediaan profesional',
+                                Icons.event_available_rounded
+                              ),
+                              (
+                                'Tanpa data sharing & tanpa follow-up',
                                 Icons.cancel_rounded
                               ),
                             ],
                             scheduleChips: const ['Chat', 'Video'],
+                            onChipSelect: (chip) => setState(() =>
+                                _serviceType = chip.toLowerCase()),
+                            selectedChip:
+                                _serviceType == 'video' ? 'Video' : 'Chat',
                             scheduleLines: _scheduleLines(),
                           ),
                           const SizedBox(height: 12),
 
-                          // ===== OPSI 2: CONTINUOUS SUPPORT =====
+                          // ===== OPSI 2: PAKET CONTINUOUS (4 SESI / 6 MINGGU) =====
                           _SupportPlanCard(
                             selected: _selectedPlan == 'continuous',
-                            onSelect: () =>
-                                setState(() => _selectedPlan = 'continuous'),
-                            title: 'Continuous Support (Best Value)',
-                            subtitle: 'Write anytime 24/7. Replies Mon-Fri.',
+                            onSelect: _packagePrice() > 0
+                                ? () => setState(
+                                    () => _selectedPlan = 'continuous')
+                                : () => ScaffoldMessenger.of(context)
+                                    .showSnackBar(const SnackBar(
+                                        content: Text(
+                                            'Profesional belum mengatur harga paket.'))),
+                            title: 'Continuous Package (Best Value)',
+                            subtitle:
+                                '4 sesi pertemuan, berlaku 6 minggu',
                             badge: (
-                              '7 Days of Asynchronous Care',
+                              '4 Sesi • 6 Minggu',
                               Icons.handshake_rounded
                             ),
-                            price: 'Rp.199rb / week',
+                            price: _packagePrice() > 0
+                                ? 'Rp. ${_rupiah(_packagePrice())} / paket'
+                                : 'Harga belum diatur',
                             featureIcon: Icons.bar_chart_rounded,
                             features: const [
-                              ('Data Monitoring', Icons.insert_chart_rounded),
                               (
-                                '24/7 Asynchronous Chat',
-                                Icons.schedule_rounded
+                                '4 sesi chat/video terjadwal',
+                                Icons.event_available_rounded
                               ),
-                              ('20% OFF Video Sessions', Icons.savings_rounded),
+                              (
+                                'Kirim diary, goals, assessment & worksheet (selama paket aktif)',
+                                Icons.send_rounded
+                              ),
+                              (
+                                'Profesional membahas kiriman saat sesi (tanpa kewajiban balas di luar sesi)',
+                                Icons.forum_rounded
+                              ),
+                              (
+                                'Tidak hadir = sesi hangus • Profesional batal = kredit kembali / reschedule',
+                                Icons.info_outline_rounded
+                              ),
                             ],
                             footnote:
-                                '7 hari penuh sejak tanggal mulai. Tanpa perpanjangan otomatis.',
-                            quota: 'Termasuk monitoring data 7 hari',
+                                'Sisa sesi setelah 6 minggu hangus. Tanpa perpanjangan otomatis.',
+                            quota: 'Termasuk monitoring data selama paket aktif',
                           ),
                           const SizedBox(height: 16),
 
@@ -456,7 +522,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             ),
                             icon: const Icon(Icons.arrow_forward_rounded),
                             label: Text(_selectedPlan == 'continuous'
-                                ? 'Lanjutkan Continuous Support'
+                                ? 'Beli Paket 4 Sesi'
                                 : 'Book Session'),
                           ),
                           const SizedBox(height: 16),
@@ -471,9 +537,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   String get _displayName {
     final hint = widget.doctorName?.trim() ?? '';
     if (hint.isNotEmpty) return hint;
-    final cred = _profile?.credential;
-    if (cred == null) return 'Profesional';
-    return 'dr. Profesional ${cred.specialization}';
+    return 'Profesional';
   }
 
   String get _shortName {
@@ -485,22 +549,13 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
     return name.isEmpty ? _displayName : name.first;
   }
 
-  String get _genderLabel => 'Male';
+  /// Harga quick consult dari tarif profesional (tanpa angka dummy).
+  /// 0 = profesional belum mengatur harga.
+  int _chatPrice() => _profile?.pricing.quickChatPrice ?? 0;
 
-  int _chatPrice(BackendProfessionalCredential cred) =>
-      cred.priceFrom > 0 ? cred.priceFrom : 80000;
+  int _videoPrice() => _profile?.pricing.quickVideoPrice ?? 0;
 
-  int _videoPrice(BackendProfessionalCredential cred) =>
-      cred.priceFrom > 0 ? (cred.priceFrom * 1.9).round() : 150000;
-
-  int _offlinePrice(BackendProfessionalCredential cred) =>
-      cred.priceFrom > 0 ? (cred.priceFrom * 2).round() : 300000;
-
-  int _quickFrom(BackendProfessionalCredential cred) =>
-      cred.priceFrom > 0 ? cred.priceFrom : 80000;
-
-  int _quickTo(BackendProfessionalCredential cred) =>
-      cred.priceFrom > 0 ? (cred.priceFrom * 1.9).round() : 150000;
+  int _packagePrice() => _profile?.pricing.packagePrice ?? 0;
 
   String _faskesDistanceLabel(BackendProfessionalCredential cred) {
     final faskes = cred.hospitalName.isEmpty
@@ -510,57 +565,111 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
     final km = distanceKmBetween(
       fromLat: pos?.latitude,
       fromLng: pos?.longitude,
-      toLat: _hospitalLat(cred),
-      toLng: _hospitalLng(cred),
+      toLat: cred.hospitalLat,
+      toLng: cred.hospitalLng,
     );
     if (km == null) return faskes;
     return '$faskes, ${km.toStringAsFixed(1)} km';
   }
 
-  double? _hospitalLat(BackendProfessionalCredential cred) {
-    // Demo profile tidak menyimpan koordinat pada credential; ambil dari demo.
-    final demo = findDemoProfessional(widget.doctorUserId);
-    return demo?.entry.hospitalLat;
-  }
+  static const _dayNamesId = [
+    '',
+    'Senin',
+    'Selasa',
+    'Rabu',
+    'Kamis',
+    'Jumat',
+    'Sabtu',
+    'Minggu',
+  ];
 
-  double? _hospitalLng(BackendProfessionalCredential cred) {
-    final demo = findDemoProfessional(widget.doctorUserId);
-    return demo?.entry.hospitalLng;
-  }
-
-  String _todayName() {
-    const days = [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday'
-    ];
-    return days[DateTime.now().weekday - 1];
-  }
-
+  /// Ringkasan jadwal mingguan profesional dari server.
   List<String> _scheduleLines() {
-    if (_todaySlots.isEmpty) {
-      return const ['Monday: 09:00 - 11:00', 'Tuesday: 09:00 - 11:00'];
+    final schedules = _profile?.schedules ?? const [];
+    if (schedules.isEmpty) {
+      return const ['Jadwal belum diatur profesional'];
     }
+    final byDay = <int, List<BackendProfessionalSchedule>>{};
+    for (final s in schedules) {
+      (byDay[s.dayOfWeek] ??= []).add(s);
+    }
+    final days = byDay.keys.toList()..sort();
     return [
-      '$_todayName(): ${_todaySlots.first.time} - ${_todaySlots.last.time}',
+      for (final d in days)
+        '${_dayNamesId[d]}: ${byDay[d]!.map((s) => '${s.startTime}–${s.endTime}').join(', ')}',
     ];
   }
+
+  /// Hari-hari ke depan yang bisa di-booking (dari availability server).
+  List<BackendAvailabilityDay> get _bookableDays =>
+      _availability.where((d) => d.bookable).toList(growable: false);
 
   void _proceed() {
     final cred = _profile?.credential;
     if (cred == null) return;
     if (_selectedPlan == 'continuous') {
-      _openContinuousBooking(cred);
+      if (_packagePrice() <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Profesional belum mengatur harga paket. Pilih Quick Consult.')),
+        );
+        return;
+      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PackageBookingScreen(
+            doctorUserId: widget.doctorUserId,
+            doctorName: _displayName,
+            price: _packagePrice(),
+            session: widget.session,
+            apiClient: widget.apiClient,
+          ),
+        ),
+      );
     } else {
-      _openBooking(context, null);
+      final price = _serviceType == 'video' ? _videoPrice() : _chatPrice();
+      if (price <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content:
+                  Text('Profesional belum mengatur harga sesi ini.')),
+        );
+        return;
+      }
+      _openBooking(context, price);
     }
   }
 
-  void _openContinuousBooking(BackendProfessionalCredential cred) {
+  static String _reviewDate(String? iso) {
+    if (iso == null || iso.isEmpty) return '';
+    final d = DateTime.tryParse(iso)?.toLocal();
+    if (d == null) return '';
+    return '${d.day}/${d.month}/${d.year}';
+  }
+
+  static String _shortDate(String yyyyMmDd) {
+    final d = DateTime.tryParse(yyyyMmDd);
+    if (d == null) return yyyyMmDd;
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des'
+    ];
+    return '${d.day} ${months[d.month - 1]}';
+  }
+
+  void _openBooking(BuildContext context, int price) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -568,8 +677,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
           doctorUserId: widget.doctorUserId,
           doctorName: _displayName,
           serviceType: _serviceType,
-          isContinuousSupport: true,
-          package: null,
+          expectedPrice: price,
           session: widget.session,
           apiClient: widget.apiClient,
         ),
@@ -577,20 +685,16 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
     );
   }
 
-  void _openBooking(BuildContext context, BackendServicePackage? package) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => BookingDetailScreen(
-          doctorUserId: widget.doctorUserId,
-          doctorName: _displayName,
-          serviceType: _serviceType,
-          package: package,
-          session: widget.session,
-          apiClient: widget.apiClient,
-        ),
-      ),
-    );
+  Future<void> _openIntroVideo(String url) async {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tidak bisa membuka video intro.')),
+      );
+    }
   }
 
   static String _rupiah(int value) {
@@ -760,19 +864,26 @@ class _ReviewCard extends StatelessWidget {
                   style: const TextStyle(
                       fontWeight: FontWeight.w900, fontSize: 13)),
               const Spacer(),
-              for (var i = 0; i < stars; i++)
-                const Icon(Icons.star_rounded,
-                    size: 14, color: MalvaColors.amber),
+              for (var i = 0; i < 5; i++)
+                Icon(
+                    i < stars ? Icons.star_rounded : Icons.star_outline_rounded,
+                    size: 14,
+                    color: MalvaColors.amber),
             ],
           ),
           const SizedBox(height: 6),
           Text(text, style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 4),
-          Text(date,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: Colors.black54)),
+          if (date.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                date,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.black54),
+              ),
+            ),
         ],
       ),
     );
@@ -793,6 +904,8 @@ class _SupportPlanCard extends StatelessWidget {
     this.footnote,
     this.quota,
     this.scheduleChips,
+    this.selectedChip,
+    this.onChipSelect,
     this.scheduleLines,
   });
 
@@ -807,6 +920,8 @@ class _SupportPlanCard extends StatelessWidget {
   final String? footnote;
   final String? quota;
   final List<String>? scheduleChips;
+  final String? selectedChip;
+  final ValueChanged<String>? onChipSelect;
   final List<String>? scheduleLines;
 
   @override
@@ -918,16 +1033,33 @@ class _SupportPlanCard extends StatelessWidget {
                 spacing: 8,
                 children: [
                   for (final chip in scheduleChips!)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: MalvaColors.seed.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(999),
+                    InkWell(
+                      onTap: onChipSelect == null
+                          ? null
+                          : () => onChipSelect!(chip),
+                      borderRadius: BorderRadius.circular(999),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: selectedChip == chip
+                              ? MalvaColors.seed
+                              : MalvaColors.seed.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(999),
+                          border: selectedChip == chip
+                              ? null
+                              : Border.all(
+                                  color: MalvaColors.seed
+                                      .withValues(alpha: 0.25)),
+                        ),
+                        child: Text(chip,
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12.5,
+                                color: selectedChip == chip
+                                    ? Colors.white
+                                    : null)),
                       ),
-                      child: Text(chip,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w800, fontSize: 12.5)),
                     ),
                 ],
               ),

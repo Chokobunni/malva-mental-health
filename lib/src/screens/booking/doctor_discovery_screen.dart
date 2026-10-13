@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/demo_professionals.dart';
 import '../../models.dart';
 import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
@@ -59,8 +58,7 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
     super.dispose();
   }
 
-  /// Muat dari server bila terjangkau; selalu fallback ke direktori demo
-  /// agar daftar tidak pernah kosong dan tidak menampilkan error mentah.
+  /// Muat direktori profesional dari server (tanpa data demo).
   Future<void> _load() async {
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
@@ -83,80 +81,20 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
         patientLng: pos?.longitude,
       );
       if (!mounted) return;
-      if (doctors.isEmpty) {
-        setState(() {
-          _doctors = _demoDirectory();
-          _offlineMode = true;
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _doctors = doctors;
-          _offlineMode = false;
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _doctors = doctors;
+        _offlineMode = false;
+        _isLoading = false;
+      });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _doctors = _demoDirectory();
+        _doctors = const [];
         _offlineMode = true;
         _error = e;
         _isLoading = false;
       });
     }
-  }
-
-  /// Direktori demo dengan filter & urutan yang sama seperti server.
-  /// Jarak dihitung lokal dari posisi pasien (bila ada) ke koordinat faskes.
-  List<BackendDoctorSearchResult> _demoDirectory() {
-    final pos = ref.read(patientLocationProvider).position;
-    var list = demoProfessionals()
-        .map((demo) => demo.entry.copyWith(
-              distanceKm: distanceKmBetween(
-                fromLat: pos?.latitude,
-                fromLng: pos?.longitude,
-                toLat: demo.entry.hospitalLat,
-                toLng: demo.entry.hospitalLng,
-              ),
-            ))
-        .toList(growable: false);
-    if (_specialization.isNotEmpty) {
-      list = list
-          .where((d) => d.specialization == _specialization)
-          .toList(growable: false);
-    }
-    if (_bpjsOnly == true) {
-      list = list.where((d) => d.isBpjsSupported).toList(growable: false);
-    }
-    final sorted = list.toList();
-    switch (_sortBy) {
-      case 'name_desc':
-        sorted.sort((a, b) => b.displayName.compareTo(a.displayName));
-      case 'sessions':
-        sorted.sort((a, b) => b.legacyCount.compareTo(a.legacyCount));
-      case 'popular':
-        sorted.sort((a, b) => b.reviewCount.compareTo(a.reviewCount));
-      case 'distance':
-        sorted.sort((a, b) {
-          final da = a.distanceKm;
-          final db = b.distanceKm;
-          if (da == null && db == null) return 0;
-          if (da == null) return 1;
-          if (db == null) return -1;
-          return da.compareTo(db);
-        });
-      case 'availability':
-        sorted.sort((a, b) {
-          final ab = (b.isAvailableToday == true ? 1 : 0) -
-              (a.isAvailableToday == true ? 1 : 0);
-          if (ab != 0) return ab;
-          return a.displayName.compareTo(b.displayName);
-        });
-      default:
-        sorted.sort((a, b) => a.displayName.compareTo(b.displayName));
-    }
-    return sorted;
   }
 
   List<BackendDoctorSearchResult> get _filtered {
@@ -274,7 +212,7 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
                 borderRadius: BorderRadius.circular(18),
                 onTap: _isLoading ? null : _load,
                 child: const OfflineNoticeBanner(
-                  message: 'Menampilkan direktori contoh. '
+                  message: 'Tidak terhubung ke server. '
                       'Ketuk untuk memuat ulang dari server.',
                 ),
               ),
@@ -386,9 +324,11 @@ class _DoctorCard extends StatelessWidget {
                         const Icon(Icons.star_rounded,
                             size: 16, color: MalvaColors.amber),
                         const SizedBox(width: 2),
-                        const Text(
-                          '4.8',
-                          style: TextStyle(
+                        Text(
+                          doctor.reviewCount == 0
+                              ? 'Belum ada ulasan'
+                              : '${doctor.helpfulnessPercent}% terbantu',
+                          style: const TextStyle(
                               fontWeight: FontWeight.w900, fontSize: 12.5),
                         ),
                         const SizedBox(width: 4),

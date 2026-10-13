@@ -251,7 +251,36 @@ func (c *client) handleChatMessage(raw json.RawMessage) {
 		return
 	}
 	if !linked {
-		c.hub.logger.Warn("ws: users not linked", "sender", c.userID, "recipient", msg.RecipientID)
+		// Relasi longgar (sesi/paket) tetap diizinkan untuk dibaca di REST;
+		// WS hanya menyimpan bila ada relasi apa pun.
+		rel, rerr := c.hub.store.PairRelation(ctx, c.userID, msg.RecipientID)
+		if rerr != nil || !rel {
+			c.hub.logger.Warn("ws: users not linked", "sender", c.userID, "recipient", msg.RecipientID)
+			return
+		}
+		linked = true
+		if c.role == "patient" {
+			patientID, professionalID = c.userID, msg.RecipientID
+		} else {
+			patientID, professionalID = msg.RecipientID, c.userID
+		}
+	}
+	// Kebijakan chat: teks hanya saat sesi berjalan; share data milik
+	// pasien butuh paket aktif; profesional tidak membalas di luar sesi.
+	kindLower := strings.ToLower(strings.TrimSpace(msg.Kind))
+	isShare := kindLower != "" && kindLower != "text"
+	access, aerr := c.hub.store.ChatAccessFor(ctx, patientID, professionalID, c.role)
+	if aerr != nil {
+		c.hub.logger.Warn("ws: chat access check failed", "error", aerr)
+		return
+	}
+	if isShare {
+		if c.role != "patient" || !access.CanShare {
+			c.hub.logger.Warn("ws: share rejected", "sender", c.userID)
+			return
+		}
+	} else if !access.CanSendText {
+		c.hub.logger.Warn("ws: text rejected outside session", "sender", c.userID)
 		return
 	}
 	timestamp := time.Now()

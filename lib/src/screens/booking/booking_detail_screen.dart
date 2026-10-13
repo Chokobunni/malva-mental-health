@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models.dart';
+import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
-import 'consent_request_sheet.dart';
 import 'payment_screen.dart';
 
 // ============================================================
-// BOOKING DETAIL â€” tanggal + slot + paket
+// BOOKING DETAIL — Quick Consult satu kali:
+// tanggal (dari hari available profesional) + slot jam riil server.
+// Tanpa slot demo, tanpa harga dummy (harga dari tarif profesional,
+// dihitung ulang oleh server).
 // ============================================================
 
 class BookingDetailScreen extends ConsumerStatefulWidget {
@@ -19,8 +22,7 @@ class BookingDetailScreen extends ConsumerStatefulWidget {
     required this.doctorUserId,
     required this.doctorName,
     required this.serviceType,
-    this.package,
-    this.isContinuousSupport = false,
+    required this.expectedPrice,
     this.session,
     this.apiClient,
   });
@@ -28,10 +30,9 @@ class BookingDetailScreen extends ConsumerStatefulWidget {
   final String doctorUserId;
   final String doctorName;
   final String serviceType;
-  final BackendServicePackage? package;
 
-  /// True = Continuous Support 7 Days (async care + data monitoring).
-  final bool isContinuousSupport;
+  /// Harga yang tampil di profil (server menghitung ulang & memvalidasi).
+  final int expectedPrice;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
@@ -41,130 +42,98 @@ class BookingDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
-  DateTime _date = DateTime.now();
+  List<BackendAvailabilityDay> _days = const [];
+  String? _selectedDate;
   String? _selectedSlot;
   List<BackendDoctorSlot> _slots = const [];
+  bool _isLoadingDays = true;
   bool _isLoadingSlots = false;
   bool _isSubmitting = false;
   String? _error;
 
-  String get _dateStr =>
-      '${_date.year.toString().padLeft(4, '0')}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}';
-
-  /// Continuous care: tanggal mulai + 6 hari = periode 7 hari.
-  DateTime get _endDate => _date.add(const Duration(days: 6));
-
-  /// 7 hari pilihan (hari ini s/d +6). Hari lampau tidak pernah muncul.
-  List<DateTime> get _next7Days {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    return [for (var i = 0; i < 7; i++) today.add(Duration(days: i))];
-  }
-
-  /// Tanggal unik yang tersedia pada range 7 hari (untuk continuous).
-  bool _isSameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
-  /// Kalender asli: pilih tanggal mulai dalam range 7 hari ke depan.
-  Future<void> _pickStartDate() async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _date.isBefore(today) ? today : _date,
-      firstDate: today,
-      lastDate: today.add(const Duration(days: 6)),
-      helpText: 'Pilih tanggal mulai (7 hari ke depan)',
-      cancelText: 'Batal',
-      confirmText: 'Pilih',
-    );
-    if (picked == null || !mounted) return;
-    setState(() {
-      _date = DateTime(picked.year, picked.month, picked.day);
-      _selectedSlot = null;
-    });
-    _loadSlots();
-  }
-
   @override
   void initState() {
     super.initState();
-    _loadSlots();
+    _loadDays();
   }
 
-  /// Set pilihan tanggal dari chip 7 hari.
-  void _selectDay(DateTime day) {
+  Future<void> _loadDays() async {
+    final MalvaApiClient apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
+    final rawToken = widget.session?.accessToken;
+    final accessToken =
+        (rawToken == null || rawToken.isEmpty) ? null : rawToken;
     setState(() {
-      _date = DateTime(day.year, day.month, day.day);
+      _isLoadingDays = true;
+      _error = null;
+    });
+    try {
+      final days = await apiClient.getDoctorAvailability(
+        accessToken: accessToken,
+        userId: widget.doctorUserId,
+      );
+      if (!mounted) return;
+      final bookable = days.where((d) => d.bookable).toList(growable: false);
+      setState(() {
+        _days = days;
+        _isLoadingDays = false;
+        _selectedDate = bookable.isEmpty ? null : bookable.first.date;
+      });
+      if (_selectedDate != null) _loadSlots();
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingDays = false;
+        _error = friendlyErrorMessage(e);
+      });
+    }
+  }
+
+  void _selectDate(String date) {
+    setState(() {
+      _selectedDate = date;
       _selectedSlot = null;
+      _slots = const [];
     });
     _loadSlots();
   }
 
   Future<void> _loadSlots() async {
-    // Continuous Support: tanpa slot spesifik (7 hari penuh).
-    if (widget.isContinuousSupport) {
-      if (mounted) setState(() => _slots = const []);
-      return;
-    }
+    final date = _selectedDate;
+    if (date == null) return;
     setState(() {
       _isLoadingSlots = true;
       _selectedSlot = null;
     });
-    List<BackendDoctorSlot> slots = const [];
-    final apiClient = widget.apiClient;
-    final rawToken = widget.session?.accessToken;
-    final accessToken =
-        (rawToken == null || rawToken.isEmpty) ? null : rawToken;
-    if (apiClient != null) {
-      try {
-        final remote = await apiClient.getDoctorAvailableSlots(
-          accessToken: accessToken,
-          userId: widget.doctorUserId,
-          date: _dateStr,
-        );
-        slots = remote.where((s) => s.available).toList(growable: false);
-      } on Object {
-        // Fallback ke slot demo di bawah.
-      }
+    try {
+      final MalvaApiClient apiClient =
+          widget.apiClient ?? ref.read(apiClientProvider);
+      final rawToken = widget.session?.accessToken;
+      final accessToken =
+          (rawToken == null || rawToken.isEmpty) ? null : rawToken;
+      final slots = await apiClient.getDoctorAvailableSlots(
+        accessToken: accessToken,
+        userId: widget.doctorUserId,
+        date: date,
+      );
+      if (!mounted) return;
+      setState(() {
+        _slots = slots;
+        _isLoadingSlots = false;
+      });
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _slots = const [];
+        _isLoadingSlots = false;
+        _error = friendlyErrorMessage(e);
+      });
     }
-    // Jaminan UX: pasien SELALU disediakan pilihan jam. Bila server kosong
-    // (offline / jadwal belum diatur), pakai jadwal demo 09:00-16:00.
-    if (slots.isEmpty) {
-      slots = _demoSlots();
-    }
-    if (!mounted) return;
-    setState(() {
-      _slots = slots;
-      _isLoadingSlots = false;
-    });
-  }
-
-  /// Slot demo deterministik 09:00-16:00 per 30 menit; pola ketersediaan
-  /// stabil per tanggal agar tidak berubah saat refresh.
-  List<BackendDoctorSlot> _demoSlots() {
-    final seed = _dateStr.hashCode.abs();
-    final out = <BackendDoctorSlot>[];
-    for (var h = 9; h < 16; h++) {
-      for (final m in const [0, 30]) {
-        final label =
-            '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
-        final available = (h * 2 + (m ~/ 30) + seed) % 4 != 0;
-        out.add(BackendDoctorSlot(time: label, available: available));
-      }
-    }
-    return out;
-  }
-
-  int get _price {
-    if (widget.isContinuousSupport) return 199000; // Rp.199rb / week
-    final pkg = widget.package;
-    if (pkg != null) return pkg.price;
-    return widget.serviceType == 'video' ? 150000 : 80000;
   }
 
   @override
   Widget build(BuildContext context) {
+    final isVideo = widget.serviceType == 'video';
     return Scaffold(
       appBar: AppBar(
         title: const Text('Booking Detail'),
@@ -192,24 +161,12 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                           style: const TextStyle(
                               fontWeight: FontWeight.w900, fontSize: 16)),
                       const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 6,
-                        children: [
-                          StatusPill(
-                            label: widget.serviceType == 'video'
-                                ? 'Video'
-                                : 'Chat',
-                            color: MalvaColors.orchid,
-                            icon: widget.serviceType == 'video'
-                                ? Icons.videocam_rounded
-                                : Icons.chat_bubble_rounded,
-                          ),
-                          if (widget.package != null)
-                            StatusPill(
-                              label: '${widget.package!.packageSessions} Sesi',
-                              color: MalvaColors.mint,
-                            ),
-                        ],
+                      StatusPill(
+                        label: isVideo ? 'Video • sekali sesi' : 'Chat • sekali sesi',
+                        color: MalvaColors.orchid,
+                        icon: isVideo
+                            ? Icons.videocam_rounded
+                            : Icons.chat_bubble_rounded,
                       ),
                     ],
                   ),
@@ -218,7 +175,6 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          // === RINGKASAN JADWAL: kapan sesi/perawatan dimulai ===
           SoftCard(
             color: MalvaColors.seed.withValues(alpha: 0.06),
             child: Row(
@@ -230,18 +186,16 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        widget.isContinuousSupport
-                            ? 'Continuous Support dimulai'
-                            : 'Sesi dimulai',
-                        style: const TextStyle(
+                      const Text(
+                        'Sesi dimulai',
+                        style: TextStyle(
                             fontWeight: FontWeight.w900, fontSize: 13.5),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        widget.isContinuousSupport
-                            ? '${_prettyDate(_date)} — berakhir ${_prettyDate(_endDate)} (7 hari)'
-                            : '${_prettyDate(_date)}'
+                        _selectedDate == null
+                            ? 'Pilih tanggal di bawah'
+                            : '${_prettyDate(_selectedDate!)}'
                                 '${_selectedSlot == null ? ' • pilih jam di bawah' : ' • pukul $_selectedSlot'}',
                         style: Theme.of(context)
                             .textTheme
@@ -255,225 +209,117 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          if (widget.isContinuousSupport) ...[
-            const SectionLabel('Tanggal Mulai'),
-            SoftCard(
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: MalvaColors.mint.withValues(alpha: 0.15),
-                    child: const Icon(Icons.calendar_month_rounded,
-                        color: MalvaColors.mint),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Mulai: ${_prettyDate(_date)}',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w900, fontSize: 15),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Berakhir: ${_prettyDate(_endDate)} • 7 hari perawatan',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: Colors.black54),
-                        ),
-                      ],
-                    ),
-                  ),
-                  FilledButton.tonalIcon(
-                    onPressed: _pickStartDate,
-                    icon: const Icon(Icons.edit_calendar_rounded, size: 18),
-                    label: const Text('Pilih'),
-                  ),
-                ],
-              ),
-            ),
-          ] else ...[
-            const SectionLabel('Pilih Tanggal (7 hari ke depan)'),
+          const SectionLabel('Pilih Tanggal (hari praktik profesional)'),
+          if (_isLoadingDays)
+            const Center(child: CircularProgressIndicator())
+          else if (_days.isEmpty || _selectedDate == null)
+            const EmptyState(
+              icon: Icons.event_busy_rounded,
+              title: 'Belum ada jadwal tersedia',
+              subtitle:
+                  'Profesional belum mengatur hari praktik / semua penuh 14 hari ke depan.',
+            )
+          else
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  for (final day in _next7Days)
+                  for (final day in _days)
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: _DayChip(
-                        day: day,
-                        selected: _isSameDay(day, _date),
-                        onTap: () => _selectDay(day),
+                        date: day.date,
+                        bookable: day.bookable,
+                        freeSlots: day.freeSlots,
+                        selected: _selectedDate == day.date,
+                        onTap: day.bookable
+                            ? () => _selectDate(day.date)
+                            : null,
                       ),
                     ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-            SoftCard(
-              child: Row(
-                children: [
-                  const Icon(Icons.event_rounded,
-                      color: MalvaColors.seed, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _prettyDate(_date),
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w900, fontSize: 15),
-                    ),
+          const SizedBox(height: 14),
+          const SectionLabel('Pilih Jam'),
+          if (_isLoadingSlots)
+            const Center(child: CircularProgressIndicator())
+          else if (_selectedDate == null)
+            const EmptyState(
+              icon: Icons.schedule_rounded,
+              title: 'Pilih tanggal dulu',
+              subtitle: 'Jam tersedia muncul setelah tanggal dipilih.',
+            )
+          else if (_slots.where((s) => s.available).isEmpty)
+            const EmptyState(
+              icon: Icons.event_busy_rounded,
+              title: 'Tidak ada slot bebas',
+              subtitle:
+                  'Semua slot tanggal ini sudah terisi. Coba tanggal lain.',
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final slot in _slots)
+                  ChoiceChip(
+                    label: Text(slot.time,
+                        style:
+                            const TextStyle(fontWeight: FontWeight.w700)),
+                    selected: _selectedSlot == slot.time,
+                    onSelected: slot.available
+                        ? (_) =>
+                            setState(() => _selectedSlot = slot.time)
+                        : null,
+                    selectedColor:
+                        MalvaColors.seed.withValues(alpha: 0.2),
                   ),
-                  FilledButton.tonalIcon(
-                    onPressed: _pickStartDate,
-                    icon: const Icon(Icons.edit_calendar_rounded, size: 18),
-                    label: const Text('Kalender'),
-                  ),
-                ],
-              ),
+              ],
             ),
-            const SizedBox(height: 14),
-            const SectionLabel('Pilih Jam'),
-            if (_isLoadingSlots)
-              const Center(child: CircularProgressIndicator())
-            else if (_slots.isEmpty)
-              const EmptyState(
-                icon: Icons.event_busy_rounded,
-                title: 'Tidak ada slot',
-                subtitle:
-                    'Tidak ada jadwal tersedia pada tanggal ini. Coba tanggal lain.',
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final slot in _slots)
-                    ChoiceChip(
-                      label: Text(slot.time,
-                          style: const TextStyle(fontWeight: FontWeight.w700)),
-                      selected: _selectedSlot == slot.time,
-                      onSelected: (_) =>
-                          setState(() => _selectedSlot = slot.time),
-                      selectedColor: MalvaColors.seed.withValues(alpha: 0.2),
-                    ),
-                ],
-              ),
+          const SizedBox(height: 14),
+          SoftCard(
+            color: MalvaColors.plum,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    isVideo ? 'Video session' : 'Chat session',
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Text(
+                  'Rp ${_formatRupiah(widget.expectedPrice)}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 20,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Text(_error!,
+                style: const TextStyle(
+                    color: MalvaColors.danger, fontWeight: FontWeight.w700)),
           ],
           const SizedBox(height: 14),
-          if (widget.isContinuousSupport) ...[
-            // === CONTINUOUS SUPPORT: tanpa slot, 7 hari + badge ===
-            SoftCard(
-              color: MalvaColors.mint.withValues(alpha: 0.10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.handshake_rounded, color: MalvaColors.mint),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '7 Days of Asynchronous Care',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w900, fontSize: 14),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Write anytime 24/7. Replies Mon-Fri. Terhubung selama 7 hari '
-                    'berturut-turut sejak pembayaran berhasil.',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: Colors.black54),
-                  ),
-                  const SizedBox(height: 6),
-                  const Row(
-                    children: [
-                      Icon(Icons.insert_chart_rounded,
-                          size: 16, color: MalvaColors.seed),
-                      SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Profesional dapat memantau progresmu (sesuai izin).',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 12.5),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (_error != null) ...[
-              const SizedBox(height: 10),
-              Text(_error!,
-                  style: const TextStyle(
-                      color: MalvaColors.danger, fontWeight: FontWeight.w700)),
-            ],
-            const SizedBox(height: 14),
-            // SATU tombol: continuous support -> consent -> payment.
-            FilledButton.icon(
-              onPressed: _isSubmitting ? null : _submitBooking,
-              icon: const Icon(Icons.handshake_rounded),
-              label: Text(_isSubmitting
-                  ? 'Memproses...'
-                  : 'Mulai Continuous Support — Rp ${_formatRupiah(_price)}'),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Chat 24/7 selama 7 hari (${_prettyDate(_date)} – ${_prettyDate(_endDate)}). Batalkan kapan saja.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: Colors.black54),
-            ),
-          ] else ...[
-            SoftCard(
-              color: MalvaColors.plum,
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      '30 menit',
-                      style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  Text(
-                    'Rp ${_formatRupiah(_price)}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 20,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 10),
-              Text(_error!,
-                  style: const TextStyle(
-                      color: MalvaColors.danger, fontWeight: FontWeight.w700)),
-            ],
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: (_selectedSlot == null || _isSubmitting)
-                  ? null
-                  : _submitBooking,
-              icon: const Icon(Icons.arrow_forward_rounded),
-              label:
-                  Text(_isSubmitting ? 'Memproses...' : 'Proceed to Payment'),
-            ),
-          ],
+          FilledButton.icon(
+            onPressed: (_selectedSlot == null || _isSubmitting)
+                ? null
+                : _submitBooking,
+            icon: const Icon(Icons.arrow_forward_rounded),
+            label: Text(_isSubmitting ? 'Memproses...' : 'Proceed to Payment'),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Chat aktif saat sesi berjalan. Tanpa data sharing & tanpa follow-up.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: Colors.black54),
+          ),
         ],
       ),
     );
@@ -487,16 +333,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
           'Hubungkan ke server untuk membuat booking.');
       return;
     }
-    // Continuous Support: consent checklist DULU (sesuai Figma flow:
-    // pilih paket -> isi consent -> bayar -> connected). Batal = tidak ada
-    // booking yatim di server.
-    if (widget.isContinuousSupport) {
-      final granted = await showConsentRequestSheet(
-        context: context,
-        professionalId: widget.doctorUserId,
-      );
-      if (!granted || !mounted) return;
-    }
+    if (_selectedDate == null || _selectedSlot == null) return;
     setState(() {
       _isSubmitting = true;
       _error = null;
@@ -505,18 +342,14 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
       final booking = await apiClient.createBooking(
         accessToken: accessToken,
         professionalId: widget.doctorUserId,
-        packageId: widget.package?.id,
-        serviceType: widget.isContinuousSupport
-            ? 'continuous_support'
-            : (widget.serviceType == 'video'
-                ? 'quick_consult_video'
-                : 'quick_consult'),
+        serviceType: widget.serviceType == 'video'
+            ? 'quick_consult_video'
+            : 'quick_consult',
         sessionType: widget.serviceType,
-        bookingDate: _dateStr,
-        // Continuous: tanpa slot (server simpan NULL). Quick: slot wajib.
-        slotTime: widget.isContinuousSupport ? null : _selectedSlot,
-        durationMinutes: widget.isContinuousSupport ? 7 * 24 * 60 : 30,
-        price: _price,
+        bookingDate: _selectedDate!,
+        slotTime: _selectedSlot,
+        durationMinutes: 30,
+        price: widget.expectedPrice,
       );
       if (!mounted) return;
       Navigator.push(
@@ -539,7 +372,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
     }
   }
 
-  static String _prettyDate(DateTime d) {
+  static String _prettyDate(String yyyyMmDd) {
     const days = [
       'Senin',
       'Selasa',
@@ -563,6 +396,8 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
       'November',
       'Desember'
     ];
+    final d = DateTime.tryParse(yyyyMmDd);
+    if (d == null) return yyyyMmDd;
     return '${days[d.weekday - 1]}, ${d.day} ${months[d.month - 1]} ${d.year}';
   }
 
@@ -578,17 +413,21 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
   }
 }
 
-/// Chip satu hari pada pemilih 7 hari (hanya hari ini s/d +6).
+/// Chip satu hari dari availability server (hanya yang bisa di-booking).
 class _DayChip extends StatelessWidget {
   const _DayChip({
-    required this.day,
+    required this.date,
+    required this.bookable,
+    required this.freeSlots,
     required this.selected,
     required this.onTap,
   });
 
-  final DateTime day;
+  final String date;
+  final bool bookable;
+  final int freeSlots;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   static const _dayNames = [
     'Sen',
@@ -617,54 +456,66 @@ class _DayChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final day = DateTime.tryParse(date) ?? DateTime.now();
     final now = DateTime.now();
     final isToday =
         day.year == now.year && day.month == now.month && day.day == now.day;
     return InkWell(
-      onTap: onTap,
+      onTap: bookable ? onTap : null,
       borderRadius: BorderRadius.circular(14),
-      child: Container(
-        width: 66,
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: selected
-              ? MalvaColors.seed
-              : MalvaColors.seed.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
+      child: Opacity(
+        opacity: bookable ? 1 : 0.45,
+        child: Container(
+          width: 66,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
             color: selected
                 ? MalvaColors.seed
-                : MalvaColors.seed.withValues(alpha: 0.18),
+                : MalvaColors.seed.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? MalvaColors.seed
+                  : MalvaColors.seed.withValues(alpha: 0.18),
+            ),
           ),
-        ),
-        child: Column(
-          children: [
-            Text(
-              isToday ? 'Hari ini' : _dayNames[day.weekday - 1],
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: selected ? Colors.white : Colors.black54,
+          child: Column(
+            children: [
+              Text(
+                isToday ? 'Hari ini' : _dayNames[day.weekday - 1],
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: selected ? Colors.white : Colors.black54,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${day.day}',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: selected ? Colors.white : MalvaColors.plum,
+              const SizedBox(height: 4),
+              Text(
+                '${day.day}',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: selected ? Colors.white : MalvaColors.plum,
+                ),
               ),
-            ),
-            Text(
-              _monthNames[day.month - 1],
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                color: selected ? Colors.white70 : Colors.black45,
+              Text(
+                _monthNames[day.month - 1],
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? Colors.white70 : Colors.black45,
+                ),
               ),
-            ),
-          ],
+              Text(
+                bookable ? '$freeSlots slot' : 'Penuh',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? Colors.white70 : Colors.black45,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

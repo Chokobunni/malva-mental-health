@@ -60,11 +60,13 @@ void main() {
     ];
 
     for (final questionKey in questionKeys) {
+      // Chip jawaban kini menampilkan label makna (bukan angka mentah),
+      // jadi pilih chip pertama (nilai 0) di dalam kartu pertanyaan.
       final answer = find.descendant(
         of: find.byKey(questionKey),
-        matching: find.widgetWithText(ChoiceChip, '0'),
+        matching: find.byType(ChoiceChip),
       );
-      tester.widget<ChoiceChip>(answer).onSelected?.call(true);
+      tester.widget<ChoiceChip>(answer.first).onSelected?.call(true);
       await tester.pump();
     }
 

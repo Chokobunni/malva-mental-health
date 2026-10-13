@@ -85,10 +85,11 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
   final _newDur = TextEditingController(text: '30');
   final _schedules = <_ScheduleRow>[];
 
-  final _pkgSessions = TextEditingController(text: '1');
-  final _pkgDays = TextEditingController(text: '7');
-  final _pkgPrice = TextEditingController(text: '199000');
-  final _pkgLabel = TextEditingController(text: '7 Days Continuous Care');
+  final _pkgSessions = TextEditingController(text: '4');
+  final _pkgDays = TextEditingController(text: '42');
+  final _pkgPrice = TextEditingController(text: '799000');
+  final _pkgLabel =
+      TextEditingController(text: 'Paket Continuous 4 Sesi / 6 Minggu');
   final _packages = <_PackageRow>[];
 
   @override

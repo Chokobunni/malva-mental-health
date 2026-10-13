@@ -4,18 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../assessment_engine.dart';
 import '../models.dart';
-import '../providers/providers.dart';
 import '../services/dashboard_sync_service.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
-import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import 'booking/credential_screens.dart';
+import 'notifications_screen.dart';
 import 'portal/crisis_incident_log_screen.dart';
 import 'portal/e_prescription_screen.dart';
 import 'portal/earnings_screen.dart';
+import 'pro_patient_detail_screen.dart';
+import 'pro_pricing_screen.dart';
+import 'pro_schedule_screen.dart';
 
 class ProfessionalDashboardScreen extends ConsumerStatefulWidget {
   const ProfessionalDashboardScreen({
@@ -39,21 +40,10 @@ class ProfessionalDashboardScreen extends ConsumerStatefulWidget {
 class _ProfessionalDashboardScreenState
     extends ConsumerState<ProfessionalDashboardScreen> {
   final Set<String> _reviewedScreeningIds = {};
-  final List<_AuditEntry> _auditEntries = [];
   final Map<String, List<BackendProfessionalNote>> _professionalNotes = {};
-  final Map<String, List<BackendFollowUpMessage>> _followUpMessages = {};
 
   List<BackendPatientProfessionalLink> _links = const [];
   Map<String, List<BackendScreeningSession>> _screeningsByPatient = const {};
-  Map<String, List<BackendTimelineEvent>> _timelineEventsByPatient = const {};
-  Map<String, List<BackendMoodCheckin>> _moodsByPatient = const {};
-  Map<String, List<BackendDiaryEntry>> _diariesByPatient = const {};
-  Map<String, List<BackendMedication>> _medicationsByPatient = const {};
-  Map<String, List<BackendMedicationLog>> _medicationLogsByPatient = const {};
-  Set<String> _moodDiaryRestrictedPatients = const {};
-  Set<String> _medicationRestrictedPatients = const {};
-  Set<String> _healthRecordRestrictedPatients = const {};
-  Map<String, BackendHealthRecord> _healthRecordsByPatient = const {};
   List<_AuditEntry> _serverAuditEntries = const [];
   String? _selectedPatientId;
   String _searchQuery = '';
@@ -108,235 +98,182 @@ class _ProfessionalDashboardScreenState
 
   @override
   Widget build(BuildContext context) {
-    final storeState = ref.watch(malvaStoreProvider);
-    final patients = _patientsForDashboard(storeState);
+    final patients = _patientsForDashboard();
     final selected = _selectedPatient(patients);
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: _loadOnlineProfessionalData,
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            GradientHeader(
-              title: 'Professional',
-              subtitle:
-                  'Prioritas pasien, screening, alert, dan follow-up klinis',
-              leading: const Icon(
-                Icons.medical_information_rounded,
-                color: Colors.white,
-                size: 34,
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _SyncStatusIndicator(
-                    status: _syncStatus,
-                    lastSyncTime: _lastSyncTime,
+      body: Column(
+        children: [
+          GradientHeader(
+            title: 'Professional',
+            subtitle:
+                'Prioritas pasien, screening, sesi, dan paket',
+            leading: const Icon(
+              Icons.medical_information_rounded,
+              color: Colors.white,
+              size: 34,
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _SyncStatusIndicator(
+                  status: _syncStatus,
+                  lastSyncTime: _lastSyncTime,
+                ),
+                IconButton(
+                  tooltip: 'Notifikasi',
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => NotificationsScreen(
+                        session: widget.session,
+                        apiClient: widget.apiClient,
+                      ),
+                    ),
                   ),
-                  IconButton(
-                    tooltip: 'Refresh manual',
-                    onPressed: _manualRefresh,
-                    icon: _syncStatus == SyncStatus.syncing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
+                  icon: const Icon(Icons.notifications_rounded,
+                      color: Colors.white),
+                ),
+                IconButton(
+                  tooltip: 'Refresh manual',
+                  onPressed: _manualRefresh,
+                  icon: _syncStatus == SyncStatus.syncing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.refresh_rounded,
+                          color: Colors.white),
+                ),
+                IconButton(
+                  tooltip: 'Keluar',
+                  onPressed: widget.onLogout,
+                  icon: const Icon(Icons.logout_rounded, color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _tabIndex == 1
+                ? ProScheduleScreen(
+                    session: widget.session,
+                    apiClient: widget.apiClient,
+                  )
+                : RefreshIndicator(
+                    onRefresh: _loadOnlineProfessionalData,
+                    child: ListView(
+                      padding: const EdgeInsets.all(18),
+                      children: [
+                        // ---- TAB 0: DASHBOARD ----
+                        if (_tabIndex == 0)
+                          _StatusBanner(
+                            isLoading: _isLoadingOnlineData,
+                            error: _onlineError,
+                            hasBackendSession: widget
+                                    .session?.accessToken?.isNotEmpty ==
+                                true,
+                            onRetry: _loadOnlineProfessionalData,
+                          ),
+                        if (_tabIndex == 0)
+                          _SyncStatusBar(
+                            syncStatus: _syncStatus,
+                            lastSyncTime: _lastSyncTime,
+                            hasBackendSession: widget
+                                    .session?.accessToken?.isNotEmpty ==
+                                true,
+                          ),
+                        if (_tabIndex == 0)
+                          _PriorityMetrics(
+                            patientCount: patients.length,
+                            crisisCount: _crisisQueue(patients).length,
+                            reviewCount:
+                                _reviewQueue(patients).length,
+                            onPatientsTap: _showActivePatientsSheet,
+                            onCrisisTap: () =>
+                                _showPriorityListSheet(crisisOnly: true),
+                            onReviewTap: () => _showPriorityListSheet(
+                                crisisOnly: false),
+                          ),
+                        if (_tabIndex == 0) const SizedBox(height: 18),
+                        // ---- TAB 2: PASIEN ----
+                        if (_tabIndex == 2)
+                          _PatientSearch(
+                            query: _searchQuery,
+                            onChanged: (value) =>
+                                setState(() => _searchQuery = value),
+                          ),
+                        if (_tabIndex == 2) const SizedBox(height: 18),
+                        if (_tabIndex == 0)
+                          SectionLabel(
+                            'Prioritas pasien',
+                            action: TextButton.icon(
+                              onPressed: _loadOnlineProfessionalData,
+                              icon: const Icon(Icons.refresh_rounded),
+                              label: const Text('Refresh'),
                             ),
-                          )
-                        : const Icon(Icons.refresh_rounded,
-                            color: Colors.white),
-                  ),
-                  IconButton(
-                    tooltip: 'Keluar',
-                    onPressed: widget.onLogout,
-                    icon: const Icon(Icons.logout_rounded, color: Colors.white),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // ---- TAB 0: DASHBOARD ----
-                  if (_tabIndex == 0)
-                    _StatusBanner(
-                      isLoading: _isLoadingOnlineData,
-                      error: _onlineError,
-                      hasBackendSession:
-                          widget.session?.accessToken?.isNotEmpty == true,
-                      onRetry: _loadOnlineProfessionalData,
-                    ),
-                  if (_tabIndex == 0)
-                    _SyncStatusBar(
-                      syncStatus: _syncStatus,
-                      lastSyncTime: _lastSyncTime,
-                      hasBackendSession:
-                          widget.session?.accessToken?.isNotEmpty == true,
-                    ),
-                  if (_tabIndex == 0)
-                    _PriorityMetrics(
-                      patientCount: patients.length,
-                      crisisCount: _crisisQueue(patients).length,
-                      reviewCount: _reviewQueue(patients).length,
-                      onPatientsTap: _showActivePatientsSheet,
-                      onCrisisTap: () =>
-                          _showPriorityListSheet(crisisOnly: true),
-                      onReviewTap: () =>
-                          _showPriorityListSheet(crisisOnly: false),
-                    ),
-                  if (_tabIndex == 0) const SizedBox(height: 18),
-                  // ---- TAB 1: PASIEN ----
-                  if (_tabIndex == 1)
-                    _PatientSearch(
-                      query: _searchQuery,
-                      onChanged: (value) =>
-                          setState(() => _searchQuery = value),
-                    ),
-                  if (_tabIndex == 1) const SizedBox(height: 18),
-                  if (_tabIndex == 0)
-                    SectionLabel(
-                      'Prioritas pasien',
-                      action: TextButton.icon(
-                        onPressed: _loadOnlineProfessionalData,
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: const Text('Refresh'),
-                      ),
-                    ),
-                  if (_tabIndex == 0)
-                    _PriorityQueue(
-                      crisisQueue: _crisisQueue(patients),
-                      reviewQueue: _reviewQueue(patients),
-                      reviewedIds: _reviewedScreeningIds,
-                      onReview: _openScreeningReview,
-                      onOpenDetail: _showPriorityDetail,
-                    ),
-                  if (_tabIndex == 1) const SectionLabel('Pasien terhubung'),
-                  if (_tabIndex == 1)
-                    _ConnectedPatientList(
-                      patients: _filterPatients(patients),
-                      selectedPatientId: selected?.patientId,
-                      onSelect: (patient) => setState(
-                        () => _selectedPatientId = patient.patientId,
-                      ),
-                    ),
-                  if (_tabIndex == 1 && selected == null)
-                    const EmptyState(
-                      icon: Icons.people_outline_rounded,
-                      title: 'Belum ada pasien terhubung',
-                      subtitle:
-                          'Pasien perlu menghubungkan akun dengan ID profesional sebelum data real muncul.',
-                    )
-                  else if (_tabIndex == 1) ...[
-                    _PatientDetailSection(
-                      patient: selected!,
-                      professionalCode: widget.session?.identifier,
-                    ),
-                    const SizedBox(height: 22),
-                    _HealthRecordManagerSection(
-                      patient: selected,
-                      online: selected.sourceLabel == 'Backend',
-                      restricted: _healthRecordRestrictedPatients
-                          .contains(selected.patientId),
-                      diagnosis: _healthRecordsByPatient[selected.patientId],
-                      onEdit: () => _openHealthRecordEdit(selected),
-                      onPrescribe: () => _openPrescribeMedication(selected),
-                    ),
-                    const SizedBox(height: 22),
-                    _ScreeningHistorySection(
-                      patient: selected,
-                      screenings: selected.screenings,
-                      reviewedIds: _reviewedScreeningIds,
-                      onReview: _openScreeningReview,
-                    ),
-                    const SizedBox(height: 22),
-                    _TimelineSection(
-                      patient: selected,
-                      backendEvents:
-                          _timelineEventsByPatient[selected.patientId] ??
-                              const <BackendTimelineEvent>[],
-                      diaryEntries: storeState.diaryEntries.take(2),
-                      medicationLogs: storeState.medicationLogs.take(2),
-                      allowLocalFallback: !(selected.sourceLabel == 'Backend'),
-                    ),
-                    const SizedBox(height: 22),
-                    _MoodDiaryReviewSection(
-                      online: selected.sourceLabel == 'Backend',
-                      restricted: _moodDiaryRestrictedPatients
-                          .contains(selected.patientId),
-                      moods: _moodsByPatient[selected.patientId] ??
-                          const <BackendMoodCheckin>[],
-                      backendEntries: _diariesByPatient[selected.patientId] ??
-                          const <BackendDiaryEntry>[],
-                      localEntries: storeState.diaryEntries.take(4).toList(),
-                      onBackendFeedback: (entry) => _openBackendDiaryFeedback(
-                        selected,
-                        entry,
-                      ),
-                      onLocalFeedback: _openDiaryFeedback,
-                    ),
-                    const SizedBox(height: 22),
-                    _MedicationMonitoringSection(
-                      storeState: storeState,
-                      online: selected.sourceLabel == 'Backend',
-                      restricted: _medicationRestrictedPatients
-                          .contains(selected.patientId),
-                      medications: _medicationsByPatient[selected.patientId] ??
-                          const <BackendMedication>[],
-                      logs: _medicationLogsByPatient[selected.patientId] ??
-                          const <BackendMedicationLog>[],
-                    ),
-                  ]
-                  // ---- TAB 2: TUGAS (catatan & follow-up) ----
-                  else if (_tabIndex == 2) ...[
-                    if (selected == null)
-                      const EmptyState(
-                        icon: Icons.task_outlined,
-                        title: 'Pilih pasien dulu',
-                        subtitle:
-                            'Buka tab Pasien lalu pilih pasien untuk menulis catatan atau follow-up.',
-                      )
-                    else
-                      _ProfessionalNotesSection(
-                        notes:
-                            _professionalNotes[selected.patientId] ?? const [],
-                        followUps:
-                            _followUpMessages[selected.patientId] ?? const [],
-                        onEditNote: () => _openProfessionalNote(
-                          selected,
-                        ),
-                        onFollowUp: () => _openFollowUpMessage(selected),
-                      ),
-                  ]
-                  // ---- TAB 3: LAINNYA ----
-                  else if (_tabIndex == 3) ...[
-                    _RelationshipManagementSection(
-                      patients: patients,
-                      professionalCode: widget.session?.identifier,
-                      onRefresh: _loadOnlineProfessionalData,
-                    ),
-                    const SizedBox(height: 22),
-                    _AuditAndExportSection(
-                      auditEntries: [
-                        ..._auditEntries,
-                        ..._serverAuditEntries,
+                          ),
+                        if (_tabIndex == 0)
+                          _PriorityQueue(
+                            crisisQueue: _crisisQueue(patients),
+                            reviewQueue: _reviewQueue(patients),
+                            reviewedIds: _reviewedScreeningIds,
+                            onReview: _openScreeningReview,
+                            onOpenDetail: _showPriorityDetail,
+                          ),
+                        if (_tabIndex == 2)
+                          const SectionLabel('Pasien terhubung'),
+                        if (_tabIndex == 2)
+                          _ConnectedPatientList(
+                            patients: _filterPatients(patients),
+                            onOpen: (patient) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ProPatientDetailScreen(
+                                    patientId: patient.patientId,
+                                    patientName: patient.displayName,
+                                    session: widget.session,
+                                    apiClient: widget.apiClient,
+                                  ),
+                                ),
+                              ).then((_) => _loadOnlineProfessionalData());
+                            },
+                          ),
+                        if (_tabIndex == 2 && patients.isEmpty)
+                          const EmptyState(
+                            icon: Icons.people_outline_rounded,
+                            title: 'Belum ada pasien terhubung',
+                            subtitle:
+                                'Pasien terhubung setelah membeli paket atau booking sesi denganmu.',
+                          ),
+                        // ---- TAB 3: LAINNYA ----
+                        if (_tabIndex == 3) ...[
+                          _RelationshipManagementSection(
+                            patients: patients,
+                            professionalCode: widget.session?.identifier,
+                            onRefresh: _loadOnlineProfessionalData,
+                          ),
+                          const SizedBox(height: 22),
+                          _AuditAndExportSection(
+                            auditEntries: _serverAuditEntries,
+                            onExport: selected == null
+                                ? () {}
+                                : () => _openExportSummary(selected),
+                          ),
+                          const SizedBox(height: 22),
+                          _ProfessionalPortalSection(
+                            session: widget.session,
+                            apiClient: widget.apiClient,
+                          ),
+                        ],
                       ],
-                      onExport: () => _openExportSummary(selected!),
                     ),
-                    const SizedBox(height: 22),
-                    _ProfessionalPortalSection(
-                      session: widget.session,
-                      apiClient: widget.apiClient,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
+                  ),
+          ),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tabIndex,
@@ -347,13 +284,13 @@ class _ProfessionalDashboardScreenState
               selectedIcon: Icon(Icons.dashboard_rounded),
               label: 'Dashboard'),
           NavigationDestination(
+              icon: Icon(Icons.calendar_month_outlined),
+              selectedIcon: Icon(Icons.calendar_month_rounded),
+              label: 'Jadwal'),
+          NavigationDestination(
               icon: Icon(Icons.people_outline_rounded),
               selectedIcon: Icon(Icons.people_rounded),
               label: 'Pasien'),
-          NavigationDestination(
-              icon: Icon(Icons.task_outlined),
-              selectedIcon: Icon(Icons.task_rounded),
-              label: 'Tugas'),
           NavigationDestination(
               icon: Icon(Icons.grid_view_outlined),
               selectedIcon: Icon(Icons.grid_view_rounded),
@@ -387,19 +324,9 @@ class _ProfessionalDashboardScreenState
       final links = await apiClient.listPatientProfessionalLinks(
           accessToken: accessToken);
       final screeningsByPatient = <String, List<BackendScreeningSession>>{};
-      final timelineEventsByPatient = <String, List<BackendTimelineEvent>>{};
-      final moodsByPatient = <String, List<BackendMoodCheckin>>{};
-      final diariesByPatient = <String, List<BackendDiaryEntry>>{};
-      final medicationsByPatient = <String, List<BackendMedication>>{};
-      final medicationLogsByPatient = <String, List<BackendMedicationLog>>{};
-      final moodDiaryRestrictedPatients = <String>{};
-      final medicationRestrictedPatients = <String>{};
-      final healthRecordRestrictedPatients = <String>{};
-      final healthRecordsByPatient = <String, BackendHealthRecord>{};
-      final notesByPatient = <String, List<BackendProfessionalNote>>{};
-      final followUpsByPatient = <String, List<BackendFollowUpMessage>>{};
       final reviewedScreeningIds = <String>{};
       final serverAuditEntries = <_AuditEntry>[];
+      final notesByPatient = <String, List<BackendProfessionalNote>>{};
 
       final patientFutures = links.map((link) async {
         final patientId = link.patientId;
@@ -420,19 +347,6 @@ class _ProfessionalDashboardScreenState
                 patientId: patientId,
                 limit: 5,
               )),
-          safely(() => apiClient.listFollowUps(
-                accessToken: accessToken,
-                patientId: patientId,
-                limit: 5,
-              )),
-          safely(() => apiClient.listTimeline(
-                accessToken: accessToken,
-                patientId: patientId,
-                limit: 20,
-              )),
-          _loadMoodDiaryData(apiClient, accessToken, patientId),
-          _loadMedicationData(apiClient, accessToken, patientId),
-          _loadHealthRecordData(apiClient, accessToken, patientId),
           safely(() => apiClient.listAuditLogs(
                 accessToken: accessToken,
                 patientId: patientId,
@@ -463,38 +377,8 @@ class _ProfessionalDashboardScreenState
             const <BackendProfessionalNote>[];
         notesByPatient[patientId] = notes;
 
-        final followUps = results[3] as List<BackendFollowUpMessage>? ??
-            const <BackendFollowUpMessage>[];
-        followUpsByPatient[patientId] = followUps;
-
-        timelineEventsByPatient[patientId] =
-            results[4] as List<BackendTimelineEvent>? ??
-                const <BackendTimelineEvent>[];
-
-        final moodDiaryResult = results[5] as _MoodDiaryResult;
-        moodsByPatient[patientId] = moodDiaryResult.moods;
-        diariesByPatient[patientId] = moodDiaryResult.diaries;
-        if (moodDiaryResult.restricted) {
-          moodDiaryRestrictedPatients.add(patientId);
-        }
-
-        final medicationResult = results[6] as _MedicationResult;
-        medicationsByPatient[patientId] = medicationResult.medications;
-        medicationLogsByPatient[patientId] = medicationResult.logs;
-        if (medicationResult.restricted) {
-          medicationRestrictedPatients.add(patientId);
-        }
-
-        final healthRecordResult = results[7] as _HealthRecordResult;
-        if (healthRecordResult.record != null) {
-          healthRecordsByPatient[patientId] = healthRecordResult.record!;
-        }
-        if (healthRecordResult.restricted) {
-          healthRecordRestrictedPatients.add(patientId);
-        }
-
         final auditLogs =
-            results[8] as List<BackendAuditLog>? ?? const <BackendAuditLog>[];
+            results[3] as List<BackendAuditLog>? ?? const <BackendAuditLog>[];
         serverAuditEntries.addAll(
           auditLogs.map(
             (entry) => _AuditEntry(
@@ -509,22 +393,10 @@ class _ProfessionalDashboardScreenState
       setState(() {
         _links = links;
         _screeningsByPatient = screeningsByPatient;
-        _timelineEventsByPatient = timelineEventsByPatient;
-        _moodsByPatient = moodsByPatient;
-        _diariesByPatient = diariesByPatient;
-        _medicationsByPatient = medicationsByPatient;
-        _medicationLogsByPatient = medicationLogsByPatient;
-        _moodDiaryRestrictedPatients = moodDiaryRestrictedPatients;
-        _medicationRestrictedPatients = medicationRestrictedPatients;
-        _healthRecordRestrictedPatients = healthRecordRestrictedPatients;
-        _healthRecordsByPatient = healthRecordsByPatient;
         _serverAuditEntries = serverAuditEntries;
         _professionalNotes
           ..clear()
           ..addAll(notesByPatient);
-        _followUpMessages
-          ..clear()
-          ..addAll(followUpsByPatient);
         _reviewedScreeningIds.addAll(reviewedScreeningIds);
         _selectedPatientId ??= links.isEmpty ? null : links.first.patientId;
         _isLoadingOnlineData = false;
@@ -545,446 +417,25 @@ class _ProfessionalDashboardScreenState
     }
   }
 
-  Future<_MoodDiaryResult> _loadMoodDiaryData(
-    MalvaApiClient apiClient,
-    String accessToken,
-    String patientId,
-  ) async {
-    try {
-      final moods = await apiClient.listMoodCheckins(
-        accessToken: accessToken,
-        patientId: patientId,
-        limit: 30,
-      );
-      final diaries = await apiClient.listDiaryEntries(
-        accessToken: accessToken,
-        patientId: patientId,
-        limit: 30,
-      );
-      return _MoodDiaryResult(moods: moods, diaries: diaries);
-    } on MalvaApiException catch (error) {
-      if (error.statusCode == 403) {
-        return const _MoodDiaryResult(
-          moods: [],
-          diaries: [],
-          restricted: true,
-        );
-      }
-      return const _MoodDiaryResult(moods: [], diaries: []);
-    } on Object {
-      return const _MoodDiaryResult(moods: [], diaries: []);
-    }
-  }
 
-  Future<_MedicationResult> _loadMedicationData(
-    MalvaApiClient apiClient,
-    String accessToken,
-    String patientId,
-  ) async {
-    try {
-      final medications = await apiClient.listMedications(
-        accessToken: accessToken,
-        patientId: patientId,
-        limit: 50,
-      );
-      final logs = await apiClient.listMedicationLogs(
-        accessToken: accessToken,
-        patientId: patientId,
-        limit: 50,
-      );
-      return _MedicationResult(medications: medications, logs: logs);
-    } on MalvaApiException catch (error) {
-      if (error.statusCode == 403) {
-        return const _MedicationResult(
-          medications: [],
-          logs: [],
-          restricted: true,
-        );
-      }
-      return const _MedicationResult(medications: [], logs: []);
-    } on Object {
-      return const _MedicationResult(medications: [], logs: []);
-    }
-  }
 
-  Future<_HealthRecordResult> _loadHealthRecordData(
-    MalvaApiClient apiClient,
-    String accessToken,
-    String patientId,
-  ) async {
-    try {
-      final record = await apiClient.getHealthRecord(
-        accessToken: accessToken,
-        patientId: patientId,
-      );
-      return _HealthRecordResult(record: record);
-    } on MalvaApiException catch (error) {
-      if (error.statusCode == 403) {
-        return const _HealthRecordResult(restricted: true);
-      }
-      return const _HealthRecordResult();
-    } on Object {
-      return const _HealthRecordResult();
-    }
-  }
-
-  /// Sheet edit diagnosis pasien (profesional terverifikasi).
-  void _openHealthRecordEdit(_ProfessionalPatient patient) {
-    final existing =
-        _healthRecordsByPatient[patient.patientId]?.diagnosisSummary ?? '';
-    final controller = TextEditingController(text: existing);
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        var saving = false;
-        String? error;
-        return StatefulBuilder(
-          builder: (sheetContext, setSheetState) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                0,
-                20,
-                MediaQuery.of(sheetContext).viewInsets.bottom + 20,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Health Record — ${patient.displayName}',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w900, fontSize: 17),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Diagnosis diisi profesional. Pasien melihat read-only '
-                      'dan akan mendapat notifikasi.',
-                      style: TextStyle(color: Colors.black54, fontSize: 12.5),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: controller,
-                      minLines: 4,
-                      maxLines: 10,
-                      decoration: const InputDecoration(
-                        labelText: 'Diagnosis summary',
-                        hintText:
-                            'contoh: F41.1 Generalized anxiety disorder, moderate',
-                      ),
-                    ),
-                    if (error != null) ...[
-                      const SizedBox(height: 8),
-                      Text(error!,
-                          style: const TextStyle(
-                              color: MalvaColors.danger,
-                              fontWeight: FontWeight.w700)),
-                    ],
-                    const SizedBox(height: 14),
-                    FilledButton.icon(
-                      onPressed: saving
-                          ? null
-                          : () async {
-                              if (apiClient == null ||
-                                  accessToken == null ||
-                                  accessToken.isEmpty) {
-                                setSheetState(() => error =
-                                    'Mode offline: hubungkan ke server.');
-                                return;
-                              }
-                              setSheetState(() {
-                                saving = true;
-                                error = null;
-                              });
-                              try {
-                                final updated =
-                                    await apiClient.updateHealthRecordDiagnosis(
-                                  accessToken: accessToken,
-                                  patientId: patient.patientId,
-                                  diagnosisSummary: controller.text.trim(),
-                                );
-                                if (!mounted || !sheetContext.mounted) return;
-                                setState(() {
-                                  _healthRecordsByPatient = {
-                                    ..._healthRecordsByPatient,
-                                    patient.patientId: updated,
-                                  };
-                                  _auditEntries.insert(
-                                    0,
-                                    _AuditEntry(
-                                      title: 'Diagnosis diperbarui',
-                                      body: patient.displayName,
-                                      createdAt: DateTime.now(),
-                                    ),
-                                  );
-                                });
-                                Navigator.pop(sheetContext);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Diagnosis tersimpan.'),
-                                    backgroundColor: MalvaColors.mint,
-                                  ),
-                                );
-                              } on MalvaApiException catch (e) {
-                                setSheetState(() {
-                                  saving = false;
-                                  error = e.message;
-                                });
-                              } on Object catch (e) {
-                                setSheetState(() {
-                                  saving = false;
-                                  error = e.toString();
-                                });
-                              }
-                            },
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(50),
-                      ),
-                      icon: const Icon(Icons.save_rounded),
-                      label: Text(saving ? 'Menyimpan...' : 'Simpan Diagnosis'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  /// Sheet resep/tambah obat pasien (muncul di Medication Tracker pasien).
-  void _openPrescribeMedication(_ProfessionalPatient patient) {
-    final nameController = TextEditingController();
-    final dosageController = TextEditingController(text: '50 mg');
-    final formController = TextEditingController(text: 'Tablet');
-    final timeController = TextEditingController(text: '08:00');
-    final mealController = TextEditingController(text: 'Setelah makan');
-    final stockController = TextEditingController(text: '30');
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        var saving = false;
-        String? error;
-        return StatefulBuilder(
-          builder: (sheetContext, setSheetState) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                0,
-                20,
-                MediaQuery.of(sheetContext).viewInsets.bottom + 20,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Resepkan Obat — ${patient.displayName}',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w900, fontSize: 17),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Obat muncul di Medication Tracker pasien sebagai '
-                      'resep profesional.',
-                      style: TextStyle(color: Colors.black54, fontSize: 12.5),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                          labelText: 'Nama obat', hintText: 'Sertraline'),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: dosageController,
-                            decoration:
-                                const InputDecoration(labelText: 'Dosis'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: formController,
-                            decoration:
-                                const InputDecoration(labelText: 'Bentuk'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: timeController,
-                            decoration: const InputDecoration(
-                                labelText: 'Jam minum', hintText: '08:00'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: mealController,
-                            decoration: const InputDecoration(
-                                labelText: 'Kaitan makan'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: stockController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Stok awal'),
-                    ),
-                    if (error != null) ...[
-                      const SizedBox(height: 8),
-                      Text(error!,
-                          style: const TextStyle(
-                              color: MalvaColors.danger,
-                              fontWeight: FontWeight.w700)),
-                    ],
-                    const SizedBox(height: 14),
-                    FilledButton.icon(
-                      onPressed: saving
-                          ? null
-                          : () async {
-                              if (apiClient == null ||
-                                  accessToken == null ||
-                                  accessToken.isEmpty) {
-                                setSheetState(() => error =
-                                    'Mode offline: hubungkan ke server.');
-                                return;
-                              }
-                              if (nameController.text.trim().isEmpty) {
-                                setSheetState(
-                                    () => error = 'Nama obat wajib diisi.');
-                                return;
-                              }
-                              setSheetState(() {
-                                saving = true;
-                                error = null;
-                              });
-                              try {
-                                final created =
-                                    await apiClient.createMedication(
-                                  accessToken: accessToken,
-                                  patientId: patient.patientId,
-                                  name: nameController.text.trim(),
-                                  dosage: dosageController.text.trim(),
-                                  form: formController.text.trim(),
-                                  reminderTime: timeController.text.trim(),
-                                  relationToMeal: mealController.text.trim(),
-                                  currentStock:
-                                      int.tryParse(stockController.text) ?? 0,
-                                  alertBelow: 5,
-                                  source: 'Profesional',
-                                );
-                                if (!mounted || !sheetContext.mounted) return;
-                                setState(() {
-                                  _medicationsByPatient = {
-                                    ..._medicationsByPatient,
-                                    patient.patientId: [
-                                      ...(_medicationsByPatient[
-                                              patient.patientId] ??
-                                          const <BackendMedication>[]),
-                                      created,
-                                    ],
-                                  };
-                                  _auditEntries.insert(
-                                    0,
-                                    _AuditEntry(
-                                      title: 'Obat diresepkan',
-                                      body: '${created.name} ${created.dosage}',
-                                      createdAt: DateTime.now(),
-                                    ),
-                                  );
-                                });
-                                Navigator.pop(sheetContext);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content:
-                                        Text('Obat ditambahkan ke pasien.'),
-                                    backgroundColor: MalvaColors.mint,
-                                  ),
-                                );
-                              } on MalvaApiException catch (e) {
-                                setSheetState(() {
-                                  saving = false;
-                                  error = e.message;
-                                });
-                              } on Object catch (e) {
-                                setSheetState(() {
-                                  saving = false;
-                                  error = e.toString();
-                                });
-                              }
-                            },
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(50),
-                      ),
-                      icon: const Icon(Icons.medication_rounded),
-                      label: Text(saving ? 'Menyimpan...' : 'Resepkan Obat'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  List<_ProfessionalPatient> _patientsForDashboard(MalvaStoreState storeState) {
-    if (_links.isNotEmpty) {
-      return [
-        for (final link in _links)
-          _ProfessionalPatient(
-            patientId: link.patientId,
-            displayName: link.patientDisplayName.isEmpty
-                ? 'Pasien Malva'
-                : link.patientDisplayName,
-            sourceLabel: 'Backend',
-            status: link.status,
-            linkedAt: null,
-            screenings: (_screeningsByPatient[link.patientId] ??
-                    const <BackendScreeningSession>[])
-                .map(_ScreeningView.fromBackend)
-                .toList(growable: false),
-          ),
-      ];
-    }
-
-    final localScreenings = storeState.screeningBundles
-        .map(_ScreeningView.fromLocal)
-        .toList(growable: false)
-        .reversed
-        .toList(growable: false);
+  /// Pasien dashboard SELALU dari server (tanpa pasien demo lokal).
+  List<_ProfessionalPatient> _patientsForDashboard() {
     return [
-      _ProfessionalPatient(
-        patientId: storeState.patient.id,
-        displayName: storeState.patient.name,
-        sourceLabel: 'Demo lokal',
-        status: 'active',
-        linkedAt: null,
-        screenings: localScreenings,
-      ),
+      for (final link in _links)
+        _ProfessionalPatient(
+          patientId: link.patientId,
+          displayName: link.patientDisplayName.isEmpty
+              ? 'Pasien Malva'
+              : link.patientDisplayName,
+          sourceLabel: 'Backend',
+          status: link.status,
+          linkedAt: null,
+          screenings: (_screeningsByPatient[link.patientId] ??
+                  const <BackendScreeningSession>[])
+              .map(_ScreeningView.fromBackend)
+              .toList(growable: false),
+        ),
     ];
   }
 
@@ -1053,8 +504,7 @@ class _ProfessionalDashboardScreenState
   // ----------------------------------------------------------
 
   void _showActivePatientsSheet() {
-    final storeState = ref.read(malvaStoreProvider);
-    final list = _patientsForDashboard(storeState)
+    final list = _patientsForDashboard()
         .where((patient) => patient.status == 'active')
         .toList(growable: false);
     showModalBottomSheet<void>(
@@ -1080,7 +530,7 @@ class _ProfessionalDashboardScreenState
                   width: 44,
                   height: 5,
                   decoration: BoxDecoration(
-                    color: Colors.black26,
+                    color: Theme.of(sheetContext).colorScheme.outlineVariant,
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
@@ -1094,9 +544,12 @@ class _ProfessionalDashboardScreenState
                     ?.copyWith(fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Ketuk pasien untuk membuka detailnya di tab Pasien.',
-                style: TextStyle(color: Colors.black54),
+                style: TextStyle(
+                    color: Theme.of(sheetContext)
+                        .colorScheme
+                        .onSurfaceVariant),
               ),
               const SizedBox(height: 12),
               if (list.isEmpty)
@@ -1156,7 +609,10 @@ class _ProfessionalDashboardScreenState
                                     style: Theme.of(sheetContext)
                                         .textTheme
                                         .bodySmall
-                                        ?.copyWith(color: Colors.black54),
+                                        ?.copyWith(
+                                            color: Theme.of(sheetContext)
+                                                .colorScheme
+                                                .onSurfaceVariant),
                                   ),
                                 ],
                               ),
@@ -1176,8 +632,7 @@ class _ProfessionalDashboardScreenState
   }
 
   void _showPriorityListSheet({required bool crisisOnly}) {
-    final storeState = ref.read(malvaStoreProvider);
-    final patients = _patientsForDashboard(storeState);
+    final patients = _patientsForDashboard();
     final items = crisisOnly ? _crisisQueue(patients) : _reviewQueue(patients);
     showModalBottomSheet<void>(
       context: context,
@@ -1202,7 +657,7 @@ class _ProfessionalDashboardScreenState
                   width: 44,
                   height: 5,
                   decoration: BoxDecoration(
-                    color: Colors.black26,
+                    color: Theme.of(sheetContext).colorScheme.outlineVariant,
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
@@ -1222,7 +677,10 @@ class _ProfessionalDashboardScreenState
                 crisisOnly
                     ? 'Pasien dengan crisis flag — prioritaskan penilaian keselamatan.'
                     : 'Screening terbaru yang menunggu review klinis.',
-                style: const TextStyle(color: Colors.black54),
+                style: TextStyle(
+                    color: Theme.of(sheetContext)
+                        .colorScheme
+                        .onSurfaceVariant),
               ),
               const SizedBox(height: 12),
               if (items.isEmpty)
@@ -1278,7 +736,10 @@ class _ProfessionalDashboardScreenState
                                     style: Theme.of(sheetContext)
                                         .textTheme
                                         .bodySmall
-                                        ?.copyWith(color: Colors.black54),
+                                        ?.copyWith(
+                                            color: Theme.of(sheetContext)
+                                                .colorScheme
+                                                .onSurfaceVariant),
                                   ),
                                 ],
                               ),
@@ -1326,7 +787,7 @@ class _ProfessionalDashboardScreenState
                     width: 44,
                     height: 5,
                     decoration: BoxDecoration(
-                      color: Colors.black26,
+                      color: Theme.of(sheetContext).colorScheme.outlineVariant,
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
@@ -1360,7 +821,10 @@ class _ProfessionalDashboardScreenState
                             style: Theme.of(sheetContext)
                                 .textTheme
                                 .bodySmall
-                                ?.copyWith(color: Colors.black54),
+                                ?.copyWith(
+                                    color: Theme.of(sheetContext)
+                                        .colorScheme
+                                        .onSurfaceVariant),
                           ),
                         ],
                       ),
@@ -1461,9 +925,13 @@ class _ProfessionalDashboardScreenState
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
+                      Text(
                         'Catatan: hasil screening adalah alat bantu, bukan diagnosis final.',
-                        style: TextStyle(color: Colors.black54, fontSize: 12),
+                        style: TextStyle(
+                            color: Theme.of(sheetContext)
+                                .colorScheme
+                                .onSurfaceVariant,
+                            fontSize: 12),
                       ),
                     ],
                   ),
@@ -1539,7 +1007,9 @@ class _ProfessionalDashboardScreenState
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
-                      ?.copyWith(color: Colors.black54),
+                      ?.copyWith(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               if (screening.crisisFlag) ...[
                 const SizedBox(height: 8),
@@ -1641,328 +1111,9 @@ class _ProfessionalDashboardScreenState
     }
   }
 
-  void _openDiaryFeedback(BuildContext context, DiaryEntry entry) {
-    final controller =
-        TextEditingController(text: entry.professionalFeedback ?? '');
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
-        return Padding(
-          padding: EdgeInsets.fromLTRB(18, 0, 18, bottomInset + 18),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Mood/diary review',
-                  style: Theme.of(sheetContext)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(height: 10),
-                Text(entry.title,
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controller,
-                  minLines: 4,
-                  maxLines: 8,
-                  decoration: const InputDecoration(
-                    labelText: 'Feedback untuk pasien',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: () {
-                    final feedback = controller.text.trim();
-                    ref.read(malvaStoreProvider.notifier).upsertDiary(
-                          DiaryEntry(
-                            id: entry.id,
-                            createdAt: entry.createdAt,
-                            mood: entry.mood,
-                            title: entry.title,
-                            note: entry.note,
-                            professionalFeedback:
-                                feedback.isEmpty ? null : feedback,
-                          ),
-                        );
-                    setState(() {
-                      _auditEntries.insert(
-                        0,
-                        _AuditEntry(
-                          title: 'Feedback diary disimpan',
-                          body: entry.title,
-                          createdAt: DateTime.now(),
-                        ),
-                      );
-                    });
-                    Navigator.pop(sheetContext);
-                  },
-                  child: const Text('Simpan feedback'),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    ).whenComplete(controller.dispose);
-  }
-
-  void _openBackendDiaryFeedback(
-    _ProfessionalPatient patient,
-    BackendDiaryEntry entry,
-  ) {
-    final controller =
-        TextEditingController(text: entry.professionalFeedback ?? '');
-    _openTextSheet(
-      title: 'Mood/diary review',
-      subtitle: 'Feedback untuk diary "${entry.title}".',
-      controller: controller,
-      label: 'Feedback untuk pasien',
-      actionLabel: 'Simpan feedback',
-      onSave: (value) async {
-        final apiClient = widget.apiClient;
-        final accessToken = widget.session?.accessToken;
-        if (value.isEmpty || apiClient == null || accessToken == null) return;
-        try {
-          await apiClient.updateDiaryFeedback(
-            accessToken: accessToken,
-            patientId: patient.patientId,
-            diaryId: entry.id,
-            feedback: value,
-          );
-          await _loadOnlineProfessionalData();
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Feedback diary tersimpan.')),
-          );
-        } on Object catch (error) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(friendlyErrorMessage(error))),
-          );
-        }
-      },
-    );
-  }
-
-  void _openProfessionalNote(_ProfessionalPatient patient) {
-    final existing = _professionalNotes[patient.patientId];
-    final controller = TextEditingController(
-        text: existing?.isNotEmpty == true ? existing!.first.body : '');
-    _openTextSheet(
-      title: 'Catatan profesional',
-      subtitle:
-          'Catatan internal untuk ${patient.displayName}. Tersimpan otomatis di perangkat ini dan disinkronkan ke server klinis saat terhubung.',
-      controller: controller,
-      label: 'Catatan internal',
-      actionLabel: 'Simpan catatan',
-      onSave: (value) async {
-        setState(() {
-          if (value.isEmpty) {
-            _professionalNotes.remove(patient.patientId);
-          } else {
-            _professionalNotes[patient.patientId] = [
-              if (existing != null) ...existing,
-              BackendProfessionalNote(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
-                patientId: patient.patientId,
-                professionalId: widget.session?.identifier ?? '',
-                body: value,
-                visibility: 'private',
-                updatedAt: DateTime.now(),
-              ),
-            ];
-          }
-          _auditEntries.insert(
-            0,
-            _AuditEntry(
-              title: 'Catatan profesional diperbarui',
-              body: patient.displayName,
-              createdAt: DateTime.now(),
-            ),
-          );
-        });
-        await _saveProfessionalNoteToBackend(patient, value);
-      },
-    );
-  }
-
-  void _openFollowUpMessage(_ProfessionalPatient patient) {
-    final existing = _followUpMessages[patient.patientId];
-    final controller = TextEditingController(
-        text: existing?.isNotEmpty == true ? existing!.first.body : '');
-    _openTextSheet(
-      title: 'Follow-up message',
-      subtitle:
-          'Arahan untuk ${patient.displayName}. Pesan terkirim ke Home pasien dan muncul sebagai notifikasi. Bila offline, tersimpan sebagai draf dan dikirim otomatis saat terhubung.',
-      controller: controller,
-      label: 'Pesan follow-up',
-      actionLabel: 'Kirim follow-up',
-      onSave: (value) async {
-        setState(() {
-          if (value.isEmpty) {
-            _followUpMessages.remove(patient.patientId);
-          } else {
-            _followUpMessages[patient.patientId] = [
-              if (existing != null) ...existing,
-              BackendFollowUpMessage(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
-                patientId: patient.patientId,
-                professionalId: widget.session?.identifier ?? '',
-                body: value,
-                status: 'sent',
-                createdAt: DateTime.now(),
-                readAt: null,
-              ),
-            ];
-          }
-          _auditEntries.insert(
-            0,
-            _AuditEntry(
-              title: 'Draft follow-up diperbarui',
-              body: patient.displayName,
-              createdAt: DateTime.now(),
-            ),
-          );
-        });
-        await _saveFollowUpToBackend(patient, value);
-      },
-    );
-  }
-
-  Future<void> _saveProfessionalNoteToBackend(
-    _ProfessionalPatient patient,
-    String value,
-  ) async {
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    if (value.isEmpty ||
-        apiClient == null ||
-        accessToken == null ||
-        accessToken.isEmpty) {
-      return;
-    }
-
-    try {
-      await apiClient.createProfessionalNote(
-        accessToken: accessToken,
-        patientId: patient.patientId,
-        body: value,
-        visibility: 'private',
-      );
-      await _loadOnlineProfessionalData();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Catatan tersimpan ke backend.')),
-      );
-    } on Object catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'Catatan tersimpan di perangkat ini. Sinkronisasi ke server dicoba otomatis saat terhubung.'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _saveFollowUpToBackend(
-    _ProfessionalPatient patient,
-    String value,
-  ) async {
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    if (value.isEmpty ||
-        apiClient == null ||
-        accessToken == null ||
-        accessToken.isEmpty) {
-      return;
-    }
-
-    try {
-      await apiClient.createFollowUp(
-        accessToken: accessToken,
-        patientId: patient.patientId,
-        body: value,
-        status: 'sent',
-      );
-      await _loadOnlineProfessionalData();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Follow-up terkirim ke pasien.')),
-      );
-    } on Object catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'Follow-up tersimpan di perangkat ini. Pengiriman ke pasien dicoba otomatis saat terhubung.'),
-        ),
-      );
-    }
-  }
-
-  void _openTextSheet({
-    required String title,
-    required String subtitle,
-    required TextEditingController controller,
-    required String label,
-    required String actionLabel,
-    required FutureOr<void> Function(String value) onSave,
-  }) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
-        return Padding(
-          padding: EdgeInsets.fromLTRB(18, 0, 18, bottomInset + 18),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(sheetContext)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(height: 6),
-                Text(subtitle),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controller,
-                  minLines: 4,
-                  maxLines: 8,
-                  decoration: InputDecoration(labelText: label),
-                ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: () async {
-                    await onSave(controller.text.trim());
-                    if (!sheetContext.mounted) return;
-                    Navigator.pop(sheetContext);
-                  },
-                  child: Text(actionLabel),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    ).whenComplete(controller.dispose);
-  }
 
   void _exportData() async {
-    final storeState = ref.read(malvaStoreProvider);
-    final exportPatients = _patientsForDashboard(storeState);
+    final exportPatients = _patientsForDashboard();
     final selected = _selectedPatient(exportPatients);
 
     final StringBuffer csv = StringBuffer();
@@ -1986,20 +1137,9 @@ class _ProfessionalDashboardScreenState
     }
     csv.writeln();
 
-    csv.writeln('--- Timeline Events ---');
-    csv.writeln('ID,Type,Title,Body,Created');
-    if (selected != null) {
-      final events = _timelineEventsByPatient[selected.patientId] ??
-          const <BackendTimelineEvent>[];
-      for (final e in events) {
-        csv.writeln('${e.id},${e.type},${e.title},${e.body},${e.createdAt}');
-      }
-    }
-    csv.writeln();
-
-    csv.writeln('--- Audit Logs ---');
+    csv.writeln('--- Audit Logs (server) ---');
     csv.writeln('Title,Body,Created');
-    for (final a in _auditEntries) {
+    for (final a in _serverAuditEntries) {
       csv.writeln('${a.title},${a.body},${a.createdAt}');
     }
 
@@ -2034,8 +1174,6 @@ class _ProfessionalDashboardScreenState
       ],
       if (_professionalNotes[patient.patientId]?.isNotEmpty == true)
         'Catatan profesional: ${_professionalNotes[patient.patientId]!.map((n) => n.body).join("; ")}',
-      if (_followUpMessages[patient.patientId]?.isNotEmpty == true)
-        'Follow-up: ${_followUpMessages[patient.patientId]!.map((f) => f.body).join("; ")}',
     ].join('\n');
 
     final csvData = [
@@ -2051,17 +1189,6 @@ class _ProfessionalDashboardScreenState
         'Crisis Flag,${latest.crisisFlag ? 'Yes' : 'No'}',
       ],
     ].join('\n');
-
-    setState(() {
-      _auditEntries.insert(
-        0,
-        _AuditEntry(
-          title: 'Ringkasan diekspor',
-          body: patient.displayName,
-          createdAt: DateTime.now(),
-        ),
-      );
-    });
 
     showDialog<void>(
       context: context,
@@ -2160,9 +1287,9 @@ class _StatusBanner extends StatelessWidget {
       return Padding(
         padding: const EdgeInsets.only(bottom: 14),
         child: SoftCard(
-          color: MalvaColors.seed.withValues(alpha: 0.08),
+          color: MalvaColors.danger.withValues(alpha: 0.08),
           child: const Text(
-            'Mode demo lokal aktif. Login profesional backend akan menampilkan pasien terhubung secara real.',
+            'Belum login ke server. Login sebagai profesional untuk melihat data real.',
           ),
         ),
       );
@@ -2353,7 +1480,7 @@ class _MetricCard extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.black54,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.w700,
                 ),
           ),
@@ -2432,13 +1559,11 @@ class _PriorityQueue extends StatelessWidget {
 class _ConnectedPatientList extends StatelessWidget {
   const _ConnectedPatientList({
     required this.patients,
-    required this.selectedPatientId,
-    required this.onSelect,
+    required this.onOpen,
   });
 
   final List<_ProfessionalPatient> patients;
-  final String? selectedPatientId;
-  final ValueChanged<_ProfessionalPatient> onSelect;
+  final ValueChanged<_ProfessionalPatient> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -2454,10 +1579,7 @@ class _ConnectedPatientList extends StatelessWidget {
       children: [
         for (final patient in patients) ...[
           SoftCard(
-            color: patient.patientId == selectedPatientId
-                ? MalvaColors.seed.withValues(alpha: 0.08)
-                : null,
-            onTap: () => onSelect(patient),
+            onTap: () => onOpen(patient),
             child: Row(
               children: [
                 CircleAvatar(
@@ -2474,12 +1596,17 @@ class _ConnectedPatientList extends StatelessWidget {
                         patient.displayName,
                         style: const TextStyle(fontWeight: FontWeight.w900),
                       ),
+                      // Info kuota paket sengaja TIDAK ditampilkan di sini agar
+                      // tidak dobel dengan halaman detail pasien (Paket & sesi).
                       Text(
                         '${patient.sourceLabel} - ${patient.status}',
                         style: Theme.of(context)
                             .textTheme
                             .bodySmall
-                            ?.copyWith(color: Colors.black54),
+                            ?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant),
                       ),
                     ],
                   ),
@@ -2499,852 +1626,14 @@ class _ConnectedPatientList extends StatelessWidget {
   }
 }
 
-class _PatientDetailSection extends StatelessWidget {
-  const _PatientDetailSection({
-    required this.patient,
-    required this.professionalCode,
-  });
 
-  final _ProfessionalPatient patient;
-  final String? professionalCode;
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SectionLabel('Detail pasien'),
-        SoftCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundColor: patient.hasCrisis
-                        ? MalvaColors.danger
-                        : MalvaColors.pink,
-                    child:
-                        const Icon(Icons.person_rounded, color: Colors.white),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          patient.displayName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 18,
-                          ),
-                        ),
-                        Text('Patient ID: ${patient.patientId}'),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  StatusPill(
-                    label: 'Relasi ${patient.status}',
-                    color: MalvaColors.seed,
-                    icon: Icons.link_rounded,
-                  ),
-                  StatusPill(
-                    label: patient.sourceLabel,
-                    color: MalvaColors.mint,
-                    icon: Icons.storage_rounded,
-                  ),
-                  StatusPill(
-                    label: 'Latest ${patient.latestLevelLabel}',
-                    color: patient.latestColor,
-                    icon: Icons.monitor_heart_rounded,
-                  ),
-                  if (professionalCode != null)
-                    StatusPill(
-                      label: 'Kode pro: $professionalCode',
-                      color: MalvaColors.orchid,
-                      icon: Icons.verified_user_rounded,
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
 
-class _ScreeningHistorySection extends StatelessWidget {
-  const _ScreeningHistorySection({
-    required this.patient,
-    required this.screenings,
-    required this.reviewedIds,
-    required this.onReview,
-  });
 
-  final _ProfessionalPatient patient;
-  final List<_ScreeningView> screenings;
-  final Set<String> reviewedIds;
-  final void Function(_ProfessionalPatient patient, _ScreeningView screening)
-      onReview;
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SectionLabel('Histori screening & review'),
-        if (screenings.isEmpty)
-          const EmptyState(
-            icon: Icons.fact_check_outlined,
-            title: 'Belum ada histori screening',
-            subtitle:
-                'PHQ-9 dan GAD-7 pasien akan muncul setelah pasien submit screening.',
-          )
-        else
-          for (final screening in screenings.take(6)) ...[
-            SoftCard(
-              color: screening.crisisFlag
-                  ? MalvaColors.danger.withValues(alpha: 0.08)
-                  : null,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _formatDate(screening.createdAt),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                      StatusPill(
-                        label: reviewedIds.contains(screening.id)
-                            ? 'Reviewed'
-                            : 'Belum review',
-                        color: reviewedIds.contains(screening.id)
-                            ? MalvaColors.mint
-                            : MalvaColors.orchid,
-                        icon: reviewedIds.contains(screening.id)
-                            ? Icons.check_rounded
-                            : Icons.rate_review_rounded,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  _ScoreLine(
-                    label: 'PHQ-9',
-                    score: screening.phq9Score,
-                    maxScore: screening.phq9MaxScore,
-                    level: screening.phq9LevelLabel,
-                    color: screening.phq9Color,
-                  ),
-                  const SizedBox(height: 8),
-                  _ScoreLine(
-                    label: 'GAD-7',
-                    score: screening.gad7Score,
-                    maxScore: screening.gad7MaxScore,
-                    level: screening.gad7LevelLabel,
-                    color: screening.gad7Color,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      StatusPill(
-                        label: 'Overall ${screening.overallLevelLabel}',
-                        color: screening.overallColor,
-                        icon: Icons.monitor_heart_rounded,
-                      ),
-                      const Spacer(),
-                      FilledButton(
-                        onPressed: () => onReview(patient, screening),
-                        style: compactFilledButtonStyle,
-                        child: const Text('Review'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
-      ],
-    );
-  }
-}
 
-class _ScoreLine extends StatelessWidget {
-  const _ScoreLine({
-    required this.label,
-    required this.score,
-    required this.maxScore,
-    required this.level,
-    required this.color,
-  });
 
-  final String label;
-  final int score;
-  final int maxScore;
-  final String level;
-  final Color color;
 
-  @override
-  Widget build(BuildContext context) {
-    final value = maxScore == 0 ? 0.0 : score / maxScore;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                '$label $score/$maxScore',
-                style: const TextStyle(fontWeight: FontWeight.w900),
-              ),
-            ),
-            Text(level),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ProgressStrip(value: value, color: color),
-      ],
-    );
-  }
-}
-
-class _TimelineSection extends StatelessWidget {
-  const _TimelineSection({
-    required this.patient,
-    required this.backendEvents,
-    required this.diaryEntries,
-    required this.medicationLogs,
-    required this.allowLocalFallback,
-  });
-
-  final _ProfessionalPatient patient;
-  final List<BackendTimelineEvent> backendEvents;
-  final Iterable<DiaryEntry> diaryEntries;
-  final Iterable<MedicationLog> medicationLogs;
-  final bool allowLocalFallback;
-
-  @override
-  Widget build(BuildContext context) {
-    final events = backendEvents.isNotEmpty
-        ? backendEvents.map(_TimelineEvent.fromBackend).toList(growable: false)
-        : allowLocalFallback
-            ? <_TimelineEvent>[
-                for (final screening in patient.screenings.take(4))
-                  _TimelineEvent(
-                    icon: Icons.fact_check_rounded,
-                    title: 'Screening ${screening.overallLevelLabel}',
-                    body:
-                        'PHQ-9 ${screening.phq9Score}, GAD-7 ${screening.gad7Score}',
-                    color: screening.overallColor,
-                  ),
-                for (final entry in diaryEntries)
-                  _TimelineEvent(
-                    icon: entry.mood.icon,
-                    title: 'Diary: ${entry.title}',
-                    body: entry.note,
-                    color: MalvaColors.seed,
-                  ),
-                for (final log in medicationLogs)
-                  _TimelineEvent(
-                    icon: Icons.medication_rounded,
-                    title: 'Medication ${log.status}',
-                    body: log.medicationName,
-                    color: MalvaColors.mint,
-                  ),
-              ]
-            : <_TimelineEvent>[];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SectionLabel('Timeline pasien'),
-        if (events.isEmpty)
-          const EmptyState(
-            icon: Icons.timeline_rounded,
-            title: 'Timeline belum tersedia',
-            subtitle: 'Screening, mood, diary, dan obat akan tersusun di sini.',
-          )
-        else
-          SoftCard(
-            child: Column(
-              children: [
-                for (final event in events.take(6)) ...[
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      CircleAvatar(
-                        radius: 18,
-                        backgroundColor: event.color.withValues(alpha: 0.12),
-                        child: Icon(event.icon, color: event.color, size: 19),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              event.title,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                            Text(
-                              event.body,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (event != events.take(6).last) const Divider(height: 18),
-                ],
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _MoodDiaryReviewSection extends StatelessWidget {
-  const _MoodDiaryReviewSection({
-    required this.online,
-    required this.restricted,
-    required this.moods,
-    required this.backendEntries,
-    required this.localEntries,
-    required this.onBackendFeedback,
-    required this.onLocalFeedback,
-  });
-
-  final bool online;
-  final bool restricted;
-  final List<BackendMoodCheckin> moods;
-  final List<BackendDiaryEntry> backendEntries;
-  final List<DiaryEntry> localEntries;
-  final ValueChanged<BackendDiaryEntry> onBackendFeedback;
-  final void Function(BuildContext context, DiaryEntry entry) onLocalFeedback;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SectionLabel('Review mood & diary'),
-        if (restricted)
-          const EmptyState(
-            icon: Icons.lock_outline_rounded,
-            title: 'Akses mood/diary dibatasi pasien',
-            subtitle:
-                'Pasien dapat mengubah consent dari menu Akses profesional.',
-          )
-        else if (online && moods.isEmpty && backendEntries.isEmpty)
-          const EmptyState(
-            icon: Icons.menu_book_outlined,
-            title: 'Belum ada mood atau diary',
-            subtitle:
-                'Data baru pasien akan tampil otomatis setelah disinkronkan.',
-          )
-        else if (online) ...[
-          if (moods.isNotEmpty)
-            SoftCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Check-in mood terbaru',
-                      style: TextStyle(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 10),
-                  for (final mood in moods.take(4)) ...[
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(_moodIcon(mood.mood), color: MalvaColors.orchid),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            '${_moodLabel(mood.mood)} • tidur ${mood.sleepHours.toStringAsFixed(1)}j • energi ${mood.energy}/10 • cemas ${mood.anxiety}/10${mood.note.isEmpty ? '' : '\n${mood.note}'}',
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                ],
-              ),
-            ),
-          if (moods.isNotEmpty && backendEntries.isNotEmpty)
-            const SizedBox(height: 10),
-          for (final entry in backendEntries.take(6)) ...[
-            SoftCard(
-              child: Row(
-                children: [
-                  CircleAvatar(child: Icon(_moodIcon(entry.mood))),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(entry.title,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w900)),
-                        Text(entry.note,
-                            maxLines: 2, overflow: TextOverflow.ellipsis),
-                        if (entry.professionalFeedback?.isNotEmpty == true)
-                          Text(
-                            'Feedback: ${entry.professionalFeedback}',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: MalvaColors.seed,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Beri feedback',
-                    onPressed: () => onBackendFeedback(entry),
-                    icon: const Icon(Icons.chat_bubble_outline_rounded),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
-        ] else
-          for (final entry in localEntries) ...[
-            SoftCard(
-              child: Row(
-                children: [
-                  CircleAvatar(child: Icon(entry.mood.icon)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          entry.title,
-                          style: const TextStyle(fontWeight: FontWeight.w900),
-                        ),
-                        Text(
-                          entry.note,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (entry.professionalFeedback != null)
-                          Text(
-                            'Feedback: ${entry.professionalFeedback}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: MalvaColors.seed,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Beri feedback',
-                    onPressed: () => onLocalFeedback(context, entry),
-                    icon: const Icon(Icons.chat_bubble_outline_rounded),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-          ],
-      ],
-    );
-  }
-}
-
-class _HealthRecordManagerSection extends StatelessWidget {
-  const _HealthRecordManagerSection({
-    required this.patient,
-    required this.online,
-    required this.restricted,
-    required this.diagnosis,
-    required this.onEdit,
-    required this.onPrescribe,
-  });
-
-  final _ProfessionalPatient patient;
-  final bool online;
-  final bool restricted;
-  final BackendHealthRecord? diagnosis;
-  final VoidCallback onEdit;
-  final VoidCallback onPrescribe;
-
-  @override
-  Widget build(BuildContext context) {
-    final hasDiagnosis = diagnosis?.hasDiagnosis == true;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SectionLabel('Health Record (isi klinis)'),
-        if (restricted)
-          const EmptyState(
-            icon: Icons.lock_outline_rounded,
-            title: 'Akses Health Record dibatasi pasien',
-            subtitle: 'Pasien dapat mengubah izin dari menu Akses profesional.',
-          )
-        else
-          SoftCard(
-            color: hasDiagnosis
-                ? MalvaColors.plum
-                : MalvaColors.amber.withValues(alpha: 0.10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      hasDiagnosis
-                          ? Icons.medical_information_rounded
-                          : Icons.medical_information_outlined,
-                      color: hasDiagnosis ? Colors.white : MalvaColors.amber,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        hasDiagnosis
-                            ? 'Diagnosis aktif'
-                            : 'Belum ada diagnosis',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 14.5,
-                          color: hasDiagnosis ? Colors.white : null,
-                        ),
-                      ),
-                    ),
-                    if (hasDiagnosis)
-                      const StatusPill(
-                        label: 'Live',
-                        color: MalvaColors.mint,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  hasDiagnosis
-                      ? diagnosis!.diagnosisSummary
-                      : 'Isi diagnosis setelah sesi meeting dengan pasien. '
-                          'Pasien akan melihatnya di Health Record (read-only).',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: hasDiagnosis ? Colors.white : Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: online ? onEdit : null,
-                        style: FilledButton.styleFrom(
-                          backgroundColor:
-                              hasDiagnosis ? Colors.white : MalvaColors.seed,
-                          foregroundColor:
-                              hasDiagnosis ? MalvaColors.plum : Colors.white,
-                          minimumSize: const Size(0, 46),
-                        ),
-                        icon: const Icon(Icons.edit_note_rounded),
-                        label: Text(hasDiagnosis ? 'Edit' : 'Isi Diagnosis'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: online ? onPrescribe : null,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: hasDiagnosis
-                              ? MalvaColors.mint
-                              : MalvaColors.seed,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(0, 46),
-                        ),
-                        icon: const Icon(Icons.medication_rounded),
-                        label: const Text('Resepkan Obat'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _MedicationMonitoringSection extends StatelessWidget {
-  const _MedicationMonitoringSection({
-    required this.storeState,
-    required this.online,
-    required this.restricted,
-    required this.medications,
-    required this.logs,
-  });
-
-  final MalvaStoreState storeState;
-  final bool online;
-  final bool restricted;
-  final List<BackendMedication> medications;
-  final List<BackendMedicationLog> logs;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SectionLabel('Monitoring obat'),
-        if (restricted)
-          const EmptyState(
-            icon: Icons.lock_outline_rounded,
-            title: 'Akses obat dibatasi pasien',
-            subtitle:
-                'Pasien dapat mengubah consent dari menu Akses profesional.',
-          )
-        else if (online && medications.isEmpty)
-          const EmptyState(
-            icon: Icons.medication_outlined,
-            title: 'Belum ada obat aktif',
-            subtitle: 'Obat yang dicatat pasien akan tampil di sini.',
-          )
-        else
-          SoftCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _ScoreLine(
-                  label: 'Adherence hari ini',
-                  score: online
-                      ? _backendAdherencePercent
-                      : storeState.adherencePercent,
-                  maxScore: 100,
-                  level:
-                      '${online ? _backendAdherencePercent : storeState.adherencePercent}%',
-                  color: (online
-                              ? _backendAdherencePercent
-                              : storeState.adherencePercent) >=
-                          80
-                      ? MalvaColors.mint
-                      : MalvaColors.orchid,
-                ),
-                const SizedBox(height: 14),
-                if (online)
-                  for (final med in medications) ...[
-                    _MedicationRow(
-                      name: med.name,
-                      dosage: med.dosage,
-                      stock: med.currentStock,
-                      needsRefill: med.needsRefill,
-                    ),
-                    const SizedBox(height: 8),
-                  ]
-                else
-                  for (final med in storeState.medications) ...[
-                    Row(
-                      children: [
-                        Icon(
-                          med.needsRefill
-                              ? Icons.warning_amber_rounded
-                              : Icons.medication_rounded,
-                          color: med.needsRefill
-                              ? MalvaColors.danger
-                              : MalvaColors.seed,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            '${med.name} ${med.dosage} - stok ${med.currentStock}',
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                        if (med.needsRefill)
-                          const StatusPill(
-                            label: 'Refill',
-                            color: MalvaColors.danger,
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                if (online && logs.isNotEmpty) ...[
-                  const Divider(height: 22),
-                  const Text('Log terbaru',
-                      style: TextStyle(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 8),
-                  for (final log in logs.take(5))
-                    Text(
-                      '${log.medicationName}: ${log.status} • ${_formatDate(log.takenAt)}',
-                    ),
-                ],
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  int get _backendAdherencePercent {
-    if (medications.isEmpty) return 0;
-    final now = DateTime.now();
-    final taken = logs.where((log) {
-      final date = log.takenAt;
-      return log.status == 'taken' &&
-          date != null &&
-          date.year == now.year &&
-          date.month == now.month &&
-          date.day == now.day;
-    }).length;
-    return ((taken / medications.length) * 100).clamp(0, 100).round();
-  }
-}
-
-class _MedicationRow extends StatelessWidget {
-  const _MedicationRow({
-    required this.name,
-    required this.dosage,
-    required this.stock,
-    required this.needsRefill,
-  });
-
-  final String name;
-  final String dosage;
-  final int stock;
-  final bool needsRefill;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(
-          needsRefill ? Icons.warning_amber_rounded : Icons.medication_rounded,
-          color: needsRefill ? MalvaColors.danger : MalvaColors.seed,
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            '$name $dosage - stok $stock',
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-        ),
-        if (needsRefill)
-          const StatusPill(label: 'Refill', color: MalvaColors.danger),
-      ],
-    );
-  }
-}
-
-class _ProfessionalNotesSection extends StatelessWidget {
-  const _ProfessionalNotesSection({
-    required this.notes,
-    required this.followUps,
-    required this.onEditNote,
-    required this.onFollowUp,
-  });
-
-  final List<BackendProfessionalNote> notes;
-  final List<BackendFollowUpMessage> followUps;
-  final VoidCallback onEditNote;
-  final VoidCallback onFollowUp;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SectionLabel('Catatan & follow-up'),
-        Row(
-          children: [
-            Expanded(
-              child: ActionTile(
-                icon: Icons.edit_note_rounded,
-                title: 'Catatan profesional',
-                subtitle: notes.isNotEmpty
-                    ? notes.first.body
-                    : 'Tambah catatan internal lokal',
-                onTap: onEditNote,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: ActionTile(
-                icon: Icons.send_rounded,
-                title: 'Follow-up',
-                subtitle: followUps.isNotEmpty
-                    ? followUps.first.body
-                    : 'Buat draft arahan pasien',
-                color: MalvaColors.orchid,
-                onTap: onFollowUp,
-              ),
-            ),
-          ],
-        ),
-        if (notes.length > 1) ...[
-          const SizedBox(height: 12),
-          const Text('Riwayat catatan profesional:',
-              style: TextStyle(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          for (final note in notes)
-            SoftCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(note.body, maxLines: 3, overflow: TextOverflow.ellipsis),
-                  if (note.updatedAt != null)
-                    Text(
-                      _formatDate(note.updatedAt),
-                      style:
-                          const TextStyle(fontSize: 11, color: Colors.black54),
-                    ),
-                ],
-              ),
-            ),
-        ],
-        if (followUps.length > 1) ...[
-          const SizedBox(height: 12),
-          const Text('Riwayat follow-up:',
-              style: TextStyle(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          for (final fu in followUps)
-            SoftCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(fu.body, maxLines: 3, overflow: TextOverflow.ellipsis),
-                  if (fu.createdAt != null)
-                    Text(
-                      _formatDate(fu.createdAt),
-                      style:
-                          const TextStyle(fontSize: 11, color: Colors.black54),
-                    ),
-                ],
-              ),
-            ),
-        ],
-      ],
-    );
-  }
-}
 
 class _RelationshipManagementSection extends StatelessWidget {
   const _RelationshipManagementSection({
@@ -3384,7 +1673,8 @@ class _RelationshipManagementSection extends StatelessWidget {
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
-                    ?.copyWith(color: Colors.black54),
+                    ?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
               const Divider(height: 22),
               for (final patient in patients) ...[
@@ -3484,6 +1774,22 @@ class _ProfessionalPortalSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SectionLabel('Portal Profesional'),
+        ActionTile(
+          icon: Icons.sell_rounded,
+          title: 'Katalog Harga',
+          subtitle: 'Atur harga quick chat, video, dan paket 4 sesi',
+          color: MalvaColors.orchid,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ProPricingScreen(
+                session: session,
+                apiClient: apiClient,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
         ActionTile(
           icon: Icons.shield_rounded,
           title: 'Crisis Incident Log',
@@ -3603,7 +1909,9 @@ class _PriorityCard extends StatelessWidget {
                       style: Theme.of(context)
                           .textTheme
                           .bodySmall
-                          ?.copyWith(color: Colors.black54),
+                          ?.copyWith(
+                              color:
+                                  Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -3740,24 +2048,6 @@ class _ScreeningView {
     );
   }
 
-  factory _ScreeningView.fromLocal(ScreeningBundle bundle) {
-    return _ScreeningView(
-      id: bundle.id,
-      createdAt: bundle.createdAt,
-      overallLevel: bundle.overallLevel.name,
-      crisisFlag: bundle.crisisFlag,
-      phq9Score: bundle.phq9.score,
-      phq9MaxScore: bundle.phq9.maxScore,
-      phq9Level: bundle.phq9.level.name,
-      gad7Score: bundle.gad7.score,
-      gad7MaxScore: bundle.gad7.maxScore,
-      gad7Level: bundle.gad7.level.name,
-      phq9CF: bundle.phq9.certaintyFactor,
-      gad7CF: bundle.gad7.certaintyFactor,
-      ruleTrace: bundle.phq9.ruleTrace,
-    );
-  }
-
   final String id;
   final DateTime? createdAt;
   final String overallLevel;
@@ -3798,42 +2088,6 @@ class _PriorityItem {
   final Color color;
 }
 
-class _TimelineEvent {
-  const _TimelineEvent({
-    required this.icon,
-    required this.title,
-    required this.body,
-    required this.color,
-  });
-
-  factory _TimelineEvent.fromBackend(BackendTimelineEvent event) {
-    return _TimelineEvent(
-      icon: switch (event.type.toLowerCase()) {
-        'screening' => Icons.fact_check_rounded,
-        'mood' => Icons.mood_rounded,
-        'diary' => Icons.edit_note_rounded,
-        'follow_up' => Icons.mark_email_read_rounded,
-        'medication' => Icons.medication_rounded,
-        _ => Icons.timeline_rounded,
-      },
-      title: event.title,
-      body: event.body,
-      color: switch (event.type.toLowerCase()) {
-        'screening' => MalvaColors.orchid,
-        'mood' => MalvaColors.pink,
-        'diary' => MalvaColors.seed,
-        'follow_up' => MalvaColors.amber,
-        'medication' => MalvaColors.mint,
-        _ => MalvaColors.seed,
-      },
-    );
-  }
-
-  final IconData icon;
-  final String title;
-  final String body;
-  final Color color;
-}
 
 class _AuditEntry {
   const _AuditEntry({
@@ -3874,56 +2128,6 @@ String _formatDate(DateTime? value) {
   return '$day/$month/${value.year}';
 }
 
-IconData _moodIcon(String value) {
-  return switch (value.toLowerCase()) {
-    'great' => Icons.sentiment_very_satisfied_rounded,
-    'good' => Icons.sentiment_satisfied_alt_rounded,
-    'sad' => Icons.sentiment_dissatisfied_rounded,
-    'awful' => Icons.sentiment_very_dissatisfied_rounded,
-    _ => Icons.sentiment_neutral_rounded,
-  };
-}
-
-String _moodLabel(String value) {
-  return switch (value.toLowerCase()) {
-    'great' => 'Sangat baik',
-    'good' => 'Baik',
-    'sad' => 'Sedih',
-    'awful' => 'Buruk',
-    _ => 'Cukup',
-  };
-}
-
-class _MoodDiaryResult {
-  const _MoodDiaryResult({
-    required this.moods,
-    required this.diaries,
-    this.restricted = false,
-  });
-
-  final List<BackendMoodCheckin> moods;
-  final List<BackendDiaryEntry> diaries;
-  final bool restricted;
-}
-
-class _MedicationResult {
-  const _MedicationResult({
-    required this.medications,
-    required this.logs,
-    this.restricted = false,
-  });
-
-  final List<BackendMedication> medications;
-  final List<BackendMedicationLog> logs;
-  final bool restricted;
-}
-
-class _HealthRecordResult {
-  const _HealthRecordResult({this.record, this.restricted = false});
-
-  final BackendHealthRecord? record;
-  final bool restricted;
-}
 
 class _SyncStatusIndicator extends StatelessWidget {
   const _SyncStatusIndicator({

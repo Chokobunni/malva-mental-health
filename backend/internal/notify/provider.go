@@ -46,6 +46,7 @@ func NewProvider(ctx context.Context, cfg config.Config, logger *slog.Logger) (P
 	if err != nil {
 		return nil, err
 	}
+	logger.Info("fcm provider active")
 	return &fcmProvider{client: client}, nil
 }
 

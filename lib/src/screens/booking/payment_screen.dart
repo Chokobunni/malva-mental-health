@@ -6,38 +6,47 @@ import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
+import '../care_package_screen.dart';
 import 'payment_success_screen.dart';
 
 // ============================================================
-// PAYMENT — break-down + 4 metode
+// PAYMENT — break-down + metode.
+// Mode internal/simulasi: pembayaran dikonfirmasi langsung dan
+// tercatat di DB (belum memakai gateway eksternal).
 // ============================================================
 
 class PaymentScreen extends ConsumerStatefulWidget {
   const PaymentScreen({
     super.key,
-    required this.booking,
+    this.booking,
+    this.package,
     this.doctorName = 'Profesional',
     this.session,
     this.apiClient,
-  });
+  }) : assert(booking != null || package != null,
+            'booking atau package wajib diisi');
 
-  final BackendBooking booking;
+  /// Quick consult (sesi satu kali).
+  final BackendBooking? booking;
+
+  /// Pembelian paket continuous (4 sesi). Payment paket masih lewat
+  /// booking pending milik paket — dibuat server saat createCarePackage?
+  /// Tidak: paket dibayar lewat booking tersendiri di bawah ini.
+  final BackendCarePackage? package;
   final String doctorName;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
+
+  bool get isPackage => package != null;
 
   @override
   ConsumerState<PaymentScreen> createState() => _PaymentScreenState();
 }
 
 class _PaymentScreenState extends ConsumerState<PaymentScreen> {
-  String _method = 'malva_bank';
+  String _method = 'qris';
   bool _isPaying = false;
   String? _error;
-
-  /// Malva Bank — payment dummy internal (transaksi tetap tercatat di DB).
-  static const _malvaBank =
-      ('malva_bank', 'Malva Bank', Icons.account_balance_rounded);
 
   /// Semua e-wallet utama Indonesia.
   static const _wallets = [
@@ -62,10 +71,21 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     ('qris', 'QRIS', Icons.qr_code_2_rounded),
   ];
 
-  int get _consultationPrice =>
-      widget.booking.price > 0 ? widget.booking.price : 150000;
+  int get _consultationPrice {
+    if (widget.isPackage) return widget.package!.price;
+    return widget.booking!.price;
+  }
+
+  /// Biaya layanan flat (sama dengan server: 2000).
   static const int _serviceFee = 2000;
   int get _total => _consultationPrice + _serviceFee;
+
+  String get _itemLabel {
+    if (widget.isPackage) {
+      return 'Paket Continuous (4 sesi / 6 minggu) • ${widget.doctorName}';
+    }
+    return 'Konsultasi (30 mnt) • ${widget.doctorName}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,10 +102,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           SoftCard(
             child: Column(
               children: [
-                _Line(
-                    label:
-                        'Konsultasi (${widget.booking.serviceType == 'continuous_support' ? '7 hari' : '30 mnt'}) • ${widget.doctorName}',
-                    value: 'Rp ${_rupiah(_consultationPrice)}'),
+                _Line(label: _itemLabel, value: 'Rp ${_rupiah(_consultationPrice)}'),
                 const SizedBox(height: 6),
                 _Line(
                     label: 'Service Fee', value: 'Rp ${_rupiah(_serviceFee)}'),
@@ -110,16 +127,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          // === MALVA BANK (dummy tapi berjalan) — paling atas ===
-          const SectionLabel('Metode Utama'),
-          _MethodTile(
-            label: _malvaBank.$2,
-            icon: _malvaBank.$3,
-            selected: _method == _malvaBank.$1,
-            onTap: () => setState(() => _method = _malvaBank.$1),
-            highlight: true,
-            subtitle: 'Saldo Malva — instan & tanpa biaya',
+          const SizedBox(height: 8),
+          const Text(
+            'Mode pembayaran internal (simulasi gateway). Transaksi tercatat di server.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11.5, color: Colors.black54),
           ),
           const SizedBox(height: 12),
           const SectionLabel('E-Wallet'),
@@ -194,9 +206,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       _error = null;
     });
     try {
+      if (widget.isPackage) {
+        await _payPackage(apiClient, accessToken);
+        return;
+      }
       final response = await apiClient.createPayment(
         accessToken: accessToken,
-        bookingId: widget.booking.id,
+        bookingId: widget.booking!.id,
         paymentMethod: _method,
       );
       final reference = response.payment.reference;
@@ -210,13 +226,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         MaterialPageRoute(
           builder: (_) => PaymentSuccessScreen(
             reference: reference,
-            isContinuousSupport:
-                widget.booking.serviceType == 'continuous_support',
-            doctorUserId: widget.booking.professionalId,
+            doctorUserId: widget.booking!.professionalId,
             doctorName: widget.doctorName,
-            periodLabel: widget.booking.serviceType == 'continuous_support'
-                ? _periodLabel(widget.booking.bookingDate)
-                : '',
             session: widget.session,
             apiClient: widget.apiClient,
           ),
@@ -231,33 +242,61 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     }
   }
 
-  static String _rupiah(int value) {
-    return _rupiahFmt(value);
+  /// Bayar paket: pasien memilih slot sesi PERTAMA (chat/video) di sini
+  /// lewat sheet yang sama dengan penjadwalan sesi paket — tidak ada lagi
+  /// slot otomatis "pertama yang bebas". Setelah bayar, paket aktif dan
+  /// sesi pertama langsung terjadwal sesuai pilihan pasien.
+  Future<void> _payPackage(
+      MalvaApiClient apiClient, String accessToken) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (_) => PackageFirstSessionSheet(
+        apiClient: apiClient,
+        accessToken: accessToken,
+        professionalId: widget.package!.professionalId,
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final parts = picked.split('|');
+    final booking = await apiClient.createPackageSessionBooking(
+      accessToken: accessToken,
+      packageId: widget.package!.id,
+      bookingDate: parts[0].split('T')[0],
+      slotTime: parts[0].split('T')[1],
+      sessionType: parts.length > 1 ? parts[1] : 'chat',
+    );
+    final response = await apiClient.createPayment(
+      accessToken: accessToken,
+      bookingId: booking.id,
+      paymentMethod: _method,
+    );
+    final reference = response.payment.reference;
+    await apiClient.markPaymentPaid(
+      accessToken: accessToken,
+      reference: reference,
+    );
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PaymentSuccessScreen(
+          reference: reference,
+          package: widget.package,
+          doctorUserId: widget.package!.professionalId,
+          doctorName: widget.doctorName,
+          session: widget.session,
+          apiClient: widget.apiClient,
+        ),
+      ),
+    );
   }
 
-  /// "2026-10-07" -> "7 Okt 2026 – 13 Okt 2026" (periode 7 hari).
-  static String _periodLabel(String yyyyMmDd) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'Mei',
-      'Jun',
-      'Jul',
-      'Agu',
-      'Sep',
-      'Okt',
-      'Nov',
-      'Des'
-    ];
-    final parts = yyyyMmDd.split('-');
-    if (parts.length != 3) return yyyyMmDd;
-    final start = DateTime.tryParse(yyyyMmDd);
-    if (start == null) return yyyyMmDd;
-    final end = start.add(const Duration(days: 6));
-    String fmt(DateTime d) => '${d.day} ${months[d.month - 1]} ${d.year}';
-    return '${fmt(start)} – ${fmt(end)}';
+  static String _rupiah(int value) {
+    return _rupiahFmt(value);
   }
 
   static String _rupiahFmt(int value) {
@@ -295,8 +334,6 @@ class _MethodTile extends StatelessWidget {
     required this.icon,
     required this.selected,
     required this.onTap,
-    this.highlight = false,
-    this.subtitle,
   });
 
   final String label;
@@ -304,14 +341,9 @@ class _MethodTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  /// Tampil menonjol (Malva Bank) — full width + subtitle.
-  final bool highlight;
-  final String? subtitle;
-
   @override
   Widget build(BuildContext context) {
-    if (highlight) {
-      return InkWell(
+    return InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: Container(
@@ -343,12 +375,6 @@ class _MethodTile extends StatelessWidget {
                     Text(label,
                         style: const TextStyle(
                             fontWeight: FontWeight.w900, fontSize: 15)),
-                    if (subtitle != null)
-                      Text(subtitle!,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: Colors.black54)),
                   ],
                 ),
               ),
@@ -358,43 +384,5 @@ class _MethodTile extends StatelessWidget {
           ),
         ),
       );
-    }
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: selected
-              ? MalvaColors.seed.withValues(alpha: 0.12)
-              : Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected
-                ? MalvaColors.seed
-                : Colors.black.withValues(alpha: 0.12),
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: selected ? MalvaColors.seed : Colors.black54),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
-                color: selected ? MalvaColors.seed : Colors.black87,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

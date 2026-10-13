@@ -195,8 +195,26 @@ class _NotificationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final (icon, color) = switch (item.type) {
       'crisis_alert' => (Icons.warning_amber_rounded, MalvaColors.danger),
+      'screening_crisis' => (Icons.warning_amber_rounded, MalvaColors.danger),
       'chat_message' => (Icons.chat_bubble_rounded, MalvaColors.orchid),
-      'follow_up' => (Icons.mark_email_unread_rounded, MalvaColors.seed),
+      'therapy_shared' => (Icons.assignment_rounded, MalvaColors.seed),
+      'session_scheduled' => (Icons.event_available_rounded, MalvaColors.seed),
+      'session_rescheduled' =>
+        (Icons.edit_calendar_rounded, MalvaColors.orchid),
+      'session_cancelled_professional' =>
+        (Icons.event_busy_rounded, MalvaColors.amber),
+      'session_cancelled_patient' =>
+        (Icons.event_busy_rounded, MalvaColors.amber),
+      'session_no_show' => (Icons.person_off_rounded, MalvaColors.danger),
+      'session_summary' => (Icons.summarize_rounded, MalvaColors.mint),
+      'package_activated' => (Icons.card_membership_rounded, MalvaColors.mint),
+      'patient_linked' => (Icons.link_rounded, MalvaColors.seed),
+      'diary_feedback_updated' =>
+        (Icons.rate_review_rounded, MalvaColors.orchid),
+      'health_record_updated' =>
+        (Icons.folder_shared_rounded, MalvaColors.seed),
+      'professional_note_shared' =>
+        (Icons.edit_note_rounded, MalvaColors.seed),
       'medication' => (Icons.medication_rounded, MalvaColors.mint),
       'screening' => (Icons.fact_check_rounded, MalvaColors.amber),
       _ => (Icons.notifications_rounded, MalvaColors.seed),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
@@ -7,10 +8,11 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
+import 'care_package_screen.dart';
 import 'chat_screen.dart';
 
 // ============================================================
-// MY CARE — jadwal sesi + daftar profesional (Active/Ended)
+// MY CARE — paket sesi + jadwal sesi + profesional (sharing)
 // ============================================================
 
 class MyCareScreen extends ConsumerStatefulWidget {
@@ -24,18 +26,14 @@ class MyCareScreen extends ConsumerStatefulWidget {
 }
 
 class _MyCareScreenState extends ConsumerState<MyCareScreen> {
-  String _tab = 'Schedule';
+  String _tab = 'Paket';
+  List<BackendCarePackage> _packages = const [];
+  List<BackendCareSession> _sessions = const [];
   List<BackendPatientProfessionalLink> _links = const [];
-  List<BackendBooking> _bookings = const [];
   bool _isLoading = true;
   String? _error;
 
-  static const _tabs = [
-    'Schedule',
-    'Upcoming',
-    'Past History',
-    'Professionals'
-  ];
+  static const _tabs = ['Paket', 'Jadwal', 'Riwayat', 'Professionals'];
 
   @override
   void initState() {
@@ -54,7 +52,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
         setState(() {
           _isLoading = false;
           _error = 'Mode offline aktif. '
-              'Hubungkan ke server untuk melihat jadwal dan profesional Anda.';
+              'Hubungkan ke server untuk melihat paket dan jadwal Anda.';
         });
       }
       return;
@@ -65,13 +63,15 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
     });
     try {
       final results = await Future.wait([
+        apiClient.listCarePackages(accessToken: accessToken),
+        apiClient.listCareSessions(accessToken: accessToken, scope: 'all'),
         apiClient.listPatientProfessionalLinks(accessToken: accessToken),
-        apiClient.listBookings(accessToken: accessToken, limit: 50),
       ]);
       if (!mounted) return;
       setState(() {
-        _links = results[0] as List<BackendPatientProfessionalLink>;
-        _bookings = results[1] as List<BackendBooking>;
+        _packages = results[0] as List<BackendCarePackage>;
+        _sessions = results[1] as List<BackendCareSession>;
+        _links = results[2] as List<BackendPatientProfessionalLink>;
         _isLoading = false;
       });
     } on Object catch (e) {
@@ -83,20 +83,20 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
     }
   }
 
-  List<BackendBooking> get _upcoming => _bookings
-      .where((b) =>
-          b.status == 'paid' || b.status == 'pending' || b.status == 'active')
-      .toList();
+  List<BackendCareSession> get _upcoming => _sessions
+      .where((s) => s.isScheduled)
+      .toList(growable: false)
+    ..sort((a, b) =>
+        (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
 
-  List<BackendBooking> get _past => _bookings
-      .where((b) => b.status == 'completed' || b.status == 'cancelled')
-      .toList();
+  List<BackendCareSession> get _past => _sessions
+      .where((s) => !s.isScheduled)
+      .toList(growable: false)
+    ..sort((a, b) =>
+        (b.scheduledAt ?? '').compareTo(a.scheduledAt ?? ''));
 
   List<BackendPatientProfessionalLink> get _activeLinks =>
       _links.where((l) => l.status == 'active').toList();
-
-  List<BackendPatientProfessionalLink> get _endedLinks =>
-      _links.where((l) => l.status != 'active').toList();
 
   @override
   Widget build(BuildContext context) {
@@ -151,35 +151,65 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
               )
             else if (_tab == 'Professionals')
               ..._professionalsBody()
+            else if (_tab == 'Paket')
+              ..._packagesBody()
+            else if (_tab == 'Jadwal')
+              ..._scheduleBody(upcoming: true)
             else
-              ..._scheduleBody(),
+              ..._scheduleBody(upcoming: false),
           ],
         ),
       ),
     );
   }
 
-  List<Widget> _scheduleBody() {
-    // Tab "Schedule" menampilkan sesi mendatang (default), bukan riwayat.
-    final list = _tab == 'Past History' ? _past : _upcoming;
-    if (list.isEmpty) {
+  List<Widget> _packagesBody() {
+    if (_packages.isEmpty) {
       return [
-        EmptyState(
-          icon: _tab == 'Past History'
-              ? Icons.history_rounded
-              : Icons.event_available_outlined,
-          title: _tab == 'Past History'
-              ? 'Belum ada riwayat sesi'
-              : 'Tidak ada sesi mendatang',
-          subtitle: _tab == 'Past History'
-              ? 'Sesi yang selesai akan tercatat di sini.'
-              : 'Booking konsultasi untuk menjadwalkan sesi.',
+        const EmptyState(
+          icon: Icons.card_membership_outlined,
+          title: 'Belum ada paket',
+          subtitle:
+              'Beli paket 4 sesi / 6 minggu dari profil profesional untuk mulai.',
         ),
       ];
     }
     return [
-      for (final b in list) ...[
-        _SessionCard(booking: b),
+      for (final p in _packages) ...[
+        _PackageCard(
+          package: p,
+          onOpen: () => _openPackage(p),
+        ),
+        const SizedBox(height: 10),
+      ],
+    ];
+  }
+
+  List<Widget> _scheduleBody({required bool upcoming}) {
+    final list = upcoming ? _upcoming : _past;
+    if (list.isEmpty) {
+      return [
+        EmptyState(
+          icon: upcoming
+              ? Icons.event_available_outlined
+              : Icons.history_rounded,
+          title: upcoming
+              ? 'Tidak ada sesi mendatang'
+              : 'Belum ada riwayat sesi',
+          subtitle: upcoming
+              ? 'Jadwalkan sesi dari paketmu.'
+              : 'Sesi yang selesai akan tercatat di sini.',
+        ),
+      ];
+    }
+    return [
+      for (final s in list) ...[
+        _SessionCard(
+          session: s,
+          onOpenChat: () => _openChat(s),
+          onJoin: () => _joinSession(s),
+          onManage: () => _openPackageFor(s),
+        ),
         const SizedBox(height: 10),
       ],
     ];
@@ -191,48 +221,107 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
         const EmptyState(
           icon: Icons.medical_services_outlined,
           title: 'Belum ada profesional',
-          subtitle: 'Hubungkan akun dengan profesional untuk mulai.',
+          subtitle: 'Beli paket atau booking sesi untuk mulai.',
         ),
       ];
     }
-    final active = _activeLinks;
-    final ended = _endedLinks;
     return [
-      if (active.isNotEmpty) ...[
-        const SectionLabel('Active'),
-        for (final link in active) ...[
-          _ProfessionalLinkCard(
-            link: link,
-            active: true,
-            onChat: () => _openChat(link),
-            onManage: () => _openManageData(link),
-          ),
-          const SizedBox(height: 10),
-        ],
-      ],
-      if (ended.isNotEmpty) ...[
-        const SectionLabel('Ended'),
-        for (final link in ended) ...[
-          _ProfessionalLinkCard(link: link, active: false),
-          const SizedBox(height: 10),
-        ],
+      const SectionLabel('Terhubung'),
+      for (final link in _activeLinks) ...[
+        _ProfessionalLinkCard(
+          link: link,
+          package: _packageForProfessional(link.professionalUserId),
+          onChat: () => _openChatFor(link),
+          onManage: () => _openManageData(link),
+        ),
+        const SizedBox(height: 10),
       ],
     ];
   }
 
-  void _openChat(BackendPatientProfessionalLink link) {
-    final name = link.professionalDisplayName.isEmpty
-        ? 'Profesional'
-        : link.professionalDisplayName;
+  /// Paket terbaru (aktif didahulukan) untuk profesional tsb, atau null.
+  BackendCarePackage? _packageForProfessional(String professionalId) {
+    BackendCarePackage? best;
+    for (final p in _packages) {
+      if (p.professionalId != professionalId) continue;
+      if (best == null) {
+        best = p;
+        continue;
+      }
+      if (best.isActive && !p.isActive) continue;
+      if (!best.isActive && p.isActive) {
+        best = p;
+        continue;
+      }
+      final a = p.createdAt;
+      final b = best.createdAt;
+      if (a != null && b != null && a.compareTo(b) > 0) best = p;
+    }
+    return best;
+  }
+
+  void _openPackage(BackendCarePackage p) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CarePackageScreen(
+          package: p,
+          session: widget.session,
+          apiClient: widget.apiClient,
+        ),
+      ),
+    ).then((_) => _load());
+  }
+
+  void _openPackageFor(BackendCareSession s) {
+    if (s.packageId == null || s.packageId!.isEmpty) return;
+    BackendCarePackage? found;
+    for (final p in _packages) {
+      if (p.id == s.packageId) {
+        found = p;
+        break;
+      }
+    }
+    if (found != null) _openPackage(found);
+  }
+
+  void _openChat(BackendCareSession s) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ChatScreen(
-          otherUserName: name,
+          otherUserName: s.professionalName.isEmpty
+              ? 'Profesional'
+              : s.professionalName,
+          otherUserId: s.professionalId,
+        ),
+      ),
+    );
+  }
+
+  void _openChatFor(BackendPatientProfessionalLink link) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          otherUserName: link.professionalDisplayName.isEmpty
+              ? 'Profesional'
+              : link.professionalDisplayName,
           otherUserId: link.professionalUserId,
         ),
       ),
     );
+  }
+
+  Future<void> _joinSession(BackendCareSession s) async {
+    if (s.isVideo && s.meetingUrl.trim().isNotEmpty) {
+      final uri = Uri.tryParse(s.meetingUrl.trim());
+      if (uri != null && await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    }
+    _openChat(s);
   }
 
   void _openManageData(BackendPatientProfessionalLink link) {
@@ -253,45 +342,199 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   }
 }
 
-class _SessionCard extends StatelessWidget {
-  const _SessionCard({required this.booking});
+class _PackageCard extends StatelessWidget {
+  const _PackageCard({required this.package, required this.onOpen});
 
-  final BackendBooking booking;
+  final BackendCarePackage package;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
-    final isContinuous = booking.serviceType == 'continuous_support';
-    final icon = isContinuous
-        ? Icons.handshake_rounded
-        : (booking.serviceType.contains('video')
-            ? Icons.videocam_rounded
-            : Icons.chat_bubble_rounded);
-    final label = isContinuous
-        ? '7 Days Continuous Care'
-        : '${booking.serviceType} • 30 minutes';
+    final expires = package.expiresDateTime?.toLocal();
     return SoftCard(
-      child: Row(
+      onTap: onOpen,
+      color: MalvaColors.mint.withValues(alpha: 0.08),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
-            child: Icon(icon, color: MalvaColors.seed),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  package.professionalName.isEmpty
+                      ? 'Paket Continuous'
+                      : package.professionalName,
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
-                Text(
-                  '${booking.bookingDate} • ${booking.status}',
-                  style: Theme.of(context).textTheme.bodySmall,
+              ),
+              StatusPill(
+                label: package.status,
+                color: package.isActive
+                    ? MalvaColors.mint
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ProgressStrip(
+            value: package.totalSessions == 0
+                ? 0
+                : package.usedSessions / package.totalSessions,
+            color: MalvaColors.seed,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${package.remainingSessions}/${package.totalSessions} sesi tersisa'
+            '${expires == null ? '' : ' • s/d ${expires.day}/${expires.month}/${expires.year}'}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          // F-12: ringkasan kredit/refund bila ada dana yang dikembalikan.
+          if (package.refundedAmount > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Refund/kredit: ${_rupiah(package.refundedAmount)}',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: MalvaColors.mint),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Format nilai rupiah sederhana (tanpa pemisah ribuan berlebih).
+String _rupiah(int value) => 'Rp ${value.toString().replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+$)'),
+      (m) => '${m[1]}.',
+    )}';
+
+class _SessionCard extends StatelessWidget {
+  const _SessionCard({
+    required this.session,
+    this.onOpenChat,
+    this.onJoin,
+    this.onManage,
+  });
+
+  final BackendCareSession session;
+  final VoidCallback? onOpenChat;
+  final VoidCallback? onJoin;
+  final VoidCallback? onManage;
+
+  @override
+  Widget build(BuildContext context) {
+    final at = session.scheduledDateTime?.toLocal();
+    final dateLabel = at == null
+        ? '-'
+        : '${at.day}/${at.month}/${at.year} ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
+    final statusColor = switch (session.status) {
+      'scheduled' => MalvaColors.seed,
+      'completed' => MalvaColors.mint,
+      'no_show' => MalvaColors.danger,
+      'cancelled_by_professional' => MalvaColors.amber,
+      _ => Theme.of(context).colorScheme.onSurfaceVariant,
+    };
+    final statusLabel = switch (session.status) {
+      'scheduled' =>
+        'Terjadwal${session.packageId == null ? ' • sekali sesi' : ''}',
+      'completed' => 'Selesai',
+      'no_show' => 'Tidak hadir (hangus)',
+      'cancelled_by_professional' => 'Dibatalkan profesional (kredit kembali)',
+      'cancelled_by_patient' => 'Dibatalkan',
+      _ => session.status,
+    };
+    return SoftCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
+                child: Icon(
+                    session.isVideo
+                        ? Icons.videocam_rounded
+                        : Icons.chat_bubble_rounded,
+                    color: MalvaColors.seed),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      session.professionalName.isEmpty
+                          ? 'Sesi ${session.isVideo ? 'Video' : 'Chat'}'
+                          : session.professionalName,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    Text(
+                      '$dateLabel • ${session.durationMinutes} mnt',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
+              ),
+              StatusPill(label: statusLabel, color: statusColor),
+            ],
+          ),
+          if (session.summaryForPatient.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Ringkasan: ${session.summaryForPatient}',
+                style: Theme.of(context).textTheme.bodySmall),
+          ],
+          // F-12: tampilkan siapa yang membatalkan sesi (cancelled_by).
+          if (session.cancelledBy.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              session.cancelledByProfessional
+                  ? 'Dibatalkan oleh profesional — kuota sesi dikembalikan.'
+                  : 'Dibatalkan oleh Anda.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ],
+          if (session.isScheduled) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: onJoin,
+                    style: compactFilledButtonStyle,
+                    icon: Icon(
+                        session.isVideo
+                            ? Icons.videocam_rounded
+                            : Icons.chat_bubble_rounded,
+                        size: 16),
+                    label: const Text('Join'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onOpenChat,
+                    icon: const Icon(Icons.send_rounded, size: 16),
+                    label: const Text('Kirim'),
+                  ),
+                ),
+                if (onManage != null && session.packageId != null) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onManage,
+                      child: const Text('Kelola'),
+                    ),
+                  ),
+                ],
               ],
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -301,18 +544,26 @@ class _SessionCard extends StatelessWidget {
 class _ProfessionalLinkCard extends StatelessWidget {
   const _ProfessionalLinkCard({
     required this.link,
-    required this.active,
+    this.package,
     this.onChat,
     this.onManage,
   });
 
   final BackendPatientProfessionalLink link;
-  final bool active;
+
+  /// Paket terbaru pasien dengan profesional ini (null = tanpa paket).
+  final BackendCarePackage? package;
   final VoidCallback? onChat;
   final VoidCallback? onManage;
 
   @override
   Widget build(BuildContext context) {
+    final pkg = package;
+    final pkgLabel = pkg == null
+        ? 'Tanpa paket aktif'
+        : pkg.isActive
+            ? 'Paket aktif: ${pkg.remainingSessions}/${pkg.totalSessions} sesi'
+            : 'Paket ${pkg.status}: ${pkg.usedSessions}/${pkg.totalSessions} terpakai';
     return SoftCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -320,11 +571,9 @@ class _ProfessionalLinkCard extends StatelessWidget {
           Row(
             children: [
               CircleAvatar(
-                backgroundColor: active
-                    ? MalvaColors.mint.withValues(alpha: 0.12)
-                    : Colors.black12,
-                child: Icon(Icons.person_rounded,
-                    color: active ? MalvaColors.mint : Colors.black45),
+                backgroundColor: MalvaColors.mint.withValues(alpha: 0.12),
+                child: const Icon(Icons.person_rounded,
+                    color: MalvaColors.mint),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -338,41 +587,41 @@ class _ProfessionalLinkCard extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
                     Text(
-                      'Status: ${link.status}',
+                      pkgLabel,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
               StatusPill(
-                label: active ? 'Terhubung' : link.status,
-                color: active ? MalvaColors.mint : Colors.black45,
+                label: pkg != null && pkg.isActive ? 'Paket aktif' : 'Terhubung',
+                color: pkg != null && pkg.isActive
+                    ? MalvaColors.mint
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ],
           ),
-          if (active) ...[
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: onChat,
-                    style: compactFilledButtonStyle,
-                    icon: const Icon(Icons.chat_bubble_rounded, size: 16),
-                    label: const Text('Chat'),
-                  ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onChat,
+                  style: compactFilledButtonStyle,
+                  icon: const Icon(Icons.send_rounded, size: 16),
+                  label: const Text('Kirim'),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onManage,
-                    icon: const Icon(Icons.tune_rounded, size: 16),
-                    label: const Text('Sharing'),
-                  ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onManage,
+                  icon: const Icon(Icons.tune_rounded, size: 16),
+                  label: const Text('Sharing'),
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -380,7 +629,7 @@ class _ProfessionalLinkCard extends StatelessWidget {
 }
 
 // ============================================================
-// MANAGE DATA — sharing toggles inline per profesional
+// MANAGE DATA — sharing toggles sesuai kolom consent server
 // ============================================================
 
 class ManageDataSheet extends ConsumerStatefulWidget {
@@ -398,10 +647,13 @@ class ManageDataSheet extends ConsumerStatefulWidget {
 }
 
 class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
-  bool _mood = true;
-  bool _diary = true;
-  bool _goals = true;
-  bool _record = true;
+  // Default MATI (opt-in eksplisit); nilai riil dimuat dari server.
+  bool _screenings = false;
+  bool _moodDiary = false;
+  bool _medications = false;
+  bool _timeline = false;
+  bool _healthRecord = false;
+  bool _goals = false;
   bool _isLoading = true;
   bool _isSaving = false;
   String? _error;
@@ -432,10 +684,12 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
       );
       if (!mounted) return;
       setState(() {
-        _mood = consent.shareMoodDiary;
-        _diary = consent.shareMoodDiary;
-        _goals = true;
-        _record = consent.shareScreenings;
+        _screenings = consent.shareScreenings;
+        _moodDiary = consent.shareMoodDiary;
+        _medications = consent.shareMedications;
+        _timeline = consent.shareTimeline;
+        _healthRecord = consent.shareHealthRecord;
+        _goals = consent.shareGoals;
         _isLoading = false;
       });
     } on Object catch (e) {
@@ -468,27 +722,36 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
                 ?.copyWith(fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 4),
-          const Text('Sharing: pilih kategori yang boleh dibaca profesional.'),
+          const Text(
+              'Sharing: pilih kategori yang boleh dibaca profesional selama paket aktif.'),
           const SizedBox(height: 12),
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
           else ...[
             _Toggle(
-                label: 'Mood',
-                value: _mood,
-                onChanged: (v) => setState(() => _mood = v)),
+                label: 'Assessment (PHQ-9/GAD-7)',
+                value: _screenings,
+                onChanged: (v) => setState(() => _screenings = v)),
             _Toggle(
-                label: 'Diary',
-                value: _diary,
-                onChanged: (v) => setState(() => _diary = v)),
+                label: 'Mood & Diary',
+                value: _moodDiary,
+                onChanged: (v) => setState(() => _moodDiary = v)),
             _Toggle(
-                label: 'Goals',
+                label: 'Obat (Medication)',
+                value: _medications,
+                onChanged: (v) => setState(() => _medications = v)),
+            _Toggle(
+                label: 'Goals & Habits',
                 value: _goals,
                 onChanged: (v) => setState(() => _goals = v)),
             _Toggle(
-                label: 'Record',
-                value: _record,
-                onChanged: (v) => setState(() => _record = v)),
+                label: 'Health Record',
+                value: _healthRecord,
+                onChanged: (v) => setState(() => _healthRecord = v)),
+            _Toggle(
+                label: 'Timeline',
+                value: _timeline,
+                onChanged: (v) => setState(() => _timeline = v)),
             if (_error != null) ...[
               const SizedBox(height: 8),
               Text(_error!,
@@ -518,10 +781,12 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
       await apiClient.updatePrivacyConsent(
         accessToken: token,
         professionalId: widget.professionalId,
-        shareScreenings: _record,
-        shareMoodDiary: _mood || _diary,
-        shareMedications: true,
-        shareTimeline: true,
+        shareScreenings: _screenings,
+        shareMoodDiary: _moodDiary,
+        shareMedications: _medications,
+        shareTimeline: _timeline,
+        shareHealthRecord: _healthRecord,
+        shareGoals: _goals,
       );
       if (!mounted) return;
       Navigator.pop(context);

@@ -525,9 +525,20 @@ func (s *Server) getDoctorProfile(w http.ResponseWriter, r *http.Request, claims
 		return
 	}
 	packages, _ := s.store.ListServicePackages(r.Context(), userID)
+	schedules, _ := s.store.ListActiveSchedulesForProfessional(r.Context(), userID)
+	pricing, _ := s.store.GetProfessionalPricing(r.Context(), userID)
+	reviews, _ := s.store.ListDoctorReviews(r.Context(), userID, 10)
+	if reviews == nil {
+		reviews = []store.DoctorReview{}
+	}
+	rating, _ := s.store.DoctorRating(r.Context(), userID)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"credential": cred,
 		"packages":   packages,
+		"schedules":  schedules,
+		"pricing":    pricing,
+		"reviews":    reviews,
+		"rating":     rating,
 	})
 }
 
@@ -545,7 +556,7 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	schedules, err := s.store.ListSchedulesForProfessional(r.Context(), userID)
+	schedules, err := s.store.ListActiveSchedulesForProfessional(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -563,7 +574,31 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 		return time.Time{}, false
 	}
 
-	slots := make([]interface{}, 0)
+	// Hari libur profesional: tidak ada slot sama sekali.
+	if off, err := s.store.ListTimeOff(r.Context(), userID, dateStr, dateStr); err == nil && len(off) > 0 {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"slots": []interface{}{}, "date": dateStr, "off": true,
+		})
+		return
+	}
+	// Tandai slot yang sudah terisi sesi (pending/scheduled) agar tidak double-book.
+	dayStart := time.Date(target.Year(), target.Month(), target.Day(), 0, 0, 0, 0, wibLoc)
+	booked := map[string]bool{}
+	if sessions, err := s.store.ListCareSessions(r.Context(), userID, "professional", "all", "", 200); err == nil {
+		for _, cs := range sessions {
+			if cs.Status != "scheduled" && cs.Status != "pending_payment" {
+				continue
+			}
+			local := cs.ScheduledAt.In(wibLoc)
+			if local.Year() == target.Year() && local.Month() == target.Month() && local.Day() == target.Day() {
+				booked[local.Format("15:04")] = true
+			}
+		}
+	}
+	_ = dayStart
+	nowWIB := time.Now().In(wibLoc)
+
+		slots := make([]interface{}, 0)
 	for _, sch := range schedules {
 		if sch.DayOfWeek != dayOfWeek {
 			continue
@@ -577,14 +612,255 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 		if step <= 0 {
 			step = 30 * time.Minute
 		}
-		for t := start; t.Before(end); t = t.Add(step) {
+		for t := start; t.Add(step).Before(end) || t.Add(step).Equal(end); t = t.Add(step) {
+			label := t.Format("15:04")
+			available := !booked[label]
+			// Lead time 24 jam: sesi butuh persiapan kedua belah pihak
+			// (aturan yang sama dipakai createBooking/validateSlot).
+			slotTime, _ := time.ParseInLocation("2006-01-02 15:04", dateStr+" "+label, wibLoc)
+			if !slotTime.After(nowWIB.Add(24 * time.Hour)) {
+				available = false
+			}
 			slots = append(slots, map[string]interface{}{
-				"time":      t.Format("15:04"),
-				"available": true,
+				"time":      label,
+				"available": available,
 			})
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"slots": slots, "date": dateStr})
+}
+
+// getDoctorAvailability ringkasan 14 hari ke depan: hari praktik, libur,
+// dan jumlah slot bebas (tanpa rincian jam).
+func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	_ = claims
+	userID := r.PathValue("user_id")
+	if userID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id is required"})
+		return
+	}
+	schedules, err := s.store.ListActiveSchedulesForProfessional(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	nowWIB := time.Now().In(wibLoc)
+	startDate := time.Date(nowWIB.Year(), nowWIB.Month(), nowWIB.Day(), 0, 0, 0, 0, wibLoc)
+	days := make([]interface{}, 0, 14)
+	for i := 0; i < 14; i++ {
+		day := startDate.AddDate(0, 0, i)
+		dateStr := day.Format("2006-01-02")
+		dayOfWeek := int(day.Weekday())
+		off := false
+		if offs, err := s.store.ListTimeOff(r.Context(), userID, dateStr, dateStr); err == nil && len(offs) > 0 {
+			off = true
+		}
+		freeSlots := 0
+		for _, sch := range schedules {
+			if sch.DayOfWeek != dayOfWeek || off {
+				continue
+			}
+			step := sch.SlotDurationMinutes
+			if step <= 0 {
+				step = 30
+			}
+			parseClockLocal := func(v string) (int, bool) {
+				v = strings.TrimSpace(v)
+				for _, layout := range []string{"15:04:05", "15:04"} {
+					if t, err := time.Parse(layout, v); err == nil {
+						return t.Hour()*60 + t.Minute(), true
+					}
+				}
+				return 0, false
+			}
+			startMin, ok1 := parseClockLocal(sch.StartTime)
+			endMin, ok2 := parseClockLocal(sch.EndTime)
+			if !ok1 || !ok2 || endMin <= startMin {
+				continue
+			}
+			count := 0
+			for m := startMin; m+step <= endMin; m += step {
+				h, mm := m/60, m%60
+				label := fmt.Sprintf("%02d:%02d", h, mm)
+				slotTime, _ := time.ParseInLocation("2006-01-02 15:04", dateStr+" "+label, wibLoc)
+				if !slotTime.After(nowWIB.Add(24 * time.Hour)) {
+					continue
+				}
+				if booked, _ := s.store.IsSlotBooked(r.Context(), userID, slotTime); booked {
+					continue
+				}
+				count++
+			}
+			freeSlots += count
+		}
+		days = append(days, map[string]interface{}{
+			"date":       dateStr,
+			"day_of_week": dayOfWeek,
+			"off":        off,
+			"free_slots": freeSlots,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"days": days})
+}
+
+type scheduleInput struct {
+	DayOfWeek           int    `json:"day_of_week"`
+	StartTime           string `json:"start_time"`
+	EndTime             string `json:"end_time"`
+	SlotDurationMinutes int    `json:"slot_duration_minutes"`
+	// IsActive opsional. Bila tidak dikirim (nil) dianggap aktif, agar
+	// klien lama yang tidak mengenal field ini tidak menonaktifkan jadwal.
+	IsActive *bool `json:"is_active"`
+}
+
+type updateSchedulesRequest struct {
+	Schedules []scheduleInput `json:"schedules"`
+}
+
+// listMySchedules jadwal mingguan milik profesional yang login.
+func (s *Server) listMySchedules(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "professional" {
+		writeError(w, http.StatusForbidden, errors.New("only professionals can view own schedules"))
+		return
+	}
+	schedules, err := s.store.ListSchedulesForProfessional(r.Context(), claims.Subject)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if schedules == nil {
+		schedules = []store.ProfessionalSchedule{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"schedules": schedules})
+}
+
+// updateMySchedules profesional menentukan hari apa saja available.
+func (s *Server) updateMySchedules(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "professional" {
+		writeError(w, http.StatusForbidden, errors.New("only professionals can update own schedules"))
+		return
+	}
+	var req updateSchedulesRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	var schedules []store.ProfessionalSchedule
+	for _, sch := range req.Schedules {
+		if sch.DayOfWeek < 0 || sch.DayOfWeek > 6 {
+			writeError(w, http.StatusBadRequest, errors.New("day_of_week harus 0 (Min) sampai 6 (Sab)"))
+			return
+		}
+		start := strings.TrimSpace(sch.StartTime)
+		end := strings.TrimSpace(sch.EndTime)
+		if len(start) > 5 {
+			start = start[:5]
+		}
+		if len(end) > 5 {
+			end = end[:5]
+		}
+		if _, err := time.Parse("15:04", start); err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("start_time harus HH:MM"))
+			return
+		}
+		if _, err := time.Parse("15:04", end); err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("end_time harus HH:MM"))
+			return
+		}
+		if start >= end {
+			writeError(w, http.StatusBadRequest, errors.New("start_time harus sebelum end_time"))
+			return
+		}
+		duration := sch.SlotDurationMinutes
+		if duration <= 0 {
+			duration = 30
+		}
+		if duration < 10 || duration > 180 {
+			writeError(w, http.StatusBadRequest, errors.New("slot_duration_minutes harus 10-180"))
+			return
+		}
+		// Default aktif bila klien tidak mengirim is_active.
+		isActive := true
+		if sch.IsActive != nil {
+			isActive = *sch.IsActive
+		}
+		schedules = append(schedules, store.ProfessionalSchedule{
+			DayOfWeek:           sch.DayOfWeek,
+			StartTime:           start,
+			EndTime:             end,
+			SlotDurationMinutes: duration,
+			IsActive:            isActive,
+		})
+	}
+	if err := s.store.UpsertSchedules(r.Context(), claims.Subject, schedules); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	updated, err := s.store.ListSchedulesForProfessional(r.Context(), claims.Subject)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"schedules": updated})
+}
+
+type doctorReviewRequest struct {
+	Stars      int    `json:"stars"`
+	ReviewText string `json:"review_text"`
+	Helpful    *bool  `json:"helpful"`
+}
+
+func (s *Server) listDoctorReviews(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	_ = claims
+	userID := r.PathValue("user_id")
+	reviews, err := s.store.ListDoctorReviews(r.Context(), userID, 20)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	rating, _ := s.store.DoctorRating(r.Context(), userID)
+	if reviews == nil {
+		reviews = []store.DoctorReview{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"reviews": reviews, "rating": rating})
+}
+
+func (s *Server) createDoctorReview(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "patient" {
+		writeError(w, http.StatusForbidden, errors.New("only patients can review"))
+		return
+	}
+	userID := r.PathValue("user_id")
+	var req doctorReviewRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	// Ulasan hanya setelah pernah ada sesi completed dengan profesional tsb.
+	sessions, err := s.store.ListCareSessions(r.Context(), claims.Subject, "patient", "past", "", 50)
+	eligible := false
+	if err == nil {
+		for _, cs := range sessions {
+			if cs.ProfessionalID == userID && cs.Status == "completed" {
+				eligible = true
+				break
+			}
+		}
+	}
+	if !eligible {
+		writeError(w, http.StatusForbidden, errors.New("ulasan hanya bisa diberikan setelah sesi selesai"))
+		return
+	}
+	helpful := true
+	if req.Helpful != nil {
+		helpful = *req.Helpful
+	}
+	rv, err := s.store.CreateDoctorReview(r.Context(), userID, claims.Subject, req.Stars, req.ReviewText, helpful)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"review": rv})
 }
 
 func (s *Server) requireVerifiedProfessional(w http.ResponseWriter, r *http.Request, claims auth.Claims) bool {

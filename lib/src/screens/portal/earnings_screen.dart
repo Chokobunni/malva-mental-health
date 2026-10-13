@@ -26,6 +26,15 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
   List<BackendEarningsTransaction> _transactions = const [];
   bool _isLoading = true;
   String? _error;
+  final _bankController = TextEditingController();
+  final _accountController = TextEditingController();
+
+  @override
+  void dispose() {
+    _bankController.dispose();
+    _accountController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -159,19 +168,24 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.account_balance_rounded,
-                            color: MalvaColors.seed),
-                        SizedBox(width: 8),
-                        Text('BCA 2643985203',
-                            style: TextStyle(fontWeight: FontWeight.w900)),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
                     Text(
                       'Balance: Rp ${_rupiah(_summary?.netAmount ?? 0)}',
                       style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _bankController,
+                      decoration: const InputDecoration(
+                          labelText: 'Bank tujuan',
+                          hintText: 'BCA'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _accountController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                          labelText: 'Nomor rekening',
+                          hintText: '…'),
                     ),
                     const SizedBox(height: 10),
                     SizedBox(
@@ -255,10 +269,21 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
       );
       return;
     }
+    final bank = _bankController.text.trim();
+    final account = _accountController.text.trim();
+    if (bank.isEmpty || account.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Isi bank & nomor rekening dulu.')),
+      );
+      return;
+    }
     try {
       await apiClient.requestPayout(
         accessToken: accessToken,
         earningId: pending.first.id,
+        bank: bank,
+        account: account,
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

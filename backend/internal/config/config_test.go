@@ -20,6 +20,32 @@ func TestLoadRequiresStrongJWTSecret(t *testing.T) {
 	}
 }
 
+func TestLoadGatewayModeRequiresMidtransServerKey(t *testing.T) {
+	t.Setenv("MALVA_DATABASE_URL", "postgres://malva:pass@127.0.0.1:5432/malva?sslmode=disable")
+	t.Setenv("MALVA_JWT_SECRET", "12345678901234567890123456789012")
+	t.Setenv("MALVA_PAYMENT_MODE", "gateway")
+	t.Setenv("MALVA_MIDTRANS_SERVER_KEY", "")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected gateway mode without server key to fail")
+	}
+}
+
+func TestLoadDefaultsToSimulationMode(t *testing.T) {
+	t.Setenv("MALVA_DATABASE_URL", "postgres://malva:pass@127.0.0.1:5432/malva?sslmode=disable")
+	t.Setenv("MALVA_JWT_SECRET", "12345678901234567890123456789012")
+	t.Setenv("MALVA_PAYMENT_MODE", "")
+	t.Setenv("MALVA_MIDTRANS_SERVER_KEY", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("simulation mode should load: %v", err)
+	}
+	if cfg.PaymentMode != PaymentModeSimulation {
+		t.Fatalf("expected simulation mode, got %q", cfg.PaymentMode)
+	}
+}
+
 func TestOriginAllowedUsesExactConfiguredOrigins(t *testing.T) {
 	cfg := Config{
 		AllowedOrigins: []string{

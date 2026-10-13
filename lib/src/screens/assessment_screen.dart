@@ -50,7 +50,8 @@ class _TherapyModuleTile extends StatelessWidget {
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
-                      ?.copyWith(color: Colors.black54),
+                      ?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               ],
             ),
@@ -278,14 +279,14 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
               const SizedBox(height: 4),
               for (var i = 0; i < _phq9Answers.length; i++)
                 Text(
-                    '  ${i + 1}. Skor: ${_phq9Answers[i] ?? 0} — ${_phq9Answers[i] != null ? AssessmentEngine.responseLabels[_phq9Answers[i]!] : "Belum dijawab"}'),
+                    '  ${i + 1}. ${_phq9Answers[i] != null ? AssessmentEngine.responseLabels[_phq9Answers[i]!] : "Belum dijawab"}'),
               const SizedBox(height: 12),
               const Text('GAD-7:',
                   style: TextStyle(fontWeight: FontWeight.w900)),
               const SizedBox(height: 4),
               for (var i = 0; i < _gad7Answers.length; i++)
                 Text(
-                    '  ${i + 1}. Skor: ${_gad7Answers[i] ?? 0} — ${_gad7Answers[i] != null ? AssessmentEngine.responseLabels[_gad7Answers[i]!] : "Belum dijawab"}'),
+                    '  ${i + 1}. ${_gad7Answers[i] != null ? AssessmentEngine.responseLabels[_gad7Answers[i]!] : "Belum dijawab"}'),
               const SizedBox(height: 12),
               Text(
                 'Total: $_answeredCount/$_questionCount terjawab',
@@ -569,7 +570,7 @@ class _QuestionCard extends StatelessWidget {
                   button: true,
                   selected: selected == value,
                   child: ChoiceChip(
-                    label: Text('$value'),
+                    label: Text(AssessmentEngine.responseLabels[value]),
                     tooltip: AssessmentEngine.responseLabels[value],
                     selected: selected == value,
                     selectedColor: color.withValues(alpha: 0.2),
@@ -589,16 +590,20 @@ class _QuestionCard extends StatelessWidget {
                       ? Icons.radio_button_unchecked_rounded
                       : Icons.check_circle_rounded,
                   size: 18,
-                  color: selected == null ? Colors.black45 : color,
+                  color: selected == null
+                      ? Theme.of(context).colorScheme.onSurfaceVariant
+                      : color,
                 ),
                 const SizedBox(width: 7),
                 Expanded(
                   child: Text(
                     selected == null
-                        ? 'Pilih jawaban 0–3'
-                        : '$selected — ${AssessmentEngine.responseLabels[selected!]}',
+                        ? 'Pilih salah satu jawaban'
+                        : AssessmentEngine.responseLabels[selected!],
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: selected == null ? Colors.black54 : color,
+                          color: selected == null
+                              ? Theme.of(context).colorScheme.onSurfaceVariant
+                              : color,
                           fontWeight: FontWeight.w800,
                         ),
                   ),
@@ -723,7 +728,10 @@ class AssessmentResultScreen extends StatelessWidget {
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodySmall
-                                    ?.copyWith(color: Colors.black54),
+                                    ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant),
                               ),
                             ],
                           ],

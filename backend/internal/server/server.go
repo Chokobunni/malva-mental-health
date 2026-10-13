@@ -16,6 +16,7 @@ import (
 
 	"malva/backend/internal/auth"
 	"malva/backend/internal/config"
+	"malva/backend/internal/payment"
 	"malva/backend/internal/realtime"
 	"malva/backend/internal/screening"
 	"malva/backend/internal/security"
@@ -32,6 +33,8 @@ type Server struct {
 	secLogger *security.SecurityLogger
 	lockout   *security.AccountLockout
 	sessions  *security.SessionManager
+	// payment nil = mode simulasi (mark-paid). Terisi saat gateway aktif.
+	payment payment.PaymentGateway
 }
 
 type registerRequest struct {
@@ -141,6 +144,7 @@ type privacyConsentRequest struct {
 	ShareMedications  bool   `json:"share_medications"`
 	ShareTimeline     bool   `json:"share_timeline"`
 	ShareHealthRecord *bool  `json:"share_health_record"`
+	ShareGoals        *bool  `json:"share_goals"`
 }
 
 type passwordChangeRequest struct {
@@ -156,7 +160,7 @@ type diaryFeedbackRequest struct {
 const refreshSessionTTL = 30 * 24 * time.Hour
 
 func New(cfg config.Config, authManager auth.Manager, st *store.Store, hub *realtime.Hub, logger *slog.Logger) *Server {
-	return &Server{
+	srv := &Server{
 		cfg:       cfg,
 		auth:      authManager,
 		store:     st,
@@ -167,6 +171,19 @@ func New(cfg config.Config, authManager auth.Manager, st *store.Store, hub *real
 		lockout:   security.NewAccountLockout(cfg.MaxLoginAttempts, time.Duration(cfg.LockoutDuration)*time.Minute, time.Duration(cfg.LockoutDuration)*time.Minute),
 		sessions:  security.NewSessionManager(),
 	}
+	// Gateway pembayaran aktif bila mode gateway (wajib server key, sudah
+	// divalidasi di config.Load) atau bila server key diisi manual (mis. untuk
+	// verifikasi webhook di lingkungan test). Mode simulasi: nil.
+	if cfg.PaymentMode == config.PaymentModeGateway || strings.TrimSpace(cfg.MidtransServerKey) != "" {
+		srv.payment = payment.NewMidtransGateway(payment.MidtransConfig{
+			ServerKey: cfg.MidtransServerKey,
+			ClientKey: cfg.MidtransClientKey,
+			Env:       cfg.MidtransEnv,
+			SnapBase:  cfg.MidtransSnapBase,
+		})
+		logger.Info("payment gateway active", "mode", cfg.PaymentMode, "midtrans_env", cfg.MidtransEnv)
+	}
+	return srv
 }
 
 func (s *Server) Routes() http.Handler {
@@ -227,16 +244,42 @@ func (s *Server) Routes() http.Handler {
 	// Professional credentials + doctor discovery
 	mux.HandleFunc("POST /v1/credentials", s.requireAuth(s.uploadCredentials))
 	mux.HandleFunc("GET /v1/credentials/me", s.requireAuth(s.getMyCredentials))
+	// Katalog tes psikologi (read-only; kosong bila admin belum mengisi).
+	mux.HandleFunc("GET /v1/psych-tests", s.public(s.listPsychTests))
 	// Direktori profesional bersifat publik (read-only) agar pasien bisa
 	// menelusuri dokter sebelum/sesudah login maupun saat sesi lokal.
 	mux.HandleFunc("GET /v1/doctors/search", s.public(s.searchDoctors))
 	mux.HandleFunc("GET /v1/doctors/{user_id}", s.public(s.getDoctorProfile))
 	mux.HandleFunc("GET /v1/doctors/{user_id}/slots", s.public(s.getDoctorAvailableSlots))
+	mux.HandleFunc("GET /v1/doctors/{user_id}/availability", s.public(s.getDoctorAvailability))
+	mux.HandleFunc("GET /v1/pricing", s.requireAuth(s.getPricing))
 	// Booking, Payment, Earnings, E-Prescription
 	mux.HandleFunc("POST /v1/bookings", s.requireAuth(s.createBooking))
 	mux.HandleFunc("POST /v1/payments", s.requireAuth(s.createPayment))
 	mux.HandleFunc("POST /v1/payments/mark-paid", s.requireAuth(s.markPaymentPaid))
+	// Webhook gateway pembayaran (publik; keaslian diverifikasi via signature).
+	mux.HandleFunc("POST /v1/webhooks/payment", s.paymentWebhook)
 	mux.HandleFunc("GET /v1/bookings", s.requireAuth(s.listBookings))
+	// Care packages & sessions (pengganti continuous support 7 hari)
+	mux.HandleFunc("POST /v1/care-packages", s.requireAuth(s.createCarePackage))
+	mux.HandleFunc("GET /v1/care-packages", s.requireAuth(s.listCarePackages))
+	mux.HandleFunc("POST /v1/care-sessions", s.requireAuth(s.scheduleSession))
+	mux.HandleFunc("GET /v1/care-sessions", s.requireAuth(s.listCareSessions))
+	mux.HandleFunc("PATCH /v1/care-sessions/{session_id}", s.requireAuth(s.updateCareSession))
+	mux.HandleFunc("POST /v1/care-sessions/{session_id}/reschedule", s.requireAuth(s.rescheduleCareSession))
+	// Refund/kredit paket (pro-cancel): eksekusi refund uang / catat kredit.
+	mux.HandleFunc("POST /v1/care-sessions/{session_id}/refund", s.requireAuth(s.refundCareSession))
+	mux.HandleFunc("GET /v1/care-refunds", s.requireAuth(s.listCareRefunds))
+	mux.HandleFunc("GET /v1/chat-permission", s.requireAuth(s.chatPermission))
+	// Jadwal & harga milik profesional
+	mux.HandleFunc("GET /v1/professional/time-off", s.requireAuth(s.listTimeOff))
+	mux.HandleFunc("POST /v1/professional/time-off", s.requireAuth(s.addTimeOff))
+	mux.HandleFunc("DELETE /v1/professional/time-off/{id}", s.requireAuth(s.deleteTimeOff))
+	mux.HandleFunc("PUT /v1/professional/pricing", s.requireAuth(s.updatePricing))
+	mux.HandleFunc("GET /v1/professional/schedules", s.requireAuth(s.listMySchedules))
+	mux.HandleFunc("PUT /v1/professional/schedules", s.requireAuth(s.updateMySchedules))
+	mux.HandleFunc("GET /v1/doctors/{user_id}/reviews", s.public(s.listDoctorReviews))
+	mux.HandleFunc("POST /v1/doctors/{user_id}/reviews", s.requireAuth(s.createDoctorReview))
 	mux.HandleFunc("GET /v1/earnings", s.requireAuth(s.earningsSummary))
 	mux.HandleFunc("POST /v1/earnings/{earning_id}/payout", s.requireAuth(s.requestPayout))
 	mux.HandleFunc("POST /v1/e-prescriptions", s.requireAuth(s.createEPrescription))
@@ -887,33 +930,13 @@ func (s *Server) listProfessionalNotes(w http.ResponseWriter, r *http.Request, c
 }
 
 func (s *Server) createFollowUp(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
-	if claims.Role != "professional" {
-		writeError(w, http.StatusForbidden, errors.New("only professionals can create follow-up messages"))
-		return
-	}
-	var req followUpRequest
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	req.Body = trimMax(req.Body, 2500)
-	req.Status = strings.ToLower(strings.TrimSpace(req.Status))
-	if req.Status == "" {
-		req.Status = "sent"
-	}
-	if !oneOf(req.Status, "draft", "sent") {
-		writeError(w, http.StatusBadRequest, errors.New("invalid follow-up status"))
-		return
-	}
-	message, err := s.store.CreateFollowUpMessage(r.Context(), claims.Subject, req.PatientID, req.Body, req.Status)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	if message.Status == "sent" {
-		s.notifyPatient(r, message.PatientID, "follow_up_created", "Ada follow-up dari profesional", "Buka Malva untuk membaca arahan terbaru.", map[string]string{"follow_up_id": message.ID})
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{"follow_up": message})
+	// Follow-up asinkron dihapus: tidak ada kewajiban membalas di luar
+	// sesi. Profesional menulis ringkasan sesi (summary_for_patient).
+	_ = claims
+	writeJSON(w, http.StatusGone, map[string]string{
+		"error": "Fitur follow-up di luar sesi sudah dihapus. Tulis ringkasan sesi setelah sesi berjalan.",
+	})
+	return
 }
 
 func (s *Server) listFollowUps(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -1118,32 +1141,13 @@ func (s *Server) deleteDiaryEntry(w http.ResponseWriter, r *http.Request, claims
 }
 
 func (s *Server) updateDiaryFeedback(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
-	if claims.Role != "professional" {
-		writeError(w, http.StatusForbidden, errors.New("only professionals can update diary feedback"))
-		return
-	}
-	var req diaryFeedbackRequest
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	req.Feedback = trimMax(req.Feedback, 2000)
-	patientID, err := s.authorizePatientAccess(r, claims, req.PatientID)
-	if err != nil {
-		writeError(w, http.StatusForbidden, err)
-		return
-	}
-	if !s.consentAllows(r, patientID, claims.Subject, "mood_diary") {
-		writeError(w, http.StatusForbidden, errors.New("patient has not shared mood/diary data"))
-		return
-	}
-	entry, err := s.store.UpdateDiaryFeedback(r.Context(), claims.Subject, patientID, r.PathValue("diary_id"), req.Feedback)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	s.notifyPatient(r, patientID, "diary_feedback_updated", "Diary sudah direview", "Profesional Anda memberikan feedback pada diary.", map[string]string{"diary_id": entry.ID})
-	writeJSON(w, http.StatusOK, map[string]any{"diary": entry})
+	// Balasan diary asinkron dihapus: profesional menanggapi saat sesi
+	// berjalan (lihat chat permission + ringkasan sesi).
+	_ = claims
+	writeJSON(w, http.StatusGone, map[string]string{
+		"error": "Fitur balasan diary di luar sesi sudah dihapus. Bahas diary pasien saat sesi berjalan.",
+	})
+	return
 }
 
 func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -1348,9 +1352,15 @@ func (s *Server) updatePrivacyConsent(w http.ResponseWriter, r *http.Request, cl
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	shareHealthRecord := true // default aktif; pasien boleh mematikan.
+	// Default MATI: pasien memberi izin eksplisit per kategori saat
+	// membeli paket (consent sheet). Opt-out diam-diam dihapus.
+	shareHealthRecord := false
 	if req.ShareHealthRecord != nil {
 		shareHealthRecord = *req.ShareHealthRecord
+	}
+	shareGoals := false
+	if req.ShareGoals != nil {
+		shareGoals = *req.ShareGoals
 	}
 	consent, err := s.store.UpdatePatientDataConsent(r.Context(), store.PatientDataConsent{
 		PatientID:         claims.Subject,
@@ -1360,6 +1370,7 @@ func (s *Server) updatePrivacyConsent(w http.ResponseWriter, r *http.Request, cl
 		ShareMedications:  req.ShareMedications,
 		ShareTimeline:     req.ShareTimeline,
 		ShareHealthRecord: shareHealthRecord,
+		ShareGoals:        shareGoals,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -1385,8 +1396,18 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request, claims aut
 		return
 	}
 	if !linked {
-		writeError(w, http.StatusForbidden, errors.New("users are not linked"))
-		return
+		// Quick consult tanpa link permanen tetap boleh baca riwayat
+		// bila pernah ada sesi/paket di antara keduanya.
+		hasRel, rerr := s.store.PairRelation(r.Context(), patientID, professionalID)
+		if rerr != nil {
+			writeError(w, http.StatusInternalServerError, rerr)
+			return
+		}
+		if !hasRel {
+			writeError(w, http.StatusForbidden, errors.New("users are not linked"))
+			return
+		}
+		canonicalPatientID, canonicalProfessionalID = patientID, professionalID
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	messages, err := s.store.ListChatMessages(r.Context(), canonicalPatientID, canonicalProfessionalID, limit)
@@ -1435,13 +1456,41 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 	if len(text) > 5000 {
 		text = text[:5000]
 	}
+	kind := strings.ToLower(strings.TrimSpace(req.Kind))
+	isShare := kind != "" && kind != "text"
 	patientID, professionalID, linked, err := s.store.AreUsersLinked(r.Context(), claims.Subject, recipientID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	if !linked {
-		writeError(w, http.StatusForbidden, errors.New("Kamu belum terhubung dengan pengguna tersebut."))
+		// Tanpa link permanen: chat hanya bila pernah ada sesi/paket.
+		relPatient, relProf, hasRel, rerr := s.resolveChatPair(r, claims, recipientID)
+		if rerr != nil || !hasRel {
+			writeError(w, http.StatusForbidden, errors.New("Kamu belum terhubung dengan pengguna tersebut."))
+			return
+		}
+		patientID, professionalID = relPatient, relProf
+		linked = true
+	}
+	// Kebijakan chat: teks hanya saat sesi berjalan; share data milik
+	// pasien butuh paket aktif; profesional tidak membalas di luar sesi.
+	access, aerr := s.store.ChatAccessFor(r.Context(), patientID, professionalID, claims.Role)
+	if aerr != nil {
+		writeError(w, http.StatusInternalServerError, aerr)
+		return
+	}
+	if isShare {
+		if claims.Role != "patient" {
+			writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa mengirim data ke profesional"))
+			return
+		}
+		if !access.CanShare {
+			writeError(w, http.StatusForbidden, errors.New("Berbagi data butuh paket sesi aktif. "+access.Reason))
+			return
+		}
+	} else if !access.CanSendText {
+		writeError(w, http.StatusForbidden, errors.New(access.Reason))
 		return
 	}
 	senderName := ""
@@ -1483,6 +1532,24 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 		s.hub.Publish(recipientID, event)
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"message": saved})
+}
+
+// resolveChatPair menentukan pasangan chat utk peran pemanggil, menerima
+// relasi longgar (sesi/paket) selain link aktif.
+func (s *Server) resolveChatPair(r *http.Request, claims auth.Claims, otherID string) (patientID, professionalID string, ok bool, err error) {
+	otherID = strings.TrimSpace(otherID)
+	if otherID == "" || otherID == claims.Subject {
+		return "", "", false, errors.New("recipient tidak valid")
+	}
+	if claims.Role == "patient" {
+		patientID, professionalID = claims.Subject, otherID
+	} else if claims.Role == "professional" {
+		patientID, professionalID = otherID, claims.Subject
+	} else {
+		return "", "", false, errors.New("role is not allowed")
+	}
+	ok, err = s.store.PairRelation(r.Context(), patientID, professionalID)
+	return patientID, professionalID, ok, err
 }
 
 // generateChatMessageID membuat id unik untuk pesan chat (uuid v4 sederhana).
@@ -1616,14 +1683,18 @@ func (s *Server) consentAllows(r *http.Request, patientID, professionalID, scope
 	switch scope {
 	case "screenings":
 		return consent.ShareScreenings
-	case "mood_diary":
+	case "mood_diary", "mood":
 		return consent.ShareMoodDiary
+	case "diary":
+		return consent.ShareDiaryCheckin
 	case "medications":
 		return consent.ShareMedications
 	case "timeline":
 		return consent.ShareTimeline
 	case "health_record":
 		return consent.ShareHealthRecord
+	case "goals":
+		return consent.ShareGoals
 	default:
 		return false
 	}

@@ -12,7 +12,7 @@ import 'package:malva_mental_health/src/widgets/home_personalization.dart';
 import 'package:malva_mental_health/src/widgets/mini_summary.dart';
 
 void main() {
-  testWidgets('doctor discovery menampilkan filter dan direktori demo',
+  testWidgets('doctor discovery menampilkan filter tanpa data demo',
       (tester) async {
     await tester.pumpWidget(
       const ProviderScope(child: MaterialApp(home: DoctorDiscoveryScreen())),
@@ -25,10 +25,9 @@ void main() {
     expect(find.text('Jadwal Profesional'), findsOneWidget);
     expect(find.text('Urutkan'), findsOneWidget);
     expect(find.text('Nama profesional'), findsOneWidget);
-    // Tanpa backend: fallback direktori demo (tidak pernah kosong).
-    // Viewport 800x600 hanya memuat 2 kartu pertama (urut nama).
-    expect(find.text('Andi Wijaya, M.Psi'), findsOneWidget);
-    expect(find.textContaining('direktori contoh'), findsOneWidget);
+    // Tanpa backend: TIDAK ada lagi direktori demo — tampil error/empty.
+    expect(find.text('Andi Wijaya, M.Psi'), findsNothing);
+    expect(find.textContaining('direktori contoh'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -45,7 +44,7 @@ void main() {
 
     expect(find.text('Payment Received!'), findsOneWidget);
     expect(find.textContaining('TXN-TEST-001'), findsWidgets);
-    expect(find.text('Continue'), findsOneWidget);
+    expect(find.text('Lihat Sesi Saya'), findsOneWidget);
 
     await tester.tap(find.text('View Receipt'));
     await tester.pumpAndSettle();
@@ -111,7 +110,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('tests marketplace menampilkan katalog + disclaimer',
+  testWidgets('tests marketplace menampilkan assessment tersedia',
       (tester) async {
     await tester.pumpWidget(
       const ProviderScope(child: MaterialApp(home: TestsMarketplaceScreen())),
@@ -119,19 +118,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Tes Psikologi'), findsOneWidget);
-    expect(find.text('Tes Kepribadian'), findsOneWidget);
-    expect(find.text('Mulai Tes'), findsWidgets);
-
-    await tester.scrollUntilVisible(
-      find.text('Mulai Tes').first,
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Mulai Tes').first);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('TIDAK ditujukan untuk mendiagnosis'),
-        findsOneWidget);
+    // Tanpa katalog server: assessment riil yang memang bisa dibuka.
+    expect(find.text('PHQ-9 & GAD-7'), findsOneWidget);
+    expect(find.text('DASS-21'), findsOneWidget);
+    expect(find.text('WHO-5'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

@@ -2,40 +2,41 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models.dart';
+import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
-import '../chat_screen.dart';
-import 'consent_request_sheet.dart';
+import '../care_package_screen.dart';
+import '../my_care_screen.dart';
 
 // ============================================================
-// PAYMENT SUCCESS — reference + receipt + connect + chat
+// PAYMENT SUCCESS — reference + receipt + langkah lanjut:
+//   Quick consult -> sesi terjadwal (lihat My Care).
+//   Paket         -> paket aktif, ajak jadwalkan sesi tersisa.
 // ============================================================
 
 class PaymentSuccessScreen extends ConsumerStatefulWidget {
   const PaymentSuccessScreen({
     super.key,
     required this.reference,
-    this.isContinuousSupport = false,
+    this.package,
     this.doctorUserId = '',
     this.doctorName = 'Profesional',
-    this.periodLabel = '',
     this.session,
     this.apiClient,
   });
 
   final String reference;
 
-  /// true = Continuous Support: Continue -> link profesional ->
-  /// dialog "You're Connected!" -> chat dengan psikiater.
-  /// Quick Consult langsung pulang (tanpa sharing).
-  final bool isContinuousSupport;
+  /// Non-null = pembayaran paket (paket sudah aktif di server).
+  final BackendCarePackage? package;
   final String doctorUserId;
   final String doctorName;
-  final String periodLabel;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
+
+  bool get isPackage => package != null;
 
   @override
   ConsumerState<PaymentSuccessScreen> createState() =>
@@ -43,24 +44,6 @@ class PaymentSuccessScreen extends ConsumerStatefulWidget {
 }
 
 class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen> {
-  bool _connecting = false;
-  bool _connected = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    // Continuous Support: begitu pembayaran sukses, langsung hubungkan ke
-    // profesional & tampilkan "You're Connected!" -> chat (tanpa klik ulang).
-    if (widget.isContinuousSupport) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_connected && !_connecting) {
-          _onContinue(context);
-        }
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -96,20 +79,39 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen> {
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              if (widget.isContinuousSupport &&
-                  widget.periodLabel.isNotEmpty) ...[
+              if (widget.isPackage) ...[
                 const SizedBox(height: 10),
                 SoftCard(
                   color: MalvaColors.mint.withValues(alpha: 0.10),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_month_rounded,
+                      const Icon(Icons.card_membership_rounded,
                           color: MalvaColors.mint),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          '${widget.doctorName}\n${widget.periodLabel}',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
+                          'Paket aktif: 4 sesi / 6 minggu\n${widget.doctorName}',
+                          style:
+                              const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: 10),
+                SoftCard(
+                  color: MalvaColors.seed.withValues(alpha: 0.06),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.event_available_rounded,
+                          color: MalvaColors.seed),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Sesi terjadwal dengan ${widget.doctorName}. Chat aktif saat sesi berjalan.',
+                          style:
+                              const TextStyle(fontWeight: FontWeight.w700),
                         ),
                       ),
                     ],
@@ -128,43 +130,16 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen> {
                 ),
               ),
               const Spacer(),
-              if (_error != null) ...[
-                Text(_error!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        color: MalvaColors.danger,
-                        fontWeight: FontWeight.w700)),
-                const SizedBox(height: 10),
-              ],
               FilledButton(
-                onPressed: (_connecting || _connected)
-                    ? null
-                    : () => _onContinue(context),
+                onPressed: () => _onContinue(context),
                 style: FilledButton.styleFrom(
                   backgroundColor: MalvaColors.mint,
                   minimumSize: const Size.fromHeight(54),
                 ),
-                child: Text(_connecting
-                    ? 'Menghubungkan...'
-                    : _connected
-                        ? 'Terhubung ✓'
-                        : widget.isContinuousSupport
-                            ? 'Connect & Continue'
-                            : 'Continue'),
+                child: Text(widget.isPackage
+                    ? 'Lihat Paket & Jadwalkan Sesi'
+                    : 'Lihat Sesi Saya'),
               ),
-              // Ubah izin sharing kapan saja (satu UI consent yang sama).
-              if (widget.isContinuousSupport) ...[
-                const SizedBox(height: 10),
-                OutlinedButton(
-                  onPressed: _connecting
-                      ? null
-                      : () => showConsentRequestSheet(
-                            context: context,
-                            professionalId: widget.doctorUserId,
-                          ),
-                  child: const Text('Atur Data Sharing'),
-                ),
-              ],
             ],
           ),
         ),
@@ -172,105 +147,50 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen> {
     );
   }
 
-  Future<void> _onContinue(BuildContext context) async {
-    if (!widget.isContinuousSupport) {
-      // Quick Consult: selesai, pulang ke Home.
-      Navigator.popUntil(context, (route) => route.isFirst);
-      return;
-    }
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    if (apiClient == null ||
-        accessToken == null ||
-        accessToken.isEmpty ||
-        widget.doctorUserId.isEmpty) {
-      setState(() => _error =
-          'Tidak bisa terhubung: sesi atau data dokter tidak lengkap.');
-      return;
-    }
-    setState(() {
-      _connecting = true;
-      _error = null;
-    });
-    try {
-      // Pastikan link pasien-profesional aktif (idempotent di server).
-      await apiClient.linkProfessional(
-        accessToken: accessToken,
-        professionalId: widget.doctorUserId,
-      );
-      if (!mounted) return;
-      setState(() {
-        _connecting = false;
-        _connected = true;
+  void _onContinue(BuildContext context) {
+    final token = widget.session?.accessToken;
+    final MalvaApiClient apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
+    if (widget.isPackage && token != null && token.isNotEmpty) {
+      // Muat ulang paket aktif lalu buka layar paket.
+      apiClient.listCarePackages(accessToken: token).then((pkgs) {
+        if (!context.mounted) return;
+        BackendCarePackage? mine;
+        for (final p in pkgs) {
+          if (p.professionalId == widget.doctorUserId && p.isActive) {
+            mine = p;
+            break;
+          }
+        }
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CarePackageScreen(
+              package: mine ?? widget.package!,
+              session: widget.session,
+              apiClient: widget.apiClient,
+            ),
+          ),
+          (route) => route.isFirst,
+        );
+      }).catchError((Object e) {
+        if (!context.mounted) return null;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyErrorMessage(e))),
+        );
+        return null;
       });
-      _showConnectedDialog(context);
-    } on MalvaApiException catch (e) {
-      if (mounted) {
-        setState(() {
-          _connecting = false;
-          _error = e.message;
-        });
-      }
-    } on Object catch (e) {
-      if (mounted) {
-        setState(() {
-          _connecting = false;
-          _error = friendlyErrorMessage(e);
-        });
-      }
+      return;
     }
-  }
-
-  /// Notifikasi "You're Connected!" -> langsung chat dengan psikiater.
-  void _showConnectedDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        icon: Container(
-          width: 72,
-          height: 72,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: MalvaColors.mint.withValues(alpha: 0.15),
-          ),
-          child: const Icon(Icons.handshake_rounded,
-              color: MalvaColors.mint, size: 40),
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MyCareScreen(
+          session: widget.session,
+          apiClient: widget.apiClient,
         ),
-        title: const Text("You're Connected!"),
-        content: Text(
-          'Kamu terhubung dengan ${widget.doctorName}'
-          '${widget.periodLabel.isEmpty ? '' : '\n${widget.periodLabel}'}\n\n'
-          'Chat 24/7 selama 7 hari. Kamu bisa berbagi ringkasan, '
-          'hasil assessment, resep, goals & habits langsung di chat.',
-          textAlign: TextAlign.center,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.popUntil(context, (route) => route.isFirst);
-            },
-            child: const Text('Nanti'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ChatScreen(
-                    otherUserName: widget.doctorName,
-                    otherUserId: widget.doctorUserId,
-                  ),
-                ),
-              );
-            },
-            style: compactFilledButtonStyle,
-            child: const Text('Chat Sekarang'),
-          ),
-        ],
       ),
+      (route) => route.isFirst,
     );
   }
 

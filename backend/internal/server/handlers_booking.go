@@ -1,14 +1,209 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"malva/backend/internal/auth"
 	"malva/backend/internal/store"
 )
+
+// validateSlot memastikan slot masuk jadwal mingguan profesional,
+// bukan hari libur / lewat, dan belum terisi sesi.
+func (s *Server) validateSlot(ctx context.Context, professionalID string, start time.Time, durationMinutes int) error {
+	if start.Before(time.Now().Add(-time.Minute)) {
+		return errors.New("slot harus di masa depan")
+	}
+	wibStart := start.In(wibLoc)
+	// Lead time 24 jam: sesi butuh persiapan kedua belah pihak.
+	// Sama dengan aturan cancel/reschedule pasien (<24 jam hangus).
+	if time.Until(start) < 24*time.Hour {
+		return errors.New("booking minimal 24 jam sebelum sesi")
+	}
+	dayOfWeek := int(wibStart.Weekday())
+	dateStr := wibStart.Format("2006-01-02")
+	off, err := s.store.ListTimeOff(ctx, professionalID, dateStr, dateStr)
+	if err != nil {
+		return err
+	}
+	if len(off) > 0 {
+		return errors.New("profesional libur pada tanggal tersebut")
+	}
+	schedules, err := s.store.ListActiveSchedulesForProfessional(ctx, professionalID)
+	if err != nil {
+		return err
+	}
+	clock := wibStart.Format("15:04")
+	fits := false
+	for _, sch := range schedules {
+		if sch.DayOfWeek != dayOfWeek {
+			continue
+		}
+		// Beberapa driver mengembalikan "15:04:05".
+		startT := strings.TrimSpace(sch.StartTime)
+		endT := strings.TrimSpace(sch.EndTime)
+		if len(startT) > 5 {
+			startT = startT[:5]
+		}
+		if len(endT) > 5 {
+			endT = endT[:5]
+		}
+		endClock, err := time.ParseInLocation("15:04", endT, wibLoc)
+		if err != nil {
+			continue
+		}
+		slotEnd := wibStart.Add(time.Duration(durationMinutes) * time.Minute)
+		slotEndClock := slotEnd.Format("15:04")
+		if startT <= clock && slotEndClock <= endClock.Format("15:04") {
+			fits = true
+			break
+		}
+	}
+	if !fits {
+		return errors.New("slot di luar jam praktik profesional")
+	}
+	booked, err := s.store.IsSlotBooked(ctx, professionalID, start)
+	if err != nil {
+		return err
+	}
+	if booked {
+		return errors.New("slot sudah terisi, pilih jam lain")
+	}
+	return nil
+}
+
+// slotDurationFor mengambil durasi slot jadwal profesional pada hari tsb.
+func (s *Server) slotDurationFor(ctx context.Context, professionalID string, start time.Time) int {
+	wibStart := start.In(wibLoc)
+	dayOfWeek := int(wibStart.Weekday())
+	clock := wibStart.Format("15:04")
+	schedules, err := s.store.ListActiveSchedulesForProfessional(ctx, professionalID)
+	if err != nil {
+		return 30
+	}
+	for _, sch := range schedules {
+		if sch.DayOfWeek != dayOfWeek {
+			continue
+		}
+		startT := strings.TrimSpace(sch.StartTime)
+		endT := strings.TrimSpace(sch.EndTime)
+		if len(startT) > 5 {
+			startT = startT[:5]
+		}
+		if len(endT) > 5 {
+			endT = endT[:5]
+		}
+		if startT <= clock && clock < endT && sch.SlotDurationMinutes > 0 {
+			return sch.SlotDurationMinutes
+		}
+	}
+	return 30
+}
+
+// activatePaidBooking membuat sesi terjadwal (quick) / paket aktif + link.
+func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) error {
+	ctx := r.Context()
+	booking, err := s.store.GetBooking(ctx, p.BookingID)
+	if err != nil {
+		return err
+	}
+	if booking.Status != "paid" {
+		return nil
+	}
+	// Paket: aktifkan paket pending milik pasangan + link + jadwalkan sesi
+	// pertama dari slot booking. (bookings.package_id tidak dipakai karena
+	// kolom itu FK ke tabel service_packages lama.)
+	if booking.ServiceType == "package_session" {
+		pkg, err := s.store.ActivatePendingPackage(ctx, booking.PatientID, booking.ProfessionalID, booking.ID)
+		if err != nil {
+			return err
+		}
+		now := time.Now()
+		starts := pkg.StartsAt
+		if starts.IsZero() || starts.After(now) {
+			starts = now
+		}
+		_ = starts
+		if _, err := s.store.LinkPatientToProfessional(ctx, booking.PatientID, booking.ProfessionalID); err != nil {
+			s.logger.Warn("link patient failed", "error", err)
+		}
+		start, perr := parseWIBDateTime(booking.BookingDate + "T" + booking.SlotTime)
+		if perr != nil || booking.SlotTime == "" {
+			return errors.New("slot sesi pertama paket tidak valid")
+		}
+		duration := booking.DurationMinutes
+		if duration <= 0 {
+			duration = s.slotDurationFor(ctx, booking.ProfessionalID, start)
+		}
+		cs, cerr := s.store.CreateCareSession(ctx, store.CareSession{
+			PackageID:       booking.PackageID,
+			BookingID:       &booking.ID,
+			PatientID:       booking.PatientID,
+			ProfessionalID:  booking.ProfessionalID,
+			SessionType:     booking.SessionType,
+			ScheduledAt:     start,
+			DurationMinutes: duration,
+			Status:          "scheduled",
+		})
+		if cerr != nil {
+			return cerr
+		}
+		s.notifyPatient(r, booking.ProfessionalID, "package_activated",
+			"Paket baru aktif", "Pasien membeli paket 4 sesi.",
+			map[string]string{"package_id": pkg.ID, "patient_id": booking.PatientID})
+		s.notifyPatient(r, booking.PatientID, "package_activated",
+			"Paket aktif!",
+			"Paket 4 sesi / 6 minggu aktif. Sesi pertama: "+start.In(wibLoc).Format("02 Jan 2006 15:04")+".",
+			map[string]string{"package_id": pkg.ID, "session_id": cs.ID})
+		return nil
+	}
+	start, perr := parseWIBDateTime(booking.BookingDate + "T" + booking.SlotTime)
+	if perr != nil || booking.SlotTime == "" {
+		// Tanpa jam (warisan continuous lama): hanya link.
+		_, _ = s.store.PairRelation(ctx, booking.PatientID, booking.ProfessionalID)
+		_, _ = s.store.LinkPatientToProfessional(ctx, booking.PatientID, booking.ProfessionalID)
+		return nil
+	}
+	duration := booking.DurationMinutes
+	if duration <= 0 {
+		duration = s.slotDurationFor(ctx, booking.ProfessionalID, start)
+	}
+	if booked, berr := s.store.IsSlotBooked(ctx, booking.ProfessionalID, start); berr != nil || booked {
+		// Slot keburu diambil saat pembayaran: kembalikan ke pending agar
+		// pasien memilih ulang (pembayaran tetap tercatat untuk refund manual).
+		_ = s.store.UpdateBookingStatus(ctx, booking.ID, "pending")
+		return errors.New("slot keburu terisi saat pembayaran; booking dikembalikan ke pending")
+	}
+	cs, cerr := s.store.CreateCareSession(ctx, store.CareSession{
+		BookingID:       &booking.ID,
+		PatientID:       booking.PatientID,
+		ProfessionalID:  booking.ProfessionalID,
+		SessionType:     booking.SessionType,
+		ScheduledAt:     start,
+		DurationMinutes: duration,
+		Status:          "scheduled",
+	})
+	if cerr != nil {
+		return cerr
+	}
+	// Quick consult: buat relasi agar chat sesi bisa dipakai (tanpa data sharing).
+	_, _ = s.store.LinkPatientToProfessional(ctx, booking.PatientID, booking.ProfessionalID)
+	s.notifyPatient(r, booking.ProfessionalID, "session_scheduled",
+		"Sesi baru dijadwalkan", "Ada sesi quick consult baru.",
+		map[string]string{"session_id": cs.ID, "patient_id": booking.PatientID})
+	s.notifyPatient(r, booking.PatientID, "session_scheduled",
+		"Sesi berhasil dijadwalkan",
+		"Sesi pada "+start.In(wibLoc).Format("02 Jan 2006 15:04")+".",
+		map[string]string{"session_id": cs.ID})
+	return nil
+}
 
 // ============================================================
 // BOOKING, PAYMENT, EARNINGS, E-PRESCRIPTION
@@ -72,26 +267,104 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 		return
 	}
 
+	serviceType := strings.ToLower(strings.TrimSpace(req.ServiceType))
+	if serviceType == "continuous_support" {
+		writeJSON(w, http.StatusGone, map[string]string{
+			"error": "Continuous Support 7 hari sudah diganti sistem paket 4 sesi. Beli paket lewat /v1/care-packages lalu jadwalkan sesinya.",
+		})
+		return
+	}
+	isPackageSession := serviceType == "package_session"
+	if serviceType != "quick_consult" && serviceType != "quick_consult_video" && !isPackageSession {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "service_type harus quick_consult, quick_consult_video, atau package_session"})
+		return
+	}
+	sessionType := strings.ToLower(strings.TrimSpace(req.SessionType))
+	switch sessionType {
+	case "video":
+	case "chat":
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_type harus chat atau video"})
+		return
+	}
+	// Harga dihitung server dari tarif profesional (bukan dari klien).
+	// package_session: harga = harga paket pending milik pasangan;
+	// aktivasi paket terjadi saat paid (bookings.package_id TIDAK dipakai).
+	var price int64
+	if isPackageSession {
+		pkgs, err := s.store.ListCarePackages(r.Context(), patientID, "patient", "", 50)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		found := false
+		for _, p := range pkgs {
+			if p.ProfessionalID == professionalID && p.Status == "pending_payment" {
+				price = p.Price
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tidak ada paket pending dengan profesional ini — buat paket dulu lewat /v1/care-packages"})
+			return
+		}
+		if price <= 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "harga paket tidak valid"})
+			return
+		}
+	} else {
+		pricing, err := s.store.GetProfessionalPricing(r.Context(), professionalID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if sessionType == "video" {
+			price = pricing.QuickVideoPrice
+		} else {
+			price = pricing.QuickChatPrice
+		}
+		if price <= 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Profesional belum mengatur harga sesi. Hubungi profesional."})
+			return
+		}
+	}
+
+	target, err := parseWIBDateTime(req.BookingDate + "T" + req.SlotTime)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "booking_date/slot_time tidak valid (butuh tanggal + jam)"})
+		return
+	}
 	duration := req.DurationMinutes
 	if duration <= 0 {
-		duration = 30
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "duration_minutes wajib diisi (10-180)"})
+		return
 	}
-	// Continuous Support 7 hari: 7*24*60 menit (10080).
-	const continuousDuration = 7 * 24 * 60
-	if duration > 120 && duration != continuousDuration {
-		duration = 120
+	if duration < 10 || duration > 180 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "duration_minutes harus 10-180 menit"})
+		return
+	}
+	if target.Before(time.Now().Add(-time.Minute)) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "slot harus di masa depan"})
+		return
+	}
+	// Validasi slot: masuk jadwal mingguan, bukan hari libur, belum terisi.
+	// Durasi sesi = durasi slot jadwal profesional hari itu.
+	duration = s.slotDurationFor(r.Context(), professionalID, target)
+	if err := s.validateSlot(r.Context(), professionalID, target, duration); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
 	}
 
 	b, err := s.store.CreateBooking(r.Context(), store.Booking{
 		PatientID:       patientID,
 		ProfessionalID:  professionalID,
-		PackageID:       req.PackageID,
-		ServiceType:     req.ServiceType,
-		SessionType:     req.SessionType,
+		ServiceType:     serviceType,
+		SessionType:     sessionType,
 		BookingDate:     req.BookingDate,
 		SlotTime:        req.SlotTime,
 		DurationMinutes: duration,
-		Price:           req.Price,
+		Price:           price,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -113,19 +386,25 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, claims au
 		(int64)(time.Now().UnixNano()%1000000),
 	)
 
-	// Dummy harga dari booking
-	bookings, _ := s.store.ListBookingsForUser(r.Context(), claims.Subject, claims.Role, 5)
-	var bookingPrice int64 = 150000
-	for _, b := range bookings {
-		if b.ID == req.BookingID {
-			bookingPrice = b.Price
-			break
-		}
+	// Harga diambil dari booking milik pasien sendiri (bukan dari klien).
+	booking, err := s.store.GetBooking(r.Context(), req.BookingID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
 	}
-	platformFee := int64(float64(bookingPrice) * 0.10 / 100.0)
+	if booking.PatientID != claims.Subject || claims.Role != "patient" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only the booking owner can pay"})
+		return
+	}
+	if booking.Status != "pending" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "booking sudah dibayar atau kedaluwarsa"})
+		return
+	}
+	bookingPrice := booking.Price
+	platformFee := bookingPrice * 10 / 100 // fee platform 10%
 	serviceFee := int64(2000)
 	gross := bookingPrice
-	net := gross - platformFee + serviceFee
+	net := gross - platformFee
 
 	p, err := s.store.CreatePayment(r.Context(), store.Payment{
 		BookingID:         req.BookingID,
@@ -141,6 +420,37 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, claims au
 		return
 	}
 
+	// Mode gateway: buat transaksi Snap, simpan token/redirect ke payment.
+	// Record lokal tetap ada walau gateway gagal (webhook bisa menyusul).
+	if s.cfg.PaymentMode == "gateway" && s.payment != nil {
+		customer := map[string]any{"first_name": claims.Subject}
+		if user, uerr := s.store.GetUserByID(r.Context(), claims.Subject); uerr == nil {
+			if strings.TrimSpace(user.DisplayName) != "" {
+				customer["first_name"] = user.DisplayName
+			}
+			if user.Email != "" {
+				customer["email"] = user.Email
+			}
+			if user.Phone != nil && *user.Phone != "" {
+				customer["phone"] = *user.Phone
+			}
+		}
+		intent, gerr := s.payment.CreateTransaction(r.Context(), reference, gross+serviceFee, customer)
+		if gerr != nil {
+			s.logger.Warn("gateway create transaction failed", "reference", reference, "error", gerr)
+			writeError(w, http.StatusBadGateway, errors.New("gagal membuat transaksi pembayaran, coba lagi"))
+			return
+		}
+		if updated, uerr := s.store.UpdatePaymentGateway(r.Context(), reference, "midtrans", intent.Token, intent.RedirectURL); uerr == nil {
+			p = updated
+		} else {
+			s.logger.Warn("simpan token gateway gagal", "reference", reference, "error", uerr)
+			p.Gateway = "midtrans"
+			p.SnapToken = intent.Token
+			p.RedirectURL = intent.RedirectURL
+		}
+	}
+
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"payment": p,
 		"breakdown": map[string]interface{}{
@@ -154,7 +464,15 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, claims au
 }
 
 func (s *Server) markPaymentPaid(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
-	// Profesional verifikasi pembayaran booking miliknya, atau webhook internal
+	// Produksi (mode gateway): konfirmasi manual dinonaktifkan; satu-satunya
+	// jalur sukses adalah webhook gateway.
+	if s.cfg.PaymentMode == "gateway" {
+		writeError(w, http.StatusGone, errors.New("mark-paid dinonaktifkan; gunakan gateway (webhook)"))
+		return
+	}
+	// Konfirmasi pembayaran internal (simulasi gateway): hanya pasien
+	// pemilik booking yang boleh mengonfirmasi, dan hanya saat pending.
+	// Produksi: ganti dengan webhook gateway (Midtrans/dll).
 	var req markPaidRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -166,10 +484,106 @@ func (s *Server) markPaymentPaid(w http.ResponseWriter, r *http.Request, claims 
 		writeError(w, http.StatusNotFound, err)
 		return
 	}
+	if err := s.store.AuthorizePaymentOwner(r.Context(), p.ID, claims.Subject, claims.Role); err != nil {
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
 
-	// Create earning untuk profesional
-	// (Dalam production, ini dipakar lewat webhook gateway — di sini hanya simulasi)
+	// Efek samping pembayaran: quick consult -> sesi terjadwal;
+	// paket -> care package aktif + link pasien-profesional.
+	if err := s.activatePaidBooking(r, p); err != nil {
+		s.logger.Warn("activate paid booking failed", "payment", p.ID, "error", err)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{"payment": p, "status": "paid"})
+}
+
+// paymentWebhook menerima notifikasi pembayaran gateway (Midtrans). Publik,
+// keaslian diverifikasi via signature SHA-512; idempoten via payment_events.
+func (s *Server) paymentWebhook(w http.ResponseWriter, r *http.Request) {
+	if s.payment == nil {
+		// Gateway tidak aktif: tidak ada yang bisa diverifikasi.
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errors.New("body tidak terbaca"))
+		return
+	}
+	_ = r.Body.Close()
+	evt, err := s.payment.ParseWebhook(body, r.Header)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	// 1. Verifikasi signature; tidak cocok -> 401 tanpa efek (AC-4.2).
+	if !s.payment.VerifySignature(evt) {
+		writeError(w, http.StatusUnauthorized, errors.New("invalid signature"))
+		return
+	}
+	// 2. Idempotensi replay via payment_events (AC-4.3).
+	eventType := strings.ToLower(strings.TrimSpace(evt.Status))
+	inserted, err := s.store.RecordPaymentEvent(r.Context(), store.PaymentEvent{
+		Gateway:     "midtrans",
+		ExternalID:  evt.OrderID,
+		EventType:   eventType,
+		Signature:   evt.Signature,
+		GrossAmount: parseGrossAmount(evt.GrossAmount),
+		RawPayload:  evt.Raw,
+		Status:      "received",
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !inserted {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		return
+	}
+	// 3. Efek: settlement/capture -> tandai lunas + aktivasi booking.
+	switch eventType {
+	case "settlement", "capture":
+		if evt.FraudStatus != "" && evt.FraudStatus != "accept" {
+			_ = s.store.UpdatePaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType, "ignored", "", "")
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
+			return
+		}
+		p, perr := s.store.MarkPaymentPaid(r.Context(), evt.OrderID, evt.TransactionID)
+		if perr != nil {
+			s.logger.Warn("webhook mark paid failed", "order_id", evt.OrderID, "error", perr)
+			_ = s.store.UpdatePaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType, "ignored", "", "")
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
+			return
+		}
+		if aerr := s.activatePaidBooking(r, p); aerr != nil {
+			s.logger.Warn("webhook activate booking failed", "payment", p.ID, "error", aerr)
+		}
+		_ = s.store.UpdatePaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType, "processed", p.ID, p.BookingID)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		return
+	default:
+		// expire/cancel/deny/pending: catat sebagai ignored.
+		_ = s.store.UpdatePaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType, "ignored", "", "")
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
+		return
+	}
+}
+
+// parseGrossAmount mengubah "150000.00" menjadi 150000 (rupiah utuh).
+func parseGrossAmount(value string) int64 {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	if dot := strings.IndexByte(value, '.'); dot >= 0 {
+		value = value[:dot]
+	}
+	n, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 func (s *Server) listBookings(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -198,12 +612,28 @@ func (s *Server) earningsSummary(w http.ResponseWriter, r *http.Request, claims 
 	})
 }
 
+type payoutRequest struct {
+	Bank    string `json:"bank"`
+	Account string `json:"account"`
+}
+
 func (s *Server) requestPayout(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if !s.requireVerifiedProfessional(w, r, claims) {
 		return
 	}
+	var req payoutRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	bank := strings.TrimSpace(req.Bank)
+	account := strings.TrimSpace(req.Account)
+	if bank == "" || account == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bank dan nomor rekening wajib diisi"})
+		return
+	}
 	earningID := r.PathValue("earning_id")
-	if err := s.store.RequestPayout(r.Context(), earningID, "bca", "2643985203"); err != nil {
+	if err := s.store.RequestPayout(r.Context(), earningID, bank, account); err != nil {
 		writeError(w, http.StatusNotFound, err)
 		return
 	}
@@ -274,6 +704,15 @@ func (s *Server) createEPrescription(w http.ResponseWriter, r *http.Request, cla
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	// Notifikasi pasien (best-effort; kegagalan TIDAK menggagalkan resep). AC-3.1.
+	doctorName := "dokter"
+	if user, uerr := s.store.GetUserByID(r.Context(), claims.Subject); uerr == nil && strings.TrimSpace(user.DisplayName) != "" {
+		doctorName = strings.TrimSpace(user.DisplayName)
+	}
+	s.notifyPatient(r, rx.PatientID, "prescription_created",
+		"Resep baru dari "+doctorName,
+		"Resep elektronik barumu sudah tersedia. Buka Malva untuk melihat detail.",
+		map[string]string{"prescription_id": rx.ID, "professional_id": claims.Subject})
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"prescription": rx})
 }
 

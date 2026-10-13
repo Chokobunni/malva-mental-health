@@ -63,6 +63,34 @@ func run(logger *slog.Logger) error {
 	worker := notify.NewOutboxWorker(st, provider, hub, logger)
 	go worker.Run(ctx)
 
+	// Sweeper paket/sesi: kedaluwarsakan paket 6 minggu, hanguskan
+	// pending_payment, auto-complete sesi lama. Tiap 10 menit.
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		sweep := func() {
+			sctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			exp, expS, done, err := st.SweepCareState(sctx)
+			if err != nil {
+				logger.Warn("care sweep failed", "error", err)
+				return
+			}
+			if exp+expS+done > 0 {
+				logger.Info("care sweep", "expired_packages", exp, "expired_sessions", expS, "completed_sessions", done)
+			}
+		}
+		sweep()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				sweep()
+			}
+		}
+	}()
+
 	app := server.New(cfg, authManager, st, hub, logger)
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,

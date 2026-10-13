@@ -728,10 +728,13 @@ class _EPrescriptionDetailScreenState
                                           fontWeight: FontWeight.w800),
                                     ),
                                     const SizedBox(height: 2),
-                                    const Text(
+                                    Text(
                                       'Tunjukkan kode ini untuk verifikasi apotek.',
                                       style: TextStyle(
-                                          fontSize: 12, color: Colors.black54),
+                                          fontSize: 12,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant),
                                     ),
                                   ],
                                 ),

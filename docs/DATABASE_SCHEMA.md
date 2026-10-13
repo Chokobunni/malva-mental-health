@@ -577,7 +577,72 @@ CREATE TYPE notification_status AS ENUM ('pending', 'sent', 'failed');
 
 **Index:** `audit_logs_patient_created_idx` ON (patient_id, created_at DESC)
 
-### 3.21 chat_messages
+### 3.21 care_packages (migrasi 012 — pengganti continuous_support 7 hari)
+
+1 paket = 4 sesi / 42 hari sejak pembayaran. Sisa hangus setelah expired.
+Pasien no-show = kuota terpakai. Profesional batal = kredit kembali.
+Tanpa FOREIGN KEY (aplikasi jalan sebagai `malva_app` tanpa hak REFERENCES);
+integritas ditegakkan di application layer.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | uuid | PK, DEFAULT gen_random_uuid() | Package ID |
+| `patient_id` | uuid | NOT NULL (tanpa FK) | Pembeli paket |
+| `professional_id` | uuid | NOT NULL (tanpa FK) | Profesional tujuan |
+| `booking_id` | uuid | UNIQUE NULLABLE (tanpa FK) | Booking pembayaran aktivasi |
+| `total_sessions` | integer | DEFAULT 4 | Selalu 4 |
+| `validity_days` | integer | DEFAULT 42 | Selalu 42 (6 minggu) |
+| `price` | bigint | DEFAULT 0 | Harga paket saat dibeli |
+| `status` | text | pending_payment/active/expired/completed/cancelled | Status paket |
+| `starts_at` | timestamptz | DEFAULT now() | Mulai berlaku |
+| `expires_at` | timestamptz | NOT NULL | starts_at + 42 hari |
+| `created_at` / `updated_at` | timestamptz | DEFAULT now() | Audit |
+
+### 3.22 care_sessions (migrasi 012)
+
+Sesi terjadwal dari paket (`package_id`) atau quick consult (`booking_id`).
+Status pemakan kuota: scheduled, completed, no_show.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | uuid | PK | Session ID |
+| `package_id` | uuid | NULLABLE (tanpa FK) | Paket induk (null = quick) |
+| `booking_id` | uuid | NULLABLE (tanpa FK) | Booking asal (quick/paket) |
+| `patient_id` / `professional_id` | uuid | NOT NULL (tanpa FK) | Peserta |
+| `session_type` | text | chat/video | Media sesi |
+| `scheduled_at` | timestamptz | NOT NULL | Jadwal (WIB saat input) |
+| `duration_minutes` | integer | 10-180 | = durasi slot jadwal pro |
+| `status` | text | pending_payment/scheduled/completed/no_show/cancelled_by_professional/cancelled_by_patient/expired_unpaid | Status |
+| `meeting_url` | text | DEFAULT '' | Link meeting video |
+| `summary_for_patient` | text | DEFAULT '' | Ringkasan sesi (ganti follow-up) |
+| `private_note` | text | DEFAULT '' | Catatan privat pro |
+| `cancel_reason` / `cancelled_by` | text / uuid | DEFAULT '' / NULL | Alasan & pelaku batal |
+| `reschedule_count` | integer | DEFAULT 0 | Jumlah reschedule |
+| `attended_marked_at` | timestamptz | NULLABLE | Kapan kehadiran ditandai |
+
+**Index:** `care_sessions_slot_uidx` UNIQUE (professional_id, scheduled_at)
+WHERE status IN ('scheduled','pending_payment') — anti double-book.
+
+### 3.23 professional_pricing (migrasi 012)
+
+Tarif milik profesional (diatur via PUT /v1/professional/pricing).
+Fallback baca: service_packages lama bila baris belum ada.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `professional_id` | uuid | PK (tanpa FK) | Profesional |
+| `quick_chat_price` / `quick_video_price` / `package_price` | bigint | >= 0 | Tarif (0 = belum diatur) |
+
+### 3.24 professional_time_off (migrasi 012)
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | uuid | PK | ID |
+| `professional_id` | uuid | NOT NULL (tanpa FK) | Profesional |
+| `off_date` | date | NOT NULL, UNIQUE(professional_id, off_date) | Hari libur |
+| `reason` | text | DEFAULT '' | Alasan |
+
+### 3.25 chat_messages
 
 | Column | Type | Constraints | Description |
 |---|---|---|---|
