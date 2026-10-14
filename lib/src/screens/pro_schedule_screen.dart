@@ -217,7 +217,10 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
 
 class _ProSessionCard extends ConsumerWidget {
   const _ProSessionCard(
-      {required this.session, required this.onChanged, this.past = false});
+      {super.key,
+      required this.session,
+      required this.onChanged,
+      this.past = false});
 
   final BackendCareSession session;
   final Future<void> Function() onChanged;
