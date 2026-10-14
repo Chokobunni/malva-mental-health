@@ -100,8 +100,14 @@ class _ProfessionalDashboardScreenState
   Widget build(BuildContext context) {
     final patients = _patientsForDashboard();
     final selected = _selectedPatient(patients);
-    final priorityCount =
-        _crisisQueue(patients).length + _reviewQueue(patients).length;
+    // Dihitung SETELAH dedup agar konsisten dengan daftar yang benar-benar
+    // dirender. Satu screening krisis yang belum direview muncul di kedua
+    // antrean; tanpa dedup tombol "Lihat semua prioritas" bisa muncul
+    // padahal tidak ada item tambahan yang bisa dilihat.
+    final priorityCount = _dedupByScreening([
+      ..._crisisQueue(patients),
+      ..._reviewQueue(patients),
+    ]).length;
     return Scaffold(
       body: Column(
         children: [
@@ -579,7 +585,11 @@ class _ProfessionalDashboardScreenState
                           Navigator.pop(sheetContext);
                           setState(() {
                             _selectedPatientId = patient.patientId;
-                            _tabIndex = 1;
+                            // Tab Pasien ada di indeks 2 (0=Dashboard,
+                            // 1=Jadwal, 2=Pasien, 3=Lainnya). Sebelumnya
+                            // bernilai 1 sehingga menekan pasien justru
+                            // membuka layar Jadwal.
+                            _tabIndex = 2;
                           });
                         },
                         padding: const EdgeInsets.all(12),
@@ -1624,7 +1634,14 @@ class _PriorityQueue extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final queue = [...crisisQueue, ...reviewQueue].take(3).toList();
+    // Buang duplikat: satu screening krisis yang belum direview muncul di
+    // `crisisQueue` DAN `reviewQueue`, sehingga tanpa ini baris yang sama
+    // tampil dua kali. Samakan dengan perilaku sheet "Semua prioritas".
+    final seen = <String>{};
+    final queue = [
+      for (final item in [...crisisQueue, ...reviewQueue])
+        if (seen.add(item.screening.id)) item,
+    ].take(3).toList();
     if (queue.isEmpty) {
       return const EmptyState(
         icon: Icons.inbox_rounded,
