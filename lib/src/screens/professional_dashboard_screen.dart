@@ -100,6 +100,8 @@ class _ProfessionalDashboardScreenState
   Widget build(BuildContext context) {
     final patients = _patientsForDashboard();
     final selected = _selectedPatient(patients);
+    final priorityCount =
+        _crisisQueue(patients).length + _reviewQueue(patients).length;
     return Scaffold(
       body: Column(
         children: [
@@ -169,22 +171,17 @@ class _ProfessionalDashboardScreenState
                       children: [
                         // ---- TAB 0: DASHBOARD ----
                         if (_tabIndex == 0)
-                          _StatusBanner(
+                          _DashboardStatusStrip(
                             isLoading: _isLoadingOnlineData,
                             error: _onlineError,
                             hasBackendSession: widget
                                     .session?.accessToken?.isNotEmpty ==
                                 true,
                             onRetry: _loadOnlineProfessionalData,
-                          ),
-                        if (_tabIndex == 0)
-                          _SyncStatusBar(
                             syncStatus: _syncStatus,
                             lastSyncTime: _lastSyncTime,
-                            hasBackendSession: widget
-                                    .session?.accessToken?.isNotEmpty ==
-                                true,
                           ),
+                        if (_tabIndex == 0) const SectionLabel('Ringkasan'),
                         if (_tabIndex == 0)
                           _PriorityMetrics(
                             patientCount: patients.length,
@@ -197,15 +194,17 @@ class _ProfessionalDashboardScreenState
                             onReviewTap: () => _showPriorityListSheet(
                                 crisisOnly: false),
                           ),
-                        if (_tabIndex == 0) const SizedBox(height: 18),
+                        if (_tabIndex == 0) const SizedBox(height: 22),
                         // ---- TAB 2: PASIEN ----
+                        if (_tabIndex == 2)
+                          const SectionLabel('Cari & filter pasien'),
                         if (_tabIndex == 2)
                           _PatientSearch(
                             query: _searchQuery,
                             onChanged: (value) =>
                                 setState(() => _searchQuery = value),
                           ),
-                        if (_tabIndex == 2) const SizedBox(height: 18),
+                        if (_tabIndex == 2) const SizedBox(height: 14),
                         if (_tabIndex == 0)
                           SectionLabel(
                             'Prioritas pasien',
@@ -223,8 +222,17 @@ class _ProfessionalDashboardScreenState
                             onReview: _openScreeningReview,
                             onOpenDetail: _showPriorityDetail,
                           ),
+                        if (_tabIndex == 0 && priorityCount > 3)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton(
+                              onPressed: () => _showPriorityListSheet(
+                                  crisisOnly: false),
+                              child: const Text('Lihat semua prioritas'),
+                            ),
+                          ),
                         if (_tabIndex == 2)
-                          const SectionLabel('Pasien terhubung'),
+                          SectionLabel('Pasien terhubung (${patients.length})'),
                         if (_tabIndex == 2)
                           _ConnectedPatientList(
                             patients: _filterPatients(patients),
@@ -1246,6 +1254,50 @@ class _ProfessionalDashboardScreenState
   }
 }
 
+/// Strip status ringkas untuk tab Dashboard: menggabungkan [_StatusBanner]
+/// (error / belum login + tombol "Coba lagi") dan [_SyncStatusBar] (status
+/// sinkronisasi) menjadi SATU baris agar tidak menumpuk dua blok status.
+///
+/// Prioritas tampil: error / belum login > status sync. Indikator dot
+/// [_SyncStatusIndicator] di header tetap dipertahankan sebagai representasi
+/// sync yang ringkas.
+class _DashboardStatusStrip extends StatelessWidget {
+  const _DashboardStatusStrip({
+    required this.isLoading,
+    required this.error,
+    required this.hasBackendSession,
+    required this.onRetry,
+    required this.syncStatus,
+    required this.lastSyncTime,
+  });
+
+  final bool isLoading;
+  final String? error;
+  final bool hasBackendSession;
+  final Future<void> Function() onRetry;
+  final SyncStatus syncStatus;
+  final DateTime? lastSyncTime;
+
+  @override
+  Widget build(BuildContext context) {
+    // Error atau belum login → banner (membawa pesan + tombol "Coba lagi").
+    if (error != null || !hasBackendSession) {
+      return _StatusBanner(
+        isLoading: isLoading,
+        error: error,
+        hasBackendSession: hasBackendSession,
+        onRetry: onRetry,
+      );
+    }
+    // Sehat → satu baris status sync ringkas.
+    return _SyncStatusBar(
+      syncStatus: syncStatus,
+      lastSyncTime: lastSyncTime,
+      hasBackendSession: hasBackendSession,
+    );
+  }
+}
+
 class _StatusBanner extends StatelessWidget {
   const _StatusBanner({
     required this.isLoading,
@@ -1530,7 +1582,7 @@ class _PriorityQueue extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final queue = [...crisisQueue, ...reviewQueue].take(5).toList();
+    final queue = [...crisisQueue, ...reviewQueue].take(3).toList();
     if (queue.isEmpty) {
       return const EmptyState(
         icon: Icons.inbox_rounded,
@@ -1648,6 +1700,7 @@ class _RelationshipManagementSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1659,35 +1712,50 @@ class _RelationshipManagementSection extends StatelessWidget {
             label: const Text('Sync'),
           ),
         ),
-        SoftCard(
-          child: Column(
+        // Header (kode + penjelasan) selalu terlihat; daftar pasien dilipat.
+        CollapsibleCard(
+          initiallyExpanded: false,
+          header: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Kode profesional: ${professionalCode ?? 'belum login backend'}',
                 style: const TextStyle(fontWeight: FontWeight.w900),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               Text(
                 'Pasien memasukkan kode ini untuk memberi akses data screening kepada profesional.',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
-                    ?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    ?.copyWith(color: onSurfaceVariant),
               ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               const Divider(height: 22),
-              for (final patient in patients) ...[
-                Row(
-                  children: [
-                    const Icon(Icons.link_rounded, color: MalvaColors.seed),
-                    const SizedBox(width: 10),
-                    Expanded(child: Text(patient.displayName)),
-                    Text(patient.status),
-                  ],
-                ),
-                const SizedBox(height: 8),
-              ],
+              if (patients.isEmpty)
+                Text(
+                  'Belum ada pasien terhubung.',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: onSurfaceVariant),
+                )
+              else
+                for (final patient in patients) ...[
+                  Row(
+                    children: [
+                      const Icon(Icons.link_rounded, color: MalvaColors.seed),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(patient.displayName)),
+                      Text(patient.status),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
             ],
           ),
         ),
@@ -1726,7 +1794,21 @@ class _AuditAndExportSection extends StatelessWidget {
                 'Review, catatan, follow-up, dan export akan tercatat di sini.',
           )
         else
-          SoftCard(
+          // Daftar audit dilipat; tombol "Export" tetap di luar (header).
+          CollapsibleCard(
+            initiallyExpanded: false,
+            header: Row(
+              children: [
+                const Icon(Icons.history_rounded, color: MalvaColors.seed),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Riwayat audit (${auditEntries.length})',
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                ),
+              ],
+            ),
             child: Column(
               children: [
                 for (final entry in auditEntries.take(6)) ...[
@@ -1774,6 +1856,7 @@ class _ProfessionalPortalSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SectionLabel('Portal Profesional'),
+        const SectionLabel('Operasional'),
         ActionTile(
           icon: Icons.sell_rounded,
           title: 'Katalog Harga',
@@ -1791,21 +1874,22 @@ class _ProfessionalPortalSection extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         ActionTile(
-          icon: Icons.shield_rounded,
-          title: 'Crisis Incident Log',
-          subtitle: 'Incident aktif, resolusi, dan jejak liability',
-          color: MalvaColors.danger,
+          icon: Icons.account_balance_wallet_rounded,
+          title: 'Earnings',
+          subtitle: 'Pendapatan, fee platform, dan payout',
+          color: MalvaColors.amber,
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => CrisisIncidentLogScreen(
+              builder: (_) => EarningsScreen(
                 session: session,
                 apiClient: apiClient,
               ),
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 22),
+        const SectionLabel('Klinis & kepatuhan'),
         ActionTile(
           icon: Icons.medication_liquid_rounded,
           title: 'E-Prescription',
@@ -1823,14 +1907,14 @@ class _ProfessionalPortalSection extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         ActionTile(
-          icon: Icons.account_balance_wallet_rounded,
-          title: 'Earnings',
-          subtitle: 'Pendapatan, fee platform, dan payout',
-          color: MalvaColors.amber,
+          icon: Icons.shield_rounded,
+          title: 'Crisis Incident Log',
+          subtitle: 'Incident aktif, resolusi, dan jejak liability',
+          color: MalvaColors.danger,
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => EarningsScreen(
+              builder: (_) => CrisisIncidentLogScreen(
                 session: session,
                 apiClient: apiClient,
               ),
