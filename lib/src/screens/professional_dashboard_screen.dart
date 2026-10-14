@@ -639,6 +639,21 @@ class _ProfessionalDashboardScreenState
     );
   }
 
+  /// Buang item ganda berdasarkan id screening, pertahankan kemunculan
+  /// pertama. Dipakai jalur [showAll]: screening krisis yang belum direview
+  /// muncul di `_crisisQueue` DAN `_reviewQueue` sehingga tanpa ini item yang
+  /// sama dirender dua kali.
+  List<_PriorityItem> _dedupByScreening(List<_PriorityItem> items) {
+    final seen = <String>{};
+    final result = <_PriorityItem>[];
+    for (final item in items) {
+      if (seen.add(item.screening.id)) {
+        result.add(item);
+      }
+    }
+    return result;
+  }
+
   /// Bottom-sheet antrean prioritas.
   ///
   /// [crisisOnly] true → hanya antrean crisis; false → hanya antrean review.
@@ -650,7 +665,10 @@ class _ProfessionalDashboardScreenState
   }) {
     final patients = _patientsForDashboard();
     final items = showAll
-        ? [..._crisisQueue(patients), ..._reviewQueue(patients)]
+        ? _dedupByScreening([
+            ..._crisisQueue(patients),
+            ..._reviewQueue(patients),
+          ])
         : crisisOnly
             ? _crisisQueue(patients)
             : _reviewQueue(patients);
