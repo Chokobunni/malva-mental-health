@@ -227,7 +227,7 @@ class _ProfessionalDashboardScreenState
                             alignment: Alignment.centerLeft,
                             child: TextButton(
                               onPressed: () => _showPriorityListSheet(
-                                  crisisOnly: false),
+                                  crisisOnly: false, showAll: true),
                               child: const Text('Lihat semua prioritas'),
                             ),
                           ),
@@ -639,9 +639,21 @@ class _ProfessionalDashboardScreenState
     );
   }
 
-  void _showPriorityListSheet({required bool crisisOnly}) {
+  /// Bottom-sheet antrean prioritas.
+  ///
+  /// [crisisOnly] true → hanya antrean crisis; false → hanya antrean review.
+  /// [showAll] true → gabungan antrean crisis + review (dipakai tombol
+  /// "Lihat semua prioritas"). Tidak mengubah perilaku pemanggil lama.
+  void _showPriorityListSheet({
+    required bool crisisOnly,
+    bool showAll = false,
+  }) {
     final patients = _patientsForDashboard();
-    final items = crisisOnly ? _crisisQueue(patients) : _reviewQueue(patients);
+    final items = showAll
+        ? [..._crisisQueue(patients), ..._reviewQueue(patients)]
+        : crisisOnly
+            ? _crisisQueue(patients)
+            : _reviewQueue(patients);
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -672,9 +684,11 @@ class _ProfessionalDashboardScreenState
               ),
               const SizedBox(height: 12),
               Text(
-                crisisOnly
-                    ? 'Crisis alert (${items.length})'
-                    : 'Perlu review (${items.length})',
+                showAll
+                    ? 'Semua prioritas (${items.length})'
+                    : crisisOnly
+                        ? 'Crisis alert (${items.length})'
+                        : 'Perlu review (${items.length})',
                 style: Theme.of(sheetContext)
                     .textTheme
                     .titleLarge
@@ -682,9 +696,11 @@ class _ProfessionalDashboardScreenState
               ),
               const SizedBox(height: 4),
               Text(
-                crisisOnly
-                    ? 'Pasien dengan crisis flag — prioritaskan penilaian keselamatan.'
-                    : 'Screening terbaru yang menunggu review klinis.',
+                showAll
+                    ? 'Gabungan antrean crisis & review klinis.'
+                    : crisisOnly
+                        ? 'Pasien dengan crisis flag — prioritaskan penilaian keselamatan.'
+                        : 'Screening terbaru yang menunggu review klinis.',
                 style: TextStyle(
                     color: Theme.of(sheetContext)
                         .colorScheme
@@ -693,15 +709,21 @@ class _ProfessionalDashboardScreenState
               const SizedBox(height: 12),
               if (items.isEmpty)
                 EmptyState(
-                  icon: crisisOnly
-                      ? Icons.check_circle_outline_rounded
-                      : Icons.inbox_rounded,
-                  title: crisisOnly
-                      ? 'Tidak ada crisis aktif'
-                      : 'Semua sudah direview',
-                  subtitle: crisisOnly
-                      ? 'Flag krisis baru akan muncul di sini.'
-                      : 'Screening baru akan muncul di sini.',
+                  icon: showAll
+                      ? Icons.inbox_rounded
+                      : crisisOnly
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.inbox_rounded,
+                  title: showAll
+                      ? 'Tidak ada prioritas'
+                      : crisisOnly
+                          ? 'Tidak ada crisis aktif'
+                          : 'Semua sudah direview',
+                  subtitle: showAll
+                      ? 'Antrean crisis & review sedang kosong.'
+                      : crisisOnly
+                          ? 'Flag krisis baru akan muncul di sini.'
+                          : 'Screening baru akan muncul di sini.',
                 )
               else
                 Flexible(
@@ -723,7 +745,9 @@ class _ProfessionalDashboardScreenState
                               backgroundColor:
                                   item.color.withValues(alpha: 0.16),
                               child: Icon(
-                                crisisOnly
+                                (showAll
+                                        ? item.screening.crisisFlag
+                                        : crisisOnly)
                                     ? Icons.priority_high_rounded
                                     : Icons.fact_check_rounded,
                                 color: item.color,
