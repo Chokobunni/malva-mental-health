@@ -37,7 +37,8 @@ class ProPatientDetailScreen extends ConsumerStatefulWidget {
       _ProPatientDetailScreenState();
 }
 
-class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen> {
+class _ProPatientDetailScreenState
+    extends ConsumerState<ProPatientDetailScreen> {
   List<BackendCarePackage> _packages = const [];
   List<BackendCareSession> _sessions = const [];
   List<BackendScreeningSession> _screenings = const [];
@@ -108,8 +109,8 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
             accessToken: token, patientId: widget.patientId, limit: 10),
         _api.listTherapySubmissions(
             accessToken: token, patientId: widget.patientId),
-        safely(() => _api.listGoals(
-            accessToken: token, patientId: widget.patientId)),
+        safely(() =>
+            _api.listGoals(accessToken: token, patientId: widget.patientId)),
         safely(() => _api.listMoodCheckins(
             accessToken: token, patientId: widget.patientId, limit: 10)),
         safely(() => _api.listDiaryEntries(
@@ -123,18 +124,15 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
       ]);
       List<BackendChatMessage> shares = const [];
       try {
-        final myId = widget.session?.backendUserId ??
-            widget.session?.identifier ??
-            '';
+        final myId =
+            widget.session?.backendUserId ?? widget.session?.identifier ?? '';
         if (myId.isNotEmpty) {
           final msgs = await _api.listMessages(
             accessToken: token,
             patientId: widget.patientId,
             professionalId: myId,
           );
-          shares = msgs
-              .where((m) => m.kind != 'text')
-              .toList(growable: false);
+          shares = msgs.where((m) => m.kind != 'text').toList(growable: false);
         }
       } on Object {
         // Riwayat kiriman opsional.
@@ -161,12 +159,9 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
         _goals = (results[4] as List<BackendGoal>?) ?? const [];
         _moods = (results[5] as List<BackendMoodCheckin>?) ?? const [];
         _diaries = (results[6] as List<BackendDiaryEntry>?) ?? const [];
-        _notes =
-            (results[7] as List<BackendProfessionalNote>?) ?? const [];
-        _medications =
-            (results[8] as List<BackendMedication>?) ?? const [];
-        _timeline =
-            (results[9] as List<BackendTimelineEvent>?) ?? const [];
+        _notes = (results[7] as List<BackendProfessionalNote>?) ?? const [];
+        _medications = (results[8] as List<BackendMedication>?) ?? const [];
+        _timeline = (results[9] as List<BackendTimelineEvent>?) ?? const [];
         _shares = shares;
         _healthRecord = record;
         _isLoading = false;
@@ -218,97 +213,113 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
             else if (_error != null)
               Center(child: Text(_error!))
             else ...[
-              if (_restricted != null)
-                SoftCard(
-                  color: MalvaColors.amber.withValues(alpha: 0.12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.lock_outline_rounded,
-                          color: MalvaColors.amber),
-                      const SizedBox(width: 10),
-                      Expanded(child: Text(_restricted!)),
-                    ],
-                  ),
-                ),
-              if (_restricted != null) const SizedBox(height: 12),
-              const SectionLabel('Paket & sesi'),
-              if (_packages.isEmpty)
+              // ============================================================
+              // GRUP 1 — Ringkasan klinis
+              // ============================================================
+              const SectionLabel('Ringkasan klinis'),
+              if (_packages.isEmpty && _sessions.isEmpty)
                 const EmptyState(
                   icon: Icons.card_membership_outlined,
                   title: 'Belum ada paket',
                   subtitle: 'Pasien belum membeli paket denganmu.',
                 )
               else
-                for (final p in _packages) ...[
-                  SoftCard(
-                    color: p.isActive
-                        ? MalvaColors.mint.withValues(alpha: 0.08)
-                        : null,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Paket ${p.totalSessions} sesi / ${p.validityDays} hari',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w900),
-                              ),
-                            ),
-                            StatusPill(
-                              label: p.status,
-                              color: p.isActive
-                                  ? MalvaColors.mint
-                                  : Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                            ),
-                          ],
+                CollapsibleCard(
+                  key: const ValueKey('packages-section'),
+                  semanticLabel: 'Paket & sesi',
+                  header: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Paket & sesi',
+                          style: TextStyle(fontWeight: FontWeight.w900),
                         ),
-                        const SizedBox(height: 6),
-                        ProgressStrip(
-                          value: p.totalSessions == 0
-                              ? 0
-                              : p.usedSessions / p.totalSessions,
+                      ),
+                      if (_packages.isNotEmpty)
+                        StatusPill(
+                          label: '${_packages.length} paket',
                           color: MalvaColors.seed,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${p.remainingSessions}/${p.totalSessions} sesi tersisa',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                ],
-              if (_sessions.isNotEmpty) ...[
-                for (final s in _sessions.take(5)) ...[
-                  SoftCard(
-                    child: Row(
-                      children: [
-                        Icon(
-                            s.isVideo
-                                ? Icons.videocam_rounded
-                                : Icons.chat_bubble_rounded,
-                            color: MalvaColors.seed),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            '${s.scheduledAt ?? '-'} • ${s.status}',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700, fontSize: 12.5),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_packages.isNotEmpty)
+                        for (final p in _packages) ...[
+                          SoftCard(
+                            padding: const EdgeInsets.all(12),
+                            color: p.isActive
+                                ? MalvaColors.mint.withValues(alpha: 0.08)
+                                : null,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'Paket ${p.totalSessions} sesi / ${p.validityDays} hari',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w900),
+                                      ),
+                                    ),
+                                    StatusPill(
+                                      label: p.status,
+                                      color: p.isActive
+                                          ? MalvaColors.mint
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                ProgressStrip(
+                                  value: p.totalSessions == 0
+                                      ? 0
+                                      : p.usedSessions / p.totalSessions,
+                                  color: MalvaColors.seed,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${p.remainingSessions}/${p.totalSessions} sesi tersisa',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                          const SizedBox(height: 8),
+                        ],
+                      if (_sessions.isNotEmpty)
+                        for (final s in _sessions.take(5)) ...[
+                          SoftCard(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                Icon(
+                                    s.isVideo
+                                        ? Icons.videocam_rounded
+                                        : Icons.chat_bubble_rounded,
+                                    color: MalvaColors.seed),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    '${s.scheduledAt ?? '-'} • ${s.status}',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12.5),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                ],
-              ],
-              const SizedBox(height: 6),
+                ),
+              const SizedBox(height: 14),
               const SectionLabel('Screening (PHQ-9 / GAD-7)'),
               if (_screenings.isEmpty)
                 const EmptyState(
@@ -320,7 +331,8 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
                 for (final sc in _screenings.take(3)) ...[
                   CollapsibleCard(
                     key: ValueKey('screening-${sc.id}'),
-                    semanticLabel: 'Detail screening ${_screeningDate(sc.createdAt)}',
+                    semanticLabel:
+                        'Detail screening ${_screeningDate(sc.createdAt)}',
                     header: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -345,9 +357,7 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
                         Text(
                           '${_screeningDate(sc.createdAt)} • Overall: ${sc.overallLevel}',
                           style: TextStyle(
-                              color: sc.crisisFlag
-                                  ? MalvaColors.danger
-                                  : null,
+                              color: sc.crisisFlag ? MalvaColors.danger : null,
                               fontWeight: FontWeight.w700,
                               fontSize: 12.5),
                         ),
@@ -376,7 +386,7 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
                   ),
                   const SizedBox(height: 8),
                 ],
-              const SizedBox(height: 6),
+              const SizedBox(height: 14),
               const SectionLabel('Worksheet dibagikan (dengan skor)'),
               if (_worksheets.isEmpty)
                 const EmptyState(
@@ -400,7 +410,7 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
                   ),
                   const SizedBox(height: 8),
                 ],
-              const SizedBox(height: 6),
+              const SizedBox(height: 14),
               // F-16: hasil DASS-21 / WHO-5 & tren (bila tersedia).
               const SectionLabel('Hasil DASS-21 / WHO-5 & tren'),
               Builder(builder: (context) {
@@ -436,8 +446,11 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
                   ],
                 );
               }),
-              const SizedBox(height: 6),
-              const SectionLabel('Goals & habits'),
+              // ============================================================
+              // GRUP 2 — Pemantauan harian (semua read-only → dilipat)
+              // ============================================================
+              const SizedBox(height: 22),
+              const SectionLabel('Pemantauan harian'),
               if (_goals.isEmpty)
                 const EmptyState(
                   icon: Icons.flag_outlined,
@@ -445,27 +458,48 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
                   subtitle: 'Goals pasien muncul bila dibagikan.',
                 )
               else
-                for (final g in _goals.take(5)) ...[
-                  SoftCard(
-                    child: Row(
-                      children: [
-                        const Icon(Icons.flag_rounded,
-                            color: MalvaColors.amber),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            '${g.title} (${g.doneThisWeek}/${g.targetPerWeek}/mgg)',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700, fontSize: 12.5),
-                          ),
+                CollapsibleCard(
+                  key: const ValueKey('goals-section'),
+                  semanticLabel: 'Goals & habits',
+                  header: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Goals & habits',
+                          style: TextStyle(fontWeight: FontWeight.w900),
                         ),
-                      ],
-                    ),
+                      ),
+                      StatusPill(
+                        label: '${_goals.length}',
+                        color: MalvaColors.amber,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                ],
-              const SizedBox(height: 6),
-              const SectionLabel('Mood & diary (read-only)'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final g in _goals.take(5)) ...[
+                        Row(
+                          children: [
+                            const Icon(Icons.flag_rounded,
+                                color: MalvaColors.amber),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                '${g.title} (${g.doneThisWeek}/${g.targetPerWeek}/mgg)',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12.5),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 10),
               if (_moods.isEmpty && _diaries.isEmpty)
                 const EmptyState(
                   icon: Icons.menu_book_outlined,
@@ -473,37 +507,54 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
                   subtitle:
                       'Mood & diary hanya dibaca — bahas saat sesi, tanpa balasan di luar sesi.',
                 )
-              else ...[
-                for (final m in _moods.take(3)) ...[
-                  SoftCard(
-                    child: Text(
-                      '${m.mood} • tidur ${m.sleepHours.toStringAsFixed(1)}j • energi ${m.energy}/10${m.note.isEmpty ? '' : '\n${m.note}'}',
-                      style: const TextStyle(fontSize: 12.5),
-                    ),
+              else
+                CollapsibleCard(
+                  key: const ValueKey('mood-diary-section'),
+                  semanticLabel: 'Mood & diary (read-only)',
+                  header: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Mood & diary (read-only)',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      StatusPill(
+                        label: '${_moods.length + _diaries.length}',
+                        color: MalvaColors.orchid,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                ],
-                for (final d in _diaries.take(3)) ...[
-                  SoftCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(d.title,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 12.5)),
-                        Text(d.note,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12.5)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final m in _moods.take(3)) ...[
+                        Text(
+                          '${m.mood} • tidur ${m.sleepHours.toStringAsFixed(1)}j • energi ${m.energy}/10${m.note.isEmpty ? '' : '\n${m.note}'}',
+                          style: const TextStyle(fontSize: 12.5),
+                        ),
+                        const SizedBox(height: 8),
                       ],
-                    ),
+                      for (final d in _diaries.take(3)) ...[
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(d.title,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 12.5)),
+                            Text(d.note,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12.5)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                ],
-              ],
-              const SizedBox(height: 6),
-              const SectionLabel('Kiriman pasien (dibahas saat sesi)'),
+                ),
+              const SizedBox(height: 10),
               if (_shares.isEmpty)
                 const EmptyState(
                   icon: Icons.inbox_outlined,
@@ -512,23 +563,36 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
                       'Ringkasan, assessment, goals & diary yang dikirim pasien muncul di sini.',
                 )
               else
-                for (final m in _shares.take(8)) ...[
-                  SoftCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        StatusPill(
-                            label: m.kind, color: MalvaColors.orchid),
-                        const SizedBox(height: 6),
-                        Text(m.text,
-                            style: const TextStyle(fontSize: 12.5)),
-                      ],
-                    ),
+                CollapsibleCard(
+                  key: const ValueKey('shares-section'),
+                  semanticLabel: 'Kiriman pasien',
+                  header: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Kiriman pasien (dibahas saat sesi)',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      StatusPill(
+                        label: '${_shares.length}',
+                        color: MalvaColors.orchid,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                ],
-              const SizedBox(height: 6),
-              const SectionLabel('Timeline pasien'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final m in _shares.take(8)) ...[
+                        StatusPill(label: m.kind, color: MalvaColors.orchid),
+                        const SizedBox(height: 6),
+                        Text(m.text, style: const TextStyle(fontSize: 12.5)),
+                        const SizedBox(height: 10),
+                      ],
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 10),
               if (_timeline.isEmpty)
                 const EmptyState(
                   icon: Icons.timeline_outlined,
@@ -537,37 +601,61 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
                       'Screening, mood, diary, dan obat tersusun di sini bila dibagikan.',
                 )
               else
-                for (final e in _timeline.take(8)) ...[
-                  SoftCard(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.timeline_rounded,
-                            color: MalvaColors.seed, size: 18),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(e.title,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 12.5)),
-                              if (e.body.isNotEmpty)
-                                Text(e.body,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style:
-                                        const TextStyle(fontSize: 12)),
-                            ],
-                          ),
+                CollapsibleCard(
+                  key: const ValueKey('timeline-section'),
+                  semanticLabel: 'Timeline pasien',
+                  header: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Timeline pasien',
+                          style: TextStyle(fontWeight: FontWeight.w900),
                         ),
-                      ],
-                    ),
+                      ),
+                      StatusPill(
+                        label: '${_timeline.length}',
+                        color: MalvaColors.seed,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                ],
-              const SizedBox(height: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final e in _timeline.take(8)) ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.timeline_rounded,
+                                color: MalvaColors.seed, size: 18),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(e.title,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 12.5)),
+                                  if (e.body.isNotEmpty)
+                                    Text(e.body,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                    ],
+                  ),
+                ),
+              // ============================================================
+              // GRUP 3 — Rencana & catatan (tetap terbuka, punya aksi)
+              // ============================================================
+              const SizedBox(height: 22),
+              const SectionLabel('Rencana & catatan'),
               const SectionLabel('Health record & obat'),
               SoftCard(
                 child: Column(
@@ -577,8 +665,7 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
                       _healthRecord?.diagnosisSummary.isNotEmpty == true
                           ? _healthRecord!.diagnosisSummary
                           : 'Belum ada diagnosis / tidak dibagikan.',
-                      style:
-                          const TextStyle(fontWeight: FontWeight.w700),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 8),
                     if (_medications.isNotEmpty) ...[
@@ -587,8 +674,7 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
                               fontWeight: FontWeight.w800, fontSize: 12.5)),
                       const SizedBox(height: 4),
                       for (final m in _medications.take(5))
-                        Text(
-                            '• ${m.name} ${m.dosage} (stok ${m.currentStock})',
+                        Text('• ${m.name} ${m.dosage} (stok ${m.currentStock})',
                             style: const TextStyle(fontSize: 12.5)),
                       const SizedBox(height: 8),
                     ],
@@ -596,21 +682,18 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
                       children: [
                         Expanded(
                           child: FilledButton.icon(
-                            onPressed: () =>
-                                _openHealthRecordEdit(context),
+                            onPressed: () => _openHealthRecordEdit(context),
                             style: compactFilledButtonStyle,
-                            icon: const Icon(Icons.edit_note_rounded,
-                                size: 16),
+                            icon: const Icon(Icons.edit_note_rounded, size: 16),
                             label: const Text('Isi diagnosis'),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () =>
-                                _openPrescribeMedication(context),
-                            icon: const Icon(Icons.medication_rounded,
-                                size: 16),
+                            onPressed: () => _openPrescribeMedication(context),
+                            icon:
+                                const Icon(Icons.medication_rounded, size: 16),
                             label: const Text('Resepkan obat'),
                           ),
                         ),
@@ -640,13 +723,10 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
                               : 'Privat',
                           color: n.visibility == 'shared_with_patient'
                               ? MalvaColors.mint
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
+                              : Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         const SizedBox(height: 6),
-                        Text(n.body,
-                            style: const TextStyle(fontSize: 12.5)),
+                        Text(n.body, style: const TextStyle(fontSize: 12.5)),
                       ],
                     ),
                   ),
@@ -657,6 +737,40 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Tulis catatan sesi'),
               ),
+              // ============================================================
+              // GRUP 4 — Akses data
+              // ============================================================
+              const SizedBox(height: 22),
+              const SectionLabel('Akses data'),
+              if (_restricted != null)
+                SoftCard(
+                  color: MalvaColors.amber.withValues(alpha: 0.12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.lock_outline_rounded,
+                          color: MalvaColors.amber),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(_restricted!)),
+                    ],
+                  ),
+                )
+              else
+                SoftCard(
+                  color: MalvaColors.mint.withValues(alpha: 0.08),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.verified_user_rounded,
+                          color: MalvaColors.mint),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                            'Semua data yang dibagikan pasien dapat diakses.'),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ],
         ),
@@ -749,29 +863,25 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
             children: [
               TextField(
                   controller: nameController,
-                  decoration:
-                      const InputDecoration(labelText: 'Nama obat *')),
+                  decoration: const InputDecoration(labelText: 'Nama obat *')),
               TextField(
                   controller: dosageController,
                   decoration:
                       const InputDecoration(labelText: 'Dosis (mis. 50 mg)')),
               TextField(
                   controller: formController,
-                  decoration:
-                      const InputDecoration(labelText: 'Bentuk')),
+                  decoration: const InputDecoration(labelText: 'Bentuk')),
               TextField(
                   controller: timeController,
                   decoration: const InputDecoration(
                       labelText: 'Jam minum (mis. 08:00)')),
               TextField(
                   controller: mealController,
-                  decoration: const InputDecoration(
-                      labelText: 'Kaitan makan')),
+                  decoration: const InputDecoration(labelText: 'Kaitan makan')),
               TextField(
                   controller: stockController,
                   keyboardType: TextInputType.number,
-                  decoration:
-                      const InputDecoration(labelText: 'Stok awal')),
+                  decoration: const InputDecoration(labelText: 'Stok awal')),
             ],
           ),
         ),
@@ -835,8 +945,8 @@ class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
   }
 
   Future<void> _openHealthRecordEdit(BuildContext context) async {
-    final controller = TextEditingController(
-        text: _healthRecord?.diagnosisSummary ?? '');
+    final controller =
+        TextEditingController(text: _healthRecord?.diagnosisSummary ?? '');
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -923,9 +1033,9 @@ class _AssessmentTrendCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ordered = [...submissions]
-      ..sort((a, b) => (b.sharedAt ?? b.createdAt ?? '')
-          .compareTo(a.sharedAt ?? a.createdAt ?? ''));
+    final ordered = [...submissions]..sort((a, b) =>
+        (b.sharedAt ?? b.createdAt ?? '')
+            .compareTo(a.sharedAt ?? a.createdAt ?? ''));
     final latest = ordered.first;
     final previous = ordered.length > 1 ? ordered[1] : null;
 
