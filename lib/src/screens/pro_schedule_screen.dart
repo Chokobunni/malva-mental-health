@@ -134,7 +134,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
                 _ProSessionCard(session: s, onChanged: _load),
                 const SizedBox(height: 10),
               ],
-            const SizedBox(height: 6),
+            const SizedBox(height: 10),
             const SectionLabel('Mendatang'),
             if (_upcoming.isEmpty)
               const EmptyState(
@@ -147,23 +147,32 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
                 _ProSessionCard(session: s, onChanged: _load),
                 const SizedBox(height: 10),
               ],
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                const SectionLabel('Ketersediaan & harga'),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: () => _openAvailability(context),
-                  icon: const Icon(Icons.edit_calendar_rounded),
-                  label: const Text('Atur'),
-                ),
-              ],
+            const SizedBox(height: 10),
+            // Info referensi (jam praktik + harga) dilipat agar tidak setara
+            // bobotnya dengan daftar sesi. Tombol "Atur" tetap di area header
+            // (selalu terlihat) sehingga aksinya tidak tersembunyi.
+            CollapsibleCard(
+              header: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Ketersediaan & harga',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _openAvailability(context),
+                    icon: const Icon(Icons.edit_calendar_rounded, size: 18),
+                    label: const Text('Atur'),
+                  ),
+                ],
+              ),
+              child: _AvailabilitySummary(
+                schedules: _schedules,
+                pricing: _pricing,
+              ),
             ),
-            _AvailabilitySummary(
-              schedules: _schedules,
-              pricing: _pricing,
-            ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 10),
             const SectionLabel('Riwayat sesi'),
             if (_past.isEmpty)
               const EmptyState(
@@ -271,6 +280,7 @@ class _ProSessionCard extends ConsumerWidget {
           ],
           if (!past && session.isScheduled) ...[
             const SizedBox(height: 10),
+            // Lapis 2 — aksi primer (paling sering dipakai saat sesi berjalan).
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -282,17 +292,6 @@ class _ProSessionCard extends ConsumerWidget {
                   label: const Text('Join / Chat'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: () => _openPatientDetail(context),
-                  icon: const Icon(Icons.person_rounded, size: 16),
-                  label: const Text('Detail pasien'),
-                ),
-                if (session.isVideo && session.meetingUrl.isNotEmpty)
-                  OutlinedButton.icon(
-                    onPressed: () => _openMeeting(context),
-                    icon: const Icon(Icons.videocam_rounded, size: 16),
-                    label: const Text('Meeting'),
-                  ),
-                OutlinedButton.icon(
                   onPressed: () => _mark(context, ref, 'completed'),
                   icon: const Icon(Icons.check_rounded, size: 16),
                   label: const Text('Hadir'),
@@ -302,22 +301,48 @@ class _ProSessionCard extends ConsumerWidget {
                   icon: const Icon(Icons.person_off_rounded, size: 16),
                   label: const Text('Tidak hadir'),
                 ),
-                OutlinedButton.icon(
-                  onPressed: () => _cancel(context, ref),
-                  icon: const Icon(Icons.cancel_rounded, size: 16),
-                  label: const Text('Batal'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => _reschedule(context, ref),
-                  icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-                  label: const Text('Reschedule'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => _editDetail(context, ref),
-                  icon: const Icon(Icons.edit_note_rounded, size: 16),
-                  label: const Text('Link & ringkasan'),
-                ),
               ],
+            ),
+            const SizedBox(height: 10),
+            // Lapis 3 — aksi sekunder dilipat agar kartu tidak penuh tombol.
+            // Semua handler tetap terpasang dan tetap bisa ditekan.
+            CollapsibleCard(
+              header: const Text(
+                'Aksi lain',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _openPatientDetail(context),
+                    icon: const Icon(Icons.person_rounded, size: 16),
+                    label: const Text('Detail pasien'),
+                  ),
+                  if (session.isVideo && session.meetingUrl.isNotEmpty)
+                    OutlinedButton.icon(
+                      onPressed: () => _openMeeting(context),
+                      icon: const Icon(Icons.videocam_rounded, size: 16),
+                      label: const Text('Meeting'),
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: () => _cancel(context, ref),
+                    icon: const Icon(Icons.cancel_rounded, size: 16),
+                    label: const Text('Batal'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _reschedule(context, ref),
+                    icon: const Icon(Icons.edit_calendar_rounded, size: 16),
+                    label: const Text('Reschedule'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _editDetail(context, ref),
+                    icon: const Icon(Icons.edit_note_rounded, size: 16),
+                    label: const Text('Link & ringkasan'),
+                  ),
+                ],
+              ),
             ),
           ],
         ],

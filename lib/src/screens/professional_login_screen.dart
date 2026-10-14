@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../providers/providers.dart';
 import '../theme.dart';
+import '../widgets/malva_components.dart';
 import 'auth_widgets.dart';
 
 /// Halaman login/daftar KHUSUS PROFESIONAL.
@@ -154,6 +155,7 @@ class _ProfessionalLoginScreenState
                   onChanged: (value) => setState(() => _mode = value),
                 ),
                 const SizedBox(height: 14),
+                if (!_isLogin) const SectionLabel('Identitas'),
                 if (!_isLogin) ...[
                   TextField(
                     controller: _nameController,
@@ -202,7 +204,8 @@ class _ProfessionalLoginScreenState
                     onChanged: (v) =>
                         setState(() => _specialization = v ?? _specialization),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 14),
+                  const SectionLabel('Kontak'),
                   TextField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
@@ -224,7 +227,7 @@ class _ProfessionalLoginScreenState
                       prefixIcon: Icon(Icons.phone_rounded),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 6),
                 ],
                 if (_isLogin) ...[
                   TextField(
@@ -238,6 +241,7 @@ class _ProfessionalLoginScreenState
                   ),
                   const SizedBox(height: 10),
                 ],
+                if (!_isLogin) const SectionLabel('Keamanan'),
                 TextField(
                   controller: _passwordController,
                   obscureText: true,
