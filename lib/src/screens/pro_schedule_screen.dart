@@ -131,7 +131,10 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
               )
             else
               for (final s in _today) ...[
-                _ProSessionCard(session: s, onChanged: _load),
+                _ProSessionCard(
+                    key: ValueKey('today-${s.id}'),
+                    session: s,
+                    onChanged: _load),
                 const SizedBox(height: 10),
               ],
             const SizedBox(height: 10),
@@ -144,7 +147,10 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
               )
             else
               for (final s in _upcoming.take(10)) ...[
-                _ProSessionCard(session: s, onChanged: _load),
+                _ProSessionCard(
+                    key: ValueKey('upcoming-${s.id}'),
+                    session: s,
+                    onChanged: _load),
                 const SizedBox(height: 10),
               ],
             const SizedBox(height: 10),
@@ -182,7 +188,11 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
               )
             else
               for (final s in _past.take(10)) ...[
-                _ProSessionCard(session: s, onChanged: _load, past: true),
+                _ProSessionCard(
+                    key: ValueKey('past-${s.id}'),
+                    session: s,
+                    onChanged: _load,
+                    past: true),
                 const SizedBox(height: 10),
               ],
           ],
@@ -307,6 +317,7 @@ class _ProSessionCard extends ConsumerWidget {
             // Lapis 3 — aksi sekunder dilipat agar kartu tidak penuh tombol.
             // Semua handler tetap terpasang dan tetap bisa ditekan.
             CollapsibleCard(
+              key: ValueKey('aksi-lain-${session.id}'),
               header: const Text(
                 'Aksi lain',
                 style: TextStyle(fontWeight: FontWeight.w900),
