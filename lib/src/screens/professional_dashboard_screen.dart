@@ -238,7 +238,13 @@ class _ProfessionalDashboardScreenState
                             ),
                           ),
                         if (_tabIndex == 2)
-                          SectionLabel('Pasien terhubung (${patients.length})'),
+                          // Teks label dipertahankan persis "Pasien terhubung"
+                          // (dipakai test widget). Jumlah pasien dipindah ke
+                          // `action` supaya tidak mengubah string label.
+                          SectionLabel(
+                            'Pasien terhubung',
+                            action: Text('${patients.length} pasien'),
+                          ),
                         if (_tabIndex == 2)
                           _ConnectedPatientList(
                             patients: _filterPatients(patients),
