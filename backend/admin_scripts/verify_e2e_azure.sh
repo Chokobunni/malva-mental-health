@@ -2,8 +2,10 @@
 #
 # verify_e2e_azure.sh — Verifikasi end-to-end backend Malva di Azure VM.
 #
-# Dirancang untuk dijalankan DI DALAM VM. Read-only, kecuali satu uji tulis
-# (toggle `is_active` satu baris jadwal) yang WAJIB dikembalikan ke nilai asli.
+# Dirancang untuk dijalankan DI DALAM VM. READ-ONLY secara default.
+# Uji tulis (toggle `is_active` satu baris jadwal) hanya dijalankan bila
+# MALVA_E2E_ALLOW_WRITE=1, dan WAJIB dikembalikan ke nilai asli (trap +
+# verifikasi). Tanpa env itu, bagian D.3 dilewati sama sekali.
 # Skrip tidak pernah menjalankan DELETE.
 #
 # Contoh pemakaian:
@@ -319,7 +321,15 @@ except Exception: print("")')
         fi
 
         # --- D.3 toggle satu baris, cek persist, lalu restore
-        if [[ "${sc_count:-0}" -ge 1 ]]; then
+        # Uji ini MENULIS ke produksi (mengubah is_active satu baris jadwal).
+        # SECARA DEFAULT DILEWATI agar skrip tidak pernah bisa merusak data.
+        # Aktifkan hanya di lingkungan yang boleh ditulis:
+        #   MALVA_E2E_ALLOW_WRITE=1
+        # Riwayat: uji tulis ini pernah meninggalkan kerusakan pada jadwal
+        # dr. Hafid (a1111111) — lihat deliverables/malva/inc/22-BOOKING_FIX.md.
+        if [[ "${MALVA_E2E_ALLOW_WRITE:-0}" != "1" ]]; then
+          skip "D: uji toggle jadwal dilewati (read-only; set MALVA_E2E_ALLOW_WRITE=1 untuk mengaktifkan)"
+        elif [[ "${sc_count:-0}" -ge 1 ]]; then
           state_before=$(printf '%s' "$sched_json" | python3 "$PY_HELPER" state 2>/dev/null)
           toggle_body=$(printf '%s' "$sched_json" | python3 "$PY_HELPER" toggle 2>/dev/null)
           RESTORE_BODY=$(printf '%s' "$sched_json" | python3 "$PY_HELPER" restore 2>/dev/null)
