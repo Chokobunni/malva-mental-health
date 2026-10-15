@@ -326,9 +326,13 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
   }
 
   Future<void> _submitBooking() async {
-    final apiClient = widget.apiClient;
+    // Fallback ke provider bila apiClient tidak dioper eksplisit (mis.
+    // deep-link), konsisten dengan _loadDays/_loadSlots, agar booking tetap
+    // bisa dikirim ke server.
+    final MalvaApiClient apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
     final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+    if (accessToken == null || accessToken.isEmpty) {
       setState(() => _error = 'Mode offline aktif. '
           'Hubungkan ke server untuk membuat booking.');
       return;

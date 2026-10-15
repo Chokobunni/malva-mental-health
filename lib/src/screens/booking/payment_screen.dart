@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models.dart';
+import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
@@ -194,9 +195,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   }
 
   Future<void> _pay() async {
-    final apiClient = widget.apiClient;
+    // Fallback ke provider bila apiClient tidak dioper eksplisit (mis.
+    // deep-link), konsisten dengan layar lain.
+    final MalvaApiClient apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
     final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+    if (accessToken == null || accessToken.isEmpty) {
       setState(() => _error = 'Mode offline aktif. '
           'Hubungkan ke server untuk melakukan pembayaran.');
       return;

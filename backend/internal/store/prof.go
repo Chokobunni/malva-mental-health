@@ -411,6 +411,21 @@ func (s *Store) listSchedules(ctx context.Context, professionalID string, active
 	return out, rows.Err()
 }
 
+// UpsertSchedules menyimpan jadwal mingguan profesional (insert/update).
+//
+// KONTRAK: payload berisi SNAPSHOT penuh jadwal profesional — semua baris
+// (aktif maupun nonaktif), seperti yang dikirim aplikasi profesional dan
+// panel admin: keduanya memuat seluruh baris lebih dulu (ListSchedules…),
+// lalu mengirimnya kembali utuh.
+//
+// PERBAIKAN PENTING: baris yang benar-benar HILANG dari payload
+// dinonaktifkan secara TERARAH, bukan lewat pola "nonaktifkan SEMUA baris
+// dulu, lalu aktifkan ulang hanya yang ada di payload". Implementasi lama
+// menjalankan `UPDATE professional_schedules SET is_active = false WHERE
+// professional_id = $1` TANPA syarat, sehingga payload parsial — atau payload
+// KOSONG — diam-diam mematikan jadwal yang sah. Terbukti di produksi:
+// jadwal dr. Hafid Algistian (a1111111) hanya menyisakan satu hari aktif.
+// Guard `len(order) > 0` menjamin payload kosong tidak menghapus apa pun.
 func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, schedules []ProfessionalSchedule) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -418,17 +433,16 @@ func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, sche
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Reset: semua baris lama dinonaktifkan lebih dulu. Baris yang tidak
-	// dikirim klien tetap tersimpan sebagai nonaktif agar bisa diaktifkan
-	// kembali dari aplikasi (bukan terhapus).
-	if _, err := tx.ExecContext(ctx, `UPDATE professional_schedules SET is_active = false WHERE professional_id = $1`, professionalID); err != nil {
-		return err
-	}
-	// Dedup entri identik dalam satu batch (tidak ada unique constraint di DB).
-	seen := make(map[string]ProfessionalSchedule)
-	var order []string
+	// Dedup entri identik dalam satu batch (kunci: day_of_week|start|end).
+	// Entri TERAKHIR untuk kunci yang sama yang menang (deterministik).
+	seen := make(map[string]ProfessionalSchedule, len(schedules))
+	order := make([]string, 0, len(schedules))
 	for _, sch := range schedules {
-		key := strings.Join([]string{strconv.Itoa(sch.DayOfWeek), strings.TrimSpace(sch.StartTime), strings.TrimSpace(sch.EndTime)}, "|")
+		key := strings.Join([]string{
+			strconv.Itoa(sch.DayOfWeek),
+			strings.TrimSpace(sch.StartTime),
+			strings.TrimSpace(sch.EndTime),
+		}, "|")
 		if _, ok := seen[key]; !ok {
 			order = append(order, key)
 		}
@@ -437,11 +451,12 @@ func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, sche
 		}
 		seen[key] = sch
 	}
+
+	// 1) Upsert setiap baris payload: perbarui baris identik yang sudah ada
+	//    (menghormati is_active dari payload), atau insert bila belum ada.
+	//    Mencegah penumpukan baris duplikat setiap kali menyimpan.
 	for _, key := range order {
 		sch := seen[key]
-		// Upsert per baris: perbarui baris identik yang sudah ada
-		// (menghormati is_active dari payload), jika belum ada insert baru.
-		// Ini mencegah penumpukan baris duplikat setiap kali menyimpan.
 		res, err := tx.ExecContext(ctx, `UPDATE professional_schedules
 			SET slot_duration_minutes = $4, is_active = $5
 			WHERE professional_id = $1 AND day_of_week = $2 AND start_time = $3::time AND end_time = $6::time`,
@@ -450,11 +465,34 @@ func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, sche
 			return err
 		}
 		if affected, _ := res.RowsAffected(); affected == 0 {
-			const q = `INSERT INTO professional_schedules (professional_id, day_of_week, start_time, end_time, slot_duration_minutes, is_active)
+			const q = `INSERT INTO professional_schedules
+				(professional_id, day_of_week, start_time, end_time, slot_duration_minutes, is_active)
 				VALUES ($1, $2, $3, $4, $5, $6)`
-			if _, err := tx.ExecContext(ctx, q, professionalID, sch.DayOfWeek, sch.StartTime, sch.EndTime, sch.SlotDurationMinutes, sch.IsActive); err != nil {
+			if _, err := tx.ExecContext(ctx, q,
+				professionalID, sch.DayOfWeek, sch.StartTime, sch.EndTime, sch.SlotDurationMinutes, sch.IsActive); err != nil {
 				return err
 			}
+		}
+	}
+
+	// 2) Nonaktifkan HANYA baris yang benar-benar hilang dari payload.
+	//    Payload kosong = tidak mengubah apa pun (guard anti-wipe).
+	if len(order) > 0 {
+		placeholders := make([]string, 0, len(order))
+		args := make([]any, 0, 1+len(order)*3)
+		args = append(args, professionalID)
+		for i, key := range order {
+			sch := seen[key]
+			args = append(args, sch.DayOfWeek, sch.StartTime, sch.EndTime)
+			base := 2 + i*3
+			placeholders = append(placeholders,
+				fmt.Sprintf("($%d, $%d::time, $%d::time)", base, base+1, base+2))
+		}
+		q := `UPDATE professional_schedules SET is_active = false
+			WHERE professional_id = $1
+			  AND (day_of_week, start_time, end_time) NOT IN (` + strings.Join(placeholders, ", ") + `)`
+		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+			return err
 		}
 	}
 	return tx.Commit()

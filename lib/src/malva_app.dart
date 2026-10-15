@@ -270,6 +270,7 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
               ? LoginScreen(onAuthenticated: _handleAuthenticated)
               : PatientShell(
                   session: authState.session,
+                  apiClient: ref.read(apiClientProvider),
                   medicationReminderService: _medicationReminderService,
                   onLogout: _handleLogout,
                 ),
