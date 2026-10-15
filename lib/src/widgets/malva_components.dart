@@ -220,16 +220,22 @@ class InitialAvatar extends StatelessWidget {
   String get _initial {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return '?';
-    return trimmed[0].toUpperCase();
+    // Ambil grapheme utuh: `trimmed[0]` hanya satu code unit sehingga emoji
+    // di luar BMP (mis. U+1F600) pecah jadi lone surrogate dan glyph rusak.
+    // `.characters` tersedia tanpa import baru lewat `package:flutter/material.dart`.
+    return trimmed.characters.first.toUpperCase();
   }
 
   /// Warna deterministik dari nama. Sengaja TIDAK memakai `String.hashCode`
   /// karena nilainya tidak dijamin stabil antar-run; jumlah `codeUnits`
-  /// selalu memberi hasil yang sama untuk nama yang sama.
+  /// selalu memberi hasil yang sama untuk nama yang sama. Memakai `trimmed`
+  /// agar nama kosong dan nama berisi spasi saja (sama-sama tampil `?`)
+  /// memperoleh warna yang sama.
   Color get _resolvedColor {
     if (color != null) return color!;
+    final trimmed = name.trim();
     var sum = 0;
-    for (final unit in name.codeUnits) {
+    for (final unit in trimmed.codeUnits) {
       sum += unit;
     }
     return _palette[sum % _palette.length];
