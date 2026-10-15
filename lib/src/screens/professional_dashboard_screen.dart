@@ -187,7 +187,9 @@ class _ProfessionalDashboardScreenState
                             syncStatus: _syncStatus,
                             lastSyncTime: _lastSyncTime,
                           ),
-                        if (_tabIndex == 0) const SectionLabel('Ringkasan'),
+                        if (_tabIndex == 0)
+                          const SectionLabel('Ringkasan',
+                              icon: Icons.insights_rounded),
                         if (_tabIndex == 0)
                           _PriorityMetrics(
                             patientCount: patients.length,
@@ -203,7 +205,8 @@ class _ProfessionalDashboardScreenState
                         if (_tabIndex == 0) const SizedBox(height: 22),
                         // ---- TAB 2: PASIEN ----
                         if (_tabIndex == 2)
-                          const SectionLabel('Cari & filter pasien'),
+                          const SectionLabel('Cari & filter pasien',
+                              icon: Icons.search_rounded),
                         if (_tabIndex == 2)
                           _PatientSearch(
                             query: _searchQuery,
@@ -214,6 +217,7 @@ class _ProfessionalDashboardScreenState
                         if (_tabIndex == 0)
                           SectionLabel(
                             'Prioritas pasien',
+                            icon: Icons.priority_high_rounded,
                             action: TextButton.icon(
                               onPressed: _loadOnlineProfessionalData,
                               icon: const Icon(Icons.refresh_rounded),
@@ -243,6 +247,7 @@ class _ProfessionalDashboardScreenState
                           // `action` supaya tidak mengubah string label.
                           SectionLabel(
                             'Pasien terhubung',
+                            icon: Icons.people_alt_rounded,
                             action: Text('${patients.length} pasien'),
                           ),
                         if (_tabIndex == 2)
@@ -1446,7 +1451,8 @@ class _SyncStatusBar extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: SoftCard(
-        color: color.withValues(alpha: 0.08),
+        accent: color,
+        tone: color.withValues(alpha: 0.08),
         child: Row(
           children: [
             Icon(icon, color: color, size: 18),
@@ -1566,6 +1572,7 @@ class _MetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return SoftCard(
       onTap: onTap,
+      accent: color,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1699,10 +1706,12 @@ class _ConnectedPatientList extends StatelessWidget {
             onTap: () => onOpen(patient),
             child: Row(
               children: [
-                CircleAvatar(
-                  backgroundColor:
-                      patient.hasCrisis ? MalvaColors.danger : MalvaColors.pink,
-                  child: const Icon(Icons.person_rounded, color: Colors.white),
+                InitialAvatar(
+                  name: patient.displayName,
+                  radius: 18,
+                  color: patient.hasCrisis
+                      ? MalvaColors.danger
+                      : MalvaColors.pink,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1771,6 +1780,7 @@ class _RelationshipManagementSection extends StatelessWidget {
       children: [
         SectionLabel(
           'Relasi pasien–profesional',
+          icon: Icons.link_rounded,
           action: TextButton.icon(
             onPressed: onRefresh,
             icon: const Icon(Icons.sync_rounded),
@@ -1845,6 +1855,7 @@ class _AuditAndExportSection extends StatelessWidget {
       children: [
         SectionLabel(
           'Audit & export ringkasan',
+          icon: Icons.history_rounded,
           action: TextButton.icon(
             onPressed: onExport,
             icon: const Icon(Icons.ios_share_rounded),
@@ -1920,7 +1931,8 @@ class _ProfessionalPortalSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionLabel('Portal Profesional'),
+        const SectionLabel('Portal Profesional',
+            icon: Icons.open_in_new_rounded),
         const SectionLabel('Operasional'),
         ActionTile(
           icon: Icons.sell_rounded,
@@ -2028,7 +2040,8 @@ class _PriorityCard extends StatelessWidget {
     final isCrisis = screening.crisisFlag;
     return SoftCard(
       onTap: onTap,
-      color: item.color.withValues(alpha: 0.08),
+      accent: item.color,
+      tone: item.color.withValues(alpha: 0.08),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -155,7 +155,8 @@ class _ProfessionalLoginScreenState
                   onChanged: (value) => setState(() => _mode = value),
                 ),
                 const SizedBox(height: 14),
-                if (!_isLogin) const SectionLabel('Identitas'),
+                if (!_isLogin)
+                  const SectionLabel('Identitas', icon: Icons.badge_rounded),
                 if (!_isLogin) ...[
                   TextField(
                     controller: _nameController,
@@ -205,7 +206,8 @@ class _ProfessionalLoginScreenState
                         setState(() => _specialization = v ?? _specialization),
                   ),
                   const SizedBox(height: 14),
-                  const SectionLabel('Kontak'),
+                  const SectionLabel('Kontak',
+                      icon: Icons.contact_mail_rounded),
                   TextField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
@@ -241,7 +243,8 @@ class _ProfessionalLoginScreenState
                   ),
                   const SizedBox(height: 10),
                 ],
-                if (!_isLogin) const SectionLabel('Keamanan'),
+                if (!_isLogin)
+                  const SectionLabel('Keamanan', icon: Icons.lock_rounded),
                 TextField(
                   controller: _passwordController,
                   obscureText: true,

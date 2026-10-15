@@ -102,7 +102,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
       child: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          const SectionLabel('Sesi hari ini'),
+          const SectionLabel('Sesi hari ini', icon: Icons.today_rounded),
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
           else if (_error != null)
@@ -138,7 +138,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
                 const SizedBox(height: 10),
               ],
             const SizedBox(height: 10),
-            const SectionLabel('Mendatang'),
+            const SectionLabel('Mendatang', icon: Icons.event_rounded),
             if (_upcoming.isEmpty)
               const EmptyState(
                 icon: Icons.calendar_month_outlined,
@@ -179,7 +179,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            const SectionLabel('Riwayat sesi'),
+            const SectionLabel('Riwayat sesi', icon: Icons.history_rounded),
             if (_past.isEmpty)
               const EmptyState(
                 icon: Icons.history_rounded,
@@ -241,6 +241,7 @@ class _ProSessionCard extends ConsumerWidget {
       _ => Theme.of(context).colorScheme.onSurfaceVariant,
     };
     return SoftCard(
+      accent: statusColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

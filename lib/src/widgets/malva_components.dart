@@ -70,17 +70,38 @@ class GradientHeader extends StatelessWidget {
 }
 
 class SectionLabel extends StatelessWidget {
-  const SectionLabel(this.text, {super.key, this.action});
+  const SectionLabel(this.text, {super.key, this.action, this.icon, this.accent});
 
   final String text;
   final Widget? action;
 
+  /// Ikon opsional di kiri label. Bila `null`, tampilan persis seperti
+  /// sebelumnya sehingga puluhan pemakaian lama tidak berubah.
+  final IconData? icon;
+
+  /// Warna ikon + batang aksen. Default [MalvaColors.seed].
+  final Color? accent;
+
   @override
   Widget build(BuildContext context) {
+    final tint = accent ?? MalvaColors.seed;
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
       child: Row(
         children: [
+          if (icon != null) ...[
+            Container(
+              width: 3,
+              height: 18,
+              decoration: BoxDecoration(
+                color: tint,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(icon, size: 18, color: tint),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: Text(
               text,
@@ -104,6 +125,9 @@ class SoftCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(16),
     this.color,
     this.onTap,
+    this.accent,
+    this.tone,
+    this.radius = 18,
   });
 
   final Widget child;
@@ -111,17 +135,120 @@ class SoftCard extends StatelessWidget {
   final Color? color;
   final VoidCallback? onTap;
 
+  /// Garis aksen 4px di sisi kiri kartu. `null` (default) = tidak ada garis,
+  /// tampilan kartu persis seperti sebelumnya.
+  final Color? accent;
+
+  /// Warna latar kartu. `null` (default) = tetap memakai warna tema.
+  /// Dipakai lewat [color] yang menang bila keduanya diisi.
+  final Color? tone;
+
+  /// Radius sudut kartu. Default 18 = nilai tema saat ini.
+  final double radius;
+
   @override
   Widget build(BuildContext context) {
+    final radiusBorder = BorderRadius.circular(radius);
+
+    // Padding isi kartu selalu diterapkan; garis aksen dibungkus paling luar
+    // (di dalam Card) agar menempel di tepi kiri kartu, bukan di dalam padding.
+    Widget body = Padding(padding: padding, child: child);
+    if (accent != null) {
+      // BoxDecoration memberi padding sebesar lebar border ke anaknya,
+      // jadi tidak ada teks yang tertimpa garis aksen.
+      body = Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: accent!, width: 4)),
+        ),
+        child: body,
+      );
+    }
+
     final card = Card(
-      color: color,
-      child: Padding(padding: padding, child: child),
+      color: color ?? tone,
+      // Hanya perlu memotong saat ada aksen agar garis mengikuti sudut
+      // membulat; tanpa aksen tetap Clip.none supaya tampilan lama identik.
+      clipBehavior: accent != null ? Clip.antiAlias : Clip.none,
+      shape: RoundedRectangleBorder(borderRadius: radiusBorder),
+      child: body,
     );
     if (onTap == null) return card;
     return InkWell(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: radiusBorder,
       onTap: onTap,
       child: card,
+    );
+  }
+}
+
+/// Avatar bulat berisi inisial nama.
+///
+/// Menghindari `CircleAvatar` ikon generik: tiap orang punya huruf yang
+/// berbeda, dan warnanya stabil untuk nama yang sama sehingga kartu
+/// daftar orang langsung terbaca sebagai entitas, bukan ikon seragam.
+class InitialAvatar extends StatelessWidget {
+  const InitialAvatar({
+    super.key,
+    required this.name,
+    this.radius = 18,
+    this.color,
+    this.fontSize,
+  });
+
+  /// Nama sumber inisial. Kosong/whitespace → `?`.
+  final String name;
+
+  /// Jari-jari lingkaran avatar.
+  final double radius;
+
+  /// Warna aksen eksplisit. `null` = dipilih deterministik dari [name].
+  final Color? color;
+
+  /// Ukuran huruf inisial. `null` = dihitung dari [radius].
+  final double? fontSize;
+
+  /// Palet tetap: urutan tidak boleh diubah agar warna tetap stabil.
+  static const List<Color> _palette = <Color>[
+    MalvaColors.seed,
+    MalvaColors.orchid,
+    MalvaColors.plum,
+    MalvaColors.mint,
+    MalvaColors.amber,
+    MalvaColors.pink,
+  ];
+
+  String get _initial {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '?';
+    return trimmed[0].toUpperCase();
+  }
+
+  /// Warna deterministik dari nama. Sengaja TIDAK memakai `String.hashCode`
+  /// karena nilainya tidak dijamin stabil antar-run; jumlah `codeUnits`
+  /// selalu memberi hasil yang sama untuk nama yang sama.
+  Color get _resolvedColor {
+    if (color != null) return color!;
+    var sum = 0;
+    for (final unit in name.codeUnits) {
+      sum += unit;
+    }
+    return _palette[sum % _palette.length];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = _resolvedColor;
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: tint.withValues(alpha: 0.16),
+      child: Text(
+        _initial,
+        style: TextStyle(
+          color: tint,
+          fontWeight: FontWeight.w900,
+          fontSize: fontSize ?? radius * 0.8,
+        ),
+      ),
     );
   }
 }
@@ -323,6 +450,8 @@ class CollapsibleCard extends StatefulWidget {
     this.color,
     this.padding = const EdgeInsets.all(16),
     this.semanticLabel,
+    this.accent,
+    this.tone,
   });
 
   /// Header ringkas yang selalu terlihat dan menjadi area tap.
@@ -344,6 +473,12 @@ class CollapsibleCard extends StatefulWidget {
   /// Label aksesibilitas untuk pembaca layar (opsional).
   final String? semanticLabel;
 
+  /// Garis aksen kiri, diteruskan ke [SoftCard]. `null` = tanpa garis.
+  final Color? accent;
+
+  /// Warna latar kartu, diteruskan ke [SoftCard]. `null` = warna tema.
+  final Color? tone;
+
   @override
   State<CollapsibleCard> createState() => _CollapsibleCardState();
 }
@@ -358,6 +493,8 @@ class _CollapsibleCardState extends State<CollapsibleCard> {
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     return SoftCard(
       color: widget.color,
+      accent: widget.accent,
+      tone: widget.tone,
       padding: widget.padding,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

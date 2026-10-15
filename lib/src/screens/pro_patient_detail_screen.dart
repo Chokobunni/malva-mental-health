@@ -216,7 +216,8 @@ class _ProPatientDetailScreenState
               // ============================================================
               // GRUP 1 — Ringkasan klinis
               // ============================================================
-              const SectionLabel('Ringkasan klinis'),
+              const SectionLabel('Ringkasan klinis',
+                  icon: Icons.assessment_rounded),
               if (_packages.isEmpty && _sessions.isEmpty)
                 const EmptyState(
                   icon: Icons.card_membership_outlined,
@@ -226,6 +227,8 @@ class _ProPatientDetailScreenState
               else
                 CollapsibleCard(
                   key: const ValueKey('packages-section'),
+                  tone: MalvaColors.seed.withValues(alpha: 0.04),
+                  accent: MalvaColors.seed.withValues(alpha: 0.35),
                   semanticLabel: 'Paket & sesi',
                   header: Row(
                     children: [
@@ -331,6 +334,8 @@ class _ProPatientDetailScreenState
                 for (final sc in _screenings.take(3)) ...[
                   CollapsibleCard(
                     key: ValueKey('screening-${sc.id}'),
+                    tone: MalvaColors.seed.withValues(alpha: 0.04),
+                    accent: MalvaColors.seed.withValues(alpha: 0.35),
                     semanticLabel:
                         'Detail screening ${_screeningDate(sc.createdAt)}',
                     header: Column(
@@ -450,7 +455,8 @@ class _ProPatientDetailScreenState
               // GRUP 2 — Pemantauan harian (semua read-only → dilipat)
               // ============================================================
               const SizedBox(height: 22),
-              const SectionLabel('Pemantauan harian'),
+              const SectionLabel('Pemantauan harian',
+                  icon: Icons.monitor_heart_rounded),
               if (_goals.isEmpty)
                 const EmptyState(
                   icon: Icons.flag_outlined,
@@ -460,6 +466,8 @@ class _ProPatientDetailScreenState
               else
                 CollapsibleCard(
                   key: const ValueKey('goals-section'),
+                  tone: MalvaColors.seed.withValues(alpha: 0.04),
+                  accent: MalvaColors.seed.withValues(alpha: 0.35),
                   semanticLabel: 'Goals & habits',
                   header: Row(
                     children: [
@@ -510,6 +518,8 @@ class _ProPatientDetailScreenState
               else
                 CollapsibleCard(
                   key: const ValueKey('mood-diary-section'),
+                  tone: MalvaColors.seed.withValues(alpha: 0.04),
+                  accent: MalvaColors.seed.withValues(alpha: 0.35),
                   semanticLabel: 'Mood & diary (read-only)',
                   header: Row(
                     children: [
@@ -565,6 +575,8 @@ class _ProPatientDetailScreenState
               else
                 CollapsibleCard(
                   key: const ValueKey('shares-section'),
+                  tone: MalvaColors.seed.withValues(alpha: 0.04),
+                  accent: MalvaColors.seed.withValues(alpha: 0.35),
                   semanticLabel: 'Kiriman pasien',
                   header: Row(
                     children: [
@@ -603,6 +615,8 @@ class _ProPatientDetailScreenState
               else
                 CollapsibleCard(
                   key: const ValueKey('timeline-section'),
+                  tone: MalvaColors.seed.withValues(alpha: 0.04),
+                  accent: MalvaColors.seed.withValues(alpha: 0.35),
                   semanticLabel: 'Timeline pasien',
                   header: Row(
                     children: [
@@ -655,7 +669,8 @@ class _ProPatientDetailScreenState
               // GRUP 3 — Rencana & catatan (tetap terbuka, punya aksi)
               // ============================================================
               const SizedBox(height: 22),
-              const SectionLabel('Rencana & catatan'),
+              const SectionLabel('Rencana & catatan',
+                  icon: Icons.edit_note_rounded),
               const SectionLabel('Health record & obat'),
               SoftCard(
                 child: Column(
@@ -741,7 +756,8 @@ class _ProPatientDetailScreenState
               // GRUP 4 — Akses data
               // ============================================================
               const SizedBox(height: 22),
-              const SectionLabel('Akses data'),
+              const SectionLabel('Akses data',
+                  icon: Icons.lock_open_rounded),
               if (_restricted != null)
                 SoftCard(
                   color: MalvaColors.amber.withValues(alpha: 0.12),
