@@ -15,7 +15,7 @@ import (
 func (s *Server) requireAdmin(next authedHandler) http.HandlerFunc {
 	return s.requireAuth(func(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 		if claims.Role != "admin" {
-			writeError(w, http.StatusForbidden, errors.New("Akses khusus admin."))
+			writeError(w, http.StatusForbidden, errors.New("akses khusus admin"))
 			return
 		}
 		next(w, r, claims)
@@ -43,11 +43,11 @@ type adminUpdateUserRequest struct {
 func (s *Server) updateAdminUser(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	userID := r.PathValue("user_id")
 	if strings.TrimSpace(userID) == "" {
-		writeError(w, http.StatusBadRequest, errors.New("user_id wajib diisi."))
+		writeError(w, http.StatusBadRequest, errors.New("user_id wajib diisi"))
 		return
 	}
 	if userID == claims.Subject {
-		writeError(w, http.StatusBadRequest, errors.New("Tidak bisa mengubah akun admin sendiri dari sini."))
+		writeError(w, http.StatusBadRequest, errors.New("tidak bisa mengubah akun admin sendiri dari sini"))
 		return
 	}
 	var req adminUpdateUserRequest
@@ -74,7 +74,7 @@ func (s *Server) updateAdminUser(w http.ResponseWriter, r *http.Request, claims 
 	updated, err := s.store.UpdateUserAdmin(r.Context(), userID, displayName, role, phone, dateOfBirth, gender, req.Disabled)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, errors.New("Pengguna tidak ditemukan."))
+			writeError(w, http.StatusNotFound, errors.New("pengguna tidak ditemukan"))
 			return
 		}
 		writeError(w, http.StatusBadRequest, err)
@@ -86,16 +86,16 @@ func (s *Server) updateAdminUser(w http.ResponseWriter, r *http.Request, claims 
 func (s *Server) deleteAdminUser(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	userID := r.PathValue("user_id")
 	if strings.TrimSpace(userID) == "" {
-		writeError(w, http.StatusBadRequest, errors.New("user_id wajib diisi."))
+		writeError(w, http.StatusBadRequest, errors.New("user_id wajib diisi"))
 		return
 	}
 	if userID == claims.Subject {
-		writeError(w, http.StatusBadRequest, errors.New("Tidak bisa menghapus akun admin sendiri."))
+		writeError(w, http.StatusBadRequest, errors.New("tidak bisa menghapus akun admin sendiri"))
 		return
 	}
 	if err := s.store.DeleteUser(r.Context(), userID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, errors.New("Pengguna tidak ditemukan."))
+			writeError(w, http.StatusNotFound, errors.New("pengguna tidak ditemukan"))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err)
@@ -125,20 +125,20 @@ func (s *Server) listAdminDoctors(w http.ResponseWriter, r *http.Request, _ auth
 func (s *Server) getAdminDoctor(w http.ResponseWriter, r *http.Request, _ auth.Claims) {
 	userID := r.PathValue("user_id")
 	if strings.TrimSpace(userID) == "" {
-		writeError(w, http.StatusBadRequest, errors.New("user_id wajib diisi."))
+		writeError(w, http.StatusBadRequest, errors.New("user_id wajib diisi"))
 		return
 	}
 	user, err := s.store.GetUserByID(r.Context(), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, errors.New("Dokter tidak ditemukan."))
+			writeError(w, http.StatusNotFound, errors.New("dokter tidak ditemukan"))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	if user.Role != "professional" {
-		writeError(w, http.StatusBadRequest, errors.New("Akun ini bukan profesional."))
+		writeError(w, http.StatusBadRequest, errors.New("akun ini bukan profesional"))
 		return
 	}
 	cred, err := s.store.GetProfessionalCredential(r.Context(), userID)
@@ -181,7 +181,7 @@ type adminVerifyRequest struct {
 func (s *Server) verifyCredential(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	credentialID := r.PathValue("id")
 	if strings.TrimSpace(credentialID) == "" {
-		writeError(w, http.StatusBadRequest, errors.New("credential id wajib diisi."))
+		writeError(w, http.StatusBadRequest, errors.New("credential id wajib diisi"))
 		return
 	}
 	var req adminVerifyRequest
@@ -191,7 +191,7 @@ func (s *Server) verifyCredential(w http.ResponseWriter, r *http.Request, claims
 	}
 	action := strings.ToLower(strings.TrimSpace(req.Action))
 	if action != "approve" && action != "reject" {
-		writeError(w, http.StatusBadRequest, errors.New("action harus approve atau reject."))
+		writeError(w, http.StatusBadRequest, errors.New("action harus approve atau reject"))
 		return
 	}
 	if err := s.store.VerifyProfessionalCredential(r.Context(), credentialID, claims.Subject, action, strings.TrimSpace(req.RejectionReason)); err != nil {
@@ -262,7 +262,7 @@ func (s *Server) createAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 		return
 	}
 	if !security.ValidateEmail(req.Email) {
-		writeError(w, http.StatusBadRequest, errors.New("Format email tidak valid."))
+		writeError(w, http.StatusBadRequest, errors.New("format email tidak valid"))
 		return
 	}
 	if err := security.ValidatePassword(req.Password, req.Email); err != nil {
@@ -270,26 +270,26 @@ func (s *Server) createAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 		return
 	}
 	if strings.TrimSpace(req.DisplayName) == "" {
-		writeError(w, http.StatusBadRequest, errors.New("Nama dokter wajib diisi."))
+		writeError(w, http.StatusBadRequest, errors.New("nama dokter wajib diisi"))
 		return
 	}
 	if strings.TrimSpace(req.ProfessionalID) == "" {
-		writeError(w, http.StatusBadRequest, errors.New("ID profesional (16 digit) wajib diisi."))
+		writeError(w, http.StatusBadRequest, errors.New("ID profesional (16 digit) wajib diisi"))
 		return
 	}
 	if !validSpecialization(strings.TrimSpace(req.Credentials.Specialization)) {
-		writeError(w, http.StatusBadRequest, errors.New("Spesialisasi harus Sp.KJ (psikiater) atau M.Psi (psikolog)."))
+		writeError(w, http.StatusBadRequest, errors.New("spesialisasi harus Sp.KJ (psikiater) atau M.Psi (psikolog)"))
 		return
 	}
 	if req.Credentials.HospitalLat != nil && req.Credentials.HospitalLng != nil {
 		if !s.validateLatLng(*req.Credentials.HospitalLat, *req.Credentials.HospitalLng) {
-			writeError(w, http.StatusBadRequest, errors.New("Koordinat rumah sakit tidak valid."))
+			writeError(w, http.StatusBadRequest, errors.New("koordinat rumah sakit tidak valid"))
 			return
 		}
 	}
 	for _, sch := range req.Schedules {
 		if sch.DayOfWeek < 0 || sch.DayOfWeek > 6 {
-			writeError(w, http.StatusBadRequest, errors.New("day_of_week harus 0 (Min) sampai 6 (Sab)."))
+			writeError(w, http.StatusBadRequest, errors.New("day_of_week harus 0 (Min) sampai 6 (Sab)"))
 			return
 		}
 	}
@@ -307,7 +307,7 @@ func (s *Server) createAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 	})
 	if err != nil {
 		if isDuplicateKeyError(err) {
-			writeError(w, http.StatusConflict, errors.New("Email atau ID profesional sudah terdaftar."))
+			writeError(w, http.StatusConflict, errors.New("email atau ID profesional sudah terdaftar"))
 			return
 		}
 		writeError(w, http.StatusBadRequest, err)
@@ -366,7 +366,7 @@ func (s *Server) createAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 func (s *Server) updateAdminDoctor(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	userID := r.PathValue("user_id")
 	if strings.TrimSpace(userID) == "" {
-		writeError(w, http.StatusBadRequest, errors.New("user_id wajib diisi."))
+		writeError(w, http.StatusBadRequest, errors.New("user_id wajib diisi"))
 		return
 	}
 	var req adminDoctorRequest
@@ -375,7 +375,7 @@ func (s *Server) updateAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 		return
 	}
 	if strings.TrimSpace(req.Credentials.Specialization) != "" && !validSpecialization(strings.TrimSpace(req.Credentials.Specialization)) {
-		writeError(w, http.StatusBadRequest, errors.New("Spesialisasi harus Sp.KJ (psikiater) atau M.Psi (psikolog)."))
+		writeError(w, http.StatusBadRequest, errors.New("spesialisasi harus Sp.KJ (psikiater) atau M.Psi (psikolog)"))
 		return
 	}
 	// Nama dokter bisa diubah dari form edit (dulu terbuang diam-diam).
@@ -388,7 +388,7 @@ func (s *Server) updateAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 	existing, err := s.store.GetProfessionalCredential(r.Context(), userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, errors.New("Data kredensial dokter tidak ditemukan."))
+			writeError(w, http.StatusNotFound, errors.New("data kredensial dokter tidak ditemukan"))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err)

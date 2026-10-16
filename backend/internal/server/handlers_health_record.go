@@ -37,7 +37,7 @@ func (s *Server) getHealthRecord(w http.ResponseWriter, r *http.Request, claims 
 	record, err := s.store.GetHealthRecord(r.Context(), patientID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, errors.New("Health record tidak ditemukan."))
+			writeError(w, http.StatusNotFound, errors.New("health record tidak ditemukan"))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err)
@@ -68,13 +68,13 @@ func (s *Server) updateHealthRecord(w http.ResponseWriter, r *http.Request, clai
 	}
 	diagnosis := security.SanitizeText(strings.TrimSpace(req.DiagnosisSummary))
 	if len(diagnosis) > 2000 {
-		writeError(w, http.StatusBadRequest, errors.New("diagnosis maksimal 2000 karakter."))
+		writeError(w, http.StatusBadRequest, errors.New("diagnosis maksimal 2000 karakter"))
 		return
 	}
 	record, err := s.store.UpdateHealthRecordDiagnosis(r.Context(), claims.Subject, patientID, diagnosis)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, errors.New("Health record tidak ditemukan."))
+			writeError(w, http.StatusNotFound, errors.New("health record tidak ditemukan"))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err)

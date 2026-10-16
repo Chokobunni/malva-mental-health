@@ -34,11 +34,11 @@ type rescheduleSessionRequest struct {
 }
 
 type updateSessionRequest struct {
-	Status           string `json:"status"`
-	CancelReason     string `json:"cancel_reason"`
-	MeetingURL       string `json:"meeting_url"`
+	Status            string `json:"status"`
+	CancelReason      string `json:"cancel_reason"`
+	MeetingURL        string `json:"meeting_url"`
 	SummaryForPatient string `json:"summary_for_patient"`
-	PrivateNote      string `json:"private_note"`
+	PrivateNote       string `json:"private_note"`
 }
 
 type timeOffRequest struct {
@@ -123,12 +123,12 @@ func (s *Server) createCarePackage(w http.ResponseWriter, r *http.Request, claim
 	}
 	cred, err := s.store.GetProfessionalCredential(r.Context(), professionalID)
 	if err != nil || cred.VerificationStatus != "VERIFIED" {
-		writeError(w, http.StatusNotFound, errors.New("Professional not found or not verified"))
+		writeError(w, http.StatusNotFound, errors.New("professional not found or not verified"))
 		return
 	}
 	// Tolak bila masih ada paket aktif dengan profesional yang sama.
 	if _, has, _ := s.store.ActivePackageBetween(r.Context(), claims.Subject, professionalID); has {
-		writeError(w, http.StatusConflict, errors.New("Kamu masih punya paket aktif dengan profesional ini. Selesaikan dulu sebelum membeli lagi."))
+		writeError(w, http.StatusConflict, errors.New("kamu masih punya paket aktif dengan profesional ini. Selesaikan dulu sebelum membeli lagi"))
 		return
 	}
 	pricing, err := s.store.GetProfessionalPricing(r.Context(), professionalID)
@@ -137,7 +137,7 @@ func (s *Server) createCarePackage(w http.ResponseWriter, r *http.Request, claim
 		return
 	}
 	if pricing.PackagePrice <= 0 {
-		writeError(w, http.StatusBadRequest, errors.New("Profesional belum mengatur harga paket. Pilih Quick Consult atau hubungi profesional."))
+		writeError(w, http.StatusBadRequest, errors.New("profesional belum mengatur harga paket. Pilih Quick Consult atau hubungi profesional"))
 		return
 	}
 	now := time.Now()
@@ -183,7 +183,7 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 	}
 	pkg, err := s.store.GetCarePackage(r.Context(), strings.TrimSpace(req.PackageID))
 	if err != nil {
-		writeError(w, http.StatusNotFound, errors.New("Care package tidak ditemukan."))
+		writeError(w, http.StatusNotFound, errors.New("care package tidak ditemukan"))
 		return
 	}
 	isPatient := claims.Role == "patient" && claims.Subject == pkg.PatientID
@@ -194,7 +194,7 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 	}
 	at, err := parseWIBDateTime(req.ScheduledAt)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errors.New("scheduled_at tidak valid (contoh: 2026-10-20T10:00)."))
+		writeError(w, http.StatusBadRequest, errors.New("scheduled_at tidak valid (contoh: 2026-10-20T10:00)"))
 		return
 	}
 	// Durasi sesi = durasi slot jadwal profesional hari itu (bukan input bebas).
@@ -248,7 +248,7 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 	sessionID := r.PathValue("session_id")
 	cs, err := s.store.GetCareSession(r.Context(), sessionID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, errors.New("Sesi tidak ditemukan."))
+		writeError(w, http.StatusNotFound, errors.New("sesi tidak ditemukan"))
 		return
 	}
 	isPatient := claims.Role == "patient" && claims.Subject == cs.PatientID
@@ -288,7 +288,7 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 	switch {
 	case isProf && (status == "completed" || status == "no_show"):
 		if time.Now().Before(cs.ScheduledAt.Add(-10 * time.Minute)) {
-			writeError(w, http.StatusBadRequest, errors.New("Kehadiran baru bisa ditandai sejak 10 menit sebelum sesi."))
+			writeError(w, http.StatusBadRequest, errors.New("kehadiran baru bisa ditandai sejak 10 menit sebelum sesi"))
 			return
 		}
 		updated, err := s.store.UpdateCareSessionStatus(r.Context(), sessionID, status, "", claims.Subject)
@@ -346,7 +346,7 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 		}
 		// Pembatalan pasien <24 jam hangus.
 		if time.Until(cs.ScheduledAt) < 24*time.Hour {
-			writeError(w, http.StatusBadRequest, errors.New("Pembatalan kurang dari 24 jam sebelum sesi: sesi hangus. Hubungi sesi atau tandai tidak hadir."))
+			writeError(w, http.StatusBadRequest, errors.New("pembatalan kurang dari 24 jam sebelum sesi: sesi hangus. Hubungi sesi atau tandai tidak hadir"))
 			return
 		}
 		updated, err := s.store.UpdateCareSessionStatus(r.Context(), sessionID, status, req.CancelReason, claims.Subject)
@@ -370,7 +370,7 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 	sessionID := r.PathValue("session_id")
 	cs, err := s.store.GetCareSession(r.Context(), sessionID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, errors.New("Sesi tidak ditemukan."))
+		writeError(w, http.StatusNotFound, errors.New("sesi tidak ditemukan"))
 		return
 	}
 	isPatient := claims.Role == "patient" && claims.Subject == cs.PatientID
@@ -386,11 +386,11 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 	}
 	at, err := parseWIBDateTime(req.ScheduledAt)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errors.New("scheduled_at tidak valid (contoh: 2026-10-20T10:00)."))
+		writeError(w, http.StatusBadRequest, errors.New("scheduled_at tidak valid (contoh: 2026-10-20T10:00)"))
 		return
 	}
 	if isPatient && time.Until(cs.ScheduledAt) < 24*time.Hour {
-		writeError(w, http.StatusBadRequest, errors.New("Reschedule pasien minimal 24 jam sebelum sesi."))
+		writeError(w, http.StatusBadRequest, errors.New("reschedule pasien minimal 24 jam sebelum sesi"))
 		return
 	}
 	if isProf && time.Now().After(cs.ScheduledAt) {
@@ -588,7 +588,7 @@ func (s *Server) refundCareSession(w http.ResponseWriter, r *http.Request, claim
 	sessionID := r.PathValue("session_id")
 	cs, err := s.store.GetCareSession(r.Context(), sessionID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, errors.New("Sesi tidak ditemukan."))
+		writeError(w, http.StatusNotFound, errors.New("sesi tidak ditemukan"))
 		return
 	}
 	isPatient := claims.Role == "patient" && claims.Subject == cs.PatientID

@@ -29,21 +29,21 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(req.IDToken) == "" {
-		writeError(w, http.StatusBadRequest, errors.New("id_token wajib diisi."))
+		writeError(w, http.StatusBadRequest, errors.New("id_token wajib diisi"))
 		return
 	}
 	if s.cfg.GoogleClientID == "" {
-		writeError(w, http.StatusNotImplemented, errors.New("Login Google belum dikonfigurasi di server. Hubungi admin untuk mengisi MALVA_GOOGLE_CLIENT_ID."))
+		writeError(w, http.StatusNotImplemented, errors.New("login Google belum dikonfigurasi di server. Hubungi admin untuk mengisi MALVA_GOOGLE_CLIENT_ID"))
 		return
 	}
 	payload, err := idtoken.Validate(r.Context(), strings.TrimSpace(req.IDToken), s.cfg.GoogleClientID)
 	if err != nil {
 		s.secLogger.LogAuthFailure(r, "google", "invalid id_token")
-		writeError(w, http.StatusUnauthorized, errors.New("Token Google tidak valid atau kedaluwarsa. Silakan coba lagi."))
+		writeError(w, http.StatusUnauthorized, errors.New("token Google tidak valid atau kedaluwarsa. Silakan coba lagi"))
 		return
 	}
 	if payload.Subject == "" {
-		writeError(w, http.StatusUnauthorized, errors.New("Token Google tidak valid atau kedaluwarsa. Silakan coba lagi."))
+		writeError(w, http.StatusUnauthorized, errors.New("token Google tidak valid atau kedaluwarsa. Silakan coba lagi"))
 		return
 	}
 	email, _ := payload.Claims["email"].(string)
@@ -51,7 +51,7 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 	displayName, _ := payload.Claims["name"].(string)
 	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" || !emailVerified {
-		writeError(w, http.StatusUnauthorized, errors.New("Email Google belum terverifikasi. Gunakan akun Google yang sudah terverifikasi."))
+		writeError(w, http.StatusUnauthorized, errors.New("email Google belum terverifikasi. Gunakan akun Google yang sudah terverifikasi"))
 		return
 	}
 	if strings.TrimSpace(displayName) == "" {
@@ -62,7 +62,7 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.Role) != "" {
 		role, err = auth.NormalizeRole(req.Role)
 		if err != nil || role == "admin" {
-			writeError(w, http.StatusBadRequest, errors.New("Role harus patient atau professional."))
+			writeError(w, http.StatusBadRequest, errors.New("role harus patient atau professional"))
 			return
 		}
 	}
@@ -118,7 +118,7 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if isDuplicateKeyError(err) {
-			writeError(w, http.StatusConflict, errors.New("Email ini sudah terdaftar. Silakan masuk dengan email & password, lalu tautkan Google."))
+			writeError(w, http.StatusConflict, errors.New("email ini sudah terdaftar. Silakan masuk dengan email & password, lalu tautkan Google"))
 			return
 		}
 		writeError(w, http.StatusBadRequest, err)

@@ -91,16 +91,16 @@ func (s *Server) createGoal(w http.ResponseWriter, r *http.Request, claims auth.
 		return
 	}
 	if !isSelf && claims.Role != "admin" {
-		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa menambah goals."))
+		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa menambah goals"))
 		return
 	}
 	title := security.SanitizeText(strings.TrimSpace(req.Title))
 	if title == "" {
-		writeError(w, http.StatusBadRequest, errors.New("title wajib diisi."))
+		writeError(w, http.StatusBadRequest, errors.New("title wajib diisi"))
 		return
 	}
 	if len(title) > 200 {
-		writeError(w, http.StatusBadRequest, errors.New("title maksimal 200 karakter."))
+		writeError(w, http.StatusBadRequest, errors.New("title maksimal 200 karakter"))
 		return
 	}
 	category := strings.ToLower(security.SanitizeText(strings.TrimSpace(req.Category)))
@@ -134,7 +134,7 @@ func (s *Server) updateGoal(w http.ResponseWriter, r *http.Request, claims auth.
 		return
 	}
 	if !isSelf && claims.Role != "admin" {
-		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa mengubah goals."))
+		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa mengubah goals"))
 		return
 	}
 	goal, err := s.store.UpdateGoal(r.Context(), patientID, goalID,
@@ -142,7 +142,7 @@ func (s *Server) updateGoal(w http.ResponseWriter, r *http.Request, claims auth.
 		req.TargetPerWeek, req.IsActive)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, errors.New("Goal tidak ditemukan."))
+			writeError(w, http.StatusNotFound, errors.New("goal tidak ditemukan"))
 			return
 		}
 		writeError(w, http.StatusBadRequest, err)
@@ -160,12 +160,12 @@ func (s *Server) deleteGoal(w http.ResponseWriter, r *http.Request, claims auth.
 		return
 	}
 	if !isSelf && claims.Role != "admin" {
-		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa menghapus goals."))
+		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa menghapus goals"))
 		return
 	}
 	if err := s.store.DeleteGoal(r.Context(), scopeID, goalID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, errors.New("Goal tidak ditemukan."))
+			writeError(w, http.StatusNotFound, errors.New("goal tidak ditemukan"))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err)
@@ -201,12 +201,12 @@ func (s *Server) logHabit(w http.ResponseWriter, r *http.Request, claims auth.Cl
 	}
 	goalID := strings.TrimSpace(req.GoalID)
 	if goalID == "" {
-		writeError(w, http.StatusBadRequest, errors.New("goal_id wajib diisi."))
+		writeError(w, http.StatusBadRequest, errors.New("goal_id wajib diisi"))
 		return
 	}
 	// Pasien hanya bisa menandai goal miliknya sendiri.
 	if claims.Role != "patient" {
-		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa mencatat habit."))
+		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa mencatat habit"))
 		return
 	}
 	logged := strings.TrimSpace(req.LoggedOn)
@@ -220,7 +220,7 @@ func (s *Server) logHabit(w http.ResponseWriter, r *http.Request, claims auth.Cl
 	log, err := s.store.LogHabit(r.Context(), claims.Subject, goalID, logged, done)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, errors.New("Goal tidak ditemukan."))
+			writeError(w, http.StatusNotFound, errors.New("goal tidak ditemukan"))
 			return
 		}
 		writeError(w, http.StatusBadRequest, err)
@@ -315,7 +315,7 @@ func (s *Server) listTherapySubmissions(w http.ResponseWriter, r *http.Request, 
 
 func (s *Server) createTherapySubmission(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if claims.Role != "patient" {
-		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa menyimpan worksheet."))
+		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa menyimpan worksheet"))
 		return
 	}
 	var req therapySubmissionRequest
@@ -325,11 +325,11 @@ func (s *Server) createTherapySubmission(w http.ResponseWriter, r *http.Request,
 	}
 	moduleID := strings.TrimSpace(req.ModuleID)
 	if moduleID == "" || len(moduleID) > maxTherapyModuleID {
-		writeError(w, http.StatusBadRequest, errors.New("module_id tidak valid."))
+		writeError(w, http.StatusBadRequest, errors.New("module_id tidak valid"))
 		return
 	}
 	if len(req.Answers) > maxTherapyAnswersBytes {
-		writeError(w, http.StatusBadRequest, errors.New("jawaban terlalu besar (maks 64 KB)."))
+		writeError(w, http.StatusBadRequest, errors.New("jawaban terlalu besar (maks 64 KB)"))
 		return
 	}
 	title := security.SanitizeText(strings.TrimSpace(req.Title))
@@ -349,7 +349,7 @@ func (s *Server) getTherapySubmission(w http.ResponseWriter, r *http.Request, cl
 	sub, err := s.store.GetTherapySubmission(r.Context(), claims.Subject, submissionID, professionalView)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, errors.New("Worksheet tidak ditemukan."))
+			writeError(w, http.StatusNotFound, errors.New("worksheet tidak ditemukan"))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err)
@@ -360,7 +360,7 @@ func (s *Server) getTherapySubmission(w http.ResponseWriter, r *http.Request, cl
 
 func (s *Server) shareTherapySubmission(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if claims.Role != "patient" {
-		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa membagikan worksheet."))
+		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa membagikan worksheet"))
 		return
 	}
 	submissionID := r.PathValue("submission_id")
@@ -376,14 +376,14 @@ func (s *Server) shareTherapySubmission(w http.ResponseWriter, r *http.Request, 
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		} else if !has {
-			writeError(w, http.StatusForbidden, errors.New("Berbagi worksheet butuh paket sesi aktif dengan profesional tersebut."))
+			writeError(w, http.StatusForbidden, errors.New("berbagi worksheet butuh paket sesi aktif dengan profesional tersebut"))
 			return
 		}
 	}
 	sub, err := s.store.ShareTherapySubmission(r.Context(), claims.Subject, submissionID, professionalID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, errors.New("Worksheet tidak ditemukan."))
+			writeError(w, http.StatusNotFound, errors.New("worksheet tidak ditemukan"))
 			return
 		}
 		writeError(w, http.StatusBadRequest, err)
@@ -401,13 +401,13 @@ func (s *Server) shareTherapySubmission(w http.ResponseWriter, r *http.Request, 
 
 func (s *Server) deleteTherapySubmission(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if claims.Role != "patient" {
-		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa menghapus worksheet."))
+		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa menghapus worksheet"))
 		return
 	}
 	submissionID := r.PathValue("submission_id")
 	if err := s.store.DeleteTherapySubmission(r.Context(), claims.Subject, submissionID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, errors.New("Worksheet tidak ditemukan."))
+			writeError(w, http.StatusNotFound, errors.New("worksheet tidak ditemukan"))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err)

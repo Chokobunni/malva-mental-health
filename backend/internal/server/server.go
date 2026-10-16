@@ -93,12 +93,6 @@ type professionalNoteRequest struct {
 	Visibility string `json:"visibility"`
 }
 
-type followUpRequest struct {
-	PatientID string `json:"patient_id"`
-	Body      string `json:"body"`
-	Status    string `json:"status"`
-}
-
 type moodCheckinRequest struct {
 	Mood            string  `json:"mood"`
 	SleepHours      float64 `json:"sleep_hours"`
@@ -150,11 +144,6 @@ type privacyConsentRequest struct {
 type passwordChangeRequest struct {
 	CurrentPassword string `json:"current_password"`
 	NewPassword     string `json:"new_password"`
-}
-
-type diaryFeedbackRequest struct {
-	PatientID string `json:"patient_id"`
-	Feedback  string `json:"feedback"`
 }
 
 const refreshSessionTTL = 30 * 24 * time.Hour
@@ -400,7 +389,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	}
 	role, err := auth.NormalizeRole(req.Role)
 	if err != nil || role == "admin" {
-		writeError(w, http.StatusBadRequest, errors.New("Role harus patient atau professional."))
+		writeError(w, http.StatusBadRequest, errors.New("role harus patient atau professional"))
 		return
 	}
 	if err := security.ValidatePassword(req.Password, req.Email); err != nil {
@@ -408,25 +397,25 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !security.ValidateEmail(req.Email) {
-		writeError(w, http.StatusBadRequest, errors.New("Format email tidak valid."))
+		writeError(w, http.StatusBadRequest, errors.New("format email tidak valid"))
 		return
 	}
 	// Field profil opsional (pasien): nomor telepon, tanggal lahir, gender.
 	phone := strings.TrimSpace(req.Phone)
 	if phone != "" && !validateIndonesianPhone(phone) {
-		writeError(w, http.StatusBadRequest, errors.New("Format nomor telepon tidak valid (gunakan 08xxxxxxxxxx atau 62xxxxxxxxxx)."))
+		writeError(w, http.StatusBadRequest, errors.New("format nomor telepon tidak valid (gunakan 08xxxxxxxxxx atau 62xxxxxxxxxx)"))
 		return
 	}
 	dateOfBirth := strings.TrimSpace(req.DateOfBirth)
 	if dateOfBirth != "" {
 		if d, err := time.Parse("2006-01-02", dateOfBirth); err != nil || d.After(time.Now()) {
-			writeError(w, http.StatusBadRequest, errors.New("Format tanggal lahir tidak valid (YYYY-MM-DD)."))
+			writeError(w, http.StatusBadRequest, errors.New("format tanggal lahir tidak valid (YYYY-MM-DD)"))
 			return
 		}
 	}
 	gender := strings.ToLower(strings.TrimSpace(req.Gender))
 	if gender != "" && gender != "male" && gender != "female" && gender != "other" {
-		writeError(w, http.StatusBadRequest, errors.New("Gender harus male, female, atau other."))
+		writeError(w, http.StatusBadRequest, errors.New("gender harus male, female, atau other"))
 		return
 	}
 	// Profesional boleh mendaftar mandiri dengan STR & SIP.
@@ -436,11 +425,11 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	specialization := strings.TrimSpace(req.Specialization)
 	if role == "professional" {
 		if strNumber == "" || sipNumber == "" {
-			writeError(w, http.StatusBadRequest, errors.New("Nomor STR dan SIP wajib diisi untuk pendaftaran profesional."))
+			writeError(w, http.StatusBadRequest, errors.New("nomor STR dan SIP wajib diisi untuk pendaftaran profesional"))
 			return
 		}
 		if !validSpecialization(specialization) {
-			writeError(w, http.StatusBadRequest, errors.New("Spesialisasi harus Sp.KJ (psikiater) atau M.Psi (psikolog)."))
+			writeError(w, http.StatusBadRequest, errors.New("spesialisasi harus Sp.KJ (psikiater) atau M.Psi (psikolog)"))
 			return
 		}
 		// Kode profesi (16 digit) = nomor STR bila tidak diisi eksplisit.
@@ -468,7 +457,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if isDuplicateKeyError(err) {
-			writeError(w, http.StatusConflict, errors.New("Email ini sudah terdaftar. Silakan masuk dengan akun tersebut."))
+			writeError(w, http.StatusConflict, errors.New("email ini sudah terdaftar. Silakan masuk dengan akun tersebut"))
 			return
 		}
 		writeError(w, http.StatusBadRequest, err)
@@ -508,14 +497,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	lockoutKey := clientIP(r) + ":" + req.Email
 	if s.lockout.IsLocked(lockoutKey) {
 		s.secLogger.LogAccountLocked(r, req.Email)
-		writeError(w, http.StatusTooManyRequests, errors.New("Akun dikunci sementara karena terlalu banyak percobaan gagal. Coba lagi dalam 15 menit."))
+		writeError(w, http.StatusTooManyRequests, errors.New("akun dikunci sementara karena terlalu banyak percobaan gagal. Coba lagi dalam 15 menit"))
 		return
 	}
 	user, err := s.store.GetUserByEmail(r.Context(), req.Email)
 	if errors.Is(err, sql.ErrNoRows) {
 		s.lockout.RecordFailure(lockoutKey)
 		s.secLogger.LogAuthFailure(r, req.Email, "user not found")
-		writeError(w, http.StatusUnauthorized, errors.New("Email atau password salah."))
+		writeError(w, http.StatusUnauthorized, errors.New("email atau password salah"))
 		return
 	}
 	if err != nil {
@@ -525,7 +514,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	if !auth.CheckPassword(user.PasswordHash, req.Password) {
 		s.lockout.RecordFailure(lockoutKey)
 		s.secLogger.LogAuthFailure(r, req.Email, "invalid password")
-		writeError(w, http.StatusUnauthorized, errors.New("Email atau password salah."))
+		writeError(w, http.StatusUnauthorized, errors.New("email atau password salah"))
 		return
 	}
 	s.lockout.Reset(lockoutKey)
@@ -539,14 +528,14 @@ func (s *Server) loginProfessionalByIdentifier(w http.ResponseWriter, r *http.Re
 	lockoutKey := clientIP(r) + ":pro:" + identifier
 	if s.lockout.IsLocked(lockoutKey) {
 		s.secLogger.LogAccountLocked(r, identifier)
-		writeError(w, http.StatusTooManyRequests, errors.New("Akun dikunci sementara karena terlalu banyak percobaan gagal. Coba lagi dalam 15 menit."))
+		writeError(w, http.StatusTooManyRequests, errors.New("akun dikunci sementara karena terlalu banyak percobaan gagal. Coba lagi dalam 15 menit"))
 		return
 	}
 	user, err := s.store.FindUserByProfessionalIdentifier(r.Context(), identifier)
 	if errors.Is(err, sql.ErrNoRows) {
 		s.lockout.RecordFailure(lockoutKey)
 		s.secLogger.LogAuthFailure(r, identifier, "professional not found")
-		writeError(w, http.StatusUnauthorized, errors.New("Nomor STR/SIP atau password salah."))
+		writeError(w, http.StatusUnauthorized, errors.New("nomor STR/SIP atau password salah"))
 		return
 	}
 	if err != nil {
@@ -556,7 +545,7 @@ func (s *Server) loginProfessionalByIdentifier(w http.ResponseWriter, r *http.Re
 	if !auth.CheckPassword(user.PasswordHash, password) {
 		s.lockout.RecordFailure(lockoutKey)
 		s.secLogger.LogAuthFailure(r, user.Email, "invalid password")
-		writeError(w, http.StatusUnauthorized, errors.New("Nomor STR/SIP atau password salah."))
+		writeError(w, http.StatusUnauthorized, errors.New("nomor STR/SIP atau password salah"))
 		return
 	}
 	s.lockout.Reset(lockoutKey)
@@ -674,7 +663,7 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, claims auth.Cl
 	if req.Phone != nil {
 		phone = strings.TrimSpace(*req.Phone)
 		if phone != "" && !validateIndonesianPhone(phone) {
-			writeError(w, http.StatusBadRequest, errors.New("Format nomor telepon tidak valid (gunakan 08xxxxxxxxxx atau 62xxxxxxxxxx)."))
+			writeError(w, http.StatusBadRequest, errors.New("format nomor telepon tidak valid (gunakan 08xxxxxxxxxx atau 62xxxxxxxxxx)"))
 			return
 		}
 	}
@@ -682,7 +671,7 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, claims auth.Cl
 		dateOfBirth = strings.TrimSpace(*req.DateOfBirth)
 		if dateOfBirth != "" {
 			if d, err := time.Parse("2006-01-02", dateOfBirth); err != nil || d.After(time.Now()) {
-				writeError(w, http.StatusBadRequest, errors.New("Format tanggal lahir tidak valid (YYYY-MM-DD)."))
+				writeError(w, http.StatusBadRequest, errors.New("format tanggal lahir tidak valid (YYYY-MM-DD)"))
 				return
 			}
 		}
@@ -690,7 +679,7 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, claims auth.Cl
 	if req.Gender != nil {
 		gender = strings.ToLower(strings.TrimSpace(*req.Gender))
 		if gender != "" && gender != "male" && gender != "female" && gender != "other" {
-			writeError(w, http.StatusBadRequest, errors.New("Gender harus male, female, atau other."))
+			writeError(w, http.StatusBadRequest, errors.New("gender harus male, female, atau other"))
 			return
 		}
 	}
@@ -936,7 +925,6 @@ func (s *Server) createFollowUp(w http.ResponseWriter, r *http.Request, claims a
 	writeJSON(w, http.StatusGone, map[string]string{
 		"error": "Fitur follow-up di luar sesi sudah dihapus. Tulis ringkasan sesi setelah sesi berjalan.",
 	})
-	return
 }
 
 func (s *Server) listFollowUps(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -1114,7 +1102,7 @@ func (s *Server) updateDiaryEntry(w http.ResponseWriter, r *http.Request, claims
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, errors.New("Diary tidak ditemukan."))
+			writeError(w, http.StatusNotFound, errors.New("diary tidak ditemukan"))
 			return
 		}
 		writeError(w, http.StatusBadRequest, err)
@@ -1131,7 +1119,7 @@ func (s *Server) deleteDiaryEntry(w http.ResponseWriter, r *http.Request, claims
 	diaryID := r.PathValue("diary_id")
 	if err := s.store.DeleteDiaryEntry(r.Context(), claims.Subject, diaryID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, errors.New("Diary tidak ditemukan."))
+			writeError(w, http.StatusNotFound, errors.New("diary tidak ditemukan"))
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err)
@@ -1147,7 +1135,6 @@ func (s *Server) updateDiaryFeedback(w http.ResponseWriter, r *http.Request, cla
 	writeJSON(w, http.StatusGone, map[string]string{
 		"error": "Fitur balasan diary di luar sesi sudah dihapus. Bahas diary pasien saat sesi berjalan.",
 	})
-	return
 }
 
 func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -1184,7 +1171,7 @@ func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims
 	req.RelationToMeal = trimMax(req.RelationToMeal, 80)
 	req.Source = trimMax(req.Source, 80)
 	if req.Name == "" {
-		writeError(w, http.StatusBadRequest, errors.New("nama obat wajib diisi."))
+		writeError(w, http.StatusBadRequest, errors.New("nama obat wajib diisi"))
 		return
 	}
 	if req.Source == "" {
@@ -1440,17 +1427,17 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 	}
 	recipientID := strings.TrimSpace(req.RecipientID)
 	if recipientID == "" {
-		writeError(w, http.StatusBadRequest, errors.New("recipient_id wajib diisi."))
+		writeError(w, http.StatusBadRequest, errors.New("recipient_id wajib diisi"))
 		return
 	}
 	if recipientID == claims.Subject {
-		writeError(w, http.StatusBadRequest, errors.New("Tidak bisa mengirim pesan ke diri sendiri."))
+		writeError(w, http.StatusBadRequest, errors.New("tidak bisa mengirim pesan ke diri sendiri"))
 		return
 	}
 	hasMetadata := len(req.Metadata) > 0 && string(req.Metadata) != "null"
 	text := strings.TrimSpace(req.Text)
 	if text == "" && !hasMetadata {
-		writeError(w, http.StatusBadRequest, errors.New("text atau metadata wajib diisi."))
+		writeError(w, http.StatusBadRequest, errors.New("text atau metadata wajib diisi"))
 		return
 	}
 	if len(text) > 5000 {
@@ -1467,11 +1454,10 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 		// Tanpa link permanen: chat hanya bila pernah ada sesi/paket.
 		relPatient, relProf, hasRel, rerr := s.resolveChatPair(r, claims, recipientID)
 		if rerr != nil || !hasRel {
-			writeError(w, http.StatusForbidden, errors.New("Kamu belum terhubung dengan pengguna tersebut."))
+			writeError(w, http.StatusForbidden, errors.New("kamu belum terhubung dengan pengguna tersebut"))
 			return
 		}
 		patientID, professionalID = relPatient, relProf
-		linked = true
 	}
 	// Kebijakan chat: teks hanya saat sesi berjalan; share data milik
 	// pasien butuh paket aktif; profesional tidak membalas di luar sesi.
@@ -1486,7 +1472,7 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 			return
 		}
 		if !access.CanShare {
-			writeError(w, http.StatusForbidden, errors.New("Berbagi data butuh paket sesi aktif. "+access.Reason))
+			writeError(w, http.StatusForbidden, errors.New("berbagi data butuh paket sesi aktif. "+access.Reason))
 			return
 		}
 	} else if !access.CanSendText {
@@ -1541,11 +1527,12 @@ func (s *Server) resolveChatPair(r *http.Request, claims auth.Claims, otherID st
 	if otherID == "" || otherID == claims.Subject {
 		return "", "", false, errors.New("recipient tidak valid")
 	}
-	if claims.Role == "patient" {
+	switch claims.Role {
+	case "patient":
 		patientID, professionalID = claims.Subject, otherID
-	} else if claims.Role == "professional" {
+	case "professional":
 		patientID, professionalID = otherID, claims.Subject
-	} else {
+	default:
 		return "", "", false, errors.New("role is not allowed")
 	}
 	ok, err = s.store.PairRelation(r.Context(), patientID, professionalID)
