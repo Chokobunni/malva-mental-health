@@ -258,7 +258,6 @@ func (c *client) handleChatMessage(raw json.RawMessage) {
 			c.hub.logger.Warn("ws: users not linked", "sender", c.userID, "recipient", msg.RecipientID)
 			return
 		}
-		linked = true
 		if c.role == "patient" {
 			patientID, professionalID = c.userID, msg.RecipientID
 		} else {

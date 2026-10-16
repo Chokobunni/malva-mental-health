@@ -71,8 +71,8 @@ type midtransChargeRequest struct {
 
 // midtransChargeResponse respons Snap (subset).
 type midtransChargeResponse struct {
-	Token       string `json:"token"`
-	RedirectURL string `json:"redirect_url"`
+	Token         string   `json:"token"`
+	RedirectURL   string   `json:"redirect_url"`
 	ErrorMessages []string `json:"error_messages"`
 }
 

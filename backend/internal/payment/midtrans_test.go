@@ -39,7 +39,7 @@ func TestMidtransSignatureInvalid(t *testing.T) {
 	gw := NewMidtransGateway(MidtransConfig{ServerKey: serverKey})
 
 	cases := map[string]WebhookEvent{
-		"signature palsu": {OrderID: orderID, StatusCode: "200", GrossAmount: gross, Signature: "deadbeef"},
+		"signature palsu":  {OrderID: orderID, StatusCode: "200", GrossAmount: gross, Signature: "deadbeef"},
 		"signature kosong": {OrderID: orderID, StatusCode: "200", GrossAmount: gross},
 		"gross diubah": {
 			OrderID: orderID, StatusCode: "200", GrossAmount: "1.00",

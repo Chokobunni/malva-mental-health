@@ -195,16 +195,16 @@ type MedicationLog struct {
 }
 
 type PatientDataConsent struct {
-	PatientID          string    `json:"patient_id"`
-	ProfessionalID     string    `json:"professional_id"`
-	ShareScreenings    bool      `json:"share_screenings"`
-	ShareMoodDiary     bool      `json:"share_mood_diary"`
-	ShareMedications   bool      `json:"share_medications"`
-	ShareTimeline      bool      `json:"share_timeline"`
-	ShareHealthRecord  bool      `json:"share_health_record"`
-	ShareGoals         bool      `json:"share_goals"`
-	ShareDiaryCheckin  bool      `json:"share_diary_checkin"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	PatientID         string    `json:"patient_id"`
+	ProfessionalID    string    `json:"professional_id"`
+	ShareScreenings   bool      `json:"share_screenings"`
+	ShareMoodDiary    bool      `json:"share_mood_diary"`
+	ShareMedications  bool      `json:"share_medications"`
+	ShareTimeline     bool      `json:"share_timeline"`
+	ShareHealthRecord bool      `json:"share_health_record"`
+	ShareGoals        bool      `json:"share_goals"`
+	ShareDiaryCheckin bool      `json:"share_diary_checkin"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 type TimelineEvent struct {

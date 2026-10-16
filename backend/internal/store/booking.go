@@ -239,7 +239,8 @@ func (s *Store) UpdatePaymentGateway(ctx context.Context, reference, gateway, sn
 	return p, nil
 }
 
-func (s *Store) CreateEarning(ctx context.Context, professionalID string, p Payment) (string, error) {	const q = `INSERT INTO earnings (professional_id, payment_id, gross, platform_fee, net)
+func (s *Store) CreateEarning(ctx context.Context, professionalID string, p Payment) (string, error) {
+	const q = `INSERT INTO earnings (professional_id, payment_id, gross, platform_fee, net)
 		VALUES ($1, $2, $3, $4, $5) RETURNING id`
 	var id string
 	err := s.db.QueryRowContext(ctx, q, professionalID, p.ID, p.GrossAmount, p.PlatformFeeAmount, p.NetAmount).Scan(&id)

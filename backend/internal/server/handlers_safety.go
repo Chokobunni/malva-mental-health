@@ -598,7 +598,7 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 	_ = dayStart
 	nowWIB := time.Now().In(wibLoc)
 
-		slots := make([]interface{}, 0)
+	slots := make([]interface{}, 0)
 	for _, sch := range schedules {
 		if sch.DayOfWeek != dayOfWeek {
 			continue
@@ -694,10 +694,10 @@ func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, c
 			freeSlots += count
 		}
 		days = append(days, map[string]interface{}{
-			"date":       dateStr,
+			"date":        dateStr,
 			"day_of_week": dayOfWeek,
-			"off":        off,
-			"free_slots": freeSlots,
+			"off":         off,
+			"free_slots":  freeSlots,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"days": days})

@@ -36,53 +36,43 @@ const (
 var locationWIB = time.FixedZone("WIB", 7*3600)
 
 type CarePackage struct {
-	ID              string    `json:"id"`
-	PatientID       string    `json:"patient_id"`
-	ProfessionalID  string    `json:"professional_id"`
-	BookingID       *string   `json:"booking_id,omitempty"`
-	PatientName     string    `json:"patient_name,omitempty"`
-	ProfessionalName string   `json:"professional_name,omitempty"`
-	TotalSessions   int       `json:"total_sessions"`
-	UsedSessions    int       `json:"used_sessions"`
-	Remaining       int       `json:"remaining_sessions"`
-	RefundValue     int64     `json:"refund_value"`
-	ValidityDays    int       `json:"validity_days"`
-	Price           int64     `json:"price"`
-	Status          string    `json:"status"`
-	StartsAt        time.Time `json:"starts_at"`
-	ExpiresAt       time.Time `json:"expires_at"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID               string    `json:"id"`
+	PatientID        string    `json:"patient_id"`
+	ProfessionalID   string    `json:"professional_id"`
+	BookingID        *string   `json:"booking_id,omitempty"`
+	PatientName      string    `json:"patient_name,omitempty"`
+	ProfessionalName string    `json:"professional_name,omitempty"`
+	TotalSessions    int       `json:"total_sessions"`
+	UsedSessions     int       `json:"used_sessions"`
+	Remaining        int       `json:"remaining_sessions"`
+	RefundValue      int64     `json:"refund_value"`
+	ValidityDays     int       `json:"validity_days"`
+	Price            int64     `json:"price"`
+	Status           string    `json:"status"`
+	StartsAt         time.Time `json:"starts_at"`
+	ExpiresAt        time.Time `json:"expires_at"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 type CareSession struct {
-	ID               string     `json:"id"`
-	PackageID        *string    `json:"package_id,omitempty"`
-	BookingID        *string    `json:"booking_id,omitempty"`
-	PatientID        string     `json:"patient_id"`
-	ProfessionalID   string     `json:"professional_id"`
-	PatientName      string     `json:"patient_name,omitempty"`
-	ProfessionalName string     `json:"professional_name,omitempty"`
-	SessionType      string     `json:"session_type"`
-	ScheduledAt      time.Time  `json:"scheduled_at"`
-	DurationMinutes  int        `json:"duration_minutes"`
-	Status           string     `json:"status"`
-	MeetingURL       string     `json:"meeting_url,omitempty"`
-	SummaryForPatient string    `json:"summary_for_patient,omitempty"`
-	PrivateNote      string     `json:"private_note,omitempty"`
-	CancelReason     string     `json:"cancel_reason,omitempty"`
-	RescheduleCount  int        `json:"reschedule_count"`
-	AttendedMarkedAt *time.Time `json:"attended_marked_at,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
-}
-
-// activeSessionsPortion status sesi yang memakan kuota paket.
-const activeSessionsPortion = "('scheduled', 'completed', 'no_show')"
-
-// usedSessionsQuery menghitung sesi yg sudah memakan kuota sebuah paket.
-func usedSessionsQuery() string {
-	return `(SELECT COUNT(*) FROM care_sessions
-		WHERE package_id = care_packages.id
-		  AND status IN ` + activeSessionsPortion + `)`
+	ID                string     `json:"id"`
+	PackageID         *string    `json:"package_id,omitempty"`
+	BookingID         *string    `json:"booking_id,omitempty"`
+	PatientID         string     `json:"patient_id"`
+	ProfessionalID    string     `json:"professional_id"`
+	PatientName       string     `json:"patient_name,omitempty"`
+	ProfessionalName  string     `json:"professional_name,omitempty"`
+	SessionType       string     `json:"session_type"`
+	ScheduledAt       time.Time  `json:"scheduled_at"`
+	DurationMinutes   int        `json:"duration_minutes"`
+	Status            string     `json:"status"`
+	MeetingURL        string     `json:"meeting_url,omitempty"`
+	SummaryForPatient string     `json:"summary_for_patient,omitempty"`
+	PrivateNote       string     `json:"private_note,omitempty"`
+	CancelReason      string     `json:"cancel_reason,omitempty"`
+	RescheduleCount   int        `json:"reschedule_count"`
+	AttendedMarkedAt  *time.Time `json:"attended_marked_at,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
 }
 
 // scanCarePackage membaca satu baris paket (kolom harus mengikuti urutan
@@ -788,12 +778,12 @@ func timesToArray(times []time.Time) string {
 // ============================================================
 
 type ChatAccess struct {
-	CanSendText  bool   `json:"can_send_text"`
-	CanShare     bool   `json:"can_share"`
-	InSession    bool   `json:"in_session"`
-	Reason       string `json:"reason,omitempty"`
-	NextSession  *time.Time `json:"next_session_at,omitempty"`
-	ActivePackage bool  `json:"has_active_package"`
+	CanSendText   bool       `json:"can_send_text"`
+	CanShare      bool       `json:"can_share"`
+	InSession     bool       `json:"in_session"`
+	Reason        string     `json:"reason,omitempty"`
+	NextSession   *time.Time `json:"next_session_at,omitempty"`
+	ActivePackage bool       `json:"has_active_package"`
 }
 
 // sessionWindow sesi dianggap "berjalan" dari 10 menit sebelum mulai
