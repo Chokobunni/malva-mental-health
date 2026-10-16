@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../assessment_engine.dart';
 import '../models.dart';
+import '../services/assessment_database_service.dart';
 import '../services/malva_api_client.dart';
 import 'auth_providers.dart';
+import 'data/assessment_provider.dart';
 
 const _sessionKey = 'malva_active_session';
 const _continuousConsentKey = 'malva_continuous_support_consent';
@@ -110,8 +112,11 @@ class MalvaStoreState {
 
 class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   final MalvaApiClient? _apiClient;
+  final AssessmentDatabaseService _assessmentDb;
 
-  MalvaStoreNotifier(this._apiClient) : super(_seededState());
+  MalvaStoreNotifier(this._apiClient, AssessmentDatabaseService? assessmentDb)
+      : _assessmentDb = assessmentDb ?? AssessmentDatabaseService(),
+        super(_seededState());
 
   static MalvaStoreState _seededState() {
     // Fresh start: TIDAK ada data demo (diagnosis, obat, mood, diary, goals,
@@ -152,6 +157,8 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         diagnosisSummary: '',
       ),
     );
+    // Muat riwayat asesmen lokal akun ini (fire-and-forget).
+    loadAndSaveAssessmentsAsync();
   }
 
   /// Perbarui nama pasien di store (dipakai setelah profil dimuat server).
@@ -652,7 +659,37 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     state = state.copyWith(
       assessments: [...state.assessments, result],
     );
+    _persistAssessments();
   }
+
+  /// Simpan hasil asesmen ke state + tunggu persistensi lokal per akun.
+  Future<void> saveAssessmentResult(AssessmentResult result) async {
+    saveAssessment(result);
+    await _assessmentDb.saveAll(state.patient.id, state.assessments);
+  }
+
+  /// Muat riwayat asesmen dari penyimpanan lokal akun aktif, gabungkan
+  /// dengan state (tanpa duplikat), lalu simpan kembali daftar gabungan.
+  /// Panggil setelah [applySession] agar riwayat offline tampil lagi.
+  Future<void> loadAndSaveAssessmentsAsync() async {
+    final local = await _assessmentDb.loadAll(state.patient.id);
+    if (local.isEmpty && state.assessments.isEmpty) return;
+    final seen = state.assessments.map(_assessmentKey).toSet();
+    final missing =
+        local.where((r) => !seen.contains(_assessmentKey(r))).toList();
+    if (missing.isEmpty && local.isNotEmpty) return;
+    final merged = [...state.assessments, ...missing];
+    state = state.copyWith(assessments: merged);
+    await _assessmentDb.saveAll(state.patient.id, merged);
+  }
+
+  /// Persistensi lokal fire-and-forget (tidak menghalangi UI).
+  void _persistAssessments() {
+    _assessmentDb.saveAll(state.patient.id, state.assessments);
+  }
+
+  static String _assessmentKey(AssessmentResult r) =>
+      '${r.type.name}|${r.createdAt.toIso8601String()}';
 
   Future<ScreeningBundle> submitScreeningBundle({
     required List<int> phq9Answers,
@@ -721,7 +758,10 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
 
 final malvaStoreProvider =
     StateNotifierProvider<MalvaStoreNotifier, MalvaStoreState>((ref) {
-  return MalvaStoreNotifier(ref.watch(apiClientProvider));
+  return MalvaStoreNotifier(
+    ref.watch(apiClientProvider),
+    ref.watch(assessmentDatabaseProvider),
+  );
 });
 
 final adherencePercentProvider = Provider<int>((ref) {
