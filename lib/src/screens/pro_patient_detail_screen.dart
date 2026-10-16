@@ -756,8 +756,7 @@ class _ProPatientDetailScreenState
               // GRUP 4 — Akses data
               // ============================================================
               const SizedBox(height: 22),
-              const SectionLabel('Akses data',
-                  icon: Icons.lock_open_rounded),
+              const SectionLabel('Akses data', icon: Icons.lock_open_rounded),
               if (_restricted != null)
                 SoftCard(
                   color: MalvaColors.amber.withValues(alpha: 0.12),
@@ -774,13 +773,13 @@ class _ProPatientDetailScreenState
               else
                 SoftCard(
                   color: MalvaColors.mint.withValues(alpha: 0.08),
-                  child: Row(
+                  child: const Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.verified_user_rounded,
+                      Icon(Icons.verified_user_rounded,
                           color: MalvaColors.mint),
-                      const SizedBox(width: 10),
-                      const Expanded(
+                      SizedBox(width: 10),
+                      Expanded(
                         child: Text(
                             'Semua data yang dibagikan pasien dapat diakses.'),
                       ),
