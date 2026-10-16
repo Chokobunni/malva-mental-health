@@ -103,7 +103,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           SoftCard(
             child: Column(
               children: [
-                _Line(label: _itemLabel, value: 'Rp ${_rupiah(_consultationPrice)}'),
+                _Line(
+                    label: _itemLabel,
+                    value: 'Rp ${_rupiah(_consultationPrice)}'),
                 const SizedBox(height: 6),
                 _Line(
                     label: 'Service Fee', value: 'Rp ${_rupiah(_serviceFee)}'),
@@ -250,8 +252,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   /// lewat sheet yang sama dengan penjadwalan sesi paket — tidak ada lagi
   /// slot otomatis "pertama yang bebas". Setelah bayar, paket aktif dan
   /// sesi pertama langsung terjadwal sesuai pilihan pasien.
-  Future<void> _payPackage(
-      MalvaApiClient apiClient, String accessToken) async {
+  Future<void> _payPackage(MalvaApiClient apiClient, String accessToken) async {
     final picked = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -348,45 +349,45 @@ class _MethodTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: selected
+              ? MalvaColors.seed.withValues(alpha: 0.12)
+              : MalvaColors.seed.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
             color: selected
-                ? MalvaColors.seed.withValues(alpha: 0.12)
-                : MalvaColors.seed.withValues(alpha: 0.04),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: selected
-                  ? MalvaColors.seed
-                  : MalvaColors.seed.withValues(alpha: 0.35),
-              width: selected ? 2 : 1.5,
-            ),
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: MalvaColors.seed,
-                child: Icon(icon, color: Colors.white),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w900, fontSize: 15)),
-                  ],
-                ),
-              ),
-              if (selected)
-                const Icon(Icons.check_circle_rounded, color: MalvaColors.seed),
-            ],
+                ? MalvaColors.seed
+                : MalvaColors.seed.withValues(alpha: 0.35),
+            width: selected ? 2 : 1.5,
           ),
         ),
-      );
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: MalvaColors.seed,
+              child: Icon(icon, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 15)),
+                ],
+              ),
+            ),
+            if (selected)
+              const Icon(Icons.check_circle_rounded, color: MalvaColors.seed),
+          ],
+        ),
+      ),
+    );
   }
 }

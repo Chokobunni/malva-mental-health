@@ -162,7 +162,9 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                               fontWeight: FontWeight.w900, fontSize: 16)),
                       const SizedBox(height: 4),
                       StatusPill(
-                        label: isVideo ? 'Video • sekali sesi' : 'Chat • sekali sesi',
+                        label: isVideo
+                            ? 'Video • sekali sesi'
+                            : 'Chat • sekali sesi',
                         color: MalvaColors.orchid,
                         icon: isVideo
                             ? Icons.videocam_rounded
@@ -232,9 +234,8 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                         bookable: day.bookable,
                         freeSlots: day.freeSlots,
                         selected: _selectedDate == day.date,
-                        onTap: day.bookable
-                            ? () => _selectDate(day.date)
-                            : null,
+                        onTap:
+                            day.bookable ? () => _selectDate(day.date) : null,
                       ),
                     ),
                 ],
@@ -265,15 +266,12 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                 for (final slot in _slots)
                   ChoiceChip(
                     label: Text(slot.time,
-                        style:
-                            const TextStyle(fontWeight: FontWeight.w700)),
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
                     selected: _selectedSlot == slot.time,
                     onSelected: slot.available
-                        ? (_) =>
-                            setState(() => _selectedSlot = slot.time)
+                        ? (_) => setState(() => _selectedSlot = slot.time)
                         : null,
-                    selectedColor:
-                        MalvaColors.seed.withValues(alpha: 0.2),
+                    selectedColor: MalvaColors.seed.withValues(alpha: 0.2),
                   ),
               ],
             ),

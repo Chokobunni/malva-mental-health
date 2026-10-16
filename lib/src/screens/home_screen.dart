@@ -109,8 +109,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         scope: 'upcoming',
       );
       if (!mounted) return;
-      sessions.sort((a, b) =>
-          (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
+      sessions
+          .sort((a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
       setState(
           () => _upcomingSession = sessions.isEmpty ? null : sessions.first);
     } on Object {

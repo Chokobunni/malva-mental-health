@@ -77,8 +77,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
     try {
       final results = await Future.wait([
         apiClient.listCarePackages(accessToken: token),
-        apiClient.listCareSessions(
-            accessToken: token, scope: 'all'),
+        apiClient.listCareSessions(accessToken: token, scope: 'all'),
       ]);
       if (!mounted) return;
       final pkgs = results[0] as List<BackendCarePackage>;
@@ -95,8 +94,8 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
         _sessions = sessions
             .where((s) => s.packageId == _package.id)
             .toList(growable: false)
-          ..sort((a, b) => (a.scheduledAt ?? '')
-              .compareTo(b.scheduledAt ?? ''));
+          ..sort(
+              (a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
         _isLoading = false;
       });
     } on Object catch (e) {
@@ -108,13 +107,11 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
     }
   }
 
-  List<BackendCareSession> get _upcoming => _sessions
-      .where((s) => s.isScheduled)
-      .toList(growable: false);
+  List<BackendCareSession> get _upcoming =>
+      _sessions.where((s) => s.isScheduled).toList(growable: false);
 
-  List<BackendCareSession> get _past => _sessions
-      .where((s) => !s.isScheduled)
-      .toList(growable: false);
+  List<BackendCareSession> get _past =>
+      _sessions.where((s) => !s.isScheduled).toList(growable: false);
 
   @override
   Widget build(BuildContext context) {
@@ -176,20 +173,15 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
                   if (expires != null)
                     Text(
                       'Berlaku s/d ${expires.day}/${expires.month}/${expires.year} — sisa hangus setelah itu.',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                   if (_package.refundedAmount > 0)
                     Text(
                       'Total refund uang: ${_rupiah(_package.refundedAmount)}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: MalvaColors.mint),
+                          fontWeight: FontWeight.w700, color: MalvaColors.mint),
                     ),
                 ],
               ),
@@ -362,8 +354,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: compactFilledButtonStyle.copyWith(
-              backgroundColor:
-                  const WidgetStatePropertyAll(MalvaColors.danger),
+              backgroundColor: const WidgetStatePropertyAll(MalvaColors.danger),
             ),
             child: const Text('Batalkan'),
           ),
@@ -622,15 +613,13 @@ class _SessionSchedulerSheetState extends State<_SessionSchedulerSheet> {
               const SizedBox(height: 8),
               Text(_error!,
                   style: const TextStyle(
-                      color: MalvaColors.danger,
-                      fontWeight: FontWeight.w700)),
+                      color: MalvaColors.danger, fontWeight: FontWeight.w700)),
             ],
             const SizedBox(height: 14),
             FilledButton(
               onPressed: (_date == null || _slot == null)
                   ? null
-                  : () => Navigator.pop(
-                      context, '${_date}T$_slot|$_type'),
+                  : () => Navigator.pop(context, '${_date}T$_slot|$_type'),
               child: const Text('Pilih Jadwal'),
             ),
           ],
@@ -667,8 +656,7 @@ class PackageFirstSessionSheet extends StatefulWidget {
       _PackageFirstSessionSheetState();
 }
 
-class _PackageFirstSessionSheetState
-    extends State<PackageFirstSessionSheet> {
+class _PackageFirstSessionSheetState extends State<PackageFirstSessionSheet> {
   List<BackendAvailabilityDay> _days = const [];
   String? _date;
   String? _slot;
@@ -689,8 +677,7 @@ class _PackageFirstSessionSheetState
         userId: widget.professionalId,
       );
       if (!mounted) return;
-      final filtered =
-          days.where((d) => d.bookable).toList(growable: false);
+      final filtered = days.where((d) => d.bookable).toList(growable: false);
       setState(() {
         _days = filtered;
         _loadingDays = false;
@@ -797,15 +784,13 @@ class _PackageFirstSessionSheetState
               const SizedBox(height: 8),
               Text(_error!,
                   style: const TextStyle(
-                      color: MalvaColors.danger,
-                      fontWeight: FontWeight.w700)),
+                      color: MalvaColors.danger, fontWeight: FontWeight.w700)),
             ],
             const SizedBox(height: 14),
             FilledButton(
               onPressed: (_date == null || _slot == null)
                   ? null
-                  : () => Navigator.pop(
-                      context, '${_date}T$_slot|$_type'),
+                  : () => Navigator.pop(context, '${_date}T$_slot|$_type'),
               child: const Text('Lanjut ke Pembayaran'),
             ),
           ],
@@ -897,8 +882,8 @@ class _FirstSessionSlotsState extends State<_FirstSessionSlots> {
     final free = _slots.where((s) => s.available).toList(growable: false);
     if (free.isEmpty) {
       return Text('Slot hari ini penuh. Pilih hari lain.',
-          style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant));
+          style:
+              TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant));
     }
     return Wrap(
       spacing: 8,
@@ -961,8 +946,7 @@ class _PackageSessionCard extends StatelessWidget {
           Row(
             children: [
               CircleAvatar(
-                backgroundColor:
-                    MalvaColors.seed.withValues(alpha: 0.12),
+                backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
                 child: Icon(
                     session.isVideo
                         ? Icons.videocam_rounded

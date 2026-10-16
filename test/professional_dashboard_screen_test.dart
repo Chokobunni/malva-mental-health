@@ -7,7 +7,8 @@ import 'package:malva_mental_health/src/screens/professional_dashboard_screen.da
 import 'package:malva_mental_health/src/theme.dart';
 
 void main() {
-  testWidgets('professional dashboard renders tabs Dashboard/Jadwal/Pasien/Lainnya',
+  testWidgets(
+      'professional dashboard renders tabs Dashboard/Jadwal/Pasien/Lainnya',
       (tester) async {
     final container = ProviderContainer();
     final store = container.read(malvaStoreProvider.notifier);

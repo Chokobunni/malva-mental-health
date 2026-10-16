@@ -560,23 +560,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           if (_accessLoaded && !_access.inSession)
             Container(
               width: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               color: MalvaColors.amber.withValues(alpha: 0.15),
               child: Text(
                 _access.reason.isEmpty
                     ? 'Chat teks aktif saat sesi berjalan.'
                     : _access.reason,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w700),
+                style:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
               ),
             ),
           if (_accessLoaded && _access.inSession)
             Container(
               width: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               color: MalvaColors.mint.withValues(alpha: 0.15),
               child: const Text(
                 'Sesi berjalan — kamu & profesional bisa chat di sini.',

@@ -297,8 +297,8 @@ class _TestCard extends StatelessWidget {
           CircleAvatar(
             radius: 24,
             backgroundColor: MalvaColors.seed.withValues(alpha: 0.1),
-            child:
-                const Icon(Icons.psychology_rounded, color: MalvaColors.seed, size: 26),
+            child: const Icon(Icons.psychology_rounded,
+                color: MalvaColors.seed, size: 26),
           ),
           const SizedBox(height: 8),
           Text(

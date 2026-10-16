@@ -194,8 +194,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                                         style: Theme.of(context)
                                             .textTheme
                                             .bodySmall
-                                            ?.copyWith(
-                                                color: Colors.black54),
+                                            ?.copyWith(color: Colors.black54),
                                       ),
                                     ],
                                   ),
@@ -208,8 +207,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                           // ===== INTRO VIDEO (hanya bila ada URL) =====
                           if (cred.videoIntroUrl.trim().isNotEmpty) ...[
                             SoftCard(
-                              onTap: () =>
-                                  _openIntroVideo(cred.videoIntroUrl),
+                              onTap: () => _openIntroVideo(cred.videoIntroUrl),
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 14, vertical: 12),
                               child: Row(
@@ -371,13 +369,10 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                                     i < reviews.reviews.length;
                                     i++) ...[
                                   _ReviewCard(
-                                    name: reviews
-                                        .reviews[i].patientName,
-                                    text: reviews.reviews[i].reviewText
-                                            .isEmpty
+                                    name: reviews.reviews[i].patientName,
+                                    text: reviews.reviews[i].reviewText.isEmpty
                                         ? 'Membantu.'
-                                        : reviews
-                                            .reviews[i].reviewText,
+                                        : reviews.reviews[i].reviewText,
                                     date: _reviewDate(
                                         reviews.reviews[i].createdAt),
                                     stars: reviews.reviews[i].stars,
@@ -393,8 +388,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                           // ===== PAKET AKTIF (bila ada) =====
                           if (_activePackage != null)
                             SoftCard(
-                              color:
-                                  MalvaColors.mint.withValues(alpha: 0.10),
+                              color: MalvaColors.mint.withValues(alpha: 0.10),
                               child: Row(
                                 children: [
                                   const Icon(Icons.card_membership_rounded,
@@ -461,8 +455,8 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                               ),
                             ],
                             scheduleChips: const ['Chat', 'Video'],
-                            onChipSelect: (chip) => setState(() =>
-                                _serviceType = chip.toLowerCase()),
+                            onChipSelect: (chip) => setState(
+                                () => _serviceType = chip.toLowerCase()),
                             selectedChip:
                                 _serviceType == 'video' ? 'Video' : 'Chat',
                             scheduleLines: _scheduleLines(),
@@ -473,15 +467,14 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                           _SupportPlanCard(
                             selected: _selectedPlan == 'continuous',
                             onSelect: _packagePrice() > 0
-                                ? () => setState(
-                                    () => _selectedPlan = 'continuous')
+                                ? () =>
+                                    setState(() => _selectedPlan = 'continuous')
                                 : () => ScaffoldMessenger.of(context)
                                     .showSnackBar(const SnackBar(
                                         content: Text(
                                             'Profesional belum mengatur harga paket.'))),
                             title: 'Continuous Package (Best Value)',
-                            subtitle:
-                                '4 sesi pertemuan, berlaku 6 minggu',
+                            subtitle: '4 sesi pertemuan, berlaku 6 minggu',
                             badge: (
                               '4 Sesi • 6 Minggu',
                               Icons.handshake_rounded
@@ -510,7 +503,8 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             ],
                             footnote:
                                 'Sisa sesi setelah 6 minggu hangus. Tanpa perpanjangan otomatis.',
-                            quota: 'Termasuk monitoring data selama paket aktif',
+                            quota:
+                                'Termasuk monitoring data selama paket aktif',
                           ),
                           const SizedBox(height: 16),
 
@@ -633,8 +627,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
       if (price <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content:
-                  Text('Profesional belum mengatur harga sesi ini.')),
+              content: Text('Profesional belum mengatur harga sesi ini.')),
         );
         return;
       }
@@ -1049,8 +1042,8 @@ class _SupportPlanCard extends StatelessWidget {
                           border: selectedChip == chip
                               ? null
                               : Border.all(
-                                  color: MalvaColors.seed
-                                      .withValues(alpha: 0.25)),
+                                  color:
+                                      MalvaColors.seed.withValues(alpha: 0.25)),
                         ),
                         child: Text(chip,
                             style: TextStyle(

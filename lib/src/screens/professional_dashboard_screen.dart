@@ -113,8 +113,7 @@ class _ProfessionalDashboardScreenState
         children: [
           GradientHeader(
             title: 'Professional',
-            subtitle:
-                'Prioritas pasien, screening, sesi, dan paket',
+            subtitle: 'Prioritas pasien, screening, sesi, dan paket',
             leading: const Icon(
               Icons.medical_information_rounded,
               color: Colors.white,
@@ -153,8 +152,7 @@ class _ProfessionalDashboardScreenState
                             color: Colors.white,
                           ),
                         )
-                      : const Icon(Icons.refresh_rounded,
-                          color: Colors.white),
+                      : const Icon(Icons.refresh_rounded, color: Colors.white),
                 ),
                 IconButton(
                   tooltip: 'Keluar',
@@ -180,9 +178,8 @@ class _ProfessionalDashboardScreenState
                           _DashboardStatusStrip(
                             isLoading: _isLoadingOnlineData,
                             error: _onlineError,
-                            hasBackendSession: widget
-                                    .session?.accessToken?.isNotEmpty ==
-                                true,
+                            hasBackendSession:
+                                widget.session?.accessToken?.isNotEmpty == true,
                             onRetry: _loadOnlineProfessionalData,
                             syncStatus: _syncStatus,
                             lastSyncTime: _lastSyncTime,
@@ -194,13 +191,12 @@ class _ProfessionalDashboardScreenState
                           _PriorityMetrics(
                             patientCount: patients.length,
                             crisisCount: _crisisQueue(patients).length,
-                            reviewCount:
-                                _reviewQueue(patients).length,
+                            reviewCount: _reviewQueue(patients).length,
                             onPatientsTap: _showActivePatientsSheet,
                             onCrisisTap: () =>
                                 _showPriorityListSheet(crisisOnly: true),
-                            onReviewTap: () => _showPriorityListSheet(
-                                crisisOnly: false),
+                            onReviewTap: () =>
+                                _showPriorityListSheet(crisisOnly: false),
                           ),
                         if (_tabIndex == 0) const SizedBox(height: 22),
                         // ---- TAB 2: PASIEN ----
@@ -442,8 +438,6 @@ class _ProfessionalDashboardScreenState
     }
   }
 
-
-
   /// Pasien dashboard SELALU dari server (tanpa pasien demo lokal).
   List<_ProfessionalPatient> _patientsForDashboard() {
     return [
@@ -572,9 +566,7 @@ class _ProfessionalDashboardScreenState
               Text(
                 'Ketuk pasien untuk membuka detailnya di tab Pasien.',
                 style: TextStyle(
-                    color: Theme.of(sheetContext)
-                        .colorScheme
-                        .onSurfaceVariant),
+                    color: Theme.of(sheetContext).colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 12),
               if (list.isEmpty)
@@ -741,9 +733,7 @@ class _ProfessionalDashboardScreenState
                         ? 'Pasien dengan crisis flag — prioritaskan penilaian keselamatan.'
                         : 'Screening terbaru yang menunggu review klinis.',
                 style: TextStyle(
-                    color: Theme.of(sheetContext)
-                        .colorScheme
-                        .onSurfaceVariant),
+                    color: Theme.of(sheetContext).colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 12),
               if (items.isEmpty)
@@ -1075,12 +1065,8 @@ class _ProfessionalDashboardScreenState
               if (screening.ruleTrace.isNotEmpty)
                 Text(
                   'Rule: ${screening.ruleTrace}',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               if (screening.crisisFlag) ...[
                 const SizedBox(height: 8),
@@ -1181,7 +1167,6 @@ class _ProfessionalDashboardScreenState
       );
     }
   }
-
 
   void _exportData() async {
     final exportPatients = _patientsForDashboard();
@@ -1709,9 +1694,8 @@ class _ConnectedPatientList extends StatelessWidget {
                 InitialAvatar(
                   name: patient.displayName,
                   radius: 18,
-                  color: patient.hasCrisis
-                      ? MalvaColors.danger
-                      : MalvaColors.pink,
+                  color:
+                      patient.hasCrisis ? MalvaColors.danger : MalvaColors.pink,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1726,13 +1710,9 @@ class _ConnectedPatientList extends StatelessWidget {
                       // tidak dobel dengan halaman detail pasien (Paket & sesi).
                       Text(
                         '${patient.sourceLabel} - ${patient.status}',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
                       ),
                     ],
                   ),
@@ -1751,15 +1731,6 @@ class _ConnectedPatientList extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
-
-
-
 
 class _RelationshipManagementSection extends StatelessWidget {
   const _RelationshipManagementSection({
@@ -2068,12 +2039,9 @@ class _PriorityCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       '${item.patient.displayName} • ${_formatDate(screening.createdAt)}',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(
-                              color:
-                                  Theme.of(context).colorScheme.onSurfaceVariant),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -2250,7 +2218,6 @@ class _PriorityItem {
   final Color color;
 }
 
-
 class _AuditEntry {
   const _AuditEntry({
     required this.title,
@@ -2289,7 +2256,6 @@ String _formatDate(DateTime? value) {
   final month = value.month.toString().padLeft(2, '0');
   return '$day/$month/${value.year}';
 }
-
 
 class _SyncStatusIndicator extends StatelessWidget {
   const _SyncStatusIndicator({

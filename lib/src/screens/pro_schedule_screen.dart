@@ -79,8 +79,8 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
       setState(() {
         _today = (results[0] as List<BackendCareSession>);
         _upcoming = (results[1] as List<BackendCareSession>)
-          ..sort((a, b) =>
-              (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
+          ..sort(
+              (a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
         _past = (results[2] as List<BackendCareSession>);
         _schedules = (results[3] as List<BackendProfessionalSchedule>);
         _pricing = (results[4] as BackendProfessionalPricing);
@@ -143,7 +143,8 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
               const EmptyState(
                 icon: Icons.calendar_month_outlined,
                 title: 'Belum ada sesi mendatang',
-                subtitle: 'Pasien menjadwalkan sesi dari paket / quick consult.',
+                subtitle:
+                    'Pasien menjadwalkan sesi dari paket / quick consult.',
               )
             else
               for (final s in _upcoming.take(10)) ...[
@@ -399,8 +400,7 @@ class _ProSessionCard extends ConsumerWidget {
     }
   }
 
-  Future<void> _mark(
-      BuildContext context, WidgetRef ref, String status) async {
+  Future<void> _mark(BuildContext context, WidgetRef ref, String status) async {
     final api = ref.read(apiClientProvider);
     final token = ref.read(currentSessionProvider)?.accessToken;
     if (token == null || token.isEmpty) return;
@@ -443,8 +443,7 @@ class _ProSessionCard extends ConsumerWidget {
             TextField(
               controller: reasonController,
               maxLines: 2,
-              decoration: const InputDecoration(
-                  labelText: 'Alasan (opsional)'),
+              decoration: const InputDecoration(labelText: 'Alasan (opsional)'),
             ),
           ],
         ),
@@ -456,8 +455,7 @@ class _ProSessionCard extends ConsumerWidget {
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: compactFilledButtonStyle.copyWith(
-              backgroundColor:
-                  const WidgetStatePropertyAll(MalvaColors.danger),
+              backgroundColor: const WidgetStatePropertyAll(MalvaColors.danger),
             ),
             child: const Text('Batalkan'),
           ),
@@ -505,8 +503,7 @@ class _ProSessionCard extends ConsumerWidget {
             TextField(
               controller: dateController,
               decoration: const InputDecoration(
-                  labelText: 'Tanggal (YYYY-MM-DD)',
-                  hintText: '2026-10-20'),
+                  labelText: 'Tanggal (YYYY-MM-DD)', hintText: '2026-10-20'),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -566,8 +563,7 @@ class _ProSessionCard extends ConsumerWidget {
   }
 
   Future<void> _editDetail(BuildContext context, WidgetRef ref) async {
-    final meetingController =
-        TextEditingController(text: session.meetingUrl);
+    final meetingController = TextEditingController(text: session.meetingUrl);
     final summaryController =
         TextEditingController(text: session.summaryForPatient);
     final noteController = TextEditingController(text: session.privateNote);
@@ -733,8 +729,7 @@ class ProAvailabilityScreen extends ConsumerStatefulWidget {
       _ProAvailabilityScreenState();
 }
 
-class _ProAvailabilityScreenState
-    extends ConsumerState<ProAvailabilityScreen> {
+class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   List<BackendProfessionalSchedule> _schedules = const [];
   bool _isLoading = true;
   String? _error;
@@ -895,8 +890,9 @@ class _ProAvailabilityScreenState
                                             : Icons.play_circle_outline_rounded,
                                         size: 16,
                                       ),
-                                      label: Text(
-                                          s.isActive ? 'Nonaktifkan' : 'Aktifkan'),
+                                      label: Text(s.isActive
+                                          ? 'Nonaktifkan'
+                                          : 'Aktifkan'),
                                     ),
                                     OutlinedButton(
                                       onPressed: () => _removeSchedule(s),
@@ -917,18 +913,16 @@ class _ProAvailabilityScreenState
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             const Text('Tambah jadwal',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w900)),
+                                style: TextStyle(fontWeight: FontWeight.w900)),
                             const SizedBox(height: 10),
                             DropdownButtonFormField<int>(
                               initialValue: _newDay,
-                              decoration: const InputDecoration(
-                                  labelText: 'Hari'),
+                              decoration:
+                                  const InputDecoration(labelText: 'Hari'),
                               items: [
                                 for (var d = 0; d < 7; d++)
                                   DropdownMenuItem(
-                                      value: d,
-                                      child: Text(_dayNames[d])),
+                                      value: d, child: Text(_dayNames[d])),
                               ],
                               onChanged: (v) {
                                 if (v != null) {
@@ -1024,7 +1018,7 @@ class _ProAvailabilityScreenState
                     ],
                   ),
                 ),
-              );
+    );
   }
 
   /// Payload satu baris jadwal untuk PUT /v1/professional/schedules.

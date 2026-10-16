@@ -275,8 +275,7 @@ class _ProfessionalLoginScreenState
                     passwordRequirementHint,
                     style: TextStyle(
                         fontSize: 12,
-                        color:
-                            Theme.of(context).colorScheme.onSurfaceVariant),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -284,8 +283,7 @@ class _ProfessionalLoginScreenState
                     'kamu tampil di direktori pasien.',
                     style: TextStyle(
                         fontSize: 12,
-                        color:
-                            Theme.of(context).colorScheme.onSurfaceVariant),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                 ],
                 const SizedBox(height: 14),

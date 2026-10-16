@@ -91,8 +91,7 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen> {
                       Expanded(
                         child: Text(
                           'Paket aktif: 4 sesi / 6 minggu\n${widget.doctorName}',
-                          style:
-                              const TextStyle(fontWeight: FontWeight.w700),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                       ),
                     ],
@@ -110,8 +109,7 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen> {
                       Expanded(
                         child: Text(
                           'Sesi terjadwal dengan ${widget.doctorName}. Chat aktif saat sesi berjalan.',
-                          style:
-                              const TextStyle(fontWeight: FontWeight.w700),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                       ),
                     ],

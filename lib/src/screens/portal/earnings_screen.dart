@@ -176,16 +176,14 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                     TextField(
                       controller: _bankController,
                       decoration: const InputDecoration(
-                          labelText: 'Bank tujuan',
-                          hintText: 'BCA'),
+                          labelText: 'Bank tujuan', hintText: 'BCA'),
                     ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _accountController,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                          labelText: 'Nomor rekening',
-                          hintText: '…'),
+                          labelText: 'Nomor rekening', hintText: '…'),
                     ),
                     const SizedBox(height: 10),
                     SizedBox(
@@ -273,8 +271,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
     final account = _accountController.text.trim();
     if (bank.isEmpty || account.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Isi bank & nomor rekening dulu.')),
+        const SnackBar(content: Text('Isi bank & nomor rekening dulu.')),
       );
       return;
     }

@@ -83,17 +83,13 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
     }
   }
 
-  List<BackendCareSession> get _upcoming => _sessions
-      .where((s) => s.isScheduled)
-      .toList(growable: false)
-    ..sort((a, b) =>
-        (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
+  List<BackendCareSession> get _upcoming =>
+      _sessions.where((s) => s.isScheduled).toList(growable: false)
+        ..sort((a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
 
-  List<BackendCareSession> get _past => _sessions
-      .where((s) => !s.isScheduled)
-      .toList(growable: false)
-    ..sort((a, b) =>
-        (b.scheduledAt ?? '').compareTo(a.scheduledAt ?? ''));
+  List<BackendCareSession> get _past =>
+      _sessions.where((s) => !s.isScheduled).toList(growable: false)
+        ..sort((a, b) => (b.scheduledAt ?? '').compareTo(a.scheduledAt ?? ''));
 
   List<BackendPatientProfessionalLink> get _activeLinks =>
       _links.where((l) => l.status == 'active').toList();
@@ -190,12 +186,10 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
     if (list.isEmpty) {
       return [
         EmptyState(
-          icon: upcoming
-              ? Icons.event_available_outlined
-              : Icons.history_rounded,
-          title: upcoming
-              ? 'Tidak ada sesi mendatang'
-              : 'Belum ada riwayat sesi',
+          icon:
+              upcoming ? Icons.event_available_outlined : Icons.history_rounded,
+          title:
+              upcoming ? 'Tidak ada sesi mendatang' : 'Belum ada riwayat sesi',
           subtitle: upcoming
               ? 'Jadwalkan sesi dari paketmu.'
               : 'Sesi yang selesai akan tercatat di sini.',
@@ -290,9 +284,8 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => ChatScreen(
-          otherUserName: s.professionalName.isEmpty
-              ? 'Profesional'
-              : s.professionalName,
+          otherUserName:
+              s.professionalName.isEmpty ? 'Profesional' : s.professionalName,
           otherUserId: s.professionalId,
         ),
       ),
@@ -572,8 +565,8 @@ class _ProfessionalLinkCard extends StatelessWidget {
             children: [
               CircleAvatar(
                 backgroundColor: MalvaColors.mint.withValues(alpha: 0.12),
-                child: const Icon(Icons.person_rounded,
-                    color: MalvaColors.mint),
+                child:
+                    const Icon(Icons.person_rounded, color: MalvaColors.mint),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -594,7 +587,8 @@ class _ProfessionalLinkCard extends StatelessWidget {
                 ),
               ),
               StatusPill(
-                label: pkg != null && pkg.isActive ? 'Paket aktif' : 'Terhubung',
+                label:
+                    pkg != null && pkg.isActive ? 'Paket aktif' : 'Terhubung',
                 color: pkg != null && pkg.isActive
                     ? MalvaColors.mint
                     : Theme.of(context).colorScheme.onSurfaceVariant,
