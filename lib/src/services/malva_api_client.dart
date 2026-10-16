@@ -940,8 +940,8 @@ class MalvaApiClient {
   Future<List<BackendPsychTest>> listPsychTests({
     String? accessToken,
   }) async {
-    final payload = await _send('GET', '/v1/psych-tests',
-        accessToken: accessToken);
+    final payload =
+        await _send('GET', '/v1/psych-tests', accessToken: accessToken);
     return _expectList(payload['tests'], 'Respons katalog tidak valid.')
         .whereType<Map<String, dynamic>>()
         .map(BackendPsychTest.fromJson)
@@ -1320,8 +1320,7 @@ class MalvaApiClient {
     required String professionalId,
   }) async {
     final payload = await _send('POST', '/v1/care-packages',
-        accessToken: accessToken,
-        body: {'professional_id': professionalId});
+        accessToken: accessToken, body: {'professional_id': professionalId});
     return BackendCarePackage.fromJson(
       _expectMap(payload['package'], 'Respons paket tidak valid.'),
     );
@@ -1435,8 +1434,7 @@ class MalvaApiClient {
         if (status != null) 'status': status,
         if (cancelReason != null) 'cancel_reason': cancelReason,
         if (meetingUrl != null) 'meeting_url': meetingUrl,
-        if (summaryForPatient != null)
-          'summary_for_patient': summaryForPatient,
+        if (summaryForPatient != null) 'summary_for_patient': summaryForPatient,
         if (privateNote != null) 'private_note': privateNote,
       },
     );
@@ -2072,8 +2070,7 @@ class MalvaApiClient {
     String account = '',
   }) async {
     await _send('POST', '/v1/earnings/$earningId/payout',
-        accessToken: accessToken,
-        body: {'bank': bank, 'account': account});
+        accessToken: accessToken, body: {'bank': bank, 'account': account});
   }
 
   Future<BackendEPrescription> createEPrescription({
@@ -3584,8 +3581,7 @@ class BackendDoctorReviews {
           .whereType<Map<String, dynamic>>()
           .map(BackendDoctorReviewItem.fromJson)
           .toList(growable: false),
-      averageStars:
-          (rating['average_stars'] as num?)?.toDouble() ?? 0,
+      averageStars: (rating['average_stars'] as num?)?.toDouble() ?? 0,
       reviewCount: (rating['review_count'] as num?)?.toInt() ?? 0,
       helpfulPercent: (rating['helpful_percent'] as num?)?.toInt() ?? 0,
     );

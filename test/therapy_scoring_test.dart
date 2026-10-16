@@ -96,10 +96,10 @@ void main() {
 
     test('who5Summary memuat skor dan kategori', () {
       expect(who5Summary(_who5([5, 5, 5, 5, 5])), contains('WHO-5 25/25'));
-      expect(who5Summary(_who5([5, 5, 5, 5, 5])),
-          contains('Kesejahteraan baik'));
-      expect(who5Summary(_who5([1, 1, 1, 1, 1])),
-          contains('screening lanjutan'));
+      expect(
+          who5Summary(_who5([5, 5, 5, 5, 5])), contains('Kesejahteraan baik'));
+      expect(
+          who5Summary(_who5([1, 1, 1, 1, 1])), contains('screening lanjutan'));
     });
   });
 

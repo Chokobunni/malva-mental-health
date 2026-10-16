@@ -70,7 +70,8 @@ class GradientHeader extends StatelessWidget {
 }
 
 class SectionLabel extends StatelessWidget {
-  const SectionLabel(this.text, {super.key, this.action, this.icon, this.accent});
+  const SectionLabel(this.text,
+      {super.key, this.action, this.icon, this.accent});
 
   final String text;
   final Widget? action;

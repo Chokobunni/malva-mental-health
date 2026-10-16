@@ -136,9 +136,8 @@ class TherapyWorksheetField {
   bool get isScale =>
       kind == TherapyFieldKind.scale && minValue != null && maxValue != null;
 
-  List<int> get scaleValues => isScale
-      ? [for (var v = minValue!; v <= maxValue!; v++) v]
-      : const [];
+  List<int> get scaleValues =>
+      isScale ? [for (var v = minValue!; v <= maxValue!; v++) v] : const [];
 
   String scaleLabel(int value) {
     if (scaleLabels.isEmpty || !isScale) return '$value';
@@ -323,27 +322,174 @@ const dass21Module = TherapyModule(
 
 /// Field worksheet DASS-21 (21 item, skala 0-3 berlabel).
 const dass21WorksheetFields = <TherapyWorksheetField>[
-  TherapyWorksheetField(id: 'q1', badge: '1', label: 'Saya merasa sulit untuk menenangkan diri', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q2', badge: '2', label: 'Saya menyadari mulut saya terasa kering', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q3', badge: '3', label: 'Saya tidak dapat merasakan perasaan positif sama sekali', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q4', badge: '4', label: 'Saya mengalami kesulitan bernapas', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q5', badge: '5', label: 'Saya merasa sulit berinisiatif mengerjakan sesuatu', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q6', badge: '6', label: 'Saya cenderung bereaksi berlebihan terhadap situasi', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q7', badge: '7', label: 'Saya mengalami gemetar (mis. di tangan)', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q8', badge: '8', label: 'Saya merasa banyak menggunakan energi untuk cemas', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q9', badge: '9', label: 'Saya khawatir akan situasi di mana saya panik', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q10', badge: '10', label: 'Saya merasa tidak ada hal yang dapat saya nantikan', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q11', badge: '11', label: 'Saya merasa gelisah', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q12', badge: '12', label: 'Saya sulit untuk rileks', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q13', badge: '13', label: 'Saya merasa sedih dan tertekan', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q14', badge: '14', label: 'Saya tidak sabar terhadap hal yang menghalangi pekerjaan', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q15', badge: '15', label: 'Saya merasa hampir panik', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q16', badge: '16', label: 'Saya tidak bisa menjadi antusias terhadap apa pun', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q17', badge: '17', label: 'Saya merasa tidak berharga', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q18', badge: '18', label: 'Saya merasa mudah tersinggung', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q19', badge: '19', label: 'Saya menyadari perubahan detak jantung saat cemas', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q20', badge: '20', label: 'Saya merasa takut tanpa alasan yang jelas', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
-  TherapyWorksheetField(id: 'q21', badge: '21', label: 'Saya merasa hidup tidak berarti', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 3, scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q1',
+      badge: '1',
+      label: 'Saya merasa sulit untuk menenangkan diri',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q2',
+      badge: '2',
+      label: 'Saya menyadari mulut saya terasa kering',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q3',
+      badge: '3',
+      label: 'Saya tidak dapat merasakan perasaan positif sama sekali',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q4',
+      badge: '4',
+      label: 'Saya mengalami kesulitan bernapas',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q5',
+      badge: '5',
+      label: 'Saya merasa sulit berinisiatif mengerjakan sesuatu',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q6',
+      badge: '6',
+      label: 'Saya cenderung bereaksi berlebihan terhadap situasi',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q7',
+      badge: '7',
+      label: 'Saya mengalami gemetar (mis. di tangan)',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q8',
+      badge: '8',
+      label: 'Saya merasa banyak menggunakan energi untuk cemas',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q9',
+      badge: '9',
+      label: 'Saya khawatir akan situasi di mana saya panik',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q10',
+      badge: '10',
+      label: 'Saya merasa tidak ada hal yang dapat saya nantikan',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q11',
+      badge: '11',
+      label: 'Saya merasa gelisah',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q12',
+      badge: '12',
+      label: 'Saya sulit untuk rileks',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q13',
+      badge: '13',
+      label: 'Saya merasa sedih dan tertekan',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q14',
+      badge: '14',
+      label: 'Saya tidak sabar terhadap hal yang menghalangi pekerjaan',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q15',
+      badge: '15',
+      label: 'Saya merasa hampir panik',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q16',
+      badge: '16',
+      label: 'Saya tidak bisa menjadi antusias terhadap apa pun',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q17',
+      badge: '17',
+      label: 'Saya merasa tidak berharga',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q18',
+      badge: '18',
+      label: 'Saya merasa mudah tersinggung',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q19',
+      badge: '19',
+      label: 'Saya menyadari perubahan detak jantung saat cemas',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q20',
+      badge: '20',
+      label: 'Saya merasa takut tanpa alasan yang jelas',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
+  TherapyWorksheetField(
+      id: 'q21',
+      badge: '21',
+      label: 'Saya merasa hidup tidak berarti',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 3,
+      scaleLabels: _dassScaleLabels),
 ];
 
 // ============================================================
@@ -381,11 +527,46 @@ const who5Module = TherapyModule(
 
 /// Field worksheet WHO-5 (5 item, skala 0-5 berlabel).
 const who5WorksheetFields = <TherapyWorksheetField>[
-  TherapyWorksheetField(id: 'q1', badge: '1', label: 'Saya merasa cerah dan bersemangat', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 5, scaleLabels: _who5ScaleLabels),
-  TherapyWorksheetField(id: 'q2', badge: '2', label: 'Saya merasa tenang dan rileks', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 5, scaleLabels: _who5ScaleLabels),
-  TherapyWorksheetField(id: 'q3', badge: '3', label: 'Saya merasa aktif dan penuh energi', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 5, scaleLabels: _who5ScaleLabels),
-  TherapyWorksheetField(id: 'q4', badge: '4', label: 'Saya bangun dengan perasaan segar', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 5, scaleLabels: _who5ScaleLabels),
-  TherapyWorksheetField(id: 'q5', badge: '5', label: 'Hidup saya dipenuhi hal-hal yang menarik', kind: TherapyFieldKind.scale, minValue: 0, maxValue: 5, scaleLabels: _who5ScaleLabels)
+  TherapyWorksheetField(
+      id: 'q1',
+      badge: '1',
+      label: 'Saya merasa cerah dan bersemangat',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 5,
+      scaleLabels: _who5ScaleLabels),
+  TherapyWorksheetField(
+      id: 'q2',
+      badge: '2',
+      label: 'Saya merasa tenang dan rileks',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 5,
+      scaleLabels: _who5ScaleLabels),
+  TherapyWorksheetField(
+      id: 'q3',
+      badge: '3',
+      label: 'Saya merasa aktif dan penuh energi',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 5,
+      scaleLabels: _who5ScaleLabels),
+  TherapyWorksheetField(
+      id: 'q4',
+      badge: '4',
+      label: 'Saya bangun dengan perasaan segar',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 5,
+      scaleLabels: _who5ScaleLabels),
+  TherapyWorksheetField(
+      id: 'q5',
+      badge: '5',
+      label: 'Hidup saya dipenuhi hal-hal yang menarik',
+      kind: TherapyFieldKind.scale,
+      minValue: 0,
+      maxValue: 5,
+      scaleLabels: _who5ScaleLabels)
 ];
 
 // ============================================================
@@ -1220,8 +1401,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
     if (module.isAssessment) {
       final missing = countUnansweredScale(module, _scaleValues);
       if (missing > 0) {
-        setState(() => _error =
-            'Masih ada $missing pertanyaan belum dijawab.');
+        setState(() => _error = 'Masih ada $missing pertanyaan belum dijawab.');
         return;
       }
     } else if (!_hasAnyAnswer) {
@@ -1383,8 +1563,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
               const SizedBox(height: 10),
             ],
             if (summary != null) ...[
-              _AssessmentResultCard(
-                  moduleId: module.id, answers: _scaleValues),
+              _AssessmentResultCard(moduleId: module.id, answers: _scaleValues),
               const SizedBox(height: 10),
             ],
             SoftCard(
@@ -1398,11 +1577,8 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                         : 'Isi worksheet ini sesuai kondisimu. Hasilnya bisa '
                             'disimpan ke folder therapy, diunduh, atau dikirim '
                             'langsung ke profesional (butuh paket sesi aktif).',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 12),
                   for (final field in module.worksheetFields) ...[
@@ -1419,8 +1595,8 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                       scaleValue: _scaleValues[field.id],
                       numberValue: _numberValues[field.id],
                       choiceValue: _choiceValues[field.id],
-                      choiceMultiValues: _choiceMultiValues[field.id] ??
-                          const <String>{},
+                      choiceMultiValues:
+                          _choiceMultiValues[field.id] ?? const <String>{},
                       beforeValue: _beforeValues[field.id],
                       afterValue: _afterValues[field.id],
                       onTextChanged: (_) => _markDirty(),
@@ -1437,8 +1613,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                         _saved = false;
                       }),
                       onChoiceMultiToggle: (v) => setState(() {
-                        final set =
-                            _choiceMultiValues[field.id] ?? <String>{};
+                        final set = _choiceMultiValues[field.id] ?? <String>{};
                         if (set.contains(v)) {
                           set.remove(v);
                         } else {
@@ -1622,8 +1797,11 @@ class _AssessmentResultCard extends StatelessWidget {
       );
     }
     final s = scoreWho5(answers);
-    final level =
-        s.possibleDepression ? 'Perlu screening lanjutan' : s.lowWellbeing ? 'Rendah' : 'Baik';
+    final level = s.possibleDepression
+        ? 'Perlu screening lanjutan'
+        : s.lowWellbeing
+            ? 'Rendah'
+            : 'Baik';
     final color = s.possibleDepression
         ? MalvaColors.danger
         : s.lowWellbeing
@@ -1809,82 +1987,84 @@ class _WorksheetFieldBlock extends StatelessWidget {
                     controllers: pointControllers,
                   )
                 : Column(
-                children: [
-                  for (var i = 0;
-                      i <
-                          (field.pointCount == 0
-                              ? pointControllers.length
-                              : field.pointCount);
-                      i++)
-                    Padding(
-                      padding: EdgeInsets.only(
-                          bottom: i ==
-                                  (field.pointCount == 0
-                                          ? pointControllers.length
-                                          : field.pointCount) -
-                                      1
-                              ? 0
-                              : 8),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 26,
-                            height: 26,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: moduleColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '${i + 1}',
-                              style: TextStyle(
-                                  color: moduleColor,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 12),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: i < pointControllers.length
-                                  ? pointControllers[i]
-                                  : null,
-                              minLines: 1,
-                              maxLines: 3,
-                              onChanged: onTextChanged,
-                              decoration: InputDecoration(
-                                hintText: i <
-                                        field.effectivePointLabels().length
-                                    ? field.effectivePointLabels()[i]
-                                    : 'Poin ${i + 1}…',
-                                filled: true,
-                                fillColor: fill,
-                                contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 10),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                      color: moduleColor.withValues(alpha: 0.25)),
+                    children: [
+                      for (var i = 0;
+                          i <
+                              (field.pointCount == 0
+                                  ? pointControllers.length
+                                  : field.pointCount);
+                          i++)
+                        Padding(
+                          padding: EdgeInsets.only(
+                              bottom: i ==
+                                      (field.pointCount == 0
+                                              ? pointControllers.length
+                                              : field.pointCount) -
+                                          1
+                                  ? 0
+                                  : 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 26,
+                                height: 26,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: moduleColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                      color: moduleColor.withValues(alpha: 0.25)),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                      color: moduleColor, width: 1.6),
+                                child: Text(
+                                  '${i + 1}',
+                                  style: TextStyle(
+                                      color: moduleColor,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 12),
                                 ),
                               ),
-                            ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: i < pointControllers.length
+                                      ? pointControllers[i]
+                                      : null,
+                                  minLines: 1,
+                                  maxLines: 3,
+                                  onChanged: onTextChanged,
+                                  decoration: InputDecoration(
+                                    hintText:
+                                        i < field.effectivePointLabels().length
+                                            ? field.effectivePointLabels()[i]
+                                            : 'Poin ${i + 1}…',
+                                    filled: true,
+                                    fillColor: fill,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 10),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide(
+                                          color: moduleColor.withValues(
+                                              alpha: 0.25)),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide(
+                                          color: moduleColor.withValues(
+                                              alpha: 0.25)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide(
+                                          color: moduleColor, width: 1.6),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
+                        ),
+                    ],
+                  ),
             TherapyFieldKind.choice => Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -1892,8 +2072,7 @@ class _WorksheetFieldBlock extends StatelessWidget {
                   for (final option in field.choices)
                     ChoiceChip(
                       label: Text(option,
-                          style:
-                              const TextStyle(fontWeight: FontWeight.w700)),
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
                       selected: choiceValue == option,
                       onSelected: (_) => onChoiceSelect?.call(option),
                       selectedColor: moduleColor.withValues(alpha: 0.22),
@@ -1909,11 +2088,9 @@ class _WorksheetFieldBlock extends StatelessWidget {
                   for (final option in field.choices)
                     FilterChip(
                       label: Text(option,
-                          style:
-                              const TextStyle(fontWeight: FontWeight.w700)),
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
                       selected: choiceMultiValues.contains(option),
-                      onSelected: (_) =>
-                          onChoiceMultiToggle?.call(option),
+                      onSelected: (_) => onChoiceMultiToggle?.call(option),
                       selectedColor: moduleColor.withValues(alpha: 0.22),
                       checkmarkColor: moduleColor,
                       side: BorderSide(
@@ -1925,8 +2102,8 @@ class _WorksheetFieldBlock extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('Sebelum latihan',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w800, fontSize: 12)),
+                      style:
+                          TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
                   const SizedBox(height: 6),
                   _MiniScale(
                     min: field.minValue ?? 0,
@@ -1937,8 +2114,8 @@ class _WorksheetFieldBlock extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   const Text('Sesudah latihan',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w800, fontSize: 12)),
+                      style:
+                          TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
                   const SizedBox(height: 6),
                   _MiniScale(
                     min: field.minValue ?? 0,
@@ -1958,22 +2135,21 @@ class _WorksheetFieldBlock extends StatelessWidget {
                   hintText: field.hint.isEmpty ? null : field.hint,
                   filled: true,
                   fillColor: fill,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                        color: moduleColor.withValues(alpha: 0.25)),
+                    borderSide:
+                        BorderSide(color: moduleColor.withValues(alpha: 0.25)),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                        color: moduleColor.withValues(alpha: 0.25)),
+                    borderSide:
+                        BorderSide(color: moduleColor.withValues(alpha: 0.25)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide:
-                        BorderSide(color: moduleColor, width: 1.6),
+                    borderSide: BorderSide(color: moduleColor, width: 1.6),
                   ),
                 ),
               ),
@@ -2014,8 +2190,8 @@ class _ScaleOptions extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
                   constraints: const BoxConstraints(minWidth: 44),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: value == v ? moduleColor : fill,
@@ -2142,17 +2318,14 @@ class _StepButton extends StatelessWidget {
         height: 42,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: onTap == null
-              ? Colors.black12
-              : color.withValues(alpha: 0.14),
+          color: onTap == null ? Colors.black12 : color.withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
               color: onTap == null
                   ? Colors.black12
                   : color.withValues(alpha: 0.35)),
         ),
-        child: Icon(icon,
-            color: onTap == null ? Colors.black38 : color),
+        child: Icon(icon, color: onTap == null ? Colors.black38 : color),
       ),
     );
   }
@@ -2271,9 +2444,7 @@ class _MiniScale extends StatelessWidget {
                 color: value == v ? color : fill,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: value == v
-                      ? color
-                      : color.withValues(alpha: 0.35),
+                  color: value == v ? color : color.withValues(alpha: 0.35),
                 ),
               ),
               child: Text(
@@ -2369,8 +2540,9 @@ class _TherapySubmissionsScreenState
       for (final p in pkgs)
         if (p.isActive) p.professionalId,
     };
-    final eligible =
-        active.where((l) => activeProIds.contains(l.professionalUserId)).toList();
+    final eligible = active
+        .where((l) => activeProIds.contains(l.professionalUserId))
+        .toList();
     if (!mounted) return;
     if (eligible.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2725,16 +2897,15 @@ class TherapySubmissionView extends StatelessWidget {
     );
 
     // Untuk modul assessment, kartu hasil skor tetap tampil di bagian atas.
-    final Widget? resultCard =
-        (module != null && module.isAssessment)
-            ? _AssessmentResultCard(
-                moduleId: module.id,
-                answers: {
-                  for (final f in fields)
-                    if (answers[f.id] is int) f.id: (answers[f.id] as int),
-                },
-              )
-            : null;
+    final Widget? resultCard = (module != null && module.isAssessment)
+        ? _AssessmentResultCard(
+            moduleId: module.id,
+            answers: {
+              for (final f in fields)
+                if (answers[f.id] is int) f.id: (answers[f.id] as int),
+            },
+          )
+        : null;
 
     // Detail yang dilipat: ringkasan + daftar jawaban per pertanyaan.
     final detail = Column(
@@ -2745,8 +2916,7 @@ class TherapySubmissionView extends StatelessWidget {
           const SizedBox(height: 10),
         ],
         if (fields.isEmpty)
-          Text(answers.toString(),
-              style: const TextStyle(fontSize: 12.5))
+          Text(answers.toString(), style: const TextStyle(fontSize: 12.5))
         else
           for (final field in fields) ...[
             Container(
@@ -2756,8 +2926,7 @@ class TherapySubmissionView extends StatelessWidget {
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(12),
-                border:
-                    Border.all(color: color.withValues(alpha: 0.18)),
+                border: Border.all(color: color.withValues(alpha: 0.18)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2769,8 +2938,7 @@ class TherapySubmissionView extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _answerText(field, answers[field.id]) ??
-                        '(tidak dijawab)',
+                    _answerText(field, answers[field.id]) ?? '(tidak dijawab)',
                     style: const TextStyle(fontSize: 13),
                   ),
                 ],
