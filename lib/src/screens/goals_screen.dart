@@ -277,11 +277,16 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
     );
   }
 
+  /// Persen goal yang sudah dicentang HARI INI.
+  ///
+  /// Sebelumnya memakai `doneThisWeek >= targetPerWeek`, sehingga habit
+  /// dengan target mingguan (mis. 7x/minggu) tetap 0% walau sudah dicentang
+  /// hari ini. Karena kartu ini berjudul "Daily Progress", acuannya adalah
+  /// penyelesaian hari ini.
   int _serverDonePercent() {
     if (_serverGoals.isEmpty) return 0;
-    final done = _serverGoals
-        .where((g) => g.doneThisWeek >= g.targetPerWeek && g.targetPerWeek > 0)
-        .length;
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final done = _serverGoals.where((g) => g.lastLoggedOn == today).length;
     return ((done / _serverGoals.length) * 100).round();
   }
 

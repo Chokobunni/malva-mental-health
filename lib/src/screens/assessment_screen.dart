@@ -171,8 +171,6 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                const _ResponseScaleGuide(),
                 const SizedBox(height: 18),
                 _AssessmentSection(
                   key: const ValueKey('phq9-section'),
@@ -276,14 +274,14 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
               const SizedBox(height: 4),
               for (var i = 0; i < _phq9Answers.length; i++)
                 Text(
-                    '  ${i + 1}. ${_phq9Answers[i] != null ? AssessmentEngine.responseLabels[_phq9Answers[i]!] : "Belum dijawab"}'),
+                    '  ${i + 1}. ${_phq9Answers[i]?.toString() ?? "Belum dijawab"}'),
               const SizedBox(height: 12),
               const Text('GAD-7:',
                   style: TextStyle(fontWeight: FontWeight.w900)),
               const SizedBox(height: 4),
               for (var i = 0; i < _gad7Answers.length; i++)
                 Text(
-                    '  ${i + 1}. ${_gad7Answers[i] != null ? AssessmentEngine.responseLabels[_gad7Answers[i]!] : "Belum dijawab"}'),
+                    '  ${i + 1}. ${_gad7Answers[i]?.toString() ?? "Belum dijawab"}'),
               const SizedBox(height: 12),
               Text(
                 'Total: $_answeredCount/$_questionCount terjawab',
@@ -476,58 +474,6 @@ class _AssessmentSection extends StatelessWidget {
   }
 }
 
-class _ResponseScaleGuide extends StatelessWidget {
-  const _ResponseScaleGuide();
-
-  @override
-  Widget build(BuildContext context) {
-    return SoftCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.info_outline_rounded, color: MalvaColors.plum),
-              SizedBox(width: 8),
-              Text(
-                'Panduan pilihan jawaban',
-                style: TextStyle(fontWeight: FontWeight.w900),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          for (var value = 0;
-              value < AssessmentEngine.responseLabels.length;
-              value++) ...[
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 14,
-                  backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
-                  foregroundColor: MalvaColors.plum,
-                  child: Text(
-                    '$value',
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    AssessmentEngine.responseLabels[value],
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ],
-            ),
-            if (value != AssessmentEngine.responseLabels.length - 1)
-              const SizedBox(height: 8),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 class _QuestionCard extends StatelessWidget {
   const _QuestionCard({
     super.key,
@@ -563,12 +509,14 @@ class _QuestionCard extends StatelessWidget {
                   value < AssessmentEngine.responseLabels.length;
                   value++)
                 Semantics(
-                  label: '$value, ${AssessmentEngine.responseLabels[value]}',
+                  label: '$value — '
+                      '${AssessmentEngine.responseDescriptions[value]}',
                   button: true,
                   selected: selected == value,
                   child: ChoiceChip(
+                    // Chip menampilkan ANGKA skor (0-3) sesuai instrumen asli.
                     label: Text(AssessmentEngine.responseLabels[value]),
-                    tooltip: AssessmentEngine.responseLabels[value],
+                    tooltip: AssessmentEngine.responseDescriptions[value],
                     selected: selected == value,
                     selectedColor: color.withValues(alpha: 0.2),
                     onSelected: (_) => onChanged(value),
@@ -596,7 +544,7 @@ class _QuestionCard extends StatelessWidget {
                   child: Text(
                     selected == null
                         ? 'Pilih salah satu jawaban'
-                        : AssessmentEngine.responseLabels[selected!],
+                        : 'Skor: ${AssessmentEngine.responseLabels[selected!]}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: selected == null
                               ? Theme.of(context).colorScheme.onSurfaceVariant

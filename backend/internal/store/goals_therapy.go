@@ -52,7 +52,7 @@ func (s *Store) ListGoals(ctx context.Context, patientID string, includeInactive
 		LEFT JOIN (
 			SELECT goal_id,
 			       COUNT(*) FILTER (WHERE done) AS done_this_week,
-			       MAX(logged_date) AS last_logged_on
+			       MAX(logged_date) FILTER (WHERE done) AS last_logged_on
 			FROM habit_logs
 			WHERE logged_date >= date_trunc('week', CURRENT_DATE)::date
 			GROUP BY goal_id

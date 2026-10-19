@@ -118,7 +118,11 @@ class AssessmentEngine {
 
   static const ruleVersion = '2026.1';
 
-  static const responseLabels = [
+  /// Pilihan jawaban ditampilkan sebagai ANGKA (0-3) sesuai instrumen asli.
+  static const responseLabels = ['0', '1', '2', '3'];
+
+  /// Makna tiap angka — dipakai sebagai tooltip/semantics, bukan label chip.
+  static const responseDescriptions = [
     'Tidak sama sekali',
     'Beberapa hari',
     'Lebih dari separuh hari',

@@ -78,10 +78,10 @@ void main() {
       expect(s.possibleDepression, isFalse);
     });
 
-    test('raw 5 -> possibleDepression true, percent 20', () {
+    test('semua 1 (nilai terendah UI 1-5) -> raw 0, percent 0', () {
       final s = scoreWho5(_who5([1, 1, 1, 1, 1]));
-      expect(s.raw, 5);
-      expect(s.percent, 20);
+      expect(s.raw, 0);
+      expect(s.percent, 0);
       expect(s.possibleDepression, isTrue);
       expect(s.lowWellbeing, isTrue);
     });

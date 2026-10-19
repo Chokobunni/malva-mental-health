@@ -209,11 +209,26 @@ String _dassLevel(String subscale, int score) {
   }
 }
 
-/// Skor DASS-21: jumlah per subskala x2 (setara DASS-42).
+/// Deteksi submission lama yang memakai skala 0-based (sebelum UI 1-based).
+/// UI baru tidak pernah menghasilkan nilai 0, jadi adanya 0 = data lama.
+bool _isLegacyScale(Map<String, dynamic> answers, int itemCount) {
+  for (var i = 1; i <= itemCount; i++) {
+    if (_answerInt(answers, 'q$i') <= 0) return true;
+  }
+  return false;
+}
+
+/// Skor DASS-21: jumlah per subskala x3 (setara DASS-42).
+///
+/// UI baru memakai nilai 1-3 → dikurangi 1 (skala standar 0-2) lalu dikali 3
+/// sehingga rentang subskala tetap 0-42 dan ambang klinis tidak berubah.
+/// Submission lama (0-3) tetap dihitung dengan rumus lamanya (x2).
 Dass21Score scoreDass21(Map<String, dynamic> answers) {
+  final legacy = _isLegacyScale(answers, 21);
   var dep = 0, anx = 0, str = 0;
   for (var i = 1; i <= 21; i++) {
-    final v = _answerInt(answers, 'q$i').clamp(0, 3);
+    final raw = _answerInt(answers, 'q$i');
+    final v = legacy ? raw.clamp(0, 3) : (raw - 1).clamp(0, 2);
     if (_dassDepressionItems.contains(i)) {
       dep += v;
     } else if (_dassAnxietyItems.contains(i)) {
@@ -222,9 +237,10 @@ Dass21Score scoreDass21(Map<String, dynamic> answers) {
       str += v;
     }
   }
-  dep *= 2;
-  anx *= 2;
-  str *= 2;
+  final factor = legacy ? 2 : 3;
+  dep *= factor;
+  anx *= factor;
+  str *= factor;
   return Dass21Score(
     depression: dep,
     anxiety: anx,
@@ -252,12 +268,19 @@ class Who5Score {
   bool get possibleDepression => raw <= 7;
 }
 
+/// Skor WHO-5: nilai UI 1-5 dikonversi ke skala standar 0-4 per item.
+/// Total 0-20 dipetakan ke rentang resmi 0-25 (persen 0-100%).
+/// Submission lama (0-5) tetap memakai rumus lamanya.
 Who5Score scoreWho5(Map<String, dynamic> answers) {
+  final legacy = _isLegacyScale(answers, 5);
   var total = 0;
   for (var i = 1; i <= 5; i++) {
-    total += _answerInt(answers, 'q$i').clamp(0, 5);
+    final raw = _answerInt(answers, 'q$i');
+    total += legacy ? raw.clamp(0, 5) : (raw - 1).clamp(0, 4);
   }
-  return Who5Score(raw: total, percent: total * 4);
+  if (legacy) return Who5Score(raw: total, percent: total * 4);
+  final raw = (total * 5 / 4).round();
+  return Who5Score(raw: raw, percent: (raw * 4).clamp(0, 100));
 }
 
 String who5Summary(Map<String, dynamic> answers) {
@@ -291,12 +314,10 @@ int countUnansweredScale(TherapyModule module, Map<String, int?> scaleValues) {
 // MODUL: DASS-21
 // ============================================================
 
-const List<String> _dassScaleLabels = [
-  'Tidak pernah',
-  'Kadang-kadang',
-  'Sering',
-  'Hampir selalu',
-];
+/// DASS-21: tiga pilihan jawaban berupa ANGKA 1-3 (bukan narasi).
+/// Nilai 1 = paling ringan (tidak pernah), 3 = paling berat (selalu).
+/// Skoring mengonversi ke rentang standar 0-3 agar ambang klinis tetap sahih.
+const List<String> _dassScaleLabels = ['1', '2', '3'];
 
 const dass21Module = TherapyModule(
   id: 'dass21',
@@ -304,7 +325,7 @@ const dass21Module = TherapyModule(
   description:
       'Kuesioner 21 pertanyaan untuk mengukur tiga aspek: depresi, kecemasan, '
       'dan stres selama minggu terakhir. Pilih jawaban yang paling sesuai '
-      'untuk setiap pernyataan (skala 0-3). Skor dihitung otomatis per '
+      'untuk setiap pernyataan (skala 1-3). Skor dihitung otomatis per '
       'kategori dan langsung tampil setelah semua pertanyaan terjawab.',
   icon: Icons.assignment_rounded,
   color: MalvaColors.seed,
@@ -327,7 +348,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '1',
       label: 'Saya merasa sulit untuk menenangkan diri',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -335,7 +356,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '2',
       label: 'Saya menyadari mulut saya terasa kering',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -343,7 +364,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '3',
       label: 'Saya tidak dapat merasakan perasaan positif sama sekali',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -351,7 +372,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '4',
       label: 'Saya mengalami kesulitan bernapas',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -359,7 +380,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '5',
       label: 'Saya merasa sulit berinisiatif mengerjakan sesuatu',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -367,7 +388,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '6',
       label: 'Saya cenderung bereaksi berlebihan terhadap situasi',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -375,7 +396,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '7',
       label: 'Saya mengalami gemetar (mis. di tangan)',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -383,7 +404,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '8',
       label: 'Saya merasa banyak menggunakan energi untuk cemas',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -391,7 +412,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '9',
       label: 'Saya khawatir akan situasi di mana saya panik',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -399,7 +420,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '10',
       label: 'Saya merasa tidak ada hal yang dapat saya nantikan',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -407,7 +428,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '11',
       label: 'Saya merasa gelisah',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -415,7 +436,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '12',
       label: 'Saya sulit untuk rileks',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -423,7 +444,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '13',
       label: 'Saya merasa sedih dan tertekan',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -431,7 +452,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '14',
       label: 'Saya tidak sabar terhadap hal yang menghalangi pekerjaan',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -439,7 +460,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '15',
       label: 'Saya merasa hampir panik',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -447,7 +468,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '16',
       label: 'Saya tidak bisa menjadi antusias terhadap apa pun',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -455,7 +476,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '17',
       label: 'Saya merasa tidak berharga',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -463,7 +484,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '18',
       label: 'Saya merasa mudah tersinggung',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -471,7 +492,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '19',
       label: 'Saya menyadari perubahan detak jantung saat cemas',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -479,7 +500,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '20',
       label: 'Saya merasa takut tanpa alasan yang jelas',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
   TherapyWorksheetField(
@@ -487,7 +508,7 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '21',
       label: 'Saya merasa hidup tidak berarti',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 3,
       scaleLabels: _dassScaleLabels),
 ];
@@ -496,14 +517,9 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
 // MODUL: WHO-5
 // ============================================================
 
-const List<String> _who5ScaleLabels = [
-  'Tidak pernah',
-  'Kadang-kadang',
-  'Kurang dari separuh waktu',
-  'Lebih dari separuh waktu',
-  'Sebagian besar waktu',
-  'Setiap saat',
-];
+/// WHO-5: lima pilihan jawaban berupa ANGKA 1-5 (bukan narasi).
+/// Nilai 1 = paling rendah, 5 = paling tinggi.
+const List<String> _who5ScaleLabels = ['1', '2', '3', '4', '5'];
 
 const who5Module = TherapyModule(
   id: 'who5',
@@ -511,7 +527,7 @@ const who5Module = TherapyModule(
   description:
       'Kuesioner singkat 5 pertanyaan untuk mengukur kesejahteraan psikologis '
       'dua minggu terakhir. Pilih jawaban yang paling sesuai untuk setiap '
-      'pernyataan (skala 0-5). Skor total dihitung otomatis (0-25).',
+      'pernyataan (skala 1-5). Skor total dihitung otomatis (0-25).',
   icon: Icons.favorite_rounded,
   color: MalvaColors.mint,
   category: 'Assessment',
@@ -532,7 +548,7 @@ const who5WorksheetFields = <TherapyWorksheetField>[
       badge: '1',
       label: 'Saya merasa cerah dan bersemangat',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 5,
       scaleLabels: _who5ScaleLabels),
   TherapyWorksheetField(
@@ -540,7 +556,7 @@ const who5WorksheetFields = <TherapyWorksheetField>[
       badge: '2',
       label: 'Saya merasa tenang dan rileks',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 5,
       scaleLabels: _who5ScaleLabels),
   TherapyWorksheetField(
@@ -548,7 +564,7 @@ const who5WorksheetFields = <TherapyWorksheetField>[
       badge: '3',
       label: 'Saya merasa aktif dan penuh energi',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 5,
       scaleLabels: _who5ScaleLabels),
   TherapyWorksheetField(
@@ -556,7 +572,7 @@ const who5WorksheetFields = <TherapyWorksheetField>[
       badge: '4',
       label: 'Saya bangun dengan perasaan segar',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 5,
       scaleLabels: _who5ScaleLabels),
   TherapyWorksheetField(
@@ -564,7 +580,7 @@ const who5WorksheetFields = <TherapyWorksheetField>[
       badge: '5',
       label: 'Hidup saya dipenuhi hal-hal yang menarik',
       kind: TherapyFieldKind.scale,
-      minValue: 0,
+      minValue: 1,
       maxValue: 5,
       scaleLabels: _who5ScaleLabels)
 ];
@@ -704,8 +720,14 @@ const thinkingTrapsWorksheetFields = <TherapyWorksheetField>[
     pointLabels: ['Mendukung pikiran itu', 'Menentang pikiran itu'],
   ),
   TherapyWorksheetField(
-    id: 'balanced_thought',
+    id: 'friend_advice',
     badge: '4',
+    label: 'Nasihat untuk teman',
+    hint: 'Apa yang akan kamu katakan ke teman yang berpikir begini?',
+  ),
+  TherapyWorksheetField(
+    id: 'balanced_thought',
+    badge: '5',
     label: 'Pikiran seimbang versi baru',
     hint: 'Kalimat yang lebih adil untuk dirimu sendiri…',
   ),
@@ -1585,8 +1607,8 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                     _WorksheetFieldBlock(
                       field: field,
                       moduleColor: color,
-                      // Layar ini sisi pasien: baris poin read-only (Q-6).
-                      readOnly: true,
+                      // Layar sisi pasien: semua baris poin dapat diisi.
+                      readOnly: false,
                       textController: _textControllers[field.id],
                       pointControllers: [
                         for (var i = 0; i < field.pointCount; i++)
@@ -1718,8 +1740,8 @@ String? _answerText(TherapyWorksheetField field, Object? answer) {
   if (answer == null) return null;
   if (answer is int) {
     if (field.isScale) {
-      // F-4: field skala berlabel tampilkan label (mis. "Kadang-kadang"),
-      // bukan angka mentah 0..3; skala numerik tanpa label tetap angka.
+      // Field skala menampilkan label angkanya (mis. DASS 1-3, WHO-5 1-5);
+      // skala numerik tanpa label tetap memakai angka mentah.
       return field.scaleLabels.isNotEmpty
           ? field.scaleLabel(answer)
           : '$answer';
@@ -2204,12 +2226,12 @@ class _ScaleOptions extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    // Chip menampilkan label makna (bukan angka mentah).
-                    field.scaleLabel(v),
+                    // Chip menampilkan ANGKA skala (mis. DASS 1-3, WHO-5 1-5).
+                    '$v',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
                       color: value == v ? Colors.white : moduleColor,
                     ),
                   ),
@@ -2226,8 +2248,8 @@ class _ScaleOptions extends StatelessWidget {
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
-              // Hanya label makna — tanpa angka skor.
-              field.scaleLabel(value!),
+              // Hanya angka skor yang dipilih.
+              'Skor: $value',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
