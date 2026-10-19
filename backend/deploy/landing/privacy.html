@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Kebijakan Privasi — Malva</title>
-  <meta name="description" content="Kebijakan Privasi aplikasi Malva: bagaimana kami mengumpulkan, menggunakan, dan melindungi data kesehatan mentalmu.">
+  <meta name="description" content="Kebijakan Privasi aplikasi Malva: bagaimana kami mengumpulkan, menggunakan, menyimpan, dan melindungi data kesehatan mentalmu beserta hak-hakmu.">
   <link rel="canonical" href="https://malva.web.id/privacy.html">
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content="3ViVxg7FKex6Edzm4hUabVczA70jHZ29X3nkgdC8N6k">
   <meta name="theme-color" content="#5D2E7E">
   <style>
-    :root { --plum:#5D2E7E; --seed:#8E44AD; --ink:#201B24; --paper:#FCFAFD; }
+    :root { --plum:#5D2E7E; --seed:#8E44AD; --orchid:#B65ACB; --pink:#E58BE8; --mint:#36C7A6; --ink:#201B24; --paper:#FCFAFD; }
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--paper); line-height:1.7; padding:2rem 1.25rem 4rem; }
     main { max-width:46rem; margin:0 auto; }
@@ -19,64 +19,88 @@
     h2 { color:var(--plum); font-size:1.2rem; margin:1.6rem 0 0.6rem; }
     p, li { font-size:0.97rem; color:#4c4354; }
     ul { padding-left:1.4rem; margin:0.5rem 0; }
+    li { margin-bottom:0.3rem; }
     a { color:var(--seed); }
+    a:focus-visible { outline:2px solid var(--seed); outline-offset:2px; border-radius:4px; }
     .back { display:inline-block; margin-bottom:1.5rem; font-size:0.92rem; }
+    .note {
+      padding: 1rem 1.15rem;
+      border-radius: 12px;
+      background: rgba(182,90,203,0.10);
+      border: 1px solid rgba(182,90,203,0.32);
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--ink);
+      margin: 1.2rem 0;
+    }
   </style>
 </head>
 <body>
   <main>
-    <a class="back" href="/">← Kembali ke beranda</a>
+    <a class="back" href="/">&larr; Kembali ke beranda</a>
     <h1>Kebijakan Privasi Malva</h1>
-    <p class="updated">Terakhir diperbarui: 8 Oktober 2026</p>
+    <p class="updated">Terakhir diperbarui: 20 Oktober 2026</p>
 
-    <p>Malva adalah aplikasi kesehatan mental. Privasi pengguna — khususnya data kesehatan mental — adalah prioritas utama kami. Kebijakan ini menjelaskan data apa yang kami proses, mengapa, dan bagaimana kamu dapat mengendalikannya.</p>
+    <p>Malva adalah aplikasi kesehatan mental. Privasi pengguna — khususnya data kesehatan mental — adalah prioritas utama kami. Kebijakan ini menjelaskan data apa yang kami proses, mengapa, siapa yang dapat mengaksesnya, dan bagaimana kamu dapat mengendalikannya. Ketentuan penggunaan layanan diatur terpisah pada <a href="/terms.html">Syarat &amp; Ketentuan</a>.</p>
+
+    <div class="note">
+      Data kesehatan mental hanya dapat diakses oleh kamu dan profesional yang kamu izinkan sendiri.
+      Kami tidak menjual, menyewakan, atau memakai datamu untuk iklan.
+    </div>
 
     <h2>1. Data yang Kami Kumpulkan</h2>
     <ul>
       <li><strong>Data akun:</strong> nama tampilan, email, nomor telepon, tanggal lahir, gender.</li>
-      <li><strong>Data kesehatan yang kamu isi sendiri:</strong> jawaban screening PHQ-9/GAD-7, mood check-in harian, isi diary, tujuan &amp; kebiasaan.</li>
-      <li><strong>Data pemesanan:</strong> jadwal konsultasi, metode pembayaran (tanpa menyimpan nomor kartu — pembayaran diproses pihak ketiga).</li>
-      <li><strong>Data teknis:</strong> token notifikasi (FCM) untuk pengiriman pengingat, dan log keamanan standar server.</li>
+      <li><strong>Data hasil asesmen:</strong> jawaban dan skor PHQ-9, GAD-7, DASS-21, serta WHO-5 beserta riwayatnya.</li>
+      <li><strong>Data harian yang kamu isi sendiri:</strong> mood check-in (mood, tidur, energi), kepatuhan obat, catatan obat dan sisa stok, isi diary, goals &amp; kebiasaan, serta catatan penyelesaian hariannya.</li>
+      <li><strong>Worksheet terapi:</strong> jawaban modul ABCDE, Identifikasi Distorsi Kognitif, Behavioral Activation, Grounding 5-4-3-2-1, dan Psikoedukasi yang kamu isi dan/atau bagikan.</li>
+      <li><strong>Data layanan profesional:</strong> jadwal dan siklus pendampingan (4 sesi dalam 6 minggu), catatan sesi, dan pesan di dalam aplikasi.</li>
+      <li><strong>Data kontak darurat:</strong> nama dan nomor kontak yang kamu simpan sendiri.</li>
+      <li><strong>Data pemesanan:</strong> metode pembayaran tanpa menyimpan nomor kartu — pembayaran diproses pihak ketiga.</li>
+      <li><strong>Data teknis:</strong> token notifikasi (FCM) untuk pengiriman pengingat, serta log keamanan standar server.</li>
       <li><strong>Google (bila login dengan Google):</strong> ID akun Google, email, dan nama tampilan — Malva tidak menerima password Google-mu.</li>
     </ul>
 
     <h2>2. Cara Kami Menggunakan Data</h2>
     <ul>
-      <li>Menyediakan fitur inti: hasil screening, diary, check-in, dan pendampingan profesional.</li>
+      <li>Menyediakan fitur inti: perhitungan skor asesmen, tren hasil, catatan harian, worksheet, dan pendampingan profesional.</li>
+      <li>Mengirim pengingat check-in, jadwal sesi, pengingat obat, dan notifikasi keselamatan.</li>
       <li>Menghubungkanmu dengan profesional yang kamu pilih sendiri — profesional hanya melihat data yang kamu bagikan/izinkan.</li>
-      <li>Mengirim pengingat check-in, jadwal, dan notifikasi keselamatan.</li>
-      <li>Keamanan: deteksi penyalahgunaan dan perlindungan akun.</li>
+      <li>Keamanan: deteksi penyalahgunaan, perlindungan akun, dan pencatatan akses untuk audit.</li>
     </ul>
 
     <h2>3. Yang TIDAK Kami Lakukan</h2>
     <ul>
       <li>Kami tidak menjual data pribadi atau data kesehatanmu kepada siapa pun.</li>
-      <li>Kami tidak menampilkan iklan.</li>
-      <li>Kami tidak memakai data untuk profil iklan.</li>
+      <li>Kami tidak menampilkan iklan dan tidak memakai data untuk profil iklan.</li>
+      <li>Kami tidak membagikan hasil asesmen atau isi diary kepada pihak luar tanpa persetujuan eksplisit darimu.</li>
     </ul>
 
     <h2>4. Penyimpanan &amp; Keamanan</h2>
     <ul>
       <li>Data tersimpan di server PostgreSQL di Indonesia (Azure region Indonesia Central) dengan enkripsi in-transit (TLS).</li>
-      <li>Password di-hash (bcrypt), token sesi dikelola aman, dan akses administratif dibatasi.</li>
+      <li>Password di-hash (bcrypt), token sesi dikelola dengan rotasi, dan akses administratif dibatasi.</li>
+      <li>Setiap akses data pasien oleh profesional tercatat pada audit log.</li>
       <li>Backup harian dienkripsi dan disimpan terpisah.</li>
+      <li>Kebocoran atau insiden keamanan material akan kami informasikan segera melalui aplikasi dan email.</li>
     </ul>
 
     <h2>5. Berbagi dengan Profesional</h2>
-    <p>Hasil screening, diary, atau ringkasan hanya terlihat oleh profesional yang kamu hubungkan secara eksplisit, dan hanya bagian yang kamu pilih untuk dibagikan. Kamu dapat memutus tautan kapan saja.</p>
+    <p>Hasil asesmen, skor DASS-21/WHO-5, hasil worksheet, catatan harian, dan timeline hanya terlihat oleh profesional yang kamu hubungkan secara eksplisit, dan hanya bagian yang kamu pilih untuk dibagikan. Kamu dapat memutus tautan atau menarik persetujuan kapan saja; penarikan persetujuan berlaku sejak saat diproses, tanpa mengubah riwayat audit.</p>
 
     <h2>6. Hak-Hakmu</h2>
     <ul>
       <li>Melihat, memperbaiki, dan mengunduh data pribadimu.</li>
-      <li>Menghapus akun beserta datanya — cukup hubungi <a href="mailto:halo@malva.web.id">halo@malva.web.id</a>.</li>
       <li>Menarik persetujuan berbagi data ke profesional kapan saja.</li>
+      <li>Meminta penghapusan akun beserta datanya — hubungi <a href="mailto:halo@malva.web.id">halo@malva.web.id</a>. Riwayat audit keamanan kami simpan untuk memenuhi kepatuhan, dan data medis inti dianonimkan sesuai kebijakan retensi Malva.</li>
+      <li>Meminta salinan data dalam format yang dapat dibaca mesin.</li>
     </ul>
 
     <h2>7. Anak di Bawah Umur</h2>
-    <p>Malva tidak ditujukan bagi anak di bawah 13 tahun. Bila kamu wali dan yakin anakmu membuat akun, hubungi kami untuk penghapusan.</p>
+    <p>Malva tidak ditujukan bagi anak di bawah 13 tahun. Bila kamu wali dan yakin anakmu membuat akun, hubungi kami untuk penghapusan data.</p>
 
     <h2>8. Perubahan Kebijakan</h2>
-    <p>Perubahan penting akan diberitahukan melalui aplikasi atau email. Penggunaan berkelanjutan setelah perubahan dianggap persetujuan.</p>
+    <p>Perubahan penting akan diberitahukan melalui aplikasi atau email. Penggunaan berkelanjutan setelah perubahan dianggap persetujuan. Tanggal berlaku selalu tercantum di bagian atas halaman ini.</p>
 
     <h2>9. Kontak</h2>
     <p>Pertanyaan atau permintaan data: <a href="mailto:halo@malva.web.id">halo@malva.web.id</a></p>
