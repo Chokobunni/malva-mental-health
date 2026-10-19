@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 720" width="380" height="720" role="img" aria-labelledby="t1">
+  <title id="t1">Ilustrasi layar screening Malva: pertanyaan dengan pilihan jawaban berupa angka 0 sampai 3</title>
+  <!-- Latar seluler -->
+  <rect x="0" y="0" width="380" height="720" rx="28" fill="#FCFAFD"/>
+  <!-- Header gradien (warna palet Malva) -->
+  <defs>
+    <linearGradient id="hdr" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3F205B"/>
+      <stop offset="0.6" stop-color="#B75ECB"/>
+      <stop offset="1" stop-color="#EFA0EC"/>
+    </linearGradient>
+  </defs>
+  <path d="M0 0h380v118a28 28 0 0 1-28 28H28A28 28 0 0 1 0 118Z" fill="url(#hdr)"/>
+  <text x="26" y="52" font-family="Segoe UI, Roboto, sans-serif" font-size="22" font-weight="700" fill="#FCFAFD">Screening</text>
+  <text x="26" y="80" font-family="Segoe UI, Roboto, sans-serif" font-size="13" fill="#FCFAFD" opacity="0.9">PHQ-9 &#8226; 9 pertanyaan</text>
+  <rect x="26" y="96" width="240" height="8" rx="4" fill="#FCFAFD" opacity="0.28"/>
+  <rect x="26" y="96" width="150" height="8" rx="4" fill="#FCFAFD"/>
+
+  <!-- Kartu pertanyaan -->
+  <rect x="20" y="176" width="340" height="212" rx="18" fill="#FFFFFF" stroke="#5D2E7E" stroke-opacity="0.12"/>
+  <circle cx="42" cy="204" r="14" fill="#8E44AD"/>
+  <text x="42" y="209" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">1</text>
+  <text x="64" y="209" font-family="Segoe UI, Roboto, sans-serif" font-size="13.5" font-weight="700" fill="#201B24">Minat atau rasa senang menurun</text>
+  <text x="36" y="238" font-family="Segoe UI, Roboto, sans-serif" font-size="11.5" fill="#6c6376">Pilih salah satu jawaban</text>
+
+  <!-- Chip angka 0-3 -->
+  <rect x="30" y="256" width="52" height="44" rx="12" fill="#FCFAFD" stroke="#B65ACB" stroke-opacity="0.45"/>
+  <text x="56" y="284" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="17" font-weight="800" fill="#8E44AD">0</text>
+  <rect x="92" y="256" width="52" height="44" rx="12" fill="#FCFAFD" stroke="#B65ACB" stroke-opacity="0.45"/>
+  <text x="118" y="284" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="17" font-weight="800" fill="#8E44AD">1</text>
+  <rect x="154" y="256" width="52" height="44" rx="12" fill="#5D2E7E" stroke="#5D2E7E" stroke-width="2"/>
+  <text x="180" y="284" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="17" font-weight="800" fill="#FFFFFF">2</text>
+  <rect x="216" y="256" width="52" height="44" rx="12" fill="#FCFAFD" stroke="#B65ACB" stroke-opacity="0.45"/>
+  <text x="242" y="284" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="17" font-weight="800" fill="#8E44AD">3</text>
+
+  <!-- Baris status -->
+  <circle cx="38" cy="336" r="9" fill="#36C7A6"/>
+  <text x="54" y="341" font-family="Segoe UI, Roboto, sans-serif" font-size="12.5" font-weight="700" fill="#8E44AD">Skor: 2</text>
+
+  <!-- Kartu pertanyaan 2 (mengambang) -->
+  <rect x="20" y="406" width="340" height="150" rx="18" fill="#FFFFFF" stroke="#5D2E7E" stroke-opacity="0.12"/>
+  <circle cx="42" cy="434" r="14" fill="#E58BE8"/>
+  <text x="42" y="439" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">2</text>
+  <text x="64" y="439" font-family="Segoe UI, Roboto, sans-serif" font-size="13.5" font-weight="700" fill="#201B24">Mood sedih, murung, atau putus asa</text>
+  <text x="36" y="468" font-family="Segoe UI, Roboto, sans-serif" font-size="11.5" fill="#6c6376">Pilih salah satu jawaban</text>
+  <rect x="30" y="486" width="52" height="40" rx="11" fill="#FCFAFD" stroke="#B65ACB" stroke-opacity="0.45"/>
+  <text x="56" y="512" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="16" font-weight="800" fill="#8E44AD">0</text>
+  <rect x="90" y="486" width="52" height="40" rx="11" fill="#FCFAFD" stroke="#B65ACB" stroke-opacity="0.45"/>
+  <text x="116" y="512" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="16" font-weight="800" fill="#8E44AD">1</text>
+  <rect x="150" y="486" width="52" height="40" rx="11" fill="#FCFAFD" stroke="#B65ACB" stroke-opacity="0.45"/>
+  <text x="176" y="512" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="16" font-weight="800" fill="#8E44AD">2</text>
+  <rect x="210" y="486" width="52" height="40" rx="11" fill="#FCFAFD" stroke="#B65ACB" stroke-opacity="0.45"/>
+  <text x="236" y="512" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="16" font-weight="800" fill="#8E44AD">3</text>
+
+  <!-- Footer kemajuan -->
+  <rect x="20" y="580" width="340" height="72" rx="16" fill="#36C7A6" fill-opacity="0.1" stroke="#36C7A6" stroke-opacity="0.35"/>
+  <text x="38" y="608" font-family="Segoe UI, Roboto, sans-serif" font-size="12" font-weight="700" fill="#1e8f76">6 dari 16 terjawab</text>
+  <rect x="38" y="618" width="304" height="8" rx="4" fill="#36C7A6" fill-opacity="0.2"/>
+  <rect x="38" y="618" width="114" height="8" rx="4" fill="#36C7A6"/>
+  <text x="38" y="644" font-family="Segoe UI, Roboto, sans-serif" font-size="11" fill="#6c6376">12%</text>
+</svg>

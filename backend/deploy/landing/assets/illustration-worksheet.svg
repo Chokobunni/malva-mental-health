@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 720" width="380" height="720" role="img" aria-labelledby="t2">
+  <title id="t2">Ilustrasi worksheet Identifikasi Distorsi Kognitif dengan baris poin yang dapat diisi</title>
+  <rect x="0" y="0" width="380" height="720" rx="28" fill="#FCFAFD"/>
+  <defs>
+    <linearGradient id="hdr2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3F205B"/>
+      <stop offset="0.6" stop-color="#B75ECB"/>
+      <stop offset="1" stop-color="#EFA0EC"/>
+    </linearGradient>
+  </defs>
+  <path d="M0 0h380v118a28 28 0 0 1-28 28H28A28 28 0 0 1 0 118Z" fill="url(#hdr2)"/>
+  <text x="26" y="52" font-family="Segoe UI, Roboto, sans-serif" font-size="22" font-weight="700" fill="#FCFAFD">Worksheet terapi</text>
+  <text x="26" y="80" font-family="Segoe UI, Roboto, sans-serif" font-size="13" fill="#FCFAFD" opacity="0.9">Identifikasi Distorsi Kognitif</text>
+  <rect x="26" y="96" width="210" height="8" rx="4" fill="#FCFAFD"/>
+
+  <!-- Field 1: pikiran negatif -->
+  <rect x="20" y="176" width="340" height="118" rx="18" fill="#FFFFFF" stroke="#5D2E7E" stroke-opacity="0.12"/>
+  <circle cx="42" cy="204" r="14" fill="#E58BE8"/>
+  <text x="42" y="209" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">1</text>
+  <text x="64" y="209" font-family="Segoe UI, Roboto, sans-serif" font-size="13.5" font-weight="700" fill="#201B24">Pikiran negatif yang muncul</text>
+  <rect x="34" y="226" width="312" height="52" rx="10" fill="#FCFAFD" stroke="#B65ACB" stroke-opacity="0.25"/>
+  <text x="46" y="248" font-family="Segoe UI, Roboto, sans-serif" font-size="11.5" fill="#4c4354">Tulis persis seperti yang ada</text>
+  <text x="46" y="266" font-family="Segoe UI, Roboto, sans-serif" font-size="11.5" fill="#4c4354">di kepalamu…</text>
+
+  <!-- Field 2: jenis jebakan (multi chip) -->
+  <rect x="20" y="310" width="340" height="140" rx="18" fill="#FFFFFF" stroke="#5D2E7E" stroke-opacity="0.12"/>
+  <circle cx="42" cy="338" r="14" fill="#E58BE8"/>
+  <text x="42" y="343" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">2</text>
+  <text x="64" y="343" font-family="Segoe UI, Roboto, sans-serif" font-size="13.5" font-weight="700" fill="#201B24">Jenis jebakan pikiran</text>
+  <rect x="34" y="358" width="128" height="34" rx="17" fill="#5D2E7E"/>
+  <text x="98" y="380" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="11.5" font-weight="800" fill="#FFFFFF">Catastrophizing</text>
+  <rect x="170" y="358" width="104" height="34" rx="17" fill="#5D2E7E" fill-opacity="0.18"/>
+  <text x="222" y="380" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="11.5" font-weight="800" fill="#8E44AD">Mind reading</text>
+  <rect x="34" y="400" width="112" height="34" rx="17" fill="#5D2E7E" fill-opacity="0.18"/>
+  <text x="90" y="422" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="11.5" font-weight="800" fill="#8E44AD">All-or-nothing</text>
+
+  <!-- Field 3: bukti nyata (poin 1 & 2 - editable) -->
+  <rect x="20" y="466" width="340" height="196" rx="18" fill="#FFFFFF" stroke="#5D2E7E" stroke-opacity="0.12"/>
+  <circle cx="42" cy="494" r="14" fill="#E58BE8"/>
+  <text x="42" y="499" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">3</text>
+  <text x="64" y="499" font-family="Segoe UI, Roboto, sans-serif" font-size="13.5" font-weight="700" fill="#201B24">Bukti nyata</text>
+
+  <rect x="34" y="516" width="26" height="26" rx="8" fill="#8E44AD" fill-opacity="0.12"/>
+  <text x="47" y="534" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="12" font-weight="800" fill="#8E44AD">1</text>
+  <rect x="68" y="516" width="278" height="46" rx="10" fill="#FCFAFD" stroke="#B65ACB" stroke-opacity="0.25"/>
+  <text x="80" y="536" font-family="Segoe UI, Roboto, sans-serif" font-size="11.5" fill="#4c4354">Mendukung pikiran itu</text>
+
+  <rect x="34" y="572" width="26" height="26" rx="8" fill="#8E44AD" fill-opacity="0.12"/>
+  <text x="47" y="590" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="12" font-weight="800" fill="#8E44AD">2</text>
+  <rect x="68" y="572" width="278" height="46" rx="10" fill="#FCFAFD" stroke="#B65ACB" stroke-opacity="0.25"/>
+  <text x="80" y="592" font-family="Segoe UI, Roboto, sans-serif" font-size="11.5" fill="#4c4354">Menentang pikiran itu</text>
+
+  <rect x="34" y="628" width="312" height="24" rx="8" fill="#36C7A6" fill-opacity="0.1"/>
+  <text x="46" y="645" font-family="Segoe UI, Roboto, sans-serif" font-size="10.5" font-weight="700" fill="#1e8f76">Bisa diisi &amp; dibagikan ke profesional</text>
+
+  <!-- Tombol simpan -->
+  <rect x="20" y="682" width="340" height="30" rx="15" fill="#5D2E7E"/>
+  <text x="190" y="702" text-anchor="middle" font-family="Segoe UI, Roboto, sans-serif" font-size="12.5" font-weight="800" fill="#FFFFFF">Simpan ke Folder Therapy</text>
+</svg>

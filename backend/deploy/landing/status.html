@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Status Layanan — Malva</title>
+  <meta name="description" content="Status terkini layanan Malva: API backend, database, dan website. Halaman ini menampilkan potretan pemeriksaan terakhir beserta cap waktunya.">
+  <link rel="canonical" href="https://malva.web.id/status.html">
+  <meta name="robots" content="index, follow">
+  <meta name="google-site-verification" content="3ViVxg7FKex6Edzm4hUabVczA70jHZ29X3nkgdC8N6k">
+  <meta name="theme-color" content="#5D2E7E">
+  <style>
+    :root { --plum:#5D2E7E; --seed:#8E44AD; --orchid:#B65ACB; --pink:#E58BE8; --mint:#36C7A6; --ink:#201B24; --paper:#FCFAFD; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--paper); line-height:1.7; padding:2rem 1.25rem 4rem; }
+    main { max-width:46rem; margin:0 auto; }
+    h1 { color:var(--plum); font-size:1.9rem; margin-bottom:0.5rem; }
+    .updated { color:#6c6376; font-size:0.9rem; margin-bottom:2rem; }
+    h2 { color:var(--plum); font-size:1.2rem; margin:1.8rem 0 0.6rem; }
+    p, li, td, th { font-size:0.97rem; color:#4c4354; }
+    ul { padding-left:1.4rem; margin:0.5rem 0; }
+    li { margin-bottom:0.3rem; }
+    a { color:var(--seed); }
+    a:focus-visible { outline:2px solid var(--seed); outline-offset:2px; border-radius:4px; }
+    .back { display:inline-block; margin-bottom:1.5rem; font-size:0.92rem; }
+    .banner {
+      display:flex; align-items:center; gap:0.9rem;
+      padding:1.15rem 1.25rem; border-radius:16px; margin-bottom:1.6rem;
+      border:1px solid rgba(54,199,166,0.35); background:rgba(54,199,166,0.10);
+    }
+    .banner.is-warning { border-color:rgba(229,139,232,0.4); background:rgba(229,139,232,0.12); }
+    .banner.is-error { border-color:rgba(182,90,203,0.45); background:rgba(182,90,203,0.14); }
+    .dot { flex:0 0 0.85rem; height:0.85rem; border-radius:50%; background:#36C7A6; }
+    .is-warning .dot { background:#E58BE8; }
+    .is-error .dot { background:#B65ACB; }
+    .banner b { color:var(--plum); }
+    .banner small { display:block; color:#6c6376; font-size:0.82rem; margin-top:0.15rem; }
+    table { width:100%; border-collapse:collapse; margin:0.5rem 0 1rem; }
+    th, td { text-align:left; padding:0.55rem 0.6rem; border-bottom:1px solid rgba(93,46,126,0.10); }
+    th { color:var(--plum); font-weight:800; font-size:0.9rem; }
+    td.value { font-weight:800; color:var(--plum); white-space:nowrap; }
+    .note {
+      padding:1rem 1.15rem; border-radius:12px;
+      background:rgba(182,90,203,0.10); border:1px solid rgba(182,90,203,0.32);
+      font-size:0.95rem; font-weight:700; color:var(--ink); margin:1.2rem 0;
+    }
+    code { font-family:Consolas,Menlo,monospace; font-size:0.88em; background:rgba(93,46,126,0.07); padding:0.1rem 0.35rem; border-radius:5px; }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="/">&larr; Kembali ke beranda</a>
+    <h1>Status Layanan</h1>
+    <p class="updated">Kondisi terkini komponen Malva. Halaman ini bukan riwayat insiden — Malva tidak memublikasikan daftar gangguan beserta uptime historis.</p>
+
+    <div id="banner" class="banner" role="status" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span>
+      <span>
+        <b id="banner-title">Memeriksa status…</b>
+        <small id="banner-meta">Menghubungi layanan Malva.</small>
+      </span>
+    </div>
+
+    <h2>Komponen</h2>
+    <table>
+      <thead>
+        <tr><th scope="col">Komponen</th><th scope="col">Status</th><th scope="col">Keterangan</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>API backend</td>
+          <td class="value" id="api-status">memeriksa…</td>
+          <td id="api-note">Endpoint <code>/healthz</code> di <code>api.malva.web.id</code>.</td>
+        </tr>
+        <tr>
+          <td>Website</td>
+          <td class="value" id="web-status">memeriksa…</td>
+          <td>Halaman ini terbuka, berarti server web berjalan.</td>
+        </tr>
+        <tr>
+          <td>Database</td>
+          <td class="value" id="db-status">tidak diperiksa</td>
+          <td>Tidak ada pemeriksaan langsung dari website agar koneksi tidak dibuka publik. Kesehatan database tercermin pada status API.</td>
+        </tr>
+        <tr>
+          <td>Aplikasi Android</td>
+          <td class="value">tersedia</td>
+          <td>Unduh melalui halaman <a href="/">beranda</a>.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note" id="snapshot-note" hidden>
+      Pemeriksaan langsung dari peramban tidak dapat dilakukan (kebijakan lintas-origin pada API).
+      Status di atas memakai <strong>potretan terakhir</strong> yang ditulis dari sisi server.
+    </div>
+
+    <h2>Cara halaman ini bekerja</h2>
+    <ul>
+      <li>Bila kebijakan lintas-origin mengizinkan, halaman ini memeriksa <code>https://api.malva.web.id/healthz</code> langsung dari perambanmu.</li>
+      <li>Bila tidak, halaman ini membaca berkas <code>/status.json</code> — potretan yang ditulis dari sisi server sehingga tetap dapat dibaca meski lintas-origin diblokir.</li>
+      <li>Berkas <code>status.json</code> diperbarui berkala oleh skrip <code>backend/deploy/scripts/status_snapshot.sh</code>, biasanya setiap menit melalui cron.</li>
+      <li>Karena itu angka di sini adalah <strong>kondisi saat pemeriksaan terakhir</strong>, bukan waktu nyata ke detik.</li>
+    </ul>
+
+    <h2>Bila layanan bermasalah</h2>
+    <ul>
+      <li>Buka ulang aplikasi dan periksa koneksimu.</li>
+      <li>Bila masalah berlanjut, hubungi <a href="mailto:halo@malva.web.id">halo@malva.web.id</a> dengan keterangan waktu dan layar yang bermasalah.</li>
+      <li>Untuk keadaan darurat kesehatan, jangan menunggu balasan email — hubungi <strong>119 ext 8</strong> atau layanan darurat setempat.</li>
+    </ul>
+
+    <h2>Status pada pemeriksaan terakhir</h2>
+    <p id="last-check">Belum ada data potretan.</p>
+  </main>
+
+  <script>
+    (function () {
+      var API = 'https://api.malva.web.id';
+      var SNAPSHOT = '/status.json';
+
+      var banner = document.getElementById('banner');
+      var title = document.getElementById('banner-title');
+      var meta = document.getElementById('banner-meta');
+      var apiStatus = document.getElementById('api-status');
+      var apiNote = document.getElementById('api-note');
+      var webStatus = document.getElementById('web-status');
+      var dbStatus = document.getElementById('db-status');
+      var lastCheck = document.getElementById('last-check');
+      var snapNote = document.getElementById('snapshot-note');
+
+      var LABEL = {
+        operational: 'Beroperasi',
+        degraded: 'Terganggu sebagian',
+        down: 'Tidak beroperasi',
+        not_probed: 'Tidak diperiksa'
+      };
+
+      function setBanner(state, headline, sub) {
+        banner.className = 'banner' + (state === 'ok' ? '' : ' ' + state);
+        title.textContent = headline;
+        meta.textContent = sub || '';
+      }
+
+      function stamp(iso) {
+        if (!iso) return 'waktu tidak tercatat';
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return iso;
+        try {
+          return d.toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'medium' });
+        } catch (e) {
+          return d.toString();
+        }
+      }
+
+      function apply(state, source, whenIso) {
+        var label = LABEL[state] || state || 'tidak diketahui';
+        apiStatus.textContent = label;
+        if (state === 'operational') {
+          apiStatus.style.color = '#1e8f76';
+        } else if (state === 'degraded') {
+          apiStatus.style.color = '#8E44AD';
+        } else {
+          apiStatus.style.color = '#5D2E7E';
+        }
+        webStatus.textContent = 'Beroperasi';
+        webStatus.style.color = '#1e8f76';
+        dbStatus.textContent = 'Tidak diperiksa';
+
+        if (state === 'operational') {
+          setBanner('ok', 'Seluruh layanan beroperasi', source + ' • diperiksa ' + stamp(whenIso));
+        } else if (state === 'degraded') {
+          setBanner('warning', 'Sebagian layanan terganggu', source + ' • diperiksa ' + stamp(whenIso));
+        } else {
+          setBanner('error', 'API tidak dapat dijangkau', source + ' • diperiksa ' + stamp(whenIso));
+        }
+      }
+
+      function applySnapshot(snap) {
+        snapNote.hidden = false;
+        var state = snap && snap.api_status ? snap.api_status : 'down';
+        apply(state, 'Potretan dari server ' + (snap && snap.source ? snap.source : ''), snap && snap.checked_at);
+        lastCheck.textContent = 'Potretan terakhir: ' + stamp(snap && snap.checked_at) +
+          (snap && snap.api_http_code ? ' • kode HTTP ' + snap.api_http_code : '') +
+          (snap && typeof snap.api_latency_ms === 'number' ? ' • ' + snap.api_latency_ms + ' ms' : '') +
+          '.';
+      }
+
+      function loadSnapshot() {
+        // Kembalikan resolve(false) — BUKAN reject — agar tidak ada penolakan
+        // promise yang lolos dari .catch internal pada cabang gagal.
+        if (!window.fetch) return Promise.resolve(false);
+        return fetch(SNAPSHOT, { cache: 'no-store' })
+          .then(function (r) {
+            if (!r.ok) throw new Error('snapshot ' + r.status);
+            return r.json();
+          })
+          .then(function (snap) {
+            applySnapshot(snap);
+            return true;
+          })
+          .catch(function () { return false; });
+      }
+
+      function probeLive() {
+        if (!window.fetch) return Promise.resolve(false);
+        var started = Date.now();
+        return fetch(API + '/healthz', { cache: 'no-store' })
+          .then(function (r) { return { r: r, ms: Date.now() - started }; })
+          .then(function (x) {
+            return x.r.text().then(function (body) {
+              snapNote.hidden = true;
+              var ok = /"status"\s*:\s*"ok"/.test(body);
+              apply(ok ? 'operational' : 'degraded', 'Pemeriksaan langsung', new Date().toISOString());
+              apiNote.textContent = 'Endpoint /healthz di api.malva.web.id • ' + x.r.status + ' dalam ' + x.ms + ' ms.';
+              lastCheck.textContent = 'Pemeriksaan langsung: kode HTTP ' + x.r.status + ' dalam ' + x.ms + ' ms pada ' + stamp(new Date().toISOString()) + '.';
+              return true;
+            });
+          })
+          .catch(function () { return false; });
+      }
+
+      webStatus.textContent = 'Beroperasi';
+      webStatus.style.color = '#1e8f76';
+
+      probeLive().then(function (liveDone) {
+        if (liveDone) return;
+        return loadSnapshot().then(function (snapDone) {
+          if (snapDone) return;
+          snapNote.hidden = true;
+          setBanner('error', 'Status tidak dapat diperiksa',
+            'Baik pemeriksaan langsung maupun potretan server tidak tersedia di halaman ini.');
+          apiStatus.textContent = 'Tidak diketahui';
+          lastCheck.textContent = 'Tidak ada data potretan yang dapat dibaca.';
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

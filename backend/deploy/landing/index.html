@@ -260,6 +260,44 @@
       font-size: 0.95rem;
     }
     .btn-download:hover { box-shadow: 0 8px 24px rgba(93,46,126,0.28); }
+    .figures {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+      margin-top: 1.25rem;
+    }
+    .figures figure {
+      background: white;
+      border: 1px solid rgba(93,46,126,0.10);
+      border-radius: 16px;
+      padding: 0.85rem;
+      box-shadow: 0 6px 24px rgba(93,46,126,0.06);
+    }
+    .figures img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 10px;
+    }
+    .figures figcaption {
+      margin-top: 0.6rem;
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: var(--ink);
+    }
+    .figures figcaption span {
+      display: block;
+      font-weight: 400;
+      color: #6c6376;
+      font-size: 0.8rem;
+    }
+    .trust {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    }
+    .trust .card h3 { font-size: 0.98rem; }
+    .trust .card p { font-size: 0.9rem; }
     footer {
       text-align: center;
       padding: 1.5rem;
@@ -359,6 +397,32 @@
         <a class="btn btn-download" href="/downloads/malva-latest.apk">Unduh APK terbaru</a>
       </div>
     </section>
+    <section id="kepercayaan">
+      <h2>Kenapa Malva Bisa Dipercaya</h2>
+      <p class="lede">Kami tidak memasang testimoni anonim yang tidak dapat diverifikasi. Sebagai gantinya, inilah hal-hal yang bisa kamu periksa sendiri di dalam aplikasi.</p>
+      <div class="trust">
+        <div class="card"><h3>Instrumen terstandar, bukan buatan sendiri</h3><p>PHQ-9 dan GAD-7 untuk depresi &amp; kecemasan, DASS-21 untuk depresi–kecemasan–stres, dan WHO-5 untuk kesejahteraan psikologis. Butir pertanyaan memakai penilaian baku masing-masing instrumen.</p></div>
+        <div class="card"><h3>Jawaban berupa angka, bukan teka-teki</h3><p>Pilihan jawaban tampil sebagai skala angka — 0–3 untuk PHQ-9 &amp; GAD-7, 1–3 untuk DASS-21, 1–5 untuk WHO-5 — sama seperti kertas kuesioner aslinya, sehingga skor dapat dihitung otomatis.</p></div>
+        <div class="card"><h3>Penilaian berbasis 18 rule pakar</h3><p>Hasil PHQ-9 dan GAD-7 diturunkan dengan metode Forward Chaining dan Certainty Factor atas 18 rule pakar, bukan ambang skor tunggal.</p></div>
+        <div class="card"><h3>Kamu yang memegang kendali izin</h3><p>Profesional hanya melihat data yang kamu bagikan secara eksplisit, dan persetujuan itu dapat ditarik kapan saja dari aplikasi.</p></div>
+        <div class="card"><h3>Server di Indonesia, akses tercatat</h3><p>Data disimpan di server Indonesia (Azure region Indonesia Central) dengan TLS, password di-hash bcrypt, dan setiap akses profesional ditulis ke audit log.</p></div>
+        <div class="card"><h3>Keselamatan diperlakukan lebih dulu</h3><p>Bila hasil screening menandakan risiko, protokol keselamatan, kontak darurat, dan hotline 119 ext 8 disajikan lebih dulu sebelum fitur lain.</p></div>
+      </div>
+      <div class="figures">
+        <figure>
+          <img src="/assets/illustration-screening.svg" alt="Ilustrasi layar screening Malva dengan pilihan jawaban angka 0 sampai 3" width="380" height="720" loading="lazy">
+          <figcaption>Screening awal<span>Pertanyaan PHQ-9/GAD-7 dengan pilihan angka 0–3</span></figcaption>
+        </figure>
+        <figure>
+          <img src="/assets/illustration-worksheet.svg" alt="Ilustrasi worksheet Identifikasi Distorsi Kognitif dengan baris bukti nyata yang dapat diisi" width="380" height="720" loading="lazy">
+          <figcaption>Worksheet terapi<span>Jebakan pikiran, bukti nyata, dan pikiran seimbang</span></figcaption>
+        </figure>
+        <figure>
+          <img src="/assets/illustration-professional.svg" alt="Ilustrasi panel profesional dengan skor DASS-21 dan tren WHO-5 pasien" width="380" height="720" loading="lazy">
+          <figcaption>Panel profesional<span>Skor subskala dan tren pasien yang dibagikan</span></figcaption>
+        </figure>
+      </div>
+    </section>
     <section>
       <h2>Pertanyaan Umum</h2>
       <details open>
@@ -404,6 +468,8 @@
     <nav>
       <a href="/">Beranda</a>
       <a href="/#profesional">Untuk Profesional</a>
+      <a href="/#kepercayaan">Kepercayaan</a>
+      <a href="/status.html">Status Layanan</a>
       <a href="/privacy.html">Kebijakan Privasi</a>
       <a href="/terms.html">Syarat &amp; Ketentuan</a>
       <a href="mailto:halo@malva.web.id">halo@malva.web.id</a>

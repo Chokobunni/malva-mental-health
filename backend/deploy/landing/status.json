@@ -1,0 +1,12 @@
+{
+  "checked_at": "2026-10-19T22:31:05Z",
+  "api_status": "operational",
+  "api_http_code": "200",
+  "api_latency_ms": 683,
+  "components": {
+    "api": "operational",
+    "website": "operational",
+    "database": "not_probed"
+  },
+  "source": "https://api.malva.web.id/healthz"
+}
