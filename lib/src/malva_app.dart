@@ -147,6 +147,13 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
 
   void _handleLogout() {
     _dashboardSyncService.stopSync();
+    // Reminder obat dibatalkan SEBELUM resetForAccount() mengosongkan daftar
+    // obat. Penjadwalan dilakukan OS, jadi tanpa ini notifikasi "waktunya minum
+    // obat X" milik akun lama tetap berbunyi setelah logout dan terbaca oleh
+    // akun berikutnya di perangkat yang sama.
+    final meds = ref.read(malvaStoreProvider).medications;
+    unawaited(_medicationReminderService
+        .cancelRemindersFor(meds.map((m) => m.id).toList(growable: false)));
     final session = ref.read(authStateProvider).session;
     // logoutSession menghapus sesi lokal lebih dulu (agar logout tetap
     // "menempel" walau jaringan menggantung), lalu mencabut refresh token

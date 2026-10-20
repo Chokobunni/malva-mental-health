@@ -97,7 +97,16 @@ class MedicationReminderService {
     await _plugin.cancel(id: medicationId.hashCode);
   }
 
-  Future<void> cancelAllReminders() async {
-    await _plugin.cancelAll();
+  /// Batalkan reminder untuk sekumpulan obat.
+  ///
+  /// Dipakai saat logout. Penjadwalan reminder dilakukan oleh OS, sehingga
+  /// notifikasinya tetap berbunyi walau pengguna sudah keluar — di perangkat
+  /// yang dipakai bergantian, jadwal obat akun lama jadi bocor ke akun
+  /// berikutnya. Sengaja memakai cancel(id) per obat, BUKAN cancelAll(), agar
+  /// notifikasi lain (mis. pesan chat) tidak ikut terhapus.
+  Future<void> cancelRemindersFor(Iterable<String> medicationIds) async {
+    for (final id in medicationIds) {
+      await _plugin.cancel(id: id.hashCode);
+    }
   }
 }
