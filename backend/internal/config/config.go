@@ -27,6 +27,11 @@ type Config struct {
 	MidtransClientKey string // dipakai klien (opsional di server)
 	MidtransEnv       string // sandbox | production
 	MidtransSnapBase  string // override base URL Snap (test/mock)
+	// Fonnte — gateway WhatsApp untuk blast SOS ke kontak darurat. Kosong =
+	// kanal keluar belum aktif; SOS tetap tercatat tetapi tidak mengklaim
+	// "terkirim".
+	FonnteToken   string
+	FonnteBaseURL string
 }
 
 // PaymentModeSimulation / PaymentModeGateway nilai valid MALVA_PAYMENT_MODE.
@@ -52,6 +57,8 @@ func Load() (Config, error) {
 		MidtransClientKey:  os.Getenv("MALVA_MIDTRANS_CLIENT_KEY"),
 		MidtransEnv:        strings.ToLower(getenv("MALVA_MIDTRANS_ENV", "sandbox")),
 		MidtransSnapBase:   strings.TrimRight(os.Getenv("MALVA_MIDTRANS_SNAP_BASE"), "/"),
+		FonnteToken:        strings.TrimSpace(os.Getenv("MALVA_FONNTE_TOKEN")),
+		FonnteBaseURL:      strings.TrimRight(getenv("MALVA_FONNTE_BASE_URL", "https://api.fonnte.com"), "/"),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("MALVA_DATABASE_URL is required")

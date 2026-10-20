@@ -16,6 +16,7 @@ import (
 
 	"malva/backend/internal/auth"
 	"malva/backend/internal/config"
+	"malva/backend/internal/notify"
 	"malva/backend/internal/payment"
 	"malva/backend/internal/realtime"
 	"malva/backend/internal/screening"
@@ -35,6 +36,8 @@ type Server struct {
 	sessions  *security.SessionManager
 	// payment nil = mode simulasi (mark-paid). Terisi saat gateway aktif.
 	payment payment.PaymentGateway
+	// sos nil = kanal blast SOS (WhatsApp/Fonnte) belum dikonfigurasi.
+	sos *notify.FonnteSender
 }
 
 type registerRequest struct {
@@ -171,6 +174,14 @@ func New(cfg config.Config, authManager auth.Manager, st *store.Store, hub *real
 			SnapBase:  cfg.MidtransSnapBase,
 		})
 		logger.Info("payment gateway active", "mode", cfg.PaymentMode, "midtrans_env", cfg.MidtransEnv)
+	}
+	// Kanal blast SOS: WhatsApp via Fonnte. Tanpa token, s.sos nil dan jalur
+	// SOS akan menandai blast 'failed' alih-alih mengaku terkirim.
+	srv.sos = notify.NewFonnteSender(cfg.FonnteToken, cfg.FonnteBaseURL)
+	if srv.sos == nil {
+		logger.Warn("MALVA_FONNTE_TOKEN belum diisi; blast SOS ke kontak darurat nonaktif")
+	} else {
+		logger.Info("SOS WhatsApp channel active", "gateway", "fonnte")
 	}
 	return srv
 }

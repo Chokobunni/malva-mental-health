@@ -251,47 +251,85 @@ func (s *Server) handleCrisisAlertV2(w http.ResponseWriter, r *http.Request, cla
 	}
 	s.hub.Broadcast(event)
 
-	// Blast ke kontak: persist log + broadcast. Gunakan background context
-	// karena request context dibatalkan setelah handler return.
+	// Blast ke kontak: kirim WhatsApp SUNGGUHAN via Fonnte lalu catat status
+	// sesuai hasil nyata gateway. Berjalan di background karena request
+	// context dibatalkan setelah handler return.
 	patientName := claims.Subject
 	if u, err := s.store.GetUserByID(r.Context(), claims.Subject); err == nil && u.DisplayName != "" {
 		patientName = u.DisplayName
 	}
-	go func(patientID, pName, incidentID string, lat, lng *float64) {
+	deliveryConfigured := s.sos != nil
+	channel := "whatsapp"
+	status := "queued"
+	if !deliveryConfigured {
+		channel = "none"
+		status = "unconfigured"
+	}
+	go func(patientID, pName, incidentID, channel string, lat, lng *float64) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		contacts, listErr := s.store.ListEmergencyContacts(ctx, patientID)
 		if listErr != nil {
 			s.logger.Error("sos list contacts failed", "error", listErr)
 		}
+		sentCount := 0
 		for _, contact := range contacts {
-			blastID, err := s.store.CreateSOSBlastLog(ctx, incidentID, contact.ContactPhone, "sms")
-			if err == nil {
-				msgBody := fmt.Sprintf(
-					"HALO %s, %s sedang mengalami krisis kesehatan mental. Mohon segera hubungi. %s",
-					contact.ContactName,
-					pName,
-					mapLink(lat, lng),
-				)
-				if aerr := s.store.AddAuditLog(ctx, patientID, patientID, "sos_blast.sms", "sos_blast_log", blastID,
-					map[string]any{"message": msgBody, "contact": contact.ContactName}); aerr != nil {
-					s.logger.Error("sos audit failed", "error", aerr)
-				}
-				if uerr := s.store.UpdateSOSBlastStatus(ctx, blastID, "sent", blastID); uerr != nil {
+			blastID, err := s.store.CreateSOSBlastLog(ctx, incidentID, contact.ContactPhone, channel)
+			if err != nil {
+				s.logger.Error("sos blast create failed", "error", err)
+				continue
+			}
+			msgBody := fmt.Sprintf(
+				"HALO %s, %s sedang mengalami krisis kesehatan mental. Mohon segera hubungi. %s",
+				contact.ContactName,
+				pName,
+				mapLink(lat, lng),
+			)
+			if !deliveryConfigured {
+				// Tidak ada transport: jangan pernah menandai 'sent'.
+				if uerr := s.store.UpdateSOSBlastStatus(ctx, blastID, "failed", ""); uerr != nil {
 					s.logger.Error("sos blast update failed", "error", uerr)
 				}
-			} else {
-				s.logger.Error("sos blast create failed", "error", err)
+				continue
+			}
+			msgID, sendErr := s.sos.Send(ctx, contact.ContactPhone, msgBody)
+			if sendErr != nil {
+				s.logger.Error("sos blast send failed", "contact", contact.ContactName, "error", sendErr)
+				if uerr := s.store.UpdateSOSBlastStatus(ctx, blastID, "failed", ""); uerr != nil {
+					s.logger.Error("sos blast update failed", "error", uerr)
+				}
+				if aerr := s.store.AddAuditLog(ctx, patientID, patientID, "sos_blast.failed", "sos_blast_log", blastID,
+					map[string]any{"error": sendErr.Error(), "contact": contact.ContactName}); aerr != nil {
+					s.logger.Error("sos audit failed", "error", aerr)
+				}
+				continue
+			}
+			sentCount++
+			if uerr := s.store.UpdateSOSBlastStatus(ctx, blastID, "sent", msgID); uerr != nil {
+				s.logger.Error("sos blast update failed", "error", uerr)
+			}
+			if aerr := s.store.AddAuditLog(ctx, patientID, patientID, "sos_blast.whatsapp", "sos_blast_log", blastID,
+				map[string]any{"message": msgBody, "contact": contact.ContactName, "message_id": msgID}); aerr != nil {
+				s.logger.Error("sos audit failed", "error", aerr)
 			}
 		}
 		_ = s.store.AddAuditLog(ctx, patientID, patientID, "crisis_alert.sos", "crisis_incidents", incidentID,
-			map[string]any{"contacts_count": len(contacts), "triggered_by": triggeredBy})
-	}(claims.Subject, patientName, created.ID, created.Latitude, created.Longitude)
+			map[string]any{
+				"contacts_count": len(contacts),
+				"sent_count":     sentCount,
+				"channel":        channel,
+				"triggered_by":   triggeredBy,
+			})
+	}(claims.Subject, patientName, created.ID, channel, created.Latitude, created.Longitude)
 
+	// Status jujur: pesan baru masuk antrean kirim, belum tentu terkirim.
+	// Status per kontak bisa dipantau lewat GET /v1/sos-blast-status.
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"incident_id": created.ID,
-		"status":      "sent",
-		"incident":    created,
+		"incident_id":         created.ID,
+		"status":              status,
+		"channel":             channel,
+		"delivery_configured": deliveryConfigured,
+		"incident":            created,
 	})
 }
 

@@ -47,11 +47,25 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
   Widget build(BuildContext context) {
     final safety = ref.watch(safetyProvider);
     final blast = safety.blastStatus;
-    final delivered = (blast?.delivered ?? 0) + (blast?.sent ?? 0);
+    final total = blast?.total ?? safety.contacts.length;
+    // Hanya hitung yang benar-benar diterima gateway. Sebelumnya status
+    // "terkirim" dikarang server walau tidak ada transport sama sekali.
+    final terkirim = (blast?.delivered ?? 0) + (blast?.sent ?? 0);
+    final gagal = blast?.failed ?? 0;
+    final menunggu = blast?.pending ?? 0;
+    final statusText = terkirim > 0
+        ? 'Terkirim ke $terkirim dari $total kontak'
+        : menunggu > 0
+            ? 'Sedang mengirim ke $total kontak…'
+            : gagal > 0
+                ? 'Gagal mengirim ke $gagal kontak'
+                : total == 0
+                    ? 'Belum ada kontak darurat terdaftar'
+                    : 'Menunggu status pengiriman…';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SOS Terkirim'),
+        title: const Text('SOS Aktif'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),
@@ -77,7 +91,7 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
                   const SizedBox(width: 14),
                   const Expanded(
                     child: Text(
-                      'Silent Emergency\nSOS Sent!',
+                      'Silent Emergency\nSOS Aktif!',
                       style:
                           TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
                     ),
@@ -147,9 +161,18 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
                           style: TextStyle(fontWeight: FontWeight.w900),
                         ),
                         Text(
-                          'Terkirim ke $delivered dari ${blast?.total ?? safety.contacts.length} kontak',
+                          statusText,
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
+                        if (gagal > 0)
+                          Text(
+                            'Hubungi kontak daruratmu sendiri atau hotline 119 ext 8.',
+                            style: TextStyle(
+                              color: MalvaColors.danger,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -187,6 +210,18 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
               ),
             ),
             const SizedBox(height: 24),
+            // Jalur bantuan yang selalu bisa diandalkan, terlepas dari status
+            // pengiriman WhatsApp ke kontak darurat.
+            FilledButton.icon(
+              onPressed: () => _callHotline(context),
+              style: FilledButton.styleFrom(
+                backgroundColor: MalvaColors.danger,
+                minimumSize: const Size.fromHeight(56),
+              ),
+              icon: const Icon(Icons.call_rounded),
+              label: const Text('PANGGIL HOTLINE 119 EXT 8'),
+            ),
+            const SizedBox(height: 10),
             FilledButton.icon(
               onPressed: () {
                 Navigator.push(
@@ -214,6 +249,17 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _callHotline(BuildContext context) async {
+    final uri = Uri(scheme: 'tel', path: '1198');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tidak dapat membuka panggilan. Hubungi 119 ext 8.')),
+      );
+    }
   }
 
   Future<void> _openMaps(BuildContext context) async {
