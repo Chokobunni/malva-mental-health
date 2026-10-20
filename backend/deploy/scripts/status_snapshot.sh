@@ -67,4 +67,13 @@ cat > "$TMP_OUT" <<JSON
 JSON
 mv "$TMP_OUT" "$OUT"
 
+# Caddy berjalan sebagai user `caddy` (bukan root). Berkas hasil `mktemp`
+# bersifat 0600 milik pembuatnya, sehingga bila skrip dijalankan oleh cron
+# (root) hasilnya menjadi root:root 0600 dan Caddy gagal menyajikannya (403).
+# Samakan kepemilikan hanya bila kita memang berjalan sebagai root.
+if [ "$(id -u)" -eq 0 ]; then
+  chown caddy:caddy "$OUT" 2>/dev/null || true
+fi
+chmod 0644 "$OUT" 2>/dev/null || true
+
 echo "status.json diperbarui -> $OUT ($API_STATUS, ${HTTP_CODE}, ${LATENCY_MS}ms)"
