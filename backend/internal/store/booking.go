@@ -2,9 +2,15 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 )
+
+// ErrPaymentNotFound menandai reference pembayaran yang tidak ada. Dipisahkan
+// dari error otorisasi agar handler bisa membedakan 404 (tidak ditemukan)
+// dengan 403 (bukan pemilik).
+var ErrPaymentNotFound = errors.New("payment not found")
 
 // ============================================================
 // BOOKING & PAYMENT & EARNINGS
@@ -138,6 +144,26 @@ func (s *Store) AuthorizePaymentOwner(ctx context.Context, paymentID, subject, r
 	err := s.db.QueryRowContext(ctx, `SELECT b.patient_id FROM payments p
 		JOIN bookings b ON b.id = p.booking_id WHERE p.id = $1`, paymentID).Scan(&patientID)
 	if err != nil {
+		return err
+	}
+	if role != "patient" || patientID != subject {
+		return errors.New("only the booking owner can confirm this payment")
+	}
+	return nil
+}
+
+// AuthorizePaymentByReference memeriksa kepemilikan pembayaran DARI REFERENCE
+// tanpa mengubah apa pun. Dipakai handler mark-paid agar otorisasi terjadi
+// SEBELUM mutasi: sebelumnya payment sudah terlanjur berstatus 'paid' walau
+// pemanggil akhirnya ditolak 403.
+func (s *Store) AuthorizePaymentByReference(ctx context.Context, reference, subject, role string) error {
+	var patientID string
+	err := s.db.QueryRowContext(ctx, `SELECT b.patient_id FROM payments p
+		JOIN bookings b ON b.id = p.booking_id WHERE p.reference = $1`, reference).Scan(&patientID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrPaymentNotFound
+		}
 		return err
 	}
 	if role != "patient" || patientID != subject {
@@ -280,11 +306,14 @@ func (s *Store) ListEarningsTransactions(ctx context.Context, professionalID str
 	return out, rows.Err()
 }
 
-func (s *Store) RequestPayout(ctx context.Context, earningID, bank, account string) error {
+// RequestPayout menandai earning sebagai payout_requested beserta rekening tujuan.
+// professionalID WAJIB ikut difilter agar profesional tidak bisa meminta payout
+// atas earning milik profesional lain (IDOR) sekaligus menimpa rekening korban.
+func (s *Store) RequestPayout(ctx context.Context, earningID, professionalID, bank, account string) error {
 	const q = `UPDATE earnings
 		SET payout_status = 'payout_requested', payout_bank = $1, payout_account = $2, payout_requested_at = now()
-		WHERE id = $3 AND payout_status = 'pending'`
-	res, err := s.db.ExecContext(ctx, q, bank, account, earningID)
+		WHERE id = $3 AND professional_id = $4 AND payout_status = 'pending'`
+	res, err := s.db.ExecContext(ctx, q, bank, account, earningID, professionalID)
 	if err != nil {
 		return err
 	}

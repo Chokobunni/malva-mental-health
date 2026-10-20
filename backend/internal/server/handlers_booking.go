@@ -479,13 +479,22 @@ func (s *Server) markPaymentPaid(w http.ResponseWriter, r *http.Request, claims 
 		return
 	}
 
+	// Otorisasi WAJIB sebelum mutasi apa pun. Sebelumnya MarkPaymentPaid
+	// dijalankan lebih dulu, sehingga pemanggil yang akhirnya ditolak 403
+	// sudah terlanjur menandai payment 'paid' (dan memicu earnings) hanya
+	// dengan menebak reference milik orang lain.
+	if err := s.store.AuthorizePaymentByReference(r.Context(), req.Reference, claims.Subject, claims.Role); err != nil {
+		if errors.Is(err, store.ErrPaymentNotFound) {
+			writeError(w, http.StatusNotFound, errors.New("payment not found or already paid"))
+			return
+		}
+		writeError(w, http.StatusForbidden, err)
+		return
+	}
+
 	p, err := s.store.MarkPaymentPaid(r.Context(), req.Reference, req.ExternalID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, err)
-		return
-	}
-	if err := s.store.AuthorizePaymentOwner(r.Context(), p.ID, claims.Subject, claims.Role); err != nil {
-		writeError(w, http.StatusForbidden, err)
 		return
 	}
 
@@ -633,7 +642,7 @@ func (s *Server) requestPayout(w http.ResponseWriter, r *http.Request, claims au
 		return
 	}
 	earningID := r.PathValue("earning_id")
-	if err := s.store.RequestPayout(r.Context(), earningID, bank, account); err != nil {
+	if err := s.store.RequestPayout(r.Context(), earningID, claims.Subject, bank, account); err != nil {
 		writeError(w, http.StatusNotFound, err)
 		return
 	}
@@ -681,6 +690,26 @@ func (s *Server) createEPrescription(w http.ResponseWriter, r *http.Request, cla
 	}
 	if len(req.Items) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one medication item is required"})
+		return
+	}
+
+	// Resep hanya boleh diterbitkan untuk pasien yang benar-benar terhubung
+	// dengan psikiater ini. Tanpa cek ini, profesional mana pun bisa menulis
+	// resep (dan mengirim notifikasi) ke pasien yang tak pernah ia tangani —
+	// sekaligus membocorkan keberadaan akun pasien tersebut.
+	if strings.TrimSpace(req.PatientID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "patient_id wajib diisi"})
+		return
+	}
+	_, _, linkedToPatient, lerr := s.store.AreUsersLinked(r.Context(), req.PatientID, claims.Subject)
+	if lerr != nil {
+		writeError(w, http.StatusInternalServerError, lerr)
+		return
+	}
+	if !linkedToPatient {
+		writeJSON(w, http.StatusForbidden, map[string]string{
+			"error": "Pasien tidak terhubung dengan anda. Resep hanya untuk pasien yang pernah menjalani sesi dengan anda.",
+		})
 		return
 	}
 
