@@ -684,57 +684,89 @@ func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, c
 	}
 	nowWIB := time.Now().In(wibLoc)
 	startDate := time.Date(nowWIB.Year(), nowWIB.Month(), nowWIB.Day(), 0, 0, 0, 0, wibLoc)
-	days := make([]interface{}, 0, 14)
+	endDate := startDate.AddDate(0, 0, 13)
+
+	// Satu query untuk hari libur seluruh 14 hari (sebelumnya satu query per hari).
+	offDates := map[string]bool{}
+	if offs, err := s.store.ListTimeOff(r.Context(), userID,
+		startDate.Format("2006-01-02"), endDate.Format("2006-01-02")); err == nil {
+		for _, o := range offs {
+			offDates[o.OffDate] = true
+		}
+	}
+
+	parseClockLocal := func(v string) (int, bool) {
+		v = strings.TrimSpace(v)
+		for _, layout := range []string{"15:04:05", "15:04"} {
+			if t, err := time.Parse(layout, v); err == nil {
+				return t.Hour()*60 + t.Minute(), true
+			}
+		}
+		return 0, false
+	}
+
+	// Langkah 1 — kumpulkan semua slot kandidat tanpa menyentuh database.
+	candidates := make([][]time.Time, 14)
+	allTimes := make([]time.Time, 0, 128)
 	for i := 0; i < 14; i++ {
 		day := startDate.AddDate(0, 0, i)
 		dateStr := day.Format("2006-01-02")
-		dayOfWeek := int(day.Weekday())
-		off := false
-		if offs, err := s.store.ListTimeOff(r.Context(), userID, dateStr, dateStr); err == nil && len(offs) > 0 {
-			off = true
+		if offDates[dateStr] {
+			continue
 		}
-		freeSlots := 0
+		dayOfWeek := int(day.Weekday())
 		for _, sch := range schedules {
-			if sch.DayOfWeek != dayOfWeek || off {
+			if sch.DayOfWeek != dayOfWeek {
 				continue
 			}
 			step := sch.SlotDurationMinutes
 			if step <= 0 {
 				step = 30
 			}
-			parseClockLocal := func(v string) (int, bool) {
-				v = strings.TrimSpace(v)
-				for _, layout := range []string{"15:04:05", "15:04"} {
-					if t, err := time.Parse(layout, v); err == nil {
-						return t.Hour()*60 + t.Minute(), true
-					}
-				}
-				return 0, false
-			}
 			startMin, ok1 := parseClockLocal(sch.StartTime)
 			endMin, ok2 := parseClockLocal(sch.EndTime)
 			if !ok1 || !ok2 || endMin <= startMin {
 				continue
 			}
-			count := 0
 			for m := startMin; m+step <= endMin; m += step {
 				h, mm := m/60, m%60
 				label := fmt.Sprintf("%02d:%02d", h, mm)
-				slotTime, _ := time.ParseInLocation("2006-01-02 15:04", dateStr+" "+label, wibLoc)
+				slotTime, err := time.ParseInLocation("2006-01-02 15:04", dateStr+" "+label, wibLoc)
+				if err != nil {
+					continue
+				}
 				if !slotTime.After(nowWIB.Add(24 * time.Hour)) {
 					continue
 				}
-				if booked, _ := s.store.IsSlotBooked(r.Context(), userID, slotTime); booked {
-					continue
-				}
-				count++
+				candidates[i] = append(candidates[i], slotTime)
+				allTimes = append(allTimes, slotTime)
 			}
-			freeSlots += count
+		}
+	}
+
+	// Langkah 2 — satu query untuk semua slot terisi. Sebelumnya IsSlotBooked
+	// dipanggil per slot, sehingga satu permintaan ketersediaan bisa menembak
+	// ±224 query ke database dan menjadikan endpoint ini yang paling berat.
+	booked := map[string]bool{}
+	if b, err := s.store.CountBookedSessions(r.Context(), userID, allTimes); err == nil {
+		booked = b
+	}
+
+	// Langkah 3 — susun respons dari hasil dua langkah di atas.
+	days := make([]interface{}, 0, 14)
+	for i := 0; i < 14; i++ {
+		day := startDate.AddDate(0, 0, i)
+		dateStr := day.Format("2006-01-02")
+		freeSlots := 0
+		for _, slotTime := range candidates[i] {
+			if !booked[slotTime.UTC().Format(time.RFC3339)] {
+				freeSlots++
+			}
 		}
 		days = append(days, map[string]interface{}{
 			"date":        dateStr,
-			"day_of_week": dayOfWeek,
-			"off":         off,
+			"day_of_week": int(day.Weekday()),
+			"off":         offDates[dateStr],
 			"free_slots":  freeSlots,
 		})
 	}
