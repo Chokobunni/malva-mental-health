@@ -199,6 +199,20 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 	}
 	// Durasi sesi = durasi slot jadwal profesional hari itu (bukan input bebas).
 	duration := s.slotDurationFor(r.Context(), pkg.ProfessionalID, at)
+	// Validasi slot: sebelumnya endpoint ini sama sekali tidak memvalidasi,
+	// sehingga sesi paket bisa dijadwalkan di luar jam praktik, pada hari
+	// libur profesional, bahkan di masa lalu — dan tetap memotong kuota paket.
+	// Aturan sama dengan createBooking; lead time 24 jam hanya untuk pasien
+	// agar profesional masih bisa menjadwalkan sesi mendadak (<24 jam).
+	if isProf {
+		if verr := s.validateSlotWindow(r.Context(), pkg.ProfessionalID, at, duration); verr != nil {
+			writeError(w, http.StatusBadRequest, verr)
+			return
+		}
+	} else if verr := s.validateSlot(r.Context(), pkg.ProfessionalID, at, duration); verr != nil {
+		writeError(w, http.StatusBadRequest, verr)
+		return
+	}
 	cs, err := s.store.CreateCareSession(r.Context(), store.CareSession{
 		PackageID:       &pkg.ID,
 		PatientID:       pkg.PatientID,
@@ -404,6 +418,19 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 			writeError(w, http.StatusBadRequest, errors.New("jadwal baru melewati masa berlaku paket"))
 			return
 		}
+	}
+	// Validasi slot tujuan: jam praktik, hari libur, dan ketersediaan berlaku
+	// untuk kedua peran (dulu tidak dicek sama sekali, padahal dialog
+	// reschedule profesional sendiri meminta "pilih slot dalam jam praktikmu").
+	// Lead time 24 jam untuk jadwal BARU hanya diterapkan ke pasien.
+	if isProf {
+		if verr := s.validateSlotWindow(r.Context(), cs.ProfessionalID, at, cs.DurationMinutes); verr != nil {
+			writeError(w, http.StatusBadRequest, verr)
+			return
+		}
+	} else if verr := s.validateSlot(r.Context(), cs.ProfessionalID, at, cs.DurationMinutes); verr != nil {
+		writeError(w, http.StatusBadRequest, verr)
+		return
 	}
 	updated, err := s.store.RescheduleCareSession(r.Context(), sessionID, at)
 	if err != nil {

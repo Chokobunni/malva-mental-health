@@ -15,18 +15,31 @@ import (
 	"malva/backend/internal/store"
 )
 
-// validateSlot memastikan slot masuk jadwal mingguan profesional,
-// bukan hari libur / lewat, dan belum terisi sesi.
+// validateSlot memastikan slot bisa dipesan pasien: masa depan, minimal 24 jam
+// ke depan (sama dengan aturan cancel/reschedule pasien), di dalam jam praktik,
+// bukan hari libur, dan belum terisi.
 func (s *Server) validateSlot(ctx context.Context, professionalID string, start time.Time, durationMinutes int) error {
 	if start.Before(time.Now().Add(-time.Minute)) {
 		return errors.New("slot harus di masa depan")
 	}
-	wibStart := start.In(wibLoc)
 	// Lead time 24 jam: sesi butuh persiapan kedua belah pihak.
 	// Sama dengan aturan cancel/reschedule pasien (<24 jam hangus).
 	if time.Until(start) < 24*time.Hour {
 		return errors.New("booking minimal 24 jam sebelum sesi")
 	}
+	return s.validateSlotWindow(ctx, professionalID, start, durationMinutes)
+}
+
+// validateSlotWindow memeriksa syarat slot yang berlaku untuk SEMUA peran:
+// masa depan, bukan hari libur, di dalam jam praktik, dan belum terisi.
+// Dipisahkan dari validateSlot supaya profesional tetap bisa menjadwalkan
+// atau memindahkan sesi secara mendadak (<24 jam) — mis. kendala di hari-H —
+// tanpa melewati aturan jam praktik/hari libur.
+func (s *Server) validateSlotWindow(ctx context.Context, professionalID string, start time.Time, durationMinutes int) error {
+	if start.Before(time.Now().Add(-time.Minute)) {
+		return errors.New("slot harus di masa depan")
+	}
+	wibStart := start.In(wibLoc)
 	dayOfWeek := int(wibStart.Weekday())
 	dateStr := wibStart.Format("2006-01-02")
 	off, err := s.store.ListTimeOff(ctx, professionalID, dateStr, dateStr)
