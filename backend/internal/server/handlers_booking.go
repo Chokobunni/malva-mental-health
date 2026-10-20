@@ -143,7 +143,13 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) error {
 			duration = s.slotDurationFor(ctx, booking.ProfessionalID, start)
 		}
 		cs, cerr := s.store.CreateCareSession(ctx, store.CareSession{
-			PackageID:       booking.PackageID,
+			// WAJIB memakai pkg.ID (care_packages), BUKAN booking.PackageID.
+			// booking.PackageID menunjuk service_packages lama dan — karena
+			// createBooking memang tidak pernah mengisinya — selalu NULL.
+			// Akibatnya sesi pertama paket tidak terhitung pada kuota
+			// (hitungnya WHERE package_id = cp.id), sehingga pasien mendapat
+			// 1 sesi ekstra gratis dari setiap paket 4 sesi.
+			PackageID:       &pkg.ID,
 			BookingID:       &booking.ID,
 			PatientID:       booking.PatientID,
 			ProfessionalID:  booking.ProfessionalID,
