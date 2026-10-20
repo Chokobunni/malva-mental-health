@@ -12,6 +12,23 @@ const _sessionKey = 'malva_active_session';
 const _continuousConsentKey = 'malva_continuous_support_consent';
 const _secureStorage = FlutterSecureStorage();
 
+/// Hasil penyimpanan screening.
+///
+/// [uploaded] hanya true bila server benar-benar menerima (mengembalikan ID).
+/// Bila false, [bundle] tetap berisi hasil lokal sehingga skor bisa ditampilkan,
+/// tetapi UI WAJIB memberi tahu bahwa profesional belum menerimanya.
+class ScreeningSubmitResult {
+  const ScreeningSubmitResult({
+    required this.bundle,
+    required this.uploaded,
+    this.error,
+  });
+
+  final ScreeningBundle bundle;
+  final bool uploaded;
+  final String? error;
+}
+
 // ============================================================
 // MALVA STORE STATE NOTIFIER
 // ============================================================
@@ -691,7 +708,15 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   static String _assessmentKey(AssessmentResult r) =>
       '${r.type.name}|${r.createdAt.toIso8601String()}';
 
-  Future<ScreeningBundle> submitScreeningBundle({
+  /// Menyimpan hasil screening dan MENGIRIMKANNYA ke server.
+  ///
+  /// Mengembalikan [ScreeningSubmitResult] yang membedakan "tersimpan di
+  /// perangkat" dari "benar-benar diterima server". Sebelumnya kegagalan
+  /// upload ditelan diam-diam (`on Object { }`) lalu UI tetap menampilkan
+  /// "Screening berhasil dikirim" dengan ID lokal — termasuk untuk screening
+  /// awal yang menentukan crisis_flag, sehingga profesional tidak pernah tahu
+  /// ada pasien berisiko.
+  Future<ScreeningSubmitResult> submitScreeningBundle({
     required List<int> phq9Answers,
     required List<int> gad7Answers,
     required bool isInitial,
@@ -717,6 +742,8 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     );
 
     final accessToken = session?.accessToken;
+    var uploaded = false;
+    String? uploadError;
     if (_apiClient != null && accessToken != null && accessToken.isNotEmpty) {
       try {
         final remote = await _apiClient.submitScreening(
@@ -735,14 +762,25 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
             isInitial: isInitial,
             source: source,
           );
+          uploaded = true;
+        } else {
+          uploadError = 'Server tidak mengembalikan ID screening.';
         }
+      } on MalvaApiException catch (error) {
+        uploadError = error.message;
       } on Object {
-        // Keep local bundle on error
+        uploadError = 'Tidak dapat menghubungi server.';
       }
+    } else {
+      uploadError = 'Kamu belum masuk atau server belum terhubung.';
     }
 
     saveScreeningBundle(bundle);
-    return bundle;
+    return ScreeningSubmitResult(
+      bundle: bundle,
+      uploaded: uploaded,
+      error: uploadError,
+    );
   }
 
   // ============================================================

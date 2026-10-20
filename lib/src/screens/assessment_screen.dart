@@ -307,9 +307,9 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
     if (confirmed != true || !mounted) return;
 
     setState(() => _isSubmitting = true);
-    late final ScreeningBundle bundle;
+    late final ScreeningSubmitResult result;
     try {
-      bundle =
+      result =
           await ref.read(malvaStoreProvider.notifier).submitScreeningBundle(
                 phq9Answers: _phq9Answers.map((answer) => answer ?? 0).toList(),
                 gad7Answers: _gad7Answers.map((answer) => answer ?? 0).toList(),
@@ -333,14 +333,25 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
 
     if (!mounted) return;
     setState(() => _isSubmitting = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Screening berhasil dikirim. ID: ${bundle.id}',
+    final bundle = result.bundle;
+    if (!result.uploaded) {
+      // Jangan pernah mengaku terkirim bila server belum menerima.
+      final retry = await _showNotSent(result.error);
+      if (!mounted) return;
+      if (retry) {
+        await _submitResult();
+        return;
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Screening berhasil dikirim. ID: ${bundle.id}',
+          ),
+          backgroundColor: MalvaColors.mint,
         ),
-        backgroundColor: MalvaColors.mint,
-      ),
-    );
+      );
+    }
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -355,6 +366,38 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
         ),
       ),
     );
+  }
+
+  /// Ditampilkan saat hasil sudah tersimpan di perangkat tetapi server belum
+  /// menerimanya (mis. offline). Harus jujur: profesional BELUM menerimanya.
+  /// Mengembalikan true bila pengguna memilih mengirim ulang.
+  Future<bool> _showNotSent(String? reason) async {
+    final detail = (reason ?? '').trim();
+    final retry = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.cloud_off_rounded, color: MalvaColors.danger),
+        title: const Text('Screening belum terkirim'),
+        content: Text(
+          '${detail.isEmpty ? '' : '$detail\n\n'}'
+          'Hasilmu tersimpan di perangkat ini, tetapi BELUM diterima server, '
+          'jadi profesional belum bisa melihatnya. Coba kirim ulang saat '
+          'koneksi stabil.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Lihat Hasil'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Kirim Ulang'),
+          ),
+        ],
+      ),
+    );
+    return retry == true;
   }
 
   void _showSubmitError(String message) {
