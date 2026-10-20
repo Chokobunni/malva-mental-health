@@ -1414,6 +1414,77 @@ func (s *Store) UpsertMedication(ctx context.Context, input Medication) (Medicat
 	return saved, nil
 }
 
+// ErrMedicationNotFound dipakai handler untuk membedakan 404 (obat tidak ada
+// atau bukan milik pasien ini) dari kegagalan server biasa.
+var ErrMedicationNotFound = errors.New("medication not found")
+
+// UpdateMedication memperbarui satu obat milik pasien tertentu.
+//
+// Filter patient_id WAJIB ikut di klausa WHERE. Tanpa itu, pasien dapat
+// mengubah obat milik pasien lain hanya dengan menebak id (IDOR), dan
+// profesional dapat menyentuh pasien di luar izinnya.
+func (s *Store) UpdateMedication(ctx context.Context, patientID, medicationID string, input Medication) (Medication, error) {
+	if patientID == "" || medicationID == "" || input.Name == "" {
+		return Medication{}, errors.New("patient_id, medication_id, and name are required")
+	}
+	if input.Dosage == "" {
+		input.Dosage = "0 mg"
+	}
+	if input.Form == "" {
+		input.Form = "Tablet"
+	}
+	var saved Medication
+	err := s.db.QueryRowContext(ctx, `
+		UPDATE medications
+		SET name = $1, dosage = $2, form = $3, reminder_time = $4,
+		    relation_to_meal = $5, current_stock = $6, alert_below = $7,
+		    source = COALESCE(NULLIF($8, ''), source), updated_at = now()
+		WHERE id = $9 AND patient_id = $10 AND active
+		RETURNING id, patient_id, name, dosage, form, reminder_time, relation_to_meal,
+		          current_stock, alert_below, source, active, created_at, updated_at
+	`, input.Name, input.Dosage, input.Form, input.ReminderTime,
+		input.RelationToMeal, input.CurrentStock, input.AlertBelow,
+		input.Source, medicationID, patientID).
+		Scan(&saved.ID, &saved.PatientID, &saved.Name, &saved.Dosage,
+			&saved.Form, &saved.ReminderTime, &saved.RelationToMeal,
+			&saved.CurrentStock, &saved.AlertBelow, &saved.Source,
+			&saved.Active, &saved.CreatedAt, &saved.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Medication{}, ErrMedicationNotFound
+		}
+		return Medication{}, err
+	}
+	_ = s.AddAuditLog(ctx, patientID, patientID, "medication.updated", "medication", saved.ID, nil)
+	return saved, nil
+}
+
+// DeleteMedication melakukan soft delete (active = false).
+//
+// Sengaja tidak DELETE fisik: medication_logs.medication_id memakai
+// ON DELETE SET NULL, sehingga riwayat kepatuhan minum obat akan kehilangan
+// keterkaitan ke obatnya bila barisnya benar-benar dihapus. ListMedications
+// sudah memfilter `active`, jadi obat nonaktif otomatis hilang dari daftar.
+func (s *Store) DeleteMedication(ctx context.Context, patientID, medicationID string) error {
+	if patientID == "" || medicationID == "" {
+		return errors.New("patient_id and medication_id are required")
+	}
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE medications
+		SET active = false, updated_at = now()
+		WHERE id = $1 AND patient_id = $2 AND active
+	`, medicationID, patientID)
+	if err != nil {
+		return err
+	}
+	aff, _ := res.RowsAffected()
+	if aff == 0 {
+		return ErrMedicationNotFound
+	}
+	_ = s.AddAuditLog(ctx, patientID, patientID, "medication.deleted", "medication", medicationID, nil)
+	return nil
+}
+
 func (s *Store) ListMedications(ctx context.Context, patientID string, limit int) ([]Medication, error) {
 	limit = normalizeLimit(limit, 50, 100)
 	rows, err := s.db.QueryContext(ctx, `
@@ -1442,6 +1513,15 @@ func (s *Store) ListMedications(ctx context.Context, patientID string, limit int
 	return items, rows.Err()
 }
 
+// CreateMedicationLog menyimpan satu log minum obat DAN menyesuaikan stok.
+//
+// Dua perubahan ini dibungkus satu transaksi karena keduanya harus konsisten:
+// bila log tersimpan tetapi stok gagal diperbarui (atau sebaliknya), angka
+// sisa obat di server menjadi salah dan tidak bisa direkonstruksi.
+//
+// Stok hanya berkurang untuk status yang benar-benar berarti obat masuk
+// ('taken' utuh, 'partial' sebagian). Status 'skipped' dan 'missed' tidak
+// boleh memotong stok — itu justru inti keluhan pengguna.
 func (s *Store) CreateMedicationLog(ctx context.Context, input MedicationLog) (MedicationLog, error) {
 	if input.PatientID == "" || input.MedicationName == "" {
 		return MedicationLog{}, errors.New("patient_id and medication_name are required")
@@ -1456,9 +1536,16 @@ func (s *Store) CreateMedicationLog(ctx context.Context, input MedicationLog) (M
 	if input.MedicationID != "" {
 		medicationID = input.MedicationID
 	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return MedicationLog{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	var saved MedicationLog
 	var medicationIDOut sql.NullString
-	err := s.db.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, `
 		INSERT INTO medication_logs (
 			patient_id, medication_id, medication_name, status, taken_at
 		)
@@ -1471,6 +1558,24 @@ func (s *Store) CreateMedicationLog(ctx context.Context, input MedicationLog) (M
 	if err != nil {
 		return MedicationLog{}, err
 	}
+
+	// GREATEST(... , 0) mencegah stok negatif saat log dicatat melebihi sisa
+	// stok. Filter patient_id memastikan log tidak bisa memotong stok obat
+	// milik pasien lain.
+	if (input.Status == "taken" || input.Status == "partial") && input.MedicationID != "" {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE medications
+			SET current_stock = GREATEST(current_stock - 1, 0), updated_at = now()
+			WHERE id = $1 AND patient_id = $2 AND active
+		`, input.MedicationID, input.PatientID); err != nil {
+			return MedicationLog{}, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return MedicationLog{}, err
+	}
+
 	if medicationIDOut.Valid {
 		saved.MedicationID = medicationIDOut.String
 	}

@@ -219,6 +219,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PATCH /v1/diary-entries/{diary_id}/feedback", s.requireAuth(s.updateDiaryFeedback))
 	mux.HandleFunc("GET /v1/medications", s.requireAuth(s.listMedications))
 	mux.HandleFunc("POST /v1/medications", s.requireAuth(s.createMedication))
+	// Sebelumnya tidak ada jalur ubah/hapus, sehingga aplikasi mengirim ulang
+	// "edit" sebagai POST dan UpsertMedication (INSERT murni) membuat baris
+	// baru — obat yang sama muncul berkali-kali di daftar pasien.
+	mux.HandleFunc("PUT /v1/medications/{medication_id}", s.requireAuth(s.updateMedication))
+	mux.HandleFunc("DELETE /v1/medications/{medication_id}", s.requireAuth(s.deleteMedication))
 	mux.HandleFunc("GET /v1/medication-logs", s.requireAuth(s.listMedicationLogs))
 	mux.HandleFunc("POST /v1/medication-logs", s.requireAuth(s.createMedicationLog))
 	mux.HandleFunc("GET /v1/timeline", s.requireAuth(s.timeline))
@@ -1214,6 +1219,112 @@ func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims
 			map[string]string{"medication_id": item.ID})
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"medication": item})
+}
+
+// resolveMedicationPatient menentukan patient_id yang sah untuk operasi
+// ubah/hapus obat. Pasien hanya boleh menyentuh datanya sendiri; profesional
+// harus lolos verifikasi, punya akses ke pasien, dan mendapat konsen
+// "medications". Mengembalikan false bila respons error sudah ditulis.
+func (s *Server) resolveMedicationPatient(w http.ResponseWriter, r *http.Request, claims auth.Claims, requestedPatientID string) (string, bool) {
+	if claims.Role == "professional" {
+		if !s.requireVerifiedProfessional(w, r, claims) {
+			return "", false
+		}
+		resolved, err := s.authorizePatientAccess(r, claims, requestedPatientID)
+		if err != nil {
+			writeError(w, http.StatusForbidden, err)
+			return "", false
+		}
+		if !s.consentAllows(r, resolved, claims.Subject, "medications") {
+			writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data Medication"))
+			return "", false
+		}
+		return resolved, true
+	}
+	if claims.Role != "patient" {
+		writeError(w, http.StatusForbidden, errors.New("only patients and professionals can manage medications"))
+		return "", false
+	}
+	return claims.Subject, true
+}
+
+// updateMedication mengubah obat yang sudah ada.
+//
+// Nomor obat diambil dari path, bukan dari body: kalau id ikut di body,
+// klien yang lupa mengirimnya akan diam-diam membuat baris duplikat lagi.
+func (s *Server) updateMedication(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	medicationID := strings.TrimSpace(r.PathValue("medication_id"))
+	if medicationID == "" {
+		writeError(w, http.StatusBadRequest, errors.New("medication_id wajib diisi"))
+		return
+	}
+	var req medicationRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	patientID, ok := s.resolveMedicationPatient(w, r, claims, req.PatientID)
+	if !ok {
+		return
+	}
+	req.Name = trimMax(req.Name, 160)
+	req.Dosage = trimMax(req.Dosage, 80)
+	req.Form = trimMax(req.Form, 80)
+	req.ReminderTime = trimMax(req.ReminderTime, 16)
+	req.RelationToMeal = trimMax(req.RelationToMeal, 80)
+	req.Source = trimMax(req.Source, 80)
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, errors.New("nama obat wajib diisi"))
+		return
+	}
+	if req.CurrentStock < 0 || req.AlertBelow < 0 {
+		writeError(w, http.StatusBadRequest, errors.New("medication stock values cannot be negative"))
+		return
+	}
+	item, err := s.store.UpdateMedication(r.Context(), patientID, medicationID, store.Medication{
+		PatientID:      patientID,
+		Name:           req.Name,
+		Dosage:         req.Dosage,
+		Form:           req.Form,
+		ReminderTime:   req.ReminderTime,
+		RelationToMeal: req.RelationToMeal,
+		CurrentStock:   req.CurrentStock,
+		AlertBelow:     req.AlertBelow,
+		Source:         req.Source,
+	})
+	if err != nil {
+		if errors.Is(err, store.ErrMedicationNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "obat tidak ditemukan"})
+			return
+		}
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"medication": item})
+}
+
+// deleteMedication melakukan soft delete agar riwayat log tetap terkait.
+// Profesional boleh menghapus obat pasien yang memberinya konsen, dengan
+// patient_id dikirim lewat query string.
+func (s *Server) deleteMedication(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	medicationID := strings.TrimSpace(r.PathValue("medication_id"))
+	if medicationID == "" {
+		writeError(w, http.StatusBadRequest, errors.New("medication_id wajib diisi"))
+		return
+	}
+	patientID, ok := s.resolveMedicationPatient(w, r, claims, r.URL.Query().Get("patient_id"))
+	if !ok {
+		return
+	}
+	if err := s.store.DeleteMedication(r.Context(), patientID, medicationID); err != nil {
+		if errors.Is(err, store.ErrMedicationNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "obat tidak ditemukan"})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"deleted": true})
 }
 
 func (s *Server) listMedications(w http.ResponseWriter, r *http.Request, claims auth.Claims) {

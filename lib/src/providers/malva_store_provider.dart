@@ -536,6 +536,20 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     state = state.copyWith(medications: newMeds);
   }
 
+  /// Ikat ulang obat lokal ke id dari server setelah pembuatan berhasil.
+  ///
+  /// Obat yang ditambahkan sebelum sync memakai id sementara
+  /// `med_<timestamp>`. Tanpa pengikatan ulang, edit berikutnya tidak bisa
+  /// memakai PUT (server tidak mengenal id sementara itu) sehingga server
+  /// kembali membuat baris baru — persis duplikat yang ingin dihindari.
+  void rebindMedication(String localId, Medication updated) {
+    final idx = state.medications.indexWhere((m) => m.id == localId);
+    if (idx < 0) return;
+    final next = [...state.medications];
+    next[idx] = updated;
+    state = state.copyWith(medications: next);
+  }
+
   /// Simpan izin monitoring Continuous Support (7 hari) secara lokal.
   /// Dipakai sebagai sumber kebenaran offline + audit consent pasien.
   Future<void> setContinuousSupportConsent({

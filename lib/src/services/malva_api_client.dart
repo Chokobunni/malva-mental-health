@@ -1105,6 +1105,69 @@ class MalvaApiClient {
     );
   }
 
+  /// Ubah obat yang sudah ada (PUT /v1/medications/{id}).
+  ///
+  /// Sebelumnya aplikasi tidak punya jalur ini sama sekali: setiap "Edit
+  /// Medication" dikirim sebagai POST, dan server memakai INSERT murni,
+  /// sehingga obat yang sama berakhir sebagai baris duplikat.
+  Future<BackendMedication> updateMedication({
+    required String accessToken,
+    required String medicationId,
+    required String name,
+    required String dosage,
+    required String form,
+    required String reminderTime,
+    required String relationToMeal,
+    required int currentStock,
+    required int alertBelow,
+    required String source,
+    String? patientId,
+  }) async {
+    final payload = await _send(
+      'PUT',
+      '/v1/medications/$medicationId',
+      accessToken: accessToken,
+      body: {
+        'name': name,
+        'dosage': dosage,
+        'form': form,
+        'reminder_time': reminderTime,
+        'relation_to_meal': relationToMeal,
+        'current_stock': currentStock,
+        'alert_below': alertBelow,
+        'source': source,
+        if (patientId != null && patientId.trim().isNotEmpty)
+          'patient_id': patientId.trim(),
+      },
+    );
+    return BackendMedication.fromJson(
+      _expectMap(payload['medication'], 'Respons obat tidak valid.'),
+    );
+  }
+
+  /// Hapus obat (DELETE /v1/medications/{id}, soft delete di server).
+  ///
+  /// Memakai `_sendUri` dan bukan `_send` karena `_send` memakai
+  /// `Uri.replace(path: ...)`, yang akan meng-escape karakter `?` sehingga
+  /// query `patient_id` berubah menjadi bagian dari path.
+  Future<void> deleteMedication({
+    required String accessToken,
+    required String medicationId,
+    String? patientId,
+  }) async {
+    final trimmed = patientId?.trim() ?? '';
+    await _sendUri(
+      'DELETE',
+      baseUri.replace(
+        path: '/v1/medications/$medicationId',
+        queryParameters: {
+          if (trimmed.isNotEmpty) 'patient_id': trimmed,
+        },
+      ),
+      accessToken: accessToken,
+    );
+  }
+
   /// Health record pasien (GET /v1/health-record).
   /// Pasien: dirinya sendiri. Profesional: pasien terhubung (konsen).
   Future<BackendHealthRecord> getHealthRecord({

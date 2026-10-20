@@ -274,7 +274,8 @@ class MedicationScreen extends ConsumerWidget {
         initial: medication,
         onSave: (value) {
           ref.read(malvaStoreProvider.notifier).upsertMedication(value);
-          unawaited(_syncMedication(context, value));
+          unawaited(
+              _syncMedication(context, ref, value, isNew: medication == null));
           unawaited(
               medicationReminderService?.scheduleMedicationReminder(value));
           Navigator.pop(context);
@@ -309,6 +310,7 @@ class MedicationScreen extends ConsumerWidget {
                   .deleteMedication(medication.id);
               unawaited(
                   medicationReminderService?.cancelReminder(medication.id));
+              unawaited(_syncMedicationDeletion(context, medication));
             },
             style: compactFilledButtonStyle.copyWith(
               backgroundColor: const WidgetStatePropertyAll(MalvaColors.danger),
@@ -399,17 +401,43 @@ class MedicationScreen extends ConsumerWidget {
     }
   }
 
+  /// Id dari server adalah UUID (36 karakter). Obat yang ditambahkan sebelum
+  /// sempat sync memakai id sementara `med_<timestamp>`, sehingga tidak boleh
+  /// dikirim ke endpoint PUT/DELETE.
+  static bool _looksLikeServerId(String id) =>
+      id.length == 36 && RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(id);
+
   Future<void> _syncMedication(
     BuildContext context,
-    Medication medication,
-  ) async {
+    WidgetRef ref,
+    Medication medication, {
+    required bool isNew,
+  }) async {
     final accessToken = session?.accessToken;
     if (apiClient == null || accessToken == null || accessToken.isEmpty) {
       return;
     }
     try {
       final reminder = medication.reminders.first;
-      await apiClient!.createMedication(
+      if (!isNew && _looksLikeServerId(medication.id)) {
+        // Jalur ubah: PUT ke id yang sudah dikenal server. Sebelumnya "edit"
+        // selalu dikirim sebagai POST, dan UpsertMedication di server adalah
+        // INSERT murni, sehingga obat yang sama menjadi baris duplikat.
+        await apiClient!.updateMedication(
+          accessToken: accessToken,
+          medicationId: medication.id,
+          name: medication.name,
+          dosage: medication.dosage,
+          form: medication.form,
+          reminderTime: reminder.label,
+          relationToMeal: reminder.relationToMeal,
+          currentStock: medication.currentStock,
+          alertBelow: medication.alertBelow,
+          source: medication.source,
+        );
+        return;
+      }
+      final created = await apiClient!.createMedication(
         accessToken: accessToken,
         name: medication.name,
         dosage: medication.dosage,
@@ -420,11 +448,44 @@ class MedicationScreen extends ConsumerWidget {
         alertBelow: medication.alertBelow,
         source: medication.source,
       );
+      // Simpan id dari server agar edit berikutnya memakai PUT, bukan POST
+      // yang akan melahirkan baris baru lagi.
+      ref
+          .read(malvaStoreProvider.notifier)
+          .rebindMedication(medication.id, medication.copyWith(id: created.id));
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Obat tersimpan lokal, sync backend gagal: $error'),
+        ),
+      );
+    }
+  }
+
+  /// Hapus obat di server.
+  ///
+  /// Sebelumnya penghapusan hanya terjadi di state lokal, sehingga obat
+  /// muncul kembali begitu daftar dimuat ulang dari backend.
+  Future<void> _syncMedicationDeletion(
+    BuildContext context,
+    Medication medication,
+  ) async {
+    final accessToken = session?.accessToken;
+    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+      return;
+    }
+    if (!_looksLikeServerId(medication.id)) return;
+    try {
+      await apiClient!.deleteMedication(
+        accessToken: accessToken,
+        medicationId: medication.id,
+      );
+    } on Object catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Obat terhapus lokal, sync backend gagal: $error'),
         ),
       );
     }
