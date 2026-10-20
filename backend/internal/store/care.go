@@ -506,13 +506,37 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 		}
 	}
 	q := `UPDATE care_sessions SET status = $1, cancel_reason = $2, updated_at = now()` + setAttended + setCancelledBy + ` WHERE id = $3`
-	res, err := s.db.ExecContext(ctx, q, args...)
+
+	// Status dan pencatatan pendapatan HARUS satu transaksi: kalau sesi sudah
+	// 'completed' tetapi pendapatan gagal dicatat, profesional kehilangan
+	// pendapatannya tanpa jejak. Dengan satu transaksi, keduanya berhasil
+	// bersama atau gagal bersama.
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return CareSession{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx, q, args...)
 	if err != nil {
 		return CareSession{}, err
 	}
 	aff, _ := res.RowsAffected()
 	if aff == 0 {
 		return CareSession{}, errors.New("care session not found")
+	}
+	// Pendapatan diakui saat sesi benar-benar selesai (keputusan pemilik
+	// produk). 'no_show' tidak diakui karena sesinya tidak pernah berlangsung;
+	// bila kelak pemilik produk ingin no-show tetap dibayar, cukup tambahkan
+	// status itu di sini. Idempoten: sesi yang sama tidak pernah menghasilkan
+	// dua baris earnings.
+	if status == "completed" {
+		if err := recognizeEarningForSession(ctx, tx, sessionID); err != nil {
+			return CareSession{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return CareSession{}, err
 	}
 	updated, err := s.GetCareSession(ctx, sessionID)
 	if err != nil {

@@ -188,6 +188,13 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) error {
 		// Tanpa jam (warisan continuous lama): hanya link.
 		_, _ = s.store.PairRelation(ctx, booking.PatientID, booking.ProfessionalID)
 		_, _ = s.store.LinkPatientToProfessional(ctx, booking.PatientID, booking.ProfessionalID)
+		// Booking seperti ini tidak akan pernah punya sesi, jadi pendapatan
+		// profesional tidak akan pernah tercatat lewat jalur "sesi selesai".
+		// Catat di sini agar profesional pemilik data lama tidak kehilangan
+		// pendapatannya. Idempoten (dilewati bila earnings sudah ada).
+		if earnErr := s.store.RecognizeEarningForPayment(ctx, p.ID); earnErr != nil {
+			s.logger.Warn("recognize earning for legacy booking failed", "payment", p.ID, "error", earnErr)
+		}
 		return nil
 	}
 	duration := booking.DurationMinutes

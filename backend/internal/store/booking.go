@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -225,21 +226,35 @@ func (s *Store) MarkPaymentPaid(ctx context.Context, reference, externalID strin
 		return Payment{}, errors.New("payment not found or already paid")
 	}
 
-	var professionalID string
-	err = tx.QueryRowContext(ctx, `SELECT professional_id FROM bookings WHERE id = $1`, p.BookingID).Scan(&professionalID)
+	// Pastikan booking benar-benar ada sebelum statusnya diubah. professionalID
+	// tidak lagi dibaca di sini: pendapatan dicatat saat sesi selesai, bukan
+	// saat pembayaran lunas (lihat catatan di bawah).
+	var bookingExists bool
+	err = tx.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM bookings WHERE id = $1)`, p.BookingID).Scan(&bookingExists)
 	if err != nil {
 		return Payment{}, err
+	}
+	if !bookingExists {
+		return Payment{}, errors.New("booking untuk pembayaran ini tidak ditemukan")
 	}
 
 	if _, err := tx.ExecContext(ctx, `UPDATE bookings SET status = 'paid' WHERE id = $1`, p.BookingID); err != nil {
 		return Payment{}, err
 	}
 
-	const eq = `INSERT INTO earnings (professional_id, payment_id, gross, platform_fee, net)
-		VALUES ($1, $2, $3, $4, $5)`
-	if _, err := tx.ExecContext(ctx, eq, professionalID, p.ID, p.GrossAmount, p.PlatformFeeAmount, p.NetAmount); err != nil {
-		return Payment{}, err
-	}
+	// Pendapatan profesional TIDAK dicatat di sini.
+	//
+	// Keputusan pemilik produk: earning diakui saat SESI SELESAI, bukan saat
+	// pembayaran lunas. Sebelumnya baris earnings dibuat di titik ini, sehingga
+	// sesi yang kemudian dibatalkan/di-reschedule tetap tercatat sebagai
+	// pendapatan dan harus dikoreksi manual. Lihat
+	// store.recognizeEarningForSession (dipanggil dari UpdateCareSessionStatus)
+	// dan migrasi 016_earnings_session.sql.
+	//
+	// Kasus khusus: pembayaran yang memang tidak akan pernah menghasilkan sesi
+	// (booking warisan tanpa jam) diakui lewat RecognizeEarningForPayment, yang
+	// dipanggil activatePaidBooking pada cabang tersebut.
 
 	if err := tx.Commit(); err != nil {
 		return Payment{}, err
@@ -287,12 +302,127 @@ func (s *Store) PaymentStatusByReference(ctx context.Context, reference string) 
 	return status, nil
 }
 
-func (s *Store) CreateEarning(ctx context.Context, professionalID string, p Payment) (string, error) {
-	const q = `INSERT INTO earnings (professional_id, payment_id, gross, platform_fee, net)
-		VALUES ($1, $2, $3, $4, $5) RETURNING id`
-	var id string
-	err := s.db.QueryRowContext(ctx, q, professionalID, p.ID, p.GrossAmount, p.PlatformFeeAmount, p.NetAmount).Scan(&id)
-	return id, err
+// ensureEarningRow mencatat satu baris pendapatan untuk sebuah pembayaran bila
+// pembayaran itu belum pernah dicatat.
+//
+// WAJIB dipanggil di dalam transaksi yang sudah mengunci baris pembayaran
+// (SELECT … FOR UPDATE). Tanpa kunci itu, dua sesi dari paket yang sama yang
+// diselesaikan hampir bersamaan bisa sama-sama lolos pemeriksaan EXISTS dan
+// menghasilkan pendapatan ganda.
+//
+// sessionID boleh kosong ("") untuk pembayaran yang tidak punya sesi
+// (booking warisan tanpa jam); kolomnya menjadi NULL.
+func ensureEarningRow(ctx context.Context, tx *sql.Tx, professionalID, paymentID, sessionID string,
+	gross, platformFee, net int64) error {
+	var exists bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM earnings WHERE payment_id = $1)`, paymentID).Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	var sessionArg any
+	if strings.TrimSpace(sessionID) != "" {
+		sessionArg = strings.TrimSpace(sessionID)
+	}
+	_, err := tx.ExecContext(ctx, `INSERT INTO earnings
+		(professional_id, payment_id, session_id, gross, platform_fee, net)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		professionalID, paymentID, sessionArg, gross, platformFee, net)
+	return err
+}
+
+// recognizeEarningForSession mencatat pendapatan profesional ketika sebuah sesi
+// berstatus 'completed' (dipanggil dari UpdateCareSessionStatus).
+//
+// Pemetaan sesi -> pembayaran:
+//   - quick consult  : care_sessions.booking_id -> payments.booking_id
+//   - paket, sesi 1  : care_sessions.booking_id = booking pembayaran paket
+//   - paket, sesi 2+ : booking_id NULL, jadi lewat care_packages.booking_id
+//
+// COALESCE menangani ketiganya sekaligus. Sesi tanpa pembayaran (mis. sesi
+// bonus/kompensasi) tidak menghasilkan earning dan BUKAN error.
+//
+// Satu pembayaran hanya menghasilkan satu baris earnings walaupun paketnya
+// berisi 4 sesi: nilai paket tidak dipecah per sesi, karena pemecahan itu akan
+// mengubah nominal yang diterima profesional dan bukan bagian dari keputusan
+// "kapan pendapatan diakui". Pembayaran model lama yang sudah punya baris
+// earnings (session_id NULL) juga dilewati, sehingga tidak terjadi hitung ganda.
+func recognizeEarningForSession(ctx context.Context, tx *sql.Tx, sessionID string) error {
+	// Langkah 1: cari pembayaran yang membiayai sesi ini (tanpa kunci).
+	const findQ = `SELECT p.id
+		FROM care_sessions cs
+		LEFT JOIN care_packages cp ON cp.id = cs.package_id
+		JOIN payments p
+		  ON p.booking_id = COALESCE(cs.booking_id, cp.booking_id)
+		 AND p.status = 'paid'
+		WHERE cs.id = $1
+		ORDER BY p.created_at DESC
+		LIMIT 1`
+	var paymentID string
+	err := tx.QueryRowContext(ctx, findQ, sessionID).Scan(&paymentID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	// Langkah 2: kunci baris pembayaran, lalu ambil data pendapatan.
+	// Kunci dipisah dari langkah 1 karena PostgreSQL tidak mengizinkan
+	// FOR UPDATE pada sisi yang bisa NULL dari outer join (care_packages
+	// selalu ikut di-LEFT JOIN, baik sesi paket maupun quick consult).
+	const lockQ = `SELECT b.professional_id,
+			p.gross_amount, p.platform_fee_amount, p.net_amount
+		FROM payments p
+		JOIN bookings b ON b.id = p.booking_id
+		WHERE p.id = $1 AND p.status = 'paid'
+		FOR UPDATE OF p`
+	var professionalID string
+	var gross, platformFee, net int64
+	err = tx.QueryRowContext(ctx, lockQ, paymentID).
+		Scan(&professionalID, &gross, &platformFee, &net)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return ensureEarningRow(ctx, tx, professionalID, paymentID, sessionID, gross, platformFee, net)
+}
+
+// RecognizeEarningForPayment mencatat pendapatan untuk pembayaran yang memang
+// tidak akan pernah menghasilkan sesi. Saat ini hanya dipakai untuk booking
+// warisan yang tidak punya jam (jalur "hanya link" di activatePaidBooking);
+// tanpa ini pendapatan profesional pada data lama tidak akan pernah tercatat
+// setelah aturan "earning saat sesi selesai" berlaku.
+func (s *Store) RecognizeEarningForPayment(ctx context.Context, paymentID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var professionalID string
+	var gross, platformFee, net int64
+	err = tx.QueryRowContext(ctx, `SELECT b.professional_id,
+			p.gross_amount, p.platform_fee_amount, p.net_amount
+		FROM payments p
+		JOIN bookings b ON b.id = p.booking_id
+		WHERE p.id = $1 AND p.status = 'paid'
+		FOR UPDATE OF p`, paymentID).
+		Scan(&professionalID, &gross, &platformFee, &net)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := ensureEarningRow(ctx, tx, professionalID, paymentID, "", gross, platformFee, net); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) EarningsSummary(ctx context.Context, professionalID string) (EarningsSummary, error) {
