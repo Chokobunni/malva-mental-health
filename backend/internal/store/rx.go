@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -135,7 +137,12 @@ func (s *Store) GetEPrescription(ctx context.Context, rxID string) (EPrescriptio
 	return rx, rows.Err()
 }
 
-func (s *Store) ListEPrescriptionsForUser(ctx context.Context, userID, role string) ([]EPrescription, error) {
+// ListEPrescriptionsForUser mengembalikan resep milik user BESERTA item obatnya.
+//
+// Sebelumnya fungsi ini hanya mengembalikan kepala resep tanpa item, sehingga
+// aplikasi selalu menampilkan "0 item obat" pada setiap kartu resep di daftar
+// (detail resep tidak terpengaruh karena memakai GetEPrescription).
+func (s *Store) ListEPrescriptionsForUser(ctx context.Context, userID, role string) ([]EPrescriptionFull, error) {
 	var q string
 	var args []interface{}
 	if role == "professional" {
@@ -151,18 +158,57 @@ func (s *Store) ListEPrescriptionsForUser(ctx context.Context, userID, role stri
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-	var out []EPrescription
+	var out []EPrescriptionFull
 	for rows.Next() {
 		var rx EPrescription
 		var sig []byte
 		if err := rows.Scan(&rx.ID, &rx.ProfessionalID, &rx.PatientID, &rx.Notes, &rx.Instructions, &sig, &rx.QRToken, &rx.Status, &rx.CreatedAt); err != nil {
+			_ = rows.Close()
 			return nil, err
 		}
 		_ = json.Unmarshal(sig, &rx.SignatureData)
-		out = append(out, rx)
+		out = append(out, EPrescriptionFull{EPrescription: rx, Items: []EPrescriptionItem{}})
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, err
+	}
+	// Tutup sebelum query kedua: pool bisa punya koneksi terbatas.
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return out, nil
+	}
+
+	// Satu query untuk item semua resep (bukan satu query per resep).
+	holders := make([]string, len(out))
+	itemArgs := make([]interface{}, len(out))
+	positions := make(map[string]int, len(out))
+	for i := range out {
+		holders[i] = fmt.Sprintf("$%d", i+1)
+		itemArgs[i] = out[i].ID
+		positions[out[i].ID] = i
+	}
+	itemQuery := fmt.Sprintf(`SELECT prescription_id, id, medication_id, name, form, dosage, frequency, days, units_per_day, unit
+		FROM e_prescription_items WHERE prescription_id IN (%s) ORDER BY name`,
+		strings.Join(holders, ","))
+	itemRows, err := s.db.QueryContext(ctx, itemQuery, itemArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = itemRows.Close() }()
+	for itemRows.Next() {
+		var item EPrescriptionItem
+		if err := itemRows.Scan(&item.PrescriptionID, &item.ID, &item.MedicationID, &item.Name, &item.Form,
+			&item.Dosage, &item.Frequency, &item.Days, &item.UnitsPerDay, &item.Unit); err != nil {
+			return nil, err
+		}
+		if idx, ok := positions[item.PrescriptionID]; ok {
+			out[idx].Items = append(out[idx].Items, item)
+		}
+	}
+	return out, itemRows.Err()
 }
 
 func (s *Store) ListActiveEPrescriptionsForProfessionalPatients(ctx context.Context, professionalID string) ([]EPrescription, error) {
