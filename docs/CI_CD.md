@@ -236,10 +236,18 @@ sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh --check
 
 # terapkan satu migrasi tertentu (disarankan: eksplisit per nomor)
 sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh 015
+sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh 016
 
 # terapkan semua migrasi berurutan (perilaku lama)
 sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh --all
 ```
+
+Migrasi terbaru yang harus jalan sebelum binary versi ini dipakai:
+
+| Migrasi | Isi | Bila terlewat |
+|---|---|---|
+| `015` | `medication_logs.status` menerima `partial` | Log obat "Partial" ditolak database |
+| `016` | `earnings.session_id` + unique parsial | Menandai sesi selesai **gagal** (kolom tidak ada) → pendapatan tidak tercatat |
 
 Skrip membaca `MALVA_DATABASE_URL` dari `/etc/malva/malva-api.env`; bila berkas
 itu tidak terbaca, berikan URL lewat lingkungan:
@@ -276,6 +284,23 @@ sudo -u malva psql "$MALVA_DATABASE_URL" -c "
 Hasil yang benar memuat `status IN ('taken','missed','skipped','partial')`.
 Cara cepat: `apply_migrations.sh --check` mencetak
 `medication_logs.status : OK — 'partial' diterima`.
+
+Migrasi `016` menambah `earnings.session_id`. Bila kolomnya belum ada,
+**menandai sesi sebagai selesai akan gagal** (INSERT earnings error) sehingga
+pendapatan profesional tidak tercatat. Periksa:
+
+```bash
+sudo -u malva psql "$MALVA_DATABASE_URL" -c "
+  SELECT column_name FROM information_schema.columns
+  WHERE table_name = 'earnings' AND column_name = 'session_id';"
+sudo -u malva psql "$MALVA_DATABASE_URL" -c "
+  SELECT indexname FROM pg_indexes
+  WHERE tablename = 'earnings' AND indexname = 'earnings_session_unique';"
+```
+
+Dua-duanya harus mengembalikan satu baris. Cara cepat: `apply_migrations.sh
+--check` mencetak `earnings.session_id : OK` dan
+`earnings.session_unique: OK — pendapatan per sesi tidak bisa ganda`.
 
 ### 9.4 Mengubah variabel lingkungan service
 

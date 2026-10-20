@@ -148,6 +148,28 @@ check_schema() {
       log "    bersihkan dulu dengan backend/admin_scripts/fix_duplicate_schedules.sql"
     fi
   fi
+
+  # Migrasi 016: earnings.session_id + unique parsial. Tanpa kolom ini,
+  # penyelesaian sesi akan gagal saat mencatat pendapatan; tanpa unique index,
+  # satu sesi bisa tercatat dua kali bila tombol "selesai" terkirim ganda.
+  if [ "$(psql_run -tAc \
+      "SELECT to_regclass('public.earnings') IS NOT NULL;")" = "t" ]; then
+    if [ "$(psql_run -tAc \
+        "SELECT count(*) FROM information_schema.columns
+         WHERE table_name = 'earnings' AND column_name = 'session_id';")" = "1" ]; then
+      log "  earnings.session_id    : OK — kolom ada"
+    else
+      log "  earnings.session_id    : BELUM ADA (016 belum jalan)"
+    fi
+    if [ "$(psql_run -tAc \
+        "SELECT count(*) FROM pg_indexes
+         WHERE tablename = 'earnings'
+           AND indexname = 'earnings_session_unique';")" = "1" ]; then
+      log "  earnings.session_unique: OK — pendapatan per sesi tidak bisa ganda"
+    else
+      log "  earnings.session_unique: BELUM ADA (016 belum jalan)"
+    fi
+  fi
 }
 
 # --- 4. Aksi --------------------------------------------------------------
