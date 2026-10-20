@@ -1250,7 +1250,10 @@ func (s *Server) createMedicationLog(w http.ResponseWriter, r *http.Request, cla
 	if req.Status == "" {
 		req.Status = "taken"
 	}
-	if !oneOf(req.Status, "taken", "skipped", "missed") {
+	// "partial" (sebagian diminum) memang ditawarkan di aplikasi. Sebelumnya
+	// status ini ditolak di sini sehingga setiap log "Partial" gagal dengan
+	// 400 dan tidak pernah tercatat di server.
+	if !oneOf(req.Status, "taken", "skipped", "missed", "partial") {
 		writeError(w, http.StatusBadRequest, errors.New("invalid medication log status"))
 		return
 	}
