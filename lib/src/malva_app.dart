@@ -148,7 +148,9 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
   void _handleLogout() {
     _dashboardSyncService.stopSync();
     final session = ref.read(authStateProvider).session;
-    // Cabut refresh token di server (best-effort), lalu bersihkan lokal.
+    // logoutSession menghapus sesi lokal lebih dulu (agar logout tetap
+    // "menempel" walau jaringan menggantung), lalu mencabut refresh token
+    // di server sebagai best-effort — karenanya aman tidak ditunggu.
     unawaited(ref.read(malvaStoreProvider.notifier).logoutSession(session));
     ref.read(malvaStoreProvider.notifier).resetForAccount();
     // Kontak darurat & insiden ikut dibersihkan agar tidak terbawa ke akun

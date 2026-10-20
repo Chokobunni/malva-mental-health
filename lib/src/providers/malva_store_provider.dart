@@ -414,17 +414,34 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
 
   /// Logout sesuai server: cabut refresh token di backend, lalu bersihkan
   /// sesi lokal. Dipanggil oleh MalvaApp saat user menekan keluar.
+  /// Logout: bersihkan sesi lokal DULU, baru cabut refresh token di server.
+  ///
+  /// Urutan ini penting. Sebelumnya `clearSession()` (yang menghapus
+  /// `malva_active_session` dari secure storage) baru dijalankan SETELAH
+  /// `await api.logout(...)`, padahal HTTP client punya timeout 10 detik.
+  /// Dampaknya dua:
+  ///   1. Bila aplikasi ditutup saat revoke masih berjalan, sesi tetap
+  ///      tersimpan sehingga `_restorePersistedSession()` meloginkan
+  ///      pengguna kembali padahal ia sudah menekan logout.
+  ///   2. Pada perangkat berganti akun, logout akun A yang masih in-flight
+  ///      bisa selesai setelah akun B login lalu menghapus sesi B.
+  /// Dengan menghapus lokal lebih dulu, keduanya tidak mungkin terjadi;
+  /// revoke di server tetap best-effort (offline / token sudah dicabut).
   Future<void> logoutSession(AuthSession? session) async {
     final api = _apiClient;
     final refreshToken = session?.refreshToken;
+    try {
+      await clearSession();
+    } on Object {
+      // Gagal hapus secure storage: jangan halangi revoke token di server.
+    }
     if (api != null && refreshToken != null && refreshToken.isNotEmpty) {
       try {
         await api.logout(refreshToken: refreshToken);
       } on Object {
-        // Offline / token sudah dicabut: tetap lanjut bersihkan lokal.
+        // Offline / token sudah dicabut: sesi lokal sudah bersih.
       }
     }
-    await clearSession();
   }
 
   // ============================================================
