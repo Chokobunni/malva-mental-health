@@ -175,6 +175,18 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                       'Balance: Rp ${_rupiah(_summary?.pendingNet ?? 0)}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
+                    const SizedBox(height: 4),
+                    // Sejak aturan "pendapatan diakui saat sesi selesai",
+                    // saldo tetap 0 walau pasien sudah membayar. Tanpa
+                    // penjelasan ini profesional mengira pembayarannya hilang.
+                    Text(
+                      'Saldo bertambah setelah sesi ditandai selesai, bukan '
+                      'saat pembayaran masuk.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _bankController,
