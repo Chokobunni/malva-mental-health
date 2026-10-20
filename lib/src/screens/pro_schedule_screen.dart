@@ -36,6 +36,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
   List<BackendCareSession> _upcoming = const [];
   List<BackendCareSession> _past = const [];
   List<BackendProfessionalSchedule> _schedules = const [];
+  List<BackendTimeOff> _timeOff = const [];
   BackendProfessionalPricing _pricing = const BackendProfessionalPricing();
   bool _isLoading = true;
   String? _error;
@@ -74,6 +75,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
         _api.listCareSessions(accessToken: token, scope: 'past'),
         _api.listMySchedules(accessToken: token),
         _api.getPricing(accessToken: token),
+        _api.listTimeOff(accessToken: token),
       ]);
       if (!mounted) return;
       setState(() {
@@ -84,6 +86,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
         _past = (results[2] as List<BackendCareSession>);
         _schedules = (results[3] as List<BackendProfessionalSchedule>);
         _pricing = (results[4] as BackendProfessionalPricing);
+        _timeOff = (results[5] as List<BackendTimeOff>);
         _isLoading = false;
       });
     } on Object catch (e) {
@@ -177,6 +180,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
               child: _AvailabilitySummary(
                 schedules: _schedules,
                 pricing: _pricing,
+                timeOff: _timeOff,
               ),
             ),
             const SizedBox(height: 10),
@@ -647,14 +651,50 @@ class _ProSessionCard extends ConsumerWidget {
   }
 }
 
+// ============================================================
+// Helper tanggal untuk hari libur. YYYY-MM-DD dipakai karena itu
+// format yang diminta/dikembalikan API (kolom DATE) sekaligus
+// urut secara leksikografis sehingga perbandingan string aman.
+// ============================================================
+
+const _monthShort = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'Mei',
+  'Jun',
+  'Jul',
+  'Agu',
+  'Sep',
+  'Okt',
+  'Nov',
+  'Des',
+];
+
+/// YYYY-MM-DD dari DateTime lokal (bukan UTC: hari libur adalah tanggal
+/// kalender di zona waktu profesional).
+String _ymdFrom(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+/// "2026-11-03" -> "Sen, 3 Nov 2026".
+String _formatYmdId(String ymd) {
+  final d = DateTime.tryParse(ymd);
+  if (d == null) return ymd;
+  const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+  return '${days[d.weekday - 1]}, ${d.day} ${_monthShort[d.month - 1]} ${d.year}';
+}
+
 class _AvailabilitySummary extends StatelessWidget {
   const _AvailabilitySummary({
     required this.schedules,
     required this.pricing,
+    this.timeOff = const [],
   });
 
   final List<BackendProfessionalSchedule> schedules;
   final BackendProfessionalPricing pricing;
+  final List<BackendTimeOff> timeOff;
 
   static const _dayNames = [
     'Min',
@@ -672,6 +712,11 @@ class _AvailabilitySummary extends StatelessWidget {
     for (final s in schedules) {
       (byDay[s.dayOfWeek] ??= []).add(s);
     }
+    final todayYmd = _ymdFrom(DateTime.now());
+    final upcomingOff = timeOff
+        .where((t) => t.offDate.compareTo(todayYmd) >= 0)
+        .toList()
+      ..sort((a, b) => a.offDate.compareTo(b.offDate));
     String rupiah(int v) {
       if (v <= 0) return 'belum diatur';
       final s = v.toString();
@@ -703,6 +748,21 @@ class _AvailabilitySummary extends StatelessWidget {
               const SizedBox(height: 2),
             ],
           const Divider(height: 18),
+          // Hari libur ikut ditampilkan di ringkasan karena tanggal yang
+          // diblokir tidak terlihat dari jadwal mingguan — tanpa ini
+          // profesional bisa lupa pasien tidak bisa booking di tanggal itu.
+          if (upcomingOff.isEmpty)
+            const Text('Hari libur: belum ada',
+                style: TextStyle(fontSize: 12.5))
+          else ...[
+            Text(
+              'Hari libur: ${upcomingOff.length} tanggal '
+              '(terdekat ${_formatYmdId(upcomingOff.first.offDate)})',
+              style: const TextStyle(fontSize: 12.5),
+            ),
+            const SizedBox(height: 2),
+          ],
+          const Divider(height: 18),
           Text('Chat: ${rupiah(pricing.quickChatPrice)}',
               style: const TextStyle(fontSize: 12.5)),
           const SizedBox(height: 2),
@@ -731,6 +791,7 @@ class ProAvailabilityScreen extends ConsumerStatefulWidget {
 
 class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   List<BackendProfessionalSchedule> _schedules = const [];
+  List<BackendTimeOff> _timeOff = const [];
   bool _isLoading = true;
   String? _error;
 
@@ -741,6 +802,9 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   final _newStart = TextEditingController(text: '09:00');
   final _newEnd = TextEditingController(text: '16:00');
   final _newDuration = TextEditingController(text: '30');
+  final _offReason = TextEditingController();
+  DateTime? _offDate;
+  bool _savingOff = false;
 
   MalvaApiClient get _api => widget.apiClient ?? ref.read(apiClientProvider);
   String? get _token {
@@ -762,6 +826,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     _newStart.dispose();
     _newEnd.dispose();
     _newDuration.dispose();
+    _offReason.dispose();
     super.dispose();
   }
 
@@ -784,11 +849,13 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
       final results = await Future.wait([
         _api.listMySchedules(accessToken: token),
         _api.getPricing(accessToken: token),
+        _api.listTimeOff(accessToken: token),
       ]);
       if (!mounted) return;
       final pricing = results[1] as BackendProfessionalPricing;
       setState(() {
         _schedules = results[0] as List<BackendProfessionalSchedule>;
+        _timeOff = results[2] as List<BackendTimeOff>;
         _chatPrice.text =
             pricing.quickChatPrice > 0 ? '${pricing.quickChatPrice}' : '';
         _videoPrice.text =
@@ -969,6 +1036,100 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                         ),
                       ),
                       const SizedBox(height: 14),
+                      const SectionLabel('Hari libur'),
+                      SoftCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'Tanggal libur tidak bisa dipilih pasien saat '
+                              'booking. Sesi yang sudah terlanjur terjadwal '
+                              'pada tanggal itu TIDAK otomatis dibatalkan — '
+                              'batalkan atau reschedule dari tab Jadwal.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            if (_upcomingTimeOff.isEmpty)
+                              const EmptyState(
+                                icon: Icons.beach_access_outlined,
+                                title: 'Belum ada hari libur',
+                                subtitle:
+                                    'Tambahkan tanggal saat kamu tidak praktik.',
+                              )
+                            else
+                              for (final t in _upcomingTimeOff) ...[
+                                Row(
+                                  children: [
+                                    const Icon(Icons.event_busy_rounded,
+                                        size: 18, color: MalvaColors.amber),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _formatYmdId(t.offDate),
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w800),
+                                          ),
+                                          if (t.reason.isNotEmpty)
+                                            Text(
+                                              t.reason,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall,
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Hapus hari libur',
+                                      onPressed: () => _removeTimeOff(t),
+                                      icon: const Icon(
+                                        Icons.delete_outline_rounded,
+                                        color: MalvaColors.danger,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: _pickOffDate,
+                              icon: const Icon(Icons.calendar_month_rounded,
+                                  size: 18),
+                              label: Text(
+                                _offDate == null
+                                    ? 'Pilih tanggal libur'
+                                    : _formatYmdId(_ymdFrom(_offDate!)),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _offReason,
+                              decoration: const InputDecoration(
+                                labelText: 'Alasan (opsional)',
+                                hintText: 'Cuti, seminar, hari besar',
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            FilledButton.icon(
+                              onPressed: _savingOff ? null : _addTimeOff,
+                              icon: const Icon(Icons.add_rounded),
+                              label: Text(_savingOff
+                                  ? 'Menyimpan…'
+                                  : 'Tambah hari libur'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
                       const SectionLabel('Harga layanan'),
                       SoftCard(
                         child: Column(
@@ -1019,6 +1180,107 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                   ),
                 ),
     );
+  }
+
+  // ==========================================================
+  // Hari libur (professional_time_off)
+  // Sisi server sudah lama mendukung GET/POST/DELETE time-off dan
+  // memakainya saat menghitung slot, tetapi belum ada layar untuk
+  // mengisinya — sehingga profesional hanya bisa "menutup" hari
+  // dengan menghapus jadwal mingguan (yang menghapus polanya juga).
+  // ==========================================================
+
+  /// Hari libur hari ini dan yang akan datang, urut terdekat.
+  /// Tanggal lampau tidak ditampilkan karena tidak lagi berguna
+  /// (tidak memblokir slot apa pun).
+  List<BackendTimeOff> get _upcomingTimeOff {
+    final today = _ymdFrom(DateTime.now());
+    return _timeOff.where((t) => t.offDate.compareTo(today) >= 0).toList()
+      ..sort((a, b) => a.offDate.compareTo(b.offDate));
+  }
+
+  Future<void> _pickOffDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _offDate ?? now,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: DateTime(now.year + 1, now.month, now.day),
+      helpText: 'Pilih tanggal libur',
+    );
+    if (picked != null && mounted) setState(() => _offDate = picked);
+  }
+
+  Future<void> _addTimeOff() async {
+    final token = _token;
+    if (token == null) return;
+    final date = _offDate;
+    if (date == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pilih tanggal libur dulu.'),
+          backgroundColor: MalvaColors.amber,
+        ),
+      );
+      return;
+    }
+    setState(() => _savingOff = true);
+    try {
+      final created = await _api.addTimeOff(
+        accessToken: token,
+        offDate: _ymdFrom(date),
+        reason: _offReason.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() {
+        // Server memakai ON CONFLICT (professional_id, off_date), jadi tanggal
+        // yang sama menimpa baris lama: buang entri lama agar tidak dobel.
+        final next = [
+          ..._timeOff.where((e) => e.offDate != created.offDate),
+          created,
+        ]..sort((a, b) => a.offDate.compareTo(b.offDate));
+        _timeOff = next;
+        _offDate = null;
+        _offReason.clear();
+        _savingOff = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Hari libur disimpan.')),
+      );
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() => _savingOff = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyErrorMessage(e)),
+          backgroundColor: MalvaColors.danger,
+        ),
+      );
+    }
+  }
+
+  Future<void> _removeTimeOff(BackendTimeOff item) async {
+    final token = _token;
+    if (token == null) return;
+    try {
+      await _api.deleteTimeOff(accessToken: token, id: item.id);
+      if (!mounted) return;
+      setState(() {
+        _timeOff =
+            _timeOff.where((e) => e.id != item.id).toList(growable: false);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Hari libur dihapus.')),
+      );
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(friendlyErrorMessage(e)),
+          backgroundColor: MalvaColors.danger,
+        ),
+      );
+    }
   }
 
   /// Payload satu baris jadwal untuk PUT /v1/professional/schedules.
