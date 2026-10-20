@@ -55,6 +55,11 @@ class _ProPatientDetailScreenState
   bool _isLoading = true;
   String? _error;
 
+  /// Bagian opsional yang gagal dimuat. Data klinis yang gagal dimuat tidak
+  /// boleh tampil sama seperti "pasien memang tidak punya data", jadi bagian
+  /// yang gagal disebutkan namanya di layar.
+  List<String> _failedSections = const [];
+
   MalvaApiClient get _api => widget.apiClient ?? ref.read(apiClientProvider);
   String? get _token {
     final t = widget.session?.accessToken;
@@ -84,19 +89,26 @@ class _ProPatientDetailScreenState
       _restricted = null;
     });
     try {
-      Future<T?> safely<T>(Future<T> Function() load) async {
+      final failed = <String>[];
+      Future<T?> safely<T>(
+          Future<T> Function() load, String sectionLabel) async {
         try {
           return await load();
         } on MalvaApiException catch (e) {
           if (e.statusCode == 403) {
+            // 403 = pasien tidak membagikan data ini; sudah dijelaskan lewat
+            // _restricted, bukan kegagalan muat.
             if (mounted) {
               setState(() => _restricted = (_restricted == null)
                   ? e.message
                   : '$_restricted • ${e.message}');
             }
+          } else {
+            failed.add(sectionLabel);
           }
           return null;
         } on Object {
+          failed.add(sectionLabel);
           return null;
         }
       }
@@ -109,18 +121,30 @@ class _ProPatientDetailScreenState
             accessToken: token, patientId: widget.patientId, limit: 10),
         _api.listTherapySubmissions(
             accessToken: token, patientId: widget.patientId),
-        safely(() =>
-            _api.listGoals(accessToken: token, patientId: widget.patientId)),
-        safely(() => _api.listMoodCheckins(
-            accessToken: token, patientId: widget.patientId, limit: 10)),
-        safely(() => _api.listDiaryEntries(
-            accessToken: token, patientId: widget.patientId, limit: 10)),
-        safely(() => _api.listProfessionalNotes(
-            accessToken: token, patientId: widget.patientId, limit: 10)),
-        safely(() => _api.listMedications(
-            accessToken: token, patientId: widget.patientId, limit: 30)),
-        safely(() => _api.listTimeline(
-            accessToken: token, patientId: widget.patientId, limit: 20)),
+        safely(
+            () =>
+                _api.listGoals(accessToken: token, patientId: widget.patientId),
+            'Goals'),
+        safely(
+            () => _api.listMoodCheckins(
+                accessToken: token, patientId: widget.patientId, limit: 10),
+            'Mood'),
+        safely(
+            () => _api.listDiaryEntries(
+                accessToken: token, patientId: widget.patientId, limit: 10),
+            'Diary'),
+        safely(
+            () => _api.listProfessionalNotes(
+                accessToken: token, patientId: widget.patientId, limit: 10),
+            'Catatan sesi'),
+        safely(
+            () => _api.listMedications(
+                accessToken: token, patientId: widget.patientId, limit: 30),
+            'Obat'),
+        safely(
+            () => _api.listTimeline(
+                accessToken: token, patientId: widget.patientId, limit: 20),
+            'Timeline'),
       ]);
       List<BackendChatMessage> shares = const [];
       try {
@@ -164,6 +188,7 @@ class _ProPatientDetailScreenState
         _timeline = (results[9] as List<BackendTimelineEvent>?) ?? const [];
         _shares = shares;
         _healthRecord = record;
+        _failedSections = List.unmodifiable(failed);
         _isLoading = false;
       });
     } on Object catch (e) {
@@ -213,6 +238,30 @@ class _ProPatientDetailScreenState
             else if (_error != null)
               Center(child: Text(_error!))
             else ...[
+              if (_failedSections.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: SoftCard(
+                    color: MalvaColors.amber.withValues(alpha: 0.10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.warning_amber_rounded,
+                            color: MalvaColors.amber, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Sebagian data gagal dimuat: '
+                            '${_failedSections.join(', ')}. Bagian tersebut '
+                            'bisa jadi kosong bukan karena pasien tidak punya '
+                            'data. Tarik ke bawah untuk memuat ulang.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               // ============================================================
               // GRUP 1 — Ringkasan klinis
               // ============================================================
