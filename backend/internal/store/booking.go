@@ -51,10 +51,16 @@ type Payment struct {
 }
 
 type EarningsSummary struct {
-	TotalSessions int    `json:"total_sessions"`
-	GrossAmount   int64  `json:"gross_amount"`
-	PlatformFee   int64  `json:"platform_fee"`
-	NetAmount     int64  `json:"net_amount"`
+	TotalSessions int   `json:"total_sessions"`
+	GrossAmount   int64 `json:"gross_amount"`
+	PlatformFee   int64 `json:"platform_fee"`
+	NetAmount     int64 `json:"net_amount"`
+	// PendingNet adalah bagian yang benar-benar bisa dicairkan sekarang
+	// (net dari earning berstatus 'pending'). Tanpa field ini UI memakai
+	// NetAmount sebagai "Balance", padahal NetAmount adalah akumulasi
+	// sepanjang waktu — angka yang ditampilkan jadi lebih besar daripada
+	// yang bisa ditarik.
+	PendingNet    int64  `json:"pending_net"`
 	PayoutBalance string `json:"payout_balance"`
 	PayoutAccount string `json:"payout_account"`
 }
@@ -290,11 +296,13 @@ func (s *Store) CreateEarning(ctx context.Context, professionalID string, p Paym
 }
 
 func (s *Store) EarningsSummary(ctx context.Context, professionalID string) (EarningsSummary, error) {
-	const q = `SELECT COALESCE(COUNT(*),0), COALESCE(SUM(gross),0), COALESCE(SUM(platform_fee),0), COALESCE(SUM(net),0)
+	const q = `SELECT COALESCE(COUNT(*),0), COALESCE(SUM(gross),0), COALESCE(SUM(platform_fee),0),
+			COALESCE(SUM(net),0),
+			COALESCE(SUM(net) FILTER (WHERE payout_status = 'pending'), 0)
 		FROM earnings WHERE professional_id = $1`
 	var e EarningsSummary
 	err := s.db.QueryRowContext(ctx, q, professionalID).
-		Scan(&e.TotalSessions, &e.GrossAmount, &e.PlatformFee, &e.NetAmount)
+		Scan(&e.TotalSessions, &e.GrossAmount, &e.PlatformFee, &e.NetAmount, &e.PendingNet)
 	return e, err
 }
 
@@ -338,6 +346,31 @@ func (s *Store) RequestPayout(ctx context.Context, earningID, professionalID, ba
 		return errors.New("earning not found or already requested")
 	}
 	return nil
+}
+
+// PayoutAllPending mencairkan SELURUH earning berstatus 'pending' milik satu
+// profesional dalam satu pernyataan.
+//
+// Model "saldo gabungan": satu permintaan payout mewakili semua transaksi yang
+// belum dicairkan. Sebelumnya UI mengirim hanya earning pertama
+// (pending.first.id), sehingga nominal "Balance" yang ditampilkan tidak sama
+// dengan yang benar-benar diminta — sisanya tertinggal tanpa penjelasan.
+//
+// Filter professional_id mencegah pencairan milik profesional lain, dan
+// filter payout_status = 'pending' membuat pemanggilan berulang tidak menimpa
+// bank/rekening pada permintaan yang sudah berjalan.
+func (s *Store) PayoutAllPending(ctx context.Context, professionalID, bank, account string) (int64, int64, error) {
+	const q = `WITH target AS (
+			UPDATE earnings
+			SET payout_status = 'payout_requested', payout_bank = $1,
+			    payout_account = $2, payout_requested_at = now()
+			WHERE professional_id = $3 AND payout_status = 'pending'
+			RETURNING net
+		)
+		SELECT COUNT(*), COALESCE(SUM(net), 0) FROM target`
+	var count, total int64
+	err := s.db.QueryRowContext(ctx, q, bank, account, professionalID).Scan(&count, &total)
+	return count, total, err
 }
 
 func (s *Store) MarkEarningPayoutPaid(ctx context.Context, earningID string) error {

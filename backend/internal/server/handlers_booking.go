@@ -695,6 +695,43 @@ func (s *Server) requestPayout(w http.ResponseWriter, r *http.Request, claims au
 	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "payout_requested"})
 }
 
+// requestPayoutAll mencairkan SELURUH saldo pending sekaligus (model saldo
+// gabungan). Endpoint per-earning di atas dipertahankan untuk kompatibilitas,
+// tetapi aplikasi tidak lagi memakainya: sebelumnya satu klik hanya meminta
+// earning pertama padahal UI menyebut seluruh net sebagai "Balance".
+func (s *Server) requestPayoutAll(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if !s.requireVerifiedProfessional(w, r, claims) {
+		return
+	}
+	var req payoutRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	bank := strings.TrimSpace(req.Bank)
+	account := strings.TrimSpace(req.Account)
+	if bank == "" || account == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bank dan nomor rekening wajib diisi"})
+		return
+	}
+	count, total, err := s.store.PayoutAllPending(r.Context(), claims.Subject, bank, account)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if count == 0 {
+		// 409, bukan 200: tidak ada yang berubah, dan klien tidak boleh
+		// menampilkan pesan sukses.
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Tidak ada saldo yang bisa dicairkan."})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":     "payout_requested",
+		"count":      count,
+		"net_amount": total,
+	})
+}
+
 // ============================================================
 // BOOKING, PAYMENT, EARNINGS, E-PRESCRIPTION
 // ============================================================

@@ -2136,6 +2136,31 @@ class MalvaApiClient {
         accessToken: accessToken, body: {'bank': bank, 'account': account});
   }
 
+  /// Cairakan SELURUH saldo pending sekaligus (model saldo gabungan).
+  ///
+  /// Berbeda dari [requestPayout] yang hanya memproses satu earning, endpoint
+  /// ini menandai semua earning 'pending' milik profesional sebagai
+  /// 'payout_requested' dalam satu transaksi, sehingga nominal yang diminta
+  /// sama dengan saldo yang ditampilkan.
+  ///
+  /// Mengembalikan jumlah transaksi yang dicairkan dan total net-nya.
+  Future<BackendPayoutResult> requestPayoutAll({
+    required String accessToken,
+    String bank = '',
+    String account = '',
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/earnings/payout',
+      accessToken: accessToken,
+      body: {'bank': bank, 'account': account},
+    );
+    return BackendPayoutResult(
+      count: (payload['count'] as num?)?.toInt() ?? 0,
+      netAmount: (payload['net_amount'] as num?)?.toInt() ?? 0,
+    );
+  }
+
   Future<BackendEPrescription> createEPrescription({
     required String accessToken,
     required String patientId,
@@ -3938,6 +3963,7 @@ class BackendEarningsSummary {
     required this.grossAmount,
     required this.platformFee,
     required this.netAmount,
+    required this.pendingNet,
     required this.payoutBalance,
     required this.payoutAccount,
   });
@@ -3948,6 +3974,7 @@ class BackendEarningsSummary {
       grossAmount: (json['gross_amount'] as num?)?.toInt() ?? 0,
       platformFee: (json['platform_fee'] as num?)?.toInt() ?? 0,
       netAmount: (json['net_amount'] as num?)?.toInt() ?? 0,
+      pendingNet: (json['pending_net'] as num?)?.toInt() ?? 0,
       payoutBalance: json['payout_balance']?.toString() ?? '',
       payoutAccount: json['payout_account']?.toString() ?? '',
     );
@@ -3957,8 +3984,23 @@ class BackendEarningsSummary {
   final int grossAmount;
   final int platformFee;
   final int netAmount;
+
+  /// Net dari earning berstatus 'pending' — inilah yang benar-benar bisa
+  /// dicairkan sekarang. `netAmount` adalah akumulasi sepanjang waktu.
+  final int pendingNet;
   final String payoutBalance;
   final String payoutAccount;
+}
+
+/// Hasil satu permintaan payout saldo gabungan.
+class BackendPayoutResult {
+  const BackendPayoutResult({required this.count, required this.netAmount});
+
+  /// Jumlah transaksi yang ikut dicairkan pada permintaan ini.
+  final int count;
+
+  /// Total net yang diajukan untuk dicairkan.
+  final int netAmount;
 }
 
 class BackendEarningsTransaction {

@@ -172,7 +172,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Balance: Rp ${_rupiah(_summary?.netAmount ?? 0)}',
+                      'Balance: Rp ${_rupiah(_summary?.pendingNet ?? 0)}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 8),
@@ -192,7 +192,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
-                        onPressed: _transactions.isEmpty
+                        onPressed: (_summary?.pendingNet ?? 0) <= 0
                             ? null
                             : () => _requestPayout(context),
                         child: const Text('Request Payout'),
@@ -263,10 +263,13 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
     final apiClient = widget.apiClient;
     final accessToken = widget.session?.accessToken;
     if (apiClient == null || accessToken == null || accessToken.isEmpty) return;
-    final pending = _transactions.where((t) => t.payoutStatus == 'pending');
-    if (pending.isEmpty) {
+    // Saldo gabungan: yang dicairkan adalah SELURUH earning pending, jadi
+    // kelayakan ditentukan oleh pendingNet, bukan oleh ada/tidaknya baris
+    // transaksi (daftar transaksi dibatasi 20 baris dan bisa kosong walau
+    // masih ada saldo).
+    if ((_summary?.pendingNet ?? 0) <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tidak ada transaksi pending payout.')),
+        const SnackBar(content: Text('Tidak ada saldo yang bisa dicairkan.')),
       );
       return;
     }
@@ -279,16 +282,17 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
       return;
     }
     try {
-      await apiClient.requestPayout(
+      final result = await apiClient.requestPayoutAll(
         accessToken: accessToken,
-        earningId: pending.first.id,
         bank: bank,
         account: account,
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Permintaan payout dikirim.'),
+        SnackBar(
+          content: Text('Permintaan payout dikirim: '
+              'Rp ${_rupiah(result.netAmount)} '
+              '(${result.count} transaksi).'),
           backgroundColor: MalvaColors.mint,
         ),
       );
