@@ -55,9 +55,11 @@ sama dengan `--dart-define` di `scripts/build_release_apk.ps1`.
 | `ANDROID_KEY_PASSWORD` | ⚠️ | `keyPassword` |
 | `GOOGLE_SERVICES_JSON_BASE64` | opsional | Base64 dari `android/app/google-services.json` (FCM) |
 
-Jika `ANDROID_KEYSTORE_BASE64` kosong, APK tetap dibuild tetapi memakai
-**debug signing** — jangan dibagikan ke pengguna karena update berikutnya akan
-gagal dengan `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
+Jika `ANDROID_KEYSTORE_BASE64` kosong, APK tetap dibuild sebagai artifact CI
+(tanda tangan debug) tetapi **job deploy dilewati** — tidak ada APK yang
+diunggah ke `/downloads`. Ini mencegah APK debug-signed terpublikasi; debug key
+runner berbeda tiap build sehingga Google Sign-In bisa gagal dan update antar
+APK tidak bisa (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`).
 
 ## 5. Setup sekali jalan di VM
 
@@ -121,6 +123,28 @@ binary-nya di `/usr/local/bin/malva-api` (lihat
 `backend/deploy/systemd/malva-api.service`).
 
 ## 6. Setup Android signing
+
+### 6.1 Buat keystore release (sekali saja, jika belum ada)
+
+```bash
+keytool -genkeypair -v \
+  -keystore android/malva-release-key.jks \
+  -alias malva \
+  -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Simpan file `.jks` dan password-nya di tempat aman (password manager + backup
+offline). Lalu daftarkan SHA-1-nya ke Google Cloud Console:
+
+```bash
+keytool -list -v -keystore android/malva-release-key.jks -alias malva | grep SHA1
+```
+
+Tambahkan SHA-1 tersebut sebagai **Android OAuth Client** untuk package
+`id.malva.app` (satu package boleh punya beberapa SHA-1). Tanpa langkah ini,
+Google Sign-In di APK release akan gagal dengan `ApiException: 10`.
+
+### 6.2 Dapatkan base64 untuk GitHub Secrets
 
 Di mesin yang punya keystore release:
 
@@ -207,7 +231,8 @@ ssh <DEPLOY_USER>@<DEPLOY_HOST> 'sudo mkdir -p /opt/malva/app/backend/migrations
 | `rsync: command not found` | `sudo apt-get install -y rsync` di VM. |
 | `MALVA_GOOGLE_CLIENT_ID kosong` | Isi repo variable `MALVA_GOOGLE_CLIENT_ID` (Settings → Variables). |
 | APK Google login gagal | Cek step **Verify dart-define embedded** di log. Pastikan variable terisi dan APK di-build ulang. |
-| APK tidak bisa di-update di HP | Signature beda (debug vs release). Isi secret keystore, lalu uninstall APK lama sekali. |
+| APK tidak bisa di-update di HP | Signature beda. Isi secret keystore release (bagian 6), lalu uninstall APK lama sekali. Debug key runner berubah tiap build, jadi APK debug tidak bisa dijadikan distribusi. |
+| APK tidak terunggah ke server | Normal bila `ANDROID_KEYSTORE_BASE64` kosong — job deploy sengaja dilewati. Isi secret keystore lalu jalankan ulang. |
 | Health check API gagal | `sudo systemctl status malva-api` dan `journalctl -u malva-api -n 100 --no-pager`. Cek juga CORS/env di `/etc/malva/malva-api.env`. |
 | Website 404 setelah deploy | Pastikan `WEB_ROOT` benar dan Caddy `root * /var/www/malva`. Cek `sudo caddy validate --config /etc/caddy/Caddyfile`. |
 

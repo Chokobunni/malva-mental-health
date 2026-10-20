@@ -67,6 +67,9 @@ jobs:
   build:
     name: Build release APK
     runs-on: ubuntu-latest
+    outputs:
+      # 'true' hanya jika APK ditandatangani dengan release keystore.
+      signed: ${{ steps.keystore.outputs.signed }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -102,6 +105,7 @@ jobs:
           cache: true
 
       - name: Restore Android keystore (opsional)
+        id: keystore
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -110,8 +114,9 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${KEYSTORE_B64:-}" ]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
             echo "::warning::ANDROID_KEYSTORE_BASE64 belum diisi — APK memakai debug signing."
-            echo "::warning::Jangan distribusikan APK debug-signed ke pengguna."
+            echo "::warning::APK TIDAK akan diunggah ke server (job deploy dilewati)."
             exit 0
           fi
           echo "$KEYSTORE_B64" | base64 -d > android/malva-release-key.jks
@@ -121,6 +126,7 @@ jobs:
           keyAlias=$KEY_ALIAS
           storeFile=../malva-release-key.jks
           EOF
+          echo "signed=true" >> "$GITHUB_OUTPUT"
           echo "Keystore release dipasang (alias: $KEY_ALIAS)."
 
       - name: Restore google-services.json (opsional)
@@ -189,8 +195,8 @@ jobs:
   deploy:
     name: Upload APK ke server
     needs: build
-    # Push/workflow_call → deploy; manual → ikuti input `deploy`.
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deploy == false) }}
+    # Hanya unggah bila APK benar-benar release-signed dan tidak dimatikan manual.
+    if: ${{ needs.build.outputs.signed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.deploy == false) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -238,8 +244,8 @@ jobs:
           ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "
             set -euo pipefail
             sudo install -d -o caddy -g caddy /var/www/malva/downloads
-            sudo install -m 0644 /tmp/malva-latest.apk /var/www/malva/downloads/malva-latest.apk
-            sudo install -m 0644 /tmp/malva-latest.apk /var/www/malva/downloads/Malva-release-${date_utc}.apk
+            sudo install -o caddy -g caddy -m 0644 /tmp/malva-latest.apk /var/www/malva/downloads/malva-latest.apk
+            sudo install -o caddy -g caddy -m 0644 /tmp/malva-latest.apk /var/www/malva/downloads/Malva-release-${date_utc}.apk
             rm -f /tmp/malva-latest.apk
           "
 
