@@ -74,7 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           rsync -az --delete \
-            --chown=www-data:www-data \
+            --chown=caddy:caddy \
             --exclude 'downloads/' \
             --rsync-path="sudo rsync" \
             -e "ssh -i ~/.ssh/deploy_key -p $DEPLOY_PORT" \

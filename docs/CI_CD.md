@@ -113,7 +113,7 @@ sudo visudo -c
 
 ```bash
 sudo mkdir -p /var/www/malva/downloads
-sudo chown -R www-data:www-data /var/www/malva
+sudo chown -R caddy:caddy /var/www/malva
 ```
 
 Service `malva-api` sudah ada di `/etc/systemd/system/malva-api.service` dan
