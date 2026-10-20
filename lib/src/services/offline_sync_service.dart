@@ -25,6 +25,7 @@ class SyncItem {
     this.status = SyncStatus.pending,
     this.retryCount = 0,
     this.lastError,
+    this.userId,
   });
 
   final String id;
@@ -34,6 +35,11 @@ class SyncItem {
   final SyncStatus status;
   final int retryCount;
   final String? lastError;
+
+  /// Pemilik item (backend user id). Antrean bersifat per akun: item milik
+  /// akun lain tidak pernah dikirim, sehingga berganti akun di perangkat yang
+  /// sama tidak lagi mengunggah data pribadi ke akun yang salah.
+  final String? userId;
 
   static const int maxRetries = 3;
 
@@ -52,6 +58,7 @@ class SyncItem {
       status: status ?? this.status,
       retryCount: retryCount ?? this.retryCount,
       lastError: lastError ?? this.lastError,
+      userId: userId,
     );
   }
 
@@ -63,6 +70,7 @@ class SyncItem {
         'status': status.name,
         'retryCount': retryCount,
         'lastError': lastError,
+        'userId': userId,
       };
 
   factory SyncItem.fromJson(Map<String, dynamic> json) {
@@ -81,6 +89,7 @@ class SyncItem {
       ),
       retryCount: (json['retryCount'] as num?)?.toInt() ?? 0,
       lastError: json['lastError']?.toString(),
+      userId: json['userId']?.toString(),
     );
   }
 }
@@ -90,9 +99,22 @@ class SyncItem {
 // ============================================================
 
 class OfflineSyncService {
-  OfflineSyncService({required this.apiClient});
+  OfflineSyncService({
+    required this.apiClient,
+    String? Function()? accessTokenReader,
+    String? Function()? activeUserIdReader,
+  })  : _readAccessToken = accessTokenReader,
+        _readActiveUserId = activeUserIdReader;
 
   final MalvaApiClient apiClient;
+
+  /// Membaca access token aktif saat dibutuhkan — bukan disalin sekali saat
+  /// service dibuat — supaya token hasil refresh langsung terpakai.
+  final String? Function()? _readAccessToken;
+
+  /// Membaca id pemilik antrean yang sedang login.
+  final String? Function()? _readActiveUserId;
+
   final _queueController = StreamController<List<SyncItem>>.broadcast();
   final _secureStorage = const FlutterSecureStorage();
   static const _queueKey = 'malva_sync_queue';
@@ -102,12 +124,25 @@ class OfflineSyncService {
   StreamSubscription? _connectivitySub;
   bool _isSyncing = false;
 
-  List<SyncItem> get queue => List.unmodifiable(_queue);
+  /// Pemilik antrean saat ini. null berarti belum ada akun yang login.
+  String? get _activeUserId {
+    final id = _readActiveUserId?.call()?.trim();
+    if (id == null || id.isEmpty) return null;
+    return id;
+  }
+
+  /// Antrean yang terlihat pengguna: hanya milik akun yang sedang aktif.
+  List<SyncItem> get queue {
+    final owner = _activeUserId;
+    if (owner == null) return const [];
+    return List.unmodifiable(_queue.where((item) => item.userId == owner));
+  }
+
   Stream<List<SyncItem>> get queueStream => _queueController.stream;
   bool get isSyncing => _isSyncing;
 
   int get pendingCount =>
-      _queue.where((item) => item.status == SyncStatus.pending).length;
+      queue.where((item) => item.status == SyncStatus.pending).length;
 
   // ----------------------------------------------------------
   // INITIALIZATION
@@ -143,6 +178,7 @@ class OfflineSyncService {
         'note': entry.note,
       },
       createdAt: DateTime.now(),
+      userId: _activeUserId,
     );
     await _addItem(item);
   }
@@ -163,6 +199,7 @@ class OfflineSyncService {
         'source': source,
       },
       createdAt: DateTime.now(),
+      userId: _activeUserId,
     );
     await _addItem(item);
   }
@@ -182,6 +219,7 @@ class OfflineSyncService {
         'taken_at': DateTime.now().toIso8601String(),
       },
       createdAt: DateTime.now(),
+      userId: _activeUserId,
     );
     await _addItem(item);
   }
@@ -198,6 +236,7 @@ class OfflineSyncService {
         'created_at': entry.createdAt.toIso8601String(),
       },
       createdAt: DateTime.now(),
+      userId: _activeUserId,
     );
     await _addItem(item);
   }
@@ -208,11 +247,27 @@ class OfflineSyncService {
 
   Future<void> syncNow({String? accessToken}) async {
     if (_isSyncing) return;
+
+    final owner = _activeUserId;
+    final token = accessToken ?? _readAccessToken?.call();
+
+    // Tanpa akun aktif atau tanpa token, antrean tidak boleh disentuh sama
+    // sekali. Sebelumnya timer periodik memanggil syncNow() tanpa token,
+    // setiap item langsung gagal, jatah retry habis, lalu item ditandai
+    // 'failed' permanen — data pengguna hilang hanya karena aplikasi dibuka
+    // dalam keadaan belum login.
+    if (owner == null || token == null || token.isEmpty) return;
+
     _isSyncing = true;
     _notifyQueue();
 
-    final pending =
-        _queue.where((item) => item.status == SyncStatus.pending).toList();
+    // Hanya item milik akun yang sedang login. Item akun lain (mis. sisa
+    // sebelum logout) tetap disimpan dan baru dikirim saat akunnya kembali
+    // login, sehingga tidak pernah terunggah ke akun yang salah.
+    final pending = _queue
+        .where(
+            (item) => item.status == SyncStatus.pending && item.userId == owner)
+        .toList();
 
     for (final item in pending) {
       if (!item.canRetry) {
@@ -223,7 +278,10 @@ class OfflineSyncService {
       _updateItem(item.copyWith(status: SyncStatus.inProgress));
 
       try {
-        await _executeItem(item, accessToken);
+        // WAJIB token hasil resolusi, bukan parameter mentah: pemanggil dari
+        // timer/connectivity tidak mengirim accessToken, sehingga dulu setiap
+        // item langsung gagal dengan "No access token available".
+        await _executeItem(item, token);
         _updateItem(item.copyWith(status: SyncStatus.completed));
       } catch (e) {
         _updateItem(item.copyWith(
@@ -320,6 +378,11 @@ class OfflineSyncService {
   // ----------------------------------------------------------
 
   Future<void> _addItem(SyncItem item) async {
+    // Item tanpa pemilik tidak akan pernah bisa dikirim (lihat syncNow), jadi
+    // jangan pernah dimasukkan ke antrean: data tetap tersimpan di store lokal,
+    // dan antrean tidak dipenuhi sampah yang mustahil dikirim.
+    if (item.userId == null) return;
+
     _queue.add(item);
     await _saveQueue();
     _notifyQueue();
@@ -343,10 +406,14 @@ class OfflineSyncService {
   }
 
   void _startPeriodicSync() {
-    _periodicSyncTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      if (pendingCount > 0) {
-        unawaited(syncNow());
-      }
+    _periodicSyncTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
+      if (pendingCount == 0) return;
+      // Perangkat offline bukan kegagalan permanen: jangan panggil syncNow
+      // (yang akan menambah retryCount) saat tidak ada koneksi, supaya jatah
+      // retry tidak habis hanya karena aplikasi lama terbuka tanpa internet.
+      final connectivity = await Connectivity().checkConnectivity();
+      if (connectivity == ConnectivityResult.none) return;
+      unawaited(syncNow());
     });
   }
 
@@ -372,6 +439,11 @@ class OfflineSyncService {
       _queue = list
           .whereType<Map<String, dynamic>>()
           .map(SyncItem.fromJson)
+          // Item sisa versi sebelumnya tidak punya pemilik, sehingga tidak
+          // mungkin dikirim tanpa berisiko masuk ke akun yang salah. Dibuang
+          // saat dimuat agar antrean tidak menyimpan data yang mustahil
+          // dikirim; salinan lokalnya tetap ada di store perangkat.
+          .where((item) => (item.userId ?? '').trim().isNotEmpty)
           .toList();
     } on Object {
       _queue = [];

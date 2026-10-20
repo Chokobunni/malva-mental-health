@@ -12,7 +12,18 @@ import '../auth_providers.dart';
 
 final offlineSyncServiceProvider = Provider<OfflineSyncService>((ref) {
   final apiClient = ref.watch(apiClientProvider);
-  final service = OfflineSyncService(apiClient: apiClient);
+  // Token & pemilik antrean dibaca dari container SAAT DIBUTUHKAN, bukan
+  // disalin sekali saat provider dibuat: sesi bisa di-refresh atau diganti
+  // akun kapan saja, dan antrean offline tidak boleh memakai token/pemilik
+  // yang sudah tidak berlaku.
+  final container = ref.container;
+  final service = OfflineSyncService(
+    apiClient: apiClient,
+    accessTokenReader: () =>
+        container.read(authStateProvider).session?.accessToken,
+    activeUserIdReader: () =>
+        container.read(authStateProvider).session?.backendUserId,
+  );
   ref.onDispose(service.dispose);
   return service;
 });
