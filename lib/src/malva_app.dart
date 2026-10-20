@@ -131,6 +131,10 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     ref.read(malvaStoreProvider.notifier).persistSession(session);
     // Fresh start: bersihkan data akun sebelumnya, set identitas akun baru.
     ref.read(malvaStoreProvider.notifier).applySession(session);
+    // Kontak darurat & insiden milik akun sebelumnya harus dibuang lebih dulu:
+    // load() mempertahankan kontak lama bila permintaan gagal, sehingga tanpa
+    // reset akun baru bisa melihat (dan mengirim SOS ke) kontak akun lama.
+    ref.read(safetyProvider.notifier).reset();
     // Muat kontak darurat untuk akun yang baru login.
     unawaited(ref.read(safetyProvider.notifier).load());
     _scheduleAllMedicationReminders();
@@ -147,6 +151,9 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     // Cabut refresh token di server (best-effort), lalu bersihkan lokal.
     unawaited(ref.read(malvaStoreProvider.notifier).logoutSession(session));
     ref.read(malvaStoreProvider.notifier).resetForAccount();
+    // Kontak darurat & insiden ikut dibersihkan agar tidak terbawa ke akun
+    // berikutnya di perangkat yang sama.
+    ref.read(safetyProvider.notifier).reset();
     ref.read(authStateProvider.notifier).clearSession();
     ref.read(apiClientProvider).setRefreshToken(null);
     unawaited(GoogleAuthService.signOut());

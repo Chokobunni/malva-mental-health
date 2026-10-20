@@ -276,6 +276,17 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
   void clearActiveIncident() {
     state = state.copyWith(clearActive: true);
   }
+
+  /// Buang seluruh data safety milik akun saat ini.
+  ///
+  /// Wajib dipanggil saat logout atau sebelum memuat akun baru: `load()`
+  /// sengaja mempertahankan kontak lama bila permintaan gagal, sehingga tanpa
+  /// reset kontak darurat & insiden akun sebelumnya bisa tampil — dan dipakai
+  /// untuk mengirim SOS — oleh akun berikutnya di perangkat yang sama.
+  void reset() {
+    if (!mounted) return;
+    state = const SafetyState();
+  }
 }
 
 // ============================================================
