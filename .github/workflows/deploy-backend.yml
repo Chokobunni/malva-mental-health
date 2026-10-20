@@ -1,0 +1,128 @@
+name: Deploy Backend (API)
+
+# Deploy otomatis binary Go ke VM Azure lalu restart service `malva-api`.
+# Dipicu saat ada perubahan di backend/ (kecuali folder landing) atau manual.
+#
+# Konfigurasi yang dibutuhkan (lihat docs/CI_CD.md):
+#   vars.DEPLOY_HOST          — IP / hostname VM
+#   vars.DEPLOY_USER          — user SSH (harus punya sudo terbatas)
+#   vars.DEPLOY_PORT          — opsional, default 22
+#   secrets.DEPLOY_SSH_KEY    — private key SSH
+#   vars.MALVA_API_BASE_URL   — opsional, default https://api.malva.web.id
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '!backend/deploy/landing/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: '1.23'
+  DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+  API_URL: ${{ vars.MALVA_API_BASE_URL || 'https://api.malva.web.id' }}
+
+jobs:
+  deploy:
+    name: Build & deploy API
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: backend/go.sum
+
+      - name: Build linux/amd64
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -trimpath -ldflags="-s -w" -o malva-api ./cmd/api
+          ls -lh malva-api
+          file malva-api
+
+      - name: Validate deploy config
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          missing=""
+          [ -n "${DEPLOY_HOST:-}" ] || missing="$missing vars.DEPLOY_HOST"
+          [ -n "${DEPLOY_USER:-}" ] || missing="$missing vars.DEPLOY_USER"
+          [ -n "${DEPLOY_SSH_KEY:-}" ] || missing="$missing secrets.DEPLOY_SSH_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Konfigurasi deploy belum lengkap:$missing"
+            echo "Buka docs/CI_CD.md untuk cara mengisi variables & secrets."
+            exit 1
+          fi
+
+      - name: Setup SSH
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Upload binary
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          scp -i ~/.ssh/deploy_key -P "$DEPLOY_PORT" \
+            backend/malva-api "$DEPLOY_USER@$DEPLOY_HOST:/tmp/malva-api.new"
+
+      - name: Install & restart service
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+            set -euo pipefail
+            sudo install -m 0755 /tmp/malva-api.new /usr/local/bin/malva-api
+            rm -f /tmp/malva-api.new
+            sudo systemctl restart malva-api
+            sleep 2
+            if ! systemctl is-active --quiet malva-api; then
+              echo "Service gagal start. Log terakhir:"
+              journalctl -u malva-api -n 50 --no-pager || true
+              exit 1
+            fi
+          '
+
+      - name: Health check
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 10 "$API_URL/healthz" \
+              | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"'; then
+              echo "API sehat: $API_URL/healthz"
+              exit 0
+            fi
+            echo "Percobaan $i/10 belum sehat, tunggu 3 detik..."
+            sleep 3
+          done
+          echo "::error::Health check gagal setelah deploy."
+          exit 1

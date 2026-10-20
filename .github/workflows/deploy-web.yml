@@ -1,0 +1,99 @@
+name: Deploy Website
+
+# Sinkronisasi landing site (HTML/CSS/aset statis) ke web root Caddy di VM.
+# Folded `downloads/` sengaja dikecualikan agar APK tidak ikut terhapus.
+#
+# Konfigurasi yang dibutuhkan (lihat docs/CI_CD.md):
+#   vars.DEPLOY_HOST, vars.DEPLOY_USER, vars.DEPLOY_PORT (opsional)
+#   secrets.DEPLOY_SSH_KEY
+#   vars.WEB_ROOT  — opsional, default /var/www/malva
+#   vars.SITE_URL  — opsional, default https://malva.web.id
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/deploy/landing/**'
+      - '.github/workflows/deploy-web.yml'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+env:
+  DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+  WEB_ROOT: ${{ vars.WEB_ROOT || '/var/www/malva' }}
+  SITE_URL: ${{ vars.SITE_URL || 'https://malva.web.id' }}
+
+jobs:
+  deploy:
+    name: Sync landing site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deploy config
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          missing=""
+          [ -n "${DEPLOY_HOST:-}" ] || missing="$missing vars.DEPLOY_HOST"
+          [ -n "${DEPLOY_USER:-}" ] || missing="$missing vars.DEPLOY_USER"
+          [ -n "${DEPLOY_SSH_KEY:-}" ] || missing="$missing secrets.DEPLOY_SSH_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Konfigurasi deploy belum lengkap:$missing"
+            echo "Buka docs/CI_CD.md untuk cara mengisi variables & secrets."
+            exit 1
+          fi
+
+      - name: Setup SSH
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Sync website files
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            --chown=www-data:www-data \
+            --exclude 'downloads/' \
+            --rsync-path="sudo rsync" \
+            -e "ssh -i ~/.ssh/deploy_key -p $DEPLOY_PORT" \
+            backend/deploy/landing/ "$DEPLOY_USER@$DEPLOY_HOST:$WEB_ROOT/"
+
+      - name: Health check
+        run: |
+          set -euo pipefail
+          ok=0
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 10 "$SITE_URL/" | grep -qi 'malva'; then
+              ok=1
+              break
+            fi
+            echo "Percobaan $i/10 belum sehat, tunggu 3 detik..."
+            sleep 3
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::Website tidak merespons / konten tidak ditemukan di $SITE_URL/"
+            exit 1
+          fi
+          echo "OK: $SITE_URL/ sehat."

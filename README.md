@@ -14,6 +14,7 @@ Aplikasi mobile mental health yang menghubungkan pasien dengan profesional keseh
 | [Database Schema](docs/DATABASE_SCHEMA.md) | All 20 tables with ERD, columns, constraints, indexes |
 | [API Documentation](docs/API_DOCUMENTATION.md) | All 39 endpoints with request/response formats |
 | [UI/UX Specification](docs/UI_UX_SPECIFICATION.md) | Design system, screen layouts, navigation, interactions |
+| [CI/CD](docs/CI_CD.md) | Deploy otomatis backend, website, dan APK via GitHub Actions |
 
 ## Tech Stack
 

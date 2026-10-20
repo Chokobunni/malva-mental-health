@@ -1,0 +1,259 @@
+name: Build & Deploy APK
+
+# Build APK release Flutter dengan SELURUH --dart-define wajib, lalu
+# (opsional) unggah ke /var/www/malva/downloads/ di VM.
+#
+# PENTING: tanpa MALVA_GOOGLE_CLIENT_ID, tombol "Continue with Google" akan
+# gagal dengan "Login Google belum dikonfigurasi di aplikasi ini."
+# Workflow ini menolak build bila variable tersebut kosong.
+#
+# Konfigurasi yang dibutuhkan (lihat docs/CI_CD.md):
+#   vars.MALVA_GOOGLE_CLIENT_ID
+#   vars.MALVA_API_BASE_URL (opsional, default https://api.malva.web.id)
+#   secrets.ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD /
+#           ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD  (opsional, signing release)
+#   secrets.GOOGLE_SERVICES_JSON_BASE64               (opsional, FCM/Firebase)
+#   vars.DEPLOY_HOST / DEPLOY_USER / DEPLOY_PORT, secrets.DEPLOY_SSH_KEY
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'assets/**'
+      - 'android/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+    inputs:
+      target_platform:
+        description: 'Target platform Flutter'
+        required: true
+        type: choice
+        default: android-arm64
+        options:
+          - android-arm64
+          - android-arm
+          - android-x64
+      deploy:
+        description: 'Upload APK ke server (/downloads)?'
+        required: true
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      target_platform:
+        type: string
+        default: android-arm64
+      deploy:
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: '3.44.8'
+  JAVA_VERSION: '17'
+  DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+  SITE_URL: ${{ vars.SITE_URL || 'https://malva.web.id' }}
+
+jobs:
+  build:
+    name: Build release APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate dart-define
+        env:
+          GOOGLE_CLIENT_ID: ${{ vars.MALVA_GOOGLE_CLIENT_ID }}
+          API_BASE_URL: ${{ vars.MALVA_API_BASE_URL || 'https://api.malva.web.id' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GOOGLE_CLIENT_ID:-}" ]; then
+            echo "::error::Variable MALVA_GOOGLE_CLIENT_ID kosong."
+            echo "Tanpa nilai ini tombol 'Continue with Google' gagal di APK."
+            echo "Isi di Settings > Secrets and variables > Actions > Variables."
+            exit 1
+          fi
+          if [ -z "${API_BASE_URL:-}" ]; then
+            echo "::error::Variable MALVA_API_BASE_URL kosong."
+            exit 1
+          fi
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Restore Android keystore (opsional)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_B64:-}" ]; then
+            echo "::warning::ANDROID_KEYSTORE_BASE64 belum diisi — APK memakai debug signing."
+            echo "::warning::Jangan distribusikan APK debug-signed ke pengguna."
+            exit 0
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > android/malva-release-key.jks
+          cat > android/key.properties <<EOF
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=../malva-release-key.jks
+          EOF
+          echo "Keystore release dipasang (alias: $KEY_ALIAS)."
+
+      - name: Restore google-services.json (opsional)
+        env:
+          GOOGLE_SERVICES_B64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GOOGLE_SERVICES_B64:-}" ]; then
+            echo "::warning::GOOGLE_SERVICES_JSON_BASE64 kosong — FCM/Firebase tidak aktif di APK."
+            exit 0
+          fi
+          echo "$GOOGLE_SERVICES_B64" | base64 -d > android/app/google-services.json
+          echo "google-services.json dipasang."
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build APK
+        env:
+          API_BASE_URL: ${{ vars.MALVA_API_BASE_URL || 'https://api.malva.web.id' }}
+          GOOGLE_CLIENT_ID: ${{ vars.MALVA_GOOGLE_CLIENT_ID }}
+          TARGET_PLATFORM: ${{ inputs.target_platform || 'android-arm64' }}
+        run: |
+          set -euo pipefail
+          flutter build apk --release \
+            --target-platform "$TARGET_PLATFORM" \
+            --dart-define=MALVA_API_BASE_URL="$API_BASE_URL" \
+            --dart-define=MALVA_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID"
+
+      - name: Verify dart-define embedded
+        env:
+          GOOGLE_CLIENT_ID: ${{ vars.MALVA_GOOGLE_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          apk=build/app/outputs/flutter-apk/app-release.apk
+          if [ ! -f "$apk" ]; then
+            echo "::error::APK tidak ditemukan di $apk"
+            exit 1
+          fi
+          count=$(unzip -p "$apk" 'lib/*/libapp.so' | grep -aocF "$GOOGLE_CLIENT_ID" || true)
+          if [ "${count:-0}" -lt 1 ]; then
+            echo "::error::MALVA_GOOGLE_CLIENT_ID tidak tertanam di libapp.so."
+            exit 1
+          fi
+          echo "OK: MALVA_GOOGLE_CLIENT_ID tertanam ($count kecocokan)."
+
+      - name: Rename & checksum
+        run: |
+          set -euo pipefail
+          apk=build/app/outputs/flutter-apk/app-release.apk
+          date_utc=$(date -u +%Y-%m-%d)
+          sha=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          mkdir -p dist
+          cp "$apk" "dist/malva-latest.apk"
+          cp "$apk" "dist/Malva-release-${date_utc}-${sha}.apk"
+          (cd dist && sha256sum ./*.apk > SHA256SUMS.txt)
+          ls -lh dist
+          cat dist/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: malva-apk
+          path: dist/
+          retention-days: 30
+
+  deploy:
+    name: Upload APK ke server
+    needs: build
+    # Push/workflow_call → deploy; manual → ikuti input `deploy`.
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deploy == false) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: malva-apk
+          path: dist
+
+      - name: Validate deploy config
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          missing=""
+          [ -n "${DEPLOY_HOST:-}" ] || missing="$missing vars.DEPLOY_HOST"
+          [ -n "${DEPLOY_USER:-}" ] || missing="$missing vars.DEPLOY_USER"
+          [ -n "${DEPLOY_SSH_KEY:-}" ] || missing="$missing secrets.DEPLOY_SSH_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Konfigurasi deploy belum lengkap:$missing"
+            exit 1
+          fi
+
+      - name: Setup SSH
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Upload & install APK
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          date_utc=$(date -u +%Y-%m-%d)
+          scp -i ~/.ssh/deploy_key -P "$DEPLOY_PORT" \
+            dist/malva-latest.apk "$DEPLOY_USER@$DEPLOY_HOST:/tmp/malva-latest.apk"
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "
+            set -euo pipefail
+            sudo install -d -o www-data -g www-data /var/www/malva/downloads
+            sudo install -m 0644 /tmp/malva-latest.apk /var/www/malva/downloads/malva-latest.apk
+            sudo install -m 0644 /tmp/malva-latest.apk /var/www/malva/downloads/Malva-release-${date_utc}.apk
+            rm -f /tmp/malva-latest.apk
+          "
+
+      - name: Health check download
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -I "$SITE_URL/downloads/malva-latest.apk" || true)
+            if [ "$code" = "200" ]; then
+              echo "OK: $SITE_URL/downloads/malva-latest.apk (200)"
+              exit 0
+            fi
+            echo "Percobaan $i/10: HTTP $code"
+            sleep 3
+          done
+          echo "::error::APK belum bisa diunduh dari $SITE_URL/downloads/malva-latest.apk"
+          exit 1
