@@ -115,14 +115,22 @@ jobs:
       - name: Health check
         run: |
           set -euo pipefail
+          body=$(mktemp)
+          ok=0
           for i in $(seq 1 10); do
-            if curl -fsS --max-time 10 "$API_URL/healthz" \
-              | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"'; then
-              echo "API sehat: $API_URL/healthz"
-              exit 0
+            # Simpan body ke file dulu: `curl | grep -q` menutup pipe lebih awal
+            # sehingga curl keluar dengan kode 23 dan pipefail menganggapnya gagal.
+            if curl -fsS --max-time 10 "$API_URL/healthz" -o "$body" 2>/dev/null \
+              && grep -q '"status"[[:space:]]*:[[:space:]]*"ok"' "$body"; then
+              ok=1
+              break
             fi
             echo "Percobaan $i/10 belum sehat, tunggu 3 detik..."
             sleep 3
           done
-          echo "::error::Health check gagal setelah deploy."
-          exit 1
+          rm -f "$body"
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::Health check gagal setelah deploy."
+            exit 1
+          fi
+          echo "API sehat: $API_URL/healthz"

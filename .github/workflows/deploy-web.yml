@@ -83,15 +83,20 @@ jobs:
       - name: Health check
         run: |
           set -euo pipefail
+          body=$(mktemp)
           ok=0
           for i in $(seq 1 10); do
-            if curl -fsS --max-time 10 "$SITE_URL/" | grep -qi 'malva'; then
+            # Simpan body ke file dulu: `curl | grep -q` menutup pipe lebih awal
+            # sehingga curl keluar dengan kode 23 dan pipefail menganggapnya gagal.
+            if curl -fsS --max-time 10 "$SITE_URL/" -o "$body" 2>/dev/null \
+              && grep -qi 'malva' "$body"; then
               ok=1
               break
             fi
             echo "Percobaan $i/10 belum sehat, tunggu 3 detik..."
             sleep 3
           done
+          rm -f "$body"
           if [ "$ok" -ne 1 ]; then
             echo "::error::Website tidak merespons / konten tidak ditemukan di $SITE_URL/"
             exit 1
