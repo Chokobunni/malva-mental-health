@@ -503,6 +503,14 @@ func (s *Store) PayoutAllPending(ctx context.Context, professionalID, bank, acco
 	return count, total, err
 }
 
+// MarkEarningPayoutPaid menandai satu earning sudah benar-benar ditransfer
+// admin (pending -> payout_requested -> paid_out) beserta stempel paid_out_at.
+//
+// BELUM ADA PEMANGGIL: belum ada endpoint admin untuk menyelesaikan payout.
+// Saat ini transfer dilakukan manual dan status di DB tidak ikut berubah,
+// sehingga paid_out_at tidak pernah terisi. Fungsi ini sengaja dipertahankan
+// sebagai titik masuk yang sudah teruji (WHERE payout_status =
+// 'payout_requested' mencegah penandaan ganda) untuk endpoint admin berikutnya.
 func (s *Store) MarkEarningPayoutPaid(ctx context.Context, earningID string) error {
 	const q = `UPDATE earnings
 		SET payout_status = 'paid_out', paid_out_at = now()
