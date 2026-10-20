@@ -165,7 +165,7 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         if (gagal > 0)
-                          Text(
+                          const Text(
                             'Hubungi kontak daruratmu sendiri atau hotline 119 ext 8.',
                             style: TextStyle(
                               color: MalvaColors.danger,
@@ -257,7 +257,8 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
       await launchUrl(uri);
     } else if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tidak dapat membuka panggilan. Hubungi 119 ext 8.')),
+        const SnackBar(
+            content: Text('Tidak dapat membuka panggilan. Hubungi 119 ext 8.')),
       );
     }
   }
