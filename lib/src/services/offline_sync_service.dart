@@ -363,12 +363,24 @@ class OfflineSyncService {
           takenAt: DateTime.parse(item.payload['taken_at'] as String),
         );
       case SyncOperation.diaryEntry:
+        // Harus sama dengan jalur online (diary_history_screen):
+        //   - sharedWithProfessionals:true — entri yang ditulis online
+        //     dibagikan ke profesional, jadi entri yang ditulis offline tidak
+        //     boleh berperilaku lain. Dulu di sini `false`, sehingga pasien
+        //     mengira tulisannya sampai ke terapis padahal tidak.
+        //   - occurredAt diambil dari waktu tulis asli (created_at saat masuk
+        //     antrean). Tanpa ini, entri hasil sinkronisasi tercap dengan jam
+        //     server dan linimasa mood pasien bergeser.
+        final occurredAt = DateTime.tryParse(
+          (item.payload['created_at'] as String?) ?? '',
+        );
         await apiClient.createDiaryEntry(
           accessToken: accessToken,
           mood: item.payload['mood'] as String,
           title: item.payload['title'] as String,
           note: item.payload['note'] as String,
-          sharedWithProfessionals: false,
+          sharedWithProfessionals: true,
+          occurredAt: occurredAt ?? item.createdAt,
         );
     }
   }
