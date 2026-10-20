@@ -265,6 +265,22 @@ func (s *Store) UpdatePaymentGateway(ctx context.Context, reference, gateway, sn
 	return p, nil
 }
 
+// PaymentStatusByReference mengembalikan status pembayaran ('pending'/'paid'/…)
+// tanpa mengubah apa pun. Dipakai webhook agar notifikasi settlement ganda
+// tidak diperlakukan sebagai kegagalan.
+func (s *Store) PaymentStatusByReference(ctx context.Context, reference string) (string, error) {
+	var status string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT status FROM payments WHERE reference = $1`, reference).Scan(&status)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrPaymentNotFound
+		}
+		return "", err
+	}
+	return status, nil
+}
+
 func (s *Store) CreateEarning(ctx context.Context, professionalID string, p Payment) (string, error) {
 	const q = `INSERT INTO earnings (professional_id, payment_id, gross, platform_fee, net)
 		VALUES ($1, $2, $3, $4, $5) RETURNING id`

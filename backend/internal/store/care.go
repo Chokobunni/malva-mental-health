@@ -1169,6 +1169,25 @@ func (s *Store) RecordPaymentEvent(ctx context.Context, evt PaymentEvent) (bool,
 
 // UpdatePaymentEventStatus menandai status event (processed/ignored/rejected)
 // dan opsional mengikat payment/booking. Idempoten.
+// PaymentEventStatus membaca status pemrosesan sebuah event webhook.
+// Nilai found=false berarti event tersebut belum pernah tercatat.
+func (s *Store) PaymentEventStatus(ctx context.Context, gateway, externalID, eventType string) (string, bool, error) {
+	if strings.TrimSpace(gateway) == "" {
+		gateway = "midtrans"
+	}
+	var status string
+	err := s.db.QueryRowContext(ctx, `SELECT status FROM payment_events
+		WHERE gateway = $1 AND external_id = $2 AND event_type = $3`,
+		gateway, externalID, eventType).Scan(&status)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return status, true, nil
+}
+
 func (s *Store) UpdatePaymentEventStatus(ctx context.Context, gateway, externalID, eventType, status, paymentID, bookingID string) error {
 	if strings.TrimSpace(gateway) == "" {
 		gateway = "midtrans"

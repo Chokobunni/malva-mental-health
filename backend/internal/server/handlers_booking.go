@@ -547,8 +547,24 @@ func (s *Server) paymentWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !inserted {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-		return
+		// Event ini sudah pernah diterima. Dulu handler langsung membalas 200
+		// tanpa memeriksa hasil pemrosesan sebelumnya, sehingga kegagalan
+		// sementara berubah menjadi pembayaran hilang permanen: gateway
+		// menganggap terkirim, dan percobaan ulang pun ditelan di sini.
+		// Sekarang: hanya event yang benar-benar sudah 'processed' yang
+		// dianggap selesai; selain itu diproses ulang.
+		status, found, serr := s.store.PaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType)
+		if serr != nil {
+			s.logger.Error("webhook read event status failed", "order_id", evt.OrderID, "error", serr)
+			writeError(w, http.StatusInternalServerError, errors.New("gagal membaca status event"))
+			return
+		}
+		if found && status == "processed" {
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			return
+		}
+		s.logger.Warn("webhook event diproses ulang", "order_id", evt.OrderID,
+			"event_type", eventType, "status_sebelumnya", status)
 	}
 	// 3. Efek: settlement/capture -> tandai lunas + aktivasi booking.
 	switch eventType {
@@ -560,9 +576,20 @@ func (s *Server) paymentWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		p, perr := s.store.MarkPaymentPaid(r.Context(), evt.OrderID, evt.TransactionID)
 		if perr != nil {
-			s.logger.Warn("webhook mark paid failed", "order_id", evt.OrderID, "error", perr)
-			_ = s.store.UpdatePaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType, "ignored", "", "")
-			writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
+			// Notifikasi settlement ganda untuk payment yang sudah lunas bukan
+			// kegagalan: cukup tandai event selesai lalu balas 200.
+			if st, serr := s.store.PaymentStatusByReference(r.Context(), evt.OrderID); serr == nil && st == "paid" {
+				_ = s.store.UpdatePaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType, "processed", "", "")
+				writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+				return
+			}
+			// Kegagalan sesungguhnya (mis. DB sedang tidak tersedia). Dulu
+			// handler membalas 200 + menandai 'ignored' sehingga gateway tidak
+			// pernah mengulang dan pembayaran hilang. Sekarang balas 5xx dan
+			// biarkan status event tetap 'received' agar percobaan ulang
+			// gateway benar-benar diproses.
+			s.logger.Error("webhook mark paid failed", "order_id", evt.OrderID, "error", perr)
+			writeError(w, http.StatusInternalServerError, errors.New("gagal memproses pembayaran"))
 			return
 		}
 		if aerr := s.activatePaidBooking(r, p); aerr != nil {
