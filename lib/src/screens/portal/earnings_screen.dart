@@ -134,7 +134,10 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                             color: Colors.white.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(999),
                           ),
-                          child: const Text('Monthly',
+                          // GET /v1/earnings menjumlahkan SELURUH earnings
+                          // profesional tanpa filter tanggal, jadi label ini
+                          // tidak boleh menyiratkan periode bulanan.
+                          child: const Text('All time',
                               style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 12,
