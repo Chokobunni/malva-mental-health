@@ -203,23 +203,95 @@ mengatur `target_platform` dan apakah APK diunggah ke server.
 
 ## 9. Migrasi database (tetap manual)
 
-Backend **tidak** menjalankan migrasi otomatis saat start. Setelah deploy yang
-mengubah skema, jalankan di VM:
+Backend **tidak** menjalankan migrasi otomatis saat start, dan workflow
+deploy backend **hanya mengirim binary** (`scp backend/malva-api`) — folder
+`migrations/` **tidak** ikut tersalin. Jadi setiap ada migrasi baru, dua hal
+harus dilakukan: salin berkasnya, lalu terapkan.
+
+### 9.1 Menyalin berkas migrasi ke VM
 
 ```bash
-# dari folder migrasi yang sudah ada di VM
+# dari root repo, di laptop
+scp -i ~/.ssh/malva_azure backend/migrations/*.sql \
+  malva@api.malva.web.id:/tmp/malva-migrations/
+
+ssh -i ~/.ssh/malva_azure malva@api.malva.web.id '
+  sudo mkdir -p /opt/malva/app/backend/migrations
+  sudo cp /tmp/malva-migrations/*.sql /opt/malva/app/backend/migrations/
+  ls -1 /opt/malva/app/backend/migrations/
+'
+```
+
+### 9.2 Menerapkan migrasi
+
+Gunakan skrip di `backend/deploy/scripts/apply_migrations.sh` (idempoten,
+menghentikan diri pada error SQL pertama, dan langsung memverifikasi hasilnya).
+
+```bash
+# lihat migrasi yang tersedia
+sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh --list
+
+# periksa kesehatan skema tanpa mengubah apa pun
+sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh --check
+
+# terapkan satu migrasi tertentu (disarankan: eksplisit per nomor)
+sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh 015
+
+# terapkan semua migrasi berurutan (perilaku lama)
+sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh --all
+```
+
+Skrip membaca `MALVA_DATABASE_URL` dari `/etc/malva/malva-api.env`; bila berkas
+itu tidak terbaca, berikan URL lewat lingkungan:
+
+```bash
+sudo MALVA_DATABASE_URL='postgres://...' \
+  /opt/malva/app/backend/deploy/scripts/apply_migrations.sh 015
+```
+
+Tanpa skrip, setara dengan:
+
+```bash
 for f in /opt/malva/app/backend/migrations/*.sql; do
   sudo -u malva psql "$MALVA_DATABASE_URL" -f "$f"
 done
 ```
 
-Migrasi di repo bersifat idempoten (`CREATE TABLE IF NOT EXISTS`), jadi aman
-dijalankan berulang. Jika folder migrasi belum ada di VM, salin dulu:
+### 9.3 Verifikasi setelah migrasi
+
+Migrasi `015` mengubah CHECK constraint `medication_logs`. Bila constraint
+lama masih aktif, log "Partial" akan **ditolak database** walau handler sudah
+menerimanya — jadi jangan berhenti di "tidak ada error". Pastikan definisinya
+sudah memuat `partial`:
 
 ```bash
-scp -r backend/migrations <DEPLOY_USER>@<DEPLOY_HOST>:/tmp/malva-migrations
-ssh <DEPLOY_USER>@<DEPLOY_HOST> 'sudo mkdir -p /opt/malva/app/backend/migrations && sudo cp -r /tmp/malva-migrations/* /opt/malva/app/backend/migrations/'
+sudo -u malva psql "$MALVA_DATABASE_URL" -c "
+  SELECT pg_get_constraintdef(oid) AS definisi
+  FROM pg_constraint
+  WHERE conrelid = 'medication_logs'::regclass
+    AND contype = 'c'
+    AND pg_get_constraintdef(oid) LIKE '%status%';"
 ```
+
+Hasil yang benar memuat `status IN ('taken','missed','skipped','partial')`.
+Cara cepat: `apply_migrations.sh --check` mencetak
+`medication_logs.status : OK — 'partial' diterima`.
+
+### 9.4 Mengubah variabel lingkungan service
+
+Perubahan env **tidak** ikut ter-deploy otomatis. Setelah mengedit
+`/etc/malva/malva-api.env`, service wajib di-restart karena `EnvironmentFile`
+hanya dibaca saat start:
+
+```bash
+sudo systemctl restart malva-api
+systemctl is-active malva-api
+sudo journalctl -u malva-api -n 30 --no-pager
+```
+
+Contoh nyata: `MALVA_FONNTE_TOKEN` untuk blast SOS WhatsApp. Bila variabel ini
+kosong, backend memakai mode stub dan melaporkan status apa adanya (tidak
+mengklaim terkirim), tetapi pesan SOS **tidak** benar-benar dikirim.
 
 ## 10. Troubleshooting
 
