@@ -1810,8 +1810,16 @@ func (s *Server) public(next authedHandler) http.HandlerFunc {
 }
 
 func (s *Server) claimsFromRequest(r *http.Request) (auth.Claims, error) {
-	if token := r.URL.Query().Get("access_token"); token != "" {
-		return s.auth.Verify(token)
+	// Token lewat query HANYA diterima pada handshake WebSocket, karena
+	// browser tidak bisa mengatur header Authorization untuk WebSocket.
+	// Sebelumnya query token diterima di SEMUA endpoint, sehingga token bisa
+	// ikut tercatat di access log Caddy, riwayat browser, atau header Referer
+	// hanya dengan menempelkannya ke URL. Untuk endpoint lain token wajib
+	// lewat header Authorization.
+	if r.URL.Path == "/v1/realtime/ws" {
+		if token := r.URL.Query().Get("access_token"); token != "" {
+			return s.auth.Verify(token)
+		}
 	}
 	return s.auth.BearerClaims(r.Header.Get("Authorization"))
 }
