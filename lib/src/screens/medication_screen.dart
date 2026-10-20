@@ -202,16 +202,8 @@ class MedicationScreen extends ConsumerWidget {
                       child: Row(
                         children: [
                           Icon(
-                            log.status == 'taken'
-                                ? Icons.check_circle_rounded
-                                : log.status == 'skipped'
-                                    ? Icons.skip_next_rounded
-                                    : Icons.cancel_rounded,
-                            color: log.status == 'taken'
-                                ? MalvaColors.mint
-                                : log.status == 'skipped'
-                                    ? MalvaColors.amber
-                                    : MalvaColors.danger,
+                            _logIcon(log.status),
+                            color: _logColor(log.status),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -255,6 +247,22 @@ class MedicationScreen extends ConsumerWidget {
     final m = dt.minute.toString().padLeft(2, '0');
     return '${dt.day}/${dt.month}/${dt.year} $h:$m';
   }
+
+  /// Ikon status log obat. 'partial' (sebagian diminum) punya ikon sendiri;
+  /// sebelumnya status ini jatuh ke ikon "dibatalkan" seperti missed.
+  static IconData _logIcon(String status) => switch (status) {
+        'taken' => Icons.check_circle_rounded,
+        'partial' => Icons.hourglass_bottom_rounded,
+        'skipped' => Icons.skip_next_rounded,
+        _ => Icons.cancel_rounded,
+      };
+
+  static Color _logColor(String status) => switch (status) {
+        'taken' => MalvaColors.mint,
+        'partial' => MalvaColors.orchid,
+        'skipped' => MalvaColors.amber,
+        _ => MalvaColors.danger,
+      };
 
   void _openMedicationForm(BuildContext context, WidgetRef ref,
       [Medication? medication]) {
@@ -375,7 +383,9 @@ class MedicationScreen extends ConsumerWidget {
 
   void _logMedication(BuildContext context, WidgetRef ref,
       Medication medication, String status) {
-    ref.read(malvaStoreProvider.notifier).takeMedication(medication.id);
+    ref
+        .read(malvaStoreProvider.notifier)
+        .takeMedication(medication.id, status: status);
     unawaited(_syncMedicationLog(context, medication, status));
     if (medication.needsRefill) {
       ScaffoldMessenger.of(context).showSnackBar(

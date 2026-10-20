@@ -476,21 +476,31 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   // MEDICATION METHODS
   // ============================================================
 
-  void takeMedication(String medicationId) {
+  /// Catat satu log minum obat dengan status sesuai pilihan pengguna.
+  ///
+  /// Sebelumnya status selalu ditulis 'taken' dan stok selalu berkurang,
+  /// sehingga menandai "Skipped" atau "Missed" tetap tercatat sebagai sudah
+  /// diminum dan memotong stok — riwayat kepatuhan minum obat jadi salah.
+  void takeMedication(String medicationId, {String status = 'taken'}) {
     final index = state.medications.indexWhere((m) => m.id == medicationId);
     if (index == -1) return;
     final med = state.medications[index];
     final now = DateTime.now();
-    final updatedMed = med.copyWith(
-      currentStock: (med.currentStock - 1).clamp(0, 999).toInt(),
-      lastTakenAt: now,
-    );
+    // Hanya dosis yang benar-benar masuk (utuh atau sebagian) yang mengurangi
+    // stok dan memperbarui penanda "terakhir diminum".
+    final consumed = status == 'taken' || status == 'partial';
+    final updatedMed = consumed
+        ? med.copyWith(
+            currentStock: (med.currentStock - 1).clamp(0, 999).toInt(),
+            lastTakenAt: now,
+          )
+        : med;
     final newMeds = [...state.medications]..[index] = updatedMed;
     final newLog = MedicationLog(
       medicationId: medicationId,
       medicationName: med.name,
       takenAt: now,
-      status: 'taken',
+      status: status,
     );
     state = state.copyWith(
       medications: newMeds,
