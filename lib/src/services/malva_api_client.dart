@@ -1880,8 +1880,13 @@ class MalvaApiClient {
           if (longitude != null) 'longitude': longitude,
           'message': message,
         });
-    return BackendCrisisIncident.fromJson(
+    // delivery_configured: false berarti MALVA_FONNTE_TOKEN belum diisi di
+    // server — pesan WhatsApp tidak akan terkirim. Klien perlu tahu agar bisa
+    // menampilkan peringatan yang jujur alih-alih "Terkirim ke N kontak".
+    final configured = payload['delivery_configured'] as bool? ?? true;
+    final incident = BackendCrisisIncident.fromJson(
         _expectMap(payload['incident'], 'Respons incident tidak valid.'));
+    return incident.copyWith(deliveryConfigured: configured);
   }
 
   Future<List<BackendCrisisIncident>> listCrisisIncidents({
@@ -3003,6 +3008,7 @@ class BackendCrisisIncident {
     this.createdAt,
     this.resolvedAt,
     this.patientName = '',
+    this.deliveryConfigured = true,
   });
 
   factory BackendCrisisIncident.fromJson(Map<String, dynamic> json) {
@@ -3021,6 +3027,22 @@ class BackendCrisisIncident {
     );
   }
 
+  BackendCrisisIncident copyWith({bool? deliveryConfigured}) =>
+      BackendCrisisIncident(
+        id: id,
+        patientId: patientId,
+        triggeredBy: triggeredBy,
+        phq9Q9Score: phq9Q9Score,
+        latitude: latitude,
+        longitude: longitude,
+        status: status,
+        resolutionNotes: resolutionNotes,
+        createdAt: createdAt,
+        resolvedAt: resolvedAt,
+        patientName: patientName,
+        deliveryConfigured: deliveryConfigured ?? this.deliveryConfigured,
+      );
+
   final String id;
   final String patientId;
   final String triggeredBy;
@@ -3032,6 +3054,11 @@ class BackendCrisisIncident {
   final DateTime? createdAt;
   final DateTime? resolvedAt;
   final String patientName;
+
+  /// false = MALVA_FONNTE_TOKEN belum diisi di server; pesan WhatsApp tidak
+  /// akan terkirim. Default true agar data lama / respons tanpa field ini
+  /// tetap dianggap "terkonfigurasi" (backward compatible).
+  final bool deliveryConfigured;
 }
 
 class BackendSOSBlastStatus {

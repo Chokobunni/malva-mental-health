@@ -234,13 +234,22 @@ func (s *Server) handleCrisisAlertV2(w http.ResponseWriter, r *http.Request, cla
 		return
 	}
 
+	// Ambil nama tampilan pasien sekali di sini — dipakai baik untuk broadcast
+	// realtime ke profesional maupun pesan WhatsApp ke kontak darurat.
+	// Sebelumnya broadcast memakai claims.Subject (UUID), sehingga profesional
+	// melihat ID acak alih-alih nama pasien saat notifikasi krisis masuk.
+	patientName := claims.Subject
+	if u, err := s.store.GetUserByID(r.Context(), claims.Subject); err == nil && u.DisplayName != "" {
+		patientName = u.DisplayName
+	}
+
 	// Broadcast crisis alert ke hub (profesionals terpantau real-time)
 	event := map[string]interface{}{
 		"type": "crisis_alert",
 		"data": map[string]interface{}{
 			"incident_id":   created.ID,
 			"patient_id":    claims.Subject,
-			"patient_name":  claims.Subject,
+			"patient_name":  patientName,
 			"triggered_by":  triggeredBy,
 			"phq9_q9_score": req.PHQ9Q9Score,
 			"latitude":      req.Latitude,
@@ -254,10 +263,6 @@ func (s *Server) handleCrisisAlertV2(w http.ResponseWriter, r *http.Request, cla
 	// Blast ke kontak: kirim WhatsApp SUNGGUHAN via Fonnte lalu catat status
 	// sesuai hasil nyata gateway. Berjalan di background karena request
 	// context dibatalkan setelah handler return.
-	patientName := claims.Subject
-	if u, err := s.store.GetUserByID(r.Context(), claims.Subject); err == nil && u.DisplayName != "" {
-		patientName = u.DisplayName
-	}
 	deliveryConfigured := s.sos != nil
 	channel := "whatsapp"
 	status := "queued"

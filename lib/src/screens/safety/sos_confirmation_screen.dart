@@ -53,15 +53,21 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
     final terkirim = (blast?.delivered ?? 0) + (blast?.sent ?? 0);
     final gagal = blast?.failed ?? 0;
     final menunggu = blast?.pending ?? 0;
-    final statusText = terkirim > 0
-        ? 'Terkirim ke $terkirim dari $total kontak'
-        : menunggu > 0
-            ? 'Sedang mengirim ke $total kontak…'
-            : gagal > 0
-                ? 'Gagal mengirim ke $gagal kontak'
-                : total == 0
-                    ? 'Belum ada kontak darurat terdaftar'
-                    : 'Menunggu status pengiriman…';
+    // delivery_configured=false berarti MALVA_FONNTE_TOKEN belum diisi di
+    // server. Tanpa peringatan ini, pasien melihat "Terkirim ke N kontak"
+    // padahal pesan WhatsApp tidak pernah keluar dari server.
+    final unconfigured = !widget.incident.deliveryConfigured;
+    final statusText = unconfigured
+        ? 'WhatsApp belum dikonfigurasi di server — hubungi admin'
+        : terkirim > 0
+            ? 'Terkirim ke $terkirim dari $total kontak'
+            : menunggu > 0
+                ? 'Sedang mengirim ke $total kontak…'
+                : gagal > 0
+                    ? 'Gagal mengirim ke $gagal kontak'
+                    : total == 0
+                        ? 'Belum ada kontak darurat terdaftar'
+                        : 'Menunggu status pengiriman…';
 
     return Scaffold(
       appBar: AppBar(
@@ -164,7 +170,16 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
                           statusText,
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
-                        if (gagal > 0)
+                        if (unconfigured)
+                          const Text(
+                            'MALVA_FONNTE_TOKEN belum diisi di server. Pesan WhatsApp tidak terkirim — hubungi admin atau gunakan hotline 119 ext 8.',
+                            style: TextStyle(
+                              color: MalvaColors.danger,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          )
+                        else if (gagal > 0)
                           const Text(
                             'Hubungi kontak daruratmu sendiri atau hotline 119 ext 8.',
                             style: TextStyle(
