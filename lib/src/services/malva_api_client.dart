@@ -1870,6 +1870,7 @@ class MalvaApiClient {
     double? latitude,
     double? longitude,
     String message = '',
+    List<String>? contactPhones,
   }) async {
     final payload = await _send('POST', '/v1/crisis-alerts',
         accessToken: accessToken,
@@ -1879,6 +1880,8 @@ class MalvaApiClient {
           if (latitude != null) 'latitude': latitude,
           if (longitude != null) 'longitude': longitude,
           'message': message,
+          if (contactPhones != null && contactPhones.isNotEmpty)
+            'contact_phones': contactPhones,
         });
     // delivery_configured: false berarti MALVA_FONNTE_TOKEN belum diisi di
     // server — pesan WhatsApp tidak akan terkirim. Klien perlu tahu agar bisa

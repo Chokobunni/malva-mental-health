@@ -27,11 +27,12 @@ type emergencyContactRequest struct {
 }
 
 type crisisAlertRequestV2 struct {
-	TriggeredBy string   `json:"triggered_by"`
-	PHQ9Q9Score *int     `json:"phq9_q9_score"`
-	Latitude    *float64 `json:"latitude"`
-	Longitude   *float64 `json:"longitude"`
-	Message     string   `json:"message"`
+	TriggeredBy   string   `json:"triggered_by"`
+	PHQ9Q9Score   *int     `json:"phq9_q9_score"`
+	Latitude      *float64 `json:"latitude"`
+	Longitude     *float64 `json:"longitude"`
+	Message       string   `json:"message"`
+	ContactPhones []string `json:"contact_phones,omitempty"`
 }
 
 type resolveCrisisRequest struct {
@@ -270,15 +271,27 @@ func (s *Server) handleCrisisAlertV2(w http.ResponseWriter, r *http.Request, cla
 		channel = "none"
 		status = "unconfigured"
 	}
-	go func(patientID, pName, incidentID, channel string, lat, lng *float64) {
+	go func(patientID, pName, incidentID, channel string, lat, lng *float64, filterPhones []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		contacts, listErr := s.store.ListEmergencyContacts(ctx, patientID)
 		if listErr != nil {
 			s.logger.Error("sos list contacts failed", "error", listErr)
 		}
+		// Bila pasien memilih kontak tertentu (contact_phones tidak kosong),
+		// hanya kirim ke kontak yang nomornya ada di daftar pilihan. Kontak
+		// lain dilewati tanpa error — ini bukan kegagalan, melainkan pilihan
+		// eksplisit pasien.
+		filterSet := make(map[string]bool, len(filterPhones))
+		for _, ph := range filterPhones {
+			filterSet[strings.TrimSpace(ph)] = true
+		}
+		hasFilter := len(filterSet) > 0
 		sentCount := 0
 		for _, contact := range contacts {
+			if hasFilter && !filterSet[strings.TrimSpace(contact.ContactPhone)] {
+				continue
+			}
 			blastID, err := s.store.CreateSOSBlastLog(ctx, incidentID, contact.ContactPhone, channel)
 			if err != nil {
 				s.logger.Error("sos blast create failed", "error", err)
@@ -325,7 +338,7 @@ func (s *Server) handleCrisisAlertV2(w http.ResponseWriter, r *http.Request, cla
 				"channel":        channel,
 				"triggered_by":   triggeredBy,
 			})
-	}(claims.Subject, patientName, created.ID, channel, created.Latitude, created.Longitude)
+	}(claims.Subject, patientName, created.ID, channel, created.Latitude, created.Longitude, req.ContactPhones)
 
 	// Status jujur: pesan baru masuk antrean kirim, belum tentu terkirim.
 	// Status per kontak bisa dipantau lewat GET /v1/sos-blast-status.

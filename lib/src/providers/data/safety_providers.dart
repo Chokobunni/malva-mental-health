@@ -199,13 +199,16 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
   }
 
   /// Kirim silent SOS. Wajib ada minimal 1 kontak; GPS opsional.
-  /// Mengembalikan incident yang dibuat.
+  /// [contactPhones] bila tidak null dan tidak kosong, backend hanya mengirim
+  /// ke kontak yang nomornya ada di daftar ini. Bila null/kosong, kirim ke
+  /// semua kontak darurat (default).
   Future<BackendCrisisIncident> sendSilentSOS({
     String triggeredBy = 'silent_sos',
     int? phq9Q9Score,
     double? latitude,
     double? longitude,
     String message = '',
+    List<String>? contactPhones,
   }) async {
     final token = _token;
     if (token == null || token.isEmpty) {
@@ -229,6 +232,7 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
         latitude: latitude,
         longitude: longitude,
         message: message,
+        contactPhones: contactPhones,
       );
       BackendSOSBlastStatus? blast;
       try {

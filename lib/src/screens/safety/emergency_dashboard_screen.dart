@@ -249,20 +249,35 @@ class _EmergencyDashboardScreenState
         icon: const Icon(Icons.notifications_active_rounded,
             color: MalvaColors.amber, size: 42),
         title: const Text('Kirim Silent SOS?'),
-        content: Text(
-          'Pesan darurat + lokasi GPS akan dikirim ke '
-          '${contacts.length} kontak darurat dan profesional tertaut.',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Pesan darurat + lokasi GPS akan dikirim ke '
+              '${contacts.length} kontak darurat dan profesional tertaut.',
+            ),
+            if (contacts.length > 1) ...[
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: () => Navigator.pop(ctx, 'select'),
+                child: Text(
+                  'Pilih kontak tertentu →',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).colorScheme.primary,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, 'cancel'),
             child: const Text('Batal'),
           ),
-          if (contacts.length > 1)
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 'select'),
-              child: const Text('Pilih Kontak'),
-            ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, 'all'),
             style: compactFilledButtonStyle.copyWith(
@@ -277,22 +292,28 @@ class _EmergencyDashboardScreenState
             ),
           ),
         ],
+        // Tombol "Pilih Kontak" sengaja dipisahkan dari actions agar tidak
+        // setara bobot visualnya dengan tombol utama. Ditampilkan sebagai
+        // link kecil di bawah konten dialog — pasien dalam krisis harus
+        // langsung melihat "Kirim ke Semua" sebagai aksi primer.
+        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
       ),
     );
 
+    // Bila user tap area di luar dialog atau tekan back, confirmResult null.
     if (!context.mounted) return;
     if (confirmResult == null || confirmResult == 'cancel') return;
 
     // Jalur pilih kontak tertentu — hanya muncul kalau kontak > 1.
-    // Backend tetap mengirim ke semua kontak yang terdaftar; pemilihan di sini
-    // bersifat UI-only sebagai catatan bagi pasien. Bila di masa depan backend
-    // mendukung filter kontak per-insident, parameter ini bisa diteruskan.
+    // contactPhones akan diteruskan ke backend; bila null, backend kirim
+    // ke semua kontak (jalur default).
+    List<String>? selectedPhones;
     if (confirmResult == 'select') {
       final selected = await _showContactPicker(context, contacts);
       if (selected == null || selected.isEmpty || !context.mounted) return;
-      // Untuk sekarang, kirim tetap ke semua (backend belum support filter).
-      // Dialog picker berfungsi sebagai konfirmasi eksplisit bahwa pasien
-      // sudah mempertimbangkan siapa yang dihubungi.
+      selectedPhones =
+          selected.map((c) => c.contactPhone).toList(growable: false);
     }
 
     double? lat;
@@ -323,6 +344,7 @@ class _EmergencyDashboardScreenState
         latitude: lat,
         longitude: lng,
         message: message,
+        contactPhones: selectedPhones,
       );
       if (!context.mounted) return;
       Navigator.push(
