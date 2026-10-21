@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
@@ -180,7 +181,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 22),
 
                   // === 3. SELF CARE ===
-                  const SectionLabel('Self Care'),
+                  const SectionLabel('Self Care', center: true),
                   _HomeSectionGrid(
                     items: [
                       _GridItem(
@@ -218,9 +219,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 22),
 
                   // === 4. PROFESSIONAL CARE ===
-                  const SectionLabel('Professional Care'),
+                  const SectionLabel('Professional Care', center: true),
                   _FindProfessionalsButton(
                     onTap: () => _openDoctorDiscovery(context),
+                  ),
+                  const SizedBox(height: 12),
+                  // Tombol Join Meeting — akses cepat ke video call yang
+                  // sudah dijadwalkan. Menampilkan sesi video terdekat yang
+                  // punya meeting_url.
+                  _JoinMeetingBanner(
+                    session: widget.session,
+                    apiClient: widget.apiClient,
                   ),
                   const SizedBox(height: 12),
                   _HomeSectionGrid(
@@ -687,5 +696,127 @@ class _NotificationBellState extends State<_NotificationBell> {
           ),
       ],
     );
+  }
+}
+
+/// Banner "Join Meeting" di homescreen pasien. Menampilkan sesi video
+/// terdekat yang punya meeting_url, dengan tombol untuk langsung gabung.
+/// Bila tidak ada sesi video mendatang, banner disembunyikan.
+class _JoinMeetingBanner extends ConsumerStatefulWidget {
+  const _JoinMeetingBanner({this.session, this.apiClient});
+
+  final AuthSession? session;
+  final MalvaApiClient? apiClient;
+
+  @override
+  ConsumerState<_JoinMeetingBanner> createState() => _JoinMeetingBannerState();
+}
+
+class _JoinMeetingBannerState extends ConsumerState<_JoinMeetingBanner> {
+  BackendCareSession? _nextVideoSession;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNextVideoSession();
+  }
+
+  Future<void> _loadNextVideoSession() async {
+    final token = widget.session?.accessToken;
+    if (token == null || token.isEmpty) {
+      setState(() => _loaded = true);
+      return;
+    }
+    try {
+      final apiClient = widget.apiClient ?? ref.read(apiClientProvider);
+      final sessions = await apiClient!.listCareSessions(
+        accessToken: token,
+        scope: 'upcoming',
+      );
+      // Cari sesi video terdekat yang punya meeting_url.
+      BackendCareSession? found;
+      for (final s in sessions) {
+        if (s.isVideo && s.meetingUrl.isNotEmpty && s.isScheduled) {
+          found = s;
+          break;
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _nextVideoSession = found;
+        _loaded = true;
+      });
+    } on Object catch (_) {
+      if (!mounted) return;
+      setState(() => _loaded = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded || _nextVideoSession == null) return const SizedBox.shrink();
+    final s = _nextVideoSession!;
+    final at = s.scheduledDateTime?.toLocal();
+    final dateLabel = at == null
+        ? ''
+        : '${at.day}/${at.month}/${at.year} ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
+    return InkWell(
+      onTap: () => _joinMeeting(s),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: MalvaColors.mint.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: MalvaColors.mint.withValues(alpha: 0.4),
+          ),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: MalvaColors.mint,
+              child: const Icon(Icons.videocam_rounded,
+                  color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Join Video Call',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                  ),
+                  if (dateLabel.isNotEmpty)
+                    Text(
+                      '${s.professionalName.isNotEmpty ? s.professionalName : 'Sesi video'} • $dateLabel',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded,
+                size: 14, color: MalvaColors.mint),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _joinMeeting(BackendCareSession s) async {
+    if (s.meetingUrl.isEmpty) return;
+    final uri = Uri.parse(s.meetingUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tidak dapat membuka video call.')),
+      );
+    }
   }
 }

@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
 import '../services/dashboard_sync_service.dart';
@@ -187,6 +189,14 @@ class _ProfessionalDashboardScreenState
                         if (_tabIndex == 0)
                           const SectionLabel('Ringkasan',
                               icon: Icons.insights_rounded),
+                        // ---- QUICK ACTION: Create Meeting ----
+                        if (_tabIndex == 0) ...[
+                          _CreateMeetingButton(
+                            session: widget.session,
+                            apiClient: widget.apiClient,
+                          ),
+                          const SizedBox(height: 14),
+                        ],
                         if (_tabIndex == 0)
                           _PriorityMetrics(
                             patientCount: patients.length,
@@ -2396,5 +2406,156 @@ class _SyncStatusIndicator extends StatelessWidget {
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
+  }
+}
+
+/// Tombol "Create Meeting" di dashboard profesional. Membuat room Jitsi Meet
+/// unik dan menampilkan link yang bisa dibagikan ke pasien untuk video call
+/// real-time. Berguna untuk testing 2+ HP tanpa perlu menjadwalkan sesi dulu.
+class _CreateMeetingButton extends StatefulWidget {
+  const _CreateMeetingButton({this.session, this.apiClient});
+
+  final AuthSession? session;
+  final MalvaApiClient? apiClient;
+
+  @override
+  State<_CreateMeetingButton> createState() => _CreateMeetingButtonState();
+}
+
+class _CreateMeetingButtonState extends State<_CreateMeetingButton> {
+  String? _meetingUrl;
+
+  void _createMeeting() {
+    // Generate room name unik: malva-pro-{userId}-{timestamp}
+    final userId = widget.session?.backendUserId ?? 'anon';
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final shortId = userId.length >= 8 ? userId.substring(0, 8) : userId;
+    final roomName = 'malva-pro-$shortId-$ts';
+    final url = 'https://meet.jit.si/$roomName';
+    setState(() => _meetingUrl = url);
+  }
+
+  Future<void> _shareMeeting() async {
+    if (_meetingUrl == null) return;
+    await Share.share(
+      'Gabung video call Malva: $_meetingUrl',
+      subject: 'Video Call — Malva Mental Health',
+    );
+  }
+
+  Future<void> _openMeeting() async {
+    if (_meetingUrl == null) return;
+    final uri = Uri.parse(_meetingUrl!);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      color: MalvaColors.mint.withValues(alpha: 0.10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: MalvaColors.mint,
+                child: const Icon(Icons.videocam_rounded,
+                    color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Quick Video Call',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+                    ),
+                    Text(
+                      _meetingUrl == null
+                          ? 'Buat room meeting instan untuk testing'
+                          : 'Room aktif — bagikan link ke pasien',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (_meetingUrl == null)
+            FilledButton.icon(
+              onPressed: _createMeeting,
+              icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+              label: const Text('Create Meeting'),
+              style: FilledButton.styleFrom(
+                backgroundColor: MalvaColors.mint,
+                foregroundColor: Colors.white,
+              ),
+            )
+          else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _openMeeting,
+                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                    label: const Text('Buka'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _shareMeeting,
+                    icon: const Icon(Icons.share_rounded, size: 16),
+                    label: const Text('Bagikan'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: MalvaColors.seed,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            InkWell(
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: _meetingUrl!));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Link disalin ke clipboard')),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  _meetingUrl!,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: MalvaColors.seed,
+                    decoration: TextDecoration.underline,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => setState(() => _meetingUrl = null),
+                child: const Text('Buat room baru',
+                    style: TextStyle(fontSize: 12)),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }

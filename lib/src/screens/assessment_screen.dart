@@ -669,6 +669,73 @@ class AssessmentResultScreen extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 12),
+                      // Penjelasan skor PHQ-9 dan GAD-7 agar pasien paham
+                      // apa arti angka yang mereka lihat. Tanpa ini, "3/27
+                      // Minimal" tidak memberi konteks — pasien tidak tahu
+                      // apakah 3 itu bagus atau buruk.
+                      _ScoreExplanationCard(
+                        title: 'PHQ-9 (Depresi)',
+                        score: bundle.phq9.score,
+                        maxScore: bundle.phq9.maxScore,
+                        level: bundle.phq9.level,
+                        ranges: const [
+                          (
+                            '0–4',
+                            'Minimal',
+                            'Gejala depresi sangat ringan atau tidak ada.'
+                          ),
+                          (
+                            '5–9',
+                            'Ringan',
+                            'Gejala depresi ringan. Pantau kondisi dan jaga self-care.'
+                          ),
+                          (
+                            '10–14',
+                            'Sedang',
+                            'Gejala depresi sedang. Disarankan konsultasi profesional.'
+                          ),
+                          (
+                            '15–19',
+                            'Berat',
+                            'Gejala depresi berat. Segera hubungi profesional kesehatan mental.'
+                          ),
+                          (
+                            '20–27',
+                            'Sangat Berat',
+                            'Gejala depresi sangat berat. Cari bantuan segera.'
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _ScoreExplanationCard(
+                        title: 'GAD-7 (Kecemasan)',
+                        score: bundle.gad7.score,
+                        maxScore: bundle.gad7.maxScore,
+                        level: bundle.gad7.level,
+                        ranges: const [
+                          (
+                            '0–4',
+                            'Minimal',
+                            'Kecemasan sangat ringan atau tidak ada.'
+                          ),
+                          (
+                            '5–9',
+                            'Ringan',
+                            'Kecemasan ringan. Teknik relaksasi bisa membantu.'
+                          ),
+                          (
+                            '10–14',
+                            'Sedang',
+                            'Kecemasan sedang. Disarankan konsultasi profesional.'
+                          ),
+                          (
+                            '15–21',
+                            'Berat',
+                            'Kecemasan berat. Segera hubungi profesional kesehatan mental.'
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                       // === Forward Chaining + Certainty Factor ===
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -975,5 +1042,129 @@ class _TipCard extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Kartu penjelasan skor screening (PHQ-9 / GAD-7). Menampilkan tabel rentang
+/// skor dengan baris yang sesuai skor pasien di-highlight, sehingga pasien
+/// langsung paham posisi mereka dalam spektrum keparahan.
+class _ScoreExplanationCard extends StatelessWidget {
+  const _ScoreExplanationCard({
+    required this.title,
+    required this.score,
+    required this.maxScore,
+    required this.level,
+    required this.ranges,
+  });
+
+  final String title;
+  final int score;
+  final int maxScore;
+  final RiskLevel level;
+  final List<(String range, String label, String description)> ranges;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: MalvaColors.seed.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.info_outline_rounded, size: 16, color: level.color),
+              const SizedBox(width: 6),
+              Text(
+                '$title — Apa arti skormu?',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12.5,
+                  color: level.color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final (range, label, desc) in ranges) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: _isInRange(score, range)
+                    ? level.color.withValues(alpha: 0.12)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: _isInRange(score, range)
+                    ? Border.all(color: level.color.withValues(alpha: 0.4))
+                    : null,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 48,
+                    child: Text(
+                      range,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                        color: _isInRange(score, range)
+                            ? level.color
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 52,
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                        color: _isInRange(score, range)
+                            ? level.color
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      desc,
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 4),
+          Text(
+            'Skormu: $score/$maxScore (${level.label})',
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+              color: level.color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Cek apakah skor masuk dalam rentang string seperti "0–4" atau "5–9".
+  static bool _isInRange(int score, String range) {
+    final parts = range.split('–');
+    if (parts.length != 2) return false;
+    final low = int.tryParse(parts[0].trim());
+    final high = int.tryParse(parts[1].trim());
+    if (low == null || high == null) return false;
+    return score >= low && score <= high;
   }
 }

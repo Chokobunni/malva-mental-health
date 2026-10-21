@@ -71,7 +71,7 @@ class GradientHeader extends StatelessWidget {
 
 class SectionLabel extends StatelessWidget {
   const SectionLabel(this.text,
-      {super.key, this.action, this.icon, this.accent});
+      {super.key, this.action, this.icon, this.accent, this.center = false});
 
   final String text;
   final Widget? action;
@@ -83,14 +83,20 @@ class SectionLabel extends StatelessWidget {
   /// Warna ikon + batang aksen. Default [MalvaColors.seed].
   final Color? accent;
 
+  /// Bila true, teks di-center (tanpa Expanded). Dipakai untuk label kategori
+  /// utama seperti "Self Care" dan "Professional Care" di homescreen pasien.
+  final bool center;
+
   @override
   Widget build(BuildContext context) {
     final tint = accent ?? MalvaColors.seed;
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
       child: Row(
+        mainAxisAlignment:
+            center ? MainAxisAlignment.center : MainAxisAlignment.start,
         children: [
-          if (icon != null) ...[
+          if (icon != null && !center) ...[
             Container(
               width: 3,
               height: 18,
@@ -103,16 +109,26 @@ class SectionLabel extends StatelessWidget {
             Icon(icon, size: 18, color: tint),
             const SizedBox(width: 8),
           ],
-          Expanded(
-            child: Text(
+          if (center)
+            Text(
               text,
+              textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: MalvaColors.ink,
                     fontWeight: FontWeight.w900,
                   ),
+            )
+          else
+            Expanded(
+              child: Text(
+                text,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: MalvaColors.ink,
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
             ),
-          ),
-          if (action != null) action!,
+          if (action != null && !center) action!,
         ],
       ),
     );

@@ -3136,9 +3136,11 @@ class BackendProfessionalCredential {
     this.addressDetails = '',
     this.priceFrom = 0,
     this.videoIntroUrl = '',
+    this.photoIntroUrl = '',
     this.hospitalLat,
     this.hospitalLng,
     this.subSpecialties = const [],
+    this.education = const [],
   });
 
   factory BackendProfessionalCredential.fromJson(Map<String, dynamic> json) {
@@ -3157,10 +3159,15 @@ class BackendProfessionalCredential {
       addressDetails: json['address_details']?.toString() ?? '',
       priceFrom: (json['price_from'] as num?)?.toInt() ?? 0,
       videoIntroUrl: json['video_intro_url']?.toString() ?? '',
+      photoIntroUrl: json['photo_intro_url']?.toString() ?? '',
       hospitalLat: numOrNull(json['hospital_lat']),
       hospitalLng: numOrNull(json['hospital_lng']),
       subSpecialties: ((json['sub_specialties'] as List?) ?? const [])
           .map((e) => e.toString())
+          .toList(growable: false),
+      education: ((json['education'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
           .toList(growable: false),
     );
   }
@@ -3178,9 +3185,11 @@ class BackendProfessionalCredential {
   final String addressDetails;
   final int priceFrom;
   final String videoIntroUrl;
+  final String photoIntroUrl;
   final double? hospitalLat;
   final double? hospitalLng;
   final List<String> subSpecialties;
+  final List<Map<String, dynamic>> education;
 }
 
 class AdminUser {

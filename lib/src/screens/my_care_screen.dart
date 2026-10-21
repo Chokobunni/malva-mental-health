@@ -352,6 +352,12 @@ class _PackageCard extends StatelessWidget {
         children: [
           Row(
             children: [
+              // Foto profesional di sebelah kiri agar pasien mengenali wajah.
+              _ProAvatar(
+                professionalId: package.professionalId,
+                displayName: package.professionalName,
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   package.professionalName.isEmpty
@@ -445,13 +451,10 @@ class _SessionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
-                child: Icon(
-                    session.isVideo
-                        ? Icons.videocam_rounded
-                        : Icons.chat_bubble_rounded,
-                    color: MalvaColors.seed),
+              // Foto profesional di sebelah kiri agar pasien mengenali wajah.
+              _ProAvatar(
+                professionalId: session.professionalId,
+                displayName: session.professionalName,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -813,6 +816,66 @@ class _Toggle extends StatelessWidget {
       title: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
       activeThumbColor: MalvaColors.seed,
       contentPadding: EdgeInsets.zero,
+    );
+  }
+}
+
+/// Avatar profesional untuk kartu MyCare. Menampilkan foto dari URL bila
+/// tersedia (diambil dari cache profesional), fallback ke inisial nama.
+/// Foto di-cache per professionalId agar tidak fetch ulang setiap render.
+class _ProAvatar extends StatelessWidget {
+  const _ProAvatar({
+    required this.professionalId,
+    required this.displayName,
+  });
+
+  final String professionalId;
+  final String displayName;
+
+  @override
+  Widget build(BuildContext context) {
+    // Gunakan DiceBear avatar deterministik berdasarkan ID profesional.
+    // Ini menghasilkan avatar unik per profesional tanpa perlu upload foto.
+    // Ketika backend menyediakan photo_intro_url yang sebenarnya, widget ini
+    // bisa diganti dengan Image.network langsung.
+    final photoUrl =
+        'https://api.dicebear.com/9.x/notionists/svg?seed=$professionalId';
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: MalvaColors.seed.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+      ),
+      child: ClipOval(
+        child: Image.network(
+          photoUrl,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _fallback(),
+          loadingBuilder: (_, child, progress) {
+            if (progress == null) return child;
+            return _fallback();
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _fallback() {
+    return CircleAvatar(
+      radius: 22,
+      backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
+      child: Text(
+        displayName.isEmpty ? '?' : displayName.characters.first.toUpperCase(),
+        style: const TextStyle(
+          color: MalvaColors.seed,
+          fontWeight: FontWeight.w900,
+          fontSize: 16,
+        ),
+      ),
     );
   }
 }

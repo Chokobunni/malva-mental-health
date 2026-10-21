@@ -8,7 +8,6 @@ import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
-import '../../widgets/professional_avatar.dart';
 import 'booking_detail_screen.dart';
 import 'package_booking_screen.dart';
 
@@ -144,6 +143,15 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                       child: ListView(
                         padding: const EdgeInsets.all(18),
                         children: [
+                          // ===== FOTO PROFIL (centered, besar) =====
+                          Center(
+                            child: _ProfessionalPhoto(
+                              photoUrl: cred.photoIntroUrl,
+                              displayName: _displayName,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+
                           // ===== HEADER: nama + rating riil + spesialisasi =====
                           Builder(builder: (context) {
                             final reviews = _profile?.reviews ??
@@ -154,50 +162,39 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             final specLabel = cred.specialization == 'Sp.KJ'
                                 ? 'Psikiater (Sp.KJ)'
                                 : 'Psikolog Klinis (M.Psi)';
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                ProfessionalAvatar(
-                                  displayName: _displayName,
-                                  radius: 32,
+                                Text(
+                                  _displayName,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 18),
                                 ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _displayName,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 16.5),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.star_rounded,
-                                              size: 17,
-                                              color: MalvaColors.amber),
-                                          const SizedBox(width: 3),
-                                          Text(
-                                            ratingLabel,
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.w800,
-                                                fontSize: 13),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        specLabel,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(color: Colors.black54),
-                                      ),
-                                    ],
-                                  ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.star_rounded,
+                                        size: 17, color: MalvaColors.amber),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      ratingLabel,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  specLabel,
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(color: Colors.black54),
                                 ),
                               ],
                             );
@@ -344,6 +341,71 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                                     label: 'SIP',
                                     value:
                                         '${cred.sippNumber.isEmpty ? '-' : cred.sippNumber}'),
+                                // Sub-spesialisasi dengan deskripsi detail
+                                if (cred.subSpecialties.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Bidang keahlian:',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 12.5),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  for (final spec in cred.subSpecialties)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 4),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text('• ',
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.w900,
+                                                  color: MalvaColors.seed)),
+                                          Expanded(
+                                            child: Text(
+                                              _specialtyDescription(spec),
+                                              style: const TextStyle(
+                                                  fontSize: 12.5),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                                // Riwayat pendidikan
+                                if (cred.education.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Riwayat pendidikan:',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 12.5),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  for (final edu in cred.education)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 4),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Icon(Icons.school_rounded,
+                                              size: 14,
+                                              color: MalvaColors.seed),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              '${edu['degree'] ?? ''} — ${edu['school'] ?? ''}'
+                                              '${edu['year'] != null ? ' (${edu['year']})' : ''}',
+                                              style: const TextStyle(
+                                                  fontSize: 12.5),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
                               ],
                             ),
                           ),
@@ -700,9 +762,124 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
     }
     return buf.toString();
   }
+
+  /// Deskripsi detail untuk setiap sub-spesialisasi.
+  static String _specialtyDescription(String spec) {
+    const descriptions = {
+      'depresi':
+          'Depresi — gangguan suasana hati yang menyebabkan perasaan sedih berkepanjangan, kehilangan minat, dan kelelahan mental.',
+      'ansietas':
+          'Ansietas — kecemasan berlebihan yang mengganggu aktivitas sehari-hari, termasuk gangguan panik dan fobia.',
+      'gangguan_tidur':
+          'Gangguan Tidur — insomnia, hipersomnia, dan masalah kualitas tidur yang berdampak pada kesehatan mental.',
+      'bipolar':
+          'Bipolar — gangguan mood dengan episode manik dan depresif yang bergantian, memerlukan penanganan farmakologis.',
+      'suicidal_ideation':
+          'Ideasi Suicidal — pikiran untuk mengakhiri hidup yang memerlukan intervensi krisis segera dan pendampingan intensif.',
+      'stress_pasca_trauma':
+          'Stress Pasca Trauma (PTSD) — reaksi psikologis setelah peristiwa traumatis, termasuk flashbacks dan hypervigilance.',
+      'kesehatan_jiwa_perempuan':
+          'Kesehatan Jiwa Perempuan — isu mental health spesifik perempuan: postpartum depression, PMDD, menopause-related mood changes.',
+      'trauma':
+          'Trauma — pengalaman menyakitkan yang meninggalkan dampak psikologis jangka panjang, ditangani dengan EMDR dan trauma-focused CBT.',
+      'pemulihan_krisis':
+          'Pemulihan Krisis — pendampingan intensif pasca kejadian kritis (bencana, kehilangan mendadak, kekerasan).',
+      'kekerasan_domestik':
+          'Kekerasan Domestik — pendampingan korban KDRT, pemulihan trauma interpersonal, dan perencanaan keselamatan.',
+      'pranikah':
+          'Konseling Pranikah — persiapan mental dan emosional menjelang pernikahan, komunikasi pasangan, dan manajemen ekspektasi.',
+      'seksualitas':
+          'Seksualitas — isu terkait identitas seksual, orientasi, disfungsi seksual, dan kesehatan reproduksi mental.',
+      'cbt':
+          'CBT (Cognitive Behavioral Therapy) — terapi berbasis bukti yang mengubah pola pikir dan perilaku negatif menjadi lebih adaptif.',
+      'manajemen_stres':
+          'Manajemen Stres — teknik pengelolaan stres kerja, akademik, dan kehidupan sehari-hari melalui relaksasi dan restrukturisasi kognitif.',
+      'konseling_remaja':
+          'Konseling Remaja — pendampingan remaja menghadapi krisis identitas, tekanan akademik, konflik keluarga, dan peer pressure.',
+      'bullying':
+          'Bullying — penanganan korban dan pelaku bullying, pemulihan harga diri, dan strategi coping di lingkungan sekolah/sosial.',
+      'gangguan_makan':
+          'Gangguan Makan — anorexia, bulimia, binge eating disorder, dan body image issues yang memerlukan pendekatan multidisiplin.',
+      'self_harm':
+          'Self-Harm — perilaku melukai diri sendiri sebagai mekanisme coping maladaptif, memerlukan intervensi DBT dan safety planning.',
+      'relasi':
+          'Relasi — konseling pasangan dan individu untuk memperbaiki komunikasi, menyelesaikan konflik, dan membangun hubungan sehat.',
+      'burnout':
+          'Burnout — kelelahan emosional, depersonalisasi, dan penurunan pencapaian pribadi akibat stres kerja kronis.',
+      'pengembangan_diri':
+          'Pengembangan Diri — eksplorasi potensi, penetapan tujuan hidup, peningkatan self-awareness dan self-efficacy.',
+      'kecemasan_sosial':
+          'Kecemasan Sosial — ketakutan berlebihan dalam situasi sosial, ditangani dengan exposure therapy dan social skills training.',
+      'parenting':
+          'Parenting — konseling pengasuhan anak, manajemen stres orang tua, dan strategi disiplin positif.',
+      'grief':
+          'Grief/Duka — pendampingan proses kehilangan (kematian, perceraian, perubahan besar), tahapan duka, dan meaning-making.',
+    };
+    return descriptions[spec.toLowerCase()] ?? spec;
+  }
 }
 
-// ============================================================
+/// Widget foto profil profesional. Menampilkan gambar dari URL bila tersedia,
+/// fallback ke InitialAvatar dengan inisial nama.
+class _ProfessionalPhoto extends StatelessWidget {
+  const _ProfessionalPhoto({
+    required this.photoUrl,
+    required this.displayName,
+  });
+
+  final String photoUrl;
+  final String displayName;
+
+  @override
+  Widget build(BuildContext context) {
+    if (photoUrl.isNotEmpty) {
+      return Container(
+        width: 120,
+        height: 120,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+              color: MalvaColors.seed.withValues(alpha: 0.3), width: 3),
+          boxShadow: [
+            BoxShadow(
+              color: MalvaColors.seed.withValues(alpha: 0.15),
+              blurRadius: 12,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: ClipOval(
+          child: Image.network(
+            photoUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _fallbackAvatar(),
+            loadingBuilder: (_, child, progress) {
+              if (progress == null) return child;
+              return const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2));
+            },
+          ),
+        ),
+      );
+    }
+    return _fallbackAvatar();
+  }
+
+  Widget _fallbackAvatar() {
+    return CircleAvatar(
+      radius: 60,
+      backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
+      child: Text(
+        displayName.isEmpty ? '?' : displayName.characters.first.toUpperCase(),
+        style: const TextStyle(
+          color: MalvaColors.seed,
+          fontWeight: FontWeight.w900,
+          fontSize: 36,
+        ),
+      ),
+    );
+  }
+} // ============================================================
 // WIDGETS LOKAL
 // ============================================================
 

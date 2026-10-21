@@ -56,10 +56,11 @@ ON CONFLICT (professional_id) DO UPDATE SET
 -- 3. CREDENTIALS (VERIFIED agar muncul di direktori)
 -- ============================================================
 INSERT INTO professional_credentials
-  (user_id, str_number, sip_number, specialization, hospital_name,
+  (user_id, str_number, sip_number, specialization, sub_specialties, hospital_name,
    hospital_lat, hospital_lng, address_details, is_bpjs_supported,
    bio, education, verification_status, verified_at,
-   legacy_count, helpfulness_count, review_count, years_experience)
+   legacy_count, helpfulness_count, review_count, years_experience,
+   photo_intro_url)
 SELECT
   u.id,
   'STR-' || split_part(u.email, '@', 1),
@@ -67,36 +68,41 @@ SELECT
   CASE WHEN split_part(u.email, '@', 1) IN ('1234567890123456', '8888777766665555')
        THEN 'Sp.KJ' ELSE 'M.Psi' END,
   CASE split_part(u.email, '@', 1)
-    WHEN '1234567890123456' THEN 'RSUD Cengkareng'
-    WHEN '8888777766665555' THEN 'RS Pondok Gede'
+    WHEN '1234567890123456' THEN '{depresi,ansietas,gangguan_tidur,bipolar,suicidal_ideation,stress_pasca_trauma}'::text[]
+    WHEN '8888777766665555' THEN '{kesehatan_jiwa_perempuan,trauma,pemulihan_krisis,kekerasan_domestik,pranikah,seksualitas}'::text[]
+    WHEN '7777666655554444' THEN '{cbt,manajemen_stres,konseling_remaja,bullying,gangguan_makan,self_harm}'::text[]
+    ELSE '{relasi,burnout,pengembangan_diri,kecemasan_sosial,parenting,grief}'::text[] END,
+  CASE split_part(u.email, '@', 1)
+    WHEN '1234567890123456' THEN 'RSI Jemursari Surabaya'
+    WHEN '8888777766665555' THEN 'RS Manyar Medical Centre'
     WHEN '7777666655554444' THEN 'Puskesmas Kebayoran'
     ELSE 'Klinik Sehat Jiwa Bandung' END,
   CASE split_part(u.email, '@', 1)
-    WHEN '1234567890123456' THEN -6.1566
-    WHEN '8888777766665555' THEN -6.2871
+    WHEN '1234567890123456' THEN -7.3197
+    WHEN '8888777766665555' THEN -7.2952
     WHEN '7777666655554444' THEN -6.2442
     ELSE -6.9175 END,
   CASE split_part(u.email, '@', 1)
-    WHEN '1234567890123456' THEN 106.7313
-    WHEN '8888777766665555' THEN 106.9056
+    WHEN '1234567890123456' THEN 112.7378
+    WHEN '8888777766665555' THEN 112.7521
     WHEN '7777666655554444' THEN 106.7831
     ELSE 107.6191 END,
   CASE split_part(u.email, '@', 1)
-    WHEN '1234567890123456' THEN 'Jl. Bumi Cengkareng Indah, Jakarta Barat'
-    WHEN '8888777766665555' THEN 'Jl. Raya Pondok Gede, Bekasi'
+    WHEN '1234567890123456' THEN 'Jl. Raya Jemursari No. 51-57, Surabaya'
+    WHEN '8888777766665555' THEN 'Jl. Manyar Kertoarjo IV No. 1, Surabaya'
     WHEN '7777666655554444' THEN 'Jl. Ciputat Raya, Jakarta Selatan'
     ELSE 'Jl. Riau No. 12, Bandung' END,
   split_part(u.email, '@', 1) IN ('1234567890123456', '7777666655554444'),
   CASE split_part(u.email, '@', 1)
-    WHEN '1234567890123456' THEN 'Psikiater dengan 12 tahun pengalaman menangani depresi, ansietas, dan gangguan tidur. Pendekatan suportif dan berbasis bukti.'
-    WHEN '8888777766665555' THEN 'Psikiater fokus pada kesehatan jiwa perempuan, trauma, dan pemulihan pasca krisis. Ramah dan terbuka untuk pasien baru.'
-    WHEN '7777666655554444' THEN 'Psikolog klinis berpengalaman dalam CBT, manajemen stres kerja, dan konseling remaja. Praktik di faskes BPJS.'
-    ELSE 'Psikolog dan konselor dengan pendekatan humanistik. Membantu isu relasi, burnout, dan pengembangan diri.' END,
+    WHEN '1234567890123456' THEN 'dr. Hafid Algistian, Sp.KJ, M.H — Psikiater dengan lebih dari 12 tahun pengalaman klinis menangani depresi mayor, gangguan kecemasan umum, gangguan tidur, bipolar, dan ideasi suicidal. Lulusan FKUI spesialis Kedokteran Jiwa, melanjutkan Magister Hukum Kesehatan di UNAIR. Pendekatan terapeutik menggabungkan farmakoterapi berbasis bukti dengan psikoterapi suportif. Aktif sebagai pembicara seminar kesehatan jiwa nasional dan penulis artikel edukasi mental health di media massa. Memegang sertifikasi Advanced Trauma Life Support dan Crisis Intervention. Melayani pasien dewasa dan lansia dengan pendekatan holistik yang memperhatikan aspek biologis, psikologis, dan sosial.'
+    WHEN '8888777766665555' THEN 'dr. Sinta Maharani, Sp.KJ — Psikiater fokus pada kesehatan jiwa perempuan, trauma interpersonal, kekerasan dalam rumah tangga, konseling pranikah, dan pemulihan pasca krisis. Lulusan Sp.KJ UNPAD dengan pelatihan lanjutan di bidang Gender-Based Violence Intervention dari WHO. Berpengalaman mendampingi korban kekerasan seksual dan domestik selama lebih dari 9 tahun. Pendekatan terapi mengintegrasikan EMDR (Eye Movement Desensitization and Reprocessing) untuk trauma, CBT untuk ansietas, dan konseling keluarga. Aktif di komunitas advokasi kesehatan mental perempuan dan menjadi narasumber reguler di podcast "Suara Jiwa". Ramah, empatik, dan menciptakan ruang aman bagi setiap pasien.'
+    WHEN '7777666655554444' THEN 'Rina Prasetyo, M.Psi — Psikolog klinis berpengalaman dalam Cognitive Behavioral Therapy (CBT), manajemen stres kerja, konseling remaja, penanganan bullying, gangguan makan, dan self-harm prevention. Lulusan Magister Psikologi Klinis UGM dengan sertifikasi CBT dari Beck Institute. Praktik di faskes BPJS sehingga terjangkau bagi masyarakat luas. Berpengalaman menangani kasus remaja korban bullying di sekolah, mahasiswa dengan burnout akademik, dan pekerja dengan work-life balance issues. Pendekatan warm, non-judgmental, dan kolaboratif — pasien diajak aktif dalam proses terapi. Juga menyediakan layanan konseling kelompok untuk support group remaja dan young adult.'
+    ELSE 'Andi Wijaya, M.Psi — Psikolog dan konselor dengan pendekatan humanistik-existensial. Membantu isu relasi pasangan, burnout profesional, pengembangan diri, kecemasan sosial, parenting, dan proses grief/duka. Lulusan Magister Psikologi UNPAD dengan pelatihan lanjutan di Acceptance and Commitment Therapy (ACT) dan Solution-Focused Brief Therapy. Berpengalaman 5+ tahun mendampingi individu dan pasangan dalam transisi hidup besar (pernikahan, perceraian, kehilangan, perubahan karier). Gaya konseling santai, reflektif, dan berfokus pada kekuatan klien. Cocok untuk kamu yang mencari ruang bicara tanpa tekanan diagnosis.' END,
   CASE split_part(u.email, '@', 1)
-    WHEN '1234567890123456' THEN '[{"degree":"Sp.KJ","school":"FKUI","year":2012}]'
-    WHEN '8888777766665555' THEN '[{"degree":"Sp.KJ","school":"UNPAD","year":2015}]'
-    WHEN '7777666655554444' THEN '[{"degree":"M.Psi","school":"UGM","year":2017}]'
-    ELSE '[{"degree":"M.Psi","school":"UNPAD","year":2019}]' END::jsonb,
+    WHEN '1234567890123456' THEN '[{"degree":"Sp.KJ (Spesialis Kedokteran Jiwa)","school":"Fakultas Kedokteran Universitas Indonesia (FKUI)","year":2012},{"degree":"M.H (Magister Hukum Kesehatan)","school":"Universitas Airlangga (UNAIR)","year":2016},{"degree":"Sertifikasi Crisis Intervention","school":"International Crisis Intervention Institute","year":2018}]'
+    WHEN '8888777766665555' THEN '[{"degree":"Sp.KJ (Spesialis Kedokteran Jiwa)","school":"Fakultas Kedokteran Universitas Padjadjaran (UNPAD)","year":2015},{"degree":"Pelatihan Gender-Based Violence Intervention","school":"World Health Organization (WHO)","year":2017},{"degree":"Sertifikasi EMDR Level II","school":"EMDR International Association","year":2019}]'
+    WHEN '7777666655554444' THEN '[{"degree":"M.Psi (Magister Psikologi Klinis)","school":"Universitas Gadjah Mada (UGM)","year":2017},{"degree":"Sertifikasi CBT","school":"Beck Institute for Cognitive Behavior Therapy","year":2018},{"degree":"S1 Psikologi","school":"Universitas Indonesia (UI)","year":2014}]'
+    ELSE '[{"degree":"M.Psi (Magister Psikologi)","school":"Universitas Padjadjaran (UNPAD)","year":2019},{"degree":"Pelatihan ACT & SFBT","school":"Association for Contextual Behavioral Science","year":2020},{"degree":"S1 Psikologi","school":"Universitas Gadjah Mada (UGM)","year":2016}]' END::jsonb,
   'VERIFIED', now(),
   CASE split_part(u.email, '@', 1)
     WHEN '1234567890123456' THEN 480
@@ -109,11 +115,14 @@ SELECT
     WHEN '1234567890123456' THEN 12
     WHEN '8888777766665555' THEN 9
     WHEN '7777666655554444' THEN 7
-    ELSE 5 END
+    ELSE 5 END,
+  -- Foto profil AI-generated (placeholder via DiceBear — avatar unik per user)
+  'https://api.dicebear.com/9.x/notionists/svg?seed=' || split_part(u.email, '@', 1)
 FROM users u
 WHERE u.email LIKE '%@professional.malva.local'
 ON CONFLICT (user_id) DO UPDATE SET
   specialization = EXCLUDED.specialization,
+  sub_specialties = EXCLUDED.sub_specialties,
   hospital_name = EXCLUDED.hospital_name,
   hospital_lat = EXCLUDED.hospital_lat,
   hospital_lng = EXCLUDED.hospital_lng,
@@ -124,7 +133,8 @@ ON CONFLICT (user_id) DO UPDATE SET
   verification_status = 'VERIFIED',
   verified_at = now(),
   legacy_count = EXCLUDED.legacy_count,
-  years_experience = EXCLUDED.years_experience;
+  years_experience = EXCLUDED.years_experience,
+  photo_intro_url = EXCLUDED.photo_intro_url;
 
 -- ============================================================
 -- 4. SCHEDULES (Senin-Jumat 09:00-16:00; Hafid & Rina + Sabtu)
