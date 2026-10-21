@@ -237,6 +237,92 @@ class _ProfessionalDashboardScreenState
                               child: const Text('Lihat semua prioritas'),
                             ),
                           ),
+                        // ---- TAB 0: Daftar pasien ringkas di dashboard ----
+                        if (_tabIndex == 0 && patients.isNotEmpty) ...[
+                          const SizedBox(height: 22),
+                          SectionLabel(
+                            'Pasien terhubung',
+                            icon: Icons.people_alt_rounded,
+                            action: TextButton.icon(
+                              onPressed: () => setState(() => _tabIndex = 2),
+                              icon: const Icon(Icons.arrow_forward_rounded,
+                                  size: 16),
+                              label: const Text('Semua'),
+                            ),
+                          ),
+                          for (final patient in patients.take(5)) ...[
+                            SoftCard(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ProPatientDetailScreen(
+                                      patientId: patient.patientId,
+                                      patientName: patient.displayName,
+                                      session: widget.session,
+                                      apiClient: widget.apiClient,
+                                    ),
+                                  ),
+                                ).then((_) => _loadOnlineProfessionalData());
+                              },
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 12),
+                              child: Row(
+                                children: [
+                                  InitialAvatar(
+                                    name: patient.displayName,
+                                    radius: 18,
+                                    color: patient.hasCrisis
+                                        ? MalvaColors.danger
+                                        : MalvaColors.seed,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          patient.displayName,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w900),
+                                        ),
+                                        Text(
+                                          '${patient.sourceLabel} • ${_riskLabel(patient.latestLevel)}'
+                                          '${patient.screenings.isNotEmpty ? ' • ${patient.screenings.length} screening' : ''}',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (patient.hasCrisis)
+                                    const StatusPill(
+                                      label: 'Krisis',
+                                      color: MalvaColors.danger,
+                                    )
+                                  else
+                                    const Icon(Icons.chevron_right_rounded),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                          if (patients.length > 5)
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton(
+                                onPressed: () => setState(() => _tabIndex = 2),
+                                child: Text(
+                                    'Lihat semua ${patients.length} pasien'),
+                              ),
+                            ),
+                        ],
                         if (_tabIndex == 2)
                           // Teks label dipertahankan persis "Pasien terhubung"
                           // (dipakai test widget). Jumlah pasien dipindah ke

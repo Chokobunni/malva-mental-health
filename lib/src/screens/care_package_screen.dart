@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:jitsi_meet_wrapper/jitsi_meet_wrapper.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
@@ -7,6 +9,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
+import 'booking/payment_screen.dart';
 import 'chat_screen.dart';
 
 // ============================================================
@@ -226,6 +229,62 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
                 ),
               )
             else ...[
+              // Paket pending_payment: tampilkan tombol Lanjutkan Pembayaran
+              // dan Batalkan. Sebelumnya pasien hanya melihat status
+              // "pending_payment" tanpa aksi — tidak bisa bayar atau batal.
+              if (_package.status == 'pending_payment') ...[
+                SoftCard(
+                  color: MalvaColors.amber.withValues(alpha: 0.10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.payment_rounded, color: MalvaColors.amber),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Pembayaran belum selesai',
+                              style: TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Lanjutkan pembayaran untuk mengaktifkan paket, atau batalkan bila tidak jadi.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _continuePayment,
+                              icon: const Icon(Icons.payment_rounded, size: 16),
+                              label: const Text('Lanjut Bayar'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _cancelPendingPackage(context),
+                              icon: const Icon(Icons.close_rounded, size: 16),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: MalvaColors.danger,
+                              ),
+                              label: const Text('Batalkan'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
               if (_package.isActive && _package.remainingSessions > 0) ...[
                 FilledButton.icon(
                   onPressed: () => _openScheduler(context),
@@ -249,6 +308,9 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
                     onOpenChat: () => _openChat(s),
                     onReschedule: () => _openScheduler(context, existing: s),
                     onCancel: () => _cancelSession(s),
+                    onJoinVideo: s.isVideo && s.meetingUrl.isNotEmpty
+                        ? () => _joinVideoCall(s)
+                        : null,
                   ),
                   const SizedBox(height: 10),
                 ],
@@ -454,6 +516,193 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
         ),
       ),
     );
+  }
+
+  /// Gabung video call via Jitsi Meet. URL sudah di-generate server saat
+  /// sesi dijadwalkan (meet.jit.si/malva-...). Menggunakan jitsi_meet_wrapper
+  /// untuk membuka native Jitsi SDK; fallback ke url_launcher bila gagal.
+  Future<void> _joinVideoCall(BackendCareSession s) async {
+    if (s.meetingUrl.isEmpty) return;
+    try {
+      // Ekstrak room name dari URL: https://meet.jit.si/malva-xxx → malva-xxx
+      final uri = Uri.tryParse(s.meetingUrl);
+      final roomName = uri?.pathSegments.isNotEmpty == true
+          ? uri!.pathSegments.last
+          : s.meetingUrl.split('/').last;
+      await JitsiMeetWrapper.joinMeeting(
+        options: JitsiMeetingOptions(
+          roomNameOrUrl: roomName,
+          serverUrl: 'https://meet.jit.si',
+          isAudioOnly: false,
+          isAudioMuted: false,
+          isVideoMuted: false,
+        ),
+      );
+    } on Object catch (_) {
+      // Fallback: buka URL di browser/app Jitsi eksternal.
+      final uri = Uri.parse(s.meetingUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak dapat membuka video call.')),
+        );
+      }
+    }
+  }
+
+  /// Lanjutkan pembayaran paket pending. Bila booking pending sudah ada
+  /// (dari percobaan bayar sebelumnya yang gagal), pakai booking itu langsung.
+  /// Kalau belum ada, buat booking baru lewat sheet pilih slot.
+  Future<void> _continuePayment() async {
+    final token = widget.session?.accessToken;
+    final MalvaApiClient apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
+    if (token == null || token.isEmpty) return;
+
+    // Cek apakah sudah ada booking pending untuk paket ini.
+    BackendBooking? existingBooking;
+    try {
+      final bookings = await apiClient.listBookings(accessToken: token);
+      for (final b in bookings) {
+        if (b.serviceType == 'package_session' &&
+            b.status == 'pending' &&
+            b.packageId == _package.id) {
+          existingBooking = b;
+          break;
+        }
+      }
+    } on Object catch (_) {
+      // Gagal ambil daftar booking — lanjut buat baru.
+    }
+
+    if (existingBooking != null) {
+      // Booking pending sudah ada — langsung ke layar pembayaran.
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PaymentScreen(
+            booking: existingBooking,
+            doctorName: _package.professionalName,
+            session: widget.session,
+            apiClient: widget.apiClient,
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Belum ada booking — buka sheet pilih slot sesi pertama.
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (_) => PackageFirstSessionSheet(
+        apiClient: apiClient,
+        accessToken: token,
+        professionalId: _package.professionalId,
+      ),
+    );
+    if (picked == null || !mounted) return;
+    try {
+      final parts = picked.split('|');
+      final booking = await apiClient.createPackageSessionBooking(
+        accessToken: token,
+        packageId: _package.id,
+        bookingDate: parts[0].split('T')[0],
+        slotTime: parts[0].split('T')[1],
+        sessionType: parts.length > 1 ? parts[1] : 'chat',
+      );
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PaymentScreen(
+            booking: booking,
+            doctorName: _package.professionalName,
+            session: widget.session,
+            apiClient: widget.apiClient,
+          ),
+        ),
+      );
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(friendlyErrorMessage(e)),
+            backgroundColor: MalvaColors.danger),
+      );
+    }
+  }
+
+  /// Batalkan paket pending_payment. Hanya bisa untuk status pending_payment.
+  Future<void> _cancelPendingPackage(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Batalkan paket?'),
+        content: const Text(
+            'Paket yang belum dibayar akan dibatalkan. Kamu bisa membeli '
+            'paket baru kapan saja.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Kembali'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: compactFilledButtonStyle.copyWith(
+              backgroundColor: const WidgetStatePropertyAll(MalvaColors.danger),
+            ),
+            child: const Text('Batalkan Paket'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final MalvaApiClient apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
+    final token = widget.session?.accessToken;
+    if (token == null || token.isEmpty) return;
+    try {
+      // Batalkan booking pending terkait dulu (kalau ada), baru batalkan paket.
+      // Tanpa ini booking & payment menggantung di database selamanya.
+      try {
+        final bookings = await apiClient.listBookings(accessToken: token);
+        for (final b in bookings) {
+          if (b.serviceType == 'package_session' &&
+              b.status == 'pending' &&
+              b.packageId == _package.id) {
+            await apiClient.cancelPendingBooking(
+              accessToken: token,
+              bookingId: b.id,
+            );
+            break;
+          }
+        }
+      } on Object catch (_) {
+        // Gagal batalkan booking — lanjut batalkan paket saja.
+      }
+      await apiClient.cancelPendingCarePackage(
+        accessToken: token,
+        packageId: _package.id,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Paket dibatalkan.')),
+      );
+      Navigator.pop(context);
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(friendlyErrorMessage(e)),
+            backgroundColor: MalvaColors.danger),
+      );
+    }
   }
 }
 
@@ -909,6 +1158,7 @@ class _PackageSessionCard extends StatelessWidget {
     this.onReschedule,
     this.onCancel,
     this.onRequestRefund,
+    this.onJoinVideo,
   });
 
   final BackendCareSession session;
@@ -917,6 +1167,7 @@ class _PackageSessionCard extends StatelessWidget {
   final VoidCallback? onReschedule;
   final VoidCallback? onCancel;
   final VoidCallback? onRequestRefund;
+  final VoidCallback? onJoinVideo;
 
   @override
   Widget build(BuildContext context) {
@@ -974,6 +1225,20 @@ class _PackageSessionCard extends StatelessWidget {
           ),
           if (!past) ...[
             const SizedBox(height: 10),
+            // Tombol Join Video muncul untuk sesi video yang punya meeting URL.
+            if (session.isVideo && session.meetingUrl.isNotEmpty) ...[
+              FilledButton.icon(
+                onPressed: onJoinVideo,
+                style: compactFilledButtonStyle.copyWith(
+                  backgroundColor:
+                      const WidgetStatePropertyAll(MalvaColors.mint),
+                  foregroundColor: const WidgetStatePropertyAll(Colors.white),
+                ),
+                icon: const Icon(Icons.videocam_rounded, size: 16),
+                label: const Text('Gabung Video Call'),
+              ),
+              const SizedBox(height: 8),
+            ],
             Row(
               children: [
                 Expanded(

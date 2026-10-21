@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:jitsi_meet_wrapper/jitsi_meet_wrapper.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
@@ -397,10 +398,28 @@ class _ProSessionCard extends ConsumerWidget {
   }
 
   Future<void> _openMeeting(BuildContext context) async {
-    final uri = Uri.tryParse(session.meetingUrl.trim());
-    if (uri == null) return;
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final url = session.meetingUrl.trim();
+    if (url.isEmpty) return;
+    try {
+      final uri = Uri.tryParse(url);
+      final roomName = uri?.pathSegments.isNotEmpty == true
+          ? uri!.pathSegments.last
+          : url.split('/').last;
+      await JitsiMeetWrapper.joinMeeting(
+        options: JitsiMeetingOptions(
+          roomNameOrUrl: roomName,
+          serverUrl: 'https://meet.jit.si',
+          isAudioOnly: false,
+          isAudioMuted: false,
+          isVideoMuted: false,
+        ),
+      );
+    } on Object catch (_) {
+      // Fallback: buka URL di browser/app Jitsi eksternal.
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
     }
   }
 

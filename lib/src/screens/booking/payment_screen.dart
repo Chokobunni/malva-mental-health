@@ -352,7 +352,7 @@ class _MethodTile extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
         decoration: BoxDecoration(
           color: selected
               ? MalvaColors.seed.withValues(alpha: 0.12)
@@ -365,26 +365,40 @@ class _MethodTile extends StatelessWidget {
             width: selected ? 2 : 1.5,
           ),
         ),
-        child: Row(
+        // Column (bukan Row): ikon di atas, label di bawah. Grid 4 kolom
+        // hanya ~80px per tile — Row memaksa teks ke lebar ~28px sehingga
+        // setiap huruf turun vertikal satu per satu ("G\no\nP\na\ny").
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: MalvaColors.seed,
-              child: Icon(icon, color: Colors.white),
+            Stack(
+              alignment: Alignment.topRight,
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: MalvaColors.seed,
+                  child: Icon(icon, color: Colors.white, size: 18),
+                ),
+                if (selected)
+                  const Positioned(
+                    top: -4,
+                    right: -4,
+                    child: Icon(Icons.check_circle_rounded,
+                        color: MalvaColors.seed, size: 14),
+                  ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w900, fontSize: 15)),
-                ],
+            const SizedBox(height: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 11,
               ),
             ),
-            if (selected)
-              const Icon(Icons.check_circle_rounded, color: MalvaColors.seed),
           ],
         ),
       ),

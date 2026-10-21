@@ -192,6 +192,36 @@ func (s *Store) UpdateBookingStatus(ctx context.Context, bookingID, status strin
 	return nil
 }
 
+// CancelPendingBooking membatalkan booking pending beserta payment pending
+// yang terkait dalam satu transaksi. Dipakai ketika pasien membatalkan paket
+// pending_payment — tanpa ini booking & payment menggantung selamanya.
+func (s *Store) CancelPendingBooking(ctx context.Context, bookingID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Batalkan semua payment pending untuk booking ini.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE payments SET status = 'cancelled' WHERE booking_id = $1 AND status = 'pending'`,
+		bookingID); err != nil {
+		return err
+	}
+	// Batalkan booking.
+	res, err := tx.ExecContext(ctx,
+		`UPDATE bookings SET status = 'cancelled' WHERE id = $1 AND status = 'pending'`,
+		bookingID)
+	if err != nil {
+		return err
+	}
+	aff, _ := res.RowsAffected()
+	if aff == 0 {
+		return errors.New("booking not found or already processed")
+	}
+	return tx.Commit()
+}
+
 func (s *Store) CreatePayment(ctx context.Context, p Payment) (Payment, error) {
 	// platform_fee_pct SMALLINT (maks 32767): fee 10% disimpan sebagai 10,
 	// bukan nominal rupiah (nominal ada di platform_fee_amount BIGINT).

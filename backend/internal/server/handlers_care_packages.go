@@ -174,6 +174,40 @@ func (s *Server) listCarePackages(w http.ResponseWriter, r *http.Request, claims
 	writeJSON(w, http.StatusOK, map[string]any{"packages": pkgs})
 }
 
+// cancelPendingCarePackage membatalkan paket yang masih pending_payment.
+// Hanya pasien pemilik paket yang boleh membatalkan, dan hanya bila statusnya
+// masih pending_payment (paket aktif/expired/completed tidak bisa dibatalkan
+// lewat endpoint ini — gunakan jalur refund sesi).
+func (s *Server) cancelPendingCarePackage(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "patient" {
+		writeError(w, http.StatusForbidden, errors.New("only patients can cancel a pending package"))
+		return
+	}
+	packageID := r.PathValue("package_id")
+	if strings.TrimSpace(packageID) == "" {
+		writeError(w, http.StatusBadRequest, errors.New("package_id is required"))
+		return
+	}
+	pkg, err := s.store.GetCarePackage(r.Context(), packageID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, errors.New("care package tidak ditemukan"))
+		return
+	}
+	if pkg.PatientID != claims.Subject {
+		writeError(w, http.StatusForbidden, errors.New("not your package"))
+		return
+	}
+	if pkg.Status != "pending_payment" {
+		writeError(w, http.StatusBadRequest, errors.New("hanya paket pending_payment yang bisa dibatalkan"))
+		return
+	}
+	if err := s.store.UpdateCarePackageStatus(r.Context(), packageID, "cancelled"); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
+}
+
 // scheduleSession menjadwalkan satu sesi dari paket aktif.
 func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	var req scheduleSessionRequest
@@ -213,6 +247,16 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 		writeError(w, http.StatusBadRequest, verr)
 		return
 	}
+	// Auto-generate meeting URL untuk sesi video bila belum disediakan klien.
+	// Menggunakan Jitsi Meet publik (meet.jit.si) — gratis, tanpa API key,
+	// cukup untuk testing real 2 HP. Room name unik per paket+scheduled_at
+	// agar tidak bentrok antar pasien.
+	meetingURL := strings.TrimSpace(req.MeetingURL)
+	sessionType := strings.ToLower(strings.TrimSpace(req.SessionType))
+	if sessionType == "video" && meetingURL == "" {
+		roomSlug := fmt.Sprintf("malva-%s-%d", pkg.ID[:8], at.Unix())
+		meetingURL = "https://meet.jit.si/" + roomSlug
+	}
 	cs, err := s.store.CreateCareSession(r.Context(), store.CareSession{
 		PackageID:       &pkg.ID,
 		PatientID:       pkg.PatientID,
@@ -221,7 +265,7 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 		ScheduledAt:     at,
 		DurationMinutes: duration,
 		Status:          "scheduled",
-		MeetingURL:      req.MeetingURL,
+		MeetingURL:      meetingURL,
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)

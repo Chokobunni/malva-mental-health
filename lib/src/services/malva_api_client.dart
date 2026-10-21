@@ -1410,6 +1410,16 @@ class MalvaApiClient {
         .toList(growable: false);
   }
 
+  /// Batalkan paket yang masih pending_payment. Hanya pasien pemilik paket
+  /// yang boleh membatalkan; paket aktif/expired/completed ditolak server.
+  Future<void> cancelPendingCarePackage({
+    required String accessToken,
+    required String packageId,
+  }) async {
+    await _send('POST', '/v1/care-packages/$packageId/cancel',
+        accessToken: accessToken);
+  }
+
   Future<BackendCareSession> scheduleSession({
     required String accessToken,
     required String packageId,
@@ -1455,6 +1465,15 @@ class MalvaApiClient {
     });
     return BackendBooking.fromJson(
         _expectMap(payload['booking'], 'Respons booking tidak valid.'));
+  }
+
+  /// Batalkan booking pending beserta payment pending terkait.
+  Future<void> cancelPendingBooking({
+    required String accessToken,
+    required String bookingId,
+  }) async {
+    await _send('POST', '/v1/bookings/$bookingId/cancel',
+        accessToken: accessToken);
   }
 
   Future<List<BackendCareSession>> listCareSessions({
@@ -2035,8 +2054,20 @@ class MalvaApiClient {
     required String userId,
     required String date,
   }) async {
-    final payload = await _send('GET', '/v1/doctors/$userId/slots?date=$date',
-        accessToken: accessToken);
+    // WAJIB pakai _sendUri dengan queryParameters — bukan _send dengan
+    // "?date=$date" di path. _send memakai Uri.replace(path:) yang
+    // meng-encode "?" dan "=" menjadi "%3F" dan "%3D", sehingga server
+    // tidak mengenali parameter "date" dan mengembalikan error. Ini yang
+    // menyebabkan "Server mengembalikan respons yang tidak valid" saat
+    // pasien membuka jadwal sesi dari MyCare.
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/doctors/$userId/slots',
+        queryParameters: {'date': date},
+      ),
+      accessToken: accessToken,
+    );
     return (payload['slots'] as List?)
             ?.map((e) => BackendDoctorSlot.fromJson(
                 _expectMap(e, 'Data slot tidak valid.')))
@@ -3922,6 +3953,7 @@ class BackendBooking {
     required this.bookingDate,
     required this.status,
     this.price = 0,
+    this.packageId,
   });
 
   factory BackendBooking.fromJson(Map<String, dynamic> json) {
@@ -3933,6 +3965,7 @@ class BackendBooking {
       bookingDate: json['booking_date']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
       price: (json['price'] as num?)?.toInt() ?? 0,
+      packageId: json['package_id']?.toString(),
     );
   }
 
@@ -3943,6 +3976,7 @@ class BackendBooking {
   final String bookingDate;
   final String status;
   final int price;
+  final String? packageId;
 }
 
 class BackendPaymentResponse {

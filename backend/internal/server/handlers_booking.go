@@ -533,6 +533,41 @@ func (s *Server) markPaymentPaid(w http.ResponseWriter, r *http.Request, claims 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"payment": p, "status": "paid"})
 }
 
+// cancelPendingBooking membatalkan booking yang masih pending beserta
+// pembayaran pending yang terkait. Dipakai ketika pasien membatalkan paket
+// pending_payment dari layar MyCare — tanpa ini booking & payment tetap
+// menggantung di database selamanya.
+func (s *Server) cancelPendingBooking(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "patient" {
+		writeError(w, http.StatusForbidden, errors.New("only patients can cancel a booking"))
+		return
+	}
+	bookingID := r.PathValue("booking_id")
+	if strings.TrimSpace(bookingID) == "" {
+		writeError(w, http.StatusBadRequest, errors.New("booking_id is required"))
+		return
+	}
+	booking, err := s.store.GetBooking(r.Context(), bookingID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, errors.New("booking tidak ditemukan"))
+		return
+	}
+	if booking.PatientID != claims.Subject {
+		writeError(w, http.StatusForbidden, errors.New("not your booking"))
+		return
+	}
+	if booking.Status != "pending" {
+		writeError(w, http.StatusBadRequest, errors.New("hanya booking pending yang bisa dibatalkan"))
+		return
+	}
+	// Batalkan booking dan payment pending terkait dalam satu transaksi.
+	if err := s.store.CancelPendingBooking(r.Context(), bookingID); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
+}
+
 // paymentWebhook menerima notifikasi pembayaran gateway (Midtrans). Publik,
 // keaslian diverifikasi via signature SHA-512; idempoten via payment_events.
 func (s *Server) paymentWebhook(w http.ResponseWriter, r *http.Request) {

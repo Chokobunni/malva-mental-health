@@ -260,6 +260,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/pricing", s.requireAuth(s.getPricing))
 	// Booking, Payment, Earnings, E-Prescription
 	mux.HandleFunc("POST /v1/bookings", s.requireAuth(s.createBooking))
+	mux.HandleFunc("POST /v1/bookings/{booking_id}/cancel", s.requireAuth(s.cancelPendingBooking))
 	mux.HandleFunc("POST /v1/payments", s.requireAuth(s.createPayment))
 	mux.HandleFunc("POST /v1/payments/mark-paid", s.requireAuth(s.markPaymentPaid))
 	// Webhook gateway pembayaran (publik; keaslian diverifikasi via signature).
@@ -268,6 +269,7 @@ func (s *Server) Routes() http.Handler {
 	// Care packages & sessions (pengganti continuous support 7 hari)
 	mux.HandleFunc("POST /v1/care-packages", s.requireAuth(s.createCarePackage))
 	mux.HandleFunc("GET /v1/care-packages", s.requireAuth(s.listCarePackages))
+	mux.HandleFunc("POST /v1/care-packages/{package_id}/cancel", s.requireAuth(s.cancelPendingCarePackage))
 	mux.HandleFunc("POST /v1/care-sessions", s.requireAuth(s.scheduleSession))
 	mux.HandleFunc("GET /v1/care-sessions", s.requireAuth(s.listCareSessions))
 	mux.HandleFunc("PATCH /v1/care-sessions/{session_id}", s.requireAuth(s.updateCareSession))
