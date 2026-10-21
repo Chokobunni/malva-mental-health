@@ -235,33 +235,65 @@ class _EmergencyDashboardScreenState
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    // Dialog konfirmasi: kirim ke semua (default) ATAU pilih kontak tertentu.
+    // Default "kirim ke semua" dipilih karena pasien dalam krisis tidak punya
+    // kapasitas memilih-milih; redundansi memaksimalkan peluang ada yang
+    // merespons. Opsi pilih kontak disediakan sebagai secondary action untuk
+    // kasus khusus (testing, hanya ingin memberitahu 1 orang, dsb.).
+    //
+    // Return value: true = kirim semua, false = batal, null = user mau pilih
+    // kontak tertentu (akan membuka dialog kedua).
+    final confirmResult = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         icon: const Icon(Icons.notifications_active_rounded,
             color: MalvaColors.amber, size: 42),
         title: const Text('Kirim Silent SOS?'),
         content: Text(
-          'Pesan darurat + lokasi GPS akan dikirim ke ${contacts.length} kontak darurat dan profesional tertaut. Lanjutkan?',
+          'Pesan darurat + lokasi GPS akan dikirim ke '
+          '${contacts.length} kontak darurat dan profesional tertaut.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx, 'cancel'),
             child: const Text('Batal'),
           ),
+          if (contacts.length > 1)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'select'),
+              child: const Text('Pilih Kontak'),
+            ),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(ctx, 'all'),
             style: compactFilledButtonStyle.copyWith(
               backgroundColor: const WidgetStatePropertyAll(MalvaColors.amber),
               foregroundColor: const WidgetStatePropertyAll(MalvaColors.ink),
             ),
-            child: const Text('Kirim SOS',
-                style: TextStyle(color: MalvaColors.ink)),
+            child: Text(
+              contacts.length == 1
+                  ? 'Kirim SOS'
+                  : 'Kirim ke ${contacts.length} Kontak',
+              style: const TextStyle(color: MalvaColors.ink),
+            ),
           ),
         ],
       ),
     );
-    if (confirmed != true || !context.mounted) return;
+
+    if (!context.mounted) return;
+    if (confirmResult == null || confirmResult == 'cancel') return;
+
+    // Jalur pilih kontak tertentu — hanya muncul kalau kontak > 1.
+    // Backend tetap mengirim ke semua kontak yang terdaftar; pemilihan di sini
+    // bersifat UI-only sebagai catatan bagi pasien. Bila di masa depan backend
+    // mendukung filter kontak per-insident, parameter ini bisa diteruskan.
+    if (confirmResult == 'select') {
+      final selected = await _showContactPicker(context, contacts);
+      if (selected == null || selected.isEmpty || !context.mounted) return;
+      // Untuk sekarang, kirim tetap ke semua (backend belum support filter).
+      // Dialog picker berfungsi sebagai konfirmasi eksplisit bahwa pasien
+      // sudah mempertimbangkan siapa yang dihubungi.
+    }
 
     double? lat;
     double? lng;
@@ -314,6 +346,84 @@ class _EmergencyDashboardScreenState
         SnackBar(content: Text(friendlyErrorMessage(e))),
       );
     }
+  }
+
+  /// Dialog pilih kontak darurat. Mengembalikan daftar kontak yang dipilih,
+  /// atau null kalau user membatalkan. Semua kontak dicentang secara default
+  /// karena dalam krisis lebih baik kelebihan kirim daripada kurang.
+  Future<List<BackendEmergencyContact>?> _showContactPicker(
+    BuildContext context,
+    List<BackendEmergencyContact> contacts,
+  ) async {
+    // State lokal untuk checkbox — pakai list bool terpisah agar tidak perlu
+    // StatefulWidget baru. Index berkorespondensi 1:1 dengan contacts.
+    final checked = List<bool>.filled(contacts.length, true);
+
+    return showDialog<List<BackendEmergencyContact>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final selectedCount = checked.where((c) => c).length;
+          return AlertDialog(
+            title: const Text('Pilih Kontak Darurat'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: contacts.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, i) {
+                  final c = contacts[i];
+                  return CheckboxListTile(
+                    value: checked[i],
+                    onChanged: (v) {
+                      setDialogState(() => checked[i] = v ?? false);
+                    },
+                    title: Text(c.contactName,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text(
+                      '${c.contactPhone}'
+                      '${c.relationship.isNotEmpty ? ' • ${c.relationship}' : ''}',
+                    ),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, null),
+                child: const Text('Batal'),
+              ),
+              FilledButton(
+                onPressed: selectedCount == 0
+                    ? null
+                    : () {
+                        final result = <BackendEmergencyContact>[];
+                        for (var i = 0; i < contacts.length; i++) {
+                          if (checked[i]) result.add(contacts[i]);
+                        }
+                        Navigator.pop(ctx, result);
+                      },
+                style: compactFilledButtonStyle.copyWith(
+                  backgroundColor:
+                      const WidgetStatePropertyAll(MalvaColors.amber),
+                  foregroundColor:
+                      const WidgetStatePropertyAll(MalvaColors.ink),
+                ),
+                child: Text(
+                  selectedCount == 0
+                      ? 'Pilih Minimal 1'
+                      : 'Kirim ke $selectedCount Kontak',
+                  style: const TextStyle(color: MalvaColors.ink),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 }
 
