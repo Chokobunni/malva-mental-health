@@ -24,7 +24,6 @@ dependencies:
   flutter_riverpod: ^2.6.1
   riverpod_annotation: ^2.6.1
   geolocator: ^14.0.2
-  jitsi_meet_wrapper: ^0.2.0+1
 
   path_provider: any
   google_sign_in: ^7.2.0
