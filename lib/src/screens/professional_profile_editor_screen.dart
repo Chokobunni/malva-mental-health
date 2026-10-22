@@ -247,6 +247,9 @@ class _ProfessionalProfileEditorScreenState
         _isUploadingPhoto = false;
         _localPhotoFile = null; // bersihkan setelah berhasil
       });
+      // Simpan langsung agar foto baru tampil realtime di sisi pasien
+      // (server menyiarkan event professional.profile.updated).
+      await _save();
     } on MalvaApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -298,6 +301,8 @@ class _ProfessionalProfileEditorScreenState
         _isUploadingVideo = false;
         _localVideoFile = null;
       });
+      // Simpan langsung agar video intro baru tampil realtime di sisi pasien.
+      await _save();
     } on MalvaApiException catch (e) {
       if (!mounted) return;
       setState(() {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -62,16 +64,20 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  /// Memuat profil profesional. [silent] dipakai saat penyegaran otomatis
+  /// (event realtime) agar tidak menampilkan indikator loading.
+  Future<void> _load({bool silent = false}) async {
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
     final rawToken = widget.session?.accessToken;
     final accessToken =
         (rawToken == null || rawToken.isEmpty) ? null : rawToken;
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
     try {
       final profile = await apiClient.getDoctorProfile(
         accessToken: accessToken,
@@ -119,6 +125,14 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Profil profesional ini berubah (foto/video intro) → muat ulang senyap.
+    ref.listen<int>(professionalProfileRevisionProvider, (previous, next) {
+      if (previous == next) return;
+      final updatedId = ref.read(professionalProfileUpdatedIdProvider);
+      if (updatedId.isEmpty || updatedId == widget.doctorUserId) {
+        unawaited(_load(silent: true));
+      }
+    });
     final cred = _profile?.credential;
 
     return Scaffold(

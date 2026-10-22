@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/medication_reminder_service.dart';
+import '../services/realtime_service.dart';
 import 'assessment_list_screen.dart';
 import 'home_screen.dart';
 import 'messages_list_screen.dart';
@@ -41,10 +45,66 @@ class _PatientShellState extends ConsumerState<PatientShell> {
   String _professionalUserId = '';
   String _professionalName = 'Profesional';
 
+  /// Koneksi realtime untuk menerima perubahan profil profesional
+  /// (foto/video intro) tanpa perlu refresh manual.
+  RealtimeService? _realtime;
+  StreamSubscription<RealtimeEvent>? _realtimeSub;
+
   @override
   void initState() {
     super.initState();
     _fetchLinkedProfessional();
+    _connectRealtime();
+  }
+
+  @override
+  void didUpdateWidget(covariant PatientShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Token berubah (login ulang / akun berbeda) → sambungkan ulang.
+    if (oldWidget.session?.accessToken != widget.session?.accessToken) {
+      _connectRealtime();
+      _fetchLinkedProfessional();
+    }
+  }
+
+  @override
+  void dispose() {
+    _realtimeSub?.cancel();
+    _realtime?.dispose();
+    super.dispose();
+  }
+
+  /// Menyambungkan klien realtime dan meneruskan event perubahan profil
+  /// profesional ke provider revisi agar layar pasien memuat ulang data.
+  void _connectRealtime() {
+    final apiClient = widget.apiClient;
+    final token = widget.session?.accessToken;
+    _realtimeSub?.cancel();
+    _realtime?.dispose();
+    _realtime = null;
+    _realtimeSub = null;
+    if (apiClient == null || token == null || token.isEmpty) return;
+
+    final service = RealtimeService(
+      accessToken: token,
+      baseUrl: apiClient.baseUri.toString(),
+    );
+    _realtime = service;
+    _realtimeSub = service.events.listen((event) {
+      if (!mounted) return;
+      switch (event.type) {
+        case 'professional.profile.updated':
+          final updatedId = event.stringValue('professional_user_id');
+          ref.read(professionalProfileUpdatedIdProvider.notifier).state =
+              updatedId;
+          ref.read(professionalProfileRevisionProvider.notifier).state++;
+          // Nama profesional bisa ikut berubah — segarkan data tautan.
+          _fetchLinkedProfessional();
+        default:
+          break;
+      }
+    });
+    service.connect();
   }
 
   Future<void> _fetchLinkedProfessional() async {

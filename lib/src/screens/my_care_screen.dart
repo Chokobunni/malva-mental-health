@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -42,7 +44,11 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  /// Memuat paket, sesi, dan tautan profesional.
+  ///
+  /// [silent] = true dipakai saat penyegaran otomatis (event realtime) agar
+  /// indikator loading tidak berkedip menutupi data yang sudah tampil.
+  Future<void> _load({bool silent = false}) async {
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
     final rawToken = widget.session?.accessToken;
@@ -58,10 +64,13 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
       }
       return;
     }
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    // Saat penyegaran senyap, biarkan data lama tetap tampil.
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
     try {
       final results = await Future.wait([
         apiClient.listCarePackages(accessToken: accessToken),
@@ -97,6 +106,12 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Profesional mengubah foto/video intro → muat ulang data secara senyap.
+    ref.listen<int>(professionalProfileRevisionProvider, (previous, next) {
+      if (previous != next) {
+        unawaited(_load(silent: true));
+      }
+    });
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Care'),

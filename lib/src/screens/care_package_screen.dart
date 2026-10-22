@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -59,7 +61,9 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  /// Memuat ulang paket & sesi. [silent] dipakai saat penyegaran otomatis
+  /// (event realtime) agar tidak menampilkan indikator loading.
+  Future<void> _load({bool silent = false}) async {
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
     final token = widget.session?.accessToken;
@@ -72,10 +76,12 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
       }
       return;
     }
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
     try {
       final results = await Future.wait([
         apiClient.listCarePackages(accessToken: token),
@@ -117,6 +123,12 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Foto/video intro profesional berubah → segarkan data paket ini.
+    ref.listen<int>(professionalProfileRevisionProvider, (previous, next) {
+      if (previous != next) {
+        unawaited(_load(silent: true));
+      }
+    });
     final expires = _package.expiresDateTime?.toLocal();
     return Scaffold(
       appBar: AppBar(

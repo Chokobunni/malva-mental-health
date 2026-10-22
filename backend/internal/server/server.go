@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
@@ -1869,6 +1870,28 @@ func (s *Server) notifyPatient(r *http.Request, patientID, kind, title, body str
 			Type: "notification.created",
 			Data: notification,
 		})
+	}
+}
+
+// broadcastProfessionalProfileUpdate menyiarkan perubahan profil profesional
+// (foto & video intro) ke semua pasien yang terhubung aktif. Tujuannya agar
+// sisi pasien memuat ulang data secara otomatis tanpa refresh manual.
+// Best-effort: kegagalan siaran tidak boleh menggagalkan penyimpanan profil.
+func (s *Server) broadcastProfessionalProfileUpdate(ctx context.Context, professionalID string) {
+	if s.hub == nil || strings.TrimSpace(professionalID) == "" {
+		return
+	}
+	linkedUsers, err := s.store.ListLinkedUsers(ctx, professionalID)
+	if err != nil {
+		s.logger.Warn("gagal mengambil pengguna terhubung untuk siaran profil", "error", err)
+		return
+	}
+	event := realtime.Event{
+		Type: "professional.profile.updated",
+		Data: map[string]string{"professional_user_id": professionalID},
+	}
+	for _, uid := range linkedUsers {
+		s.hub.Publish(uid, event)
 	}
 }
 

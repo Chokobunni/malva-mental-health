@@ -507,6 +507,9 @@ func (s *Server) uploadCredentials(w http.ResponseWriter, r *http.Request, claim
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	// Siarkan perubahan profil (foto/video intro) ke pasien terhubung agar
+	// tampilan di sisi pasien ikut terbarui tanpa refresh manual.
+	s.broadcastProfessionalProfileUpdate(r.Context(), claims.Subject)
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"credential":          cred,
 		"verification_status": cred.VerificationStatus,

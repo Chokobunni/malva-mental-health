@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -59,16 +61,19 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
   }
 
   /// Muat direktori profesional dari server (tanpa data demo).
-  Future<void> _load() async {
+  /// [silent] dipakai saat penyegaran otomatis agar daftar tidak berkedip.
+  Future<void> _load({bool silent = false}) async {
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
     final rawToken = widget.session?.accessToken;
     final accessToken =
         (rawToken == null || rawToken.isEmpty) ? null : rawToken;
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
     try {
       final location = ref.read(patientLocationProvider);
       final pos = location.position;
@@ -107,6 +112,12 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Foto profesional berubah → segarkan daftar tanpa mengganggu pencarian.
+    ref.listen<int>(professionalProfileRevisionProvider, (previous, next) {
+      if (previous != next) {
+        unawaited(_load(silent: true));
+      }
+    });
     return Scaffold(
       appBar: AppBar(
         title: const Text('Jadwal Profesional'),

@@ -475,5 +475,8 @@ func (s *Server) updateAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 			return
 		}
 	}
+	// Profil bisa diubah admin (mis. foto/video intro) — siarkan juga agar
+	// sisi pasien ikut terbarui secara realtime.
+	s.broadcastProfessionalProfileUpdate(r.Context(), userID)
 	writeJSON(w, http.StatusOK, map[string]any{"credential": cred})
 }
