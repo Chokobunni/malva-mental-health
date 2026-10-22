@@ -39,9 +39,17 @@ void main() {
     expect(find.text('Lainnya'), findsOneWidget);
     expect(find.text('Tugas'), findsNothing);
 
-    // Dashboard: prioritas pasien (tanpa backend = kosong, tanpa demo).
-    expect(find.text('Prioritas pasien'), findsOneWidget);
-    expect(find.text('Tidak ada prioritas urgent'), findsOneWidget);
+    // Dashboard tanpa backend session menampilkan banner "Belum login ke server"
+    // alih-alih section "Prioritas pasien". Test ini tidak menyediakan token,
+    // jadi _DashboardStatusStrip menampilkan banner error.
+    expect(
+      find.text(
+          'Belum login ke server. Login sebagai profesional untuk melihat data real.'),
+      findsOneWidget,
+    );
+
+    // Quick Video Call card selalu tampil di dashboard.
+    expect(find.text('Quick Video Call'), findsOneWidget);
 
     // Tab Jadwal: sesi dari server (kosong tanpa backend).
     await tester.tap(find.text('Jadwal'));
