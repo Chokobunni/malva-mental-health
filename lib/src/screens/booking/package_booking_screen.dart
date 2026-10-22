@@ -23,7 +23,7 @@ class PackageBookingScreen extends ConsumerStatefulWidget {
     required this.doctorUserId,
     required this.doctorName,
     required this.price,
-    this.doctorPhotoUrl = '',
+    required this.doctorPhotoUrl,
     this.session,
     this.apiClient,
   });

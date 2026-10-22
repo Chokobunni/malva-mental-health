@@ -24,7 +24,7 @@ class BookingDetailScreen extends ConsumerStatefulWidget {
     required this.doctorName,
     required this.serviceType,
     required this.expectedPrice,
-    this.doctorPhotoUrl = '',
+    required this.doctorPhotoUrl,
     this.session,
     this.apiClient,
   });

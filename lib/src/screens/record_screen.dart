@@ -522,7 +522,7 @@ class _MedicationCard extends StatelessWidget {
                 Text(
                   med.source.isEmpty
                       ? 'Source: Profesional'
-                      : 'Source: ${med.source}',
+                      : 'Source: ${medicationSourceLabel(med.source)}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],

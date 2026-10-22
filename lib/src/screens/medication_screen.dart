@@ -597,7 +597,7 @@ class _MedicationCard extends StatelessWidget {
                 icon: Icons.inventory_2_rounded,
               ),
               StatusPill(
-                label: medication.source,
+                label: medication.sourceLabel,
                 color: MalvaColors.amber,
                 icon: Icons.verified_user_rounded,
               ),

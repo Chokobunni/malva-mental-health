@@ -132,6 +132,28 @@ class MedicationReminder {
   }
 }
 
+/// Normalisasi nilai `source` obat mentah menjadi label yang ramah pengguna.
+///
+/// Backend menyimpan nilai mentah seperti 'Pasien', 'Profesional', atau
+/// 'prescription' (huruf kecil, dari e-resep yang dibuat profesional).
+/// Nilai dinormalisasi ke label manusia (tidak peka huruf besar/kecil);
+/// nilai tak dikenal dikembalikan apa adanya (setelah di-trim) agar tidak
+/// pernah kosong untuk input non-kosong dan tidak pernah crash. Nilai
+/// `source` mentah tetap utuh untuk perbandingan logika di tempat lain.
+String medicationSourceLabel(String source) {
+  final raw = source.trim();
+  switch (raw.toLowerCase()) {
+    case 'prescription':
+      return 'Resep';
+    case 'pasien':
+      return 'Pasien';
+    case 'profesional':
+      return 'Profesional';
+    default:
+      return raw;
+  }
+}
+
 class Medication {
   const Medication({
     required this.id,
@@ -156,6 +178,9 @@ class Medication {
   final DateTime? lastTakenAt;
 
   bool get needsRefill => currentStock <= alertBelow;
+
+  /// Label sumber obat yang ramah pengguna (lihat [medicationSourceLabel]).
+  String get sourceLabel => medicationSourceLabel(source);
 
   String get lastTakenLabel {
     final taken = lastTakenAt;
