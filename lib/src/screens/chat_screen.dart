@@ -872,10 +872,13 @@ class _ChatBubble extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
                   message.senderName,
-                  style: TextStyle(
+                  // Nama pengirim tampil di latar terang (bubble lavender),
+                  // jadi wajib hitam agar terbaca. Bubble milik sendiri
+                  // (isMine) tidak menampilkan nama ini.
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w900,
-                    color: MalvaColors.plum.withValues(alpha: 0.7),
+                    color: Colors.black87,
                   ),
                 ),
               ),

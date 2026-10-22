@@ -276,8 +276,7 @@ class _ProPatientDetailScreenState
               else
                 CollapsibleCard(
                   key: const ValueKey('packages-section'),
-                  tone: MalvaColors.seed.withValues(alpha: 0.04),
-                  accent: MalvaColors.seed.withValues(alpha: 0.35),
+                  bordered: true,
                   semanticLabel: 'Paket & sesi',
                   header: Row(
                     children: [
@@ -383,8 +382,7 @@ class _ProPatientDetailScreenState
                 for (final sc in _screenings.take(3)) ...[
                   CollapsibleCard(
                     key: ValueKey('screening-${sc.id}'),
-                    tone: MalvaColors.seed.withValues(alpha: 0.04),
-                    accent: MalvaColors.seed.withValues(alpha: 0.35),
+                    bordered: true,
                     semanticLabel:
                         'Detail screening ${_screeningDate(sc.createdAt)}',
                     header: Column(
@@ -515,8 +513,7 @@ class _ProPatientDetailScreenState
               else
                 CollapsibleCard(
                   key: const ValueKey('goals-section'),
-                  tone: MalvaColors.seed.withValues(alpha: 0.04),
-                  accent: MalvaColors.seed.withValues(alpha: 0.35),
+                  bordered: true,
                   semanticLabel: 'Goals & habits',
                   header: Row(
                     children: [
@@ -567,8 +564,7 @@ class _ProPatientDetailScreenState
               else
                 CollapsibleCard(
                   key: const ValueKey('mood-diary-section'),
-                  tone: MalvaColors.seed.withValues(alpha: 0.04),
-                  accent: MalvaColors.seed.withValues(alpha: 0.35),
+                  bordered: true,
                   semanticLabel: 'Mood & diary (read-only)',
                   header: Row(
                     children: [
@@ -624,8 +620,7 @@ class _ProPatientDetailScreenState
               else
                 CollapsibleCard(
                   key: const ValueKey('shares-section'),
-                  tone: MalvaColors.seed.withValues(alpha: 0.04),
-                  accent: MalvaColors.seed.withValues(alpha: 0.35),
+                  bordered: true,
                   semanticLabel: 'Kiriman pasien',
                   header: Row(
                     children: [
@@ -664,8 +659,7 @@ class _ProPatientDetailScreenState
               else
                 CollapsibleCard(
                   key: const ValueKey('timeline-section'),
-                  tone: MalvaColors.seed.withValues(alpha: 0.04),
-                  accent: MalvaColors.seed.withValues(alpha: 0.35),
+                  bordered: true,
                   semanticLabel: 'Timeline pasien',
                   header: Row(
                     children: [

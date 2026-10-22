@@ -57,7 +57,10 @@ class MedicationScreen extends ConsumerWidget {
                   ],
                   currentStock: b.currentStock,
                   alertBelow: b.alertBelow,
-                  source: 'Profesional',
+                  // Pakai sumber asli dari server ('Pasien'/'Profesional')
+                  // agar badge tidak salah label untuk obat yang ditambahkan
+                  // pasien sendiri. Fallback ke 'Profesional' bila kosong.
+                  source: b.source.isEmpty ? 'Profesional' : b.source,
                 ),
               )
               .toList();

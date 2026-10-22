@@ -962,12 +962,18 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                                           ? 'Nonaktifkan'
                                           : 'Aktifkan'),
                                     ),
-                                    OutlinedButton(
+                                    // Hapus PERMANEN — sengaja bergaya teks
+                                    // merah (bukan outlined) agar jelas beda
+                                    // dari "Nonaktifkan" yang bisa dibalik.
+                                    TextButton.icon(
                                       onPressed: () => _removeSchedule(s),
-                                      style: OutlinedButton.styleFrom(
+                                      style: TextButton.styleFrom(
                                         foregroundColor: MalvaColors.danger,
                                       ),
-                                      child: const Text('Hapus'),
+                                      icon: const Icon(
+                                          Icons.delete_forever_rounded,
+                                          size: 16),
+                                      label: const Text('Hapus permanen'),
                                     ),
                                   ],
                                 ),
@@ -1335,22 +1341,42 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   Future<void> _removeSchedule(BackendProfessionalSchedule s) async {
     final token = _token;
     if (token == null) return;
-    final next = _schedules
-        .where((e) =>
-            e.dayOfWeek != s.dayOfWeek ||
-            e.startTime != s.startTime ||
-            e.endTime != s.endTime)
-        .map(_scheduleToPayload)
-        .toList();
+    // Konfirmasi dulu: hapus permanen tidak bisa dibatalkan.
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.delete_forever_rounded,
+            color: MalvaColors.danger),
+        title: const Text('Hapus jadwal permanen?'),
+        content: const Text(
+            'Jadwal ini akan dihapus permanen dan tidak bisa dikembalikan. '
+            'Bila hanya ingin menyembunyikan sementara, gunakan '
+            '"Nonaktifkan" — jadwal tetap tersimpan dan bisa diaktifkan lagi.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: compactFilledButtonStyle.copyWith(
+              backgroundColor: const WidgetStatePropertyAll(MalvaColors.danger),
+            ),
+            child: const Text('Hapus permanen'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
     try {
-      final updated = await _api.updateMySchedules(
-        accessToken: token,
-        schedules: next,
-      );
+      await _api.deleteMySchedule(accessToken: token, id: s.id);
       if (!mounted) return;
-      setState(() => _schedules = updated);
+      setState(() {
+        _schedules =
+            _schedules.where((e) => e.id != s.id).toList(growable: false);
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Jadwal dihapus.')),
+        const SnackBar(content: Text('Jadwal dihapus permanen.')),
       );
     } on Object catch (e) {
       if (!mounted) return;

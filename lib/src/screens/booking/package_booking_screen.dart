@@ -7,6 +7,7 @@ import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
+import '../../widgets/professional_avatar.dart';
 import 'consent_request_sheet.dart';
 import 'payment_screen.dart';
 
@@ -22,6 +23,7 @@ class PackageBookingScreen extends ConsumerStatefulWidget {
     required this.doctorUserId,
     required this.doctorName,
     required this.price,
+    this.doctorPhotoUrl = '',
     this.session,
     this.apiClient,
   });
@@ -29,6 +31,9 @@ class PackageBookingScreen extends ConsumerStatefulWidget {
   final String doctorUserId;
   final String doctorName;
   final int price;
+
+  /// URL foto profil profesional. Kosong = pakai avatar gradien + inisial.
+  final String doctorPhotoUrl;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
@@ -55,11 +60,10 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
           SoftCard(
             child: Row(
               children: [
-                CircleAvatar(
+                ProfessionalAvatar(
+                  displayName: widget.doctorName,
                   radius: 28,
-                  backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
-                  child: const Icon(Icons.medical_services_rounded,
-                      color: MalvaColors.seed, size: 30),
+                  photoUrl: widget.doctorPhotoUrl,
                 ),
                 const SizedBox(width: 12),
                 Expanded(

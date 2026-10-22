@@ -580,26 +580,48 @@ class _ProfessionalDashboardScreenState
   }
 
   List<_PriorityItem> _crisisQueue(List<_ProfessionalPatient> patients) {
-    return [
-      for (final patient in patients)
-        for (final screening in patient.screenings)
-          if (screening.crisisFlag)
-            _PriorityItem(
-              patient: patient,
-              screening: screening,
-              title: 'Crisis alert',
-              body:
-                  '${patient.displayName} memiliki crisis flag pada screening ${_formatDate(screening.createdAt)}.',
-              color: MalvaColors.danger,
-            ),
-    ];
+    final items = <_PriorityItem>[];
+    final seen = <String>{};
+    for (final patient in patients) {
+      for (final screening in patient.screenings) {
+        if (!screening.crisisFlag) continue;
+        // Lewati screening yang sudah direview agar tidak menumpuk selamanya
+        // di dashboard (dulu: baris crisis lama tetap tampil setelah direview).
+        if (_reviewedScreeningIds.contains(screening.id)) continue;
+        // Satu item per (pasien, screening) — jangan pernah render dua kali.
+        if (!seen.add(screening.id)) continue;
+        items.add(
+          _PriorityItem(
+            patient: patient,
+            screening: screening,
+            title: 'Crisis alert',
+            body:
+                '${patient.displayName} memiliki crisis flag pada screening ${_formatDate(screening.createdAt)}.',
+            color: MalvaColors.danger,
+          ),
+        );
+      }
+    }
+    // Urutkan terbaru dulu agar alert paling baru tampil paling atas.
+    items.sort((a, b) {
+      final at = a.screening.createdAt;
+      final bt = b.screening.createdAt;
+      if (at == null && bt == null) return 0;
+      if (at == null) return 1;
+      if (bt == null) return -1;
+      return bt.compareTo(at);
+    });
+    return items;
   }
 
   List<_PriorityItem> _reviewQueue(List<_ProfessionalPatient> patients) {
     final items = <_PriorityItem>[];
+    final seen = <String>{};
     for (final patient in patients) {
       for (final screening in patient.screenings.take(3)) {
         if (_reviewedScreeningIds.contains(screening.id)) continue;
+        // Dedupe: satu item per screening walau data pasien terduplikasi.
+        if (!seen.add(screening.id)) continue;
         items.add(
           _PriorityItem(
             patient: patient,
@@ -612,6 +634,15 @@ class _ProfessionalDashboardScreenState
         );
       }
     }
+    // Urutkan terbaru dulu.
+    items.sort((a, b) {
+      final at = a.screening.createdAt;
+      final bt = b.screening.createdAt;
+      if (at == null && bt == null) return 0;
+      if (at == null) return 1;
+      if (bt == null) return -1;
+      return bt.compareTo(at);
+    });
     return items;
   }
 
@@ -1252,6 +1283,9 @@ class _ProfessionalDashboardScreenState
         note: noteController.text.trim(),
       );
       if (!mounted) return;
+      // Tandai lokal agar baris langsung hilang dari antrean & metrik turun,
+      // tanpa perlu keluar dari layar. Refresh berikutnya menyelaraskan dgn server.
+      setState(() => _reviewedScreeningIds.add(screeningId));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Screening ditandai sebagai direview.'),

@@ -1687,6 +1687,21 @@ class MalvaApiClient {
         .toList(growable: false);
   }
 
+  /// Hapus PERMANEN satu jadwal mingguan milik profesional
+  /// (DELETE /v1/professional/schedules/{id}).
+  ///
+  /// Berbeda dengan [updateMySchedules] yang hanya menonaktifkan
+  /// (`is_active=false`) baris yang hilang dari payload, endpoint ini
+  /// benar-benar menghapus baris dari database. Server hanya boleh
+  /// menghapus baris milik pemanggil (ditegakkan lewat access token).
+  Future<void> deleteMySchedule({
+    required String accessToken,
+    required String id,
+  }) async {
+    await _send('DELETE', '/v1/professional/schedules/$id',
+        accessToken: accessToken);
+  }
+
   Future<List<BackendTimeOff>> listTimeOff({
     required String accessToken,
     String? professionalId,

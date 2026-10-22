@@ -13,6 +13,7 @@ import '../widgets/crisis_hotline.dart';
 import '../widgets/daily_checkin_flow.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/friendly_error.dart';
+import '../widgets/professional_avatar.dart';
 import '../widgets/sync_status.dart';
 import '../widgets/therapy_library.dart';
 import 'booking/doctor_discovery_screen.dart';
@@ -425,11 +426,10 @@ class _UpcomingSessionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
+              ProfessionalAvatar(
+                displayName: name,
                 radius: 22,
-                backgroundColor: MalvaColors.seed.withValues(alpha: 0.14),
-                child:
-                    const Icon(Icons.person_rounded, color: MalvaColors.seed),
+                photoUrl: session.photoIntroUrl,
               ),
               const SizedBox(width: 12),
               Expanded(

@@ -57,9 +57,11 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
       ]);
       if (!mounted) return;
       final record = results[0] as BackendHealthRecord;
-      final meds = (results[1] as List<BackendMedication>)
-          .where((m) => m.source.toLowerCase() != 'pasien')
-          .toList(growable: false);
+      // Tampilkan SEMUA obat aktif apa pun sumbernya ('Pasien' maupun
+      // 'Profesional'). Dulu obat yang ditambahkan pasien sendiri difilter
+      // keluar (source != 'pasien') sehingga tidak muncul di Health Record
+      // (mis. Lamictal dengan source 'Pasien').
+      final meds = results[1] as List<BackendMedication>;
       setState(() {
         _healthRecord = record;
         _medications = meds;
@@ -150,8 +152,8 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                           ),
                           SizedBox(height: 6),
                           Text(
-                            'Obat hanya dapat ditambahkan oleh profesional '
-                            'setelah sesi konsultasi & diagnosis.',
+                            'Tambahkan obat dari menu Medication agar '
+                            'muncul di sini.',
                             textAlign: TextAlign.center,
                           ),
                         ],
