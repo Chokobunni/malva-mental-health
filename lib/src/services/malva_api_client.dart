@@ -2006,6 +2006,47 @@ class MalvaApiClient {
         _expectMap(c, 'Respons kredensial tidak valid.'));
   }
 
+  /// Mengunggah berkas media (foto/video) ke server via POST /v1/upload.
+  /// Mengembalikan URL relatif yang bisa dipakai sebagai photo_intro_url atau
+  /// video_intro_url saat menyimpan kredensial profesional.
+  Future<String> uploadFile({
+    required String accessToken,
+    required String filePath,
+  }) async {
+    final uri = baseUri.replace(path: '/v1/upload');
+    final request = http.MultipartRequest('POST', uri)
+      ..headers['Authorization'] = 'Bearer $accessToken'
+      ..files.add(await http.MultipartFile.fromPath('file', filePath));
+
+    late final http.StreamedResponse streamed;
+    try {
+      streamed = await _httpClient.send(request).timeout(
+            const Duration(seconds: 60),
+          );
+    } on Object catch (e) {
+      throw MalvaApiException('Gagal mengunggah berkas: $e');
+    }
+
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      // Coba ekstrak pesan error dari respons JSON.
+      try {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final msg = body['error']?.toString() ?? 'Unggahan gagal (${response.statusCode}).';
+        throw MalvaApiException(msg);
+      } on Object {
+        throw MalvaApiException('Unggahan gagal (${response.statusCode}).');
+      }
+    }
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final url = body['url']?.toString();
+    if (url == null || url.isEmpty) {
+      throw const MalvaApiException('Server tidak mengembalikan URL unggahan.');
+    }
+    return url;
+  }
+
   // Direktori publik: token opsional agar bisa dijelajahi offline/tanpa login.
   Future<List<BackendDoctorSearchResult>> searchDoctors({
     String? accessToken,
@@ -2826,9 +2867,11 @@ class BackendHealthRecord {
     this.primaryProfessional = '',
     this.updatedAt,
     this.medicationCount = 0,
+    this.medications = const [],
   });
 
   factory BackendHealthRecord.fromJson(Map<String, dynamic> json) {
+    final medsList = json['medications'] as List?;
     return BackendHealthRecord(
       patientId: json['patient_id']?.toString() ?? '',
       diagnosisSummary: json['diagnosis_summary']?.toString() ?? '',
@@ -2836,6 +2879,11 @@ class BackendHealthRecord {
       primaryProfessional: json['primary_professional']?.toString() ?? '',
       updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? ''),
       medicationCount: (json['medication_count'] as num?)?.toInt() ?? 0,
+      medications: medsList
+              ?.whereType<Map<String, dynamic>>()
+              .map((e) => BackendHealthRecordMed.fromJson(e))
+              .toList(growable: false) ??
+          const [],
     );
   }
 
@@ -2845,6 +2893,35 @@ class BackendHealthRecord {
   final String primaryProfessional;
   final DateTime? updatedAt;
   final int medicationCount;
+  /// Daftar obat aktif pasien (diisi server sejak perbaikan Bug #5b).
+  final List<BackendHealthRecordMed> medications;
+}
+
+/// Item obat dalam respons health record (Bug #5b).
+class BackendHealthRecordMed {
+  const BackendHealthRecordMed({
+    required this.id,
+    required this.name,
+    required this.dosage,
+    required this.form,
+    this.source = '',
+  });
+
+  factory BackendHealthRecordMed.fromJson(Map<String, dynamic> json) {
+    return BackendHealthRecordMed(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      dosage: json['dosage']?.toString() ?? '',
+      form: json['form']?.toString() ?? '',
+      source: json['source']?.toString() ?? '',
+    );
+  }
+
+  final String id;
+  final String name;
+  final String dosage;
+  final String form;
+  final String source;
 }
 
 class BackendMedicationLog {

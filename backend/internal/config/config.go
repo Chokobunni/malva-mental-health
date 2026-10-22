@@ -32,6 +32,10 @@ type Config struct {
 	// "terkirim".
 	FonnteToken   string
 	FonnteBaseURL string
+	// Upload — konfigurasi unggah berkas (foto/video profil profesional).
+	UploadDir    string // direktori penyimpanan berkas unggahan
+	MaxImageSize int64  // batas ukuran gambar (byte)
+	MaxVideoSize int64  // batas ukuran video (byte)
 }
 
 // PaymentModeSimulation / PaymentModeGateway nilai valid MALVA_PAYMENT_MODE.
@@ -59,6 +63,9 @@ func Load() (Config, error) {
 		MidtransSnapBase:   strings.TrimRight(os.Getenv("MALVA_MIDTRANS_SNAP_BASE"), "/"),
 		FonnteToken:        strings.TrimSpace(os.Getenv("MALVA_FONNTE_TOKEN")),
 		FonnteBaseURL:      strings.TrimRight(getenv("MALVA_FONNTE_BASE_URL", "https://api.fonnte.com"), "/"),
+		UploadDir:          getenv("MALVA_UPLOAD_DIR", "./uploads"),
+		MaxImageSize:       5 << 20,  // 5 MB
+		MaxVideoSize:       20 << 20, // 20 MB
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("MALVA_DATABASE_URL is required")

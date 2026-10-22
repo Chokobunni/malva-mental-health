@@ -249,6 +249,10 @@ func (s *Server) Routes() http.Handler {
 	// Professional credentials + doctor discovery
 	mux.HandleFunc("POST /v1/credentials", s.requireAuth(s.uploadCredentials))
 	mux.HandleFunc("GET /v1/credentials/me", s.requireAuth(s.getMyCredentials))
+	// Unggah berkas media (foto/video profil profesional).
+	mux.HandleFunc("POST /v1/upload", s.requireAuth(s.uploadFile))
+	// Sajikan berkas unggahan secara statis.
+	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(s.cfg.UploadDir))))
 	// Katalog tes psikologi (read-only; kosong bila admin belum mengisi).
 	mux.HandleFunc("GET /v1/psych-tests", s.public(s.listPsychTests))
 	// Direktori profesional bersifat publik (read-only) agar pasien bisa

@@ -27,6 +27,7 @@ dependencies:
 
   path_provider: any
   google_sign_in: ^7.2.0
+  image_picker: ^1.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

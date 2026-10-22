@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
@@ -10,8 +13,8 @@ import '../widgets/malva_components.dart';
 
 // ============================================================
 // EDITOR PROFIL PROFESIONAL
-// Profesional mengatur: foto (URL), bio, sub-spesialisasi,
-// riwayat pendidikan, pengalaman, faskes, alamat.
+// Profesional mengatur: foto (upload galeri / URL / AI avatar), bio,
+// sub-spesialisasi, riwayat pendidikan, pengalaman, faskes, alamat.
 // Perubahan langsung terlihat di halaman "Profesional Info" pasien.
 // ============================================================
 
@@ -42,6 +45,12 @@ const _availableSpecialties = [
   ('parenting', 'Parenting'),
   ('grief', 'Grief / Duka'),
 ];
+
+/// Ekstensi gambar yang didukung untuk unggahan foto profil.
+const _allowedImageExtensions = {'.jpg', '.jpeg', '.png', '.webp'};
+
+/// Ekstensi video yang didukung untuk unggahan video perkenalan.
+const _allowedVideoExtensions = {'.mp4'};
 
 class ProfessionalProfileEditorScreen extends ConsumerStatefulWidget {
   const ProfessionalProfileEditorScreen({
@@ -78,6 +87,16 @@ class _ProfessionalProfileEditorScreenState
 
   Set<String> _selectedSpecialties = {};
   List<Map<String, dynamic>> _education = [];
+
+  // Status unggah media — true saat proses upload berlangsung.
+  bool _isUploadingPhoto = false;
+  bool _isUploadingVideo = false;
+
+  // Berkas lokal yang baru dipilih (untuk pratinjau sebelum/sesudah upload).
+  File? _localPhotoFile;
+  File? _localVideoFile;
+
+  final _imagePicker = ImagePicker();
 
   MalvaApiClient get _api => widget.apiClient ?? ref.read(apiClientProvider);
   String? get _token => widget.session?.accessToken;
@@ -187,6 +206,127 @@ class _ProfessionalProfileEditorScreenState
     }
   }
 
+  /// Memilih foto dari galeri lalu mengunggahnya ke server.
+  Future<void> _pickAndUploadPhoto() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      setState(() => _error = 'Login dulu untuk mengunggah foto.');
+      return;
+    }
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+
+      // Validasi ekstensi sisi klien.
+      final ext = '.' + picked.name.split('.').last.toLowerCase();
+      if (!_allowedImageExtensions.contains(ext)) {
+        setState(() => _error = 'Format foto tidak didukung. Gunakan JPEG, PNG, atau WebP.');
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _isUploadingPhoto = true;
+        _error = null;
+        _localPhotoFile = File(picked.path);
+      });
+
+      final url = await _api.uploadFile(
+        accessToken: token,
+        filePath: picked.path,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _photoUrlController.text = url;
+        _isUploadingPhoto = false;
+        _localPhotoFile = null; // bersihkan setelah berhasil
+      });
+    } on MalvaApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isUploadingPhoto = false;
+        _error = e.message;
+      });
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isUploadingPhoto = false;
+        _error = friendlyErrorMessage(e);
+      });
+    }
+  }
+
+  /// Memilih video dari galeri lalu mengunggahnya ke server.
+  Future<void> _pickAndUploadVideo() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      setState(() => _error = 'Login dulu untuk mengunggah video.');
+      return;
+    }
+    try {
+      final picked = await _imagePicker.pickVideo(source: ImageSource.gallery);
+      if (picked == null) return;
+
+      // Validasi ekstensi sisi klien.
+      final ext = '.' + picked.name.split('.').last.toLowerCase();
+      if (!_allowedVideoExtensions.contains(ext)) {
+        setState(() => _error = 'Format video tidak didukung. Gunakan MP4.');
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _isUploadingVideo = true;
+        _error = null;
+        _localVideoFile = File(picked.path);
+      });
+
+      final url = await _api.uploadFile(
+        accessToken: token,
+        filePath: picked.path,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _videoUrlController.text = url;
+        _isUploadingVideo = false;
+        _localVideoFile = null;
+      });
+    } on MalvaApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isUploadingVideo = false;
+        _error = e.message;
+      });
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isUploadingVideo = false;
+        _error = friendlyErrorMessage(e);
+      });
+    }
+  }
+
+  /// Menghasilkan avatar AI via DiceBear API menggunakan user ID sebagai seed.
+  void _generateAiAvatar() {
+    final userId = _cred?.userId ?? widget.session?.backendUserId ?? '';
+    if (userId.isEmpty) {
+      setState(() => _error = 'User ID tidak tersedia untuk menghasilkan avatar AI.');
+      return;
+    }
+    setState(() {
+      _photoUrlController.text =
+          'https://api.dicebear.com/9.x/notionists/svg?seed=$userId';
+      _localPhotoFile = null; // reset berkas lokal karena pakai URL eksternal
+    });
+  }
+
   void _addEducation() {
     setState(() {
       _education.add({'degree': '', 'school': '', 'year': DateTime.now().year});
@@ -248,55 +388,65 @@ class _ProfessionalProfileEditorScreenState
               : ListView(
                   padding: const EdgeInsets.all(18),
                   children: [
-                    // Foto profil URL
+                    // ── Foto Profil ──────────────────────────────────────
                     const SectionLabel('Foto Profil'),
                     SoftCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Pratinjau foto: berkas lokal > URL jaringan > kosong
+                          Center(
+                            child: _buildPhotoPreview(),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Tombol aksi: pilih dari galeri + generate AI avatar
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed:
+                                    _isUploadingPhoto ? null : _pickAndUploadPhoto,
+                                icon: _isUploadingPhoto
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.photo_library_rounded,
+                                        size: 18),
+                                label: Text(_isUploadingPhoto
+                                    ? 'Mengunggah...'
+                                    : 'Pilih dari Galeri'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: _generateAiAvatar,
+                                icon: const Icon(Icons.auto_awesome_rounded,
+                                    size: 18),
+                                label: const Text('Generate AI Avatar'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+
+                          // Fallback: URL manual masih bisa diketikkan.
                           TextField(
                             controller: _photoUrlController,
                             decoration: const InputDecoration(
-                              labelText: 'URL Foto Profil',
+                              labelText: 'URL Foto Profil (opsional)',
                               hintText:
-                                  'https://contoh.com/foto.jpg atau URL DiceBear',
+                                  'Paste URL foto atau biarkan kosong untuk AI avatar',
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Tips: gunakan https://api.dicebear.com/9.x/notionists/svg?seed=namaunik '
-                            'untuk avatar AI gratis, atau upload foto ke cloud storage dan paste URL-nya.',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
-                          ),
-                          if (_photoUrlController.text.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Center(
-                              child: ClipOval(
-                                child: Image.network(
-                                  _photoUrlController.text,
-                                  width: 80,
-                                  height: 80,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) =>
-                                      const CircleAvatar(
-                                    radius: 40,
-                                    child: Icon(Icons.broken_image_rounded),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     ),
                     const SizedBox(height: 14),
 
-                    // Bio / Overview
+                    // ── Bio / Overview ───────────────────────────────────
                     const SectionLabel('Bio / Overview'),
                     SoftCard(
                       child: TextField(
@@ -311,7 +461,7 @@ class _ProfessionalProfileEditorScreenState
                     ),
                     const SizedBox(height: 14),
 
-                    // Sub-spesialisasi
+                    // ── Sub-spesialisasi ─────────────────────────────────
                     const SectionLabel('Bidang Keahlian'),
                     SoftCard(
                       child: Wrap(
@@ -339,7 +489,7 @@ class _ProfessionalProfileEditorScreenState
                     ),
                     const SizedBox(height: 14),
 
-                    // Riwayat Pendidikan
+                    // ── Riwayat Pendidikan ───────────────────────────────
                     const SectionLabel('Riwayat Pendidikan'),
                     SoftCard(
                       child: Column(
@@ -371,7 +521,7 @@ class _ProfessionalProfileEditorScreenState
                     ),
                     const SizedBox(height: 14),
 
-                    // Pengalaman & Faskes
+                    // ── Pengalaman & Faskes ──────────────────────────────
                     const SectionLabel('Pengalaman & Faskes'),
                     SoftCard(
                       child: Column(
@@ -399,7 +549,7 @@ class _ProfessionalProfileEditorScreenState
                     ),
                     const SizedBox(height: 14),
 
-                    // Lisensi
+                    // ── Lisensi ──────────────────────────────────────────
                     const SectionLabel('Lisensi'),
                     SoftCard(
                       child: Column(
@@ -420,20 +570,71 @@ class _ProfessionalProfileEditorScreenState
                     ),
                     const SizedBox(height: 14),
 
-                    // Video intro URL
+                    // ── Video Perkenalan ─────────────────────────────────
                     const SectionLabel('Video Perkenalan'),
                     SoftCard(
-                      child: TextField(
-                        controller: _videoUrlController,
-                        decoration: const InputDecoration(
-                          labelText: 'URL Video Intro',
-                          hintText:
-                              'https://youtube.com/watch?v=... atau URL lain',
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Tombol pilih video dari galeri
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: _isUploadingVideo
+                                      ? null
+                                      : _pickAndUploadVideo,
+                                  icon: _isUploadingVideo
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2),
+                                        )
+                                      : const Icon(
+                                          Icons.video_library_rounded,
+                                          size: 18),
+                                  label: Text(_isUploadingVideo
+                                      ? 'Mengunggah video...'
+                                      : 'Pilih Video dari Galeri'),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          // URL fallback
+                          TextField(
+                            controller: _videoUrlController,
+                            decoration: const InputDecoration(
+                              labelText: 'URL Video Intro (opsional)',
+                              hintText:
+                                  'https://youtube.com/watch?v=... atau URL lain',
+                            ),
+                          ),
+                          // Pratinjau thumbnail video lokal
+                          if (_localVideoFile != null) ...[
+                            const SizedBox(height: 8),
+                            Center(
+                              child: Container(
+                                width: 120,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  color: MalvaColors.seed.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Center(
+                                  child: Icon(Icons.videocam_rounded,
+                                      size: 32, color: MalvaColors.seed),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     const SizedBox(height: 14),
 
+                    // ── Error & Save ─────────────────────────────────────
                     if (_error != null) ...[
                       Text(_error!,
                           style: const TextStyle(
@@ -456,6 +657,84 @@ class _ProfessionalProfileEditorScreenState
                     const SizedBox(height: 24),
                   ],
                 ),
+    );
+  }
+
+  /// Membangun widget pratinjau foto profil.
+  /// Prioritas: berkas lokal yang sedang di-upload > URL jaringan > placeholder.
+  Widget _buildPhotoPreview() {
+    // Sedang mengunggah — tampilkan indikator loading.
+    if (_isUploadingPhoto) {
+      return Container(
+        width: 100,
+        height: 100,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: MalvaColors.seed.withValues(alpha: 0.1),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    // Berkas lokal yang baru dipilih (sebelum/sesudah upload).
+    if (_localPhotoFile != null) {
+      return ClipOval(
+        child: Image.file(
+          _localPhotoFile!,
+          width: 100,
+          height: 100,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _photoPlaceholder(),
+        ),
+      );
+    }
+
+    // URL jaringan (dari server atau DiceBear).
+    final url = _photoUrlController.text.trim();
+    if (url.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          url,
+          width: 100,
+          height: 100,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _photoPlaceholder(),
+          loadingBuilder: (_, child, progress) {
+            if (progress == null) return child;
+            return Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: MalvaColors.seed.withValues(alpha: 0.1),
+              ),
+              child: const Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    return _photoPlaceholder();
+  }
+
+  /// Placeholder ketika belum ada foto.
+  Widget _photoPlaceholder() {
+    return Container(
+      width: 100,
+      height: 100,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: MalvaColors.seed.withValues(alpha: 0.1),
+      ),
+      child: const Center(
+        child: Icon(Icons.person_outline_rounded,
+            size: 40, color: MalvaColors.seed),
+      ),
     );
   }
 }
