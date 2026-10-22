@@ -19,23 +19,23 @@ import (
 // HealthRecord adalah ringkasan klinis pasien yang dapat dibaca pasien
 // dan profesionalnya.
 type HealthRecord struct {
-	PatientID           string              `json:"patient_id"`
-	DiagnosisSummary    string              `json:"diagnosis_summary"`
-	PrimaryProfessional string              `json:"primary_professional,omitempty"`
-	UpdatedAt           *time.Time          `json:"updated_at,omitempty"`
-	UpdatedBy           *string             `json:"updated_by,omitempty"`
-	HasDiagnosis        bool                `json:"has_diagnosis"`
-	MedicationCount     int                 `json:"medication_count"`
-	Medications         []HealthRecordMed   `json:"medications,omitempty"`
+	PatientID           string            `json:"patient_id"`
+	DiagnosisSummary    string            `json:"diagnosis_summary"`
+	PrimaryProfessional string            `json:"primary_professional,omitempty"`
+	UpdatedAt           *time.Time        `json:"updated_at,omitempty"`
+	UpdatedBy           *string           `json:"updated_by,omitempty"`
+	HasDiagnosis        bool              `json:"has_diagnosis"`
+	MedicationCount     int               `json:"medication_count"`
+	Medications         []HealthRecordMed `json:"medications,omitempty"`
 }
 
 // HealthRecordMed obat aktif pasien untuk ditampilkan di health record.
 type HealthRecordMed struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Dosage  string `json:"dosage"`
-	Form    string `json:"form"`
-	Source  string `json:"source,omitempty"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Dosage string `json:"dosage"`
+	Form   string `json:"form"`
+	Source string `json:"source,omitempty"`
 }
 
 // GetHealthRecord membaca ringkasan diagnosis + hitungan obat aktif pasien.

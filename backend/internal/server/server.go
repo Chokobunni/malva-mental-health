@@ -290,6 +290,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PUT /v1/professional/pricing", s.requireAuth(s.updatePricing))
 	mux.HandleFunc("GET /v1/professional/schedules", s.requireAuth(s.listMySchedules))
 	mux.HandleFunc("PUT /v1/professional/schedules", s.requireAuth(s.updateMySchedules))
+	// Hapus permanen satu baris jadwal (beda dari PUT yang hanya menonaktifkan).
+	mux.HandleFunc("DELETE /v1/professional/schedules/{id}", s.requireAuth(s.deleteMySchedule))
 	mux.HandleFunc("GET /v1/doctors/{user_id}/reviews", s.public(s.listDoctorReviews))
 	mux.HandleFunc("POST /v1/doctors/{user_id}/reviews", s.requireAuth(s.createDoctorReview))
 	mux.HandleFunc("GET /v1/earnings", s.requireAuth(s.earningsSummary))

@@ -876,9 +876,16 @@ func rxItemsFromRequest(items []eRxItemRequest) []store.EPrescriptionItem {
 		out[i] = store.EPrescriptionItem{
 			MedicationID: item.MedicationID,
 			Name:         item.Name,
-			Frequency:    item.Frequency,
-			Days:         item.Days,
-			UnitsPerDay:  item.UnitsPerDay,
+			// Dosage WAJIB dipetakan: dulu field ini terbuang diam-diam sehingga
+			// e_prescription_items.dosage selalu tersimpan kosong. Dampaknya
+			// nyata — obat hasil resep yang disalin ke tabel `medications`
+			// (lihat store.syncPrescriptionItemsToMedications) tampil dengan
+			// dosis default "0 mg" di rekam medis & daily check-in pasien,
+			// dan semua resep dengan nama obat sama saling menimpa saat dedup.
+			Dosage:      item.Dosage,
+			Frequency:   item.Frequency,
+			Days:        item.Days,
+			UnitsPerDay: item.UnitsPerDay,
 		}
 		if item.UnitsPerDay <= 0 {
 			out[i].UnitsPerDay = 1

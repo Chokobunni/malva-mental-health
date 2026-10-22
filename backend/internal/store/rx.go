@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 )
@@ -74,7 +75,63 @@ func (s *Store) CreateEPrescription(ctx context.Context, rx EPrescription, items
 	}
 	_ = s.AddAuditLog(ctx, rx.ProfessionalID, rx.PatientID, "eprescription.issued", "e_prescriptions", rx.ID,
 		map[string]any{"items_count": len(items)})
+	// Sinkronkan item resep ke tabel `medications` milik pasien.
+	//
+	// Dulu item resep hanya masuk ke `e_prescription_items`, sementara rekam
+	// medis pasien (GET /v1/medications, GET /v1/health-record) membaca tabel
+	// `medications`. Akibatnya obat yang diresepkan (mis. Lamictal) tidak
+	// pernah muncul di rekam medis maupun pemilih obat pada daily check-in.
+	//
+	// Sinkronisasi ini BEST-EFFORT: dijalankan SETELAH commit dan kegagalannya
+	// hanya dicatat sebagai warning. Resep yang sudah sah tidak boleh batal
+	// hanya karena pencatatan obat gagal.
+	s.syncPrescriptionItemsToMedications(ctx, rx.PatientID, items)
 	return rx, nil
+}
+
+// syncPrescriptionItemsToMedications menyalin item e-resep ke tabel
+// `medications` pasien agar tampil di rekam medis & pemilih obat check-in.
+//
+// Aturan:
+//   - Idempoten: item dilewati bila sudah ada obat AKTIF dengan nama
+//     (case-insensitive) dan dosis yang sama untuk pasien tersebut.
+//   - `source` diisi 'prescription' agar bisa dibedakan dari input pasien.
+//   - `form` & `dosage` wajib NOT NULL di skema, jadi dipakai nilai default
+//     yang sama dengan UpsertMedication bila item resep mengosongkannya.
+//   - Semua kegagalan hanya di-log (best-effort), tidak mengembalikan error.
+func (s *Store) syncPrescriptionItemsToMedications(ctx context.Context, patientID string, items []EPrescriptionItem) {
+	if strings.TrimSpace(patientID) == "" || len(items) == 0 {
+		return
+	}
+	for _, item := range items {
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			continue
+		}
+		dosage := strings.TrimSpace(item.Dosage)
+		if dosage == "" {
+			dosage = "0 mg"
+		}
+		form := strings.TrimSpace(item.Form)
+		if form == "" {
+			form = "Tablet"
+		}
+		// Satu statement per item: insert hanya bila belum ada obat aktif
+		// dengan nama (case-insensitive) + dosis yang sama.
+		const q = `INSERT INTO medications
+			(patient_id, name, dosage, form, reminder_time, relation_to_meal,
+			 current_stock, alert_below, source, active)
+			SELECT $1, $2, $3, $4, '', '', 0, 0, 'prescription', true
+			WHERE NOT EXISTS (
+				SELECT 1 FROM medications
+				WHERE patient_id = $1 AND active
+				  AND lower(name) = lower($2) AND dosage = $3
+			)`
+		if _, err := s.db.ExecContext(ctx, q, patientID, name, dosage, form); err != nil {
+			slog.Warn("sinkronisasi obat dari e-resep gagal",
+				"error", err, "patient", patientID, "medication", name)
+		}
+	}
 }
 
 func (s *Store) GetEPrescriptionByQR(ctx context.Context, qrToken string) (EPrescriptionFull, error) {

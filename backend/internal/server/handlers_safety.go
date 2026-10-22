@@ -480,9 +480,23 @@ func (s *Server) uploadCredentials(w http.ResponseWriter, r *http.Request, claim
 	// Pertahankan harga & pengalaman yang diset admin agar tidak ter-nol-kan
 	// saat profesional memperbarui kredensialnya sendiri.
 	yearsExperience, priceFrom := 0, int64(0)
-	if existing, err := s.store.GetProfessionalCredential(r.Context(), claims.Subject); err == nil {
-		yearsExperience, priceFrom = existing.YearsExperience, existing.PriceFrom
+	var existing store.ProfessionalCredential
+	hasExisting := false
+	if cur, err := s.store.GetProfessionalCredential(r.Context(), claims.Subject); err == nil {
+		existing = cur
+		hasExisting = true
+		yearsExperience, priceFrom = cur.YearsExperience, cur.PriceFrom
 	}
+	// Profesional yang sebelumnya DITOLAK lalu memperbaiki STR/SIP/SIPP/dokumen
+	// perlu masuk kembali ke antrean review admin. Status VERIFIED sengaja
+	// TIDAK PERNAH di-reset di sini — lihat catatan pada
+	// UpsertProfessionalCredential: reset status adalah akar bug hilangnya
+	// profesional dari daftar pasien.
+	needsReview := hasExisting && existing.VerificationStatus == "REJECTED" &&
+		(strings.TrimSpace(req.STRNumber) != existing.STRNumber ||
+			strings.TrimSpace(req.SIPNumber) != existing.SIPNumber ||
+			strings.TrimSpace(req.SIPPNumber) != existing.SIPPNumber ||
+			strings.TrimSpace(req.DocumentURL) != existing.DocumentURL)
 	cred, err := s.store.UpsertProfessionalCredential(r.Context(), store.ProfessionalCredential{
 		UserID:          claims.Subject,
 		STRNumber:       req.STRNumber,
@@ -506,6 +520,14 @@ func (s *Server) uploadCredentials(w http.ResponseWriter, r *http.Request, claim
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
+	}
+	// Bila STR/SIP/SIPP/dokumen diperbaiki setelah ditolak, buka kembali review.
+	if needsReview {
+		if err := s.store.ReopenCredentialReview(r.Context(), claims.Subject); err != nil {
+			s.logger.Warn("gagal membuka ulang review kredensial", "error", err, "user", claims.Subject)
+		} else if refreshed, gerr := s.store.GetProfessionalCredential(r.Context(), claims.Subject); gerr == nil {
+			cred = refreshed
+		}
 	}
 	// Siarkan perubahan profil (foto/video intro) ke pasien terhubung agar
 	// tampilan di sisi pasien ikut terbarui tanpa refresh manual.
@@ -898,6 +920,34 @@ func (s *Server) updateMySchedules(w http.ResponseWriter, r *http.Request, claim
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"schedules": updated})
+}
+
+// deleteMySchedule menghapus PERMANEN satu jadwal mingguan milik profesional
+// yang sedang login (DELETE /v1/professional/schedules/{id}).
+//
+// Berbeda dengan updateMySchedules yang hanya menonaktifkan (is_active=false),
+// endpoint ini benar-benar menghapus baris sehingga tidak lagi tampil sebagai
+// "Nonaktif". Kepemilikan diverifikasi di lapisan store lewat filter
+// professional_id, sehingga jadwal milik profesional lain menghasilkan 404.
+func (s *Server) deleteMySchedule(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "professional" {
+		writeError(w, http.StatusForbidden, errors.New("only professionals can delete own schedules"))
+		return
+	}
+	scheduleID := strings.TrimSpace(r.PathValue("id"))
+	if scheduleID == "" {
+		writeError(w, http.StatusBadRequest, errors.New("id jadwal wajib diisi"))
+		return
+	}
+	if err := s.store.DeleteProfessionalSchedule(r.Context(), claims.Subject, scheduleID); err != nil {
+		if errors.Is(err, store.ErrScheduleNotFound) {
+			writeError(w, http.StatusNotFound, errors.New("jadwal tidak ditemukan"))
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "id": scheduleID})
 }
 
 type doctorReviewRequest struct {

@@ -448,7 +448,9 @@ func (s *Server) updateAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 	if req.Credentials.PriceFrom > 0 {
 		merged.PriceFrom = req.Credentials.PriceFrom
 	}
-	// Upsert selalu mengembalikan ke PENDING -> verifikasi ulang otomatis.
+	// Upsert tidak lagi mengubah status verifikasi (lihat
+	// UpsertProfessionalCredential), jadi admin menyetel ulang secara eksplisit
+	// agar dokter hasil edit admin tetap tampil di direktori.
 	cred, err := s.store.UpsertProfessionalCredential(r.Context(), merged)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)

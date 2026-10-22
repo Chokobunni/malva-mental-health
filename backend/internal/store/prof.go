@@ -101,6 +101,24 @@ func pgTextArray(values []string) string {
 	return "{" + strings.Join(quoted, ",") + "}"
 }
 
+// UpsertProfessionalCredential menyimpan (update atau insert) kredensial
+// profesional milik satu user.
+//
+// PENTING — STATUS VERIFIKASI TIDAK BOLEH DI-RESET:
+// fungsi ini dipakai bersama oleh tiga jalur berbeda: (1) self-service
+// profesional (unggah/ganti foto profil, video intro, bio, STR/SIP),
+// (2) pendaftaran akun profesional baru, dan (3) panel admin. Sebelumnya
+// klausa UPDATE selalu menulis `verification_status='PENDING', verified_at=NULL`.
+// Akibatnya setiap penyimpanan profil — termasuk sekadar mengganti foto —
+// menurunkan profesional yang sudah VERIFIED kembali ke PENDING, sehingga
+// mereka hilang dari daftar "Cari Profesional" sisi pasien karena
+// SearchDoctors memfilter `verification_status = 'VERIFIED'`.
+//
+// Karena itu UPDATE di bawah ini sengaja TIDAK menyentuh verification_status
+// maupun verified_at: perubahan status hanya boleh lewat
+// VerifyProfessionalCredential (aksi admin eksplisit). Jalur INSERT tetap
+// menulis 'PENDING' karena profesional baru memang wajib menunggu persetujuan
+// admin sebelum tampil di direktori.
 func (s *Store) UpsertProfessionalCredential(ctx context.Context, c ProfessionalCredential) (ProfessionalCredential, error) {
 	// Avatar default otomatis: bila PhotoIntroURL kosong, gunakan DiceBear API
 	// agar setiap profesional punya avatar meskipun belum mengunggah foto.
@@ -115,12 +133,13 @@ func (s *Store) UpsertProfessionalCredential(ctx context.Context, c Professional
 		}
 	}
 	// UPDATE dulu; bila 0 baris, INSERT (hindari ON CONFLICT tanpa unique constraint).
+	// CATATAN: verification_status & verified_at sengaja TIDAK diikutkan di sini
+	// agar penyimpanan profil mandiri tidak mencabut status VERIFIED.
 	const upd = `UPDATE professional_credentials SET
 		str_number=$2, sip_number=$3, sipp_number=$4, specialization=$5, sub_specialties=$6,
 		hospital_lat=$7, hospital_lng=$8, hospital_name=$9, address_details=$10, is_bpjs_supported=$11,
 		photo_intro_url=$12, video_intro_url=$13, bio=$14, education=$15::jsonb, document_url=$16,
-		years_experience=$17, price_from=$18,
-		verification_status='PENDING', verified_at=NULL
+		years_experience=$17, price_from=$18
 		WHERE user_id = $1`
 	res, err := s.db.ExecContext(ctx, upd, c.UserID, c.STRNumber, c.SIPNumber, c.SIPPNumber, c.Specialization, sub,
 		c.HospitalLat, c.HospitalLng, c.HospitalName, c.AddressDetails, c.IsBPJSSupported,
@@ -148,6 +167,23 @@ func (s *Store) UpsertProfessionalCredential(ctx context.Context, c Professional
 	_ = s.AddAuditLog(ctx, c.UserID, c.UserID, "credentials.uploaded", "professional_credentials", out.ID,
 		map[string]any{"spec": c.Specialization})
 	return out, nil
+}
+
+// ReopenCredentialReview mengembalikan kredensial berstatus REJECTED ke PENDING
+// agar masuk kembali ke antrean review admin (ListPendingCredentials) setelah
+// profesional memperbaiki STR/SIP/SIPP/dokumen yang ditolak.
+//
+// Guard `verification_status = 'REJECTED'` membuat fungsi ini TIDAK PERNAH
+// menyentuh kredensial VERIFIED — itulah inti bug yang sedang diperbaiki:
+// status terverifikasi tidak boleh dicabut oleh penyimpanan profil mandiri.
+func (s *Store) ReopenCredentialReview(ctx context.Context, userID string) error {
+	if strings.TrimSpace(userID) == "" {
+		return errors.New("user_id is required")
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE professional_credentials
+		SET verification_status = 'PENDING', verified_at = NULL, rejection_reason = NULL
+		WHERE user_id = $1 AND verification_status = 'REJECTED'`, userID)
+	return err
 }
 
 func (s *Store) GetProfessionalCredential(ctx context.Context, userID string) (ProfessionalCredential, error) {
@@ -512,6 +548,40 @@ func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, sche
 		}
 	}
 	return tx.Commit()
+}
+
+// ErrScheduleNotFound dikembalikan bila jadwal yang ingin dihapus tidak ada
+// atau bukan milik profesional yang sedang login.
+var ErrScheduleNotFound = errors.New("schedule not found")
+
+// DeleteProfessionalSchedule menghapus PERMANEN satu baris jadwal mingguan
+// milik profesional tertentu.
+//
+// Bedanya dengan UpsertSchedules (yang hanya menonaktifkan baris yang hilang
+// dari payload lewat is_active=false): fungsi ini benar-benar menjalankan
+// DELETE sehingga baris hilang dari daftar. Keduanya dipakai berdampingan —
+// tombol "Nonaktifkan" memakai PUT, tombol "Hapus" memakai DELETE.
+//
+// Filter professional_id = $2 wajib ada agar profesional tidak bisa menghapus
+// jadwal milik profesional lain (IDOR). Bila 0 baris terpengaruh, berarti
+// jadwal tidak ada atau bukan miliknya — keduanya dipetakan ke
+// ErrScheduleNotFound (handler menerjemahkannya menjadi 404).
+func (s *Store) DeleteProfessionalSchedule(ctx context.Context, professionalID, scheduleID string) error {
+	if strings.TrimSpace(professionalID) == "" || strings.TrimSpace(scheduleID) == "" {
+		return ErrScheduleNotFound
+	}
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM professional_schedules WHERE id = $1 AND professional_id = $2`,
+		scheduleID, professionalID)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return ErrScheduleNotFound
+	}
+	_ = s.AddAuditLog(ctx, professionalID, professionalID, "schedule.deleted", "professional_schedules", scheduleID, nil)
+	return nil
 }
 
 // Service packages
