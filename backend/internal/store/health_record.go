@@ -19,13 +19,23 @@ import (
 // HealthRecord adalah ringkasan klinis pasien yang dapat dibaca pasien
 // dan profesionalnya.
 type HealthRecord struct {
-	PatientID           string     `json:"patient_id"`
-	DiagnosisSummary    string     `json:"diagnosis_summary"`
-	PrimaryProfessional string     `json:"primary_professional,omitempty"`
-	UpdatedAt           *time.Time `json:"updated_at,omitempty"`
-	UpdatedBy           *string    `json:"updated_by,omitempty"`
-	HasDiagnosis        bool       `json:"has_diagnosis"`
-	MedicationCount     int        `json:"medication_count"`
+	PatientID           string              `json:"patient_id"`
+	DiagnosisSummary    string              `json:"diagnosis_summary"`
+	PrimaryProfessional string              `json:"primary_professional,omitempty"`
+	UpdatedAt           *time.Time          `json:"updated_at,omitempty"`
+	UpdatedBy           *string             `json:"updated_by,omitempty"`
+	HasDiagnosis        bool                `json:"has_diagnosis"`
+	MedicationCount     int                 `json:"medication_count"`
+	Medications         []HealthRecordMed   `json:"medications,omitempty"`
+}
+
+// HealthRecordMed obat aktif pasien untuk ditampilkan di health record.
+type HealthRecordMed struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Dosage  string `json:"dosage"`
+	Form    string `json:"form"`
+	Source  string `json:"source,omitempty"`
 }
 
 // GetHealthRecord membaca ringkasan diagnosis + hitungan obat aktif pasien.
@@ -96,6 +106,25 @@ func (s *Store) GetHealthRecord(ctx context.Context, patientID string) (HealthRe
 	_ = s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM medications WHERE patient_id = $1 AND active
 	`, patientID).Scan(&rec.MedicationCount)
+
+	// PERBAIKAN BUG #5b: Sertakan daftar obat aktif (bukan hanya jumlah)
+	// agar pasien dan profesional bisa melihat detail obat di health record.
+	rows, merr := s.db.QueryContext(ctx, `
+		SELECT id, name, COALESCE(dosage,''), COALESCE(form,''), COALESCE(source,'')
+		FROM medications
+		WHERE patient_id = $1 AND active
+		ORDER BY name ASC
+		LIMIT 50
+	`, patientID)
+	if merr == nil {
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var med HealthRecordMed
+			if err := rows.Scan(&med.ID, &med.Name, &med.Dosage, &med.Form, &med.Source); err == nil {
+				rec.Medications = append(rec.Medications, med)
+			}
+		}
+	}
 
 	return rec, nil
 }

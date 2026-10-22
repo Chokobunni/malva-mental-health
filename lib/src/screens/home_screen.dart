@@ -89,6 +89,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _refreshAll() async {
     await _loadUpcomingSession();
+    // Segarkan riwayat check-in dan obat dari server saat pull-to-refresh.
+    final notifier = ref.read(malvaStoreProvider.notifier);
+    await Future.wait([
+      notifier.loadCheckinHistory().catchError((_) {}),
+      notifier.loadMedications().catchError((_) {}),
+    ]);
   }
 
   Future<void> _loadUpcomingSession() async {

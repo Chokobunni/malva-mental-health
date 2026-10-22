@@ -753,7 +753,12 @@ func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, c
 				if err != nil {
 					continue
 				}
-				if !slotTime.After(nowWIB.Add(24 * time.Hour)) {
+				// PERBAIKAN BUG #4: filter 24 jam dipindahkan ke validateSlot
+				// (saat booking). Endpoint ketersediaan harus menampilkan SEMUA
+				// slot agar pasien melihat jadwal yang baru ditambahkan profesional.
+				// Sebelumnya slot dalam 24 jam disembunyikan sehingga jadwal hari
+				// ini tampak kosong di sisi pasien meskipun aktif di sisi profesional.
+				if !slotTime.After(nowWIB) {
 					continue
 				}
 				candidates[i] = append(candidates[i], slotTime)

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../assessment_engine.dart';
@@ -157,6 +158,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   /// Reset seluruh data akun ke kondisi fresh (kosong). Dipanggil saat
   /// login akun baru & logout agar data akun sebelumnya tidak bocor.
   void resetForAccount() {
+    __lastAccessToken = null;
     state = _seededState();
   }
 
@@ -174,9 +176,118 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         diagnosisSummary: '',
       ),
     );
+    // Simpan token akses untuk pemuatan data server nanti.
+    __lastAccessToken = session.accessToken;
     // Muat riwayat asesmen lokal akun ini (fire-and-forget).
     loadAndSaveAssessmentsAsync();
+    // Muat riwayat check-in dan obat dari server agar tidak hilang
+    // setelah logout/login atau ganti perangkat (Bug #5a & #5b).
+    _loadServerDataAsync(session);
   }
+
+  /// Muat data dari server secara paralel setelah login (non-blocking).
+  /// Kegagalan satu panggilan tidak menghalangi panggilan lain.
+  Future<void> _loadServerDataAsync(AuthSession session) async {
+    final api = _apiClient;
+    final token = session.accessToken;
+    if (api == null || token == null || token.isEmpty) return;
+
+    // Jalankan kedua pemuatan secara paralel.
+    await Future.wait([
+      loadCheckinHistory(api, token).catchError((_) {}),
+      loadMedications(api, token).catchError((_) {}),
+    ]);
+  }
+
+  /// Muat riwayat check-in (mood) dari server dan isi store.
+  /// Dipanggil saat login agar riwayat tidak hilang setelah logout/login.
+  Future<void> loadCheckinHistory([
+    MalvaApiClient? apiOverride,
+    String? tokenOverride,
+  ]) async {
+    final api = apiOverride ?? _apiClient;
+    if (api == null) return;
+    final token = tokenOverride ?? _currentAccessToken;
+    if (token == null || token.isEmpty) return;
+    try {
+      final moods = await api.listMoodCheckins(
+        accessToken: token,
+        limit: 30,
+      );
+      // Konversi BackendMoodCheckin → MoodEntry untuk store lokal.
+      final entries = moods
+          .where((m) => m.occurredAt != null)
+          .map((m) => MoodEntry(
+                date: m.occurredAt!,
+                mood: _parseMoodValue(m.mood),
+                sleepHours: m.sleepHours,
+                energy: m.energy,
+                anxiety: m.anxiety,
+                irritability: m.irritability,
+                note: m.note,
+              ))
+          .toList();
+      replaceMoodEntries(entries);
+    } on Object {
+      // Gagal memuat (offline/server error): jangan halangi UI.
+    }
+  }
+
+  /// Muat daftar obat dari server dan isi store.
+  /// Dipanggil saat login agar obat dari resep muncul di daily check-in.
+  Future<void> loadMedications([
+    MalvaApiClient? apiOverride,
+    String? tokenOverride,
+  ]) async {
+    final api = apiOverride ?? _apiClient;
+    if (api == null) return;
+    final token = tokenOverride ?? _currentAccessToken;
+    if (token == null || token.isEmpty) return;
+    try {
+      final meds = await api.listMedications(
+        accessToken: token,
+        limit: 50,
+      );
+      // Konversi BackendMedication → Medication untuk store lokal.
+      final medications = meds.map((m) {
+        // Parse reminder_time menjadi MedicationReminder.
+        final reminders = <MedicationReminder>[];
+        if (m.reminderTime.isNotEmpty) {
+          final parts = m.reminderTime.split(':');
+          if (parts.length >= 2) {
+            final hour = int.tryParse(parts[0]) ?? 8;
+            final minute = int.tryParse(parts[1]) ?? 0;
+            reminders.add(MedicationReminder(
+              time: TimeOfDay(hour: hour, minute: minute),
+              relationToMeal: '',
+            ));
+          }
+        }
+        return Medication(
+          id: m.id,
+          name: m.name,
+          dosage: m.dosage,
+          form: m.form,
+          reminders: reminders,
+          currentStock: m.currentStock,
+          alertBelow: m.alertBelow,
+          source: m.source,
+        );
+      }).toList();
+      replaceMedications(medications);
+    } on Object {
+      // Gagal memuat (offline/server error): jangan halangi UI.
+    }
+  }
+
+  /// Token akses terakhir yang diketahui (di-set saat applySession).
+  String? get _currentAccessToken {
+    // Ambil dari sesi yang tersimpan di secure storage secara sinkron
+    // tidak mungkin, jadi kita simpan referensi saat applySession.
+    return __lastAccessToken;
+  }
+
+  String? __lastAccessToken;
 
   /// Perbarui nama pasien di store (dipakai setelah profil dimuat server).
   void setPatientIdentity({String? name, String? primaryProfessional}) {
@@ -822,6 +933,22 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       uploaded: uploaded,
       error: uploadError,
     );
+  }
+
+  // ============================================================
+  // HELPERS
+  // ============================================================
+
+  /// Parse string mood dari server menjadi MoodValue enum.
+  static MoodValue _parseMoodValue(String raw) {
+    final v = raw.trim().toLowerCase();
+    return switch (v) {
+      'great' => MoodValue.great,
+      'good' => MoodValue.good,
+      'sad' => MoodValue.sad,
+      'awful' => MoodValue.awful,
+      _ => MoodValue.okay,
+    };
   }
 
   // ============================================================

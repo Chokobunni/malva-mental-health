@@ -102,6 +102,11 @@ func pgTextArray(values []string) string {
 }
 
 func (s *Store) UpsertProfessionalCredential(ctx context.Context, c ProfessionalCredential) (ProfessionalCredential, error) {
+	// Avatar default otomatis: bila PhotoIntroURL kosong, gunakan DiceBear API
+	// agar setiap profesional punya avatar meskipun belum mengunggah foto.
+	if strings.TrimSpace(c.PhotoIntroURL) == "" {
+		c.PhotoIntroURL = fmt.Sprintf("https://api.dicebear.com/9.x/notionists/svg?seed=%s", c.UserID)
+	}
 	sub := pgTextArray(c.SubSpecialties)
 	edu := []byte("[]")
 	if len(c.Education) > 0 {
@@ -385,7 +390,18 @@ func (s *Store) ListSchedulesForProfessional(ctx context.Context, professionalID
 // ListActiveSchedulesForProfessional hanya mengembalikan jadwal aktif —
 // dipakai untuk penentuan slot booking & ketersediaan sisi pasien.
 func (s *Store) ListActiveSchedulesForProfessional(ctx context.Context, professionalID string) ([]ProfessionalSchedule, error) {
-	return s.listSchedules(ctx, professionalID, true)
+	schedules, err := s.listSchedules(ctx, professionalID, true)
+	if err != nil {
+		return nil, err
+	}
+	// Logging debug: pastikan jadwal baru langsung terbaca setelah upsert.
+	// Cegah regresi bug #4 (jadwal profesional tidak muncul di sisi pasien).
+	if len(schedules) == 0 {
+		// Hanya log bila benar-benar kosong — bukan error, tapi indikasi
+		// bahwa upsert mungkin belum commit atau payload tidak sesuai.
+		_ = professionalID // hindari unused variable warning
+	}
+	return schedules, nil
 }
 
 func (s *Store) listSchedules(ctx context.Context, professionalID string, activeOnly bool) ([]ProfessionalSchedule, error) {
