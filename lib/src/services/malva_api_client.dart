@@ -2044,6 +2044,11 @@ class MalvaApiClient {
     if (url == null || url.isEmpty) {
       throw const MalvaApiException('Server tidak mengembalikan URL unggahan.');
     }
+    // Konversi URL relatif menjadi absolut agar bisa diakses dari mana saja.
+    // Server mengembalikan path seperti "/uploads/user123/file.jpg".
+    if (url.startsWith('/')) {
+      return '${baseUri.origin}$url';
+    }
     return url;
   }
 

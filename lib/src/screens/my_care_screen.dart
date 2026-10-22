@@ -130,7 +130,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
             if (_isLoading)
               const Center(child: CircularProgressIndicator())
             else if (_error != null)
-              SoftCard(
+              SoftCard(bordered: true, 
                 child: Column(
                   children: [
                     Text(_error!,
@@ -345,7 +345,7 @@ class _PackageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final expires = package.expiresDateTime?.toLocal();
-    return SoftCard(
+    return SoftCard(bordered: true, 
       onTap: onOpen,
       color: MalvaColors.mint.withValues(alpha: 0.08),
       child: Column(
@@ -449,7 +449,7 @@ class _SessionCard extends StatelessWidget {
       'cancelled_by_patient' => 'Dibatalkan',
       _ => session.status,
     };
-    return SoftCard(
+    return SoftCard(bordered: true, 
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -567,7 +567,7 @@ class _ProfessionalLinkCard extends StatelessWidget {
         : pkg.isActive
             ? 'Paket aktif: ${pkg.remainingSessions}/${pkg.totalSessions} sesi'
             : 'Paket ${pkg.status}: ${pkg.usedSessions}/${pkg.totalSessions} terpakai';
-    return SoftCard(
+    return SoftCard(bordered: true, 
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

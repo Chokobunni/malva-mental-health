@@ -172,16 +172,16 @@ class SoftCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final radiusBorder = BorderRadius.circular(radius);
 
-    // Mode bordered: paksa putih, abaikan accent/tone, tambah border abu.
+    // Mode bordered: paksa putih, abaikan accent/tone, tambah border hitam.
     if (bordered) {
       final body = Padding(padding: padding, child: child);
       final card = Card(
         color: Colors.white,
         clipBehavior: Clip.none,
-        elevation: 1,
+        elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: radiusBorder,
-          side: BorderSide(color: Colors.grey.shade300, width: 1),
+          side: const BorderSide(color: Colors.black, width: 1),
         ),
         child: body,
       );

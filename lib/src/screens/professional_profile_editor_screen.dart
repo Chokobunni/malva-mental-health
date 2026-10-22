@@ -430,17 +430,6 @@ class _ProfessionalProfileEditorScreenState
                               ),
                             ],
                           ),
-                          const SizedBox(height: 10),
-
-                          // Fallback: URL manual masih bisa diketikkan.
-                          TextField(
-                            controller: _photoUrlController,
-                            decoration: const InputDecoration(
-                              labelText: 'URL Foto Profil (opsional)',
-                              hintText:
-                                  'Paste URL foto atau biarkan kosong untuk AI avatar',
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -600,16 +589,6 @@ class _ProfessionalProfileEditorScreenState
                                 ),
                               ),
                             ],
-                          ),
-                          const SizedBox(height: 8),
-                          // URL fallback
-                          TextField(
-                            controller: _videoUrlController,
-                            decoration: const InputDecoration(
-                              labelText: 'URL Video Intro (opsional)',
-                              hintText:
-                                  'https://youtube.com/watch?v=... atau URL lain',
-                            ),
                           ),
                           // Pratinjau thumbnail video lokal
                           if (_localVideoFile != null) ...[
