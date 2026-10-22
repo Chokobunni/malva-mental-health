@@ -8,6 +8,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/professional_avatar.dart';
 import 'care_package_screen.dart';
 import 'chat_screen.dart';
 
@@ -356,6 +357,9 @@ class _PackageCard extends StatelessWidget {
               _ProAvatar(
                 professionalId: package.professionalId,
                 displayName: package.professionalName,
+                photoUrl: package.photoIntroUrl.isNotEmpty
+                    ? package.photoIntroUrl
+                    : null,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -455,6 +459,9 @@ class _SessionCard extends StatelessWidget {
               _ProAvatar(
                 professionalId: session.professionalId,
                 displayName: session.professionalName,
+                photoUrl: session.photoIntroUrl.isNotEmpty
+                    ? session.photoIntroUrl
+                    : null,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -821,61 +828,26 @@ class _Toggle extends StatelessWidget {
 }
 
 /// Avatar profesional untuk kartu MyCare. Menampilkan foto dari URL bila
-/// tersedia (diambil dari cache profesional), fallback ke inisial nama.
-/// Foto di-cache per professionalId agar tidak fetch ulang setiap render.
+/// tersedia (dari photo_intro_url di professional_credentials), fallback ke
+/// inisial nama. Menggunakan ProfessionalAvatar widget yang sudah mendukung
+/// network image dengan error/loading fallback.
 class _ProAvatar extends StatelessWidget {
   const _ProAvatar({
     required this.professionalId,
     required this.displayName,
+    this.photoUrl,
   });
 
   final String professionalId;
   final String displayName;
+  final String? photoUrl;
 
   @override
   Widget build(BuildContext context) {
-    // Gunakan DiceBear avatar deterministik berdasarkan ID profesional.
-    // Ini menghasilkan avatar unik per profesional tanpa perlu upload foto.
-    // Ketika backend menyediakan photo_intro_url yang sebenarnya, widget ini
-    // bisa diganti dengan Image.network langsung.
-    final photoUrl =
-        'https://api.dicebear.com/9.x/notionists/svg?seed=$professionalId';
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: MalvaColors.seed.withValues(alpha: 0.3),
-          width: 1.5,
-        ),
-      ),
-      child: ClipOval(
-        child: Image.network(
-          photoUrl,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _fallback(),
-          loadingBuilder: (_, child, progress) {
-            if (progress == null) return child;
-            return _fallback();
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _fallback() {
-    return CircleAvatar(
+    return ProfessionalAvatar(
+      displayName: displayName,
       radius: 22,
-      backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
-      child: Text(
-        displayName.isEmpty ? '?' : displayName.characters.first.toUpperCase(),
-        style: const TextStyle(
-          color: MalvaColors.seed,
-          fontWeight: FontWeight.w900,
-          fontSize: 16,
-        ),
-      ),
+      photoUrl: photoUrl,
     );
   }
 }

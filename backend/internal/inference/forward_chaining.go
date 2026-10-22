@@ -288,24 +288,10 @@ var levelPriority = map[string]int{
 }
 
 func buildResult(wm map[string]Fact, trace []Trace, firedCount int) InferenceResult {
-	// Krisis: crisis_flag pernah dibuat oleh rule (Value disimpan 1 pada
-	// applyConclusions untuk konklusi bertipe flag). Tandai via CF > 0.
-	if crisis, ok := wm["crisis_flag"]; ok && crisis.CF > 0 {
-		summary := "Ada indikator keselamatan diri. Tampilkan crisis flow dan hubungi profesional."
-		if lvl, ok := wm["crisis_level"]; ok {
-			summary = lvl.Str
-		}
-		return InferenceResult{
-			Level:          "crisis",
-			CF:             crisis.CF,
-			Summary:        summary,
-			IsCrisis:       true,
-			Trace:          trace,
-			WorkingMemory:  wm,
-			FiredRuleCount: firedCount,
-		}
-	}
-
+	// Tentukan level keparahan dari skor total (depression_level / anxiety_level).
+	// Ini TIDAK boleh di-override oleh crisis_flag — level keparahan dan flag
+	// krisis adalah dua hal terpisah: level = seberapa parah gejala secara
+	// keseluruhan, crisisFlag = apakah ada indikator keselamatan diri.
 	dep, hasDep := wm["depression_level"]
 	anx, hasAnx := wm["anxiety_level"]
 
@@ -337,5 +323,25 @@ func buildResult(wm map[string]Fact, trace []Trace, firedCount int) InferenceRes
 	if res.Summary == "" {
 		res.Summary = "Gejala minimal."
 	}
+
+	// Krisis: crisis_flag dibuat oleh rule PHQ9_CRISIS_SELF_HARM bila item 9 > 0.
+	// Ini menandai perlunya intervensi keselamatan, tetapi TIDAK mengubah
+	// level keparahan — pasien dengan skor PHQ-9 7/27 + item 9 = 1 tetap
+	// "mild" secara keparahan, namun flagged sebagai krisis karena ide
+	// menyakiti diri memerlukan perhatian segera.
+	if crisis, ok := wm["crisis_flag"]; ok && crisis.CF > 0 {
+		res.IsCrisis = true
+		crisisSummary := "Ada indikator keselamatan diri. Tampilkan crisis flow dan hubungi profesional."
+		if lvl, ok := wm["crisis_level"]; ok && lvl.Str != "" {
+			crisisSummary = lvl.Str
+		}
+		// Gabungkan ringkasan: level keparahan + peringatan krisis.
+		res.Summary = res.Summary + " " + crisisSummary
+		// CF krisis lebih tinggi → pakai itu sebagai CF utama.
+		if crisis.CF > res.CF {
+			res.CF = crisis.CF
+		}
+	}
+
 	return res
 }

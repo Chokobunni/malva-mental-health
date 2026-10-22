@@ -222,15 +222,16 @@ void main() {
       });
 
       test('crisis flag when self-harm item positive', () {
-        // Item 9 (phq_self_harm) = 1, all others 0
+        // Item 9 (phq_self_harm) = 1, all others 0 → skor total 1 = minimal.
+        // Level keparahan tetap "minimal" (berdasarkan skor), tapi IsCrisis=true.
         final result = engine.infer(
           questionIds: KnowledgeBase.phq9QuestionIds,
           answers: [0, 0, 0, 0, 0, 0, 0, 0, 1],
           rules: KnowledgeBase.phq9Rules,
         );
 
-        expect(result.level, 'crisis');
-        expect(result.isCrisis, true);
+        expect(result.level, 'minimal'); // Skor 1 = minimal, bukan crisis
+        expect(result.isCrisis, true); // Tapi flagged krisis karena item 9 > 0
         expect(result.certaintyFactor, greaterThan(0.9));
       });
 
@@ -242,7 +243,8 @@ void main() {
           rules: KnowledgeBase.phq9Rules,
         );
 
-        expect(result.isCrisis, true);
+        expect(result.level, 'minimal'); // Skor 3 = minimal
+        expect(result.isCrisis, true); // Tapi flagged krisis
       });
 
       test('audit trail contains fired rules', () {
@@ -372,16 +374,16 @@ void main() {
         check('all zero', [0, 0, 0, 0, 0, 0, 0, 0, 0], 'minimal', 0.5700, 1);
       });
 
-      test('item9 = 1 -> crisis CF 0.9500, 2 rule', () {
-        check('item9=1', [0, 0, 0, 0, 0, 0, 0, 0, 1], 'crisis', 0.9500, 2);
+      test('item9 = 1 -> minimal CF 0.9500, 2 rule (crisis flag terpisah)', () {
+        check('item9=1', [0, 0, 0, 0, 0, 0, 0, 0, 1], 'minimal', 0.9500, 2);
       });
 
       test('moderate -> moderate CF 0.7980, 1 rule', () {
         check('moderate', [2, 2, 1, 2, 1, 1, 1, 0, 0], 'moderate', 0.7980, 1);
       });
 
-      test('all two -> crisis CF 0.9500, 7 rule', () {
-        check('all two', [2, 2, 2, 2, 2, 2, 2, 2, 2], 'crisis', 0.9500, 7);
+      test('all two -> severe CF 0.9500, 7 rule (crisis flag terpisah)', () {
+        check('all two', [2, 2, 2, 2, 2, 2, 2, 2, 2], 'severe', 0.9500, 7);
       });
     });
 

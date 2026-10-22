@@ -544,6 +544,33 @@ class _QuestionCard extends StatelessWidget {
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 12),
+          // Legenda skor: pasien perlu tahu arti angka 0-3 sebelum memilih.
+          // Tanpa ini, "0" dan "3" tidak punya konteks — pasien bisa salah
+          // memahami tingkat keparahan yang mereka laporkan.
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              for (var v = 0; v < AssessmentEngine.responseLabels.length; v++)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${AssessmentEngine.responseLabels[v]} = ${AssessmentEngine.responseDescriptions[v]}',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: color.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,

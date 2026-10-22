@@ -319,26 +319,13 @@ class ForwardChainingEngine {
     Map<String, ClinicalFact> workingMemory,
     List<RuleFiredTrace> trace,
   ) {
-    // Check for crisis first (highest priority)
-    final crisisFlag = workingMemory['crisis_flag'];
-    if (crisisFlag != null && crisisFlag.value == true) {
-      final crisisLevel = workingMemory['crisis_level'];
-      return InferenceResult(
-        level: 'crisis',
-        certaintyFactor: crisisFlag.certaintyFactor,
-        summary: crisisLevel?.value as String? ??
-            'Ada indikator keselamatan diri. Tampilkan crisis flow dan hubungi profesional.',
-        isCrisis: true,
-        trace: trace,
-        workingMemory: Map.unmodifiable(workingMemory),
-      );
-    }
-
-    // Get depression and anxiety levels
+    // Tentukan level keparahan dari skor total (depression_level / anxiety_level).
+    // Ini TIDAK boleh di-override oleh crisis_flag — level keparahan dan flag
+    // krisis adalah dua hal terpisah: level = seberapa parah gejala secara
+    // keseluruhan, crisisFlag = apakah ada indikator keselamatan diri.
     final depressionLevel = workingMemory['depression_level'];
     final anxietyLevel = workingMemory['anxiety_level'];
 
-    // Determine overall level (highest severity)
     String finalLevel;
     double finalCF;
     String summary;
@@ -375,11 +362,29 @@ class ForwardChainingEngine {
       summary = anxSummary as String;
     }
 
+    // Krisis: crisis_flag dibuat oleh rule PHQ9_CRISIS_SELF_HARM bila item 9 > 0.
+    // Ini menandai perlunya intervensi keselamatan, tetapi TIDAK mengubah
+    // level keparahan — pasien dengan skor PHQ-9 7/27 + item 9 = 1 tetap
+    // "mild" secara keparahan, namun flagged sebagai krisis karena ide
+    // menyakiti diri memerlukan perhatian segera.
+    bool isCrisis = false;
+    final crisisFlag = workingMemory['crisis_flag'];
+    if (crisisFlag != null && crisisFlag.value == true) {
+      isCrisis = true;
+      final crisisLevel = workingMemory['crisis_level'];
+      final crisisSummary = crisisLevel?.value as String? ??
+          'Ada indikator keselamatan diri. Tampilkan crisis flow dan hubungi profesional.';
+      summary = '$summary $crisisSummary';
+      if (crisisFlag.certaintyFactor > finalCF) {
+        finalCF = crisisFlag.certaintyFactor;
+      }
+    }
+
     return InferenceResult(
       level: finalLevel,
       certaintyFactor: finalCF,
       summary: summary,
-      isCrisis: false,
+      isCrisis: isCrisis,
       trace: trace,
       workingMemory: Map.unmodifiable(workingMemory),
     );

@@ -123,7 +123,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Psychiatrist Info'),
+        title: const Text('Profesional Info'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),

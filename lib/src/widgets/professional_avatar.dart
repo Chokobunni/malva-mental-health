@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 
 // ============================================================
-// AVATAR PROFESIONAL — gradien deterministik + inisial.
-// Offline-safe (tanpa network image) sehingga selalu tampil rapi.
+// AVATAR PROFESIONAL — foto dari URL bila tersedia, fallback ke
+// gradien deterministik + inisial. Foto diambil dari photo_intro_url
+// yang disimpan di professional_credentials (DiceBear atau URL lain).
 // ============================================================
 
 class ProfessionalAvatar extends StatelessWidget {
@@ -12,10 +13,14 @@ class ProfessionalAvatar extends StatelessWidget {
     super.key,
     required this.displayName,
     this.radius = 30,
+    this.photoUrl,
   });
 
   final String displayName;
   final double radius;
+
+  /// URL foto profil profesional. Bila kosong/null, pakai gradien + inisial.
+  final String? photoUrl;
 
   static const _gradients = [
     [MalvaColors.plum, MalvaColors.orchid],
@@ -40,6 +45,30 @@ class ProfessionalAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Jika ada URL foto, tampilkan gambar jaringan dengan fallback ke gradien.
+    if (photoUrl != null && photoUrl!.isNotEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: Colors.transparent,
+        child: ClipOval(
+          child: Image.network(
+            photoUrl!,
+            width: radius * 2,
+            height: radius * 2,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _gradientFallback(),
+            loadingBuilder: (_, child, progress) {
+              if (progress == null) return child;
+              return _gradientFallback();
+            },
+          ),
+        ),
+      );
+    }
+    return _gradientFallback();
+  }
+
+  Widget _gradientFallback() {
     final hash = displayName.hashCode.abs();
     final gradient = _gradients[hash % _gradients.length];
     return CircleAvatar(

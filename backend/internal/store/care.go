@@ -52,6 +52,7 @@ type CarePackage struct {
 	StartsAt         time.Time `json:"starts_at"`
 	ExpiresAt        time.Time `json:"expires_at"`
 	CreatedAt        time.Time `json:"created_at"`
+	PhotoIntroURL    string    `json:"photo_intro_url,omitempty"`
 }
 
 type CareSession struct {
@@ -73,6 +74,7 @@ type CareSession struct {
 	RescheduleCount   int        `json:"reschedule_count"`
 	AttendedMarkedAt  *time.Time `json:"attended_marked_at,omitempty"`
 	CreatedAt         time.Time  `json:"created_at"`
+	PhotoIntroURL     string     `json:"photo_intro_url,omitempty"`
 }
 
 // scanCarePackage membaca satu baris paket (kolom harus mengikuti urutan
@@ -82,7 +84,8 @@ const carePackageColumns = `cp.id, cp.patient_id, cp.professional_id, cp.booking
 	cp.starts_at, cp.expires_at, cp.created_at,
 	` + `(SELECT COUNT(*) FROM care_sessions
 		WHERE package_id = cp.id AND status IN ('scheduled','completed','no_show')),` +
-	`COALESCE(pat.display_name, ''), COALESCE(pro.display_name, '')`
+	`COALESCE(pat.display_name, ''), COALESCE(pro.display_name, ''),
+	COALESCE((SELECT pc.photo_intro_url FROM professional_credentials pc WHERE pc.user_id = cp.professional_id), '')`
 
 func scanCarePackage(row interface {
 	Scan(dest ...any) error
@@ -92,7 +95,7 @@ func scanCarePackage(row interface {
 	err := row.Scan(&p.ID, &p.PatientID, &p.ProfessionalID, &bookingID,
 		&p.TotalSessions, &p.ValidityDays, &p.Price, &p.Status,
 		&p.StartsAt, &p.ExpiresAt, &p.CreatedAt,
-		&p.UsedSessions, &p.PatientName, &p.ProfessionalName)
+		&p.UsedSessions, &p.PatientName, &p.ProfessionalName, &p.PhotoIntroURL)
 	if err != nil {
 		return CarePackage{}, err
 	}
@@ -289,7 +292,8 @@ const careSessionColumns = `cs.id, cs.package_id, cs.booking_id, cs.patient_id, 
 	COALESCE(cs.meeting_url,''), COALESCE(cs.summary_for_patient,''),
 	COALESCE(cs.private_note,''), COALESCE(cs.cancel_reason,''),
 	cs.reschedule_count, cs.attended_marked_at, cs.created_at,
-	COALESCE(pat.display_name, ''), COALESCE(pro.display_name, '')`
+	COALESCE(pat.display_name, ''), COALESCE(pro.display_name, ''),
+	COALESCE((SELECT pc.photo_intro_url FROM professional_credentials pc WHERE pc.user_id = cs.professional_id), '')`
 
 func scanCareSession(row interface {
 	Scan(dest ...any) error
@@ -300,7 +304,7 @@ func scanCareSession(row interface {
 		&cs.SessionType, &cs.ScheduledAt, &cs.DurationMinutes, &cs.Status,
 		&cs.MeetingURL, &cs.SummaryForPatient, &cs.PrivateNote, &cs.CancelReason,
 		&cs.RescheduleCount, &cs.AttendedMarkedAt, &cs.CreatedAt,
-		&cs.PatientName, &cs.ProfessionalName)
+		&cs.PatientName, &cs.ProfessionalName, &cs.PhotoIntroURL)
 	if err != nil {
 		return CareSession{}, err
 	}

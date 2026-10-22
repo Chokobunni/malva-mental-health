@@ -3250,6 +3250,7 @@ class BackendDoctorSearchResult {
     this.hospitalLng,
     this.addressDetails = '',
     this.priceFrom = 0,
+    this.photoIntroUrl = '',
   });
 
   factory BackendDoctorSearchResult.fromJson(Map<String, dynamic> json) {
@@ -3270,6 +3271,7 @@ class BackendDoctorSearchResult {
       hospitalLng: (json['hospital_lng'] as num?)?.toDouble(),
       addressDetails: json['address_details']?.toString() ?? '',
       priceFrom: (json['price_from'] as num?)?.toInt() ?? 0,
+      photoIntroUrl: json['photo_intro_url']?.toString() ?? '',
     );
   }
 
@@ -3289,6 +3291,7 @@ class BackendDoctorSearchResult {
   final double? hospitalLng;
   final String addressDetails;
   final int priceFrom;
+  final String photoIntroUrl;
 
   int get helpfulnessPercent => reviewCount <= 0
       ? 0
@@ -3484,6 +3487,7 @@ class BackendCarePackage {
     this.startsAt,
     this.expiresAt,
     this.createdAt,
+    this.photoIntroUrl = '',
   });
 
   factory BackendCarePackage.fromJson(Map<String, dynamic> json) {
@@ -3504,6 +3508,7 @@ class BackendCarePackage {
       startsAt: json['starts_at']?.toString(),
       expiresAt: json['expires_at']?.toString(),
       createdAt: json['created_at']?.toString(),
+      photoIntroUrl: json['photo_intro_url']?.toString() ?? '',
     );
   }
 
@@ -3525,6 +3530,7 @@ class BackendCarePackage {
   final String? startsAt;
   final String? expiresAt;
   final String? createdAt;
+  final String photoIntroUrl;
 
   bool get isActive => status == 'active';
   DateTime? get expiresDateTime =>
@@ -3550,6 +3556,7 @@ class BackendCareSession {
     this.cancelReason = '',
     this.rescheduleCount = 0,
     this.cancelledBy = '',
+    this.photoIntroUrl = '',
   });
 
   factory BackendCareSession.fromJson(Map<String, dynamic> json) {
@@ -3571,6 +3578,7 @@ class BackendCareSession {
       cancelReason: json['cancel_reason']?.toString() ?? '',
       rescheduleCount: (json['reschedule_count'] as num?)?.toInt() ?? 0,
       cancelledBy: json['cancelled_by']?.toString() ?? '',
+      photoIntroUrl: json['photo_intro_url']?.toString() ?? '',
     );
   }
 
@@ -3593,6 +3601,9 @@ class BackendCareSession {
 
   /// Aktor pembatal (audit `cancelled_by`): id pasien/profesional/admin.
   final String cancelledBy;
+
+  /// URL foto profil profesional (dari professional_credentials).
+  final String photoIntroUrl;
 
   DateTime? get scheduledDateTime =>
       scheduledAt == null ? null : DateTime.tryParse(scheduledAt!);

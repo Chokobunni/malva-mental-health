@@ -18,6 +18,7 @@ import 'portal/e_prescription_screen.dart';
 import 'portal/earnings_screen.dart';
 import 'pro_patient_detail_screen.dart';
 import 'pro_pricing_screen.dart';
+import 'professional_profile_editor_screen.dart';
 import 'pro_schedule_screen.dart';
 
 class ProfessionalDashboardScreen extends ConsumerStatefulWidget {
@@ -1026,6 +1027,9 @@ class _ProfessionalDashboardScreenState
                 ],
                 const SizedBox(height: 12),
                 SoftCard(
+                  color: isCrisis
+                      ? MalvaColors.danger.withValues(alpha: 0.06)
+                      : MalvaColors.seed.withValues(alpha: 0.04),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1357,7 +1361,7 @@ class _ProfessionalDashboardScreenState
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.1),
+                  color: MalvaColors.seed.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: SelectableText(summary,
@@ -1370,7 +1374,7 @@ class _ProfessionalDashboardScreenState
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.1),
+                  color: MalvaColors.seed.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: SelectableText(csvData,
@@ -2000,6 +2004,29 @@ class _ProfessionalPortalSection extends StatelessWidget {
       children: [
         const SectionLabel('Portal Profesional',
             icon: Icons.open_in_new_rounded),
+        // Edit Profil — profesional mengatur foto, bio, spesialisasi,
+        // pendidikan, faskes, dan alamat. Perubahan langsung terlihat di
+        // halaman "Profesional Info" yang dilihat pasien.
+        ActionTile(
+          icon: Icons.edit_rounded,
+          title: 'Edit Profil',
+          subtitle: 'Foto, bio, keahlian, pendidikan, faskes & alamat',
+          color: MalvaColors.seed,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ProfessionalProfileEditorScreen(
+                session: session,
+                apiClient: apiClient,
+              ),
+            ),
+          ).then((_) {
+            // Reload data setelah edit profil agar perubahan langsung terlihat.
+            // _loadOnlineProfessionalData ada di parent state, bukan di widget ini.
+            // Kita trigger reload lewat context — parent akan rebuild.
+          }),
+        ),
+        const SizedBox(height: 10),
         const SectionLabel('Operasional'),
         ActionTile(
           icon: Icons.sell_rounded,

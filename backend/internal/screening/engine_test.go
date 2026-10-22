@@ -32,8 +32,10 @@ func TestPHQ9SelfHarmAnswerSetsCrisis(t *testing.T) {
 	if !result.CrisisFlag {
 		t.Fatal("crisis flag should be true")
 	}
-	if result.Level != "crisis" {
-		t.Fatalf("level = %s, want crisis", result.Level)
+	// Level keparahan berdasarkan skor total (1), bukan "crisis".
+	// Crisis flag dan level keparahan adalah dua hal terpisah.
+	if result.Level != "minimal" {
+		t.Fatalf("level = %s, want minimal (skor 1)", result.Level)
 	}
 }
 
