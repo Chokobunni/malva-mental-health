@@ -70,3 +70,4 @@ backend/*.exe~
 backend/api.exe
 backend/admin.exe
 backend/malva-api
+malva-api-linux
