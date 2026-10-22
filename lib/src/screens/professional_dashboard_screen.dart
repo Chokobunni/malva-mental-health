@@ -262,7 +262,7 @@ class _ProfessionalDashboardScreenState
                             ),
                           ),
                           for (final patient in patients.take(5)) ...[
-                            SoftCard(
+                            SoftCard(bordered: true, 
                               onTap: () {
                                 Navigator.push(
                                   context,
@@ -680,7 +680,7 @@ class _ProfessionalDashboardScreenState
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (_, index) {
                       final patient = list[index];
-                      return SoftCard(
+                      return SoftCard(bordered: true, 
                         onTap: () {
                           Navigator.pop(sheetContext);
                           setState(() {
@@ -859,7 +859,7 @@ class _ProfessionalDashboardScreenState
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (_, index) {
                       final item = items[index];
-                      return SoftCard(
+                      return SoftCard(bordered: true, 
                         onTap: () {
                           Navigator.pop(sheetContext);
                           _showPriorityDetail(item);
@@ -1026,7 +1026,7 @@ class _ProfessionalDashboardScreenState
                   ),
                 ],
                 const SizedBox(height: 12),
-                SoftCard(
+                SoftCard(bordered: true, 
                   color: isCrisis
                       ? MalvaColors.danger.withValues(alpha: 0.06)
                       : MalvaColors.seed.withValues(alpha: 0.04),
@@ -1470,7 +1470,7 @@ class _StatusBanner extends StatelessWidget {
     if (error != null) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 14),
-        child: SoftCard(
+        child: SoftCard(bordered: true, 
           color: MalvaColors.danger.withValues(alpha: 0.08),
           child: Row(
             children: [
@@ -1486,7 +1486,7 @@ class _StatusBanner extends StatelessWidget {
     if (!hasBackendSession) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 14),
-        child: SoftCard(
+        child: SoftCard(bordered: true, 
           color: MalvaColors.danger.withValues(alpha: 0.08),
           child: const Text(
             'Belum login ke server. Login sebagai profesional untuk melihat data real.',
@@ -1535,7 +1535,7 @@ class _SyncStatusBar extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
-      child: SoftCard(
+      child: SoftCard(bordered: true, 
         accent: color,
         tone: color.withValues(alpha: 0.08),
         child: Row(
@@ -1655,7 +1655,7 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SoftCard(
+    return SoftCard(bordered: true, 
       onTap: onTap,
       accent: color,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
@@ -1787,7 +1787,7 @@ class _ConnectedPatientList extends StatelessWidget {
     return Column(
       children: [
         for (final patient in patients) ...[
-          SoftCard(
+          SoftCard(bordered: true, 
             onTap: () => onOpen(patient),
             child: Row(
               children: [
@@ -2132,7 +2132,7 @@ class _PriorityCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final screening = item.screening;
     final isCrisis = screening.crisisFlag;
-    return SoftCard(
+    return SoftCard(bordered: true, 
       onTap: onTap,
       accent: item.color,
       tone: item.color.withValues(alpha: 0.08),
@@ -2480,7 +2480,7 @@ class _CreateMeetingButtonState extends State<_CreateMeetingButton> {
 
   @override
   Widget build(BuildContext context) {
-    return SoftCard(
+    return SoftCard(bordered: true, 
       color: MalvaColors.mint.withValues(alpha: 0.10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

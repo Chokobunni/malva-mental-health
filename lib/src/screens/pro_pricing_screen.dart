@@ -155,7 +155,7 @@ class _ProPricingScreenState extends ConsumerState<ProPricingScreen> {
                   padding: const EdgeInsets.all(18),
                   children: [
                     const SectionLabel('Harga layanan'),
-                    SoftCard(
+                    SoftCard(bordered: true, 
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [

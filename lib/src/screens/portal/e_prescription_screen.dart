@@ -134,7 +134,7 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
             if (_isLoading)
               const Center(child: CircularProgressIndicator())
             else if (_error != null)
-              SoftCard(
+              SoftCard(bordered: true, 
                 child: Column(
                   children: [
                     Text(_error!,
@@ -208,7 +208,7 @@ class _PrescriptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SoftCard(
+    return SoftCard(bordered: true, 
       onTap: onTap,
       child: Row(
         children: [
@@ -507,7 +507,7 @@ class _ItemEditorState extends State<_ItemEditor> {
 
   @override
   Widget build(BuildContext context) {
-    return SoftCard(
+    return SoftCard(bordered: true, 
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -653,7 +653,7 @@ class _EPrescriptionDetailScreenState
                   : ListView(
                       padding: const EdgeInsets.all(18),
                       children: [
-                        SoftCard(
+                        SoftCard(bordered: true, 
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -696,7 +696,7 @@ class _EPrescriptionDetailScreenState
                           ),
                         ),
                         const SizedBox(height: 12),
-                        SoftCard(
+                        SoftCard(bordered: true, 
                           color: MalvaColors.seed.withValues(alpha: 0.06),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,

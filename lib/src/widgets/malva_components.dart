@@ -145,6 +145,7 @@ class SoftCard extends StatelessWidget {
     this.accent,
     this.tone,
     this.radius = 18,
+    this.bordered = false,
   });
 
   final Widget child;
@@ -163,9 +164,34 @@ class SoftCard extends StatelessWidget {
   /// Radius sudut kartu. Default 18 = nilai tema saat ini.
   final double radius;
 
+  /// Mode border-only: latar putih, tanpa aksen/tone, border abu tipis.
+  /// Bila true, parameter [color], [accent], dan [tone] diabaikan.
+  final bool bordered;
+
   @override
   Widget build(BuildContext context) {
     final radiusBorder = BorderRadius.circular(radius);
+
+    // Mode bordered: paksa putih, abaikan accent/tone, tambah border abu.
+    if (bordered) {
+      final body = Padding(padding: padding, child: child);
+      final card = Card(
+        color: Colors.white,
+        clipBehavior: Clip.none,
+        elevation: 1,
+        shape: RoundedRectangleBorder(
+          borderRadius: radiusBorder,
+          side: BorderSide(color: Colors.grey.shade300, width: 1),
+        ),
+        child: body,
+      );
+      if (onTap == null) return card;
+      return InkWell(
+        borderRadius: radiusBorder,
+        onTap: onTap,
+        child: card,
+      );
+    }
 
     // Padding isi kartu selalu diterapkan; garis aksen dibungkus paling luar
     // (di dalam Card) agar menempel di tepi kiri kartu, bukan di dalam padding.
@@ -475,6 +501,7 @@ class CollapsibleCard extends StatefulWidget {
     this.semanticLabel,
     this.accent,
     this.tone,
+    this.bordered = false,
   });
 
   /// Header ringkas yang selalu terlihat dan menjadi area tap.
@@ -502,6 +529,9 @@ class CollapsibleCard extends StatefulWidget {
   /// Warna latar kartu, diteruskan ke [SoftCard]. `null` = warna tema.
   final Color? tone;
 
+  /// Mode border-only, diteruskan ke [SoftCard].
+  final bool bordered;
+
   @override
   State<CollapsibleCard> createState() => _CollapsibleCardState();
 }
@@ -519,6 +549,7 @@ class _CollapsibleCardState extends State<CollapsibleCard> {
       accent: widget.accent,
       tone: widget.tone,
       padding: widget.padding,
+      bordered: widget.bordered,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

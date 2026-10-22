@@ -109,7 +109,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
           else if (_error != null)
-            SoftCard(
+            SoftCard(bordered: true, 
               child: Column(
                 children: [
                   Text(_error!,
@@ -245,7 +245,7 @@ class _ProSessionCard extends ConsumerWidget {
       'cancelled_by_patient' => Theme.of(context).colorScheme.onSurfaceVariant,
       _ => Theme.of(context).colorScheme.onSurfaceVariant,
     };
-    return SoftCard(
+    return SoftCard(bordered: true, 
       accent: statusColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -730,7 +730,7 @@ class _AvailabilitySummary extends StatelessWidget {
       return 'Rp ${buf.toString()}';
     }
 
-    return SoftCard(
+    return SoftCard(bordered: true, 
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -920,7 +920,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                         )
                       else
                         for (final s in _schedules) ...[
-                          SoftCard(
+                          SoftCard(bordered: true, 
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 12),
                             child: Column(
@@ -976,7 +976,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                           ),
                           const SizedBox(height: 8),
                         ],
-                      SoftCard(
+                      SoftCard(bordered: true, 
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -1038,7 +1038,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                       ),
                       const SizedBox(height: 14),
                       const SectionLabel('Hari libur'),
-                      SoftCard(
+                      SoftCard(bordered: true, 
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -1132,7 +1132,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                       ),
                       const SizedBox(height: 14),
                       const SectionLabel('Harga layanan'),
-                      SoftCard(
+                      SoftCard(bordered: true, 
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
