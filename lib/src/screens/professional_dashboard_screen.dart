@@ -2470,9 +2470,9 @@ class _SyncStatusIndicator extends StatelessWidget {
   }
 }
 
-/// Tombol "Create Meeting" di dashboard profesional. Membuat room Jitsi Meet
-/// unik dan menampilkan link yang bisa dibagikan ke pasien untuk video call
-/// real-time. Berguna untuk testing 2+ HP tanpa perlu menjadwalkan sesi dulu.
+/// Tombol "Create Meeting" di dashboard profesional. Membuat Google Meet instan
+/// via backend API dan menampilkan link yang bisa dibagikan ke pasien untuk
+/// video call real-time.
 class _CreateMeetingButton extends StatefulWidget {
   const _CreateMeetingButton({this.session, this.apiClient});
 
@@ -2485,15 +2485,39 @@ class _CreateMeetingButton extends StatefulWidget {
 
 class _CreateMeetingButtonState extends State<_CreateMeetingButton> {
   String? _meetingUrl;
+  bool _isLoading = false;
 
-  void _createMeeting() {
-    // Generate room name unik: malva-pro-{userId}-{timestamp}
-    final userId = widget.session?.backendUserId ?? 'anon';
-    final ts = DateTime.now().millisecondsSinceEpoch;
-    final shortId = userId.length >= 8 ? userId.substring(0, 8) : userId;
-    final roomName = 'malva-pro-$shortId-$ts';
-    final url = 'https://meet.jit.si/$roomName';
-    setState(() => _meetingUrl = url);
+  /// Buat Google Meet via backend API (POST /v1/meet/quick).
+  Future<void> _createMeeting() async {
+    if (_isLoading) return;
+    final api = widget.apiClient;
+    final token = widget.session?.accessToken;
+    if (api == null || token == null || token.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sesi tidak valid. Silakan login ulang.')),
+      );
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      final result = await api.createQuickMeet(accessToken: token);
+      if (!mounted) return;
+      setState(() => _meetingUrl = result.meetUrl);
+    } on MalvaApiException catch (e) {
+      if (!mounted) return;
+      // Pesan error dari backend (mis. Google belum dihubungkan).
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal membuat meeting: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _shareMeeting() async {
@@ -2553,9 +2577,15 @@ class _CreateMeetingButtonState extends State<_CreateMeetingButton> {
           const SizedBox(height: 10),
           if (_meetingUrl == null)
             FilledButton.icon(
-              onPressed: _createMeeting,
-              icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-              label: const Text('Create Meeting'),
+              onPressed: _isLoading ? null : _createMeeting,
+              icon: _isLoading
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.add_circle_outline_rounded, size: 18),
+              label: Text(_isLoading ? 'Membuat...' : 'Create Meeting'),
               style: FilledButton.styleFrom(
                 backgroundColor: MalvaColors.mint,
                 foregroundColor: Colors.white,

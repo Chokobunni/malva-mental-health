@@ -41,6 +41,53 @@ class GoogleAuthService {
     return idToken;
   }
 
+  /// Login Google dengan scope Calendar Events untuk mendapatkan authorization code.
+  /// Kode ini dikirim ke backend untuk ditukar dengan refresh token Google Calendar.
+  /// Mengembalikan serverAuthCode, atau null bila pengguna membatalkan.
+  static Future<String?> signInWithCalendarScope() async {
+    if (!GoogleConfig.isConfigured) {
+      throw const AuthFailure(
+        'Login Google belum dikonfigurasi di aplikasi ini. '
+        'Silakan hubungi admin.',
+      );
+    }
+    if (!_initialized) {
+      await GoogleSignIn.instance.initialize(
+        serverClientId: GoogleConfig.serverClientId,
+      );
+      _initialized = true;
+    }
+    late final GoogleSignInAccount account;
+    try {
+      // Autentikasi dengan scopeHint calendar.events.
+      account = await GoogleSignIn.instance.authenticate(
+        scopeHint: ['https://www.googleapis.com/auth/calendar.events'],
+      );
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        return null;
+      }
+      throw AuthFailure(_friendlySignInError(e.code));
+    }
+    // Minta server authorization code untuk backend token exchange.
+    try {
+      final serverAuth = await account.authorizationClient.authorizeServer(
+        ['https://www.googleapis.com/auth/calendar.events'],
+      );
+      if (serverAuth == null || serverAuth.serverAuthCode.isEmpty) {
+        throw const AuthFailure(
+          'Google tidak memberikan authorization code. Coba lagi.',
+        );
+      }
+      return serverAuth.serverAuthCode;
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        return null;
+      }
+      throw AuthFailure(_friendlySignInError(e.code));
+    }
+  }
+
   static Future<void> signOut() async {
     try {
       await GoogleSignIn.instance.signOut();

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
+import '../services/google_auth_service.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
@@ -84,6 +85,11 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 10),
+          // Tombol hubungkan Google untuk profesional (video call via Meet).
+          if (session?.role == UserRole.professional) ...[
+            _GoogleLinkTile(session: session),
+            const SizedBox(height: 10),
+          ],
           ActionTile(
             icon: Icons.logout_rounded,
             title: 'Log out',
@@ -299,5 +305,76 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+}
+
+/// Tombol untuk menghubungkan akun Google profesional dengan Calendar scope.
+/// Langkah: 1) signInIdToken -> link-google, 2) signInWithCalendarScope -> google-token-exchange.
+class _GoogleLinkTile extends ConsumerStatefulWidget {
+  const _GoogleLinkTile({this.session});
+
+  final AuthSession? session;
+
+  @override
+  ConsumerState<_GoogleLinkTile> createState() => _GoogleLinkTileState();
+}
+
+class _GoogleLinkTileState extends ConsumerState<_GoogleLinkTile> {
+  bool _isLinking = false;
+
+  Future<void> _linkGoogle() async {
+    if (_isLinking) return;
+    final accessToken = widget.session?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) return;
+
+    setState(() => _isLinking = true);
+    try {
+      final apiClient = ref.read(apiClientProvider);
+
+      // Langkah 1: Tautkan akun Google (ID Token).
+      final idToken = await GoogleAuthService.signInIdToken();
+      if (idToken == null) return; // Pengguna membatalkan.
+      if (!mounted) return;
+      await apiClient.linkGoogleAccount(
+        accessToken: accessToken,
+        idToken: idToken,
+      );
+
+      // Langkah 2: Dapatkan authorization code untuk Calendar.
+      final authCode = await GoogleAuthService.signInWithCalendarScope();
+      if (authCode != null && mounted) {
+        await apiClient.exchangeGoogleToken(
+          accessToken: accessToken,
+          authorizationCode: authCode,
+        );
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Google berhasil dihubungkan untuk Video Call.'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _isLinking = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionTile(
+      icon: Icons.videocam_rounded,
+      title: 'Hubungkan Google untuk Video Call',
+      subtitle: _isLinking ? 'Menghubungkan...' : 'Aktifkan Google Meet',
+      color: MalvaColors.mint,
+      onTap: () {
+        if (!_isLinking) _linkGoogle();
+      },
+    );
   }
 }

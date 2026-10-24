@@ -418,6 +418,71 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     }
   }
 
+  /// Login profesional via Google (ID Token sudah diverifikasi google_sign_in).
+  /// Mengembalikan sesi + flag needsCompletion untuk profesional baru tanpa STR/SIP.
+  Future<({AuthSession session, bool needsCompletion})> loginProfessionalWithGoogle({
+    required String idToken,
+  }) async {
+    final api = _apiClient;
+    if (api == null) throw _noServerFailure;
+    try {
+      final result = await api.googleLogin(
+        idToken: idToken,
+        role: UserRole.professional,
+      );
+      if (result.role != UserRole.professional) {
+        throw const AuthFailure('Akun ini bukan akun profesional.');
+      }
+      final session = AuthSession(
+        role: result.role,
+        identifier: result.email,
+        displayName: result.displayName,
+        backendUserId: result.userId,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        backendSynced: true,
+      );
+      return (session: session, needsCompletion: result.needsCompletion);
+    } on MalvaApiException catch (e) {
+      if (e.statusCode != null) rethrow;
+      throw _noServerFailure;
+    }
+  }
+
+  /// Lengkapi onboarding profesional baru (STR/SIP/spesialisasi) setelah login Google.
+  /// Mengembalikan sesi yang sudah diperbarui.
+  Future<AuthSession> completeProfessionalOnboarding({
+    required String accessToken,
+    required String strNumber,
+    required String sipNumber,
+    required String specialization,
+    String? displayName,
+  }) async {
+    final api = _apiClient;
+    if (api == null) throw _noServerFailure;
+    try {
+      final result = await api.completeProfessionalProfile(
+        accessToken: accessToken,
+        strNumber: strNumber,
+        sipNumber: sipNumber,
+        specialization: specialization,
+        displayName: displayName,
+      );
+      return AuthSession(
+        role: UserRole.professional,
+        identifier: result.email,
+        displayName: result.displayName,
+        backendUserId: result.userId,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        backendSynced: true,
+      );
+    } on MalvaApiException catch (e) {
+      if (e.statusCode != null) rethrow;
+      throw _noServerFailure;
+    }
+  }
+
   Future<AuthSession> loginProfessionalOnline({
     required String professionalId,
     required String password,

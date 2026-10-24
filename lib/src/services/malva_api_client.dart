@@ -165,17 +165,102 @@ class MalvaApiClient {
 
   /// Menukar Google ID Token menjadi sesi Malva.
   /// Backend: find-or-create + tautan SSO otomatis.
+  /// [role] menentukan jenis akun (patient atau professional).
   Future<BackendAuthResult> googleLogin({
     required String idToken,
+    UserRole role = UserRole.patient,
   }) async {
     return _sendAuth(
       'POST',
       '/v1/auth/google',
       {
         'id_token': idToken,
-        'role': UserRole.patient.name,
+        'role': role.name,
       },
     );
+  }
+
+  /// Lengkapi profil profesional baru yang login via Google (STR/SIP belum ada).
+  /// POST /v1/auth/complete-professional — membutuhkan Bearer token.
+  Future<BackendAuthResult> completeProfessionalProfile({
+    required String accessToken,
+    required String strNumber,
+    required String sipNumber,
+    required String specialization,
+    String? displayName,
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/auth/complete-professional',
+      accessToken: accessToken,
+      body: {
+        'str_number': strNumber.trim(),
+        'sip_number': sipNumber.trim(),
+        'specialization': specialization.trim(),
+        if (displayName != null && displayName.trim().isNotEmpty)
+          'display_name': displayName.trim(),
+      },
+    );
+    // Respons berisi user + credential; ambil user untuk sesi.
+    final user = payload['user'];
+    if (user is! Map<String, dynamic>) {
+      throw const MalvaApiException(
+          'Respons complete-professional tidak valid.');
+    }
+    return BackendAuthResult(
+      userId: user['id']?.toString() ?? '',
+      email: user['email']?.toString() ?? '',
+      role: UserRole.professional,
+      displayName: user['display_name']?.toString() ?? '',
+      accessToken: accessToken, // token tetap sama
+      refreshToken: '', // tidak berubah
+    );
+  }
+
+  /// Tautkan akun Google ke profesional yang sudah ada.
+  /// POST /v1/auth/link-google — membutuhkan Bearer token.
+  Future<void> linkGoogleAccount({
+    required String accessToken,
+    required String idToken,
+  }) async {
+    await _send(
+      'POST',
+      '/v1/auth/link-google',
+      accessToken: accessToken,
+      body: {'id_token': idToken},
+    );
+  }
+
+  /// Tukar authorization code Google Calendar dengan backend.
+  /// POST /v1/auth/google-token-exchange — membutuhkan Bearer token profesional.
+  Future<void> exchangeGoogleToken({
+    required String accessToken,
+    required String authorizationCode,
+  }) async {
+    await _send(
+      'POST',
+      '/v1/auth/google-token-exchange',
+      accessToken: accessToken,
+      body: {'authorization_code': authorizationCode},
+    );
+  }
+
+  /// Buat Google Meet instan untuk video call.
+  /// POST /v1/meet/quick — membutuhkan Bearer token profesional.
+  Future<({String meetUrl, String eventId})> createQuickMeet({
+    required String accessToken,
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/meet/quick',
+      accessToken: accessToken,
+    );
+    final meetUrl = payload['meet_url']?.toString();
+    final eventId = payload['event_id']?.toString();
+    if (meetUrl == null || meetUrl.isEmpty) {
+      throw const MalvaApiException('Server tidak mengembalikan URL Meet.');
+    }
+    return (meetUrl: meetUrl, eventId: eventId ?? '');
   }
 
   // ============================================================
@@ -2350,6 +2435,7 @@ class MalvaApiClient {
       displayName: user['display_name']?.toString() ?? 'Malva',
       accessToken: token,
       refreshToken: payload['refresh_token']?.toString() ?? '',
+      needsCompletion: payload['needs_completion'] == true,
     );
   }
 
@@ -2488,6 +2574,7 @@ class BackendAuthResult {
     required this.displayName,
     required this.accessToken,
     required this.refreshToken,
+    this.needsCompletion = false,
   });
 
   final String userId;
@@ -2496,6 +2583,9 @@ class BackendAuthResult {
   final String displayName;
   final String accessToken;
   final String refreshToken;
+
+  /// true bila profesional baru login via Google dan belum melengkapi STR/SIP.
+  final bool needsCompletion;
 }
 
 class BackendScreeningResult {

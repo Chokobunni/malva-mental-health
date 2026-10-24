@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
+import '../services/google_auth_service.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 import 'auth_widgets.dart';
+import 'professional_completion_screen.dart';
 
 /// Halaman login/daftar KHUSUS PROFESIONAL.
 /// Login: nomor STR / SIP / kode profesi (16 digit) + password.
@@ -86,6 +88,47 @@ class _ProfessionalLoginScreenState
     }
   }
 
+  /// Login profesional via Google Sign-In.
+  /// Bila needsCompletion=true, arahkan ke form pelengkapan STR/SIP.
+  Future<void> _signInWithGoogle() async {
+    if (_isSubmitting) return;
+    try {
+      setState(() => _isSubmitting = true);
+      final idToken = await GoogleAuthService.signInIdToken();
+      if (idToken == null) return; // Pengguna membatalkan.
+      if (!mounted) return;
+      final result = await ref
+          .read(malvaStoreProvider.notifier)
+          .loginProfessionalWithGoogle(idToken: idToken);
+      if (!mounted) return;
+      if (result.needsCompletion) {
+        // Profesional baru tanpa STR/SIP — arahkan ke form pelengkapan.
+        final apiClient = ref.read(apiClientProvider);
+        final updatedSession = await Navigator.push<AuthSession>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ProfessionalCompletionScreen(
+              session: result.session,
+              apiClient: apiClient,
+              onCompleted: (updated) => Navigator.pop(context, updated),
+            ),
+          ),
+        );
+        if (!mounted) return;
+        if (updatedSession != null) {
+          widget.onAuthenticated(updatedSession);
+        }
+      } else {
+        widget.onAuthenticated(result.session);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      showAuthFailure(context, error);
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
   void _validateFields() {
     if (_isLogin) {
       final identifier = _idController.text.trim();
@@ -155,6 +198,37 @@ class _ProfessionalLoginScreenState
                   onChanged: (value) => setState(() => _mode = value),
                 ),
                 const SizedBox(height: 14),
+                // Tombol Google Sign-In untuk profesional (hanya mode login).
+                if (_isLogin) ...[
+                  OutlinedButton.icon(
+                    onPressed: _isSubmitting ? null : _signInWithGoogle,
+                    icon: const Icon(Icons.g_mobiledata_rounded, size: 24),
+                    label: const Text('Masuk dengan Google'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: BorderSide(
+                          color: Theme.of(context).colorScheme.outline),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Expanded(child: Divider()),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          'atau masuk dengan STR',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: Colors.black54),
+                        ),
+                      ),
+                      const Expanded(child: Divider()),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 if (!_isLogin)
                   const SectionLabel('Identitas', icon: Icons.badge_rounded),
                 if (!_isLogin) ...[
