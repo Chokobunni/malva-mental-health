@@ -73,12 +73,16 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 	if user, err := s.store.GetUserBySSO(r.Context(), "google", payload.Subject); err == nil {
 		s.secLogger.LogAuthSuccess(r, user.ID)
 		// Profesional yang belum melengkapi profil (STR/SIP) perlu diarahkan
-		// ke halaman complete-professional. Cek apakah kredensial sudah ada.
+		// ke halaman complete-professional. Patokannya bukan ada/tidaknya baris
+		// kredensial (placeholder selalu ada sejak pendaftaran), melainkan
+		// apakah professional_id masih sementara ("g-...") atau profil belum ada.
 		needsCompletion := false
 		if user.Role == "professional" {
-			if _, cerr := s.store.GetProfessionalCredential(r.Context(), user.ID); cerr != nil {
-				needsCompletion = true
+			incomplete, cerr := s.store.IsProfessionalProfileIncomplete(r.Context(), user.ID)
+			if cerr != nil {
+				s.logger.Warn("gagal memeriksa kelengkapan profil profesional", "error", cerr, "user", user.ID)
 			}
+			needsCompletion = cerr == nil && incomplete
 		}
 		s.writeAuthResponseWithCompletion(w, r, http.StatusOK, user, needsCompletion)
 		return
@@ -101,9 +105,11 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 		s.secLogger.LogAuthSuccess(r, linked.ID)
 		needsCompletion := false
 		if linked.Role == "professional" {
-			if _, cerr := s.store.GetProfessionalCredential(r.Context(), linked.ID); cerr != nil {
-				needsCompletion = true
+			incomplete, cerr := s.store.IsProfessionalProfileIncomplete(r.Context(), linked.ID)
+			if cerr != nil {
+				s.logger.Warn("gagal memeriksa kelengkapan profil profesional", "error", cerr, "user", linked.ID)
 			}
+			needsCompletion = cerr == nil && incomplete
 		}
 		s.writeAuthResponseWithCompletion(w, r, http.StatusOK, linked, needsCompletion)
 		return
@@ -254,10 +260,23 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 		Endpoint:     googoauth.Endpoint,
 		Scopes:       []string{"https://www.googleapis.com/auth/calendar.events"},
 	}
-	tok, err := oauthCfg.Exchange(r.Context(), code)
+	// access_type=offline + prompt=consent memaksa Google mengirim refresh
+	// token. Tanpa ini, penukaran ulang kode sering hanya menghasilkan access
+	// token, sehingga integrasi Calendar gagal dan memicu loop "tautkan ulang".
+	tok, err := oauthCfg.Exchange(r.Context(), code,
+		oauth2.SetAuthURLParam("access_type", "offline"),
+		oauth2.SetAuthURLParam("prompt", "consent"),
+	)
 	if err != nil {
 		s.logger.Warn("gagal menukar authorization code Google", "error", err, "user", claims.Subject)
 		writeError(w, http.StatusBadRequest, errors.New("gagal menukar authorization code. Pastikan code masih berlaku"))
+		return
+	}
+	// Refresh token kosong tidak boleh disimpan: kalau tersimpan, akses
+	// Calendar akan selalu ErrReauthNeeded dan menautkan ulang menghasilkan
+	// token kosong lagi (loop tanpa akhir).
+	if strings.TrimSpace(tok.RefreshToken) == "" {
+		writeError(w, http.StatusBadRequest, errors.New("Google tidak memberikan refresh token. Cabut akses Malva di https://myaccount.google.com/permissions lalu hubungkan ulang akun Google"))
 		return
 	}
 	scope := strings.Join(oauthCfg.Scopes, " ")

@@ -44,10 +44,27 @@ func (s *Server) completeProfessionalProfile(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, errors.New("spesialisasi harus Sp.KJ (psikiater) atau M.Psi (psikolog)"))
 		return
 	}
-	// Cek apakah STR sudah dipakai profesional lain.
+	// Cek apakah STR sudah dipakai profesional lain. Bila ya, jangan langsung
+	// menolak: bisa jadi ini profesional lama (akun email sintetis) yang
+	// mendaftar ulang lewat Google. Dalam kasus itu tautan Google milik akun
+	// placeholder dipindahkan ke akun lama, bukan dibiarkan menggantung.
 	existing, err := s.store.FindUserByProfessionalIdentifier(r.Context(), strNumber)
 	if err == nil && existing.ID != claims.Subject {
-		writeError(w, http.StatusConflict, errors.New("nomor STR sudah terdaftar pada akun lain"))
+		canMerge, merr := s.store.CanAbsorbGoogleLink(r.Context(), existing.ID, claims.Subject)
+		if merr != nil {
+			s.logger.Warn("gagal memeriksa kemungkinan merge akun Google", "error", merr)
+		}
+		if merr == nil && canMerge {
+			if lerr := s.store.MoveGoogleLink(r.Context(), existing.ID, claims.Subject); lerr != nil {
+				writeError(w, http.StatusInternalServerError, lerr)
+				return
+			}
+			s.secLogger.LogAuthSuccess(r, existing.ID)
+			// Kembalikan sesi untuk akun LAMA (token baru) agar klien berpindah akun.
+			s.writeAuthResponseWithCompletion(w, r, http.StatusOK, existing, false)
+			return
+		}
+		writeError(w, http.StatusConflict, errors.New("nomor STR sudah terdaftar pada akun lain. Masuk dengan akun tersebut lalu gunakan menu 'Hubungkan Google' di Pengaturan"))
 		return
 	}
 	// Perbarui professional_profiles.professional_id dari temporary "g-..." ke STR asli.

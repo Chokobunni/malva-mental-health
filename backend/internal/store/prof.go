@@ -189,6 +189,21 @@ func (s *Store) UpdateProfessionalID(ctx context.Context, userID, newProfessiona
 	return nil
 }
 
+// IsProfessionalProfileIncomplete menandai profesional yang belum melengkapi
+// STR/SIP, yaitu yang masih memakai professional_id sementara hasil
+// pendaftaran Google ("g-...") atau belum punya baris professional_profiles.
+func (s *Store) IsProfessionalProfileIncomplete(ctx context.Context, userID string) (bool, error) {
+	const q = `SELECT COALESCE(pp.professional_id LIKE 'g-%', true)
+		FROM users u
+		LEFT JOIN professional_profiles pp ON pp.user_id = u.id
+		WHERE u.id = $1`
+	var incomplete bool
+	if err := s.db.QueryRowContext(ctx, q, userID).Scan(&incomplete); err != nil {
+		return false, err
+	}
+	return incomplete, nil
+}
+
 // ReopenCredentialReview mengembalikan kredensial berstatus REJECTED ke PENDING
 // agar masuk kembali ke antrean review admin (ListPendingCredentials) setelah
 // profesional memperbaiki STR/SIP/SIPP/dokumen yang ditolak.
