@@ -84,6 +84,7 @@ class _ProfessionalCompletionScreenState
         sipNumber: _sipController.text,
         specialization: _specialization,
         displayName: _nameController.text,
+        currentRefreshToken: widget.session.refreshToken ?? '',
       );
       if (!mounted) return;
       widget.onCompleted(updatedSession);

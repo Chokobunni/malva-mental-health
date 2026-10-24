@@ -457,6 +457,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     required String sipNumber,
     required String specialization,
     String? displayName,
+    String currentRefreshToken = '',
   }) async {
     final api = _apiClient;
     if (api == null) throw _noServerFailure;
@@ -468,13 +469,18 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         specialization: specialization,
         displayName: displayName,
       );
+      // Jalur non-merge tidak mengembalikan refresh token; pertahankan token
+      // dari sesi login Google agar sesi baru tetap bisa memperpanjang akses.
+      final effectiveRefreshToken = result.refreshToken.isNotEmpty
+          ? result.refreshToken
+          : currentRefreshToken;
       return AuthSession(
         role: UserRole.professional,
         identifier: result.email,
         displayName: result.displayName,
         backendUserId: result.userId,
         accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
+        refreshToken: effectiveRefreshToken,
         backendSynced: true,
       );
     } on MalvaApiException catch (e) {

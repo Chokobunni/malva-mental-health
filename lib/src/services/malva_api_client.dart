@@ -207,13 +207,18 @@ class MalvaApiClient {
       throw const MalvaApiException(
           'Respons complete-professional tidak valid.');
     }
+    // Jalur merge (STR sudah milik akun lama) mengembalikan sesi penuh untuk
+    // akun lama: pakai token baru agar sesi tidak menunjuk akun placeholder
+    // yang sudah dinonaktifkan server.
+    final newAccessToken = payload['access_token']?.toString() ?? '';
+    final newRefreshToken = payload['refresh_token']?.toString() ?? '';
     return BackendAuthResult(
       userId: user['id']?.toString() ?? '',
       email: user['email']?.toString() ?? '',
       role: UserRole.professional,
       displayName: user['display_name']?.toString() ?? '',
-      accessToken: accessToken, // token tetap sama
-      refreshToken: '', // tidak berubah
+      accessToken: newAccessToken.isNotEmpty ? newAccessToken : accessToken,
+      refreshToken: newRefreshToken.isNotEmpty ? newRefreshToken : '',
     );
   }
 
