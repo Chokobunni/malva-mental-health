@@ -68,6 +68,7 @@ type CareSession struct {
 	DurationMinutes   int        `json:"duration_minutes"`
 	Status            string     `json:"status"`
 	MeetingURL        string     `json:"meeting_url,omitempty"`
+	GoogleEventID     string     `json:"google_event_id,omitempty"`
 	SummaryForPatient string     `json:"summary_for_patient,omitempty"`
 	PrivateNote       string     `json:"private_note,omitempty"`
 	CancelReason      string     `json:"cancel_reason,omitempty"`
@@ -289,7 +290,8 @@ func (s *Store) ActivePackageBetween(ctx context.Context, patientID, professiona
 
 const careSessionColumns = `cs.id, cs.package_id, cs.booking_id, cs.patient_id, cs.professional_id,
 	cs.session_type, cs.scheduled_at, cs.duration_minutes, cs.status,
-	COALESCE(cs.meeting_url,''), COALESCE(cs.summary_for_patient,''),
+	COALESCE(cs.meeting_url,''), COALESCE(cs.google_event_id,''),
+	COALESCE(cs.summary_for_patient,''),
 	COALESCE(cs.private_note,''), COALESCE(cs.cancel_reason,''),
 	cs.reschedule_count, cs.attended_marked_at, cs.created_at,
 	COALESCE(pat.display_name, ''), COALESCE(pro.display_name, ''),
@@ -302,7 +304,8 @@ func scanCareSession(row interface {
 	var packageID, bookingID sql.NullString
 	err := row.Scan(&cs.ID, &packageID, &bookingID, &cs.PatientID, &cs.ProfessionalID,
 		&cs.SessionType, &cs.ScheduledAt, &cs.DurationMinutes, &cs.Status,
-		&cs.MeetingURL, &cs.SummaryForPatient, &cs.PrivateNote, &cs.CancelReason,
+		&cs.MeetingURL, &cs.GoogleEventID,
+		&cs.SummaryForPatient, &cs.PrivateNote, &cs.CancelReason,
 		&cs.RescheduleCount, &cs.AttendedMarkedAt, &cs.CreatedAt,
 		&cs.PatientName, &cs.ProfessionalName, &cs.PhotoIntroURL)
 	if err != nil {
@@ -389,12 +392,12 @@ func (s *Store) CreateCareSession(ctx context.Context, cs CareSession) (CareSess
 	}
 	const ins = `INSERT INTO care_sessions
 		(package_id, booking_id, patient_id, professional_id, session_type, scheduled_at,
-		 duration_minutes, status, meeting_url, summary_for_patient, private_note)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		 duration_minutes, status, meeting_url, google_event_id, summary_for_patient, private_note)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id, created_at`
 	err = tx.QueryRowContext(ctx, ins, packageID, bookingID, cs.PatientID, cs.ProfessionalID,
 		cs.SessionType, start, cs.DurationMinutes, status,
-		cs.MeetingURL, cs.SummaryForPatient, cs.PrivateNote).
+		cs.MeetingURL, cs.GoogleEventID, cs.SummaryForPatient, cs.PrivateNote).
 		Scan(&cs.ID, &cs.CreatedAt)
 	if err != nil {
 		// Race terakhir: unique index slot.

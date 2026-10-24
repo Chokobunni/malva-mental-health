@@ -17,6 +17,7 @@ import (
 
 	"malva/backend/internal/auth"
 	"malva/backend/internal/config"
+	googlecal "malva/backend/internal/google"
 	"malva/backend/internal/notify"
 	"malva/backend/internal/payment"
 	"malva/backend/internal/realtime"
@@ -39,6 +40,8 @@ type Server struct {
 	payment payment.PaymentGateway
 	// sos nil = kanal blast SOS (WhatsApp/Fonnte) belum dikonfigurasi.
 	sos *notify.FonnteSender
+	// calendar nil = Google Calendar/Meet belum dikonfigurasi (client secret kosong).
+	calendar *googlecal.CalendarService
 }
 
 type registerRequest struct {
@@ -184,6 +187,14 @@ func New(cfg config.Config, authManager auth.Manager, st *store.Store, hub *real
 	} else {
 		logger.Info("SOS WhatsApp channel active", "gateway", "fonnte")
 	}
+	// Google Calendar/Meet: aktif bila client secret tersedia. Tanpa ini,
+	// sesi video tetap bisa memakai Jitsi sebagai fallback.
+	if cfg.GoogleClientSecret != "" {
+		srv.calendar = googlecal.NewCalendarService(cfg, st)
+		logger.Info("Google Calendar/Meet integration active")
+	} else {
+		logger.Warn("MALVA_GOOGLE_CLIENT_SECRET belum diisi; Google Meet nonaktif (fallback Jitsi)")
+	}
 	return srv
 }
 
@@ -194,6 +205,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/auth/register", s.rateLimit(s.register))
 	mux.HandleFunc("POST /v1/auth/login", s.rateLimit(s.login))
 	mux.HandleFunc("POST /v1/auth/google", s.rateLimit(s.googleLogin))
+	mux.HandleFunc("POST /v1/auth/link-google", s.requireAuth(s.linkGoogle))
+	mux.HandleFunc("POST /v1/auth/google-token-exchange", s.requireAuth(s.exchangeGoogleToken))
+	mux.HandleFunc("POST /v1/auth/complete-professional", s.requireAuth(s.completeProfessionalProfile))
 	mux.HandleFunc("POST /v1/auth/refresh", s.rateLimit(s.refresh))
 	mux.HandleFunc("POST /v1/auth/logout", s.rateLimit(s.logout))
 	mux.HandleFunc("POST /v1/auth/change-password", s.requireAuth(s.changePassword))
@@ -279,6 +293,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/care-sessions", s.requireAuth(s.listCareSessions))
 	mux.HandleFunc("PATCH /v1/care-sessions/{session_id}", s.requireAuth(s.updateCareSession))
 	mux.HandleFunc("POST /v1/care-sessions/{session_id}/reschedule", s.requireAuth(s.rescheduleCareSession))
+	// Quick video call (Google Meet ad-hoc) untuk profesional.
+	mux.HandleFunc("POST /v1/meet/quick", s.requireAuth(s.createQuickMeet))
 	// Refund/kredit paket (pro-cancel): eksekusi refund uang / catat kredit.
 	mux.HandleFunc("POST /v1/care-sessions/{session_id}/refund", s.requireAuth(s.refundCareSession))
 	mux.HandleFunc("GET /v1/care-refunds", s.requireAuth(s.listCareRefunds))
@@ -1930,6 +1946,43 @@ func (s *Server) writeAuthResponseWithRefreshToken(w http.ResponseWriter, status
 		"token_type":    "Bearer",
 		"expires_in":    int((24 * time.Hour).Seconds()),
 	})
+}
+
+// writeAuthResponseWithCompletion sama dengan writeAuthResponse tetapi
+// menambahkan field needs_completion untuk alur onboarding profesional Google.
+func (s *Server) writeAuthResponseWithCompletion(w http.ResponseWriter, r *http.Request, status int, user store.User, needsCompletion bool) {
+	refreshToken, err := auth.GenerateRefreshToken()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if err := s.store.CreateRefreshSession(
+		r.Context(),
+		user.ID,
+		auth.HashRefreshToken(refreshToken),
+		r.UserAgent(),
+		clientIP(r),
+		refreshSessionTTL,
+	); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	token, err := s.auth.Issue(user.ID, user.Role)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	resp := map[string]any{
+		"user":          user,
+		"access_token":  token,
+		"refresh_token": refreshToken,
+		"token_type":    "Bearer",
+		"expires_in":    int((24 * time.Hour).Seconds()),
+	}
+	if needsCompletion {
+		resp["needs_completion"] = true
+	}
+	writeJSON(w, status, resp)
 }
 
 type authedHandler func(http.ResponseWriter, *http.Request, auth.Claims)

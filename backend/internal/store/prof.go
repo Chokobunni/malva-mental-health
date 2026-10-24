@@ -169,6 +169,26 @@ func (s *Store) UpsertProfessionalCredential(ctx context.Context, c Professional
 	return out, nil
 }
 
+// UpdateProfessionalID mengganti professional_id di tabel professional_profiles.
+// Dipakai saat profesional mendaftar via Google (temporary ID "g-...") lalu
+// melengkapi profil dengan nomor STR asli.
+func (s *Store) UpdateProfessionalID(ctx context.Context, userID, newProfessionalID string) error {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(newProfessionalID) == "" {
+		return errors.New("user_id and professional_id are required")
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE professional_profiles SET professional_id = $2 WHERE user_id = $1`,
+		userID, strings.TrimSpace(newProfessionalID))
+	if err != nil {
+		return err
+	}
+	aff, _ := res.RowsAffected()
+	if aff == 0 {
+		return errors.New("professional profile not found")
+	}
+	return nil
+}
+
 // ReopenCredentialReview mengembalikan kredensial berstatus REJECTED ke PENDING
 // agar masuk kembali ke antrean review admin (ListPendingCredentials) setelah
 // profesional memperbaiki STR/SIP/SIPP/dokumen yang ditolak.

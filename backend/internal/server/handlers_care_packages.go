@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"malva/backend/internal/auth"
+	googlecal "malva/backend/internal/google"
 	"malva/backend/internal/store"
 )
 
@@ -247,15 +248,31 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 		writeError(w, http.StatusBadRequest, verr)
 		return
 	}
-	// Auto-generate meeting URL untuk sesi video bila belum disediakan klien.
-	// Menggunakan Jitsi Meet publik (meet.jit.si) — gratis, tanpa API key,
-	// cukup untuk testing real 2 HP. Room name unik per paket+scheduled_at
-	// agar tidak bentrok antar pasien.
+	// Auto-generate meeting URL untuk sesi video. Prioritas: Google Meet via
+	// Calendar API (bila profesional sudah menautkan akun Google). Fallback:
+	// Jitsi Meet publik bila Calendar service tidak tersedia atau gagal.
 	meetingURL := strings.TrimSpace(req.MeetingURL)
+	googleEventID := ""
 	sessionType := strings.ToLower(strings.TrimSpace(req.SessionType))
 	if sessionType == "video" && meetingURL == "" {
-		roomSlug := fmt.Sprintf("malva-%s-%d", pkg.ID[:8], at.Unix())
-		meetingURL = "https://meet.jit.si/" + roomSlug
+		if s.calendar != nil {
+			endTime := at.Add(time.Duration(duration) * time.Minute)
+			eventID, meetURL, cerr := s.calendar.CreateMeetEvent(r.Context(), pkg.ProfessionalID, googlecal.MeetEventOptions{
+				Summary:   "Sesi Malva - " + pkg.PatientName,
+				StartTime: at,
+				EndTime:   endTime,
+			})
+			if cerr != nil {
+				s.logger.Warn("gagal membuat event Google Meet, fallback ke Jitsi", "error", cerr, "professional", pkg.ProfessionalID)
+			} else {
+				meetingURL = meetURL
+				googleEventID = eventID
+			}
+		}
+		if meetingURL == "" {
+			roomSlug := fmt.Sprintf("malva-%s-%d", pkg.ID[:8], at.Unix())
+			meetingURL = "https://meet.jit.si/" + roomSlug
+		}
 	}
 	cs, err := s.store.CreateCareSession(r.Context(), store.CareSession{
 		PackageID:       &pkg.ID,
@@ -266,6 +283,7 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 		DurationMinutes: duration,
 		Status:          "scheduled",
 		MeetingURL:      meetingURL,
+		GoogleEventID:   googleEventID,
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -382,6 +400,12 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
+		// Best-effort: batalkan event Google Calendar bila ada.
+		if cs.GoogleEventID != "" && s.calendar != nil {
+			if cerr := s.calendar.CancelMeetEvent(r.Context(), cs.ProfessionalID, cs.GoogleEventID); cerr != nil {
+				s.logger.Warn("gagal membatalkan event Meet saat cancel profesional", "error", cerr, "event_id", cs.GoogleEventID)
+			}
+		}
 		// Ledger kredit otomatis (idempoten): bukti audit kuota kembali.
 		refund, creditErr := s.recordAutoCredit(r, updated)
 		if creditErr != nil {
@@ -411,6 +435,12 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
+		}
+		// Best-effort: batalkan event Google Calendar bila ada.
+		if cs.GoogleEventID != "" && s.calendar != nil {
+			if cerr := s.calendar.CancelMeetEvent(r.Context(), cs.ProfessionalID, cs.GoogleEventID); cerr != nil {
+				s.logger.Warn("gagal membatalkan event Meet saat cancel pasien", "error", cerr, "event_id", cs.GoogleEventID)
+			}
 		}
 		s.notifyPatient(r, cs.ProfessionalID, "session_cancelled_patient",
 			"Pasien membatalkan sesi", "Seorang pasien membatalkan sesi terjadwal.",
@@ -480,6 +510,13 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
+	}
+	// Best-effort: perbarui event Google Calendar bila ada.
+	if cs.GoogleEventID != "" && s.calendar != nil {
+		newEnd := at.Add(time.Duration(cs.DurationMinutes) * time.Minute)
+		if uerr := s.calendar.UpdateMeetEvent(r.Context(), cs.ProfessionalID, cs.GoogleEventID, at, newEnd); uerr != nil {
+			s.logger.Warn("gagal memperbarui event Meet saat reschedule", "error", uerr, "event_id", cs.GoogleEventID)
+		}
 	}
 	other := cs.PatientID
 	title := "Sesi di-reschedule profesional"

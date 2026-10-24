@@ -19,6 +19,9 @@ type Config struct {
 	// GoogleClientID adalah Web OAuth Client ID untuk verifikasi Google Sign-In.
 	// Kosong = endpoint /v1/auth/google nonaktif dengan pesan yang jelas.
 	GoogleClientID string
+	// GoogleClientSecret adalah OAuth client secret untuk pertukaran token
+	// (authorization code -> refresh/access token) dan akses Google Calendar API.
+	GoogleClientSecret string
 	// PaymentMode memilih jalur pembayaran: "simulation" (default, dev/test)
 	// atau "gateway" (produksi, wajib + server key Midtrans).
 	PaymentMode string
@@ -56,6 +59,7 @@ func Load() (Config, error) {
 		LockoutDuration:    15,
 		MaxRequestBodySize: 1 << 20,
 		GoogleClientID:     os.Getenv("MALVA_GOOGLE_CLIENT_ID"),
+		GoogleClientSecret: os.Getenv("MALVA_GOOGLE_CLIENT_SECRET"),
 		PaymentMode:        strings.ToLower(getenv("MALVA_PAYMENT_MODE", PaymentModeSimulation)),
 		MidtransServerKey:  os.Getenv("MALVA_MIDTRANS_SERVER_KEY"),
 		MidtransClientKey:  os.Getenv("MALVA_MIDTRANS_CLIENT_KEY"),
