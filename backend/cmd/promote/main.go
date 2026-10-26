@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"malva/backend/internal/config"
+
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -25,7 +27,7 @@ func run() error {
 		return fmt.Errorf("pemakaian: promote <email>")
 	}
 	email := strings.ToLower(strings.TrimSpace(os.Args[1]))
-	dbURL := os.Getenv("MALVA_DATABASE_URL")
+	dbURL := config.DatabaseURL()
 	if dbURL == "" {
 		return fmt.Errorf("MALVA_DATABASE_URL wajib diisi")
 	}

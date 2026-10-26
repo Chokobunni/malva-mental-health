@@ -345,7 +345,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/admin/doctors", s.requireAdmin(s.listAdminDoctors))
 	mux.HandleFunc("GET /v1/admin/doctors/{user_id}", s.requireAdmin(s.getAdminDoctor))
 	mux.HandleFunc("PUT /v1/admin/doctors/{user_id}", s.requireAdmin(s.updateAdminDoctor))
-	return s.recover(s.securityHeaders(s.inputSanitize(s.cors(mux))))
+	return s.requestID(s.recover(s.securityHeaders(s.inputSanitize(s.cors(mux)))))
 }
 
 func (s *Server) root(w http.ResponseWriter, r *http.Request) {
@@ -2027,8 +2027,9 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		if s.cfg.OriginAllowed(origin) {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-CSRF-Token")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-CSRF-Token, X-Request-Id")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Expose-Headers", "X-Request-Id")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Access-Control-Max-Age", "86400")
 		}
@@ -2088,7 +2089,8 @@ func (s *Server) recover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				s.logger.Error("panic recovered", "value", recovered)
+				reqID, _ := RequestIDFromContext(r.Context())
+				s.logger.Error("panic recovered", "value", recovered, "request_id", reqID)
 				writeError(w, http.StatusInternalServerError, errors.New("internal server error"))
 			}
 		}()

@@ -8,6 +8,7 @@ import (
 
 type Config struct {
 	HTTPAddr           string
+	LogLevel           string
 	DatabaseURL        string
 	JWTSecret          string
 	AllowedOrigins     []string
@@ -50,6 +51,7 @@ const (
 func Load() (Config, error) {
 	cfg := Config{
 		HTTPAddr:           getenv("MALVA_HTTP_ADDR", ":8080"),
+		LogLevel:           strings.ToLower(getenv("MALVA_LOG_LEVEL", "info")),
 		DatabaseURL:        os.Getenv("MALVA_DATABASE_URL"),
 		JWTSecret:          os.Getenv("MALVA_JWT_SECRET"),
 		AllowedOrigins:     splitCSV(getenv("MALVA_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://localhost:8080")),
@@ -83,6 +85,15 @@ func Load() (Config, error) {
 		return Config{}, errors.New("MALVA_MIDTRANS_SERVER_KEY is required when MALVA_PAYMENT_MODE=gateway")
 	}
 	return cfg, nil
+}
+
+// DatabaseURL mengembalikan URL koneksi database dari environment
+// (MALVA_DATABASE_URL). Helper ini untuk CLI seperti cmd/admin dan cmd/promote
+// yang hanya butuh URL database dan tidak perlu memuat Config penuh
+// (yang mewajibkan MALVA_JWT_SECRET). Kode aplikasi utama tetap memakai
+// config.Load().
+func DatabaseURL() string {
+	return os.Getenv("MALVA_DATABASE_URL")
 }
 
 func (c Config) OriginAllowed(origin string) bool {

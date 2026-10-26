@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"malva/backend/internal/clock"
 )
 
 // ============================================================
@@ -308,7 +310,7 @@ func (s *Store) UpdateSOSBlastStatus(ctx context.Context, logID, status, message
 	const q = `UPDATE sos_blast_log SET status = $1, message_id = $2, delivered_at = $3 WHERE id = $4`
 	var deliveredAt any
 	if status == "delivered" {
-		deliveredAt = time.Now()
+		deliveredAt = clock.Now()
 	}
 	_, err := s.db.ExecContext(ctx, q, status, messageID, deliveredAt, logID)
 	return err

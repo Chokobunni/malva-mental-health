@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"malva/backend/internal/auth"
+	"malva/backend/internal/clock"
 	googlecal "malva/backend/internal/google"
 	"malva/backend/internal/store"
 )
@@ -53,9 +54,9 @@ type pricingRequest struct {
 	PackagePrice    *int64 `json:"package_price"`
 }
 
-// wibLoc zona waktu sesi (WIB). FixedZone bebas embed tzdata.
+// wibLoc zona waktu sesi (WIB), bersumber tunggal dari paket clock.
 // Catatan: magic offset tetap valid untuk WIB (tidak ada DST).
-var wibLoc = time.FixedZone("WIB", 7*3600)
+var wibLoc = clock.Location()
 
 func parseWIBDateTime(value string) (time.Time, error) {
 	value = strings.TrimSpace(value)

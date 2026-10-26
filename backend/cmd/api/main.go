@@ -13,6 +13,7 @@ import (
 
 	"malva/backend/internal/auth"
 	"malva/backend/internal/config"
+	"malva/backend/internal/logging"
 	"malva/backend/internal/notify"
 	"malva/backend/internal/realtime"
 	"malva/backend/internal/server"
@@ -22,18 +23,24 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	if err := run(logger); err != nil {
-		logger.Error("server stopped", "error", err)
+	if err := run(); err != nil {
+		slog.Error("server stopped", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(logger *slog.Logger) error {
+func run() error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
+
+	// Logger terpusat dibuat SETELAH config.Load agar level (MALVA_LOG_LEVEL)
+	// sudah terbaca. logging.SetDefault memasangnya sebagai logger default,
+	// sehingga pemanggilan slog.* yang tersebar di server/store ikut memakai
+	// logger JSON terpusat ini (bukan handler teks default ke stderr).
+	logger := logging.New(cfg.LogLevel, os.Stdout)
+	logging.SetDefault(logger)
 
 	db, err := sql.Open("pgx", cfg.DatabaseURL)
 	if err != nil {

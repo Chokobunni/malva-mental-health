@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"malva/backend/internal/clock"
 	"malva/backend/internal/screening"
 )
 
@@ -1166,7 +1167,7 @@ func (s *Store) UpsertMoodCheckin(ctx context.Context, input MoodCheckin) (MoodC
 		return MoodCheckin{}, errors.New("patient_id and mood are required")
 	}
 	if input.OccurredAt.IsZero() {
-		input.OccurredAt = time.Now()
+		input.OccurredAt = clock.Now()
 	}
 	var saved MoodCheckin
 	err := s.db.QueryRowContext(ctx, `
@@ -1226,7 +1227,7 @@ func (s *Store) UpsertDiaryEntry(ctx context.Context, input DiaryEntry) (DiaryEn
 		input.Mood = "okay"
 	}
 	if input.OccurredAt.IsZero() {
-		input.OccurredAt = time.Now()
+		input.OccurredAt = clock.Now()
 	}
 	var saved DiaryEntry
 	var feedback sql.NullString
@@ -1530,7 +1531,7 @@ func (s *Store) CreateMedicationLog(ctx context.Context, input MedicationLog) (M
 		input.Status = "taken"
 	}
 	if input.TakenAt.IsZero() {
-		input.TakenAt = time.Now()
+		input.TakenAt = clock.Now()
 	}
 	var medicationID any
 	if input.MedicationID != "" {

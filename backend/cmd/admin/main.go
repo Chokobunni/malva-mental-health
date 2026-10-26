@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"malva/backend/internal/config"
+
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -51,7 +53,7 @@ type SystemHealth struct {
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	dbURL := os.Getenv("MALVA_DATABASE_URL")
+	dbURL := config.DatabaseURL()
 	if dbURL == "" {
 		dbURL = "postgres://malva:malva_dev_password@localhost:5432/malva?sslmode=disable"
 	}

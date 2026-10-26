@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"malva/backend/internal/clock"
 )
 
 // ============================================================
@@ -31,9 +33,9 @@ const (
 )
 
 // locationWIB dipakai agar jam sesi selalu dihitung dalam waktu
-// Indonesia barat (kantor faskes). UTC+7 tanpa DST.
-// Catatan: magic offset tetap valid untuk WIB (tidak ada DST).
-var locationWIB = time.FixedZone("WIB", 7*3600)
+// Indonesia barat (kantor faskes). UTC+7 tanpa DST. Bersumber tunggal
+// dari paket clock.
+var locationWIB = clock.Location()
 
 type CarePackage struct {
 	ID               string    `json:"id"`
@@ -124,7 +126,7 @@ func (s *Store) CreateCarePackage(ctx context.Context, p CarePackage) (CarePacka
 		p.ValidityDays = CarePackageValidityDays
 	}
 	if p.StartsAt.IsZero() {
-		p.StartsAt = time.Now()
+		p.StartsAt = clock.Now()
 	}
 	if p.ExpiresAt.IsZero() {
 		p.ExpiresAt = p.StartsAt.AddDate(0, 0, p.ValidityDays)
@@ -334,7 +336,7 @@ func (s *Store) CreateCareSession(ctx context.Context, cs CareSession) (CareSess
 		return CareSession{}, errors.New("session_type harus chat atau video")
 	}
 	start := cs.ScheduledAt
-	if start.Before(time.Now().Add(-time.Minute)) {
+	if start.Before(clock.Now().Add(-time.Minute)) {
 		return CareSession{}, errors.New("jadwal sesi harus di masa depan")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -577,7 +579,7 @@ func (s *Store) RescheduleCareSession(ctx context.Context, sessionID string, new
 	if current.Status != "scheduled" && current.Status != "cancelled_by_professional" {
 		return CareSession{}, errors.New("hanya sesi terjadwal yang bisa di-reschedule")
 	}
-	if newTime.Before(time.Now().Add(-time.Minute)) {
+	if newTime.Before(clock.Now().Add(-time.Minute)) {
 		return CareSession{}, errors.New("jadwal baru harus di masa depan")
 	}
 	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "care_slot:"+current.ProfessionalID); err != nil {
@@ -828,7 +830,7 @@ func inSessionWindow(now, start time.Time, durationMinutes int) bool {
 }
 
 func (s *Store) ChatAccessFor(ctx context.Context, patientID, professionalID, senderRole string) (ChatAccess, error) {
-	now := time.Now()
+	now := clock.Now()
 	out := ChatAccess{}
 	// Paket aktif?
 	_, hasPkg, err := s.ActivePackageBetween(ctx, patientID, professionalID)

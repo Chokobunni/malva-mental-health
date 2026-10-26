@@ -7,6 +7,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"malva/backend/internal/clock"
 )
 
 // ============================================================
@@ -204,7 +206,7 @@ func (s *Store) LogHabit(ctx context.Context, patientID, goalID, loggedOn string
 		return HabitLog{}, errors.New("patient_id and goal_id are required")
 	}
 	if strings.TrimSpace(loggedOn) == "" {
-		loggedOn = time.Now().Format("2006-01-02")
+		loggedOn = clock.Now().Format("2006-01-02")
 	}
 	if _, err := time.Parse("2006-01-02", loggedOn); err != nil {
 		return HabitLog{}, errors.New("logged_on must be YYYY-MM-DD")

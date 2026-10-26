@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"malva/backend/internal/clock"
 )
 
 // ErrPaymentNotFound menandai reference pembayaran yang tidak ada. Dipisahkan
@@ -291,7 +293,7 @@ func (s *Store) MarkPaymentPaid(ctx context.Context, reference, externalID strin
 	}
 	p.Reference = reference
 	p.Status = "paid"
-	now := time.Now()
+	now := clock.Now()
 	p.PaidAt = &now
 	return p, nil
 }
