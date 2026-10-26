@@ -8,7 +8,19 @@
 | Version | v1 |
 | Auth | JWT Bearer token |
 | Format | JSON |
-| Total Endpoints | 39 |
+| Total Endpoints | 121 API (+1 static `/uploads/`) |
+
+> **Catatan sinkronisasi:** inventaris rute lengkap dan **selalu sinkron** dengan
+> kode ada di [`API_ROUTES.md`](API_ROUTES.md) (dibuat otomatis oleh
+> `cd backend && go run ./cmd/apidoc`). Skema mesin-terbaca (OpenAPI 3.0.3) ada di
+> [`openapi.yaml`](openapi.yaml). Dokumen ini adalah narasi manusia; sumber
+> kebenaran jumlah & daftar endpoint adalah generator tersebut.
+>
+> **Keterbatasan `openapi.yaml`:** skema mencakup **seluruh** path, method, autentikasi,
+> dan respons (200/400/401/403/404/422/500). Namun `requestBody` baru terisi untuk
+> **12 endpoint inti** (register, login, refresh, change-password, screenings,
+> mood-checkins, bookings, payments, care-packages, care-sessions, crisis-alerts,
+> webhooks/payment); `requestBody` endpoint lain menyusul per modul.
 
 ---
 
