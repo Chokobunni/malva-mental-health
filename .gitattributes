@@ -1,3 +1,6 @@
 # Shell scripts wajib LF agar tetap jalan saat dijalankan di Linux/VM
 # (mis. `ssh ... 'bash -s' < script.sh`), walau di-checkout di Windows.
 *.sh text eol=lf
+# Hook git tidak ber-ekstensi .sh, tapi tetap skrip shell — wajib LF agar
+# shebang tetap valid saat di-checkout di Windows.
+.githooks/* text eol=lf

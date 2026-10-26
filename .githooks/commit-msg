@@ -1,0 +1,40 @@
+#!/usr/bin/env sh
+# ============================================================
+# Malva — hook commit-msg (R10.1 Conventional Commits)
+# ============================================================
+# Aktifkan sekali per clone:
+#   git config core.hooksPath .githooks
+#   chmod +x .githooks/commit-msg
+#
+# Melewati: merge commit, revert, fixup!/squash! (perintah rebase).
+# ============================================================
+msg_file="${1:?berkas pesan commit tidak diberikan}"
+first_line="$(head -n1 "$msg_file" | tr -d '\r')"
+
+case "$first_line" in
+  Merge*|Revert*|"fixup!"*|"squash!"*) exit 0 ;;
+esac
+
+pattern='^(feat|fix|refactor|chore|docs|perf|test|build|ci|style|revert|seo|infra)(\([A-Za-z0-9._/-]+\))?: .{3,}$'
+
+if printf '%s' "$first_line" | grep -Eq "$pattern"; then
+  exit 0
+fi
+
+cat >&2 <<'EOF'
+ERROR: pesan commit tidak sesuai Conventional Commits.
+
+Format : <type>(<scope>): <ringkasan>
+
+  type  : feat|fix|refactor|chore|docs|perf|test|build|ci|style|revert|seo|infra
+  scope : opsional, mis. (auth), (care), (flutter), (ci)
+  contoh: feat(care): sesi selesai mencatat earnings
+
+Body (disarankan) berisi bullet perubahan per modul:
+
+  feat(care): sesi selesai mencatat earnings
+
+  - tambah kolom session_id pada earnings
+  - sesuaikan handler UpdateCareSessionStatus
+EOF
+exit 1

@@ -64,6 +64,21 @@ jobs:
       - name: Run tests
         working-directory: backend
         run: go test -v -race -coverprofile=coverage.out ./...
+      - name: Check conventions (format & clock.Now)
+        working-directory: backend
+        run: bash scripts/check_conventions.sh
+      - name: Check env sync (.env.example)
+        working-directory: backend
+        run: bash scripts/check_env_sync.sh
+      - name: Check migrations
+        working-directory: backend
+        run: bash scripts/check_migrations.sh
+      - name: Check coverage floors
+        working-directory: backend
+        run: bash scripts/check_coverage.sh coverage.out
+      - name: Check API docs in sync
+        working-directory: backend
+        run: go run ./cmd/apidoc -check
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
@@ -83,6 +98,7 @@ jobs:
       - name: Build
         working-directory: backend
         run: |
+          go build ./...
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o malva-api ./cmd/api
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o malva-api.exe ./cmd/api
           CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o malva-api-darwin ./cmd/api

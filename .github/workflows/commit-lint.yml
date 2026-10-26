@@ -1,0 +1,46 @@
+name: Commit Messages
+
+# Gate R10.1: setiap commit pada Pull Request wajib mengikuti
+# Conventional Commits. Dijalankan di PR saja agar riwayat lama
+# (sebelum aturan berlaku) tidak menghalangi.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  conventional-commits:
+    name: Conventional Commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Periksa pesan commit
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE_REF" || true
+          pattern='^(feat|fix|refactor|chore|docs|perf|test|build|ci|style|revert|seo|infra)(\([A-Za-z0-9._/-]+\))?: .{3,}'
+          fail=0
+          while IFS= read -r subject; do
+            [ -z "$subject" ] && continue
+            case "$subject" in
+              Merge*|Revert*|"fixup!"*|"squash!"*) continue ;;
+            esac
+            if ! printf '%s' "$subject" | grep -Eq "$pattern"; then
+              echo "::error::Commit tidak sesuai Conventional Commits: $subject"
+              fail=1
+            fi
+          done < <(git log --format=%s "origin/$BASE_REF"..HEAD)
+          if [ "$fail" -ne 0 ]; then
+            echo "Lihat .agents/AGENTS.md §BAGIAN 10 untuk format yang benar."
+            exit 1
+          fi
+          echo "OK: semua pesan commit sesuai Conventional Commits."

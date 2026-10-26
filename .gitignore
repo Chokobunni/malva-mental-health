@@ -51,6 +51,9 @@ flutter_web_stderr.log
 
 # Local Go build artifacts
 backend/*.exe
+# Artefak coverage Go (dihasilkan go test -coverprofile, dipakai gate CI)
+backend/coverage.out
+coverage.out
 
 # Local secrets and production environment files
 .env
