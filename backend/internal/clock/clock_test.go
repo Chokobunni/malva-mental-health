@@ -28,7 +28,7 @@ func TestNowInWIBZone(t *testing.T) {
 		t.Fatalf("Now() harus berada di zona Location(), dapat %q", now.Location())
 	}
 	// Sanity: Now() WIB tidak boleh menyimpang jauh dari time.Now().
-	diff := now.Sub(time.Now())
+	diff := time.Until(now)
 	if diff < -time.Minute || diff > time.Minute {
 		t.Fatalf("Now() menyimpang terlalu jauh dari waktu nyata: %v", diff)
 	}
