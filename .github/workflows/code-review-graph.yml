@@ -1,0 +1,47 @@
+name: Code Review Graph
+
+# ============================================================
+# Blast-radius analysis untuk setiap Pull Request
+# ============================================================
+# Memetakan diff PR -> fungsi terdampak -> pemanggil -> test yang
+# terpengaruh, lalu memposting SATU komentar sticky di PR (diperbarui
+# di tempat, tidak menumpuk).
+#
+# Mode saat ini: ADVISORY.
+#   - tidak memblokir merge (input `fail-on-risk` sengaja tidak dipakai)
+#   - tidak mengubah kode, tidak menyentuh database
+# Untuk menjadikannya merge gate nanti, tambahkan:
+#   fail-on-risk: high
+#
+# Catatan: hanya berjalan pada PR dari repo ini (bukan fork), karena
+# butuh izin pull-requests: write untuk menulis komentar.
+# ============================================================
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: crg-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  blast-radius:
+    name: Blast Radius
+    runs-on: ubuntu-latest
+    # Fork tidak mendapat token dengan izin tulis komentar.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Analisis dampak perubahan
+        uses: tirth8205/code-review-graph@v2.3.9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
