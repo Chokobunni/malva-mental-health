@@ -22,9 +22,11 @@ jobs:
           go-version: '1.26'
           cache-dependency-path: backend/go.sum
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        # v8 + golangci-lint v2: v1.x dibangun dengan Go 1.24 sehingga
+        # menolak menganalisis modul bertarget go 1.26.10.
+        uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          version: v2.15.0
           working-directory: backend
 
   test:
