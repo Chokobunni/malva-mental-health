@@ -1,0 +1,33 @@
+# ============================================================
+# Konfigurasi gitleaks — Malva
+# ============================================================
+# Prinsip: allowlist SEMINIMAL mungkin. Setiap entri wajib punya alasan
+# tertulis. Jangan menambahkan entri hanya karena scan gagal — periksa
+# dulu apakah nilainya benar-benar publik/dummy.
+#
+# Gate CI memakai mode `--no-git` (memindai berkas yang ada di checkout,
+# yaitu berkas tracked). Pemindaian riwayat penuh dijalankan manual.
+# ============================================================
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Nilai publik atau dummy yang memang ada di repo Malva"
+
+paths = [
+  # Firebase *client* API key (apiKey web/android/ios) adalah identifier
+  # publik yang tertanam di aplikasi klien dan dikirim ke Google. Bukan
+  # rahasia server — membocorkannya tidak memberi akses ke data pengguna.
+  # Yang RAHASIA adalah service-account JSON (firebase-service-account.json),
+  # dan itu di-gitignore.
+  '''lib/firebase_options\.dart$''',
+]
+
+regexes = [
+  # Secret JWT khusus job CI di .github/workflows/backend-ci.yml.
+  # Nilainya dummy dan hanya berlaku di database Postgres sementara.
+  '''test-jwt-secret-for-ci-must-be-at-least-32-chars-long''',
+  # Contoh token FCM di docs/FCM_TESTING.md — base64 dari "test_token_example".
+  '''dGVzdF90b2tlbl9leGFtcGxl''',
+]

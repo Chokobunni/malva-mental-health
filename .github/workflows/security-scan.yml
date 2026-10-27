@@ -1,0 +1,95 @@
+name: Security Gates
+
+# ============================================================
+# Gate keamanan — TERPISAH dari backend-ci.yml
+# ============================================================
+# Tujuan: menambah lapisan keamanan tanpa mengubah pipeline yang sudah
+# berjalan. Semua job di sini READ-ONLY:
+#   - tidak mengubah kode
+#   - tidak menyentuh database
+#   - tidak memerlukan secret produksi
+#
+# Verifikasi lokal sebelum gate ini dipasang (27 Okt 2026):
+#   gitleaks  : 0 temuan pada berkas tracked (setelah .gitleaks.toml)
+#   gosec     : 0 issue pada severity=high & confidence=high
+#   osv-scanner (pubspec.lock): 172 paket, 0 kerentanan
+#
+# Catatan govulncheck: masih ADVISORY di backend-ci.yml (job security-scan)
+# karena saat ini menemukan 26 kerentanan nyata yang perlu diupgrade
+# terpisah. Jangan jadikan blocking sebelum dependency di-upgrade.
+# ============================================================
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # CVE baru muncul tanpa perubahan kode — pindai ulang tiap Senin 03:00 UTC.
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Secret Scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unduh gitleaks v8.30.1
+        run: |
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz"
+          curl -sSfL "$url" -o gitleaks.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks version
+
+      - name: Pindai secret pada berkas tracked
+        # --no-git: hanya memindai berkas yang ada di checkout, BUKAN riwayat.
+        # Alasannya: satu secret lama pernah ter-commit (sudah dihapus dari
+        # berkas, lihat catatan rotasi). Gate ini mencegah kebocoran BARU;
+        # pembersihan riwayat adalah tugas terpisah.
+        run: |
+          set -euo pipefail
+          ./gitleaks detect --source . --no-git --redact --no-banner \
+            --exit-code 1 --config .gitleaks.toml
+
+  sast:
+    name: SAST Go (gosec)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          cache-dependency-path: backend/go.sum
+
+      - name: gosec (severity & confidence high)
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          "$(go env GOPATH)/bin/gosec" \
+            -severity=high -confidence=high -exclude-generated -fmt=text ./...
+
+  deps:
+    name: Dependency CVE (osv-scanner)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          # osv-scanner v2 mensyaratkan Go >= 1.27
+          go-version: 'stable'
+
+      - name: osv-scanner (Flutter pubspec.lock)
+        # go.sum sengaja tidak dipindai di sini: osv-scanner v2 tidak punya
+        # extractor untuk go.sum, dan govulncheck sudah menangani modul Go
+        # di backend-ci.yml.
+        run: |
+          set -euo pipefail
+          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.7.0
+          "$(go env GOPATH)/bin/osv-scanner" scan source -L pubspec.lock
