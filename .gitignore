@@ -21,6 +21,9 @@ build/
 # Local IDE and machine state
 .idea/
 .vscode/
+# Konfigurasi Claude Code lokal (hook graphify terikat ke binary di mesin ini).
+# Instruksi portabelnya ada di CLAUDE.md; skill graphify di .agents/skills/.
+.claude/
 *.iml
 *.ipr
 *.iws
@@ -54,6 +57,9 @@ backend/*.exe
 # Artefak coverage Go (dihasilkan go test -coverprofile, dipakai gate CI)
 backend/coverage.out
 coverage.out
+
+# Graphify knowledge graph output (generated, bukan source code)
+graphify-out/
 
 # Local secrets and production environment files
 .env

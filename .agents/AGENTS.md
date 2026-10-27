@@ -229,6 +229,31 @@ Ambang coverage per paket ada di `scripts/check_coverage.sh` (auth 55, clock 90,
 | R9.1 | Audit repo mikroservis `hepipay-*` | Malva monolith; tidak ada repo sibling. |
 | R11.2 | Prefix gateway `/hepipay/pos/` | Malva pakai `/v1/` di `api.malva.web.id`. |
 
+## Alat Bantu Agent & Urutan Prioritas
+
+Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berada di bawah aturan Malva.
+
+| # | Sumber | Mengatur | Boleh mengalahkan #1? |
+|---|---|---|---|
+| 1 | **`.agents/AGENTS.md`** (dokumen ini) | keamanan, skema, migrasi, waktu, log, commit | — |
+| 2 | **Superpowers** (`.agents/skills/superpowers/`, 15 skills) | proses: brainstorming, plan, TDD, review, verifikasi | **tidak** |
+| 3 | **Ponytail** (`.agents/skills/ponytail/`) | ukuran implementasi (YAGNI, diff minimal) | **tidak** |
+| — | **Graphify** (`graphify-out/`) | navigasi codebase via knowledge graph | hanya alat baca |
+
+**Ponytail aktif default (level `full`)** — tidak perlu dipicu kata kunci. Karena itu daftar "tidak boleh dipotong" di bawah ini bersifat mengikat:
+
+1. Migrasi idempoten (`IF NOT EXISTS`, kolom nullable/DEFAULT).
+2. `clock.Now()` untuk timestamp bisnis.
+3. Sinkronisasi dokumen API (`go run ./cmd/apidoc`).
+4. Gate CI: `go build`, `go vet`, `go test`, `apidoc -check`, 4 skrip konvensi.
+5. Validasi input di trust boundary + otorisasi per-role.
+6. Signature webhook pembayaran (`/v1/webhooks/payment`).
+7. Error handling transaksi: payment, earnings, refund.
+8. Test untuk logika non-trivial (Superpowers TDD).
+9. Masking PII di log.
+
+**Analisis tetap penuh, implementasi yang minimal.** Plan First + analisis dampak tidak boleh dipangkas oleh YAGNI.
+
 ## Alur Kerja
 
 1. **Plan First** — susun rencana singkat (file yang disentuh, langkah, risiko) dan minta persetujuan sebelum eksekusi besar.
