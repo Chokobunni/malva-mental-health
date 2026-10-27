@@ -173,7 +173,10 @@ $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
   ```powershell
   cd "D:\Project\Malva\2026-07-09\say\outputs\malva\backend"
   $env:MALVA_DATABASE_URL = "postgres://malva:malva_dev_password@localhost:5432/malva?sslmode=disable"
-  $env:MALVA_JWT_SECRET = "2dbccb5cccd0497f9ccf0323735ac2302ade3544c49fdfefd4a1feb09f693474"
+  # JWT secret WAJIB minimal 32 karakter. Salin dari backend/.env (yang di-gitignore),
+  # atau buat baru dengan: openssl rand -hex 32
+  # JANGAN menaruh nilai secret asli di dokumen yang di-commit.
+  $env:MALVA_JWT_SECRET = "<tempel-secret-dari-backend/.env>"
   .\api.exe
   ```
 
