@@ -34,9 +34,9 @@ func NewProvider(ctx context.Context, cfg config.Config, logger *slog.Logger) (P
 
 	var opts []option.ClientOption
 	if cfg.FCMCredentialsJSON != "" {
-		opts = append(opts, option.WithCredentialsJSON([]byte(cfg.FCMCredentialsJSON)))
+		opts = append(opts, option.WithAuthCredentialsJSON(option.ServiceAccount, []byte(cfg.FCMCredentialsJSON)))
 	} else {
-		opts = append(opts, option.WithCredentialsFile(cfg.FCMCredentialsFile))
+		opts = append(opts, option.WithAuthCredentialsFile(option.ServiceAccount, cfg.FCMCredentialsFile))
 	}
 	app, err := firebase.NewApp(ctx, nil, opts...)
 	if err != nil {

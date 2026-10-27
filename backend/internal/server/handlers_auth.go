@@ -251,7 +251,7 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 		return
 	}
 	if s.cfg.GoogleClientSecret == "" {
-		writeError(w, http.StatusNotImplemented, errors.New("Google OAuth client secret belum dikonfigurasi"))
+		writeError(w, http.StatusNotImplemented, errors.New("google OAuth client secret belum dikonfigurasi"))
 		return
 	}
 	oauthCfg := &oauth2.Config{
@@ -276,7 +276,7 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 	// Calendar akan selalu ErrReauthNeeded dan menautkan ulang menghasilkan
 	// token kosong lagi (loop tanpa akhir).
 	if strings.TrimSpace(tok.RefreshToken) == "" {
-		writeError(w, http.StatusBadRequest, errors.New("Google tidak memberikan refresh token. Cabut akses Malva di https://myaccount.google.com/permissions lalu hubungkan ulang akun Google"))
+		writeError(w, http.StatusBadRequest, errors.New("google tidak memberikan refresh token. Cabut akses Malva di https://myaccount.google.com/permissions lalu hubungkan ulang akun Google"))
 		return
 	}
 	scope := strings.Join(oauthCfg.Scopes, " ")

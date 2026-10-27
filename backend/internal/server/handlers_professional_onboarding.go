@@ -110,7 +110,7 @@ func (s *Server) createQuickMeet(w http.ResponseWriter, r *http.Request, claims 
 		return
 	}
 	if s.calendar == nil {
-		writeError(w, http.StatusNotImplemented, errors.New("Google Calendar belum dikonfigurasi di server"))
+		writeError(w, http.StatusNotImplemented, errors.New("google Calendar belum dikonfigurasi di server"))
 		return
 	}
 	now := time.Now()

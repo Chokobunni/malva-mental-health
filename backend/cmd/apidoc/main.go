@@ -403,8 +403,9 @@ func yamlScalar(s string) string {
 	}
 	needQuote := false
 	for _, r := range s {
-		if !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') &&
-			!(r >= '0' && r <= '9') && r != '.' && r != '_' && r != '-' {
+		isSafe := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-'
+		if !isSafe {
 			needQuote = true
 			break
 		}
