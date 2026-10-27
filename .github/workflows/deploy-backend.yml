@@ -28,7 +28,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GO_VERSION: '1.23'
+  GO_VERSION: '1.26'
   DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
   API_URL: ${{ vars.MALVA_API_BASE_URL || 'https://api.malva.web.id' }}
 
