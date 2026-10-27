@@ -146,21 +146,6 @@ func (s *Store) GetBooking(ctx context.Context, bookingID string) (Booking, erro
 	return b, nil
 }
 
-// AuthorizePaymentOwner memastikan hanya pemilik booking yang
-// mengonfirmasi pembayarannya (tidak bisa oleh pihak lain).
-func (s *Store) AuthorizePaymentOwner(ctx context.Context, paymentID, subject, role string) error {
-	var patientID string
-	err := s.db.QueryRowContext(ctx, `SELECT b.patient_id FROM payments p
-		JOIN bookings b ON b.id = p.booking_id WHERE p.id = $1`, paymentID).Scan(&patientID)
-	if err != nil {
-		return err
-	}
-	if role != "patient" || patientID != subject {
-		return errors.New("only the booking owner can confirm this payment")
-	}
-	return nil
-}
-
 // AuthorizePaymentByReference memeriksa kepemilikan pembayaran DARI REFERENCE
 // tanpa mengubah apa pun. Dipakai handler mark-paid agar otorisasi terjadi
 // SEBELUM mutasi: sebelumnya payment sudah terlanjur berstatus 'paid' walau
