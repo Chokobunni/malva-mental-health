@@ -12,7 +12,8 @@ void main() {
     });
 
     test('URL berakhiran .svg terdeteksi sebagai SVG', () {
-      expect(isSvgPhotoUrl('https://api.malva.web.id/uploads/avatar.svg'), isTrue);
+      expect(
+          isSvgPhotoUrl('https://api.malva.web.id/uploads/avatar.svg'), isTrue);
     });
 
     test('URL raster (png/jpg/webp) bukan SVG', () {
