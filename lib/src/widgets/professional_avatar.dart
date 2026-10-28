@@ -1,4 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:http/http.dart' as http;
 
 import '../theme.dart';
 
@@ -51,16 +55,12 @@ class ProfessionalAvatar extends StatelessWidget {
         radius: radius,
         backgroundColor: Colors.transparent,
         child: ClipOval(
-          child: Image.network(
-            photoUrl!,
+          child: ProfessionalPhoto(
+            photoUrl: photoUrl!,
             width: radius * 2,
             height: radius * 2,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _gradientFallback(),
-            loadingBuilder: (_, child, progress) {
-              if (progress == null) return child;
-              return _gradientFallback();
-            },
+            fallback: _gradientFallback(),
           ),
         ),
       );
@@ -93,6 +93,97 @@ class ProfessionalAvatar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// True bila URL mengarah ke gambar SVG (mis. avatar DiceBear default yang
+/// di-generate backend saat profesional belum unggah foto). Flutter tidak
+/// bisa mendekode SVG lewat Image.network, jadi URL seperti ini wajib
+/// dirender lewat flutter_svg — kalau tidak, avatar profesional selalu
+/// jatuh ke fallback inisial di sisi pasien.
+bool isSvgPhotoUrl(String url) {
+  final path = url.toLowerCase().split('?').first;
+  return path.endsWith('.svg') || path.endsWith('/svg');
+}
+
+/// Foto profil profesional dari URL jaringan.
+/// - URL raster (png/jpg/webp): [Image.network] dengan fallback bila gagal.
+/// - URL SVG: byte diunduh via HTTP lalu dirender [SvgPicture.memory].
+/// [fallback] dipakai saat URL kosong, gambar gagal dimuat, atau masih loading.
+class ProfessionalPhoto extends StatefulWidget {
+  const ProfessionalPhoto({
+    super.key,
+    required this.photoUrl,
+    this.width,
+    this.height,
+    this.fit = BoxFit.cover,
+    this.fallback = const SizedBox.shrink(),
+  });
+
+  final String photoUrl;
+  final double? width;
+  final double? height;
+  final BoxFit fit;
+  final Widget fallback;
+
+  @override
+  State<ProfessionalPhoto> createState() => _ProfessionalPhotoState();
+}
+
+class _ProfessionalPhotoState extends State<ProfessionalPhoto> {
+  Uint8List? _bytes;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (isSvgPhotoUrl(widget.photoUrl)) {
+      _fetchSvg();
+    }
+  }
+
+  Future<void> _fetchSvg() async {
+    try {
+      final res = await http
+          .get(Uri.parse(widget.photoUrl))
+          .timeout(const Duration(seconds: 12));
+      if (!mounted) return;
+      if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
+        setState(() => _bytes = res.bodyBytes);
+      } else {
+        setState(() => _failed = true);
+      }
+    } on Object catch (_) {
+      if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.photoUrl.isEmpty || _failed) return widget.fallback;
+
+    if (isSvgPhotoUrl(widget.photoUrl)) {
+      final bytes = _bytes;
+      if (bytes == null) return widget.fallback;
+      return SvgPicture.memory(
+        bytes,
+        width: widget.width,
+        height: widget.height,
+        fit: widget.fit,
+      );
+    }
+
+    return Image.network(
+      widget.photoUrl,
+      width: widget.width,
+      height: widget.height,
+      fit: widget.fit,
+      errorBuilder: (_, __, ___) => widget.fallback,
+      loadingBuilder: (_, child, progress) {
+        if (progress == null) return child;
+        return widget.fallback;
+      },
     );
   }
 }

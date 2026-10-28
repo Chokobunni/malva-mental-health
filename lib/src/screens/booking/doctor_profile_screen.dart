@@ -10,6 +10,7 @@ import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
+import '../../widgets/professional_avatar.dart';
 import 'booking_detail_screen.dart';
 import 'package_booking_screen.dart';
 
@@ -865,15 +866,12 @@ class _ProfessionalPhoto extends StatelessWidget {
           ],
         ),
         child: ClipOval(
-          child: Image.network(
-            photoUrl,
+          child: ProfessionalPhoto(
+            photoUrl: photoUrl,
+            width: 120,
+            height: 120,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _fallbackAvatar(),
-            loadingBuilder: (_, child, progress) {
-              if (progress == null) return child;
-              return const Center(
-                  child: CircularProgressIndicator(strokeWidth: 2));
-            },
+            fallback: _fallbackAvatar(),
           ),
         ),
       );

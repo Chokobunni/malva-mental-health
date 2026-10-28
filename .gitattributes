@@ -4,3 +4,7 @@
 # Hook git tidak ber-ekstensi .sh, tapi tetap skrip shell — wajib LF agar
 # shebang tetap valid saat di-checkout di Windows.
 .githooks/* text eol=lf
+# File Dart wajib LF: `dart format` di CI (Linux) menandai file CRLF sebagai
+# belum terformat, dan git di Windows (core.autocrlf=true) mengubah LF jadi
+# CRLF saat checkout kalau tidak dikunci di sini.
+*.dart text eol=lf

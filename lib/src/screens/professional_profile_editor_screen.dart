@@ -10,6 +10,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/professional_avatar.dart';
 
 // ============================================================
 // EDITOR PROFIL PROFESIONAL
@@ -720,26 +721,12 @@ class _ProfessionalProfileEditorScreenState
     final url = _photoUrlController.text.trim();
     if (url.isNotEmpty) {
       return ClipOval(
-        child: Image.network(
-          url,
+        child: ProfessionalPhoto(
+          photoUrl: url,
           width: 100,
           height: 100,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _photoPlaceholder(),
-          loadingBuilder: (_, child, progress) {
-            if (progress == null) return child;
-            return Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: MalvaColors.seed.withValues(alpha: 0.1),
-              ),
-              child: const Center(
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            );
-          },
+          fallback: _photoPlaceholder(),
         ),
       );
     }
