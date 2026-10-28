@@ -6,8 +6,10 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"malva/backend/internal/auth"
+	"malva/backend/internal/realtime"
 	"malva/backend/internal/security"
 	"malva/backend/internal/store"
 )
@@ -396,7 +398,111 @@ func (s *Server) shareTherapySubmission(w http.ResponseWriter, r *http.Request, 
 			"Pasien membagikan worksheet terapi untuk kamu tinjau.",
 			map[string]string{"submission_id": sub.ID, "module_id": sub.ModuleID})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"submission": sub})
+	// Pesan chat: agar percakapan profesional benar-benar memuat worksheet yang
+	// dibagikan. Sebelumnya status hanya berubah jadi "Dibagikan" tanpa pesan
+	// apa pun, sehingga detail messages kosong.
+	chatMessageID := s.appendTherapyShareChat(r, claims, sub, professionalID)
+	response := map[string]any{"submission": sub}
+	if chatMessageID != "" {
+		response["chat_message_id"] = chatMessageID
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+// appendTherapyShareChat membuat pesan chat berisi ringkasan worksheet yang
+// baru dibagikan, lalu menyiarkannya lewat hub realtime.
+//
+// Best effort: kegagalan membuat pesan TIDAK menggagalkan proses share
+// (worksheet tetap tersimpan, profesional tetap menerima notifikasi in-app).
+// Mengembalikan id pesan chat bila berhasil, string kosong bila gagal/dilewati.
+func (s *Server) appendTherapyShareChat(r *http.Request, claims auth.Claims,
+	sub store.TherapySubmission, professionalID string) string {
+	if professionalID == "" {
+		return ""
+	}
+	kind, text := therapyShareChat(sub.ModuleID, sub.Title, sub.Summary)
+	sharedAt := time.Now()
+	if sub.SharedAt != nil {
+		sharedAt = *sub.SharedAt
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"submission_id": sub.ID,
+		"module_id":     sub.ModuleID,
+		"title":         sub.Title,
+		"summary":       sub.Summary,
+		"shared_at":     sharedAt.Format(time.RFC3339),
+	})
+	if err != nil {
+		metadata = json.RawMessage(`{}`)
+	}
+	senderName := ""
+	if user, err := s.store.GetUserByID(r.Context(), claims.Subject); err == nil {
+		senderName = user.DisplayName
+	}
+	saved, err := s.store.CreateChatMessage(r.Context(), store.ChatMessage{
+		ID:             generateChatMessageID(),
+		PatientID:      claims.Subject,
+		ProfessionalID: professionalID,
+		SenderID:       claims.Subject,
+		SenderName:     senderName,
+		Text:           text,
+		Kind:           kind,
+		Metadata:       metadata,
+		CreatedAt:      time.Now(),
+	})
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn("gagal membuat pesan chat share worksheet",
+				"err", err, "submission_id", sub.ID, "module_id", sub.ModuleID)
+		}
+		return ""
+	}
+	// Siarkan realtime ke kedua pihak (pola sama dengan sendMessage).
+	if s.hub != nil {
+		data := map[string]any{
+			"id":           saved.ID,
+			"sender_id":    saved.SenderID,
+			"sender_name":  saved.SenderName,
+			"recipient_id": professionalID,
+			"text":         saved.Text,
+			"kind":         saved.Kind,
+			"timestamp":    saved.CreatedAt.Format(time.RFC3339),
+		}
+		if len(saved.Metadata) > 0 {
+			data["metadata"] = json.RawMessage(saved.Metadata)
+		}
+		event := realtime.Event{Type: "chat_message", Data: data}
+		s.hub.Publish(saved.SenderID, event)
+		s.hub.Publish(professionalID, event)
+	}
+	return saved.ID
+}
+
+// therapyShareChat menentukan kind & teks pesan chat untuk worksheet yang
+// dibagikan pasien.
+//
+// Instrumen berskor (DASS-21 & WHO-5) memakai kind "assessment" agar klien
+// menampilkannya sebagai kartu hasil assessment; worksheet latihan lain
+// memakai kind "worksheet". Fungsi murni supaya bisa diuji tanpa DB.
+func therapyShareChat(moduleID, title, summary string) (kind, text string) {
+	moduleID = strings.TrimSpace(moduleID)
+	title = strings.TrimSpace(title)
+	summary = strings.TrimSpace(summary)
+
+	if moduleID == "dass21" || moduleID == "who5" {
+		label := title
+		if label == "" {
+			label = "asesmen"
+		}
+		if summary == "" {
+			return "assessment", "Hasil " + label + " dibagikan."
+		}
+		return "assessment", "Hasil " + label + ": " + summary
+	}
+	if title == "" {
+		return "worksheet", "Worksheet terapi dibagikan."
+	}
+	return "worksheet", "Worksheet " + title + " dibagikan."
 }
 
 func (s *Server) deleteTherapySubmission(w http.ResponseWriter, r *http.Request, claims auth.Claims) {

@@ -56,13 +56,17 @@ type CreateUserParams struct {
 }
 
 type PatientProfessionalLink struct {
-	PatientID               string    `json:"patient_id"`
-	ProfessionalID          string    `json:"professional_user_id"`
-	ProfessionalCode        string    `json:"professional_id"`
-	PatientDisplayName      string    `json:"patient_display_name"`
-	ProfessionalDisplayName string    `json:"professional_display_name"`
-	Status                  string    `json:"status"`
-	CreatedAt               time.Time `json:"created_at"`
+	PatientID               string `json:"patient_id"`
+	ProfessionalID          string `json:"professional_user_id"`
+	ProfessionalCode        string `json:"professional_id"`
+	PatientDisplayName      string `json:"patient_display_name"`
+	ProfessionalDisplayName string `json:"professional_display_name"`
+	// ProfessionalPhotoURL = professional_credentials.photo_intro_url, dipakai
+	// klien untuk menampilkan avatar profesional (bukan inisial) di daftar
+	// percakapan dan header chat. Kosong bila profesional belum unggah foto.
+	ProfessionalPhotoURL string    `json:"professional_photo_url"`
+	Status               string    `json:"status"`
+	CreatedAt            time.Time `json:"created_at"`
 }
 
 type ScreeningSession struct {
@@ -646,6 +650,9 @@ func (s *Store) ListPatientProfessionalLinks(ctx context.Context, userID, role s
 		       pp.professional_id,
 		       patient.display_name,
 		       professional.display_name,
+		       COALESCE((SELECT pc.photo_intro_url
+		                   FROM professional_credentials pc
+		                  WHERE pc.user_id = l.professional_id), '') AS professional_photo_url,
 		       l.status,
 		       l.created_at
 		FROM patient_professional_links l
@@ -669,6 +676,7 @@ func (s *Store) ListPatientProfessionalLinks(ctx context.Context, userID, role s
 			&link.ProfessionalCode,
 			&link.PatientDisplayName,
 			&link.ProfessionalDisplayName,
+			&link.ProfessionalPhotoURL,
 			&link.Status,
 			&link.CreatedAt,
 		); err != nil {
@@ -2138,6 +2146,10 @@ type ChatMessage struct {
 var validChatKinds = map[string]bool{
 	"text": true, "summary": true, "assessment": true, "prescription": true,
 	"goals": true, "habits": true, "diary": true, "progress": true, "file": true, "voice": true,
+	// "worksheet": kartu worksheet terapi (ABCDE, grounding, dll.) yang
+	// dibagikan pasien. Tanpa entri ini kind dinormalisasi jadi "text"
+	// sehingga kartu ringkasan di chat tidak pernah muncul.
+	"worksheet": true,
 }
 
 func normalizeChatKind(kind string) string {

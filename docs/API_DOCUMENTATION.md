@@ -451,6 +451,7 @@ Note: `professional_id` is the license code from `professional_profiles.professi
     "professional_id": "9999888877776666",
     "patient_display_name": "...",
     "professional_display_name": "...",
+    "professional_photo_url": "https://.../photo.png",
     "status": "active",
     "created_at": "..."
   }
@@ -478,11 +479,23 @@ List patient-professional links for the current user.
       "professional_id": "9999888877776666",
       "patient_display_name": "...",
       "professional_display_name": "...",
+      "professional_photo_url": "https://.../photo.png",
       "status": "active"
     }
   ]
 }
 ```
+
+**Fields (setiap item `links`):**
+| Field | Type | Keterangan |
+|---|---|---|
+| patient_id | string | UUID pasien |
+| professional_user_id | string | UUID akun profesional |
+| professional_id | string | Nomor/kode profesi (STR) dari `professional_profiles` |
+| patient_display_name | string | Nama tampilan pasien |
+| professional_display_name | string | Nama tampilan profesional |
+| professional_photo_url | string | URL foto profil profesional (`professional_credentials.photo_intro_url`); string kosong bila profesional belum mengunggah foto |
+| status | string | Status relasi, mis. `active` |
 
 ---
 
@@ -1239,6 +1252,58 @@ WebSocket endpoint for real-time events.
   }
 }
 ```
+
+### 3.19 Therapy Worksheet (Submissions)
+
+---
+
+#### `POST /v1/therapy-submissions/{submission_id}/share`
+
+Bagikan worksheet terapi (termasuk hasil DASS-21 & WHO-5) ke profesional, atau
+tarik izin berbagi bila `professional_id` dikirim kosong.
+
+**Auth:** Patient only
+
+**Path:**
+| Param | Type | Required |
+|---|---|---|
+| submission_id | string | ✅ |
+
+**Request:**
+```json
+{
+  "professional_id": "uuid"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "submission": {
+    "id": "uuid",
+    "module_id": "dass21",
+    "title": "DASS-21 (Depression Anxiety Stress Scales)",
+    "summary": "Depresi 10 (Ringan) • Kecemasan 8 (Ringan) • Stres 12 (Normal)",
+    "shared_with_professional_id": "uuid",
+    "shared_at": "2026-07-30T10:00:00Z"
+  },
+  "chat_message_id": "uuid"
+}
+```
+
+**Fields respons:**
+| Field | Type | Keterangan |
+|---|---|---|
+| submission | object | Worksheet setelah diperbarui (`shared_with_professional_id`, `shared_at`) |
+| chat_message_id | string | Opsional. Ada hanya bila pesan chat berhasil dibuat; kegagalan membuat pesan chat TIDAK menggagalkan share (worksheet tetap tersimpan dan profesional tetap menerima notifikasi in-app) |
+
+**Side effects:**
+- Membuat notifikasi in-app untuk profesional (`therapy_shared`)
+- Membuat pesan chat berisi ringkasan worksheet: `kind` = `assessment` untuk DASS-21/WHO-5, `worksheet` untuk worksheet latihan lain. Pesan disiarkan lewat event realtime `chat_message` ke pasien & profesional
+
+**Errors:** 400 (payload tidak valid) · 401 · 403 (bukan pasien, atau tidak punya paket sesi aktif dengan profesional tersebut) · 404 (worksheet tidak ditemukan) · 500
+
+---
 
 ## 4. Error Codes
 
