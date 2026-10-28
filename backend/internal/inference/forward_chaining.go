@@ -288,11 +288,12 @@ func compareInt(value int, op ConditionOperator, target int) bool {
 }
 
 var levelPriority = map[string]int{
-	"minimal":  0,
-	"mild":     1,
-	"moderate": 2,
-	"severe":   3,
-	"crisis":   4,
+	"minimal":           0,
+	"mild":              1,
+	"moderate":          2,
+	"moderately_severe": 3,
+	"severe":            4,
+	"crisis":            5,
 }
 
 func buildResult(wm map[string]Fact, trace []Trace, firedCount int) InferenceResult {

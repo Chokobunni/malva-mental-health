@@ -12,9 +12,10 @@ void main() {
       expect(_phqNoCrisis(9).level, RiskLevel.mild);
       expect(_phqNoCrisis(10).level, RiskLevel.moderate);
       expect(_phqNoCrisis(14).level, RiskLevel.moderate);
-      expect(_phqNoCrisis(15).level, RiskLevel.severe);
-      expect(_phqNoCrisis(19).level, RiskLevel.severe);
+      expect(_phqNoCrisis(15).level, RiskLevel.moderatelySevere);
+      expect(_phqNoCrisis(19).level, RiskLevel.moderatelySevere);
       expect(_phqNoCrisis(20).level, RiskLevel.severe);
+      expect(_phqNoCrisis(27).level, RiskLevel.severe);
     });
 
     test('sets crisis flag when item 9 is positive', () {
@@ -81,6 +82,38 @@ void main() {
         store.state.initialScreeningStatus, InitialScreeningStatus.completed);
     expect(store.state.screeningBundles, hasLength(1));
     expect(store.state.assessments, hasLength(2));
+  });
+
+  test('overallLevel memakai tingkat terberat antar instrumen', () {
+    // PHQ-9 15 = moderatelySevere, GAD-7 10 = moderate → overall harus
+    // mengikuti yang lebih berat.
+    final bundle = ScreeningBundle(
+      id: 'bundle_level',
+      phq9: _phqNoCrisis(15),
+      gad7: _gad(10),
+      createdAt: DateTime(2026, 7, 9),
+      isInitial: false,
+      source: 'test',
+    );
+
+    expect(bundle.phq9.level, RiskLevel.moderatelySevere);
+    expect(bundle.gad7.level, RiskLevel.moderate);
+    expect(bundle.overallLevel, RiskLevel.moderatelySevere);
+    expect(bundle.crisisFlag, isFalse);
+  });
+
+  test('overallLevel: severe menang atas moderatelySevere', () {
+    final bundle = ScreeningBundle(
+      id: 'bundle_level2',
+      phq9: _phqNoCrisis(15), // moderatelySevere
+      gad7: _gad(15), // severe
+      createdAt: DateTime(2026, 7, 9),
+      isInitial: false,
+      source: 'test',
+    );
+
+    expect(bundle.gad7.level, RiskLevel.severe);
+    expect(bundle.overallLevel, RiskLevel.severe);
   });
 }
 

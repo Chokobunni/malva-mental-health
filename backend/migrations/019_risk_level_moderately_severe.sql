@@ -1,0 +1,13 @@
+-- Migration 019: tambah nilai enum 'moderately_severe' pada risk_level.
+-- Idempoten: aman dijalankan ulang (IF NOT EXISTS).
+--
+-- Alasan: PHQ-9 baku (Kroenke, Spitzer & Williams 2001) memakai 5 band
+-- keparahan: 0-4 minimal, 5-9 mild, 10-14 moderate, 15-19 moderately severe,
+-- 20-27 severe. Sebelumnya 15-19 digabung ke 'severe' karena enum hanya
+-- punya 4 tingkat keparahan.
+--
+-- CATATAN POSTGRESQL: ALTER TYPE ... ADD VALUE tidak boleh dipakai bersama
+-- pemakaian nilai barunya dalam SATU transaksi. Karena itu backfill data
+-- dipisah ke migrasi 020. Jalankan migrasi ini dengan autocommit (psql -f
+-- tanpa BEGIN), jangan dibungkus transaksi tunggal.
+ALTER TYPE risk_level ADD VALUE IF NOT EXISTS 'moderately_severe';

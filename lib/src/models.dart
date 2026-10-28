@@ -41,13 +41,14 @@ class AuthFailure implements Exception {
 
 enum InitialScreeningStatus { pending, completed, skipped }
 
-enum RiskLevel { minimal, mild, moderate, severe, crisis }
+enum RiskLevel { minimal, mild, moderate, moderatelySevere, severe, crisis }
 
 extension RiskLevelText on RiskLevel {
   String get label => switch (this) {
         RiskLevel.minimal => 'Minimal',
         RiskLevel.mild => 'Ringan',
         RiskLevel.moderate => 'Sedang',
+        RiskLevel.moderatelySevere => 'Cukup Berat',
         RiskLevel.severe => 'Berat',
         RiskLevel.crisis => 'Krisis',
       };
@@ -56,6 +57,7 @@ extension RiskLevelText on RiskLevel {
         RiskLevel.minimal => const Color(0xFF36C7A6),
         RiskLevel.mild => const Color(0xFF6CBF57),
         RiskLevel.moderate => const Color(0xFFFFBE55),
+        RiskLevel.moderatelySevere => const Color(0xFFE8873C),
         RiskLevel.severe => const Color(0xFFE55B5B),
         RiskLevel.crisis => const Color(0xFFB00020),
       };

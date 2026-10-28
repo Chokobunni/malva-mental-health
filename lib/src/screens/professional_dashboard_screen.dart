@@ -2399,21 +2399,29 @@ class _AuditEntry {
 
 String _riskLabel(String value) {
   return switch (value.toLowerCase()) {
+    'minimal' => 'Minimal',
     'mild' => 'Ringan',
     'moderate' => 'Sedang',
+    'moderately_severe' => 'Cukup Berat',
     'severe' => 'Berat',
     'crisis' => 'Krisis',
-    _ => 'Minimal',
+    // Fail-safe: level yang tidak dikenal TIDAK boleh tampil sebagai
+    // "Minimal". Menurunkan derajat pasien secara diam-diam berbahaya
+    // secara klinis; lebih aman menampilkan yang lebih berat.
+    _ => 'Berat',
   };
 }
 
 Color _riskColor(String value) {
   return switch (value.toLowerCase()) {
+    'minimal' => MalvaColors.seed,
     'mild' => MalvaColors.mint,
     'moderate' => const Color(0xFFFFBE55),
+    'moderately_severe' => const Color(0xFFE8873C),
     'severe' => MalvaColors.danger,
     'crisis' => MalvaColors.danger,
-    _ => MalvaColors.seed,
+    // Fail-safe, lihat catatan pada _riskLabel.
+    _ => MalvaColors.danger,
   };
 }
 

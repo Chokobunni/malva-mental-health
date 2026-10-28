@@ -35,7 +35,7 @@ func TestPHQ9SeverityLevels(t *testing.T) {
 		{"minimal (0-4)", []int{0, 0, 0, 0, 0, 0, 0, 3, 0}, "minimal"},
 		{"mild (5-9)", []int{1, 1, 1, 1, 1, 0, 0, 0, 0}, "mild"},
 		{"moderate (10-14)", []int{2, 2, 1, 2, 1, 1, 1, 0, 0}, "moderate"},
-		{"moderately severe (15-19)", []int{2, 2, 2, 2, 2, 2, 1, 2, 0}, "severe"},
+		{"moderately severe (15-19)", []int{2, 2, 2, 2, 2, 2, 1, 2, 0}, "moderately_severe"},
 		{"severe (20-27)", []int{3, 3, 2, 3, 2, 3, 2, 2, 0}, "severe"},
 	}
 	for _, tc := range cases {
@@ -253,11 +253,12 @@ func TestParityVector(t *testing.T) {
 		// CF = max(0.57, 0.95) = 0.95. Fired rules: PHQ9_MINIMAL + PHQ9_CRISIS_SELF_HARM = 2.
 		{"item9 = 1", []int{0, 0, 0, 0, 0, 0, 0, 0, 1}, "minimal", 0.9500, 2},
 		{"moderate", []int{2, 2, 1, 2, 1, 1, 1, 0, 0}, "moderate", 0.7980, 1},
-		// all two: skor 18 → level "severe" (bukan "crisis"), IsCrisis=true karena item9=2>0.
+		// all two: skor 18 → band 15-19 = "moderately_severe" (bukan "crisis"),
+		// IsCrisis=true karena item9=2>0.
 		// Fired: PHQ9_SEVERE_MODERATE + PHQ9_MOTOR_RETARDATION + PHQ9_SLEEP_DISRUPTION +
 		//        PHQ9_APPETITE_CHANGE + PHQ9_CONCENTRATION_ISSUE + PHQ9_SELF_WORTH_ISSUE +
 		//        PHQ9_CRISIS_SELF_HARM = 7.
-		{"all two", []int{2, 2, 2, 2, 2, 2, 2, 2, 2}, "severe", 0.9500, 7},
+		{"all two", []int{2, 2, 2, 2, 2, 2, 2, 2, 2}, "moderately_severe", 0.9500, 7},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

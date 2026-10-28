@@ -24,6 +24,44 @@ func TestScoreBundleCombinesPHQ9AndGAD7(t *testing.T) {
 	}
 }
 
+func TestOverallLevelUsesModeratelySevere(t *testing.T) {
+	// PHQ-9 skor 15 = band 15-19 (moderately_severe), GAD-7 skor 10 = moderate.
+	// Overall harus mengikuti level yang lebih berat.
+	bundle, err := ScoreBundle(
+		[]int{2, 2, 2, 2, 2, 2, 1, 2, 0},
+		[]int{2, 2, 2, 2, 2, 0, 0},
+	)
+	if err != nil {
+		t.Fatalf("ScoreBundle returned error: %v", err)
+	}
+	if bundle.PHQ9.Level != "moderately_severe" {
+		t.Fatalf("PHQ-9 level = %s, want moderately_severe", bundle.PHQ9.Level)
+	}
+	if bundle.GAD7.Level != "moderate" {
+		t.Fatalf("GAD-7 level = %s, want moderate", bundle.GAD7.Level)
+	}
+	if bundle.Overall != "moderately_severe" {
+		t.Fatalf("overall = %s, want moderately_severe", bundle.Overall)
+	}
+}
+
+func TestOverallLevelSevereBeatsModeratelySevere(t *testing.T) {
+	// GAD-7 skor 15 = severe harus menang atas PHQ-9 moderately_severe.
+	bundle, err := ScoreBundle(
+		[]int{2, 2, 2, 2, 2, 2, 1, 2, 0},
+		[]int{2, 3, 2, 2, 2, 2, 2},
+	)
+	if err != nil {
+		t.Fatalf("ScoreBundle returned error: %v", err)
+	}
+	if bundle.GAD7.Level != "severe" {
+		t.Fatalf("GAD-7 level = %s, want severe", bundle.GAD7.Level)
+	}
+	if bundle.Overall != "severe" {
+		t.Fatalf("overall = %s, want severe", bundle.Overall)
+	}
+}
+
 func TestPHQ9SelfHarmAnswerSetsCrisis(t *testing.T) {
 	result, err := Score("phq9", []int{0, 0, 0, 0, 0, 0, 0, 0, 1})
 	if err != nil {

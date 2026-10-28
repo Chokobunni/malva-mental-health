@@ -80,15 +80,34 @@ class AssessmentDatabaseService {
         ],
       };
 
+  /// Level cadangan bila nama level tersimpan tidak dikenali (mis. data
+  /// ditulis versi aplikasi yang lebih baru). Diturunkan dari skor memakai
+  /// band baku — BUKAN default ke 'minimal', karena itu menurunkan derajat
+  /// pasien secara diam-diam.
+  static RiskLevel _levelFromScore(AssessmentType type, int score) {
+    if (type == AssessmentType.phq9) {
+      if (score >= 20) return RiskLevel.severe;
+      if (score >= 15) return RiskLevel.moderatelySevere;
+      if (score >= 10) return RiskLevel.moderate;
+      if (score >= 5) return RiskLevel.mild;
+      return RiskLevel.minimal;
+    }
+    if (score >= 15) return RiskLevel.severe;
+    if (score >= 10) return RiskLevel.moderate;
+    if (score >= 5) return RiskLevel.mild;
+    return RiskLevel.minimal;
+  }
+
   static AssessmentResult? _resultFromJson(Map<String, dynamic> json) {
     try {
       final type = AssessmentType.values.firstWhere(
         (t) => t.name == json['type'],
         orElse: () => AssessmentType.phq9,
       );
+      final score = (json['score'] as num?)?.toInt() ?? 0;
       final level = RiskLevel.values.firstWhere(
         (l) => l.name == json['level'],
-        orElse: () => RiskLevel.minimal,
+        orElse: () => _levelFromScore(type, score),
       );
       final rulesRaw = json['rulesFired'];
       final rules = <RuleTrace>[
@@ -97,6 +116,8 @@ class AssessmentDatabaseService {
             RuleTrace(
               id: r['id']?.toString() ?? '',
               label: r['label']?.toString() ?? '',
+              // Level pada jejak rule hanya metadata audit (bukan klasifikasi
+              // pasien), jadi fallback minimal di sini tidak berbahaya.
               level: RiskLevel.values.firstWhere(
                 (l) => l.name == r['level'],
                 orElse: () => RiskLevel.minimal,
@@ -105,7 +126,7 @@ class AssessmentDatabaseService {
       ];
       return AssessmentResult(
         type: type,
-        score: (json['score'] as num?)?.toInt() ?? 0,
+        score: score,
         maxScore: (json['maxScore'] as num?)?.toInt() ?? 0,
         level: level,
         summary: json['summary']?.toString() ?? '',

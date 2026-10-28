@@ -220,7 +220,7 @@ void main() {
         expect(result.isCrisis, false);
       });
 
-      test('severe depression (score 15-19)', () {
+      test('moderately severe depression (score 15-19)', () {
         // Answers: 2,2,2,2,2,2,2,1,0 = score 15
         final result = engine.infer(
           questionIds: KnowledgeBase.phq9QuestionIds,
@@ -228,7 +228,7 @@ void main() {
           rules: KnowledgeBase.phq9Rules,
         );
 
-        expect(result.level, 'severe');
+        expect(result.level, 'moderately_severe');
         expect(result.isCrisis, false);
       });
 
@@ -407,8 +407,11 @@ void main() {
         check('moderate', [2, 2, 1, 2, 1, 1, 1, 0, 0], 'moderate', 0.7980, 1);
       });
 
-      test('all two -> severe CF 0.9500, 7 rule (crisis flag terpisah)', () {
-        check('all two', [2, 2, 2, 2, 2, 2, 2, 2, 2], 'severe', 0.9500, 7);
+      test('all two -> moderately_severe CF 0.9500, 7 rule (crisis terpisah)',
+          () {
+        // Skor 18 = band 15-19 = moderately_severe (bukan severe).
+        check('all two', [2, 2, 2, 2, 2, 2, 2, 2, 2], 'moderately_severe',
+            0.9500, 7);
       });
     });
 

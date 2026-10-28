@@ -20,11 +20,10 @@ package inference
 // CF user mengikuti mapping jawaban 0-3 -> 0/0.3/0.6/0.9.
 // Port 1:1 dari lib/src/ai/knowledge_base.dart (client).
 //
-// CATATAN BAND: enum risk_level di database hanya punya 4 tingkat keparahan
-// (minimal, mild, moderate, severe) + crisis. Karena itu PHQ-9 15-19
-// ("moderately severe") dan 20-27 ("severe") sama-sama dipetakan ke 'severe'
-// — penggabungan 4-band yang lazim. Pembedaannya tetap ada di Description
-// dan Explanation rule. GAD-7 tidak terpengaruh (band-nya memang 4).
+// CATATAN BAND: enum risk_level di database memakai 5 tingkat keparahan
+// (minimal, mild, moderate, moderately_severe, severe) + crisis, sehingga
+// PHQ-9 15-19 dipetakan ke 'moderately_severe' dan 20-27 ke 'severe' —
+// sesuai band baku. GAD-7 tetap 4 band (tidak punya band moderately severe).
 // ============================================================
 
 // PHQ9QuestionIDs urutan item PHQ-9.
@@ -95,9 +94,9 @@ func PHQ9Rules() []Rule {
 				{FactID: "phq9_total_score", Op: OpLessOrEqual, Value: 19},
 			},
 			Conclusions: []Conclusion{
-				{FactID: "depression_level", Value: "severe", CF: 0.9,
+				{FactID: "depression_level", Value: "moderately_severe", CF: 0.9,
 					Explanation: "Skor PHQ-9 15-19 menunjukkan gejala depresi cukup berat"},
-				{FactID: "depression_summary", Value: "severe", CF: 0.9,
+				{FactID: "depression_summary", Value: "moderately_severe", CF: 0.9,
 					Explanation: "Gejala cukup berat. Prioritaskan evaluasi profesional."},
 			},
 			RuleCF: 0.90,

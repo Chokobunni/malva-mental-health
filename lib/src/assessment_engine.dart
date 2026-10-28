@@ -100,6 +100,9 @@ class ScreeningBundle {
     if (crisisFlag) return RiskLevel.crisis;
     final levels = [phq9.level, gad7.level];
     if (levels.contains(RiskLevel.severe)) return RiskLevel.severe;
+    if (levels.contains(RiskLevel.moderatelySevere)) {
+      return RiskLevel.moderatelySevere;
+    }
     if (levels.contains(RiskLevel.moderate)) return RiskLevel.moderate;
     if (levels.contains(RiskLevel.mild)) return RiskLevel.mild;
     return RiskLevel.minimal;
@@ -299,6 +302,8 @@ class AssessmentEngine {
         return RiskLevel.mild;
       case 'moderate':
         return RiskLevel.moderate;
+      case 'moderately_severe':
+        return RiskLevel.moderatelySevere;
       case 'severe':
         return RiskLevel.severe;
       case 'crisis':

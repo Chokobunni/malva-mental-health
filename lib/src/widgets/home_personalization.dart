@@ -34,6 +34,12 @@ class ConditionBanner extends StatelessWidget {
           MalvaColors.seed,
           Icons.battery_0_bar_rounded,
         ),
+      RiskLevel.moderatelySevere => (
+          'Depresi Cukup Berat',
+          'Dukungan profesional akan sangat membantu.',
+          const Color(0xFFE8873C),
+          Icons.battery_1_bar_rounded,
+        ),
       RiskLevel.moderate => (
           'Kecemasan / Mood Menurun',
           'Langkah kecil hari ini sangat berarti.',

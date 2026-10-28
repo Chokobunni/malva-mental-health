@@ -25,11 +25,10 @@ class KnowledgeBase {
         //   0-4 minimal | 5-9 ringan | 10-14 sedang |
         //   15-19 cukup berat | 20-27 berat
         //
-        // CATATAN PENTING: enum RiskLevel produk ini hanya punya 4 tingkat
-        // keparahan (minimal, mild, moderate, severe) + crisis. Karena itu
-        // 15-19 dan 20-27 sama-sama dipetakan ke 'severe' — penggabungan yang
-        // lazim dipakai pada panduan PHQ-9 4-band. Pembedaannya tetap
-        // dipertahankan pada `description` dan `explanation` rule.
+        // CATATAN PENTING: enum RiskLevel memakai 5 tingkat keparahan
+        // (minimal, mild, moderate, moderatelySevere, severe) + crisis,
+        // sehingga 15-19 dipetakan ke 'moderately_severe' dan 20-27 ke
+        // 'severe' — sesuai band baku PHQ-9. GAD-7 tetap 4 band.
         // ============================================================
 
         const ScreeningRule(
@@ -149,7 +148,7 @@ class KnowledgeBase {
           conclusions: [
             RuleConclusion(
               factId: 'depression_level',
-              value: 'severe',
+              value: 'moderately_severe',
               cf: 0.92,
               explanation:
                   'Skor PHQ-9 15-19 menunjukkan gejala depresi cukup berat',

@@ -156,11 +156,12 @@ func overallLevel(phq9, gad7 Result) string {
 	}
 
 	priority := map[string]int{
-		"minimal":  0,
-		"mild":     1,
-		"moderate": 2,
-		"severe":   3,
-		"crisis":   4,
+		"minimal":           0,
+		"mild":              1,
+		"moderate":          2,
+		"moderately_severe": 3,
+		"severe":            4,
+		"crisis":            5,
 	}
 	if priority[phq9.Level] >= priority[gad7.Level] {
 		return phq9.Level

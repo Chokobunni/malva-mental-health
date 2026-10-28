@@ -336,8 +336,9 @@ class ForwardChainingEngine {
       'minimal': 0,
       'mild': 1,
       'moderate': 2,
-      'severe': 3,
-      'crisis': 4,
+      'moderately_severe': 3,
+      'severe': 4,
+      'crisis': 5,
     };
 
     final depPriority = levelPriority[depressionLevel?.value] ?? 0;
