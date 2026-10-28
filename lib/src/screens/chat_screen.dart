@@ -8,19 +8,25 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/chat_service.dart';
 import '../services/malva_api_client.dart';
+import '../services/weekly_summary_service.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/mini_summary.dart';
+import '../widgets/professional_avatar.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({
     super.key,
     required this.otherUserName,
     required this.otherUserId,
+    this.otherUserPhotoUrl = '',
   });
 
   final String otherUserName;
   final String otherUserId;
+
+  /// URL foto lawan bicara (profesional). Kosong = pakai gradien + inisial.
+  final String otherUserPhotoUrl;
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -42,12 +48,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   StreamSubscription<ChatPresence>? _presenceSub;
   final Map<String, bool> _onlineUsers = {};
 
+  /// Foto lawan bicara; diisi dari parameter atau diambil dari server.
+  String _photoUrl = '';
+
   @override
   void initState() {
     super.initState();
+    _photoUrl = widget.otherUserPhotoUrl;
     _initChat();
     _loadHistory();
     _loadAccess();
+    // Best effort: lengkapi foto profesional bila pemanggil tidak membawanya.
+    unawaited(_loadProfessionalPhoto());
+  }
+
+  /// Ambil foto profesional dari server (GET /v1/doctors/{userId}).
+  ///
+  /// Tidak memblokir UI: bila gagal, avatar tetap tampil dengan gradien +
+  /// inisial. Dijalankan sekali saat layar dibuka.
+  Future<void> _loadProfessionalPhoto() async {
+    if (_photoUrl.isNotEmpty) return;
+    final session = ref.read(currentSessionProvider);
+    final token = session?.accessToken;
+    if (session?.role != UserRole.patient) return;
+    if (token == null || token.isEmpty) return;
+    try {
+      final profile = await ref.read(apiClientProvider).getDoctorProfile(
+            accessToken: token,
+            userId: widget.otherUserId,
+          );
+      final photo = profile.credential.photoIntroUrl;
+      if (!mounted || photo.isEmpty) return;
+      setState(() => _photoUrl = photo);
+    } on Object {
+      // Abaikan: foto hanya pelengkap tampilan.
+    }
   }
 
   /// Muat izin chat: teks hanya saat sesi berjalan; share data milik
@@ -225,7 +260,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   /// Kirim pesan terstruktur (share) agar pasti tersimpan di server.
   /// Share hanya untuk pasien dengan paket aktif (server menegakkan).
-  Future<void> _sendShare({
+  ///
+  /// Mengembalikan true HANYA bila pesan benar-benar terkirim, supaya UI tidak
+  /// menampilkan toast "terkirim" padahal pengiriman gagal.
+  Future<bool> _sendShare({
     required String kind,
     required String text,
     Map<String, dynamic>? metadata,
@@ -238,16 +276,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   'Berbagi data butuh paket sesi aktif dengan profesional ini.')),
         );
       }
-      return;
+      return false;
     }
     if (_chatState == ChatState.connected && metadata == null) {
       _chatService?.sendMessage(text, kind: kind);
-      return;
+      return true;
     }
-    await _sendViaRest(text: text, kind: kind, metadata: metadata);
+    return _sendViaRest(text: text, kind: kind, metadata: metadata);
   }
 
-  Future<void> _sendViaRest({
+  /// Kirim lewat REST (jalur cadangan saat WebSocket tidak tersambung).
+  /// Mengembalikan true bila server menerima pesan.
+  Future<bool> _sendViaRest({
     required String text,
     required String kind,
     Map<String, dynamic>? metadata,
@@ -255,7 +295,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final session = ref.read(currentSessionProvider);
     final token = session?.accessToken;
     final myId = session?.backendUserId ?? session?.identifier;
-    if (token == null || token.isEmpty || myId == null) return;
+    if (token == null || token.isEmpty || myId == null) return false;
     try {
       final sent = await ref.read(apiClientProvider).sendChatMessage(
             accessToken: token,
@@ -264,7 +304,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             kind: kind,
             metadata: metadata,
           );
-      if (!mounted) return;
+      if (!mounted) return true;
       setState(() {
         if (!_messages.any((m) => m.id == sent.id)) {
           _messages.add(
@@ -282,14 +322,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         }
       });
       _scrollToBottom();
+      return true;
     } on Object {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Gagal mengirim. Periksa koneksi ke server Malva.'),
           backgroundColor: MalvaColors.danger,
         ),
       );
+      return false;
     }
   }
 
@@ -390,116 +432,464 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   /// Menyusun ringkasan data lalu mengirimkannya ke chat profesional.
+  ///
+  /// Sumber data UTAMA adalah server (screening, worksheet DASS/WHO-5, obat,
+  /// goals, diary). Store lokal hanya dipakai sebagai fallback ketika panggilan
+  /// API gagal, karena store tidak selalu terhidrasi — itulah sebab dulu muncul
+  /// toast "Belum ada goals/diary/assessment" padahal datanya ada di server.
   Future<void> _shareData(String kind, String label) async {
+    final session = ref.read(currentSessionProvider);
+    final token = session?.accessToken;
+    final api = ref.read(apiClientProvider);
+    final myId = session?.backendUserId ?? session?.identifier ?? '';
+    if (token == null || token.isEmpty) {
+      _toast('Login dulu untuk membagikan data.');
+      return;
+    }
     final store = ref.read(malvaStoreProvider);
     String text;
     Map<String, dynamic> metadata = {};
 
     switch (kind) {
       case 'summary':
-        final moods = store.moodEntries.take(14).toList(growable: false);
-        final avgSleep = moods.isEmpty
-            ? 0.0
-            : moods.map((e) => e.sleepHours).reduce((a, b) => a + b) /
-                moods.length;
-        final adherence = store.adherencePercent;
+        // Ringkasan 14 hari diambil dari SERVER, bukan dari store yang belum
+        // tentu terhidrasi. Store hanya fallback — tanpa ini pesan ke
+        // profesional bisa berisi angka palsu (0 check-in / 0 jam / 0%).
+        final metrics = await loadWeeklySummary(
+          api: api,
+          accessToken: token,
+          localMoods: [
+            for (final entry in store.moodEntries)
+              (
+                at: entry.date,
+                sleepHours: entry.sleepHours,
+                moodScore: entry.mood.score,
+              ),
+          ],
+          localLogs: [
+            for (final log in store.medicationLogs)
+              (at: log.takenAt, status: log.status),
+          ],
+        );
+        if (metrics == null) {
+          text = 'Ringkasan 14 hari belum tersedia '
+              '(data check-in belum dimuat).';
+          metadata = {'available': false};
+          break;
+        }
+        // Hanya metrik yang benar-benar diketahui yang disebut; metrik yang
+        // gagal dimuat tidak boleh muncul sebagai angka 0.
+        final parts = <String>[
+          if (metrics.moodKnown) '${metrics.moodCount} mood check-in',
+          if (metrics.moodKnown && metrics.moodCount > 0)
+            'tidur rata-rata ${metrics.avgSleepHours.toStringAsFixed(1)} jam',
+          if (metrics.logsKnown) 'ketaatan obat ${metrics.adherencePercent}%',
+        ];
+        text = 'Ringkasan 14 hari: ${parts.join(', ')}.';
         metadata = {
-          'mood_count': moods.length,
-          'avg_sleep_hours': double.parse(avgSleep.toStringAsFixed(1)),
-          'medication_adherence': adherence,
+          if (metrics.moodKnown) 'mood_count': metrics.moodCount,
+          if (metrics.moodCount > 0)
+            'avg_sleep_hours':
+                double.parse(metrics.avgSleepHours.toStringAsFixed(1)),
+          if (metrics.logsKnown)
+            'medication_adherence': metrics.adherencePercent,
+          'source': metrics.source,
         };
-        text = 'Ringkasan 14 hari: ${moods.length} mood check-in, '
-            'tidur rata-rata ${avgSleep.toStringAsFixed(1)} jam, '
-            'ketaatan obat $adherence%.';
       case 'assessment':
-        final bundle =
-            store.screeningBundles.isEmpty ? null : store.screeningBundles.last;
-        final result =
-            store.assessments.isEmpty ? null : store.assessments.last;
-        if (bundle == null && result == null) {
-          _toast('Belum ada hasil assessment untuk dibagikan.');
-          return;
-        }
-        if (bundle != null) {
-          metadata = {
-            'type': 'phq9_gad7',
-            'phq9_score': bundle.phq9.score,
-            'gad7_score': bundle.gad7.score,
-            'level': bundle.overallLevel.label,
-            'cf': double.parse(bundle.phq9.certaintyFactor.toStringAsFixed(3)),
-            'crisis_flag': bundle.crisisFlag,
-          };
-          text = 'Hasil assessment terbaru: ${bundle.overallLevel.label} '
-              '(PHQ-9 ${bundle.phq9.score}, GAD-7 ${bundle.gad7.score}, '
-              'CF ${(bundle.phq9.certaintyFactor * 100).round()}%).';
-        } else {
-          metadata = {
-            'type': result!.type.name,
-            'score': result.score,
-            'level': result.level.label,
-            'cf': double.parse(result.certaintyFactor.toStringAsFixed(3)),
-            'crisis_flag': result.crisisFlag,
-          };
-          text = 'Hasil assessment terbaru: ${result.level.label} '
-              '(${result.type.title} ${result.score}/${result.maxScore}, '
-              'CF ${(result.certaintyFactor * 100).round()}%).';
-        }
+        await _shareAssessment(
+          token: token,
+          api: api,
+          patientId: myId,
+          label: label,
+        );
+        return;
       case 'prescription':
-        final meds = store.medications;
+        final meds = await _collectMedications(
+          token: token,
+          api: api,
+          fallback: store,
+        );
         if (meds.isEmpty) {
           _toast('Belum ada data obat untuk dibagikan.');
           return;
         }
-        metadata = {
-          'medications': [
-            for (final med in meds)
-              {
-                'name': med.name,
-                'dosage': med.dosage,
-                'form': med.form,
-                'reminders': med.reminders,
-              },
-          ],
-        };
+        metadata = {'medications': meds};
         text = 'Daftar obat aktif: '
-            '${meds.map((m) => '${m.name} ${m.dosage}').join(', ')}.';
+            '${meds.map((m) => '${m['name']} ${m['dosage']}').join(', ')}.';
       case 'goals':
-        final goals = store.goals;
+        final goals = await _collectGoals(
+          token: token,
+          api: api,
+          fallback: store,
+        );
         if (goals.isEmpty) {
           _toast('Belum ada goals untuk dibagikan.');
           return;
         }
-        metadata = {
-          'goals': [
-            for (final goal in goals)
-              {
-                'title': goal.title,
-                'streak_days': goal.streakDays,
-                'completed_today': goal.completedToday,
-              },
-          ],
-        };
+        metadata = {'goals': goals};
         text = 'Goals & habits: '
-            '${goals.map((g) => g.title).take(5).join(', ')}.';
+            '${goals.take(5).map((g) => '${g['title']} (${g['done_this_week']}/${g['target_per_week']} minggu ini)').join(', ')}.';
       case 'diary':
-        final diaries = store.diaryEntries;
-        if (diaries.isEmpty) {
+        final diary = await _collectLatestDiary(
+          token: token,
+          api: api,
+          fallback: store,
+        );
+        if (diary == null) {
           _toast('Belum ada diary untuk dibagikan.');
           return;
         }
-        final latest = diaries.first;
-        metadata = {
-          'title': latest.title,
-          'mood': latest.mood.label,
-          'created_at': latest.createdAt.toIso8601String(),
-        };
-        text = 'Diary terakhir (${latest.mood.label}): '
-            '"${latest.note.isEmpty ? latest.title : latest.note}".';
+        metadata = diary.metadata;
+        text = diary.text;
       default:
         return;
     }
-    await _sendShare(kind: kind, text: text, metadata: metadata);
-    if (mounted) _toast('$label terkirim ke chat.');
+    final sent = await _sendShare(kind: kind, text: text, metadata: metadata);
+    if (sent && mounted) _toast('$label terkirim ke chat.');
+  }
+
+  /// Bagikan hasil assessment: screening PHQ-9/GAD-7 dan worksheet
+  /// DASS-21/WHO-5 diambil dari server, lalu dipilih bila lebih dari satu.
+  Future<void> _shareAssessment({
+    required String token,
+    required MalvaApiClient api,
+    required String patientId,
+    required String label,
+  }) async {
+    final candidates = await _assessmentCandidates(
+      token: token,
+      api: api,
+      patientId: patientId,
+    );
+    if (!mounted) return;
+    if (candidates.isEmpty) {
+      _toast('Belum ada hasil assessment untuk dibagikan.');
+      return;
+    }
+    var chosen = candidates.first;
+    if (candidates.length > 1) {
+      final picked = await _pickCandidate(candidates);
+      if (picked == null) return; // pasien membatalkan
+      chosen = picked;
+    }
+    final sent = await _sendShare(
+      kind: 'assessment',
+      text: chosen.text,
+      metadata: chosen.metadata,
+    );
+    if (sent && mounted) _toast('$label terkirim ke chat.');
+  }
+
+  /// Kandidat hasil assessment: screening server + worksheet DASS/WHO-5.
+  /// Bila API gagal total, jatuh ke data store lokal (best effort).
+  Future<List<_ShareCandidate>> _assessmentCandidates({
+    required String token,
+    required MalvaApiClient api,
+    required String patientId,
+  }) async {
+    final out = <_ShareCandidate>[];
+
+    // 1) Screening PHQ-9 & GAD-7 dari server.
+    try {
+      final screenings = await api.listScreenings(
+        accessToken: token,
+        patientId: patientId,
+        limit: 5,
+      );
+      for (final screening in screenings) {
+        final text = 'Hasil screening: PHQ-9 '
+            '${screening.phq9.score}/${screening.phq9.maxScore} '
+            '(${screening.phq9.level}), GAD-7 '
+            '${screening.gad7.score}/${screening.gad7.maxScore} '
+            '(${screening.gad7.level}).';
+        out.add(_ShareCandidate(
+          title: 'PHQ-9 & GAD-7 — ${screening.overallLevel}',
+          subtitle: _dateLabel(screening.createdAt),
+          text: text,
+          icon: Icons.fact_check_rounded,
+          metadata: {
+            'source': 'screening',
+            'screening_id': screening.id,
+            'overall_level': screening.overallLevel,
+            'phq9_score': screening.phq9.score,
+            'gad7_score': screening.gad7.score,
+            'crisis_flag': screening.crisisFlag,
+            'summary': text,
+            'shared_at':
+                (screening.createdAt ?? DateTime.now()).toIso8601String(),
+          },
+        ));
+      }
+    } on Object {
+      // Lanjut ke sumber berikutnya.
+    }
+
+    // 2) Worksheet DASS-21 / WHO-5 dari server (summary sudah berformat baku).
+    try {
+      final submissions = await api.listTherapySubmissions(accessToken: token);
+      for (final sub in submissions) {
+        if (sub.moduleId != 'dass21' && sub.moduleId != 'who5') continue;
+        final title = sub.title.trim().isEmpty
+            ? sub.moduleId.toUpperCase()
+            : sub.title.trim();
+        final summary = sub.summary.trim();
+        final text = 'Hasil $title: '
+            '${summary.isEmpty ? 'skor belum tersedia' : summary}';
+        out.add(_ShareCandidate(
+          title: title,
+          subtitle: '${_dateLabel(sub.createdDateTime)}'
+              '${sub.isShared ? ' • Dibagikan' : ''}',
+          text: text,
+          icon: Icons.assignment_turned_in_rounded,
+          metadata: {
+            'source': 'therapy',
+            'module_id': sub.moduleId,
+            'submission_id': sub.id,
+            'summary': summary,
+            'shared_at':
+                (sub.createdDateTime ?? DateTime.now()).toIso8601String(),
+          },
+        ));
+      }
+    } on Object {
+      // Lanjut ke fallback store.
+    }
+
+    // 3) Fallback: hasil yang tersimpan di store lokal (mis. offline).
+    if (out.isEmpty) {
+      final store = ref.read(malvaStoreProvider);
+      final bundle =
+          store.screeningBundles.isEmpty ? null : store.screeningBundles.last;
+      if (bundle != null) {
+        final text = 'Hasil screening: PHQ-9 ${bundle.phq9.score} '
+            '(${bundle.phq9.level.label}), GAD-7 ${bundle.gad7.score} '
+            '(${bundle.gad7.level.label}).';
+        out.add(_ShareCandidate(
+          title: 'PHQ-9 & GAD-7 — ${bundle.overallLevel.label}',
+          subtitle: _dateLabel(bundle.createdAt),
+          text: text,
+          icon: Icons.fact_check_rounded,
+          metadata: {
+            'source': 'screening',
+            'phq9_score': bundle.phq9.score,
+            'gad7_score': bundle.gad7.score,
+            'overall_level': bundle.overallLevel.label,
+            'crisis_flag': bundle.crisisFlag,
+            'summary': text,
+            'shared_at': bundle.createdAt.toIso8601String(),
+          },
+        ));
+      }
+      final result = store.assessments.isEmpty ? null : store.assessments.last;
+      if (result != null) {
+        final text = 'Hasil ${result.type.title}: '
+            '${result.score}/${result.maxScore} (${result.level.label}).';
+        out.add(_ShareCandidate(
+          title: result.type.title,
+          subtitle: _dateLabel(result.createdAt),
+          text: text,
+          icon: Icons.assignment_turned_in_rounded,
+          metadata: {
+            'source': 'therapy',
+            'module_id': result.type.name,
+            'summary': text,
+            'shared_at': result.createdAt.toIso8601String(),
+          },
+        ));
+      }
+    }
+    return out;
+  }
+
+  /// Bottom sheet pemilihan hasil assessment (dipanggil bila kandidat > 1).
+  Future<_ShareCandidate?> _pickCandidate(List<_ShareCandidate> candidates) {
+    return showModalBottomSheet<_ShareCandidate>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Pilih hasil assessment',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+              const SizedBox(height: 4),
+              Text(
+                'Hasil yang dipilih akan dikirim ke ${widget.otherUserName}.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.black54),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final candidate in candidates)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: SoftCard(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: CircleAvatar(
+                              backgroundColor:
+                                  MalvaColors.orchid.withValues(alpha: 0.14),
+                              child: Icon(candidate.icon,
+                                  color: MalvaColors.orchid),
+                            ),
+                            title: Text(candidate.title,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w900, fontSize: 14)),
+                            subtitle: Text(candidate.subtitle),
+                            trailing: const Icon(Icons.send_rounded, size: 18),
+                            onTap: () => Navigator.pop(ctx, candidate),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Daftar obat: server dulu, fallback store lokal.
+  Future<List<Map<String, dynamic>>> _collectMedications({
+    required String token,
+    required MalvaApiClient api,
+    required MalvaStoreState fallback,
+  }) async {
+    try {
+      final backendMeds = await api.listMedications(accessToken: token);
+      if (backendMeds.isNotEmpty) {
+        return [
+          for (final med in backendMeds)
+            {
+              'name': med.name,
+              'dosage': med.dosage,
+              'form': med.form,
+              'reminder_time': med.reminderTime,
+            },
+        ];
+      }
+    } on Object {
+      // Fallback di bawah.
+    }
+    return [
+      for (final med in fallback.medications)
+        {
+          'name': med.name,
+          'dosage': med.dosage,
+          'form': med.form,
+          'reminder_time':
+              med.reminders.isEmpty ? '' : med.reminders.first.label,
+        },
+    ];
+  }
+
+  /// Daftar goals aktif: server dulu, fallback store lokal.
+  Future<List<Map<String, dynamic>>> _collectGoals({
+    required String token,
+    required MalvaApiClient api,
+    required MalvaStoreState fallback,
+  }) async {
+    try {
+      final backendGoals = await api.listGoals(accessToken: token);
+      final active =
+          backendGoals.where((goal) => goal.isActive).toList(growable: false);
+      if (active.isNotEmpty) {
+        return [
+          for (final goal in active)
+            {
+              'title': goal.title,
+              'target_per_week': goal.targetPerWeek,
+              'done_this_week': goal.doneThisWeek,
+              'is_active': goal.isActive,
+            },
+        ];
+      }
+    } on Object {
+      // Fallback di bawah.
+    }
+    return [
+      for (final goal in fallback.goals)
+        {
+          'title': goal.title,
+          'target_per_week': 0,
+          'done_this_week': goal.completedToday ? 1 : 0,
+          'is_active': true,
+        },
+    ];
+  }
+
+  /// Diary terbaru: server dulu, fallback store lokal.
+  Future<_ShareCandidate?> _collectLatestDiary({
+    required String token,
+    required MalvaApiClient api,
+    required MalvaStoreState fallback,
+  }) async {
+    try {
+      final diaries = await api.listDiaryEntries(
+        accessToken: token,
+        limit: 5,
+      );
+      if (diaries.isNotEmpty) {
+        final latest = diaries.first;
+        final mood = latest.mood.trim().isEmpty ? 'tanpa mood' : latest.mood;
+        final raw = (latest.note.trim().isEmpty ? latest.title : latest.note)
+            .trim()
+            .replaceAll('\n', ' ');
+        final excerpt = raw.length > 120 ? '${raw.substring(0, 120)}…' : raw;
+        return _ShareCandidate(
+          title: latest.title.trim().isEmpty ? 'Diary' : latest.title.trim(),
+          subtitle: _dateLabel(latest.occurredAt),
+          text: 'Diary terakhir ($mood): "$excerpt".',
+          icon: Icons.edit_note_rounded,
+          metadata: {
+            'title': latest.title,
+            'mood': latest.mood,
+            'occurred_at':
+                (latest.occurredAt ?? DateTime.now()).toIso8601String(),
+          },
+        );
+      }
+    } on Object {
+      // Fallback di bawah.
+    }
+    if (fallback.diaryEntries.isEmpty) return null;
+    final latest = fallback.diaryEntries.first;
+    final raw = (latest.note.trim().isEmpty ? latest.title : latest.note)
+        .trim()
+        .replaceAll('\n', ' ');
+    final excerpt = raw.length > 120 ? '${raw.substring(0, 120)}…' : raw;
+    return _ShareCandidate(
+      title: latest.title.trim().isEmpty ? 'Diary' : latest.title.trim(),
+      subtitle: _dateLabel(latest.createdAt),
+      text: 'Diary terakhir (${latest.mood.label}): "$excerpt".',
+      icon: Icons.edit_note_rounded,
+      metadata: {
+        'title': latest.title,
+        'mood': latest.mood.label,
+        'occurred_at': latest.createdAt.toIso8601String(),
+      },
+    );
+  }
+
+  /// Label tanggal ringkas untuk subjudul pilihan (mis. "7/9/2026").
+  static String _dateLabel(DateTime? date) {
+    if (date == null) return 'Tanggal tidak tercatat';
+    final local = date.toLocal();
+    return '${local.day}/${local.month}/${local.year}';
   }
 
   void _toast(String message) {
@@ -510,43 +900,72 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final otherOnline = _onlineUsers.values.any((online) => online);
     return Scaffold(
       appBar: AppBar(
+        // AppBar global bertema transparan + teks putih; di layar chat latar
+        // terang membuat nama profesional putih tidak terbaca. Jadi warna
+        // di-set eksplisit di sini (ungu Malva) dan teksnya tetap putih.
+        backgroundColor: MalvaColors.seed,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: false,
+        titleSpacing: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Column(
+        title: Row(
           children: [
-            Text(
-              widget.otherUserName,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+            ProfessionalAvatar(
+              displayName: widget.otherUserName,
+              photoUrl: _photoUrl,
+              radius: 18,
             ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _ConnectionStatusChip(state: _chatState),
-                if (_onlineUsers.values.any((online) => online)) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: MalvaColors.mint,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.otherUserName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  const Text(
-                    'Online',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _ConnectionStatusChip(state: _chatState),
+                      if (otherOnline) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: MalvaColors.mint,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Online',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.85),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
-              ],
+              ),
             ),
           ],
         ),
@@ -590,7 +1009,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           if (_isLoadingHistory)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 6),
-              child: Text('Memuat riwayatâ€¦',
+              child: Text('Memuat riwayat…',
                   style: TextStyle(fontSize: 12, color: Colors.black54)),
             ),
           Expanded(
@@ -957,7 +1376,7 @@ class _FileBubble extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'PDF â€¢ ketuk untuk buka',
+                  'PDF • ketuk untuk buka',
                   style: TextStyle(
                     fontSize: 11,
                     color: isMine
@@ -1011,7 +1430,7 @@ class _VoiceBubble extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Voice note â€¢ 0:00',
+                  'Voice note • 0:00',
                   style: TextStyle(
                     fontSize: 11,
                     color: isMine
@@ -1042,6 +1461,7 @@ class _SharedCardBubble extends StatelessWidget {
       'habits' => (Icons.flag_rounded, 'Goals & Habits'),
       'summary' => (Icons.auto_awesome_rounded, 'Ringkasan'),
       'assessment' => (Icons.fact_check_rounded, 'Assessment'),
+      'worksheet' => (Icons.assignment_turned_in_rounded, 'Worksheet'),
       'prescription' => (Icons.medication_rounded, 'Obat & Resep'),
       'progress' => (Icons.show_chart_rounded, 'Progress'),
       _ => (Icons.insert_drive_file_rounded, 'Lampiran'),
@@ -1075,6 +1495,24 @@ class _SharedCardBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Satu kandidat data yang bisa dibagikan ke chat (dipakai pemilihan
+/// assessment: screening PHQ-9/GAD-7 atau worksheet DASS-21/WHO-5).
+class _ShareCandidate {
+  const _ShareCandidate({
+    required this.title,
+    required this.subtitle,
+    required this.text,
+    required this.icon,
+    required this.metadata,
+  });
+
+  final String title;
+  final String subtitle;
+  final String text;
+  final IconData icon;
+  final Map<String, dynamic> metadata;
 }
 
 class _ChatInput extends StatelessWidget {

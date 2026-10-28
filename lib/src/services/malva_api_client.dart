@@ -2793,6 +2793,7 @@ class BackendPatientProfessionalLink {
     required this.patientDisplayName,
     required this.professionalDisplayName,
     required this.status,
+    this.professionalPhotoUrl = '',
   });
 
   factory BackendPatientProfessionalLink.fromJson(Map<String, dynamic> json) {
@@ -2804,6 +2805,9 @@ class BackendPatientProfessionalLink {
       professionalDisplayName:
           json['professional_display_name']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
+      // Foto profil profesional (photo_intro_url) — dipakai avatar di daftar
+      // percakapan & header chat agar tidak selalu inisial.
+      professionalPhotoUrl: json['professional_photo_url']?.toString() ?? '',
     );
   }
 
@@ -2813,6 +2817,7 @@ class BackendPatientProfessionalLink {
   final String patientDisplayName;
   final String professionalDisplayName;
   final String status;
+  final String professionalPhotoUrl;
 }
 
 class BackendScreeningReview {

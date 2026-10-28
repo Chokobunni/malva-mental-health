@@ -7,6 +7,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/professional_avatar.dart';
 import 'chat_screen.dart';
 
 // ============================================================
@@ -128,6 +129,9 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen> {
                       : (link.professionalDisplayName.isEmpty
                           ? 'Profesional'
                           : link.professionalDisplayName),
+                  // Foto hanya milik profesional; sisi profesional tetap
+                  // memakai inisial pasien.
+                  photoUrl: isPro ? '' : link.professionalPhotoUrl,
                   status: link.status,
                   onTap: () {
                     Navigator.push(
@@ -139,6 +143,8 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen> {
                               : link.professionalDisplayName,
                           otherUserId:
                               isPro ? link.patientId : link.professionalUserId,
+                          otherUserPhotoUrl:
+                              isPro ? '' : link.professionalPhotoUrl,
                         ),
                       ),
                     );
@@ -158,11 +164,15 @@ class _ConversationCard extends StatelessWidget {
     required this.name,
     required this.status,
     required this.onTap,
+    this.photoUrl = '',
   });
 
   final String name;
   final String status;
   final VoidCallback onTap;
+
+  /// URL foto profesional; kosong = gradien + inisial.
+  final String photoUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -172,17 +182,12 @@ class _ConversationCard extends StatelessWidget {
         children: [
           Stack(
             children: [
-              CircleAvatar(
+              // Foto profesional (bila ada) menggantikan inisial; fallback
+              // gradien + inisial tetap dipakai saat foto kosong/gagal.
+              ProfessionalAvatar(
+                displayName: name,
+                photoUrl: photoUrl,
                 radius: 26,
-                backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
-                child: Text(
-                  name.isEmpty ? '?' : name.characters.first.toUpperCase(),
-                  style: const TextStyle(
-                    color: MalvaColors.seed,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 20,
-                  ),
-                ),
               ),
               Positioned(
                 right: 0,

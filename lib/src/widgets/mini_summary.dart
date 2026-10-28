@@ -1,14 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
+import '../services/weekly_summary_service.dart';
 import '../theme.dart';
 import 'malva_components.dart';
 
 // ============================================================
 // CHAT MINI SUMMARY (Weekly) — ringkasan 14 hari untuk dokter
-// Dihitung lokal dari store; backend Gemini menyusul (kontrak sama).
+// Angka mood/tidur/kepatuhan diambil dari SERVER (fallback ke store lokal),
+// karena store tidak selalu terhidrasi saat chat dibuka — dulu kartu ini
+// menampilkan 0 check-in / 0.0 jam / 0% padahal data pasien ada.
 // ============================================================
 
 class MiniSummaryButton extends ConsumerWidget {
@@ -44,40 +49,87 @@ class MiniSummaryButton extends ConsumerWidget {
   }
 }
 
-class _MiniSummarySheet extends ConsumerWidget {
+class _MiniSummarySheet extends ConsumerStatefulWidget {
   const _MiniSummarySheet();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_MiniSummarySheet> createState() => _MiniSummarySheetState();
+}
+
+class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
+  /// Metrik dari server (fallback store). null = belum selesai dimuat.
+  WeeklySummaryMetrics? _metrics;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadMetrics());
+  }
+
+  /// Muat metrik 14 hari sekali saat sheet dibuka.
+  Future<void> _loadMetrics() async {
+    final store = ref.read(malvaStoreProvider);
+    final session = ref.read(currentSessionProvider);
+    final token = session?.accessToken;
+    WeeklySummaryMetrics? metrics;
+    if (token != null && token.isNotEmpty) {
+      try {
+        metrics = await loadWeeklySummary(
+          api: ref.read(apiClientProvider),
+          accessToken: token,
+          localMoods: [
+            for (final entry in store.moodEntries)
+              (
+                at: entry.date,
+                sleepHours: entry.sleepHours,
+                moodScore: entry.mood.score,
+              ),
+          ],
+          localLogs: [
+            for (final log in store.medicationLogs)
+              (at: log.takenAt, status: log.status),
+          ],
+        );
+      } on Object {
+        metrics = null;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _metrics = metrics;
+      _isLoading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final store = ref.watch(malvaStoreProvider);
+    final metrics = _metrics;
     final cutoff = DateTime.now().subtract(const Duration(days: 14));
 
-    final moods =
-        store.moodEntries.where((e) => e.date.isAfter(cutoff)).toList();
+    // Diary & goals tetap dari store (bukan bagian metrik yang diperbaiki).
     final diaries =
         store.diaryEntries.where((e) => e.createdAt.isAfter(cutoff)).toList();
-    final logs =
-        store.medicationLogs.where((l) => l.takenAt.isAfter(cutoff)).toList();
-
-    final avgSleep = moods.isEmpty
-        ? 0.0
-        : moods.map((e) => e.sleepHours).reduce((a, b) => a + b) / moods.length;
-    final taken = logs.where((l) => l.status == 'taken').length;
-    final adherence = logs.isEmpty ? 0 : ((taken / logs.length) * 100).round();
     final activeGoals =
         store.goals.where((g) => !g.completedToday).take(3).toList();
 
+    // Angka mood/tidur/kepatuhan hanya ditampilkan bila benar-benar diketahui.
+    final moodKnown = metrics?.moodKnown ?? false;
+    final moodCount = metrics?.moodCount ?? 0;
+    final avgSleep = metrics?.avgSleepHours ?? 0.0;
+    final logsKnown = metrics?.logsKnown ?? false;
+    final taken = metrics?.takenLogs ?? 0;
+    final totalLogs = metrics?.totalLogs ?? 0;
+    final adherence = metrics?.adherencePercent ?? 0;
+
     String moodTrend = 'Belum ada data';
-    if (moods.length >= 2) {
-      final first = moods.last.mood.score;
-      final last = moods.first.mood.score;
-      if (last > first) {
-        moodTrend = 'Membaik ↗';
-      } else if (last < first) {
-        moodTrend = 'Menurun ↘';
-      } else {
-        moodTrend = 'Stabil →';
-      }
+    if (moodKnown && moodCount >= 2) {
+      moodTrend = switch (metrics!.moodTrend) {
+        1 => 'Membaik ↗',
+        -1 => 'Menurun ↘',
+        _ => 'Stabil →',
+      };
     }
 
     return DraggableScrollableSheet(
@@ -109,24 +161,34 @@ class _MiniSummarySheet extends ConsumerWidget {
             'Ringkasan 14 hari terakhir — dihitung dari data tersimpan.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
+          if (_isLoading) ...[
+            const SizedBox(height: 12),
+            const LinearProgressIndicator(minHeight: 2),
+          ],
           const SizedBox(height: 16),
           _SummaryTile(
             icon: Icons.show_chart_rounded,
             color: MalvaColors.seed,
             title: 'Mood Trend',
-            value: '$moodTrend (${moods.length} check-in)',
+            value: moodKnown
+                ? '$moodTrend ($moodCount check-in)'
+                : 'Data check-in belum dimuat',
           ),
           _SummaryTile(
             icon: Icons.bedtime_rounded,
             color: MalvaColors.orchid,
             title: 'Rata-rata Jam Tidur',
-            value: '${avgSleep.toStringAsFixed(1)} jam/malam',
+            value: moodKnown && moodCount > 0
+                ? '${avgSleep.toStringAsFixed(1)} jam/malam'
+                : 'Belum ada data check-in',
           ),
           _SummaryTile(
             icon: Icons.medication_rounded,
             color: MalvaColors.mint,
             title: 'Ketaatan Obat',
-            value: '$adherence% ($taken dari ${logs.length} log)',
+            value: logsKnown
+                ? '$adherence% ($taken dari $totalLogs log)'
+                : 'Data log obat belum dimuat',
           ),
           _SummaryTile(
             icon: Icons.edit_note_rounded,
@@ -153,7 +215,7 @@ class _MiniSummarySheet extends ConsumerWidget {
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Text(
-              'Ringkasan ini dihitung lokal dari data perangkat. Versi AI (Gemini) menyusul via backend.',
+              'Ringkasan ini dihitung dari data check-in & log obat di server. Versi AI (Gemini) menyusul via backend.',
               style: TextStyle(fontSize: 12),
             ),
           ),
