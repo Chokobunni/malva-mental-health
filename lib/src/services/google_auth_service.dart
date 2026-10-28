@@ -123,11 +123,9 @@ class GoogleAuthService {
     // Timeout juga di sini (langkah 2 bisa ikut menggantung bila dialog
     // otorisasi scope tidak bisa tampil — insiden 28 Okt 2026).
     try {
-      final serverAuth = await account.authorizationClient
-          .authorizeServer(
-            const ['https://www.googleapis.com/auth/calendar.events'],
-          )
-          .timeout(_authTimeout);
+      final serverAuth = await account.authorizationClient.authorizeServer(
+        const ['https://www.googleapis.com/auth/calendar.events'],
+      ).timeout(_authTimeout);
       if (serverAuth == null || serverAuth.serverAuthCode.isEmpty) {
         throw const AuthFailure(
           'Google tidak memberikan authorization code. Coba lagi.',
