@@ -2659,9 +2659,11 @@ class _CreateMeetingButtonState extends State<_CreateMeetingButton> {
 
   Future<void> _shareMeeting() async {
     if (_meetingUrl == null) return;
-    await Share.share(
-      'Gabung video call Malva: $_meetingUrl',
-      subject: 'Video Call — Malva Mental Health',
+    await SharePlus.instance.share(
+      ShareParams(
+        text: 'Gabung video call Malva: $_meetingUrl',
+        subject: 'Video Call — Malva Mental Health',
+      ),
     );
   }
 
@@ -2683,11 +2685,11 @@ class _CreateMeetingButtonState extends State<_CreateMeetingButton> {
         children: [
           Row(
             children: [
-              CircleAvatar(
+              const CircleAvatar(
                 radius: 20,
                 backgroundColor: MalvaColors.mint,
-                child: const Icon(Icons.videocam_rounded,
-                    color: Colors.white, size: 20),
+                child:
+                    Icon(Icons.videocam_rounded, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
