@@ -459,6 +459,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     required String specialization,
     String? displayName,
     String currentRefreshToken = '',
+    String existingPassword = '',
   }) async {
     final api = _apiClient;
     if (api == null) throw _noServerFailure;
@@ -469,6 +470,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         sipNumber: sipNumber,
         specialization: specialization,
         displayName: displayName,
+        existingPassword: existingPassword,
       );
       // Jalur non-merge tidak mengembalikan refresh token; pertahankan token
       // dari sesi login Google agar sesi baru tetap bisa memperpanjang akses.
