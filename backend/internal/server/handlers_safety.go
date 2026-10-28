@@ -453,6 +453,70 @@ type uploadCredentialsRequest struct {
 	DocumentURL     string        `json:"document_url"`
 }
 
+// mergeCredentialPreserving menyusun kredensial yang akan disimpan dari
+// permintaan klien, sambil MEMPERTAHANKAN field yang tidak dikirim form
+// editor profesional.
+//
+// Fungsi ini MURNI (tanpa database) supaya aturan "jangan hapus data yang
+// tidak dikirim" bisa diuji langsung. Nilai dari klien SELALU menang; nilai
+// lama hanya dipakai bila klien tidak mengirim apa pun.
+//
+// Aturan (bug 28 Okt 2026):
+//   - hospital_lat/lng: form editor tidak punya kolom koordinat. Tanpa
+//     fallback ini, setiap "Simpan Profil" menghapus koordinat faskes dan
+//     profesional hilang dari direktori pasien.
+//   - document_url: form editor tidak mengirimnya; string kosong tidak boleh
+//     menghapus dokumen lisensi yang sudah diunggah.
+//   - photo_intro_url / video_intro_url: string kosong tidak boleh menimpa
+//     foto/video lama. Bila diteruskan, UpsertProfessionalCredential akan
+//     mengganti foto lama dengan avatar DiceBear default.
+//   - years_experience / price_from: diisi admin, tidak dikirim form editor.
+//
+// Catatan: UserID sengaja TIDAK diisi di sini — pemanggil menetapkannya dari
+// klaim autentikasi agar tidak bisa dipalsukan lewat body request.
+func mergeCredentialPreserving(existing store.ProfessionalCredential, req uploadCredentialsRequest) store.ProfessionalCredential {
+	merged := store.ProfessionalCredential{
+		STRNumber:       req.STRNumber,
+		SIPNumber:       req.SIPNumber,
+		SIPPNumber:      req.SIPPNumber,
+		Specialization:  req.Specialization,
+		SubSpecialties:  req.SubSpecialties,
+		HospitalLat:     req.HospitalLat,
+		HospitalLng:     req.HospitalLng,
+		HospitalName:    req.HospitalName,
+		AddressDetails:  req.AddressDetails,
+		IsBPJSSupported: req.IsBPJSSupported,
+		PhotoIntroURL:   req.PhotoIntroURL,
+		VideoIntroURL:   req.VideoIntroURL,
+		Bio:             req.Bio,
+		Education:       req.Education,
+		DocumentURL:     req.DocumentURL,
+		YearsExperience: existing.YearsExperience,
+		PriceFrom:       existing.PriceFrom,
+	}
+	// Koordinat: hanya field yang nil yang diisi dari data lama.
+	if merged.HospitalLat == nil {
+		merged.HospitalLat = existing.HospitalLat
+	}
+	if merged.HospitalLng == nil {
+		merged.HospitalLng = existing.HospitalLng
+	}
+	// Dokumen lisensi: pertahankan bila request mengosongkannya.
+	if strings.TrimSpace(merged.DocumentURL) == "" {
+		merged.DocumentURL = existing.DocumentURL
+	}
+	// Foto/video intro: pertahankan bila request mengosongkan DAN nilai lama ada.
+	if strings.TrimSpace(merged.PhotoIntroURL) == "" &&
+		strings.TrimSpace(existing.PhotoIntroURL) != "" {
+		merged.PhotoIntroURL = existing.PhotoIntroURL
+	}
+	if strings.TrimSpace(merged.VideoIntroURL) == "" &&
+		strings.TrimSpace(existing.VideoIntroURL) != "" {
+		merged.VideoIntroURL = existing.VideoIntroURL
+	}
+	return merged
+}
+
 func (s *Server) uploadCredentials(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if claims.Role != "professional" {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "Only professionals can upload credentials"})
@@ -470,22 +534,49 @@ func (s *Server) uploadCredentials(w http.ResponseWriter, r *http.Request, claim
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "specialization tidak dikenal (contoh: Sp.KJ, M.Psi)"})
 		return
 	}
-	if req.HospitalLat != nil && req.HospitalLng != nil {
-		if !s.validateLatLng(*req.HospitalLat, *req.HospitalLng) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid hospital coordinates"})
-			return
-		}
-	}
 
 	// Pertahankan harga & pengalaman yang diset admin agar tidak ter-nol-kan
-	// saat profesional memperbarui kredensialnya sendiri.
-	yearsExperience, priceFrom := 0, int64(0)
+	// saat profesional memperbarui kredensialnya sendiri (lihat
+	// mergeCredentialPreserving).
 	var existing store.ProfessionalCredential
 	hasExisting := false
 	if cur, err := s.store.GetProfessionalCredential(r.Context(), claims.Subject); err == nil {
 		existing = cur
 		hasExisting = true
-		yearsExperience, priceFrom = cur.YearsExperience, cur.PriceFrom
+	}
+
+	// ------------------------------------------------------------
+	// Pertahankan field yang TIDAK dikirim oleh form editor profesional.
+	//
+	// Form editor (lib/src/screens/professional_profile_editor_screen.dart)
+	// tidak punya kolom koordinat faskes maupun dokumen lisensi, sehingga
+	// request selalu datang dengan hospital_lat/lng = null dan
+	// document_url = "". Tanpa penjagaan ini, setiap "Simpan Profil"
+	// MENGHAPUS koordinat faskes — dan profesional tanpa koordinat hilang
+	// dari "Cari Profesional" (bug 28 Okt 2026, sisi pasien).
+	// ------------------------------------------------------------
+	merged := mergeCredentialPreserving(existing, req)
+	merged.UserID = claims.Subject
+	// Koordinat faskes harus dikirim BERPASANGAN oleh klien.
+	//
+	// Pemeriksaan dilakukan pada REQUEST (sebelum fallback), bukan setelahnya:
+	// bila klien hanya mengirim salah satu, fallback akan mengisi pasangannya
+	// dari data lama sehingga terbentuk koordinat HIBRIDA (lat baru + lng lama)
+	// yang tampak valid padahal salah — mis. lat Surabaya dengan lng Jakarta.
+	// Memeriksa setelah fallback juga akan memblokir simpan profil untuk data
+	// lama yang terlanjur setengah jadi, jadi bukan pilihan yang aman.
+	if (req.HospitalLat == nil) != (req.HospitalLng == nil) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Koordinat faskes harus dikirim berpasangan (lat dan lng).",
+		})
+		return
+	}
+	// Validasi koordinat efektif (setelah fallback ke nilai lama).
+	if merged.HospitalLat != nil && merged.HospitalLng != nil {
+		if !s.validateLatLng(*merged.HospitalLat, *merged.HospitalLng) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid hospital coordinates"})
+			return
+		}
 	}
 	// Profesional yang sebelumnya DITOLAK lalu memperbaiki STR/SIP/SIPP/dokumen
 	// perlu masuk kembali ke antrean review admin. Status VERIFIED sengaja
@@ -496,27 +587,8 @@ func (s *Server) uploadCredentials(w http.ResponseWriter, r *http.Request, claim
 		(strings.TrimSpace(req.STRNumber) != existing.STRNumber ||
 			strings.TrimSpace(req.SIPNumber) != existing.SIPNumber ||
 			strings.TrimSpace(req.SIPPNumber) != existing.SIPPNumber ||
-			strings.TrimSpace(req.DocumentURL) != existing.DocumentURL)
-	cred, err := s.store.UpsertProfessionalCredential(r.Context(), store.ProfessionalCredential{
-		UserID:          claims.Subject,
-		STRNumber:       req.STRNumber,
-		SIPNumber:       req.SIPNumber,
-		SIPPNumber:      req.SIPPNumber,
-		Specialization:  req.Specialization,
-		SubSpecialties:  req.SubSpecialties,
-		HospitalLat:     req.HospitalLat,
-		HospitalLng:     req.HospitalLng,
-		HospitalName:    req.HospitalName,
-		AddressDetails:  req.AddressDetails,
-		IsBPJSSupported: req.IsBPJSSupported,
-		PhotoIntroURL:   req.PhotoIntroURL,
-		VideoIntroURL:   req.VideoIntroURL,
-		Bio:             req.Bio,
-		Education:       req.Education,
-		DocumentURL:     req.DocumentURL,
-		YearsExperience: yearsExperience,
-		PriceFrom:       priceFrom,
-	})
+			strings.TrimSpace(merged.DocumentURL) != existing.DocumentURL)
+	cred, err := s.store.UpsertProfessionalCredential(r.Context(), merged)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return

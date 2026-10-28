@@ -7,6 +7,23 @@ import 'package:http/http.dart' as http;
 import '../assessment_engine.dart';
 import '../models.dart';
 
+/// Kode mesin pada balasan 409 `POST /v1/auth/complete-professional` yang
+/// berarti: nomor STR sudah terdaftar di akun profesional lain dan pengguna
+/// harus membuktikan kepemilikan (password akun lama) sebelum akun Google-nya
+/// boleh ditautkan.
+///
+/// Harus SAMA dengan `mergeVerificationRequiredCode` di server
+/// (backend/internal/server/handlers_professional_onboarding.go).
+const professionalMergeVerificationRequiredCode =
+    'str_terdaftar_perlu_verifikasi';
+
+/// Kode mesin pada balasan 429 endpoint yang sama: lockout per-akun aktif
+/// karena terlalu banyak percobaan verifikasi identitas. Berbeda dari
+/// [professionalMergeVerificationRequiredCode] — jangan ditangani sama.
+///
+/// Harus SAMA dengan `mergeTooManyAttemptsCode` di server.
+const professionalMergeTooManyAttemptsCode = 'terlalu_banyak_percobaan';
+
 class MalvaApiClient {
   MalvaApiClient({
     http.Client? httpClient,
@@ -188,6 +205,7 @@ class MalvaApiClient {
     required String sipNumber,
     required String specialization,
     String? displayName,
+    String existingPassword = '',
   }) async {
     final payload = await _send(
       'POST',
@@ -199,6 +217,9 @@ class MalvaApiClient {
         'specialization': specialization.trim(),
         if (displayName != null && displayName.trim().isNotEmpty)
           'display_name': displayName.trim(),
+        // Bukti kepemilikan akun lama. Hanya dikirim bila diisi — jalur normal
+        // (akun Google baru / email sama) tidak perlu password.
+        if (existingPassword.isNotEmpty) 'existing_password': existingPassword,
       },
     );
     // Respons berisi user + credential; ambil user untuk sesi.
@@ -2580,6 +2601,7 @@ class MalvaApiClient {
           decoded['error']?.toString() ??
               'Sesi berakhir, silakan login kembali.',
           statusCode: response.statusCode,
+          code: decoded['code']?.toString(),
         );
       }
     }
@@ -2588,6 +2610,7 @@ class MalvaApiClient {
       throw MalvaApiException(
         decoded['error']?.toString() ?? 'Request backend gagal.',
         statusCode: response.statusCode,
+        code: decoded['code']?.toString(),
       );
     }
     return decoded;
@@ -3355,6 +3378,7 @@ class BackendProfessionalCredential {
     required this.verificationStatus,
     required this.strNumber,
     required this.sippNumber,
+    this.sipNumber = '',
     this.hospitalName = '',
     this.bio = '',
     this.isBpjsSupported = false,
@@ -3377,6 +3401,7 @@ class BackendProfessionalCredential {
       specialization: json['specialization']?.toString() ?? 'M.Psi',
       verificationStatus: json['verification_status']?.toString() ?? 'PENDING',
       strNumber: json['str_number']?.toString() ?? '',
+      sipNumber: json['sip_number']?.toString() ?? '',
       sippNumber: json['sipp_number']?.toString() ?? '',
       hospitalName: json['hospital_name']?.toString() ?? '',
       bio: json['bio']?.toString() ?? '',
@@ -3403,6 +3428,10 @@ class BackendProfessionalCredential {
   final String specialization;
   final String verificationStatus;
   final String strNumber;
+
+  /// Nomor SIP (Surat Izin Praktik). Terpisah dari [sippNumber] — keduanya
+  /// field berbeda di database (`sip_number` dan `sipp_number`).
+  final String sipNumber;
   final String sippNumber;
   final String hospitalName;
   final String bio;
@@ -4535,10 +4564,15 @@ class BackendQRVerifyResult {
 }
 
 class MalvaApiException implements Exception {
-  const MalvaApiException(this.message, {this.statusCode});
+  const MalvaApiException(this.message, {this.statusCode, this.code});
 
   final String message;
   final int? statusCode;
+
+  /// Kode mesin opsional dari body error server (mis.
+  /// `str_terdaftar_perlu_verifikasi`). Dipakai UI untuk bereaksi spesifik,
+  /// bukan sekadar menampilkan pesan generik.
+  final String? code;
 
   @override
   String toString() => message;

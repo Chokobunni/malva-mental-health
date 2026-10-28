@@ -299,10 +299,31 @@ func (s *Store) VerifyProfessionalCredential(ctx context.Context, credentialID, 
 	return nil
 }
 
-// SearchDoctors mencari profesional terverifikasi dengan stats + Haversine jarak.
-// Bila params.IncludeUnverified=true (dipakai panel admin), sertakan semua
-// dokter termasuk yang masih PENDING/REJECTED atau dinonaktifkan.
-func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([]DoctorSearchResult, error) {
+// doctorSearchFilter adalah potongan SQL hasil penyusunan filter direktori.
+// Dipisahkan dari SearchDoctors agar logika filter bisa diuji TANPA database.
+type doctorSearchFilter struct {
+	// Where berisi klausa yang digabung dengan " AND ".
+	Where []string
+	// Args berisi nilai untuk placeholder $1..$n sesuai urutan Where.
+	Args []interface{}
+	// DistanceCol adalah ekspresi kolom `distance_km`. Selalu ada (NULL bila
+	// pasien tidak mengirim koordinat) agar Scan hasil query tetap stabil.
+	DistanceCol string
+}
+
+// buildDoctorSearchWhere menyusun klausa WHERE + argumen untuk SearchDoctors.
+//
+// Fungsi ini MURNI (tidak menyentuh database) supaya aturan filter bisa diuji
+// langsung tanpa Postgres. Aturan penting (bug 28 Okt 2026):
+//
+//   - Filter `hospital_lat/lng IS NOT NULL` HANYA dipasang bila ada filter
+//     jarak eksplisit (MaxKM != nil). Tanpa filter jarak, profesional yang
+//     belum punya koordinat faskes TETAP tampil di direktori — sebelumnya
+//     mereka hilang begitu pasien mengirim koordinat (aplikasi selalu
+//     mengirimnya bila izin lokasi aktif).
+//   - Kolom `distance_km` selalu ada; nilainya NULL untuk profesional tanpa
+//     koordinat sehingga `ORDER BY distance_km ASC NULLS LAST` tetap benar.
+func buildDoctorSearchWhere(params DoctorSearchParams) doctorSearchFilter {
 	var where []string
 	if !params.IncludeUnverified {
 		where = append(where, "pc.verification_status = 'VERIFIED'")
@@ -310,8 +331,7 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 	}
 	var args []interface{}
 	nextArg := func() string {
-		arg := fmt.Sprintf("$%d", len(args)+1)
-		return arg
+		return fmt.Sprintf("$%d", len(args)+1)
 	}
 
 	if params.Specialization != "" {
@@ -338,10 +358,9 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 		args = append(args, *params.MaxPrice)
 	}
 
-	hasCoords := params.PatientLat != nil && params.PatientLng != nil
-
 	// Kolom jarak selalu ada (NULL bila tanpa koordinat) agar Scan stabil.
 	distanceCol := "NULL::numeric AS distance_km"
+	hasCoords := params.PatientLat != nil && params.PatientLng != nil
 	if hasCoords {
 		latArg := nextArg()
 		args = append(args, *params.PatientLat)
@@ -353,13 +372,25 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 			POWER(SIN(RADIANS((%s - pc.hospital_lng)/2.0)), 2)
 		))::numeric, 2)`, latArg, latArg, lngArg)
 		distanceCol = haversine + " AS distance_km"
-		where = append(where, "pc.hospital_lat IS NOT NULL AND pc.hospital_lng IS NOT NULL")
 		if params.MaxKM != nil {
+			where = append(where, "pc.hospital_lat IS NOT NULL AND pc.hospital_lng IS NOT NULL")
 			maxArg := nextArg()
 			args = append(args, *params.MaxKM)
 			where = append(where, haversine+" <= "+maxArg)
 		}
 	}
+	return doctorSearchFilter{Where: where, Args: args, DistanceCol: distanceCol}
+}
+
+// SearchDoctors mencari profesional terverifikasi dengan stats + Haversine jarak.
+// Bila params.IncludeUnverified=true (dipakai panel admin), sertakan semua
+// dokter termasuk yang masih PENDING/REJECTED atau dinonaktifkan.
+func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([]DoctorSearchResult, error) {
+	filter := buildDoctorSearchWhere(params)
+	where := filter.Where
+	args := filter.Args
+	distanceCol := filter.DistanceCol
+	hasCoords := params.PatientLat != nil && params.PatientLng != nil
 
 	orderBy := "u.display_name ASC"
 	switch params.SortBy {

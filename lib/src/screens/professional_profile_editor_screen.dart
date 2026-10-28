@@ -57,10 +57,16 @@ class ProfessionalProfileEditorScreen extends ConsumerStatefulWidget {
     super.key,
     this.session,
     this.apiClient,
+    this.onSaved,
   });
 
   final AuthSession? session;
   final MalvaApiClient? apiClient;
+
+  /// Dipanggil setelah profil berhasil disimpan. Dipakai pemanggil (mis.
+  /// `_ProfessionalPortalSection`) untuk memuat ulang data profesional agar
+  /// foto/nama baru langsung tampil tanpa menutup layar.
+  final VoidCallback? onSaved;
 
   @override
   ConsumerState<ProfessionalProfileEditorScreen> createState() =>
@@ -84,6 +90,11 @@ class _ProfessionalProfileEditorScreenState
   final _yearsExpController = TextEditingController();
   final _strController = TextEditingController();
   final _sipController = TextEditingController();
+
+  /// Controller TERPISAH untuk SIPP. Sebelumnya satu controller dipakai untuk
+  /// SIP dan SIPP sekaligus, sehingga `sip_number` terhapus dan `sipp_number`
+  /// terduplikasi setiap kali profil disimpan (bug 28 Okt 2026).
+  final _sippController = TextEditingController();
 
   Set<String> _selectedSpecialties = {};
   List<Map<String, dynamic>> _education = [];
@@ -117,6 +128,7 @@ class _ProfessionalProfileEditorScreenState
     _yearsExpController.dispose();
     _strController.dispose();
     _sipController.dispose();
+    _sippController.dispose();
     super.dispose();
   }
 
@@ -156,7 +168,9 @@ class _ProfessionalProfileEditorScreenState
     _yearsExpController.text =
         cred.yearsExperience > 0 ? '${cred.yearsExperience}' : '';
     _strController.text = cred.strNumber;
-    _sipController.text = cred.sippNumber;
+    // SIP dan SIPP adalah dua field berbeda — jangan tertukar.
+    _sipController.text = cred.sipNumber;
+    _sippController.text = cred.sippNumber;
     _selectedSpecialties = Set<String>.from(cred.subSpecialties);
     _education = List<Map<String, dynamic>>.from(cred.education);
   }
@@ -174,9 +188,15 @@ class _ProfessionalProfileEditorScreenState
         accessToken: token,
         strNumber: _strController.text.trim(),
         sipNumber: _sipController.text.trim(),
-        sippNumber: _sipController.text.trim(),
+        sippNumber: _sippController.text.trim(),
         specialization: _cred?.specialization ?? 'M.Psi',
         subSpecialties: _selectedSpecialties.toList(),
+        // Kirim balik koordinat faskes yang sudah ada. Form editor tidak
+        // punya kolom koordinat; tanpa ini setiap simpan mengosongkan
+        // hospital_lat/lng (pertahanan berlapis di sisi klien — server juga
+        // mempertahankan nilai lama bila field tidak dikirim).
+        hospitalLat: _cred?.hospitalLat,
+        hospitalLng: _cred?.hospitalLng,
         hospitalName: _hospitalNameController.text.trim(),
         addressDetails: _addressController.text.trim(),
         isBpjsSupported: _cred?.isBpjsSupported ?? false,
@@ -191,6 +211,16 @@ class _ProfessionalProfileEditorScreenState
         _isSaving = false;
         _successMessage = 'Profil berhasil disimpan.';
       });
+      // Beri tahu layar lain (dashboard profesional & sisi pasien) bahwa
+      // profil berubah, sehingga foto/nama baru langsung tampil di kedua sisi.
+      ref.read(professionalProfileRevisionProvider.notifier).state++;
+      final userId = updated.userId.isNotEmpty
+          ? updated.userId
+          : (widget.session?.backendUserId ?? '');
+      if (userId.isNotEmpty) {
+        ref.read(professionalProfileUpdatedIdProvider.notifier).state = userId;
+      }
+      widget.onSaved?.call();
     } on MalvaApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -560,7 +590,15 @@ class _ProfessionalProfileEditorScreenState
                           TextField(
                             controller: _sipController,
                             decoration: const InputDecoration(
-                                labelText: 'Nomor SIP / SIPP'),
+                                labelText: 'Nomor SIP',
+                                hintText: 'SIP-1234567890'),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _sippController,
+                            decoration: const InputDecoration(
+                                labelText: 'Nomor SIPP (bila ada)',
+                                hintText: 'SIPP-1234567890'),
                           ),
                         ],
                       ),
