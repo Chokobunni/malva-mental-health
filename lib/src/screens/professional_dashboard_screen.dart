@@ -7,10 +7,12 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
+import '../providers/providers.dart';
 import '../services/dashboard_sync_service.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/professional_avatar.dart';
 import 'booking/credential_screens.dart';
 import 'notifications_screen.dart';
 import 'portal/crisis_incident_log_screen.dart';
@@ -386,6 +388,7 @@ class _ProfessionalDashboardScreenState
                           _ProfessionalPortalSection(
                             session: widget.session,
                             apiClient: widget.apiClient,
+                            onRefresh: _loadOnlineProfessionalData,
                           ),
                         ],
                       ],
@@ -2034,17 +2037,131 @@ class _AuditAndExportSection extends StatelessWidget {
   }
 }
 
-class _ProfessionalPortalSection extends StatelessWidget {
-  const _ProfessionalPortalSection({this.session, this.apiClient});
+class _ProfessionalPortalSection extends ConsumerStatefulWidget {
+  const _ProfessionalPortalSection({
+    this.session,
+    this.apiClient,
+    this.onRefresh,
+  });
 
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
+  /// Memuat ulang data profesional di parent state setelah profil disimpan.
+  final Future<void> Function()? onRefresh;
+
+  @override
+  ConsumerState<_ProfessionalPortalSection> createState() =>
+      _ProfessionalPortalSectionState();
+}
+
+class _ProfessionalPortalSectionState
+    extends ConsumerState<_ProfessionalPortalSection> {
+  BackendProfessionalCredential? _credential;
+  bool _isLoadingCredential = false;
+
+  /// Alias agar referensi di bawah tetap ringkas.
+  AuthSession? get session => widget.session;
+  MalvaApiClient? get apiClient => widget.apiClient;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadCredential());
+  }
+
+  /// Memuat kredensial sendiri (`GET /v1/credentials/me`) untuk menampilkan
+  /// avatar + nama profesional di sisi profesional — permintaan produk:
+  /// foto profil baru harus langsung tampil di KEDUA sisi.
+  Future<void> _loadCredential() async {
+    final token = widget.session?.accessToken;
+    if (token == null || token.isEmpty) return;
+    if (mounted) setState(() => _isLoadingCredential = true);
+    try {
+      // apiClientProvider bertipe non-null, jadi tidak perlu null-check.
+      final MalvaApiClient client =
+          widget.apiClient ?? ref.read(apiClientProvider);
+      final credential = await client.getMyCredentials(accessToken: token);
+      if (!mounted) return;
+      setState(() {
+        _credential = credential;
+        _isLoadingCredential = false;
+      });
+    } on Object {
+      // Best-effort: avatar jatuh ke fallback inisial, kartu tetap tampil.
+      if (!mounted) return;
+      setState(() => _isLoadingCredential = false);
+    }
+  }
+
+  /// Dipanggil setelah editor profil berhasil menyimpan.
+  void _handleProfileSaved() {
+    unawaited(_loadCredential());
+    final refresh = widget.onRefresh;
+    if (refresh != null) unawaited(refresh());
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Setiap revisi profil berubah (disimpan dari layar mana pun), muat ulang
+    // kredensial agar foto & nama di kartu ini ikut terbarui.
+    ref.listen<int>(professionalProfileRevisionProvider, (previous, next) {
+      unawaited(_loadCredential());
+    });
+    final displayName = (widget.session?.displayName ?? '').trim();
+    final specialization = (_credential?.specialization ?? '').trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const SectionLabel('Profil Profesional', icon: Icons.badge_rounded),
+        // Kartu identitas profesional: avatar + nama + status verifikasi.
+        // Foto diambil dari photo_intro_url yang sama dengan yang dilihat
+        // pasien, sehingga perubahan foto langsung terlihat di kedua sisi.
+        SoftCard(
+          child: Row(
+            children: [
+              ProfessionalAvatar(
+                displayName: displayName.isEmpty ? 'Profesional' : displayName,
+                radius: 28,
+                photoUrl: _credential?.photoIntroUrl,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName.isEmpty ? 'Profesional Malva' : displayName,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _isLoadingCredential
+                          ? 'Memuat profil...'
+                          : specialization.isEmpty
+                              ? 'Belum ada spesialisasi'
+                              : specialization,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_credential != null)
+                StatusPill(
+                  label: _credential!.verificationStatus == 'VERIFIED'
+                      ? 'Terverifikasi'
+                      : 'Menunggu review',
+                  color: _credential!.verificationStatus == 'VERIFIED'
+                      ? MalvaColors.mint
+                      : MalvaColors.amber,
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
         const SectionLabel('Portal Profesional',
             icon: Icons.open_in_new_rounded),
         // Edit Profil — profesional mengatur foto, bio, spesialisasi,
@@ -2061,12 +2178,14 @@ class _ProfessionalPortalSection extends StatelessWidget {
               builder: (_) => ProfessionalProfileEditorScreen(
                 session: session,
                 apiClient: apiClient,
+                // Muat ulang kartu identitas + data dashboard setelah simpan.
+                onSaved: _handleProfileSaved,
               ),
             ),
           ).then((_) {
-            // Reload data setelah edit profil agar perubahan langsung terlihat.
-            // _loadOnlineProfessionalData ada di parent state, bukan di widget ini.
-            // Kita trigger reload lewat context — parent akan rebuild.
+            // Setelah editor ditutup, segarkan juga data dashboard di parent
+            // (daftar pasien, audit) agar tidak ada tampilan basi.
+            _handleProfileSaved();
           }),
         ),
         const SizedBox(height: 10),

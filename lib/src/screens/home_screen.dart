@@ -128,6 +128,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Foto/nama profesional bisa berubah kapan saja (event realtime
+    // `professional.profile.updated`). Muat ulang data sesi yang menampilkan
+    // identitas profesional tanpa perlu refresh manual (bug 28 Okt 2026:
+    // foto profil baru tidak muncul di sisi pasien).
+    ref.listen<int>(professionalProfileRevisionProvider, (previous, next) {
+      unawaited(_loadUpcomingSession());
+    });
     final storeState = ref.watch(malvaStoreProvider);
     final upcoming = _upcomingSession;
     // Nama sapaan diambil dari sesi login asli, fallback ke store.
@@ -765,6 +772,10 @@ class _JoinMeetingBannerState extends ConsumerState<_JoinMeetingBanner> {
 
   @override
   Widget build(BuildContext context) {
+    // Banner ini menampilkan nama profesional; segarkan saat profil berubah.
+    ref.listen<int>(professionalProfileRevisionProvider, (previous, next) {
+      unawaited(_loadNextVideoSession());
+    });
     if (!_loaded || _nextVideoSession == null) return const SizedBox.shrink();
     final s = _nextVideoSession!;
     final at = s.scheduledDateTime?.toLocal();

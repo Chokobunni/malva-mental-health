@@ -74,6 +74,12 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Identitas profesional (nama/foto) bisa berubah lewat event realtime
+    // `professional.profile.updated` — segarkan daftar percakapan agar tidak
+    // menampilkan nama lama.
+    ref.listen<int>(professionalProfileRevisionProvider, (previous, next) {
+      _load();
+    });
     final isPro = widget.session?.role == UserRole.professional;
     return Scaffold(
       appBar: AppBar(
