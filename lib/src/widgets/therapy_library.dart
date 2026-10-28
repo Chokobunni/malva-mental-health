@@ -5,11 +5,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../ai/assessment_interpretation.dart';
+import '../ai/assessment_scoring.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import 'friendly_error.dart';
 import 'malva_components.dart';
+
+// Skoring baku DASS-21/WHO-5 kini tinggal di `ai/assessment_scoring.dart`
+// agar lapisan interpretasi (CF) bisa memakainya tanpa impor melingkar.
+// Diekspor ulang supaya pemanggil lama (mis. layar profesional) tetap jalan.
+export '../ai/assessment_scoring.dart';
 
 // ============================================================
 // TERAPI LIBRARY — konten edukasi dengan penjelasan singkat
@@ -99,6 +106,7 @@ class TherapyWorksheetField {
     this.minValue,
     this.maxValue,
     this.scaleLabels = const [],
+    this.scaleShortLabels = const [],
     this.choices = const [],
     this.pointCount = 0,
     this.pointLabels = const [],
@@ -124,6 +132,11 @@ class TherapyWorksheetField {
   /// Bila kosong, dipakai label angka saja.
   final List<String> scaleLabels;
 
+  /// Label PENDEK tiap nilai skala (opsional), dipakai pada tombol pilihan
+  /// agar semua opsi muat dalam satu baris. Bila kosong, dipakai
+  /// [scaleLabels].
+  final List<String> scaleShortLabels;
+
   /// Opsi untuk [TherapyFieldKind.choice] / [choiceMulti].
   final List<String> choices;
 
@@ -146,6 +159,14 @@ class TherapyWorksheetField {
     return scaleLabels[idx];
   }
 
+  /// Label pendek untuk tombol pilihan; fallback ke [scaleLabel].
+  String scaleShortLabel(int value) {
+    if (scaleShortLabels.isEmpty) return scaleLabel(value);
+    final idx = value - (minValue ?? 0);
+    if (idx < 0 || idx >= scaleShortLabels.length) return scaleLabel(value);
+    return scaleShortLabels[idx];
+  }
+
   List<String> effectivePointLabels() {
     if (pointLabels.isNotEmpty) return pointLabels;
     return [for (var i = 1; i <= pointCount; i++) 'Poin $i'];
@@ -153,153 +174,17 @@ class TherapyWorksheetField {
 }
 
 // ============================================================
-// SKORING DASS-21 & WHO-5 (dipakai pasien & profesional)
+// SKORING DASS-21 & WHO-5
 // ============================================================
-
-/// Kelompok item DASS-21 per subskala (nomor item 1-based).
-const Set<int> _dassDepressionItems = {3, 5, 10, 13, 16, 17, 21};
-const Set<int> _dassAnxietyItems = {2, 4, 7, 9, 15, 19, 20};
-const Set<int> _dassStressItems = {1, 6, 8, 11, 12, 14, 18};
-
-int _answerInt(Map<String, dynamic> answers, String key) {
-  final v = answers[key];
-  if (v is int) return v;
-  if (v is num) return v.toInt();
-  return 0;
-}
-
-class Dass21Score {
-  const Dass21Score({
-    required this.depression,
-    required this.anxiety,
-    required this.stress,
-    required this.depressionLevel,
-    required this.anxietyLevel,
-    required this.stressLevel,
-  });
-
-  final int depression;
-  final int anxiety;
-  final int stress;
-  final String depressionLevel;
-  final String anxietyLevel;
-  final String stressLevel;
-}
-
-String _dassLevel(String subscale, int score) {
-  switch (subscale) {
-    case 'depression':
-      if (score <= 9) return 'Normal';
-      if (score <= 13) return 'Ringan';
-      if (score <= 20) return 'Sedang';
-      if (score <= 27) return 'Berat';
-      return 'Sangat berat';
-    case 'anxiety':
-      if (score <= 7) return 'Normal';
-      if (score <= 9) return 'Ringan';
-      if (score <= 14) return 'Sedang';
-      if (score <= 19) return 'Berat';
-      return 'Sangat berat';
-    default: // stress
-      if (score <= 14) return 'Normal';
-      if (score <= 18) return 'Ringan';
-      if (score <= 25) return 'Sedang';
-      if (score <= 33) return 'Berat';
-      return 'Sangat berat';
-  }
-}
-
-/// Deteksi submission lama yang memakai skala 0-based (sebelum UI 1-based).
-/// UI baru tidak pernah menghasilkan nilai 0, jadi adanya 0 = data lama.
-bool _isLegacyScale(Map<String, dynamic> answers, int itemCount) {
-  for (var i = 1; i <= itemCount; i++) {
-    if (_answerInt(answers, 'q$i') <= 0) return true;
-  }
-  return false;
-}
-
-/// Skor DASS-21: jumlah per subskala x3 (setara DASS-42).
-///
-/// UI baru memakai nilai 1-3 → dikurangi 1 (skala standar 0-2) lalu dikali 3
-/// sehingga rentang subskala tetap 0-42 dan ambang klinis tidak berubah.
-/// Submission lama (0-3) tetap dihitung dengan rumus lamanya (x2).
-Dass21Score scoreDass21(Map<String, dynamic> answers) {
-  final legacy = _isLegacyScale(answers, 21);
-  var dep = 0, anx = 0, str = 0;
-  for (var i = 1; i <= 21; i++) {
-    final raw = _answerInt(answers, 'q$i');
-    final v = legacy ? raw.clamp(0, 3) : (raw - 1).clamp(0, 2);
-    if (_dassDepressionItems.contains(i)) {
-      dep += v;
-    } else if (_dassAnxietyItems.contains(i)) {
-      anx += v;
-    } else if (_dassStressItems.contains(i)) {
-      str += v;
-    }
-  }
-  final factor = legacy ? 2 : 3;
-  dep *= factor;
-  anx *= factor;
-  str *= factor;
-  return Dass21Score(
-    depression: dep,
-    anxiety: anx,
-    stress: str,
-    depressionLevel: _dassLevel('depression', dep),
-    anxietyLevel: _dassLevel('anxiety', anx),
-    stressLevel: _dassLevel('stress', str),
-  );
-}
-
-String dass21Summary(Map<String, dynamic> answers) {
-  final s = scoreDass21(answers);
-  return 'Depresi ${s.depression} (${s.depressionLevel}) • '
-      'Kecemasan ${s.anxiety} (${s.anxietyLevel}) • '
-      'Stres ${s.stress} (${s.stressLevel})';
-}
-
-class Who5Score {
-  const Who5Score({required this.raw, required this.percent});
-
-  final int raw;
-  final int percent;
-
-  bool get lowWellbeing => raw < 13;
-  bool get possibleDepression => raw <= 7;
-}
-
-/// Skor WHO-5: nilai UI 1-5 dikonversi ke skala standar 0-4 per item.
-/// Total 0-20 dipetakan ke rentang resmi 0-25 (persen 0-100%).
-/// Submission lama (0-5) tetap memakai rumus lamanya.
-Who5Score scoreWho5(Map<String, dynamic> answers) {
-  final legacy = _isLegacyScale(answers, 5);
-  var total = 0;
-  for (var i = 1; i <= 5; i++) {
-    final raw = _answerInt(answers, 'q$i');
-    total += legacy ? raw.clamp(0, 5) : (raw - 1).clamp(0, 4);
-  }
-  if (legacy) return Who5Score(raw: total, percent: total * 4);
-  final raw = (total * 5 / 4).round();
-  return Who5Score(raw: raw, percent: (raw * 4).clamp(0, 100));
-}
-
-String who5Summary(Map<String, dynamic> answers) {
-  final s = scoreWho5(answers);
-  var suffix = 'Kesejahteraan baik';
-  if (s.possibleDepression) {
-    suffix = 'Perlu screening lanjutan (kemungkinan depresi)';
-  } else if (s.lowWellbeing) {
-    suffix = 'Kesejahteraan rendah, pertimbangkan konsultasi';
-  }
-  return 'WHO-5 ${s.raw}/25 (${s.percent}%) — $suffix';
-}
-
-/// Ringkasan skor untuk modul assessment; '' untuk modul lain.
-String assessmentSummary(String moduleId, Map<String, dynamic> answers) {
-  if (moduleId == 'dass21') return dass21Summary(answers);
-  if (moduleId == 'who5') return who5Summary(answers);
-  return '';
-}
+//
+// Rumus skoring baku (termasuk kompatibilitas submission lama) tinggal di
+// `ai/assessment_scoring.dart` dan diekspor ulang oleh berkas ini, sehingga
+// `scoreDass21`, `scoreWho5`, `dass21Summary`, `who5Summary`, dan
+// `assessmentSummary` tetap dapat dipakai dari sini.
+//
+// Lapisan interpretasi triage (Forward Chaining + Certainty Factor) ada di
+// `ai/assessment_interpretation.dart`. CF HANYA menilai keyakinan triage dan
+// TIDAK PERNAH mengubah skor/level instrumen.
 
 /// Jumlah item skala yang belum dijawab (untuk validasi assessment).
 int countUnansweredScale(TherapyModule module, Map<String, int?> scaleValues) {
@@ -314,19 +199,36 @@ int countUnansweredScale(TherapyModule module, Map<String, int?> scaleValues) {
 // MODUL: DASS-21
 // ============================================================
 
-/// DASS-21: tiga pilihan jawaban berupa ANGKA 1-3 (bukan narasi).
-/// Nilai 1 = paling ringan (tidak pernah), 3 = paling berat (selalu).
-/// Skoring mengonversi ke rentang standar 0-3 agar ambang klinis tetap sahih.
-const List<String> _dassScaleLabels = ['1', '2', '3'];
+/// DASS-21: 21 item dengan jawaban BAKU 0-3 untuk "minggu terakhir".
+///
+/// 0 = Tidak pernah (tidak sesuai dengan saya sama sekali)
+/// 1 = Kadang-kadang (sesuai sampai tingkat tertentu)
+/// 2 = Sering (sesuai sampai tingkat yang cukup besar)
+/// 3 = Hampir selalu (sangat sesuai dengan saya)
+const List<String> _dassScaleLabels = [
+  'Tidak pernah',
+  'Kadang-kadang',
+  'Sering',
+  'Hampir selalu',
+];
+
+/// Label pendek tombol DASS-21. 4 opsi muat dalam satu baris sehingga teks
+/// penuh tetap dipakai (tidak ada singkatan yang mengubah makna klinis).
+const List<String> _dassScaleShort = [
+  'Tidak pernah',
+  'Kadang-kadang',
+  'Sering',
+  'Hampir selalu',
+];
 
 const dass21Module = TherapyModule(
   id: 'dass21',
   title: 'DASS-21 (Depression Anxiety Stress Scales)',
   description:
       'Kuesioner 21 pertanyaan untuk mengukur tiga aspek: depresi, kecemasan, '
-      'dan stres selama minggu terakhir. Pilih jawaban yang paling sesuai '
-      'untuk setiap pernyataan (skala 1-3). Skor dihitung otomatis per '
-      'kategori dan langsung tampil setelah semua pertanyaan terjawab.',
+      'dan stres selama minggu terakhir. Pilih jawaban 0-3 yang paling sesuai '
+      'untuk setiap pernyataan. Skor dihitung otomatis per kategori (0-42) dan '
+      'langsung tampil setelah semua pertanyaan terjawab.',
   icon: Icons.assignment_rounded,
   color: MalvaColors.seed,
   category: 'Assessment',
@@ -348,186 +250,229 @@ const dass21WorksheetFields = <TherapyWorksheetField>[
       badge: '1',
       label: 'Saya merasa sulit untuk menenangkan diri',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q2',
       badge: '2',
       label: 'Saya menyadari mulut saya terasa kering',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q3',
       badge: '3',
       label: 'Saya tidak dapat merasakan perasaan positif sama sekali',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q4',
       badge: '4',
       label: 'Saya mengalami kesulitan bernapas',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q5',
       badge: '5',
       label: 'Saya merasa sulit berinisiatif mengerjakan sesuatu',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q6',
       badge: '6',
       label: 'Saya cenderung bereaksi berlebihan terhadap situasi',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q7',
       badge: '7',
       label: 'Saya mengalami gemetar (mis. di tangan)',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q8',
       badge: '8',
       label: 'Saya merasa banyak menggunakan energi untuk cemas',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q9',
       badge: '9',
       label: 'Saya khawatir akan situasi di mana saya panik',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q10',
       badge: '10',
       label: 'Saya merasa tidak ada hal yang dapat saya nantikan',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q11',
       badge: '11',
       label: 'Saya merasa gelisah',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q12',
       badge: '12',
       label: 'Saya sulit untuk rileks',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q13',
       badge: '13',
       label: 'Saya merasa sedih dan tertekan',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q14',
       badge: '14',
       label: 'Saya tidak sabar terhadap hal yang menghalangi pekerjaan',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q15',
       badge: '15',
       label: 'Saya merasa hampir panik',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q16',
       badge: '16',
       label: 'Saya tidak bisa menjadi antusias terhadap apa pun',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q17',
       badge: '17',
       label: 'Saya merasa tidak berharga',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q18',
       badge: '18',
       label: 'Saya merasa mudah tersinggung',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q19',
       badge: '19',
       label: 'Saya menyadari perubahan detak jantung saat cemas',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q20',
       badge: '20',
       label: 'Saya merasa takut tanpa alasan yang jelas',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
   TherapyWorksheetField(
       id: 'q21',
       badge: '21',
       label: 'Saya merasa hidup tidak berarti',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 3,
-      scaleLabels: _dassScaleLabels),
+      scaleLabels: _dassScaleLabels,
+      scaleShortLabels: _dassScaleShort),
 ];
 
 // ============================================================
 // MODUL: WHO-5
 // ============================================================
 
-/// WHO-5: lima pilihan jawaban berupa ANGKA 1-5 (bukan narasi).
-/// Nilai 1 = paling rendah, 5 = paling tinggi.
-const List<String> _who5ScaleLabels = ['1', '2', '3', '4', '5'];
+/// WHO-5: 5 item dengan jawaban BAKU 0-5 untuk "2 minggu terakhir".
+///
+/// 0 = Tidak pernah, 1 = Jarang, 2 = Kurang dari setengah waktu,
+/// 3 = Lebih dari setengah waktu, 4 = Sebagian besar waktu, 5 = Selalu.
+const List<String> _who5ScaleLabels = [
+  'Tidak pernah',
+  'Jarang',
+  'Kurang dari setengah waktu',
+  'Lebih dari setengah waktu',
+  'Sebagian besar waktu',
+  'Selalu',
+];
+
+/// Label pendek untuk tombol pilihan WHO-5 (0..5).
+///
+/// Tombol disusun 3 per baris (2 baris) agar tiap tombol cukup lebar; teks
+/// lengkap tiap angka tetap tampil pada legenda "0 = ..." di atas tombol.
+const List<String> _who5ScaleShort = [
+  'Tidak pernah',
+  'Jarang',
+  'Kurang dari ½',
+  'Lebih dari ½',
+  'Sering',
+  'Selalu',
+];
 
 const who5Module = TherapyModule(
   id: 'who5',
   title: 'WHO-5 (Well-Being Index)',
   description:
       'Kuesioner singkat 5 pertanyaan untuk mengukur kesejahteraan psikologis '
-      'dua minggu terakhir. Pilih jawaban yang paling sesuai untuk setiap '
-      'pernyataan (skala 1-5). Skor total dihitung otomatis (0-25).',
+      'dua minggu terakhir. Pilih jawaban 0-5 yang paling sesuai untuk setiap '
+      'pernyataan. Skor total dihitung otomatis (0-25).',
   icon: Icons.favorite_rounded,
   color: MalvaColors.mint,
   category: 'Assessment',
@@ -536,7 +481,7 @@ const who5Module = TherapyModule(
     'Siapkan diri di kondisi tenang (± 3 menit).',
     'Ingat dua minggu terakhir, bukan hanya hari ini.',
     'Jawab kelima pernyataan — semuanya wajib dijawab.',
-    'Skor dihitung otomatis: di bawah 13 berarti kesejahteraan rendah dan disarankan screening lanjutan.',
+    'Skor dihitung otomatis (0-25): ≤ 12 (≤ 50%) berarti kesejahteraan rendah dan disarankan screening lanjutan.',
     'Ulangi rutin untuk melihat arah perubahan.',
   ],
 );
@@ -548,41 +493,46 @@ const who5WorksheetFields = <TherapyWorksheetField>[
       badge: '1',
       label: 'Saya merasa cerah dan bersemangat',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 5,
-      scaleLabels: _who5ScaleLabels),
+      scaleLabels: _who5ScaleLabels,
+      scaleShortLabels: _who5ScaleShort),
   TherapyWorksheetField(
       id: 'q2',
       badge: '2',
       label: 'Saya merasa tenang dan rileks',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 5,
-      scaleLabels: _who5ScaleLabels),
+      scaleLabels: _who5ScaleLabels,
+      scaleShortLabels: _who5ScaleShort),
   TherapyWorksheetField(
       id: 'q3',
       badge: '3',
       label: 'Saya merasa aktif dan penuh energi',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 5,
-      scaleLabels: _who5ScaleLabels),
+      scaleLabels: _who5ScaleLabels,
+      scaleShortLabels: _who5ScaleShort),
   TherapyWorksheetField(
       id: 'q4',
       badge: '4',
       label: 'Saya bangun dengan perasaan segar',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 5,
-      scaleLabels: _who5ScaleLabels),
+      scaleLabels: _who5ScaleLabels,
+      scaleShortLabels: _who5ScaleShort),
   TherapyWorksheetField(
       id: 'q5',
       badge: '5',
       label: 'Hidup saya dipenuhi hal-hal yang menarik',
       kind: TherapyFieldKind.scale,
-      minValue: 1,
+      minValue: 0,
       maxValue: 5,
-      scaleLabels: _who5ScaleLabels)
+      scaleLabels: _who5ScaleLabels,
+      scaleShortLabels: _who5ScaleShort)
 ];
 
 // ============================================================
@@ -1226,6 +1176,15 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
           }
       }
     }
+    // Penanda versi skala: submission baru memakai skala BAKU (DASS-21 0-3,
+    // WHO-5 0-5). Tanpa penanda ini, data baru yang kebetulan bernilai 0 akan
+    // salah dikira data lama oleh fungsi skoring. Penanda hanya disisipkan
+    // pada modul assessment agar worksheet terapi lain tidak berubah bentuk.
+    if (module.isAssessment) {
+      out[scaleVersionKey] = standardizedScaleVersion;
+      out[scaleMinKey] = 0;
+      out[scaleMaxKey] = module.id == 'who5' ? 5 : 3;
+    }
     return out;
   }
 
@@ -1252,12 +1211,17 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
   int get _totalScaleCount =>
       module.worksheetFields.where((f) => f.isScale).length;
 
+  /// Jawaban skala + penanda versi skala, untuk pratinjau skor & interpretasi
+  /// langsung di layar (sebelum disimpan).
+  Map<String, dynamic> _liveAssessmentAnswers() => {
+        for (final e in _scaleValues.entries) e.key: e.value,
+        scaleVersionKey: standardizedScaleVersion,
+      };
+
   String? _liveSummary() {
     if (!module.isAssessment) return null;
     if (_answeredScaleCount < _totalScaleCount) return null;
-    return assessmentSummary(module.id, {
-      for (final e in _scaleValues.entries) e.key: e.value,
-    });
+    return assessmentSummary(module.id, _liveAssessmentAnswers());
   }
 
   void _markDirty() {
@@ -1585,7 +1549,8 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
               const SizedBox(height: 10),
             ],
             if (summary != null) ...[
-              _AssessmentResultCard(moduleId: module.id, answers: _scaleValues),
+              _AssessmentResultCard(
+                  moduleId: module.id, answers: _liveAssessmentAnswers()),
               const SizedBox(height: 10),
             ],
             SoftCard(
@@ -1777,6 +1742,11 @@ String? _answerText(TherapyWorksheetField field, Object? answer) {
 }
 
 /// Kartu hasil skor DASS-21 / WHO-5 (live saat mengisi & untuk viewer).
+///
+/// Skor di kartu ini DETERMINISTIK (lihat `ai/assessment_scoring.dart`).
+/// Baris "Interpretasi triage" memakai lapisan pakar (forward chaining + CF,
+/// lihat `ai/assessment_interpretation.dart`) yang HANYA menilai keyakinan
+/// rujukan — tidak pernah mengubah skor maupun level subskala.
 class _AssessmentResultCard extends StatelessWidget {
   const _AssessmentResultCard({
     required this.moduleId,
@@ -1784,40 +1754,83 @@ class _AssessmentResultCard extends StatelessWidget {
   });
 
   final String moduleId;
-  final Map<String, int> answers;
+  final Map<String, dynamic> answers;
 
   @override
   Widget build(BuildContext context) {
+    final interpretation =
+        interpretDassWho5(answers: answers, moduleId: moduleId);
     if (moduleId == 'dass21') {
-      final s = scoreDass21(answers);
-      return SoftCard(
-        color: MalvaColors.seed.withValues(alpha: 0.06),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.auto_graph_rounded, color: MalvaColors.seed),
-                SizedBox(width: 8),
-                Text('Hasil DASS-21',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            _ScoreRow(
-                label: 'Depresi',
-                score: s.depression,
-                level: s.depressionLevel),
-            const SizedBox(height: 8),
-            _ScoreRow(
-                label: 'Kecemasan', score: s.anxiety, level: s.anxietyLevel),
-            const SizedBox(height: 8),
-            _ScoreRow(label: 'Stres', score: s.stress, level: s.stressLevel),
-          ],
-        ),
-      );
+      return _buildDass21(context, interpretation);
     }
+    return _buildWho5(context, interpretation);
+  }
+
+  Widget _buildDass21(
+    BuildContext context,
+    AssessmentInterpretation interpretation,
+  ) {
+    final s = scoreDass21(answers);
+    return SoftCard(
+      color: MalvaColors.seed.withValues(alpha: 0.06),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.auto_graph_rounded, color: MalvaColors.seed),
+              SizedBox(width: 8),
+              Text('Hasil DASS-21',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _ScoreRow(
+              label: 'Depresi', score: s.depression, level: s.depressionLevel),
+          const SizedBox(height: 8),
+          _ScoreRow(
+              label: 'Kecemasan', score: s.anxiety, level: s.anxietyLevel),
+          const SizedBox(height: 8),
+          _ScoreRow(label: 'Stres', score: s.stress, level: s.stressLevel),
+          const SizedBox(height: 12),
+          _TriageLine(interpretation: interpretation),
+          const SizedBox(height: 8),
+          _ScoreMeaningExpansion(
+            children: [
+              _ScoreRangeTable(
+                title: 'Depresi',
+                score: s.depression,
+                maxScore: 42,
+                level: s.depressionLevel,
+                ranges: dassDepressionRanges,
+              ),
+              const SizedBox(height: 10),
+              _ScoreRangeTable(
+                title: 'Kecemasan',
+                score: s.anxiety,
+                maxScore: 42,
+                level: s.anxietyLevel,
+                ranges: dassAnxietyRanges,
+              ),
+              const SizedBox(height: 10),
+              _ScoreRangeTable(
+                title: 'Stres',
+                score: s.stress,
+                maxScore: 42,
+                level: s.stressLevel,
+                ranges: dassStressRanges,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWho5(
+    BuildContext context,
+    AssessmentInterpretation interpretation,
+  ) {
     final s = scoreWho5(answers);
     final level = s.possibleDepression
         ? 'Perlu screening lanjutan'
@@ -1858,10 +1871,203 @@ class _AssessmentResultCard extends StatelessWidget {
             s.possibleDepression
                 ? 'Skor ≤ 7 menandakan kemungkinan depresi — disarankan screening lanjutan dan konsultasi profesional.'
                 : s.lowWellbeing
-                    ? 'Skor di bawah 13 menandakan kesejahteraan rendah — pertimbangkan konsultasi.'
+                    ? 'Skor ≤ 12 (≤ 50%) menandakan kesejahteraan rendah — pertimbangkan konsultasi.'
                     : 'Kesejahteraan dalam rentang baik. Ulangi rutin untuk memantau tren.',
             style: const TextStyle(fontSize: 12.5),
           ),
+          const SizedBox(height: 12),
+          _TriageLine(interpretation: interpretation),
+          const SizedBox(height: 8),
+          _ScoreMeaningExpansion(
+            children: [
+              _ScoreRangeTable(
+                title: 'Kesejahteraan (WHO-5)',
+                score: s.raw,
+                maxScore: 25,
+                level: s.level,
+                ranges: who5Ranges,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Baris "Interpretasi triage: Tinggi (CF 78%)" + alasan singkat.
+///
+/// Nada sengaja suportif: tujuannya mengarahkan pasien ke bantuan yang tepat,
+/// bukan menakut-nakuti. CF ditampilkan sebagai persen keyakinan sistem.
+class _TriageLine extends StatelessWidget {
+  const _TriageLine({required this.interpretation});
+
+  final AssessmentInterpretation interpretation;
+
+  Color get _color => switch (interpretation.triageLevel) {
+        'krisis' || 'tinggi' => MalvaColors.danger,
+        'sedang' => MalvaColors.amber,
+        _ => MalvaColors.mint,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final reasons = interpretation.reasons.take(2).toList(growable: false);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: _color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _color.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.support_agent_rounded, size: 16, color: _color),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  interpretation.summaryLine,
+                  style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12.5,
+                      color: _color),
+                ),
+              ),
+            ],
+          ),
+          for (final reason in reasons) ...[
+            const SizedBox(height: 4),
+            Text('• $reason', style: const TextStyle(fontSize: 11.5)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Pembungkus lipat untuk tabel "Apa arti skormu?" agar layar tidak panjang.
+class _ScoreMeaningExpansion extends StatelessWidget {
+  const _ScoreMeaningExpansion({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Theme(
+      // Hilangkan garis pemisah bawaan ExpansionTile agar menyatu dengan kartu.
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(top: 4, bottom: 4),
+        shape: const Border(),
+        collapsedShape: const Border(),
+        iconColor: MalvaColors.seed,
+        collapsedIconColor: onSurfaceVariant,
+        title: Row(
+          children: [
+            Icon(Icons.info_outline_rounded, size: 16, color: onSurfaceVariant),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Apa arti skormu?',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w900,
+                  color: onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+        children: children,
+      ),
+    );
+  }
+}
+
+/// Tabel rentang skor (rentang → label → saran) dengan baris skor di-highlight.
+class _ScoreRangeTable extends StatelessWidget {
+  const _ScoreRangeTable({
+    required this.title,
+    required this.score,
+    required this.maxScore,
+    required this.level,
+    required this.ranges,
+  });
+
+  final String title;
+  final int score;
+  final int maxScore;
+  final String level;
+  final List<ScoreRangeRow> ranges;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = severityColor(level);
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: MalvaColors.seed.withValues(alpha: 0.22)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$title — $score/$maxScore',
+              style: TextStyle(
+                  fontWeight: FontWeight.w900, fontSize: 12, color: color)),
+          const SizedBox(height: 6),
+          for (final row in ranges)
+            Container(
+              margin: const EdgeInsets.only(bottom: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              decoration: BoxDecoration(
+                color: row.contains(score)
+                    ? color.withValues(alpha: 0.12)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: row.contains(score)
+                    ? Border.all(color: color.withValues(alpha: 0.4))
+                    : null,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 44,
+                    child: Text(
+                      row.rangeLabel,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                        color: row.contains(score) ? color : onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 68,
+                    child: Text(
+                      row.label,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                        color: row.contains(score) ? color : onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child:
+                        Text(row.advice, style: const TextStyle(fontSize: 11)),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -2182,7 +2388,15 @@ class _WorksheetFieldBlock extends StatelessWidget {
   }
 }
 
-/// Pilihan skala berlabel (DASS-21 / WHO-5): tombol + label makna.
+/// Pilihan skala berlabel (DASS-21 / WHO-5).
+///
+/// Tiga hal yang WAJIB tampil, karena sebelumnya pasien hanya melihat angka
+/// tanpa arti dan tombolnya turun ke bawah (susah dibandingkan):
+/// 1. Legenda "0 = Tidak pernah", "1 = Kadang-kadang", … di ATAS tombol —
+///    sama seperti legenda PHQ-9/GAD-7 di `assessment_screen.dart`.
+/// 2. Semua opsi dalam SATU baris horizontal (`Row` + `Expanded`), tidak
+///    pernah turun baris walau layar sempit.
+/// 3. Ringkasan pilihan aktif: "Skor: 1 — Kadang-kadang".
 class _ScaleOptions extends StatelessWidget {
   const _ScaleOptions({
     required this.field,
@@ -2199,46 +2413,41 @@ class _ScaleOptions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fill = worksheetFieldFill(context);
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+    final values = field.scaleValues;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Legenda arti tiap angka — konteks sebelum pasien memilih.
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: 6,
+          runSpacing: 4,
           children: [
-            for (final v in field.scaleValues)
-              InkWell(
-                onTap: () => onSelect?.call(v),
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  constraints: const BoxConstraints(minWidth: 44),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: value == v ? moduleColor : fill,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: value == v
-                          ? moduleColor
-                          : moduleColor.withValues(alpha: 0.35),
-                      width: value == v ? 2 : 1,
-                    ),
-                  ),
-                  child: Text(
-                    // Chip menampilkan ANGKA skala (mis. DASS 1-3, WHO-5 1-5).
-                    '$v',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 15,
-                      color: value == v ? Colors.white : moduleColor,
-                    ),
+            for (final v in values)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: moduleColor.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '$v = ${field.scaleLabel(v)}',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: moduleColor.withValues(alpha: 0.85),
                   ),
                 ),
               ),
           ],
         ),
+        const SizedBox(height: 8),
+        // Susunan opsi tetap "ke samping" seperti PHQ-9/GAD-7:
+        // - <= 4 opsi → SATU baris penuh (DASS-21, 4 opsi muat).
+        // - > 4 opsi  → 3 per baris (WHO-5: 0,1,2 lalu 3,4,5). Enam tombol
+        //   dalam satu baris hanya menyisakan ~46px per tombol di layar
+        //   360dp sehingga labelnya terpotong dan tak terbaca.
+        ..._optionRows(values, fill),
         if (value != null) ...[
           const SizedBox(height: 6),
           Container(
@@ -2248,8 +2457,8 @@ class _ScaleOptions extends StatelessWidget {
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
-              // Hanya angka skor yang dipilih.
-              'Skor: $value',
+              // Angka + maknanya, mis. "Skor: 1 — Kadang-kadang".
+              'Skor: $value — ${field.scaleLabel(value!)}',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
@@ -2261,12 +2470,125 @@ class _ScaleOptions extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Ketuk salah satu pilihan untuk menjawab.',
-            style: TextStyle(
-                fontSize: 11.5,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
+            style: TextStyle(fontSize: 11.5, color: onSurfaceVariant),
           ),
         ],
       ],
+    );
+  }
+
+  /// Baris-baris tombol opsi (urutan nilai tidak berubah).
+  ///
+  /// 4 opsi atau kurang dirender satu baris; lebih dari 4 dipecah 3 per baris
+  /// agar tiap tombol cukup lebar dan label pendeknya terbaca utuh.
+  List<Widget> _optionRows(List<int> values, Color fill) {
+    final perRow = values.length <= 4 ? values.length : 3;
+    final rows = <Widget>[];
+    for (var start = 0; start < values.length; start += perRow) {
+      final chunk = values.skip(start).take(perRow).toList(growable: false);
+      if (rows.isNotEmpty) rows.add(const SizedBox(height: 4));
+      rows.add(
+        Row(
+          children: [
+            for (var i = 0; i < chunk.length; i++) ...[
+              if (i > 0) const SizedBox(width: 4),
+              Expanded(
+                child: _ScaleOptionButton(
+                  number: chunk[i],
+                  shortLabel: field.scaleShortLabel(chunk[i]),
+                  fullLabel: field.scaleLabel(chunk[i]),
+                  color: moduleColor,
+                  fill: fill,
+                  selected: value == chunk[i],
+                  onTap: () => onSelect?.call(chunk[i]),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+    return rows;
+  }
+}
+
+/// Satu tombol skala: angka besar + label pendek (maks 2 baris) di bawahnya.
+class _ScaleOptionButton extends StatelessWidget {
+  const _ScaleOptionButton({
+    required this.number,
+    required this.shortLabel,
+    required this.fullLabel,
+    required this.color,
+    required this.fill,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final int number;
+  final String shortLabel;
+  final String fullLabel;
+  final Color color;
+  final Color fill;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = selected ? Colors.white : color;
+    return Semantics(
+      label: '$number — $fullLabel',
+      button: true,
+      selected: selected,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          // 68px: cukup untuk angka + label 2 baris pada font 10.5.
+          height: 68,
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected ? color : fill,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? color : color.withValues(alpha: 0.35),
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  // Angka skor baku (DASS-21 0-3, WHO-5 0-5).
+                  '$number',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 17,
+                    height: 1.05,
+                    color: textColor,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Expanded(
+                child: Text(
+                  shortLabel,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    height: 1.1,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -2925,6 +3247,11 @@ class TherapySubmissionView extends StatelessWidget {
             answers: {
               for (final f in fields)
                 if (answers[f.id] is int) f.id: (answers[f.id] as int),
+              // Penanda versi skala dari submission asli WAJIB diteruskan:
+              // tanpanya, submission baru (0-3/0-5) akan dihitung dengan rumus
+              // lama dan skornya salah.
+              if (answers[scaleVersionKey] is int)
+                scaleVersionKey: answers[scaleVersionKey] as int,
             },
           )
         : null;
