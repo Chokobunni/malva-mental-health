@@ -50,7 +50,8 @@ class GoogleAuthService {
     }
     late final GoogleSignInAccount account;
     try {
-      account = await GoogleSignIn.instance.authenticate().timeout(_authTimeout);
+      account =
+          await GoogleSignIn.instance.authenticate().timeout(_authTimeout);
     } on TimeoutException {
       throw const AuthFailure(
         'Dialog akun Google tidak muncul. Kemungkinan penyebab: sidik jari '
@@ -103,11 +104,9 @@ class GoogleAuthService {
     late final GoogleSignInAccount account;
     try {
       // Autentikasi dengan scopeHint calendar.events.
-      account = await GoogleSignIn.instance
-          .authenticate(
-            scopeHint: const ['https://www.googleapis.com/auth/calendar.events'],
-          )
-          .timeout(_authTimeout);
+      account = await GoogleSignIn.instance.authenticate(
+        scopeHint: const ['https://www.googleapis.com/auth/calendar.events'],
+      ).timeout(_authTimeout);
     } on TimeoutException {
       throw const AuthFailure(
         'Dialog akun Google tidak muncul. Kemungkinan penyebab: sidik jari '
@@ -121,17 +120,21 @@ class GoogleAuthService {
       throw AuthFailure(_friendlySignInError(e.code));
     }
     // Minta server authorization code untuk backend token exchange.
+    // Timeout juga di sini (langkah 2 bisa ikut menggantung bila dialog
+    // otorisasi scope tidak bisa tampil — insiden 28 Okt 2026).
     try {
-      final serverAuth = await account.authorizationClient.authorizeServer(
-        ['https://www.googleapis.com/auth/calendar.events'],
-      );
+      final serverAuth = await account.authorizationClient
+          .authorizeServer(
+            const ['https://www.googleapis.com/auth/calendar.events'],
+          )
+          .timeout(_authTimeout);
       if (serverAuth == null || serverAuth.serverAuthCode.isEmpty) {
         throw const AuthFailure(
           'Google tidak memberikan authorization code. Coba lagi.',
         );
       }
       return serverAuth.serverAuthCode;
-    } on GoogleSignInException catch (e) {
+    } on TimeoutException {
       if (e.code == GoogleSignInExceptionCode.canceled) {
         return null;
       }
