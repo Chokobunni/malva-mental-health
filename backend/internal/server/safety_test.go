@@ -109,7 +109,11 @@ func TestDoctorDirectoryIsPublic(t *testing.T) {
 	srv := New(cfg, mgr, store.New(db), nil, logger)
 	handler := srv.Routes()
 
-	rec := doAuthed(t, handler, "GET", "/v1/doctors/search", "", "")
+	// Difilter per spesialisasi + limit maksimum agar hasil TIDAK bergantung
+	// pada jumlah baris di tabel: sebelumnya test ini pecah ketika data uji
+	// menumpuk dan mendorong seed dokter keluar dari LIMIT 50.
+	// Inti pengujian tetap sama: direktori bisa diakses TANPA token.
+	rec := doAuthed(t, handler, "GET", "/v1/doctors/search?specialization=Sp.KJ&limit=100", "", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /v1/doctors/search: expected 200 tanpa token, got %d (%s)",
 			rec.Code, rec.Body.String())
