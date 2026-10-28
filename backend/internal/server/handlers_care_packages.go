@@ -534,6 +534,13 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	// Reschedule bisa memindahkan sesi video yang belum punya link ke jadwal
+	// baru. Buatkan link bila kosong (best-effort, sama seperti booking).
+	// Reschedule profesional bisa menjadwal ulang sesi chat menjadi sesi yang
+	// butuh link; pasien memakai jendela gabung 10 menit.
+	if updated.SessionType == "video" && !isGoogleMeetURL(updated.MeetingURL) {
+		updated = s.ensureMeetLinkBestEffort(r.Context(), updated)
+	}
 	// Best-effort: perbarui event Google Calendar bila ada.
 	if cs.GoogleEventID != "" && s.calendar != nil {
 		newEnd := at.Add(time.Duration(cs.DurationMinutes) * time.Minute)

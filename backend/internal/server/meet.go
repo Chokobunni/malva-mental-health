@@ -66,6 +66,12 @@ func (s *Server) meetEventOptions(ctx context.Context, cs store.CareSession) goo
 // Pemanggil bertanggung jawab memastikan sesi bertipe video dan berstatus
 // scheduled.
 func (s *Server) createMeetLink(ctx context.Context, cs store.CareSession) (store.CareSession, error) {
+	// Tanpa integrasi Google, tidak ada yang bisa dibuat — gagal cepat tanpa
+	// menyentuh database. Urutan penting: GetCareSession di bawah memakai
+	// s.store yang bisa nil pada Server parsial (test).
+	if s.calendar == nil {
+		return cs, ErrMeetUnavailable
+	}
 	// Ambil data terbaru agar ringkasan event memuat nama pasien dan
 	// pemeriksaan meeting_url memakai keadaan sebenarnya di database.
 	if fresh, err := s.store.GetCareSession(ctx, cs.ID); err == nil {
@@ -77,9 +83,6 @@ func (s *Server) createMeetLink(ctx context.Context, cs store.CareSession) (stor
 	// Link lama dari penyedia lain (Jitsi dsb.) dianggap belum ada: Google
 	// Meet adalah satu-satunya penyedia yang didukung sekarang.
 	cs.MeetingURL = ""
-	if s.calendar == nil {
-		return cs, ErrMeetUnavailable
-	}
 	eventID, meetURL, err := s.calendar.CreateMeetEvent(ctx, cs.ProfessionalID, s.meetEventOptions(ctx, cs))
 	if err != nil {
 		return cs, err
@@ -108,8 +111,13 @@ func (s *Server) ensureMeetLinkBestEffort(ctx context.Context, cs store.CareSess
 	}
 	updated, err := s.createMeetLink(ctx, cs)
 	if err != nil {
-		s.logger.Warn("gagal membuat link Google Meet; link bisa dibuat menyusul",
-			"error", err, "session", cs.ID, "professional", cs.ProfessionalID)
+		// s.logger selalu terisi pada Server produksi (dibuat di New), tetapi
+		// helper ini harus tahan dipanggil dari Server parsial (test) — jangan
+		// sampai pencatatan kegagalan ikut mematikan alur pemanggil.
+		if s.logger != nil {
+			s.logger.Warn("gagal membuat link Google Meet; link bisa dibuat menyusul",
+				"error", err, "session", cs.ID, "professional", cs.ProfessionalID)
+		}
 		return cs
 	}
 	return updated
