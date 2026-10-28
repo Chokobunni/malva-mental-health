@@ -208,7 +208,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/auth/google", s.rateLimit(s.googleLogin))
 	mux.HandleFunc("POST /v1/auth/link-google", s.requireAuth(s.linkGoogle))
 	mux.HandleFunc("POST /v1/auth/google-token-exchange", s.requireAuth(s.exchangeGoogleToken))
-	mux.HandleFunc("POST /v1/auth/complete-professional", s.requireAuth(s.completeProfessionalProfile))
+	mux.HandleFunc("POST /v1/auth/complete-professional", s.rateLimit(s.requireAuth(s.completeProfessionalProfile)))
 	mux.HandleFunc("POST /v1/auth/refresh", s.rateLimit(s.refresh))
 	mux.HandleFunc("POST /v1/auth/logout", s.rateLimit(s.logout))
 	mux.HandleFunc("POST /v1/auth/change-password", s.requireAuth(s.changePassword))
@@ -1962,6 +1962,14 @@ func (s *Server) writeAuthResponseWithRefreshToken(w http.ResponseWriter, status
 // writeAuthResponseWithCompletion sama dengan writeAuthResponse tetapi
 // menambahkan field needs_completion untuk alur onboarding profesional Google.
 func (s *Server) writeAuthResponseWithCompletion(w http.ResponseWriter, r *http.Request, status int, user store.User, needsCompletion bool) {
+	s.writeAuthResponseWithCompletionAndExtra(w, r, status, user, needsCompletion, nil)
+}
+
+// writeAuthResponseWithCompletionAndExtra sama seperti
+// writeAuthResponseWithCompletion, tetapi menyertakan field tambahan pada
+// respons (mis. "credential" setelah akun lama di-merge dengan akun Google).
+// Token akses & refresh tetap diterbitkan baru agar klien berpindah akun.
+func (s *Server) writeAuthResponseWithCompletionAndExtra(w http.ResponseWriter, r *http.Request, status int, user store.User, needsCompletion bool, extra map[string]any) {
 	refreshToken, err := auth.GenerateRefreshToken()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -1992,6 +2000,9 @@ func (s *Server) writeAuthResponseWithCompletion(w http.ResponseWriter, r *http.
 	}
 	if needsCompletion {
 		resp["needs_completion"] = true
+	}
+	for key, value := range extra {
+		resp[key] = value
 	}
 	writeJSON(w, status, resp)
 }

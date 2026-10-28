@@ -166,17 +166,23 @@ func handlerName(wrapper string) string {
 	return name
 }
 
-// classifyAuth memetakan pembungkus terluar ke label autentikasi.
+// classifyAuth memetakan pembungkus ke label autentikasi.
+//
+// Pembungkus boleh BERSARANG, mis.
+// `s.rateLimit(s.requireAuth(s.completeProfessionalProfile))` — endpoint itu
+// tetap butuh bearer token meskipun lapisan terluarnya rateLimit. Karena itu
+// gerbang autentikasi (requireAdmin/requireAuth/public) diperiksa lebih dulu di
+// seluruh ekspresi, baru kemudian pembungkus luar lainnya.
 func classifyAuth(wrapper string) string {
 	switch {
-	case strings.HasPrefix(wrapper, "s.requireAdmin"):
+	case strings.Contains(wrapper, "s.requireAdmin"):
 		return "bearer (admin)"
-	case strings.HasPrefix(wrapper, "s.requireAuth"):
+	case strings.Contains(wrapper, "s.requireAuth"):
 		return "bearer"
-	case strings.HasPrefix(wrapper, "s.public"):
+	case strings.Contains(wrapper, "s.public"):
 		return "publik"
 	case strings.HasPrefix(wrapper, "s.rateLimit"):
-		// Seluruh endpoint ber-rate-limit adalah endpoint auth publik.
+		// Endpoint ber-rate-limit tanpa requireAuth = endpoint auth publik.
 		return "publik"
 	case strings.HasPrefix(wrapper, "s.paymentWebhook"):
 		return "signature"
