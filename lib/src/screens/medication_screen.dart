@@ -11,7 +11,7 @@ import '../theme.dart';
 import '../widgets/home_personalization.dart';
 import '../widgets/malva_components.dart';
 
-class MedicationScreen extends ConsumerWidget {
+class MedicationScreen extends ConsumerStatefulWidget {
   const MedicationScreen({
     super.key,
     this.session,
@@ -28,18 +28,102 @@ class MedicationScreen extends ConsumerWidget {
   final MedicationReminderService? medicationReminderService;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MedicationScreen> createState() => _MedicationScreenState();
+}
+
+class _MedicationScreenState extends ConsumerState<MedicationScreen> {
+  /// Status izin notifikasi: null = belum selesai diperiksa.
+  bool? _notificationsEnabled;
+
+  /// Sedang memeriksa/meminta izin (tombol dinonaktifkan sementara).
+  bool _isCheckingPermission = false;
+
+  /// Guard agar satu dosis tidak tercatat dua kali karena tap ganda.
+  bool _isLogging = false;
+
+  /// Kunci debounce terakhir ("<id>|<status>") dan waktunya.
+  String? _lastLogKey;
+  DateTime? _lastLogAt;
+
+  AuthSession? get _session => widget.session;
+  MalvaApiClient? get _apiClient => widget.apiClient;
+  MedicationReminderService? get _reminderService =>
+      widget.medicationReminderService;
+
+  @override
+  void initState() {
+    super.initState();
+    // Ditunda ke post-frame: jangan menyentuh platform channel saat build
+    // pertama (dan aman untuk widget test).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_refreshPermissionStatus());
+    });
+  }
+
+  /// Periksa izin notifikasi dan minta bila belum aktif, lalu simpan statusnya.
+  Future<void> _refreshPermissionStatus() async {
+    final service = _reminderService;
+    if (service == null) {
+      if (mounted) setState(() => _notificationsEnabled = false);
+      return;
+    }
+    if (mounted) setState(() => _isCheckingPermission = true);
+    var enabled = false;
+    try {
+      enabled = await service.ensurePermissions();
+    } on Object {
+      enabled = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _notificationsEnabled = enabled;
+      _isCheckingPermission = false;
+    });
+  }
+
+  /// Kirim notifikasi uji agar pasien bisa memverifikasi pengingat berfungsi.
+  Future<void> _sendTestNotification(BuildContext context) async {
+    final service = _reminderService;
+    if (service == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Layanan pengingat belum siap.')),
+      );
+      return;
+    }
+    try {
+      await service.showTestNotification();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Notifikasi uji dikirim. Bila tidak muncul, aktifkan izin '
+                  'notifikasi untuk Malva di Pengaturan perangkat.'),
+          backgroundColor: MalvaColors.mint,
+        ),
+      );
+    } on Object catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal mengirim notifikasi uji: $error')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final storeState = ref.watch(malvaStoreProvider);
     final store = ref.read(malvaStoreProvider.notifier);
     final content = RefreshIndicator(
       onRefresh: () async {
-        final accessToken = session?.accessToken;
-        if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+        final accessToken = _session?.accessToken;
+        final api = _apiClient;
+        if (api == null || accessToken == null || accessToken.isEmpty) {
           await Future<void>.delayed(const Duration(milliseconds: 500));
           return;
         }
         try {
-          final backendMeds = await apiClient!.listMedications(
+          final backendMeds = await api.listMedications(
             accessToken: accessToken,
           );
           final meds = backendMeds
@@ -64,6 +148,9 @@ class MedicationScreen extends ConsumerWidget {
                 ),
               )
               .toList();
+          // replaceMedications() ikut mengurangkan dosis yang masih pending,
+          // sehingga stok yang belum terpotong di server tidak menaikkan
+          // angka di layar.
           store.replaceMedications(meds);
         } on Object catch (_) {
           await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -72,7 +159,7 @@ class MedicationScreen extends ConsumerWidget {
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          if (!embedded)
+          if (!widget.embedded)
             const GradientHeader(
               title: 'Medication',
               subtitle: 'Reminder, stok, dan adherence',
@@ -156,6 +243,8 @@ class MedicationScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
+                const SizedBox(height: 14),
+                _buildReminderStatusCard(context),
                 const SizedBox(height: 22),
                 const SectionLabel('Jadwal hari ini'),
                 if (storeState.medications.isEmpty)
@@ -176,7 +265,7 @@ class MedicationScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 16),
                         FilledButton.icon(
-                          onPressed: () => _openMedicationForm(context, ref),
+                          onPressed: () => _openMedicationForm(context),
                           icon: const Icon(Icons.add_rounded),
                           label: const Text('Tambah Obat Pertama'),
                         ),
@@ -187,8 +276,8 @@ class MedicationScreen extends ConsumerWidget {
                   for (final med in storeState.medications) ...[
                     _MedicationCard(
                       medication: med,
-                      onTake: () => _takeMedication(context, ref, med),
-                      onEdit: () => _openMedicationForm(context, ref, med),
+                      onTake: () => _takeMedication(context, med),
+                      onEdit: () => _openMedicationForm(context, med),
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -234,14 +323,101 @@ class MedicationScreen extends ConsumerWidget {
         ],
       ),
     );
-    if (embedded) return content;
+    if (widget.embedded) return content;
     return Scaffold(
       floatingActionButton: FloatingActionButton(
         heroTag: 'medication_add_fab',
-        onPressed: () => _openMedicationForm(context, ref),
+        onPressed: () => _openMedicationForm(context),
         child: const Icon(Icons.add_rounded),
       ),
       body: content,
+    );
+  }
+
+  /// Kartu status pengingat obat: izin aktif/tidak + uji notifikasi.
+  Widget _buildReminderStatusCard(BuildContext context) {
+    final enabled = _notificationsEnabled;
+    final active = enabled ?? false;
+    final color = enabled == null
+        ? MalvaColors.seed
+        : active
+            ? MalvaColors.mint
+            : MalvaColors.amber;
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+    return SoftCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: color.withValues(alpha: 0.12),
+                child: Icon(Icons.notifications_active_rounded, color: color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Pengingat obat',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      enabled == null
+                          ? 'Memeriksa izin notifikasi…'
+                          : active
+                              ? 'Izin notifikasi aktif — pengingat berbunyi '
+                                  'sesuai jam minum obat.'
+                              : 'Izin notifikasi belum aktif — pengingat tidak '
+                                  'akan berbunyi. Aktifkan agar tidak ada dosis '
+                                  'yang terlewat.',
+                      style: TextStyle(fontSize: 12, color: onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              StatusPill(
+                label: enabled == null
+                    ? 'Memeriksa'
+                    : active
+                        ? 'Aktif'
+                        : 'Tidak aktif',
+                color: color,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _isCheckingPermission
+                    ? null
+                    : () => _sendTestNotification(context),
+                icon: const Icon(Icons.notifications_rounded, size: 18),
+                label: const Text('Tes pengingat'),
+              ),
+              if (!active)
+                FilledButton.icon(
+                  onPressed:
+                      _isCheckingPermission ? null : _refreshPermissionStatus,
+                  icon: _isCheckingPermission
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.lock_open_rounded, size: 18),
+                  label: const Text('Aktifkan izin'),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -267,8 +443,7 @@ class MedicationScreen extends ConsumerWidget {
         _ => MalvaColors.danger,
       };
 
-  void _openMedicationForm(BuildContext context, WidgetRef ref,
-      [Medication? medication]) {
+  void _openMedicationForm(BuildContext context, [Medication? medication]) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -277,24 +452,21 @@ class MedicationScreen extends ConsumerWidget {
         initial: medication,
         onSave: (value) {
           ref.read(malvaStoreProvider.notifier).upsertMedication(value);
-          unawaited(
-              _syncMedication(context, ref, value, isNew: medication == null));
-          unawaited(
-              medicationReminderService?.scheduleMedicationReminder(value));
+          unawaited(_syncMedication(context, value, isNew: medication == null));
+          unawaited(_reminderService?.scheduleMedicationReminder(value));
           Navigator.pop(context);
         },
         onDelete: medication != null
             ? () {
                 Navigator.pop(context);
-                _deleteMedication(context, ref, medication);
+                _deleteMedication(context, medication);
               }
             : null,
       ),
     );
   }
 
-  void _deleteMedication(
-      BuildContext context, WidgetRef ref, Medication medication) {
+  void _deleteMedication(BuildContext context, Medication medication) {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -311,8 +483,7 @@ class MedicationScreen extends ConsumerWidget {
               ref
                   .read(malvaStoreProvider.notifier)
                   .deleteMedication(medication.id);
-              unawaited(
-                  medicationReminderService?.cancelReminder(medication.id));
+              unawaited(_reminderService?.cancelReminder(medication.id));
               unawaited(_syncMedicationDeletion(context, medication));
             },
             style: compactFilledButtonStyle.copyWith(
@@ -325,8 +496,7 @@ class MedicationScreen extends ConsumerWidget {
     );
   }
 
-  void _takeMedication(
-      BuildContext context, WidgetRef ref, Medication medication) {
+  void _takeMedication(BuildContext context, Medication medication) {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -341,7 +511,7 @@ class MedicationScreen extends ConsumerWidget {
               subtitle: const Text('Obat sudah diminum'),
               onTap: () {
                 Navigator.pop(context);
-                _logMedication(context, ref, medication, 'taken');
+                unawaited(_logMedication(context, medication, 'taken'));
               },
             ),
             ListTile(
@@ -351,7 +521,7 @@ class MedicationScreen extends ConsumerWidget {
               subtitle: const Text('Dilewati dengan sengaja'),
               onTap: () {
                 Navigator.pop(context);
-                _logMedication(context, ref, medication, 'skipped');
+                unawaited(_logMedication(context, medication, 'skipped'));
               },
             ),
             ListTile(
@@ -361,7 +531,7 @@ class MedicationScreen extends ConsumerWidget {
               subtitle: const Text('Terlewat tanpa sengaja'),
               onTap: () {
                 Navigator.pop(context);
-                _logMedication(context, ref, medication, 'missed');
+                unawaited(_logMedication(context, medication, 'missed'));
               },
             ),
             ListTile(
@@ -371,7 +541,7 @@ class MedicationScreen extends ConsumerWidget {
               subtitle: const Text('Sebagian diminum'),
               onTap: () {
                 Navigator.pop(context);
-                _logMedication(context, ref, medication, 'partial');
+                unawaited(_logMedication(context, medication, 'partial'));
               },
             ),
           ],
@@ -386,12 +556,54 @@ class MedicationScreen extends ConsumerWidget {
     );
   }
 
-  void _logMedication(BuildContext context, WidgetRef ref,
-      Medication medication, String status) {
-    ref
-        .read(malvaStoreProvider.notifier)
-        .takeMedication(medication.id, status: status);
-    unawaited(_syncMedicationLog(context, medication, status));
+  /// Catat dosis: potong stok lokal, kirim log ke server, lalu rekonsiliasi.
+  ///
+  /// Urutan ini penting. Stok lokal dipotong lebih dulu agar UI langsung
+  /// benar, lalu penanda "pending" menjaga angka itu tidak ditimpa stok server
+  /// yang belum terpotong. Setelah server menerima (dan memotong), penanda
+  /// dihapus dan daftar obat dimuat ulang dari server sebagai sumber final.
+  Future<void> _logMedication(
+    BuildContext context,
+    Medication medication,
+    String status,
+  ) async {
+    if (_isLogging) return;
+    // Debounce per obat + status: tap ganda dalam 3 detik diabaikan.
+    final key = '${medication.id}|$status';
+    final now = DateTime.now();
+    final last = _lastLogAt;
+    if (_lastLogKey == key &&
+        last != null &&
+        now.difference(last) < const Duration(seconds: 3)) {
+      return;
+    }
+    _lastLogKey = key;
+    _lastLogAt = now;
+    setState(() => _isLogging = true);
+
+    final store = ref.read(malvaStoreProvider.notifier);
+    final consumed = status == 'taken' || status == 'partial';
+    store.takeMedication(medication.id, status: status);
+    final accepted = await _syncMedicationLog(context, medication, status);
+    if (!mounted) return;
+    setState(() => _isLogging = false);
+
+    if (accepted) {
+      if (consumed) store.confirmDose(medication.id);
+      unawaited(_reloadMedications());
+    } else if (consumed) {
+      // Gagal kirim: penanda pending DIBIARKAN supaya stok di layar tetap
+      // terpotong dan tidak naik kembali saat refresh. Pesan dibuat jujur.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Log obat tersimpan di perangkat, tetapi belum terkirim ke '
+              'server. Stok akan disesuaikan otomatis saat koneksi kembali.'),
+          backgroundColor: MalvaColors.amber,
+        ),
+      );
+    }
+
     if (medication.needsRefill) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -404,6 +616,15 @@ class MedicationScreen extends ConsumerWidget {
     }
   }
 
+  /// Muat ulang daftar obat dari server (best effort, tanpa menggagalkan UI).
+  Future<void> _reloadMedications() async {
+    final accessToken = _session?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) return;
+    await ref
+        .read(malvaStoreProvider.notifier)
+        .loadMedications(_apiClient, accessToken);
+  }
+
   /// Id dari server adalah UUID (36 karakter). Obat yang ditambahkan sebelum
   /// sempat sync memakai id sementara `med_<timestamp>`, sehingga tidak boleh
   /// dikirim ke endpoint PUT/DELETE.
@@ -412,12 +633,12 @@ class MedicationScreen extends ConsumerWidget {
 
   Future<void> _syncMedication(
     BuildContext context,
-    WidgetRef ref,
     Medication medication, {
     required bool isNew,
   }) async {
-    final accessToken = session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+    final accessToken = _session?.accessToken;
+    final api = _apiClient;
+    if (api == null || accessToken == null || accessToken.isEmpty) {
       return;
     }
     try {
@@ -426,7 +647,7 @@ class MedicationScreen extends ConsumerWidget {
         // Jalur ubah: PUT ke id yang sudah dikenal server. Sebelumnya "edit"
         // selalu dikirim sebagai POST, dan UpsertMedication di server adalah
         // INSERT murni, sehingga obat yang sama menjadi baris duplikat.
-        await apiClient!.updateMedication(
+        await api.updateMedication(
           accessToken: accessToken,
           medicationId: medication.id,
           name: medication.name,
@@ -440,7 +661,7 @@ class MedicationScreen extends ConsumerWidget {
         );
         return;
       }
-      final created = await apiClient!.createMedication(
+      final created = await api.createMedication(
         accessToken: accessToken,
         name: medication.name,
         dosage: medication.dosage,
@@ -474,13 +695,14 @@ class MedicationScreen extends ConsumerWidget {
     BuildContext context,
     Medication medication,
   ) async {
-    final accessToken = session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
+    final accessToken = _session?.accessToken;
+    final api = _apiClient;
+    if (api == null || accessToken == null || accessToken.isEmpty) {
       return;
     }
     if (!_looksLikeServerId(medication.id)) return;
     try {
-      await apiClient!.deleteMedication(
+      await api.deleteMedication(
         accessToken: accessToken,
         medicationId: medication.id,
       );
@@ -494,29 +716,42 @@ class MedicationScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _syncMedicationLog(
+  /// Kirim log minum obat ke server.
+  ///
+  /// Mengembalikan `true` HANYA bila server menerima log SEKALIGUS memotong
+  /// stok — yaitu saat `medication_id` benar-benar dikirim. Tanpa
+  /// `medication_id`, backend tidak memotong stok (lihat
+  /// `backend/internal/store/store.go` pada CreateMedicationLog), sehingga
+  /// refresh berikutnya mengembalikan stok lama: inilah akar bug "stok 2
+  /// kembali jadi 3".
+  Future<bool> _syncMedicationLog(
     BuildContext context,
     Medication medication,
     String status,
   ) async {
-    final accessToken = session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
-      return;
-    }
+    final accessToken = _session?.accessToken;
+    final api = _apiClient;
+    if (api == null || accessToken == null || accessToken.isEmpty) return false;
+    final serverId = _looksLikeServerId(medication.id) ? medication.id : null;
     try {
-      await apiClient!.createMedicationLog(
+      await api.createMedicationLog(
         accessToken: accessToken,
+        medicationId: serverId,
         medicationName: medication.name,
         status: status,
         takenAt: DateTime.now(),
       );
+      return serverId != null;
     } on Object catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Log obat tersimpan lokal, sync backend gagal: $error'),
-        ),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text('Log obat tersimpan lokal, sync backend gagal: $error'),
+          ),
+        );
+      }
+      return false;
     }
   }
 }

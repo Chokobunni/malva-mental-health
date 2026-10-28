@@ -159,6 +159,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   /// login akun baru & logout agar data akun sebelumnya tidak bocor.
   void resetForAccount() {
     __lastAccessToken = null;
+    clearPendingDoses();
     state = _seededState();
   }
 
@@ -167,6 +168,8 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     final name = session.displayName.trim().isEmpty
         ? 'Pasien'
         : session.displayName.trim();
+    // Dosis pending milik akun sebelumnya tidak boleh terbawa.
+    clearPendingDoses();
     state = MalvaStoreState(
       patient: PatientProfile(
         id: session.backendUserId ?? 'patient_local',
@@ -704,6 +707,13 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       takenAt: now,
       status: status,
     );
+    if (consumed) {
+      // Server baru memotong stok saat menerima log dengan `medication_id`.
+      // Sampai konfirmasi sukses datang, pemotongan ini harus "diingat" agar
+      // refresh dari server (yang stoknya belum terpotong) tidak mengembalikan
+      // angka stok ke nilai lama — bug "stok 2 kembali jadi 3".
+      _pendingDoses[medicationId] = (_pendingDoses[medicationId] ?? 0) + 1;
+    }
     state = state.copyWith(
       medications: newMeds,
       medicationLogs: [newLog, ...state.medicationLogs],
@@ -770,10 +780,54 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     state = state.copyWith(
       medications: state.medications.where((m) => m.id != id).toList(),
     );
+    _pendingDoses.remove(id);
   }
 
+  /// Ganti seluruh daftar obat (mis. hasil muat ulang dari server).
+  ///
+  /// Stok dari server bisa BELUM terpotong (backend hanya memotong saat log
+  /// dikirim dengan `medication_id`). Karena itu dosis yang masih pending
+  /// dikurangkan lagi di sini, agar angka stok di layar tidak naik kembali
+  /// setelah pull-to-refresh.
   void replaceMedications(List<Medication> meds) {
-    state = state.copyWith(medications: meds);
+    final adjusted = <Medication>[];
+    for (final med in meds) {
+      final pending = _pendingDoses[med.id] ?? 0;
+      adjusted.add(
+        pending <= 0
+            ? med
+            : med.copyWith(
+                currentStock:
+                    (med.currentStock - pending).clamp(0, 999).toInt(),
+              ),
+      );
+    }
+    state = state.copyWith(medications: adjusted);
+  }
+
+  // ============================================================
+  // DOSIS PENDING (anti "stok naik sendiri" setelah refresh)
+  // ============================================================
+
+  /// Jumlah dosis yang sudah dipotong lokal tetapi belum dikonfirmasi server.
+  final Map<String, int> _pendingDoses = <String, int>{};
+
+  /// Berapa dosis yang masih pending untuk satu obat.
+  int pendingDosesFor(String medicationId) => _pendingDoses[medicationId] ?? 0;
+
+  /// Tandai satu dosis pending sudah diterima server.
+  void confirmDose(String medicationId) {
+    final pending = _pendingDoses[medicationId] ?? 0;
+    if (pending <= 1) {
+      _pendingDoses.remove(medicationId);
+    } else {
+      _pendingDoses[medicationId] = pending - 1;
+    }
+  }
+
+  /// Buang semua catatan dosis pending (logout / ganti akun).
+  void clearPendingDoses() {
+    _pendingDoses.clear();
   }
 
   // ============================================================

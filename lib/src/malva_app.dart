@@ -80,9 +80,9 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
 
   void _scheduleAllMedicationReminders() {
     final meds = ref.read(malvaStoreProvider).medications;
-    for (final med in meds) {
-      unawaited(_medicationReminderService.scheduleMedicationReminder(med));
-    }
+    // scheduleAll menjadwalkan SEMUA jam pengingat tiap obat (bukan hanya
+    // jam pertama) dan membatalkan id lama agar tidak dobel.
+    unawaited(_medicationReminderService.scheduleAll(meds));
   }
 
   /// Restore sesi dari secure storage saat aplikasi dibuka kembali.
