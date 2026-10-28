@@ -10,11 +10,15 @@ import (
 	"malva/backend/internal/config"
 )
 
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
 // Regresi: NewProvider tanpa ProjectID menyebabkan crash-loop
 // ("project ID is required to access Firebase Cloud Messaging client").
 func TestNewProviderMendeteksiProjectID(t *testing.T) {
 	// 1) Tanpa kredensial -> no-op provider (API tetap hidup).
-	p, err := NewProvider(t.Context(), config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	p, err := NewProvider(t.Context(), config.Config{}, discardLogger())
 	if err != nil {
 		t.Fatalf("tanpa kredensial harus no-op, bukan error: %v", err)
 	}
@@ -45,13 +49,12 @@ func TestNewProviderMendeteksiProjectID(t *testing.T) {
 	if got := detectProjectID(config.Config{FCMCredentialsFile: "/tidak/ada.json"}); got != "" {
 		t.Errorf("detectProjectID file hilang = %q, want \"\"", got)
 	}
-	p, err = NewProvider(t.Context(), config.Config{FCMCredentialsFile: "/tidak/ada.json"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	if p != nil {
+	if p, perr := NewProvider(t.Context(), config.Config{FCMCredentialsFile: "/tidak/ada.json"}, discardLogger()); perr == nil {
 		t.Errorf("file hilang harus gagal, dapat %T", p)
 	}
 
 	// 5) JSON bukan service account (tanpa project_id) -> errNoProjectID.
-	p, err = NewProvider(t.Context(), config.Config{FCMCredentialsJSON: `{"type":"authorized_user"}`}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	p, err = NewProvider(t.Context(), config.Config{FCMCredentialsJSON: `{"type":"authorized_user"}`}, discardLogger())
 	if err == nil {
 		t.Fatal("kredensial tanpa project_id harus gagal")
 	}
