@@ -33,9 +33,7 @@ class GoogleAuthService {
     if (!_initialized) {
       try {
         await GoogleSignIn.instance
-            .initialize(
-              serverClientId: GoogleConfig.serverClientId,
-            )
+            .initialize(serverClientId: GoogleConfig.serverClientId)
             .timeout(_authTimeout);
       } on TimeoutException {
         throw const AuthFailure(
@@ -52,9 +50,7 @@ class GoogleAuthService {
     }
     late final GoogleSignInAccount account;
     try {
-      account = await GoogleSignIn.instance
-          .authenticate()
-          .timeout(_authTimeout);
+      account = await GoogleSignIn.instance.authenticate().timeout(_authTimeout);
     } on TimeoutException {
       throw const AuthFailure(
         'Dialog akun Google tidak muncul. Kemungkinan penyebab: sidik jari '
@@ -89,9 +85,7 @@ class GoogleAuthService {
     if (!_initialized) {
       try {
         await GoogleSignIn.instance
-            .initialize(
-              serverClientId: GoogleConfig.serverClientId,
-            )
+            .initialize(serverClientId: GoogleConfig.serverClientId)
             .timeout(_authTimeout);
       } on TimeoutException {
         throw const AuthFailure(
@@ -111,7 +105,7 @@ class GoogleAuthService {
       // Autentikasi dengan scopeHint calendar.events.
       account = await GoogleSignIn.instance
           .authenticate(
-            scopeHint: ['https://www.googleapis.com/auth/calendar.events'],
+            scopeHint: const ['https://www.googleapis.com/auth/calendar.events'],
           )
           .timeout(_authTimeout);
     } on TimeoutException {
