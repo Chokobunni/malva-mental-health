@@ -38,16 +38,21 @@ $keytool = "C:\Program Files\Microsoft\jdk-17.0.20.8-hotspot\bin\keytool.exe"
   Select-String "SHA1|SHA256"
 ```
 
-## Untuk production (release keystore)
+## Mengecek ulang fingerprint keystore aktif
 
-Bila nanti memakai release keystore (file `android/key.properties`):
+Release keystore aktif: `android/malva-release-key.jks`, alias `malva`
+(gitignored, JANGAN di-commit; kredensial di `android/key.properties`,
+juga gitignored). Bila keystore diganti/rotasi, daftarkan SHA-1 BARU
+sebagai Android OAuth Client tambahan, lalu perbarui tabel di atas:
 
 ```powershell
-& $keytool -list -v -keystore "C:\path\keystore.jks" -alias upload
+$keytool = "C:\Program Files\Microsoft\jdk-17.0.20.8-hotspot\bin\keytool.exe"
+& $keytool -list -v -keystore "android\malva-release-key.jks" -alias malva | Select-String "SHA1|SHA256|Valid"
 ```
 
-Daftarkan SHA-1 release tersebut sebagai Android OAuth Client **tambahan**
-(boleh ada banyak client untuk satu package name).
+CATATAN: jangan hapus OAuth client lama sebelum semua APK lama yang
+masih dipakai ikut cocok dengan client baru (boleh ada banyak client
+untuk satu package name).
 
 ## Package name
 

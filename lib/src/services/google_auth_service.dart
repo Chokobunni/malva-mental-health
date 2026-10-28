@@ -135,6 +135,12 @@ class GoogleAuthService {
       }
       return serverAuth.serverAuthCode;
     } on TimeoutException {
+      throw const AuthFailure(
+        'Dialog otorisasi Google Calendar tidak muncul. Kemungkinan sidik '
+        'jari aplikasi (SHA-1) belum didaftarkan di Google Cloud, atau '
+        'Google Play Services perlu diperbarui. Hubungi admin bila berlanjut.',
+      );
+    } on GoogleSignInException catch (e) {
       if (e.code == GoogleSignInExceptionCode.canceled) {
         return null;
       }
