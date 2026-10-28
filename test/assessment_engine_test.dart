@@ -18,13 +18,18 @@ void main() {
     });
 
     test('sets crisis flag when item 9 is positive', () {
+      // Standar PHQ-9: keparahan dihitung dari total 9 item, sehingga skor 1
+      // berarti "minimal". Item 9 adalah penanda keselamatan TERPISAH
+      // (crisisFlag), bukan bagian dari skor keparahan. Eskalasi tampilan
+      // krisis dilakukan di level bundel (ScreeningBundle.overallLevel).
       final result = AssessmentEngine.score(
         type: AssessmentType.phq9,
         answers: [0, 0, 0, 0, 0, 0, 0, 0, 1],
       );
 
       expect(result.crisisFlag, isTrue);
-      expect(result.level, RiskLevel.crisis);
+      expect(result.level, RiskLevel.minimal);
+      expect(result.score, 1);
     });
   });
 
@@ -37,6 +42,21 @@ void main() {
       expect(_gad(14).level, RiskLevel.moderate);
       expect(_gad(15).level, RiskLevel.severe);
       expect(_gad(21).level, RiskLevel.severe);
+    });
+
+    test('GAD-7 minimal memakai level kecemasan dengan CF positif', () {
+      // Regresi: sebelumnya skor GAD-7 minimal (0-4) jatuh ke cabang depresi
+      // yang tidak punya fakta sama sekali, sehingga CF = 0 dan ringkasan
+      // salah menyebut "gejala depresi".
+      final result = AssessmentEngine.score(
+        type: AssessmentType.gad7,
+        answers: [0, 0, 0, 0, 0, 0, 0],
+      );
+
+      expect(result.level, RiskLevel.minimal);
+      expect(result.crisisFlag, isFalse);
+      expect(result.certaintyFactor, greaterThan(0.0));
+      expect(result.summary.toLowerCase(), contains('kecemasan'));
     });
   });
 

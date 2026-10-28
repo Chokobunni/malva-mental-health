@@ -218,10 +218,12 @@ class ForwardChainingEngine {
       }
     }
 
-    // Rule fires only if ALL conditions are satisfied
-    final allSatisfied = failedConditions.isEmpty;
+    // Rule hanya menembak bila SEMUA kondisi terpenuhi DAN ada bukti nyata
+    // (CF gabungan > 0). Menembak dengan CF 0 hanya akan menulis fakta tanpa
+    // keyakinan ke working memory dan mengotori audit trail.
     final combinedConditionsCF =
         CertaintyFactorCalculator.combineConditions(conditionCFs);
+    final allSatisfied = failedConditions.isEmpty && combinedConditionsCF > 0;
     final resultCF = allSatisfied
         ? CertaintyFactorCalculator.applyRuleCF(
             rule.ruleCF, combinedConditionsCF)
@@ -341,14 +343,24 @@ class ForwardChainingEngine {
     final depPriority = levelPriority[depressionLevel?.value] ?? 0;
     final anxPriority = levelPriority[anxietyLevel?.value] ?? 0;
 
-    if (depPriority >= anxPriority) {
-      finalLevel = depressionLevel?.value as String? ?? 'minimal';
-      finalCF = depressionLevel?.certaintyFactor ?? 0.0;
-      summary = depressionLevel?.explanation ?? 'Gejala depresi minimal.';
+    // Pilih instrumen yang BENAR-BENAR menghasilkan level.
+    // Tanpa penjagaan ini, skor GAD-7 minimal (0-4) jatuh ke cabang depresi
+    // yang tidak punya fakta sama sekali: CF menjadi 0 dan ringkasan salah
+    // menyebut "gejala depresi" padahal yang diukur adalah kecemasan.
+    if (depressionLevel != null &&
+        (anxietyLevel == null || depPriority >= anxPriority)) {
+      finalLevel = depressionLevel.value as String? ?? 'minimal';
+      finalCF = depressionLevel.certaintyFactor;
+      summary = depressionLevel.explanation;
+    } else if (anxietyLevel != null) {
+      finalLevel = anxietyLevel.value as String? ?? 'minimal';
+      finalCF = anxietyLevel.certaintyFactor;
+      summary = anxietyLevel.explanation;
     } else {
-      finalLevel = anxietyLevel?.value as String? ?? 'minimal';
-      finalCF = anxietyLevel?.certaintyFactor ?? 0.0;
-      summary = anxietyLevel?.explanation ?? 'Gejala kecemasan minimal.';
+      // Tidak ada rule keparahan yang menembak (mis. data tidak lengkap).
+      finalLevel = 'minimal';
+      finalCF = 0.0;
+      summary = 'Tidak ada level keparahan yang terbentuk dari jawaban.';
     }
 
     // Build combined summary
@@ -369,7 +381,10 @@ class ForwardChainingEngine {
     // menyakiti diri memerlukan perhatian segera.
     bool isCrisis = false;
     final crisisFlag = workingMemory['crisis_flag'];
-    if (crisisFlag != null && crisisFlag.value == true) {
+    // Deteksi memakai CF > 0 (bukan perbandingan nilai) agar sejalan dengan
+    // implementasi server di backend/internal/inference dan tahan terhadap
+    // perbedaan tipe nilai antar-engine (bool di Dart, string di Go).
+    if (crisisFlag != null && crisisFlag.certaintyFactor > 0) {
       isCrisis = true;
       final crisisLevel = workingMemory['crisis_level'];
       final crisisSummary = crisisLevel?.value as String? ??

@@ -20,6 +20,16 @@ class KnowledgeBase {
         // ============================================================
         // SEVERITY LEVEL RULES (based on total score ranges)
         // These rules determine the overall depression severity level
+        //
+        // Ambang mengikuti PHQ-9 baku:
+        //   0-4 minimal | 5-9 ringan | 10-14 sedang |
+        //   15-19 cukup berat | 20-27 berat
+        //
+        // CATATAN PENTING: enum RiskLevel produk ini hanya punya 4 tingkat
+        // keparahan (minimal, mild, moderate, severe) + crisis. Karena itu
+        // 15-19 dan 20-27 sama-sama dipetakan ke 'severe' — penggabungan yang
+        // lazim dipakai pada panduan PHQ-9 4-band. Pembedaannya tetap
+        // dipertahankan pada `description` dan `explanation` rule.
         // ============================================================
 
         const ScreeningRule(

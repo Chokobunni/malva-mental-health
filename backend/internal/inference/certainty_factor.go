@@ -51,11 +51,18 @@ func Combine(cf1, cf2 float64) float64 {
 	if cf1 < 0 {
 		pos, neg = cf2, cf1
 	}
-	minAbs := pos
-	if abs(neg) < abs(pos) {
+	// Penyebut memakai min(|CF1|,|CF2|), sesuai rumus EMYCIN:
+	//   CF(A,B) = (CF(A)+CF(B)) / (1 - min(|CF(A)|,|CF(B)|))
+	minAbs := abs(pos)
+	if abs(neg) < minAbs {
 		minAbs = abs(neg)
 	}
-	return (pos + neg) / (1.0 - abs(pos)*minAbs)
+	denominator := 1.0 - minAbs
+	if denominator <= 0 {
+		// Degenerasi: |CF1| = |CF2| = 1.0 berlawanan tanda → saling meniadakan.
+		return 0.0
+	}
+	return (pos + neg) / denominator
 }
 
 // CombineConditions menggabungkan CF antar-kondisi (AND logika).

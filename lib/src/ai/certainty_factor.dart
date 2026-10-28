@@ -62,6 +62,10 @@ class CertaintyFactorCalculator {
     }
 
     // Case 3: CFs have opposite signs (partial cancellation)
+    //
+    // Rumus EMYCIN/MYCIN (Shortliffe & Buchanan, 1975):
+    //   CF_combined = (CF1 + CF2) / (1 - min(|CF1|, |CF2|))
+    // Penyebut memakai min(|CF1|,|CF2|) — BUKAN hasil kali |CF1|*min(...).
     final double pos;
     final double neg;
     if (cf1 >= 0) {
@@ -72,19 +76,31 @@ class CertaintyFactorCalculator {
       neg = cf1;
     }
 
-    return (pos + neg) /
-        (1.0 -
-            pos.abs().clamp(0.0, 1.0).toDouble() *
-                (pos.abs() < neg.abs() ? pos.abs() : neg.abs()));
+    final double minAbs = pos.abs() < neg.abs() ? pos.abs() : neg.abs();
+    final double denominator = 1.0 - minAbs;
+    if (denominator <= 0.0) {
+      // Degenerasi: |CF1| = |CF2| = 1.0 dengan tanda berlawanan.
+      // Bukti saling meniadakan sepenuhnya → tidak ada keyakinan bersih.
+      return 0.0;
+    }
+    return (pos + neg) / denominator;
   }
 
   /// Convert a raw symptom score (0-3) to a Certainty Factor.
   ///
-  /// This mapping is based on clinical interpretation of PHQ-9/GAD-7:
+  /// CATATAN: pemetaan ini adalah KEPUTUSAN PEMODELAN sistem pakar, bukan
+  /// bagian dari skoring baku PHQ-9/GAD-7. Instrumen aslinya hanya
+  /// menjumlahkan 0-3 per item; CF dipakai agar mesin inferensi dapat
+  /// menimbang kekuatan bukti. Syarat yang dijaga: monoton naik dan
+  /// 0 -> 0.0 (tidak ada gejala = tidak ada bukti).
+  ///
   /// - 0 (Tidak sama sekali): No evidence → CF = 0.0
   /// - 1 (Beberapa hari): Weak evidence → CF = 0.3
   /// - 2 (Lebih dari separuh hari): Moderate evidence → CF = 0.6
   /// - 3 (Hampir setiap hari): Strong evidence → CF = 0.9
+  ///
+  /// Harus identik dengan backend/internal/inference/certainty_factor.go
+  /// ([ScoreToCF]) agar hasil klien dan server sama.
   ///
   /// Parameters:
   ///   [rawScore] - Raw answer value (0-3)

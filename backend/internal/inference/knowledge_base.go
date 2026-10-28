@@ -19,6 +19,12 @@ package inference
 //  - 0.85: pola sekunder (pendukung)
 // CF user mengikuti mapping jawaban 0-3 -> 0/0.3/0.6/0.9.
 // Port 1:1 dari lib/src/ai/knowledge_base.dart (client).
+//
+// CATATAN BAND: enum risk_level di database hanya punya 4 tingkat keparahan
+// (minimal, mild, moderate, severe) + crisis. Karena itu PHQ-9 15-19
+// ("moderately severe") dan 20-27 ("severe") sama-sama dipetakan ke 'severe'
+// — penggabungan 4-band yang lazim. Pembedaannya tetap ada di Description
+// dan Explanation rule. GAD-7 tidak terpengaruh (band-nya memang 4).
 // ============================================================
 
 // PHQ9QuestionIDs urutan item PHQ-9.

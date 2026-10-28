@@ -58,8 +58,12 @@ type Condition struct {
 
 // Conclusion fakta baru yang dihasilkan rule (THEN).
 type Conclusion struct {
-	FactID      string  `json:"fact_id"`
-	Value       string  `json:"value"`
+	FactID string `json:"fact_id"`
+	Value  string `json:"value"`
+	// CF hanya anotasi kekuatan klinis untuk audit/keterbacaan rule base.
+	// TIDAK dipakai dalam perhitungan EMYCIN: CF kesimpulan dihitung murni
+	// sebagai RuleCF x CF(bukti) — lihat ApplyRuleCF. Paritas dengan
+	// lib/src/ai/models.dart (RuleConclusion.cf).
 	CF          float64 `json:"cf"`
 	Explanation string  `json:"explanation"`
 }
@@ -230,6 +234,10 @@ func evaluateRule(rule Rule, wm map[string]Fact) Trace {
 	}
 
 	tr.ConditionCF = CombineConditions(conditionCFs)
+	// Rule hanya menembak bila semua kondisi terpenuhi DAN ada bukti nyata
+	// (CF gabungan > 0). Menembak dengan CF 0 hanya menulis fakta tanpa
+	// keyakinan ke working memory.
+	allSatisfied = allSatisfied && tr.ConditionCF > 0
 	if allSatisfied {
 		tr.ResultCF = ApplyRuleCF(rule.RuleCF, tr.ConditionCF)
 	}
@@ -307,18 +315,21 @@ func buildResult(wm map[string]Fact, trace []Trace, firedCount int) InferenceRes
 	}
 
 	res := InferenceResult{Trace: trace, WorkingMemory: wm, FiredRuleCount: firedCount}
-	if depPriority >= anxPriority {
+	// Pilih instrumen yang BENAR-BENAR menghasilkan level (paritas dengan
+	// lib/src/ai/forward_chaining_engine.dart). Tanpa ini, skor GAD-7 minimal
+	// (0-4) jatuh ke cabang depresi yang tidak punya fakta: CF menjadi 0 dan
+	// ringkasan salah menyebut gejala depresi.
+	switch {
+	case hasDep && (!hasAnx || depPriority >= anxPriority):
 		res.Level = depLevel
-		if hasDep {
-			res.CF = dep.CF
-			res.Summary = dep.Note
-		}
-	} else {
+		res.CF = dep.CF
+		res.Summary = dep.Note
+	case hasAnx:
 		res.Level = anxLevel
-		if hasAnx {
-			res.CF = anx.CF
-			res.Summary = anx.Note
-		}
+		res.CF = anx.CF
+		res.Summary = anx.Note
+	default:
+		res.Level = "minimal"
 	}
 	if res.Summary == "" {
 		res.Summary = "Gejala minimal."

@@ -139,8 +139,12 @@ class RuleConclusion {
   /// Value to assign to this fact.
   final dynamic value;
 
-  /// Certainty Factor for this conclusion.
-  /// Will be combined with the rule's CF and condition CFs.
+  /// Anotasi kekuatan klinis untuk audit / keterbacaan rule base.
+  ///
+  /// TIDAK dipakai dalam perhitungan EMYCIN. CF kesimpulan dihitung murni
+  /// sebagai CF(rule) x CF(bukti) — lihat
+  /// [CertaintyFactorCalculator.applyRuleCF]. Field ini dipertahankan sebagai
+  /// metadata; jangan mengandalkannya untuk mengubah hasil inferensi.
   final double cf;
 
   /// Human-readable explanation for audit trail.

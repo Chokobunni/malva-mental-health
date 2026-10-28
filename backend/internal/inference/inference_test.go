@@ -2,6 +2,7 @@ package inference
 
 import (
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -103,6 +104,21 @@ func TestGAD7SeverityLevels(t *testing.T) {
 	}
 }
 
+func TestGAD7MinimalKeepsAnxietyEvidence(t *testing.T) {
+	// Regresi: sebelumnya skor GAD-7 minimal (0-4) jatuh ke cabang depresi
+	// yang tidak punya fakta, sehingga CF = 0 dan ringkasan menyebut depresi.
+	res := runGAD7(t, []int{1, 0, 1, 0, 1, 0, 1})
+	if res.Level != "minimal" {
+		t.Fatalf("level = %s, want minimal", res.Level)
+	}
+	if res.CF <= 0 {
+		t.Errorf("CF = %.4f, want > 0 (bukti kecemasan minimal harus terbawa)", res.CF)
+	}
+	if !strings.Contains(strings.ToLower(res.Summary), "kecemasan") {
+		t.Errorf("summary = %q, want menyebut kecemasan", res.Summary)
+	}
+}
+
 func TestTraceContainsAuditTrail(t *testing.T) {
 	res := runPHQ9(t, []int{2, 2, 2, 2, 2, 2, 2, 2, 0})
 	if len(res.Trace) == 0 {
@@ -135,6 +151,26 @@ func TestCFCombineMatchesReference(t *testing.T) {
 	// CF 0 tidak mengubah.
 	if got := Combine(0.0, 0.6); math.Abs(got-0.6) > 1e-9 {
 		t.Errorf("Combine(0, 0.6) = %.6f, want 0.6", got)
+	}
+}
+
+func TestCFCombineOppositeSigns(t *testing.T) {
+	// Rumus EMYCIN: (CF1 + CF2) / (1 - min(|CF1|, |CF2|)).
+	// (0.7 - 0.3) / (1 - 0.3) = 0.4 / 0.7
+	if got := Combine(0.7, -0.3); math.Abs(got-(0.4/0.7)) > 1e-9 {
+		t.Errorf("Combine(0.7,-0.3) = %.6f, want %.6f", got, 0.4/0.7)
+	}
+	// (0.3 - 0.8) / (1 - 0.3) = -0.5 / 0.7
+	if got := Combine(0.3, -0.8); math.Abs(got-(-0.5/0.7)) > 1e-9 {
+		t.Errorf("Combine(0.3,-0.8) = %.6f, want %.6f", got, -0.5/0.7)
+	}
+	// Simetris terhadap urutan argumen.
+	if a, b := Combine(0.6, -0.2), Combine(-0.2, 0.6); math.Abs(a-b) > 1e-9 {
+		t.Errorf("Combine tidak simetris: %.6f vs %.6f", a, b)
+	}
+	// Kontradiksi penuh: |CF| = 1.0 berlawanan tanda → 0.
+	if got := Combine(1.0, -1.0); got != 0 {
+		t.Errorf("Combine(1.0,-1.0) = %.6f, want 0", got)
 	}
 }
 

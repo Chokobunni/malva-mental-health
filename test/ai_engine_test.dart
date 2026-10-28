@@ -44,11 +44,34 @@ void main() {
       });
 
       test('combines opposite sign CFs correctly', () {
+        // Rumus EMYCIN: (CF1 + CF2) / (1 - min(|CF1|, |CF2|))
         // CF(A) = 0.7, CF(B) = -0.3
-        // Should partially cancel out
+        //   = (0.7 - 0.3) / (1 - min(0.7, 0.3))
+        //   = 0.4 / 0.7 = 0.571428...
         final result = CertaintyFactorCalculator.combine(0.7, -0.3);
-        expect(result, lessThan(0.7));
-        expect(result, greaterThan(-0.3));
+        expect(result, closeTo(0.4 / 0.7, 0.0001));
+      });
+
+      test('opposite sign CFs: negative result when evidence contradicts', () {
+        // (0.3 - 0.8) / (1 - min(0.3, 0.8)) = -0.5 / 0.7
+        final result = CertaintyFactorCalculator.combine(0.3, -0.8);
+        expect(result, closeTo(-0.5 / 0.7, 0.0001));
+      });
+
+      test('opposite sign CFs: symmetric regardless of argument order', () {
+        expect(
+          CertaintyFactorCalculator.combine(0.6, -0.2),
+          closeTo(CertaintyFactorCalculator.combine(-0.2, 0.6), 0.0001),
+        );
+        expect(
+          CertaintyFactorCalculator.combine(0.6, -0.2),
+          closeTo(0.5, 0.0001),
+        );
+      });
+
+      test('opposite sign CFs: full contradiction yields 0', () {
+        // |CF1| = |CF2| = 1.0 berlawanan tanda → saling meniadakan.
+        expect(CertaintyFactorCalculator.combine(1.0, -1.0), 0.0);
       });
 
       test('combines 0.0 with positive CF', () {
@@ -326,7 +349,9 @@ void main() {
       });
 
       test('scenario: crisis patient with comorbid conditions', () {
-        // High PHQ-9 with self-harm
+        // High PHQ-9 with self-harm: skor total 27 = berat (severe), dan
+        // crisisFlag menyala karena item 9 positif. Level keparahan tetap
+        // mengikuti skor total sesuai standar PHQ-9.
         final result = engine.infer(
           questionIds: KnowledgeBase.phq9QuestionIds,
           answers: [3, 3, 3, 3, 3, 3, 3, 3, 3],
@@ -334,7 +359,7 @@ void main() {
         );
 
         expect(result.isCrisis, true);
-        expect(result.level, 'crisis');
+        expect(result.level, 'severe');
         expect(result.certaintyFactor, greaterThan(0.9));
       });
 
