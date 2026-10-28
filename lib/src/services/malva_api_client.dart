@@ -1615,6 +1615,38 @@ class MalvaApiClient {
     );
   }
 
+  /// Buat (atau ambil ulang) link Google Meet untuk satu sesi video.
+  /// POST /v1/care-sessions/{id}/meet-link — pasien maupun profesional.
+  Future<BackendCareSession> ensureMeetLink({
+    required String accessToken,
+    required String sessionId,
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/care-sessions/$sessionId/meet-link',
+      accessToken: accessToken,
+    );
+    return BackendCareSession.fromJson(
+      _expectMap(payload['session'], 'Respons sesi tidak valid.'),
+    );
+  }
+
+  /// Status tautan Google Calendar profesional.
+  /// GET /v1/google/status
+  Future<({bool serverConfigured, bool connected, String scope})>
+      googleStatus({required String accessToken}) async {
+    final payload = await _send(
+      'GET',
+      '/v1/google/status',
+      accessToken: accessToken,
+    );
+    return (
+      serverConfigured: payload['server_configured'] == true,
+      connected: payload['connected'] == true,
+      scope: payload['scope']?.toString() ?? '',
+    );
+  }
+
   Future<BackendCareSession> rescheduleCareSession({
     required String accessToken,
     required String sessionId,
@@ -3805,6 +3837,74 @@ class BackendCareSession {
 
   bool get cancelledByProfessional => status == 'cancelled_by_professional';
   bool get cancelledByPatient => status == 'cancelled_by_patient';
+
+  /// Pintu masuk ruang tunggu dibuka 10 menit sebelum jadwal.
+  static const Duration joinOpensBefore = Duration(minutes: 10);
+
+  /// Jendela bergabung ditutup 30 menit setelah sesi berakhir, memberi
+  /// kelonggaran bila sesi molor.
+  static const Duration joinClosesAfterEnd = Duration(minutes: 30);
+
+  DateTime? get _joinOpensAt =>
+      scheduledDateTime?.subtract(joinOpensBefore);
+
+  DateTime? get _joinClosesAt {
+    final start = scheduledDateTime;
+    if (start == null) return null;
+    final end = start.add(Duration(minutes: durationMinutes));
+    return end.add(joinClosesAfterEnd);
+  }
+
+  /// True bila tombol gabung boleh ditampilkan sekarang.
+  bool get canJoinNow {
+    final opens = _joinOpensAt;
+    final closes = _joinClosesAt;
+    if (opens == null || closes == null) return false;
+    final now = DateTime.now();
+    return !now.isBefore(opens) && !now.isAfter(closes);
+  }
+
+  /// True bila sesi belum boleh dimasuki (masih terlalu awal).
+  bool get isBeforeJoinWindow {
+    final opens = _joinOpensAt;
+    if (opens == null) return false;
+    return DateTime.now().isBefore(opens);
+  }
+
+  /// True bila jendela bergabung sudah lewat.
+  bool get isAfterJoinWindow {
+    final closes = _joinClosesAt;
+    if (closes == null) return false;
+    return DateTime.now().isAfter(closes);
+  }
+
+  /// Sisa waktu menuju pembukaan jendela bergabung (null bila sudah dibuka
+  /// atau jadwal tidak diketahui).
+  Duration? get timeUntilJoinOpens {
+    final opens = _joinOpensAt;
+    if (opens == null) return null;
+    final diff = opens.difference(DateTime.now());
+    return diff.isNegative ? null : diff;
+  }
+
+  /// Label ringkas untuk tombol/keadaan sesi video.
+  /// Contoh: "Mulai dalam 45 menit", "Bisa bergabung", "Sesi berakhir".
+  String get joinStateLabel {
+    if (!isVideo) return '';
+    if (meetingUrl.trim().isEmpty) return 'Link belum tersedia';
+    if (isAfterJoinWindow) return 'Sesi berakhir';
+    if (isBeforeJoinWindow) {
+      final left = timeUntilJoinOpens;
+      if (left == null) return 'Bisa bergabung';
+      if (left.inMinutes >= 60) {
+        final h = left.inHours;
+        final m = left.inMinutes % 60;
+        return 'Mulai dalam $h jam $m mnt';
+      }
+      return 'Mulai dalam ${left.inMinutes + 1} mnt';
+    }
+    return 'Bisa bergabung';
+  }
 }
 
 /// Ledger refund/kredit pembatalan sesi (tabel `care_refunds`).

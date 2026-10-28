@@ -321,6 +321,36 @@ class _GoogleLinkTile extends ConsumerStatefulWidget {
 
 class _GoogleLinkTileState extends ConsumerState<_GoogleLinkTile> {
   bool _isLinking = false;
+  bool _loadingStatus = true;
+  bool _connected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadStatus());
+  }
+
+  /// Memeriksa apakah akun Google profesional masih tertaut, agar pengguna
+  /// tahu perlu menautkan ulang sebelum sesi video dimulai.
+  Future<void> _loadStatus() async {
+    final accessToken = widget.session?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      if (mounted) setState(() => _loadingStatus = false);
+      return;
+    }
+    try {
+      final status = await ref
+          .read(apiClientProvider)
+          .googleStatus(accessToken: accessToken);
+      if (!mounted) return;
+      setState(() {
+        _connected = status.connected;
+        _loadingStatus = false;
+      });
+    } on Object {
+      if (mounted) setState(() => _loadingStatus = false);
+    }
+  }
 
   Future<void> _linkGoogle() async {
     if (_isLinking) return;
@@ -355,6 +385,7 @@ class _GoogleLinkTileState extends ConsumerState<_GoogleLinkTile> {
           content: Text('Google berhasil dihubungkan untuk Video Call.'),
         ),
       );
+      await _loadStatus();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -367,11 +398,25 @@ class _GoogleLinkTileState extends ConsumerState<_GoogleLinkTile> {
 
   @override
   Widget build(BuildContext context) {
+    final String subtitle;
+    if (_isLinking) {
+      subtitle = 'Menghubungkan...';
+    } else if (_loadingStatus) {
+      subtitle = 'Memeriksa status...';
+    } else if (_connected) {
+      subtitle = 'Terhubung — Google Meet siap dipakai';
+    } else {
+      subtitle = 'Belum terhubung — wajib untuk sesi video';
+    }
     return ActionTile(
-      icon: Icons.videocam_rounded,
-      title: 'Hubungkan Google untuk Video Call',
-      subtitle: _isLinking ? 'Menghubungkan...' : 'Aktifkan Google Meet',
-      color: MalvaColors.mint,
+      icon: _connected
+          ? Icons.video_camera_front_rounded
+          : Icons.videocam_rounded,
+      title: _connected
+          ? 'Google Meet aktif'
+          : 'Hubungkan Google untuk Video Call',
+      subtitle: subtitle,
+      color: _connected ? MalvaColors.mint : MalvaColors.amber,
       onTap: () {
         if (!_isLinking) _linkGoogle();
       },

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
@@ -10,6 +9,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/meet_join_button.dart';
 import 'booking/payment_screen.dart';
 import 'chat_screen.dart';
 
@@ -319,9 +319,8 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
                     onOpenChat: () => _openChat(s),
                     onReschedule: () => _openScheduler(context, existing: s),
                     onCancel: () => _cancelSession(s),
-                    onJoinVideo: s.isVideo && s.meetingUrl.isNotEmpty
-                        ? () => _joinVideoCall(s)
-                        : null,
+                    accessToken: widget.session?.accessToken ?? '',
+                    onSessionChanged: (_) => _load(silent: true),
                   ),
                   const SizedBox(height: 10),
                 ],
@@ -527,22 +526,6 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
         ),
       ),
     );
-  }
-
-  /// Gabung video call via Jitsi Meet. URL sudah di-generate server saat
-  /// sesi dijadwalkan (meet.jit.si/malva-...). Membuka link di browser/app
-  /// Jitsi eksternal — tidak perlu native SDK yang tidak kompatibel dengan
-  /// AGP modern.
-  Future<void> _joinVideoCall(BackendCareSession s) async {
-    if (s.meetingUrl.isEmpty) return;
-    final uri = Uri.parse(s.meetingUrl);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tidak dapat membuka video call.')),
-      );
-    }
   }
 
   /// Lanjutkan pembayaran paket pending. Bila booking pending sudah ada
@@ -1152,7 +1135,8 @@ class _PackageSessionCard extends StatelessWidget {
     this.onReschedule,
     this.onCancel,
     this.onRequestRefund,
-    this.onJoinVideo,
+    this.accessToken = '',
+    this.onSessionChanged,
   });
 
   final BackendCareSession session;
@@ -1161,7 +1145,12 @@ class _PackageSessionCard extends StatelessWidget {
   final VoidCallback? onReschedule;
   final VoidCallback? onCancel;
   final VoidCallback? onRequestRefund;
-  final VoidCallback? onJoinVideo;
+
+  /// Token akses pasien — dibutuhkan untuk membuat link Meet bila belum ada.
+  final String accessToken;
+
+  /// Dipanggil setelah link Meet berhasil dibuat agar data disegarkan.
+  final ValueChanged<BackendCareSession>? onSessionChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1219,17 +1208,14 @@ class _PackageSessionCard extends StatelessWidget {
           ),
           if (!past) ...[
             const SizedBox(height: 10),
-            // Tombol Join Video muncul untuk sesi video yang punya meeting URL.
-            if (session.isVideo && session.meetingUrl.isNotEmpty) ...[
-              FilledButton.icon(
-                onPressed: onJoinVideo,
-                style: compactFilledButtonStyle.copyWith(
-                  backgroundColor:
-                      const WidgetStatePropertyAll(MalvaColors.mint),
-                  foregroundColor: const WidgetStatePropertyAll(Colors.white),
-                ),
-                icon: const Icon(Icons.videocam_rounded, size: 16),
-                label: const Text('Gabung Video Call'),
+            // Sesi video: tombol gabung Google Meet dengan jendela waktu.
+            // Bila link belum ada, tombol berubah menjadi "Siapkan link Meet".
+            if (session.isVideo) ...[
+              MeetJoinButton(
+                session: session,
+                accessToken: accessToken,
+                expanded: true,
+                onSessionChanged: (updated) => onSessionChanged?.call(updated),
               ),
               const SizedBox(height: 8),
             ],

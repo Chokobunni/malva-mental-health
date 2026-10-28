@@ -740,10 +740,11 @@ class _JoinMeetingBannerState extends ConsumerState<_JoinMeetingBanner> {
         accessToken: token,
         scope: 'upcoming',
       );
-      // Cari sesi video terdekat yang punya meeting_url.
+      // Cari sesi video terjadwal terdekat (dengan atau tanpa link Meet).
+      // Tanpa link, banner menawarkan "Siapkan link Meet".
       BackendCareSession? found;
       for (final s in sessions) {
-        if (s.isVideo && s.meetingUrl.isNotEmpty && s.isScheduled) {
+        if (s.isVideo && s.isScheduled) {
           found = s;
           break;
         }
@@ -781,10 +782,10 @@ class _JoinMeetingBannerState extends ConsumerState<_JoinMeetingBanner> {
         ),
         child: Row(
           children: [
-            CircleAvatar(
+            const CircleAvatar(
               radius: 20,
               backgroundColor: MalvaColors.mint,
-              child: const Icon(Icons.videocam_rounded,
+              child: Icon(Icons.videocam_rounded,
                   color: Colors.white, size: 20),
             ),
             const SizedBox(width: 12),
@@ -792,9 +793,14 @@ class _JoinMeetingBannerState extends ConsumerState<_JoinMeetingBanner> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Join Video Call',
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                  Text(
+                    s.meetingUrl.trim().isEmpty
+                        ? 'Siapkan Link Meet'
+                        : (s.isBeforeJoinWindow
+                            ? 'Video call • ${s.joinStateLabel}'
+                            : 'Join Video Call'),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w900, fontSize: 13),
                   ),
                   if (dateLabel.isNotEmpty)
                     Text(
@@ -815,13 +821,43 @@ class _JoinMeetingBannerState extends ConsumerState<_JoinMeetingBanner> {
   }
 
   Future<void> _joinMeeting(BackendCareSession s) async {
-    if (s.meetingUrl.isEmpty) return;
+    final token = widget.session?.accessToken;
+    // Link belum ada: minta backend membuatkannya sekarang.
+    if (s.meetingUrl.trim().isEmpty) {
+      if (token == null || token.isEmpty) return;
+      try {
+        final MalvaApiClient apiClient =
+            widget.apiClient ?? ref.read(apiClientProvider);
+        await apiClient.ensureMeetLink(
+          accessToken: token,
+          sessionId: s.id,
+        );
+        await _loadNextVideoSession();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Link Google Meet sudah siap.')),
+        );
+      } on Object catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyErrorMessage(e))),
+        );
+      }
+      return;
+    }
+    if (s.isBeforeJoinWindow) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Belum bisa bergabung — ${s.joinStateLabel}.')),
+      );
+      return;
+    }
     final uri = Uri.parse(s.meetingUrl);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tidak dapat membuka video call.')),
+        const SnackBar(content: Text('Tidak dapat membuka Google Meet.')),
       );
     }
   }

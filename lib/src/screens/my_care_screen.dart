@@ -323,12 +323,38 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   }
 
   Future<void> _joinSession(BackendCareSession s) async {
-    if (s.isVideo && s.meetingUrl.trim().isNotEmpty) {
+    if (s.isVideo) {
+      if (s.meetingUrl.trim().isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Link Google Meet belum tersedia. Buka detail sesi untuk menyiapkannya.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      if (s.isBeforeJoinWindow) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Belum bisa bergabung — ${s.joinStateLabel}.')),
+          );
+        }
+        return;
+      }
       final uri = Uri.tryParse(s.meetingUrl.trim());
       if (uri != null && await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
         return;
       }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak dapat membuka Google Meet.')),
+        );
+      }
+      return;
     }
     _openChat(s);
   }

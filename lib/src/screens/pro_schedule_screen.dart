@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
@@ -8,6 +7,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/meet_join_button.dart';
 import 'chat_screen.dart';
 import 'pro_patient_detail_screen.dart';
 
@@ -299,6 +299,20 @@ class _ProSessionCard extends ConsumerWidget {
           ],
           if (!past && session.isScheduled) ...[
             const SizedBox(height: 10),
+            // Sesi video: tombol gabung Google Meet dengan jendela waktu.
+            // Bila link belum ada, tombol berubah menjadi "Siapkan link Meet".
+            if (session.isVideo) ...[
+              MeetJoinButton(
+                session: session,
+                accessToken:
+                    ref.read(currentSessionProvider)?.accessToken ?? '',
+                expanded: true,
+                onSessionChanged: (_) {
+                  onChanged();
+                },
+              ),
+              const SizedBox(height: 10),
+            ],
             // Lapis 2 — aksi primer (paling sering dipakai saat sesi berjalan).
             Wrap(
               spacing: 8,
@@ -340,12 +354,6 @@ class _ProSessionCard extends ConsumerWidget {
                     icon: const Icon(Icons.person_rounded, size: 16),
                     label: const Text('Detail pasien'),
                   ),
-                  if (session.isVideo && session.meetingUrl.isNotEmpty)
-                    OutlinedButton.icon(
-                      onPressed: () => _openMeeting(context),
-                      icon: const Icon(Icons.videocam_rounded, size: 16),
-                      label: const Text('Meeting'),
-                    ),
                   OutlinedButton.icon(
                     onPressed: () => _cancel(context, ref),
                     icon: const Icon(Icons.cancel_rounded, size: 16),
@@ -394,15 +402,6 @@ class _ProSessionCard extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _openMeeting(BuildContext context) async {
-    final url = session.meetingUrl.trim();
-    if (url.isEmpty) return;
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
   }
 
   Future<void> _mark(BuildContext context, WidgetRef ref, String status) async {
