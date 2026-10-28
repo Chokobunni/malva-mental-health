@@ -57,3 +57,45 @@ untuk satu package name).
 ## Package name
 
 `id.malva.app` (lihat `android/app/build.gradle.kts` → `applicationId`).
+
+## Verifikasi bahwa Android OAuth Client BENAR-BENAR ada
+
+Mendaftarkan SHA-1 di Google Cloud Console tidak cukup — harus dibuktikan
+bahwa konfigurasi itu benar-benar sampai ke aplikasi. Caranya: periksa file
+`android/app/google-services.json`.
+
+```bash
+# Android OAuth Client = client_type 1. Web client = client_type 3.
+grep -n '"client_type"' android/app/google-services.json
+```
+
+Yang benar: file memuat **minimal satu** entri `"client_type": 1` (Android)
+yang `package_name`-nya `id.malva.app`, di samping entri `"client_type": 3`
+(Web) yang dipakai sebagai `serverClientId`.
+
+Yang SALAH (gejala bug 28 Okt 2026): file hanya berisi `client_type: 3`.
+Artinya **Android OAuth Client belum pernah dibuat** untuk package + SHA-1
+ini, sehingga Google Credential Manager (google_sign_in v7) tidak bisa
+menerbitkan ID token. Dampaknya:
+
+- tombol "Continue with Google" gagal di perangkat, dan
+- **tidak ada** request `POST /v1/auth/google` sama sekali di log server
+  (`journalctl -u malva-api`), karena kegagalan terjadi sebelum request
+  keluar dari HP.
+
+Bila `client_type: 1` belum ada:
+
+1. Buka Google Cloud Console → APIs & Services → Credentials →
+   **Create credentials → OAuth client ID → Android**.
+2. Package name: `id.malva.app`.
+3. SHA-1: daftarkan **dua kali** (dua client terpisah) — satu dengan SHA-1
+   release, satu dengan SHA-1 debug dari tabel di atas.
+4. Simpan, tunggu 5–10 menit (propagasi Google), lalu **unduh ulang**
+   `google-services.json` dari Firebase Console → Project settings → Your
+   apps → Android (`id.malva.app`) → `google-services.json`.
+5. Ulangi pemeriksaan `grep '"client_type"'` di atas — harus muncul
+   `client_type: 1`. Bila belum muncul, OAuth client belum tersimpan di
+   project yang benar.
+
+Langkah lengkap (termasuk cara mengecek APK sudah memuat client ID yang
+sama): lihat `docs/GOOGLE_SIGNIN_SETUP.md` bagian **Diagnosa cepat**.

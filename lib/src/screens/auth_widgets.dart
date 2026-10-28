@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models.dart';
+import '../services/google_auth_service.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
@@ -37,23 +39,51 @@ const passwordRequirementHint =
 /// BUKAN AuthFailure/MalvaApiException (mis. TimeoutException bila lolos,
 /// StateError, dsb.) sebelumnya jatuh ke pesan generik. Kini pesan asli
 /// error tetap ditampilkan agar tidak ada lagi kegagalan yang "sunyi".
+///
+/// Perbaikan lanjutan (login Google gagal di perangkat): `PlatformException`
+/// dari layer native (Credential Manager / Google Play Services) ditangani
+/// eksplisit sehingga `code` dan `message` aslinya terlihat di layar —
+/// inilah satu-satunya jejak yang tersedia ketika kegagalan terjadi sebelum
+/// request keluar dari perangkat (tidak ada log di server).
 void showAuthFailure(BuildContext context, Object error) {
+  showAuthError(context, _authFailureMessage(error));
+}
+
+/// Menyusun pesan dialog untuk [error] beserta kode error Google terakhir
+/// (bila ada) agar pengguna bisa menyebutkannya saat melapor ke admin.
+String _authFailureMessage(Object error) {
   if (error is AuthFailure) {
-    showAuthError(context, error.message);
-    return;
+    return _withGoogleCode(error.message);
   }
   if (error is MalvaApiException) {
-    showAuthError(context, error.message);
-    return;
+    return _withGoogleCode(error.message);
+  }
+  if (error is PlatformException) {
+    final detail = (error.message ?? '').trim();
+    final buffer = StringBuffer('Login Google gagal di perangkat '
+        '(kode: ${error.code}).');
+    if (detail.isNotEmpty) {
+      buffer.write(' Detail: $detail');
+    }
+    buffer.write(' Coba lagi, atau masuk dengan email & password.');
+    return buffer.toString();
   }
   final raw = error.toString();
   // Potong prefix "Exception: " agar ramah dibaca, tapi isi tetap asli.
   final cleaned = raw.replaceFirst(RegExp(r'^(Exception|Error)\s*:\s*'), '');
   if (cleaned.trim().isNotEmpty) {
-    showAuthError(context, cleaned.trim());
-    return;
+    return _withGoogleCode(cleaned.trim());
   }
-  showAuthError(context, 'Terjadi kesalahan tak terduga. Silakan coba lagi.');
+  return 'Terjadi kesalahan tak terduga. Silakan coba lagi.';
+}
+
+/// Menambahkan baris "Kode error" bila Google Sign-In mencatat kode terakhir
+/// yang belum tertulis di pesan. Tanpa ini, kegagalan yang terjadi di
+/// perangkat (sebelum request keluar) tidak meninggalkan jejak apa pun.
+String _withGoogleCode(String message) {
+  final code = GoogleAuthService.lastErrorCode;
+  if (code == null || code.isEmpty || message.contains(code)) return message;
+  return '$message\n\nKode error: $code';
 }
 
 /// Halaman gerbang peran — langkah pertama setelah splash.

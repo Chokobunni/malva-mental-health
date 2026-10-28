@@ -3,7 +3,9 @@ package server
 import (
 	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -40,6 +42,19 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	payload, err := idtoken.Validate(r.Context(), strings.TrimSpace(req.IDToken), s.cfg.GoogleClientID)
 	if err != nil {
+		// Diagnosa: token yang ditolak hampir selalu karena audience/issuer
+		// tidak cocok (mis. APK di-build dengan Web Client ID berbeda, atau
+		// token berasal dari project Firebase lain). Kita hanya MEMBACA
+		// klaim tanpa memverifikasi tanda tangan — khusus untuk log. Validasi
+		// audience TIDAK dilonggarkan: token tetap ditolak dengan 401.
+		aud, iss, sub := peekIDTokenClaimsUnverified(strings.TrimSpace(req.IDToken))
+		s.logger.Warn("validasi id_token Google gagal",
+			"error", err,
+			"aud", aud,
+			"iss", iss,
+			"sub_panjang", len(sub),
+			"expected_aud", s.cfg.GoogleClientID,
+		)
 		s.secLogger.LogAuthFailure(r, "google", "invalid id_token")
 		writeError(w, http.StatusUnauthorized, errors.New("token Google tidak valid atau kedaluwarsa. Silakan coba lagi"))
 		return
@@ -167,6 +182,44 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	s.secLogger.LogAuthSuccess(r, user.ID)
 	s.writeAuthResponseWithCompletion(w, r, http.StatusCreated, user, needsCompletion)
+}
+
+// peekIDTokenClaimsUnverified membaca klaim `aud`, `iss`, dan `sub` dari
+// payload JWT TANPA memverifikasi tanda tangan.
+//
+// HANYA dipakai untuk logging/diagnosa ketika validasi gagal — jangan pernah
+// memakai hasilnya untuk mengambil keputusan otorisasi. Bila token tidak bisa
+// diurai, ketiga nilai dikembalikan sebagai string kosong.
+func peekIDTokenClaimsUnverified(raw string) (aud, iss, sub string) {
+	parts := strings.Split(raw, ".")
+	if len(parts) < 2 {
+		return "", "", ""
+	}
+	// JWT memakai base64url tanpa padding.
+	decoded, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", "", ""
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(decoded, &claims); err != nil {
+		return "", "", ""
+	}
+	// `aud` boleh berupa string tunggal atau array (multi-audience).
+	switch v := claims["aud"].(type) {
+	case string:
+		aud = v
+	case []any:
+		items := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				items = append(items, s)
+			}
+		}
+		aud = strings.Join(items, ",")
+	}
+	iss, _ = claims["iss"].(string)
+	sub, _ = claims["sub"].(string)
+	return aud, iss, sub
 }
 
 // isDuplicateKeyError mendeteksi pelanggaran unique constraint Postgres

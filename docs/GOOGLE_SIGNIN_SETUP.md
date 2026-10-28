@@ -130,6 +130,74 @@ flutter build apk --release --target-platform android-arm64 `
 2. Backend membuat/menautkan akun otomatis (kolom `sso_provider=google`).
 3. Cek di database: `SELECT email, sso_provider FROM users WHERE sso_provider='google';`
 
+## Diagnosa cepat — "tombol Google error tapi server tidak menerima request"
+
+Ini adalah gejala **paling penting** untuk dikenali, karena artinya masalahnya
+di perangkat, bukan di backend.
+
+### Tanda pasti
+
+1. Di layar pengguna muncul dialog "Autentikasi gagal" dengan teks yang
+   menyebut kode error (mis. `kode: clientConfigurationError` atau
+   `Login Google gagal di perangkat (kode: ...)`).
+2. Di log server **tidak ada satu pun** request `POST /v1/auth/google`:
+
+```bash
+sudo journalctl -u malva-api --since "2 hours ago" | grep "/v1/auth/google"
+```
+
+Bila hasilnya kosong sementara pengguna sudah menekan tombol Google, berarti
+**Android OAuth Client belum dibuat** (atau SHA-1-nya belum cocok). Google
+Credential Manager menolak menerbitkan ID token sebelum request apa pun
+keluar dari HP, sehingga server tidak punya kesempatan mencatat apa pun.
+
+### Langkah perbaikan (persis, berurutan)
+
+1. Buka **Google Cloud Console** → **APIs & Services** → **Credentials**
+   untuk project `malva-7084e`:
+   `https://console.cloud.google.com/apis/credentials?project=malva-7084e`
+2. Klik **Create credentials** → **OAuth client ID**.
+3. Application type: **Android**.
+4. **Package name**: `id.malva.app`.
+5. **SHA-1 certificate fingerprint**: ambil nilai dari
+   `docs/ANDROID_SHA_FINGERPRINTS.md`:
+   - release: `9F:FC:92:19:10:39:31:77:B0:A4:5A:3C:4E:96:6E:90:DF:51:F5:91`
+   - debug: `C3:09:B8:22:F4:D0:2F:B3:D5:4A:88:B0:9C:ED:08:E9:0E:20:AA:01`
+
+   Buat **dua** OAuth client Android terpisah (satu per SHA-1) agar login
+   jalan di APK release **dan** saat `flutter run`.
+6. Klik **Create**, lalu tunggu 5–10 menit (propagasi Google).
+7. **Unduh ulang** `google-services.json`: Firebase Console →
+   ⚙️ Project settings → **Your apps** → Android (`id.malva.app`) →
+   `google-services.json`, lalu timpa `android/app/google-services.json`.
+8. **Verifikasi** file tersebut sekarang memuat Android OAuth Client:
+
+```bash
+grep -n '"client_type"' android/app/google-services.json
+# HARUS ada minimal satu baris: "client_type": 1   <- Android
+# Baris "client_type": 3 (Web) tetap ada dan tetap dipakai serverClientId.
+```
+
+9. Build ulang APK (client ID Web tetap sama, tidak berubah):
+
+```powershell
+flutter build apk --release --target-platform android-arm64 `
+  --dart-define=MALVA_API_BASE_URL=https://api.malva.web.id `
+  --dart-define=MALVA_GOOGLE_CLIENT_ID=910496426601-thlkor62046ftqplmon364p3qhobkntv.apps.googleusercontent.com
+```
+
+10. Uji lagi. Sekarang request `POST /v1/auth/google` **harus** muncul di
+    `journalctl`. Bila muncul tapi ditolak 401, lihat baris log
+    `validasi id_token Google gagal` — server kini mencatat `aud`, `iss`, dan
+    `expected_aud` agar ketidakcocokan audience langsung terlihat.
+
+### Selama belum diperbaiki
+
+Login **email + password tetap berfungsi** untuk pasien maupun profesional.
+Sampaikan ini ke pengguna agar tidak terblokir total.
+
+---
+
 ## Troubleshooting
 
 | Gejala | Penyebab | Solusi |
@@ -138,6 +206,7 @@ flutter build apk --release --target-platform android-arm64 `
 | Tombol Google tidak muncul / error konfigurasi | APK di-build tanpa `--dart-define` | Build ulang APK (CI otomatis memvalidasi + verifikasi) |
 | **Tidak ada respons sama sekali** (dialog akun tidak muncul, tanpa pesan) | (a) SHA-1 release belum didaftarkan → Google menolak diam-diam; (b) Play Services usang | Sejak 28 Okt 2026 app memakai timeout 60 dtk sehingga kasus ini kini menampilkan pesan jelas. Tetap: daftarkan SHA-1 release + update Play Services; tunggu 5–10 menit |
 | `DEVELOPER_ERROR` di HP | SHA-1 salah / belum didaftarkan | Daftarkan SHA-1 di OAuth client Android; tunggu 5–10 menit |
+| **Tombol Google error TAPI tidak ada request `/v1/auth/google` di log server** | Android OAuth Client belum dibuat (`google-services.json` hanya punya `client_type: 3`) | Ikuti bagian **Diagnosa cepat** di atas; verifikasi muncul `client_type: 1` |
 | "Dialog akun Google tidak muncul…" (pesan timeout baru) | SHA-1 belum terdaftar / Play Services | Ikuti pesan: cek OAuth client + Play Services, hubungi admin bila berlanjut |
 | "Email Google belum terverifikasi" | Akun Google belum verifikasi email | Gunakan akun Google terverifikasi |
 | Akses ditolak "has not completed the Google verification" | Status OAuth masih Testing | Tambahkan akun sebagai **Test user** di OAuth consent screen |
