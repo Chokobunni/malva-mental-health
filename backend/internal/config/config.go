@@ -14,6 +14,10 @@ type Config struct {
 	AllowedOrigins     []string
 	FCMCredentialsFile string
 	FCMCredentialsJSON string
+	// FCMProjectID adalah Firebase project ID untuk push notification.
+	// Kosong = otomatis dibaca dari `project_id` pada kredensial service
+	// account, sehingga backend selalu sinkron dengan project Firebase.
+	FCMProjectID       string
 	MaxLoginAttempts   int
 	LockoutDuration    int
 	MaxRequestBodySize int64
@@ -57,6 +61,7 @@ func Load() (Config, error) {
 		AllowedOrigins:     splitCSV(getenv("MALVA_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://localhost:8080")),
 		FCMCredentialsFile: os.Getenv("MALVA_FCM_CREDENTIALS_FILE"),
 		FCMCredentialsJSON: os.Getenv("MALVA_FCM_CREDENTIALS_JSON"),
+		FCMProjectID:       os.Getenv("MALVA_FCM_PROJECT_ID"),
 		MaxLoginAttempts:   5,
 		LockoutDuration:    15,
 		MaxRequestBodySize: 1 << 20,
