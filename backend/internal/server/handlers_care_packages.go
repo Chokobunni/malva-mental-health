@@ -249,31 +249,50 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 		writeError(w, http.StatusBadRequest, verr)
 		return
 	}
-	// Auto-generate meeting URL untuk sesi video. Prioritas: Google Meet via
-	// Calendar API (bila profesional sudah menautkan akun Google). Fallback:
-	// Jitsi Meet publik bila Calendar service tidak tersedia atau gagal.
+	// Link meeting untuk sesi video: selalu Google Meet, tanpa fallback.
+	// Bila pembuatan link gagal, sesi TIDAK dibuat agar pasien tidak menerima
+	// sesi video tanpa ruang pertemuan.
 	meetingURL := strings.TrimSpace(req.MeetingURL)
 	googleEventID := ""
 	sessionType := strings.ToLower(strings.TrimSpace(req.SessionType))
 	if sessionType == "video" && meetingURL == "" {
-		if s.calendar != nil {
-			endTime := at.Add(time.Duration(duration) * time.Minute)
-			eventID, meetURL, cerr := s.calendar.CreateMeetEvent(r.Context(), pkg.ProfessionalID, googlecal.MeetEventOptions{
-				Summary:   "Sesi Malva - " + pkg.PatientName,
-				StartTime: at,
-				EndTime:   endTime,
-			})
-			if cerr != nil {
-				s.logger.Warn("gagal membuat event Google Meet, fallback ke Jitsi", "error", cerr, "professional", pkg.ProfessionalID)
-			} else {
-				meetingURL = meetURL
-				googleEventID = eventID
+		if s.calendar == nil {
+			writeError(w, http.StatusNotImplemented, ErrMeetUnavailable)
+			return
+		}
+		opts := s.meetEventOptions(r.Context(), store.CareSession{
+			PatientID:        pkg.PatientID,
+			ProfessionalID:   pkg.ProfessionalID,
+			PatientName:      pkg.PatientName,
+			ProfessionalName: pkg.ProfessionalName,
+			SessionType:      "video",
+			ScheduledAt:      at,
+			DurationMinutes:  duration,
+		})
+		eventID, meetURL, cerr := s.calendar.CreateMeetEvent(r.Context(), pkg.ProfessionalID, opts)
+		if cerr != nil {
+			if errors.Is(cerr, googlecal.ErrReauthNeeded) {
+				writeError(w, http.StatusUnauthorized,
+					errors.New("akses Google Calendar profesional kedaluwarsa. Profesional perlu menautkan ulang akun Google"))
+				return
 			}
+			s.logger.Warn("gagal membuat event Google Meet", "error", cerr, "professional", pkg.ProfessionalID)
+			writeError(w, http.StatusBadGateway,
+				errors.New("gagal membuat link Google Meet. Coba lagi beberapa saat lagi"))
+			return
 		}
-		if meetingURL == "" {
-			roomSlug := fmt.Sprintf("malva-%s-%d", pkg.ID[:8], at.Unix())
-			meetingURL = "https://meet.jit.si/" + roomSlug
+		if strings.TrimSpace(meetURL) == "" {
+			if eventID != "" {
+				if cerr := s.calendar.CancelMeetEvent(r.Context(), pkg.ProfessionalID, eventID); cerr != nil {
+					s.logger.Warn("gagal membatalkan event Meet tanpa link", "error", cerr, "event_id", eventID)
+				}
+			}
+			writeError(w, http.StatusBadGateway,
+				errors.New("google tidak mengembalikan link Meet untuk event ini. Coba lagi"))
+			return
 		}
+		meetingURL = meetURL
+		googleEventID = eventID
 	}
 	cs, err := s.store.CreateCareSession(r.Context(), store.CareSession{
 		PackageID:       &pkg.ID,
@@ -293,10 +312,13 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 	s.notifyPatient(r, pkg.ProfessionalID, "session_scheduled",
 		"Sesi baru dijadwalkan", "Ada sesi baru yang dijadwalkan dengan pasien.",
 		map[string]string{"session_id": cs.ID, "patient_id": pkg.PatientID})
+	body := "Sesi dengan profesional dijadwalkan pada " + cs.ScheduledAt.In(wibLoc).Format("02 Jan 2006 15:04") + "."
+	if strings.TrimSpace(cs.MeetingURL) != "" {
+		body += " Link video call: " + cs.MeetingURL
+	}
 	s.notifyPatient(r, pkg.PatientID, "session_scheduled",
-		"Sesi berhasil dijadwalkan",
-		"Sesi dengan profesional dijadwalkan pada "+cs.ScheduledAt.In(wibLoc).Format("02 Jan 2006 15:04")+".",
-		map[string]string{"session_id": cs.ID})
+		"Sesi berhasil dijadwalkan", body,
+		map[string]string{"session_id": cs.ID, "meeting_url": cs.MeetingURL})
 	writeJSON(w, http.StatusCreated, map[string]any{"session": cs})
 }
 

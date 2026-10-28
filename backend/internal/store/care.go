@@ -619,6 +619,95 @@ func (s *Store) RescheduleCareSession(ctx context.Context, sessionID string, new
 	return s.GetCareSession(ctx, sessionID)
 }
 
+// UpdateCareSessionMeeting menyimpan link Meet + ID event Google Calendar
+// untuk satu sesi. Dipakai saat link dibuat/di-generate ulang.
+func (s *Store) UpdateCareSessionMeeting(ctx context.Context, sessionID, meetingURL, googleEventID string) (CareSession, error) {
+	const q = `UPDATE care_sessions
+		SET meeting_url = $1, google_event_id = $2, updated_at = now()
+		WHERE id = $3`
+	res, err := s.db.ExecContext(ctx, q,
+		strings.TrimSpace(meetingURL), strings.TrimSpace(googleEventID), sessionID)
+	if err != nil {
+		return CareSession{}, err
+	}
+	aff, _ := res.RowsAffected()
+	if aff == 0 {
+		return CareSession{}, errors.New("care session not found")
+	}
+	return s.GetCareSession(ctx, sessionID)
+}
+
+// ListCareSessionsNeedingMeetLink mengembalikan sesi video yang masih
+// berstatus scheduled tetapi belum punya link Google Meet. Termasuk sesi yang
+// masih menyimpan link penyedia lama (Jitsi) agar bisa diganti.
+func (s *Store) ListCareSessionsNeedingMeetLink(ctx context.Context, limit int) ([]CareSession, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	const q = `SELECT ` + careSessionColumns + `
+		FROM care_sessions cs
+		LEFT JOIN users pat ON pat.id = cs.patient_id
+		LEFT JOIN users pro ON pro.id = cs.professional_id
+		WHERE cs.session_type = 'video'
+		  AND cs.status = 'scheduled'
+		  AND COALESCE(cs.meeting_url, '') NOT LIKE '%meet.google.com%'
+		  AND cs.scheduled_at > now()
+		ORDER BY cs.scheduled_at ASC
+		LIMIT $1`
+	rows, err := s.db.QueryContext(ctx, q, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []CareSession
+	for rows.Next() {
+		cs, err := scanCareSession(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, cs)
+	}
+	return out, rows.Err()
+}
+
+// MarkSessionReminderSent menandai pengingat sesi sudah dikirim agar tidak
+// terkirim dua kali oleh sweeper.
+func (s *Store) MarkSessionReminderSent(ctx context.Context, sessionID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE care_sessions SET reminder_sent_at = now() WHERE id = $1 AND reminder_sent_at IS NULL`,
+		sessionID)
+	return err
+}
+
+// ListSessionsForReminder mengembalikan sesi terjadwal yang akan mulai dalam
+// rentang [from, to] dan belum pernah dikirimi pengingat.
+func (s *Store) ListSessionsForReminder(ctx context.Context, from, to time.Time) ([]CareSession, error) {
+	const q = `SELECT ` + careSessionColumns + `
+		FROM care_sessions cs
+		LEFT JOIN users pat ON pat.id = cs.patient_id
+		LEFT JOIN users pro ON pro.id = cs.professional_id
+		WHERE cs.status = 'scheduled'
+		  AND cs.reminder_sent_at IS NULL
+		  AND cs.scheduled_at >= $1
+		  AND cs.scheduled_at <= $2
+		ORDER BY cs.scheduled_at ASC
+		LIMIT 200`
+	rows, err := s.db.QueryContext(ctx, q, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []CareSession
+	for rows.Next() {
+		cs, err := scanCareSession(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, cs)
+	}
+	return out, rows.Err()
+}
+
 // UpdateCareSessionDetail meeting_url / ringkasan sesi / catatan privat.
 func (s *Store) UpdateCareSessionDetail(ctx context.Context, sessionID, meetingURL, summary, privateNote string) (CareSession, error) {
 	const q = `UPDATE care_sessions

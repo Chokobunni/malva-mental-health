@@ -304,6 +304,21 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (User, error) 
 	return user, err
 }
 
+// GetUserEmail mengembalikan email satu user. Dipakai untuk mengundang
+// peserta ke event Google Calendar. String kosong bila user tidak ada.
+func (s *Store) GetUserEmail(ctx context.Context, userID string) (string, error) {
+	var email string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(email, '') FROM users WHERE id = $1`, userID).Scan(&email)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return strings.TrimSpace(email), nil
+}
+
 func (s *Store) GetUserByID(ctx context.Context, id string) (User, error) {
 	var user User
 	err := s.db.QueryRowContext(ctx, `

@@ -70,8 +70,24 @@ func run() error {
 	worker := notify.NewOutboxWorker(st, provider, hub, logger)
 	go worker.Run(ctx)
 
+	app := server.New(cfg, authManager, st, hub, logger)
+
+	// Backfill sekali saat start: sesi video terjadwal yang belum punya link
+	// Google Meet (termasuk yang masih memakai link penyedia lama) dibuatkan
+	// sekarang, agar pasien tidak menemukan sesi tanpa ruang pertemuan.
+	go func() {
+		bctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		if n, err := app.BackfillMissingMeetLinks(bctx, 25); err != nil {
+			logger.Warn("backfill link Meet gagal", "error", err)
+		} else if n > 0 {
+			logger.Info("backfill link Meet selesai", "created", n)
+		}
+	}()
+
 	// Sweeper paket/sesi: kedaluwarsakan paket 6 minggu, hanguskan
-	// pending_payment, auto-complete sesi lama. Tiap 10 menit.
+	// pending_payment, auto-complete sesi lama, dan kirim pengingat sesi
+	// video yang akan dimulai. Tiap 10 menit.
 	go func() {
 		ticker := time.NewTicker(10 * time.Minute)
 		defer ticker.Stop()
@@ -81,10 +97,15 @@ func run() error {
 			exp, expS, done, err := st.SweepCareState(sctx)
 			if err != nil {
 				logger.Warn("care sweep failed", "error", err)
-				return
-			}
-			if exp+expS+done > 0 {
+			} else if exp+expS+done > 0 {
 				logger.Info("care sweep", "expired_packages", exp, "expired_sessions", expS, "completed_sessions", done)
+			}
+			// Pengingat sesi video: jendela 15-25 menit sebelum mulai, lebih
+			// lebar dari interval ticker agar tidak ada sesi yang terlewat.
+			if sent, rerr := app.RunSessionReminders(sctx); rerr != nil {
+				logger.Warn("session reminder failed", "error", rerr)
+			} else if sent > 0 {
+				logger.Info("session reminders sent", "count", sent)
 			}
 		}
 		sweep()
@@ -98,7 +119,6 @@ func run() error {
 		}
 	}()
 
-	app := server.New(cfg, authManager, st, hub, logger)
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           app.Routes(),

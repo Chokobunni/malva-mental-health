@@ -67,7 +67,11 @@ Status `Aktif` berarti endpoint terdaftar di `Routes()` dan diimplementasikan di
 | FEAT-045 | Tandai kehadiran / ubah status sesi | Profesional, Pasien | `PATCH /v1/care-sessions/{session_id}` | Aktif |
 | FEAT-046 | Reschedule sesi | Pasien, Profesional | `POST /v1/care-sessions/{session_id}/reschedule` | Aktif |
 | FEAT-047 | Refund / kredit sesi | Pasien, Profesional, Admin | `POST /v1/care-sessions/{session_id}/refund`, `GET /v1/care-refunds` | Aktif |
-| FEAT-048 | Quick video call (Meet) | Profesional | `POST /v1/meet/quick` | Aktif (butuh Google; fallback Jitsi) |
+| FEAT-048 | Quick video call (Meet) | Profesional | `POST /v1/meet/quick` | Aktif (wajib Google Meet, tanpa fallback) |
+| FEAT-049 | Link Meet otomatis untuk sesi video | Pasien, Profesional | `POST /v1/care-sessions/{session_id}/meet-link` | Aktif — dibuat saat sesi dijadwalkan/dibooking, bisa diulang |
+| FEAT-049a | Undangan + pengingat Google Calendar ke pasien | Pasien | (internal, `calendar.go` attendee) | Aktif |
+| FEAT-049b | Status tautan Google Calendar | Profesional | `GET /v1/google/status` | Aktif |
+| FEAT-049c | Pengingat sesi otomatis (15–25 menit sebelum) | Pasien, Profesional | (sweeper backend) | Aktif |
 
 ## 6. Chat & Realtime
 

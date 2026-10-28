@@ -29,9 +29,14 @@ type CalendarService struct {
 
 // MeetEventOptions parameter pembuatan event Meet baru.
 type MeetEventOptions struct {
-	Summary   string
-	StartTime time.Time
-	EndTime   time.Time
+	Summary string
+	// Description tampil di undangan kalender (opsional).
+	Description string
+	StartTime   time.Time
+	EndTime     time.Time
+	// AttendeeEmails diundang ke event sehingga menerima email undangan dan
+	// pengingat dari Google Calendar. Kosong = event hanya milik profesional.
+	AttendeeEmails []string
 }
 
 // NewCalendarService membuat instance CalendarService.
@@ -114,7 +119,8 @@ func (c *CalendarService) CreateMeetEvent(ctx context.Context, professionalUserI
 	}
 	requestID := fmt.Sprintf("malva-%d", time.Now().UnixNano())
 	event := &calendar.Event{
-		Summary: opts.Summary,
+		Summary:     opts.Summary,
+		Description: opts.Description,
 		Start: &calendar.EventDateTime{
 			DateTime: opts.StartTime.Format(time.RFC3339),
 			TimeZone: "Asia/Jakarta",
@@ -132,7 +138,19 @@ func (c *CalendarService) CreateMeetEvent(ctx context.Context, professionalUserI
 			},
 		},
 	}
+	// Undang peserta (pasien) agar menerima email undangan + pengingat.
+	for _, email := range opts.AttendeeEmails {
+		email = strings.TrimSpace(email)
+		if email == "" {
+			continue
+		}
+		event.Attendees = append(event.Attendees, &calendar.EventAttendee{Email: email})
+	}
 	call := svc.Events.Insert("primary", event).ConferenceDataVersion(1)
+	if len(event.Attendees) > 0 {
+		// sendUpdates=all: Google mengirim email undangan ke peserta.
+		call = call.SendUpdates("all")
+	}
 	created, err := call.Context(ctx).Do()
 	if err != nil {
 		return "", "", fmt.Errorf("gagal membuat event Meet: %w", err)

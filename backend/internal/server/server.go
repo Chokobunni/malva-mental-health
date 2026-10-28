@@ -187,13 +187,14 @@ func New(cfg config.Config, authManager auth.Manager, st *store.Store, hub *real
 	} else {
 		logger.Info("SOS WhatsApp channel active", "gateway", "fonnte")
 	}
-	// Google Calendar/Meet: aktif bila client secret tersedia. Tanpa ini,
-	// sesi video tetap bisa memakai Jitsi sebagai fallback.
+	// Google Calendar/Meet: aktif bila client secret tersedia. Sesi video
+	// HANYA memakai Google Meet — tidak ada penyedia fallback. Tanpa secret,
+	// pembuatan sesi video ditolak dengan pesan yang jelas.
 	if cfg.GoogleClientSecret != "" {
 		srv.calendar = googlecal.NewCalendarService(cfg, st)
 		logger.Info("Google Calendar/Meet integration active")
 	} else {
-		logger.Warn("MALVA_GOOGLE_CLIENT_SECRET belum diisi; Google Meet nonaktif (fallback Jitsi)")
+		logger.Warn("MALVA_GOOGLE_CLIENT_SECRET belum diisi; sesi video tidak bisa dibuat (Google Meet satu-satunya penyedia)")
 	}
 	return srv
 }
@@ -293,6 +294,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/care-sessions", s.requireAuth(s.listCareSessions))
 	mux.HandleFunc("PATCH /v1/care-sessions/{session_id}", s.requireAuth(s.updateCareSession))
 	mux.HandleFunc("POST /v1/care-sessions/{session_id}/reschedule", s.requireAuth(s.rescheduleCareSession))
+	// Link Google Meet: buat / ambil ulang untuk sesi video (pasien & profesional).
+	mux.HandleFunc("POST /v1/care-sessions/{session_id}/meet-link", s.requireAuth(s.ensureMeetLinkHandler))
+	// Status tautan Google Calendar profesional (tanpa membocorkan token).
+	mux.HandleFunc("GET /v1/google/status", s.requireAuth(s.googleStatusHandler))
 	// Quick video call (Google Meet ad-hoc) untuk profesional.
 	mux.HandleFunc("POST /v1/meet/quick", s.requireAuth(s.createQuickMeet))
 	// Refund/kredit paket (pro-cancel): eksekusi refund uang / catat kredit.
@@ -1868,11 +1873,17 @@ func (s *Server) notifyProfessionalsForCrisis(r *http.Request, session store.Scr
 }
 
 func (s *Server) notifyPatient(r *http.Request, patientID, kind, title, body string, data map[string]string) {
+	s.notifyUser(r.Context(), patientID, kind, title, body, data)
+}
+
+// notifyUser mengirim notifikasi tanpa membutuhkan *http.Request, sehingga
+// bisa dipakai background job (mis. pengingat sesi).
+func (s *Server) notifyUser(ctx context.Context, patientID, kind, title, body string, data map[string]string) {
 	if data == nil {
 		data = map[string]string{}
 	}
 	data["kind"] = kind
-	notification, err := s.store.CreateNotification(r.Context(), store.Notification{
+	notification, err := s.store.CreateNotification(ctx, store.Notification{
 		UserID: patientID,
 		Type:   kind,
 		Title:  title,

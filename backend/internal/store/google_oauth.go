@@ -45,6 +45,31 @@ func (s *Store) GetGoogleToken(ctx context.Context, userID string) (*GoogleOAuth
 	return &tok, nil
 }
 
+// GoogleTokenInfo ringkasan status tautan Google tanpa membocorkan token.
+// Dipakai endpoint GET /v1/google/status.
+type GoogleTokenInfo struct {
+	HasRefreshToken bool      `json:"has_refresh_token"`
+	Scope           string    `json:"scope"`
+	TokenExpiry     time.Time `json:"expires_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// GetGoogleTokenInfo mengambil ringkasan status token Google milik user.
+// Mengembalikan sql.ErrNoRows bila user belum pernah menautkan akun.
+func (s *Store) GetGoogleTokenInfo(ctx context.Context, userID string) (GoogleTokenInfo, error) {
+	const q = `SELECT COALESCE(refresh_token, '') <> '', COALESCE(scope, ''),
+			token_expiry, updated_at
+		FROM google_oauth_tokens WHERE user_id = $1`
+	var info GoogleTokenInfo
+	err := s.db.QueryRowContext(ctx, q, userID).Scan(
+		&info.HasRefreshToken, &info.Scope, &info.TokenExpiry, &info.UpdatedAt,
+	)
+	if err != nil {
+		return GoogleTokenInfo{}, err
+	}
+	return info, nil
+}
+
 // DeleteGoogleToken menghapus token OAuth Google milik user (mis. saat
 // unlink atau revokasi akses). Tidak error bila baris tidak ada.
 func (s *Store) DeleteGoogleToken(ctx context.Context, userID string) error {

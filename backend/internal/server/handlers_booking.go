@@ -174,13 +174,21 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) error {
 		if cerr != nil {
 			return cerr
 		}
+		// Sesi pertama paket bisa bertipe video: buat link Google Meet.
+		// Best-effort — pembayaran sudah lunas, kegagalan Google tidak boleh
+		// membatalkan aktivasi paket. Link bisa dibuat menyusul lewat
+		// POST /v1/care-sessions/{id}/meet-link.
+		cs = s.ensureMeetLinkBestEffort(ctx, cs)
 		s.notifyPatient(r, booking.ProfessionalID, "package_activated",
 			"Paket baru aktif", "Pasien membeli paket 4 sesi.",
 			map[string]string{"package_id": pkg.ID, "patient_id": booking.PatientID})
+		pkgBody := "Paket 4 sesi / 6 minggu aktif. Sesi pertama: " + start.In(wibLoc).Format("02 Jan 2006 15:04") + "."
+		if strings.TrimSpace(cs.MeetingURL) != "" {
+			pkgBody += " Link video call: " + cs.MeetingURL
+		}
 		s.notifyPatient(r, booking.PatientID, "package_activated",
-			"Paket aktif!",
-			"Paket 4 sesi / 6 minggu aktif. Sesi pertama: "+start.In(wibLoc).Format("02 Jan 2006 15:04")+".",
-			map[string]string{"package_id": pkg.ID, "session_id": cs.ID})
+			"Paket aktif!", pkgBody,
+			map[string]string{"package_id": pkg.ID, "session_id": cs.ID, "meeting_url": cs.MeetingURL})
 		return nil
 	}
 	start, perr := parseWIBDateTime(booking.BookingDate + "T" + booking.SlotTime)
@@ -219,15 +227,21 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) error {
 	if cerr != nil {
 		return cerr
 	}
+	// Quick consult video: buat link Google Meet (best-effort, lihat catatan
+	// pada alur aktivasi paket di atas).
+	cs = s.ensureMeetLinkBestEffort(ctx, cs)
 	// Quick consult: buat relasi agar chat sesi bisa dipakai (tanpa data sharing).
 	_, _ = s.store.LinkPatientToProfessional(ctx, booking.PatientID, booking.ProfessionalID)
 	s.notifyPatient(r, booking.ProfessionalID, "session_scheduled",
 		"Sesi baru dijadwalkan", "Ada sesi quick consult baru.",
 		map[string]string{"session_id": cs.ID, "patient_id": booking.PatientID})
+	quickBody := "Sesi pada " + start.In(wibLoc).Format("02 Jan 2006 15:04") + "."
+	if strings.TrimSpace(cs.MeetingURL) != "" {
+		quickBody += " Link video call: " + cs.MeetingURL
+	}
 	s.notifyPatient(r, booking.PatientID, "session_scheduled",
-		"Sesi berhasil dijadwalkan",
-		"Sesi pada "+start.In(wibLoc).Format("02 Jan 2006 15:04")+".",
-		map[string]string{"session_id": cs.ID})
+		"Sesi berhasil dijadwalkan", quickBody,
+		map[string]string{"session_id": cs.ID, "meeting_url": cs.MeetingURL})
 	return nil
 }
 
