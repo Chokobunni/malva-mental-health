@@ -225,7 +225,8 @@ class _ProfessionalProfileEditorScreenState
       // Validasi ekstensi sisi klien.
       final ext = '.' + picked.name.split('.').last.toLowerCase();
       if (!_allowedImageExtensions.contains(ext)) {
-        setState(() => _error = 'Format foto tidak didukung. Gunakan JPEG, PNG, atau WebP.');
+        setState(() => _error =
+            'Format foto tidak didukung. Gunakan JPEG, PNG, atau WebP.');
         return;
       }
 
@@ -322,7 +323,8 @@ class _ProfessionalProfileEditorScreenState
   void _generateAiAvatar() {
     final userId = _cred?.userId ?? widget.session?.backendUserId ?? '';
     if (userId.isEmpty) {
-      setState(() => _error = 'User ID tidak tersedia untuk menghasilkan avatar AI.');
+      setState(() =>
+          _error = 'User ID tidak tersedia untuk menghasilkan avatar AI.');
       return;
     }
     setState(() {
@@ -412,8 +414,9 @@ class _ProfessionalProfileEditorScreenState
                             alignment: WrapAlignment.center,
                             children: [
                               OutlinedButton.icon(
-                                onPressed:
-                                    _isUploadingPhoto ? null : _pickAndUploadPhoto,
+                                onPressed: _isUploadingPhoto
+                                    ? null
+                                    : _pickAndUploadPhoto,
                                 icon: _isUploadingPhoto
                                     ? const SizedBox(
                                         width: 16,
@@ -585,8 +588,7 @@ class _ProfessionalProfileEditorScreenState
                                           child: CircularProgressIndicator(
                                               strokeWidth: 2),
                                         )
-                                      : const Icon(
-                                          Icons.video_library_rounded,
+                                      : const Icon(Icons.video_library_rounded,
                                           size: 18),
                                   label: Text(_isUploadingVideo
                                       ? 'Mengunggah video...'
@@ -603,7 +605,8 @@ class _ProfessionalProfileEditorScreenState
                                 width: 120,
                                 height: 80,
                                 decoration: BoxDecoration(
-                                  color: MalvaColors.seed.withValues(alpha: 0.1),
+                                  color:
+                                      MalvaColors.seed.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: const Center(

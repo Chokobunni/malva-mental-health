@@ -81,7 +81,8 @@ class RealtimeService {
       final type = decoded['type']?.toString() ?? '';
       if (type.isEmpty) return;
       final dataRaw = decoded['data'];
-      final data = dataRaw is Map<String, dynamic> ? dataRaw : <String, dynamic>{};
+      final data =
+          dataRaw is Map<String, dynamic> ? dataRaw : <String, dynamic>{};
       if (!_eventController.isClosed) {
         _eventController.add(RealtimeEvent(type: type, data: data));
       }

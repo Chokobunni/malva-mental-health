@@ -420,7 +420,8 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
 
   /// Login profesional via Google (ID Token sudah diverifikasi google_sign_in).
   /// Mengembalikan sesi + flag needsCompletion untuk profesional baru tanpa STR/SIP.
-  Future<({AuthSession session, bool needsCompletion})> loginProfessionalWithGoogle({
+  Future<({AuthSession session, bool needsCompletion})>
+      loginProfessionalWithGoogle({
     required String idToken,
   }) async {
     final api = _apiClient;

@@ -241,7 +241,8 @@ class _ProPatientDetailScreenState
               if (_failedSections.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: SoftCard(bordered: true, 
+                  child: SoftCard(
+                    bordered: true,
                     color: MalvaColors.amber.withValues(alpha: 0.10),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -298,7 +299,8 @@ class _ProPatientDetailScreenState
                     children: [
                       if (_packages.isNotEmpty)
                         for (final p in _packages) ...[
-                          SoftCard(bordered: true, 
+                          SoftCard(
+                            bordered: true,
                             padding: const EdgeInsets.all(12),
                             color: p.isActive
                                 ? MalvaColors.mint.withValues(alpha: 0.08)
@@ -344,7 +346,8 @@ class _ProPatientDetailScreenState
                         ],
                       if (_sessions.isNotEmpty)
                         for (final s in _sessions.take(5)) ...[
-                          SoftCard(bordered: true, 
+                          SoftCard(
+                            bordered: true,
                             padding: const EdgeInsets.all(12),
                             child: Row(
                               children: [
@@ -715,7 +718,8 @@ class _ProPatientDetailScreenState
               const SectionLabel('Rencana & catatan',
                   icon: Icons.edit_note_rounded),
               const SectionLabel('Health record & obat'),
-              SoftCard(bordered: true, 
+              SoftCard(
+                bordered: true,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -771,7 +775,8 @@ class _ProPatientDetailScreenState
                 )
               else
                 for (final n in _notes.take(5)) ...[
-                  SoftCard(bordered: true, 
+                  SoftCard(
+                    bordered: true,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -801,7 +806,8 @@ class _ProPatientDetailScreenState
               const SizedBox(height: 22),
               const SectionLabel('Akses data', icon: Icons.lock_open_rounded),
               if (_restricted != null)
-                SoftCard(bordered: true, 
+                SoftCard(
+                  bordered: true,
                   color: MalvaColors.amber.withValues(alpha: 0.12),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -814,7 +820,8 @@ class _ProPatientDetailScreenState
                   ),
                 )
               else
-                SoftCard(bordered: true, 
+                SoftCard(
+                  bordered: true,
                   color: MalvaColors.mint.withValues(alpha: 0.08),
                   child: const Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1101,7 +1108,8 @@ class _AssessmentTrendCard extends StatelessWidget {
     final dateLabel = _shortDate(latest.sharedAt ?? latest.createdAt);
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
-    return SoftCard(bordered: true, 
+    return SoftCard(
+      bordered: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

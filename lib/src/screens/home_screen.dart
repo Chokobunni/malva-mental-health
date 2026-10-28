@@ -419,7 +419,8 @@ class _UpcomingSessionCard extends StatelessWidget {
     final name = session.professionalName.isEmpty
         ? 'Profesional'
         : session.professionalName;
-    return SoftCard(bordered: true, 
+    return SoftCard(
+      bordered: true,
       color: MalvaColors.seed.withValues(alpha: 0.06),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -522,7 +523,8 @@ class _MoodMedicationBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SoftCard(bordered: true, 
+    return SoftCard(
+      bordered: true,
       onTap: onTap,
       color: MalvaColors.orchid.withValues(alpha: 0.10),
       child: Row(
@@ -598,7 +600,8 @@ class _HomeGridTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SoftCard(bordered: true, 
+    return SoftCard(
+      bordered: true,
       onTap: item.onTap,
       padding: const EdgeInsets.all(14),
       child: Row(
@@ -785,8 +788,8 @@ class _JoinMeetingBannerState extends ConsumerState<_JoinMeetingBanner> {
             const CircleAvatar(
               radius: 20,
               backgroundColor: MalvaColors.mint,
-              child: Icon(Icons.videocam_rounded,
-                  color: Colors.white, size: 20),
+              child:
+                  Icon(Icons.videocam_rounded, color: Colors.white, size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(

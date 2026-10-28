@@ -98,7 +98,8 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
             if (_isLoading)
               const Center(child: CircularProgressIndicator())
             else if (_error != null)
-              SoftCard(bordered: true, 
+              SoftCard(
+                bordered: true,
                 child: Column(
                   children: [
                     Text(_error!,
@@ -115,7 +116,8 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                 ),
               )
             else ...[
-              SoftCard(bordered: true, 
+              SoftCard(
+                bordered: true,
                 color: MalvaColors.plum,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -167,7 +169,8 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
               ),
               const SizedBox(height: 12),
               const SectionLabel('Payout'),
-              SoftCard(bordered: true, 
+              SoftCard(
+                bordered: true,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -224,7 +227,8 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                 )
               else
                 for (final t in _transactions) ...[
-                  SoftCard(bordered: true, 
+                  SoftCard(
+                    bordered: true,
                     padding: const EdgeInsets.all(14),
                     child: Row(
                       children: [

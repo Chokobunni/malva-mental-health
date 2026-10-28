@@ -170,8 +170,7 @@ class _ProfessionalCompletionScreenState
             items: const [
               DropdownMenuItem(
                   value: 'Sp.KJ', child: Text('Sp.KJ — Psikiater')),
-              DropdownMenuItem(
-                  value: 'M.Psi', child: Text('M.Psi — Psikolog')),
+              DropdownMenuItem(value: 'M.Psi', child: Text('M.Psi — Psikolog')),
             ],
             onChanged: (v) =>
                 setState(() => _specialization = v ?? _specialization),

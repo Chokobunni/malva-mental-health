@@ -1633,8 +1633,8 @@ class MalvaApiClient {
 
   /// Status tautan Google Calendar profesional.
   /// GET /v1/google/status
-  Future<({bool serverConfigured, bool connected, String scope})>
-      googleStatus({required String accessToken}) async {
+  Future<({bool serverConfigured, bool connected, String scope})> googleStatus(
+      {required String accessToken}) async {
     final payload = await _send(
       'GET',
       '/v1/google/status',
@@ -2169,7 +2169,8 @@ class MalvaApiClient {
       // Coba ekstrak pesan error dari respons JSON.
       try {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
-        final msg = body['error']?.toString() ?? 'Unggahan gagal (${response.statusCode}).';
+        final msg = body['error']?.toString() ??
+            'Unggahan gagal (${response.statusCode}).';
         throw MalvaApiException(msg);
       } on Object {
         throw MalvaApiException('Unggahan gagal (${response.statusCode}).');
@@ -3040,6 +3041,7 @@ class BackendHealthRecord {
   final String primaryProfessional;
   final DateTime? updatedAt;
   final int medicationCount;
+
   /// Daftar obat aktif pasien (diisi server sejak perbaikan Bug #5b).
   final List<BackendHealthRecordMed> medications;
 }
@@ -3845,8 +3847,7 @@ class BackendCareSession {
   /// kelonggaran bila sesi molor.
   static const Duration joinClosesAfterEnd = Duration(minutes: 30);
 
-  DateTime? get _joinOpensAt =>
-      scheduledDateTime?.subtract(joinOpensBefore);
+  DateTime? get _joinOpensAt => scheduledDateTime?.subtract(joinOpensBefore);
 
   DateTime? get _joinClosesAt {
     final start = scheduledDateTime;
