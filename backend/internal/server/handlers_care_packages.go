@@ -251,10 +251,15 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 	}
 	// Link meeting untuk sesi video: selalu Google Meet, tanpa fallback.
 	// Bila pembuatan link gagal, sesi TIDAK dibuat agar pasien tidak menerima
-	// sesi video tanpa ruang pertemuan.
+	// sesi video tanpa ruang pertemuan. Link manual pun wajib Google Meet
+	// agar tidak ada sesi video dengan ruang dari penyedia lain.
 	meetingURL := strings.TrimSpace(req.MeetingURL)
 	googleEventID := ""
 	sessionType := strings.ToLower(strings.TrimSpace(req.SessionType))
+	if meetingURL != "" && !isGoogleMeetURL(meetingURL) {
+		writeError(w, http.StatusBadRequest, errors.New("link meeting harus berupa link Google Meet (meet.google.com). Kosongkan untuk membuat otomatis"))
+		return
+	}
 	if sessionType == "video" && meetingURL == "" {
 		if s.calendar == nil {
 			writeError(w, http.StatusNotImplemented, ErrMeetUnavailable)
@@ -367,6 +372,10 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 	if status == "" {
 		if !isProf {
 			writeError(w, http.StatusForbidden, errors.New("only professionals can update session detail"))
+			return
+		}
+		if trimmed := strings.TrimSpace(req.MeetingURL); trimmed != "" && !isGoogleMeetURL(trimmed) {
+			writeError(w, http.StatusBadRequest, errors.New("link meeting harus berupa link Google Meet (meet.google.com). Kosongkan untuk membuat otomatis"))
 			return
 		}
 		updated, err := s.store.UpdateCareSessionDetail(r.Context(), sessionID, req.MeetingURL, req.SummaryForPatient, req.PrivateNote)
@@ -554,9 +563,14 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 		other = cs.ProfessionalID
 		title = "Sesi di-reschedule pasien"
 	}
+	reschedBody := "Sesi dipindahkan ke " + at.In(wibLoc).Format("02 Jan 2006 15:04") + "."
+	reschedPayload := map[string]string{"session_id": sessionID}
+	if strings.TrimSpace(updated.MeetingURL) != "" {
+		reschedBody += " Link video call: " + updated.MeetingURL
+		reschedPayload["meeting_url"] = updated.MeetingURL
+	}
 	s.notifyPatient(r, other, "session_rescheduled", title,
-		"Sesi dipindahkan ke "+at.In(wibLoc).Format("02 Jan 2006 15:04")+".",
-		map[string]string{"session_id": sessionID})
+		reschedBody, reschedPayload)
 	writeJSON(w, http.StatusOK, map[string]any{"session": updated})
 }
 

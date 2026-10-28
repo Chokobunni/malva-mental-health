@@ -3,18 +3,31 @@
 Gunakan fingerprint berikut saat membuat **Android OAuth Client** di Google
 Cloud Console untuk aplikasi Malva.
 
-## Debug keystore (dipakai APK yang dibagikan saat ini)
+## Release keystore (APK produksi saat ini)
 
-APK release yang dibangun tanpa `android/key.properties` ditandatangani dengan
-debug keystore (`%USERPROFILE%\.android\debug.keystore`), jadi fingerprint
-debug inilah yang cocok untuk testing.
+APK `Malva-release-*.apk` yang dipublish 28 Okt 2026 ditandatangani dengan
+release keystore (`android/malva-release-key.jks`, alias `malva` —
+gitignored, JANGAN di-commit). **Fingerprint inilah yang WAJIB terdaftar**
+sebagai Android OAuth Client, kalau tidak Login Google di APK release gagal
+tanpa pesan / `ApiException: 10`.
+
+| Algoritma | Fingerprint |
+|---|---|
+| SHA-1 | `9F:FC:92:19:10:39:31:77:B0:A4:5A:3C:4E:96:6E:90:DF:51:F5:91` |
+| SHA-256 | `96:5F:74:30:EC:7F:67:A4:4B:7A:99:E8:3F:15:5E:60:11:16:FF:16:C1:8F:A8:DB:57:A4:E7:9D:E4:F2:D3:00` |
+
+Keystore valid 28 Okt 2026 – 15 Mar 2054.
+
+## Debug keystore (build lokal / flutter run)
+
+APK debug / `flutter run` ditandatangani dengan debug keystore
+(`%USERPROFILE%\.android\debug.keystore`). Daftarkan JUGA sebagai OAuth
+client terpisah agar login Google jalan saat development:
 
 | Algoritma | Fingerprint |
 |---|---|
 | SHA-1 | `C3:09:B8:22:F4:D0:2F:B3:D5:4A:88:B0:9C:ED:08:E9:0E:20:AA:01` |
 | SHA-256 | `49:6F:22:F9:78:FB:84:CA:21:0D:BB:70:F2:87:F7:A4:69:53:34:0B:D2:47:AC:38:9F:78:BA:62:3D:94:75:57` |
-
-Keystore ini valid dari 30 Juli 2026 sampai 22 Juli 2056.
 
 ## Cara mengecek ulang
 

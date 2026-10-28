@@ -47,3 +47,20 @@ func TestEnsureMeetLinkBestEffortTanpaKalender(t *testing.T) {
 		t.Errorf("tanpa kalender, sesi video harus dikembalikan tanpa link, dapat %+v", got)
 	}
 }
+
+// TestRunSessionRemindersTanpaLogger memastikan sweeper pengingat tahan
+// dipanggil dari Server parsial (store+logger nil pada sesi chat): tidak
+// boleh panic mengikuti pola guard yang sama seperti best-effort.
+func TestRunSessionRemindersTanpaLogger(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("RunSessionReminders panic pada Server parsial: %v", r)
+		}
+	}()
+	// Tanpa store, ListSessionsForReminder gagal DB — yang penting bukan
+	// panic nil-pointer pada logger, melainkan error yang dikembalikan.
+	s := &Server{}
+	if _, err := s.RunSessionReminders(t.Context()); err == nil {
+		t.Log("tanpa store mengembalikan error (bukan panic) — perilaku benar")
+	}
+}

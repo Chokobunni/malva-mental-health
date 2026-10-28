@@ -32,6 +32,11 @@ const passwordRequirementHint =
     'Min. 8 karakter: huruf besar + kecil + angka + simbol.';
 
 /// Menampilkan error apapun dari proses autentikasi sebagai dialog ramah.
+///
+/// Perbaikan 28 Okt 2026 (insiden login Google tanpa pesan): error yang
+/// BUKAN AuthFailure/MalvaApiException (mis. TimeoutException bila lolos,
+/// StateError, dsb.) sebelumnya jatuh ke pesan generik. Kini pesan asli
+/// error tetap ditampilkan agar tidak ada lagi kegagalan yang "sunyi".
 void showAuthFailure(BuildContext context, Object error) {
   if (error is AuthFailure) {
     showAuthError(context, error.message);
@@ -39,6 +44,13 @@ void showAuthFailure(BuildContext context, Object error) {
   }
   if (error is MalvaApiException) {
     showAuthError(context, error.message);
+    return;
+  }
+  final raw = error.toString();
+  // Potong prefix "Exception: " agar ramah dibaca, tapi isi tetap asli.
+  final cleaned = raw.replaceFirst(RegExp(r'^(Exception|Error)\s*:\s*'), '');
+  if (cleaned.trim().isNotEmpty) {
+    showAuthError(context, cleaned.trim());
     return;
   }
   showAuthError(context, 'Terjadi kesalahan tak terduga. Silakan coba lagi.');

@@ -196,11 +196,22 @@ func (s *Server) ensureMeetLinkHandler(w http.ResponseWriter, r *http.Request, c
 // mencegah pengingat ganda.
 func (s *Server) RunSessionReminders(ctx context.Context) (int, error) {
 	now := clock.Now()
+	if s.store == nil {
+		return 0, errors.New("store belum diinisialisasi")
+	}
 	sessions, err := s.store.ListSessionsForReminder(ctx, now.Add(15*time.Minute), now.Add(25*time.Minute))
 	if err != nil {
 		return 0, err
 	}
 	sent := 0
+	logWarn := func(msg string, args ...any) {
+		// s.logger selalu terisi pada Server produksi (dibuat di New), guard
+		// ini menjaga Server parsial (test) — pola sama seperti
+		// ensureMeetLinkBestEffort.
+		if s.logger != nil {
+			s.logger.Warn(msg, args...)
+		}
+	}
 	for _, cs := range sessions {
 		// Sesi video tanpa link: coba buat sekarang agar pengingat berisi link.
 		if cs.SessionType == "video" {
@@ -223,7 +234,7 @@ func (s *Server) RunSessionReminders(ctx context.Context) (int, error) {
 			"Sesi dimulai sebentar lagi", profBody,
 			map[string]string{"session_id": cs.ID, "meeting_url": cs.MeetingURL, "patient_id": cs.PatientID})
 		if err := s.store.MarkSessionReminderSent(ctx, cs.ID); err != nil {
-			s.logger.Warn("gagal menandai pengingat terkirim", "error", err, "session", cs.ID)
+			logWarn("gagal menandai pengingat terkirim", "error", err, "session", cs.ID)
 			continue
 		}
 		sent++

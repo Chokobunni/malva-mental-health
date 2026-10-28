@@ -21,11 +21,23 @@ Server produksi: `https://api.malva.web.id` (Azure VM).
 | Web Client ID | Dari Google Cloud → Credentials → OAuth client (Web) |
 | Android Client ID | Package `id.malva.app` + SHA-1 (lihat `docs/ANDROID_SHA_FINGERPRINTS.md`) |
 
-SHA-1 debug APK saat ini:
+SHA-1 debug (build lokal / `flutter run`):
 
 ```
 C3:09:B8:22:F4:D0:2F:B3:D5:4A:88:B0:9C:ED:08:E9:0E:20:AA:01
 ```
+
+SHA-1 release (APK produksi `Malva-release-*.apk`, 28 Okt 2026):
+
+```
+9F:FC:92:19:10:39:31:77:B0:A4:5A:3C:4E:96:6E:90:DF:51:F5:91
+```
+
+> WAJIB: daftarkan KEDUA SHA-1 di atas sebagai Android OAuth Client
+> terpisah (satu package `id.malva.app`, dua sidik jari). Tanpa SHA-1
+> release, Login Google di APK produksi tidak menampilkan dialog akun sama
+> sekali (tanpa pesan error) — insiden 28 Okt 2026. Lihat
+> `docs/ANDROID_SHA_FINGERPRINTS.md`.
 
 ## Client ID terpasang (produksi, Oktober 2026)
 
@@ -54,6 +66,13 @@ Catatan: client ID bukan rahasia (bukan kredensial); aman didokumentasikan.
 4. **Project support email**: pilih email kamu. → **Save**.
 5. Buka tab **Users** → pastikan **Authorized domains** berisi
    `api.malva.web.id` (tambahkan bila belum ada; `localhost` sudah default).
+6. **WAJIB untuk APK release**: di Google Cloud Console
+   (https://console.cloud.google.com/apis/credentials?project=malva-7084e),
+   pastikan ada **DUA** Android OAuth Client untuk package `id.malva.app`:
+   satu dengan SHA-1 debug, satu dengan SHA-1 release (lihat daftar di
+   atas). Bila SHA-1 release belum ada → **Create Credentials → OAuth
+   client ID → Android** → package `id.malva.app` + SHA-1 release → Create.
+   Tunggu 5–10 menit setelah menambah (propagasi Google).
 
 ## STEP 3 — Buat OAuth client (Google Cloud, tanpa billing)
 
@@ -116,8 +135,10 @@ flutter build apk --release --target-platform android-arm64 `
 | Gejala | Penyebab | Solusi |
 |---|---|---|
 | "Login Google belum dikonfigurasi" | `MALVA_GOOGLE_CLIENT_ID` belum diisi di VM | Isi env + restart `malva-api` |
-| Tombol Google tidak muncul / error konfigurasi | APK di-build tanpa `--dart-define` | Build ulang APK |
+| Tombol Google tidak muncul / error konfigurasi | APK di-build tanpa `--dart-define` | Build ulang APK (CI otomatis memvalidasi + verifikasi) |
+| **Tidak ada respons sama sekali** (dialog akun tidak muncul, tanpa pesan) | (a) SHA-1 release belum didaftarkan → Google menolak diam-diam; (b) Play Services usang | Sejak 28 Okt 2026 app memakai timeout 60 dtk sehingga kasus ini kini menampilkan pesan jelas. Tetap: daftarkan SHA-1 release + update Play Services; tunggu 5–10 menit |
 | `DEVELOPER_ERROR` di HP | SHA-1 salah / belum didaftarkan | Daftarkan SHA-1 di OAuth client Android; tunggu 5–10 menit |
+| "Dialog akun Google tidak muncul…" (pesan timeout baru) | SHA-1 belum terdaftar / Play Services | Ikuti pesan: cek OAuth client + Play Services, hubungi admin bila berlanjut |
 | "Email Google belum terverifikasi" | Akun Google belum verifikasi email | Gunakan akun Google terverifikasi |
 | Akses ditolak "has not completed the Google verification" | Status OAuth masih Testing | Tambahkan akun sebagai **Test user** di OAuth consent screen |
 | Backend 501 | Client ID kosong di server | Step 4A |

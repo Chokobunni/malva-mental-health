@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../config/google_config.dart';
@@ -7,8 +9,19 @@ import '../models.dart';
 ///
 /// Mengembalikan ID Token, atau `null` bila pengguna membatalkan.
 /// Error lain dilempar sebagai [AuthFailure] berbahasa Indonesia.
+///
+/// CATATAN ANTI-GANTUNG (insiden 28 Okt 2026): `authenticate()` pada v7
+/// memakai Credential Manager dan TIDAK punya timeout bawaan. Bila dialog
+/// akun tidak bisa tampil (SHA-1 belum terdaftar, Play Services usang,
+/// dsb.), Future tidak pernah selesai dan tombol terlihat "tidak merespons
+/// sama sekali" tanpa pesan. Karena itu SEMUA pemanggilan di sini dibungkus
+/// `.timeout(...)` agar selalu kembali dengan pesan yang jelas.
 class GoogleAuthService {
   static bool _initialized = false;
+
+  /// Batas tunggu dialog akun Google. Cukup lama untuk memilih akun,
+  /// cukup singkat agar kegagalan sistem langsung terlihat.
+  static const Duration _authTimeout = Duration(seconds: 60);
 
   static Future<String?> signInIdToken() async {
     if (!GoogleConfig.isConfigured) {
@@ -18,14 +31,36 @@ class GoogleAuthService {
       );
     }
     if (!_initialized) {
-      await GoogleSignIn.instance.initialize(
-        serverClientId: GoogleConfig.serverClientId,
-      );
+      try {
+        await GoogleSignIn.instance
+            .initialize(
+              serverClientId: GoogleConfig.serverClientId,
+            )
+            .timeout(_authTimeout);
+      } on TimeoutException {
+        throw const AuthFailure(
+          'Layanan Google tidak merespons. Periksa koneksi & Google Play '
+          'Services, lalu coba lagi.',
+        );
+      } on GoogleSignInException catch (e) {
+        if (e.code == GoogleSignInExceptionCode.canceled) {
+          return null;
+        }
+        throw AuthFailure(_friendlySignInError(e.code));
+      }
       _initialized = true;
     }
     late final GoogleSignInAccount account;
     try {
-      account = await GoogleSignIn.instance.authenticate();
+      account = await GoogleSignIn.instance
+          .authenticate()
+          .timeout(_authTimeout);
+    } on TimeoutException {
+      throw const AuthFailure(
+        'Dialog akun Google tidak muncul. Kemungkinan penyebab: sidik jari '
+        'aplikasi (SHA-1) belum didaftarkan di Google Cloud, atau Google '
+        'Play Services perlu diperbarui. Hubungi admin bila berlanjut.',
+      );
     } on GoogleSignInException catch (e) {
       if (e.code == GoogleSignInExceptionCode.canceled) {
         return null;
@@ -52,16 +87,38 @@ class GoogleAuthService {
       );
     }
     if (!_initialized) {
-      await GoogleSignIn.instance.initialize(
-        serverClientId: GoogleConfig.serverClientId,
-      );
+      try {
+        await GoogleSignIn.instance
+            .initialize(
+              serverClientId: GoogleConfig.serverClientId,
+            )
+            .timeout(_authTimeout);
+      } on TimeoutException {
+        throw const AuthFailure(
+          'Layanan Google tidak merespons. Periksa koneksi & Google Play '
+          'Services, lalu coba lagi.',
+        );
+      } on GoogleSignInException catch (e) {
+        if (e.code == GoogleSignInExceptionCode.canceled) {
+          return null;
+        }
+        throw AuthFailure(_friendlySignInError(e.code));
+      }
       _initialized = true;
     }
     late final GoogleSignInAccount account;
     try {
       // Autentikasi dengan scopeHint calendar.events.
-      account = await GoogleSignIn.instance.authenticate(
-        scopeHint: ['https://www.googleapis.com/auth/calendar.events'],
+      account = await GoogleSignIn.instance
+          .authenticate(
+            scopeHint: ['https://www.googleapis.com/auth/calendar.events'],
+          )
+          .timeout(_authTimeout);
+    } on TimeoutException {
+      throw const AuthFailure(
+        'Dialog akun Google tidak muncul. Kemungkinan penyebab: sidik jari '
+        'aplikasi (SHA-1) belum didaftarkan di Google Cloud, atau Google '
+        'Play Services perlu diperbarui. Hubungi admin bila berlanjut.',
       );
     } on GoogleSignInException catch (e) {
       if (e.code == GoogleSignInExceptionCode.canceled) {
