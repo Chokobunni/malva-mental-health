@@ -8,6 +8,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/password_field.dart';
 
 // ============================================================
 // SETTINGS / PROFILE / SECURITY
@@ -231,20 +232,14 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
           ),
           const SizedBox(height: 14),
           const SectionLabel('Ubah Password'),
-          TextField(
+          PasswordField(
             controller: _currentPassword,
-            obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'Password saat ini',
-            ),
+            labelText: 'Password saat ini',
           ),
           const SizedBox(height: 10),
-          TextField(
+          PasswordField(
             controller: _newPassword,
-            obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'Password baru (min 8 karakter)',
-            ),
+            labelText: 'Password baru (min 8 karakter)',
           ),
           if (_error != null) ...[
             const SizedBox(height: 10),

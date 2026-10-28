@@ -6,6 +6,7 @@ import '../providers/providers.dart';
 import '../services/google_auth_service.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/password_field.dart';
 import 'auth_widgets.dart';
 import 'professional_completion_screen.dart';
 
@@ -117,6 +118,19 @@ class _ProfessionalLoginScreenState
         if (!mounted) return;
         if (updatedSession != null) {
           widget.onAuthenticated(updatedSession);
+        } else {
+          // Pengguna memilih "Batalkan login" di form pelengkapan: pastikan
+          // tidak ada sesi yang tersisa dan kembali ke halaman login.
+          await GoogleAuthService.signOut();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Login dibatalkan. Identitas medis (STR & SIP) wajib '
+                'dilengkapi untuk memakai akun profesional.',
+              ),
+            ),
+          );
         }
       } else {
         widget.onAuthenticated(result.session);
@@ -319,30 +333,24 @@ class _ProfessionalLoginScreenState
                 ],
                 if (!_isLogin)
                   const SectionLabel('Keamanan', icon: Icons.lock_rounded),
-                TextField(
+                PasswordField(
                   controller: _passwordController,
-                  obscureText: true,
+                  labelText: 'Password',
+                  prefixIcon: const Icon(Icons.lock_rounded),
                   textInputAction:
                       _isLogin ? TextInputAction.done : TextInputAction.next,
                   onSubmitted: (_) {
                     if (_isLogin) _submit();
                   },
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: Icon(Icons.lock_rounded),
-                  ),
                 ),
                 if (!_isLogin) ...[
                   const SizedBox(height: 10),
-                  TextField(
+                  PasswordField(
                     controller: _confirmPasswordController,
-                    obscureText: true,
+                    labelText: 'Konfirmasi password',
+                    prefixIcon: const Icon(Icons.lock_reset_rounded),
                     textInputAction: TextInputAction.done,
                     onSubmitted: (_) => _submit(),
-                    decoration: const InputDecoration(
-                      labelText: 'Konfirmasi password',
-                      prefixIcon: Icon(Icons.lock_reset_rounded),
-                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(

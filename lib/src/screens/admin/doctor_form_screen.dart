@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/malva_components.dart';
+import '../../widgets/password_field.dart';
 
 const _dayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
@@ -339,13 +340,11 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                           labelText: 'Email akun',
                           prefixIcon: Icon(Icons.email_rounded))),
                   const SizedBox(height: 10),
-                  TextField(
+                  PasswordField(
                       controller: _password,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                          labelText:
-                              'Password akun (min. 8, besar+kecil+angka+simbol)',
-                          prefixIcon: Icon(Icons.lock_rounded))),
+                      labelText:
+                          'Password akun (min. 8, besar+kecil+angka+simbol)',
+                      prefixIcon: const Icon(Icons.lock_rounded)),
                   const SizedBox(height: 10),
                   TextField(
                       controller: _profId,

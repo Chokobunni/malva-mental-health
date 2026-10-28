@@ -5,6 +5,7 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/google_auth_service.dart';
 import '../theme.dart';
+import '../widgets/password_field.dart';
 import 'auth_widgets.dart';
 
 /// Halaman login/daftar KHUSUS PASIEN.
@@ -259,30 +260,24 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                TextField(
+                PasswordField(
                   controller: _passwordController,
-                  obscureText: true,
+                  labelText: 'Password',
+                  prefixIcon: const Icon(Icons.lock_rounded),
                   textInputAction:
                       _isLogin ? TextInputAction.done : TextInputAction.next,
                   onSubmitted: (_) {
                     if (_isLogin) _submit();
                   },
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: Icon(Icons.lock_rounded),
-                  ),
                 ),
                 if (!_isLogin) ...[
                   const SizedBox(height: 10),
-                  TextField(
+                  PasswordField(
                     controller: _confirmPasswordController,
-                    obscureText: true,
+                    labelText: 'Konfirmasi password',
+                    prefixIcon: const Icon(Icons.lock_reset_rounded),
                     textInputAction: TextInputAction.done,
                     onSubmitted: (_) => _submit(),
-                    decoration: const InputDecoration(
-                      labelText: 'Konfirmasi password',
-                      prefixIcon: Icon(Icons.lock_reset_rounded),
-                    ),
                   ),
                   const SizedBox(height: 8),
                   const Text(
