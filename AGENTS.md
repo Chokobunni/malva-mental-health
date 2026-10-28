@@ -11,7 +11,7 @@ Panduan perilaku agent untuk repo ini **ada di [`.agents/AGENTS.md`](.agents/AGE
 | [`.agents/skills/superpowers/`](.agents/skills/superpowers/) | 15 Superpowers skills (brainstorming, TDD, debugging, code review, dll) — berlaku untuk semua model AI |
 | [`.agents/skills/ponytail/`](.agents/skills/ponytail/) | Ponytail — YAGNI/lazy senior dev mode untuk implementasi minimal |
 | [`backend/migrations/README.md`](backend/migrations/README.md) | Konvensi migrasi SQL |
-| [`docs/API_ROUTES.md`](docs/API_ROUTES.md) · [`docs/openapi.yaml`](docs/openapi.yaml) | Inventaris 121 endpoint & skema OpenAPI 3.0.3 |
+| [`docs/API_ROUTES.md`](docs/API_ROUTES.md) · [`docs/openapi.yaml`](docs/openapi.yaml) | Inventaris 123 endpoint & skema OpenAPI 3.0.3 |
 | [`docs/MODULE_FEATURES.md`](docs/MODULE_FEATURES.md) | Matriks fitur per role |
 
 ## Tujuh aturan yang tidak bisa ditawar

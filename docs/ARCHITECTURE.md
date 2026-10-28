@@ -4,9 +4,16 @@
 
 | Field | Value |
 |---|---|
-| Version | 2.0 (Production) |
+| Version | 2.1 (Production) |
 | Date | 2026-07-30 |
-| Last Updated | 2026-07-30 |
+| Last Updated | 2026-10-29 |
+
+> **Pembaruan 2026-10-29 (terverifikasi di kode):** 123 endpoint aktif
+> (`go run ./cmd/apidoc -check`), 44 tabel (migrasi 001–020), pembayaran via
+> gateway Midtrans + webhook bertanda tangan (mode `simulation` tetap
+> tersedia untuk dev), blast SOS WhatsApp via Fonnte
+> (`POST /v1/crisis-alerts`), serta skala asesmen baku DASS-21 0–3 / WHO-5 0–5
+> dengan penanda `scale_version: 2` pada submission baru.
 
 ---
 
@@ -24,7 +31,7 @@ graph TB
     end
 
     subgraph Backend["Go Backend"]
-        Router["HTTP Router<br/>39 endpoints"]
+        Router["HTTP Router<br/>123 endpoints"]
         Auth["Auth Middleware<br/>JWT + RBAC"]
         WS["WebSocket Hub<br/>Realtime Events"]
         Handlers["Handlers<br/>Business Logic"]
@@ -33,7 +40,7 @@ graph TB
     end
 
     subgraph Data["Data Layer"]
-        PG[("PostgreSQL 18<br/>20 tables")]
+        PG[("PostgreSQL 18<br/>44 tables")]
         FCM2["Firebase Cloud<br/>Messaging"]
     end
 

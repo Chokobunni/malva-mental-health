@@ -11,8 +11,8 @@ Aplikasi mobile mental health yang menghubungkan pasien dengan profesional keseh
 | [PRD](docs/PRD.md) | Product Requirements Document — fitur, user roles, success metrics |
 | [BRD](docs/BRD.md) | Business Requirements Document — business rules, compliance, revenue |
 | [Architecture](docs/ARCHITECTURE.md) | System architecture — components, data flows, security, deployment |
-| [Database Schema](docs/DATABASE_SCHEMA.md) | All 20 tables with ERD, columns, constraints, indexes |
-| [API Documentation](docs/API_DOCUMENTATION.md) | Ikhtisar API — 121 endpoint; inventaris lengkap di [API_ROUTES](docs/API_ROUTES.md), skema di [openapi.yaml](docs/openapi.yaml) |
+| [Database Schema](docs/DATABASE_SCHEMA.md) | All 44 tables with ERD, columns, constraints, indexes |
+| [API Documentation](docs/API_DOCUMENTATION.md) | Ikhtisar API — 123 endpoint; inventaris lengkap di [API_ROUTES](docs/API_ROUTES.md), skema di [openapi.yaml](docs/openapi.yaml) |
 | [UI/UX Specification](docs/UI_UX_SPECIFICATION.md) | Design system, screen layouts, navigation, interactions |
 | [CI/CD](docs/CI_CD.md) | Deploy otomatis backend, website, dan APK via GitHub Actions |
 | [Agent Rules](.agents/AGENTS.md) | Aturan kerja agent (43 aturan) — wajib dibaca sebelum mengubah kode |

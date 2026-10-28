@@ -8,7 +8,7 @@
 | Version | v1 |
 | Auth | JWT Bearer token |
 | Format | JSON |
-| Total Endpoints | 121 API (+1 static `/uploads/`) |
+| Total Endpoints | 123 API (+1 static `/uploads/`) |
 
 > **Catatan sinkronisasi:** inventaris rute lengkap dan **selalu sinkron** dengan
 > kode ada di [`API_ROUTES.md`](API_ROUTES.md) (dibuat otomatis oleh
