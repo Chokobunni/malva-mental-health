@@ -1525,7 +1525,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
             const SizedBox(height: 14),
             Row(
               children: [
-                const SectionLabel('Worksheet'),
+                const Expanded(child: SectionLabel('Worksheet')),
                 const Spacer(),
                 if (module.isAssessment)
                   StatusPill(
