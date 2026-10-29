@@ -839,7 +839,7 @@ Jadwal mingguan profesional.
 
 **Index:** `professional_schedules_unique_slot` UNIQUE (professional_id, day_of_week, start_time, end_time) — anti duplikat (014).
 
-### 3.33 professional_credentials (migrasi 006)
+### 3.33 professional_credentials (migrasi 006, 008)
 
 Kredensial & profil praktik profesional (STR/SIP/SIPP, faskes, foto/video intro).
 
@@ -864,6 +864,7 @@ Kredensial & profil praktik profesional (STR/SIP/SIPP, faskes, foto/video intro)
 | `document_url` | text | NULLABLE | Dokumen pendukung |
 | `legacy_count` / `helpfulness_count` / `review_count` | integer | NOT NULL, DEFAULT 0 | Statistik |
 | `years_experience` | integer | NOT NULL, DEFAULT 0 | Pengalaman (tahun) |
+| `price_from` | bigint | NOT NULL, DEFAULT 0 (008) | Harga mulai konsultasi |
 | `created_at` | timestamptz | DEFAULT CURRENT_TIMESTAMP | Waktu dibuat |
 
 **Index:** `professional_credentials_user_uidx` UNIQUE (user_id).

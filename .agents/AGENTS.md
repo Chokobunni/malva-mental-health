@@ -22,7 +22,7 @@
 | Backend CLI | `backend/cmd/admin/`, `backend/cmd/promote/`, `backend/cmd/apidoc/` | Admin, promosi role, generator dokumentasi API |
 | Handler (lapis HTTP) | `backend/internal/server/handlers_*.go` | 9 file; DTO = struct inline; logika bisnis di sini |
 | Data (lapis store) | `backend/internal/store/*.go` | 11 file; raw SQL via `database/sql` + `pgx/v5` |
-| Rute | `backend/internal/server/server.go` → `Routes()` | 121 endpoint API + 1 static `/uploads/` |
+| Rute | `backend/internal/server/server.go` → `Routes()` | 123 endpoint API + 1 static `/uploads/` |
 | Domain packages | `backend/internal/{auth,screening,inference,payment,notify,google,realtime,security,config}` | |
 | Config | `backend/internal/config/config.go` | `Config`, `Load()`, prefix env `MALVA_*` |
 | Migrasi | `backend/migrations/NNN_*.sql` | 001–017, idempoten; lihat `migrations/README.md` |
@@ -121,7 +121,7 @@
 | R11.1 | Setiap tambah/ubah/hapus endpoint/DTO wajib perbarui dokumentasi API serentak | `[ADAPTASI]` | Regenerasi `docs/API_ROUTES.md` + `docs/openapi.yaml` via `cd backend && go run ./cmd/apidoc`. Verifikasi: `go run ./cmd/apidoc -check`. |
 | R11.2 | Prefix gateway `/hepipay/pos/` di `servers:` swagger | `[TIDAK DITERAPKAN]` | Malva pakai prefix `/v1/` di `api.malva.web.id`. |
 | R11.3 | Kelengkapan skema: path/method/summary/tag/param/response `$ref` | `[ADAPTASI]` | Envelope error nyata = `{"error": "..."}` (`writeError`). Skema OpenAPI sudah mencakup 200/400/401/403/404/422/500. |
-| R11.4 | Konsistensi OpenAPI 3.0.3; tak ada endpoint aktif tanpa dokumentasi | `[ADAPTASI]` | `docs/openapi.yaml` pin `3.0.3`; generator mencakup **seluruh** 121 route. |
+| R11.4 | Konsistensi OpenAPI 3.0.3; tak ada endpoint aktif tanpa dokumentasi | `[ADAPTASI]` | `docs/openapi.yaml` pin `3.0.3`; generator mencakup **seluruh** 123 route. |
 
 ## BAGIAN 12 — Standar Testing & Verifikasi
 
