@@ -9,22 +9,22 @@ import '../widgets/malva_components.dart';
 import '../widgets/therapy_library.dart';
 
 // ============================================================
-// HASIL ASSESSMENT — riwayat skrining & asesmen pasien.
+// ASSESSMENT RECORD — riwayat skrining & assessment pasien.
 //
 // Halaman ini menampung DUA sumber hasil yang berbeda bentuk:
 //   1. Screening PHQ-9 + GAD-7 (tabel screening di server).
-//   2. Worksheet asesmen DASS-21 / WHO-5 (submission therapy).
+//   2. Worksheet assessment DASS-21 / WHO-5 (submission therapy).
 // Keduanya dulu tercampur dengan worksheet terapi dalam satu daftar,
 // sehingga hasil skrining sulit dibedakan dari catatan latihan. Sekarang
-// hasil asesmen punya halaman sendiri dan daftar "Hasil Therapy" hanya
-// berisi worksheet terapi (lihat `TherapySubmissionsScreen`).
+// assessment record punya halaman sendiri dan daftar "Therapy Record"
+// hanya berisi worksheet terapi (lihat `TherapySubmissionsScreen`).
 //
 // Model & pemuat data di file ini sengaja publik karena dipakai ulang oleh
 // Health Record (`screens/record_screen.dart`) agar tampilan detail dan
 // ringkasan skor tidak diduplikasi di dua tempat.
 // ============================================================
 
-/// Satu baris riwayat hasil asesmen (screening atau worksheet asesmen).
+/// Satu baris riwayat assessment record (screening atau worksheet assessment).
 class AssessmentHistoryEntry {
   const AssessmentHistoryEntry({
     required this.kind,
@@ -60,7 +60,7 @@ class AssessmentHistoryEntry {
   /// Definisi modul asesmen (DASS-21/WHO-5) bila id-nya dikenal.
   TherapyModule? get module => findTherapyModuleById(moduleId);
 
-  /// True bila entri ini hasil asesmen, bukan worksheet terapi.
+  /// True bila entri ini assessment record, bukan worksheet terapi.
   bool get isAssessmentResult => isScreening || (module?.isAssessment ?? false);
 
   /// Ikon kartu: ikon modul bila dikenal, selain itu ikon generik per jenis.
@@ -73,7 +73,7 @@ class AssessmentHistoryEntry {
       module?.color ?? (isScreening ? MalvaColors.seed : MalvaColors.orchid);
 }
 
-/// Format tanggal + jam hasil asesmen (`dd/MM/yyyy HH:mm`).
+/// Format tanggal + jam assessment record (`dd/MM/yyyy HH:mm`).
 String formatAssessmentDate(DateTime? date) {
   if (date == null) return 'Tanggal tidak tercatat';
   String two(int value) => value.toString().padLeft(2, '0');
@@ -101,7 +101,7 @@ AssessmentHistoryEntry assessmentEntryFromSubmission(
   return AssessmentHistoryEntry(
     kind: AssessmentHistoryEntry.kindWorksheet,
     title: submission.title.isEmpty
-        ? (module?.title ?? 'Hasil asesmen')
+        ? (module?.title ?? 'Assessment record')
         : submission.title,
     subtitle: submission.summary,
     date: submission.createdDateTime,
@@ -136,7 +136,7 @@ int _byDateDescending(AssessmentHistoryEntry a, AssessmentHistoryEntry b) {
   return dateB.compareTo(dateA);
 }
 
-/// Muat seluruh riwayat hasil asesmen (worksheet asesmen + screening).
+/// Muat seluruh riwayat assessment record (worksheet assessment + screening).
 ///
 /// Tiap sumber dimuat dengan try/catch sendiri: kegagalan satu endpoint tidak
 /// boleh mengosongkan hasil dari endpoint lain. Bila SEMUA sumber gagal
@@ -191,7 +191,7 @@ Future<List<AssessmentHistoryEntry>> loadAssessmentHistory({
   return entries;
 }
 
-/// Tampilkan detail satu hasil asesmen dalam bottom sheet.
+/// Tampilkan detail satu assessment record dalam bottom sheet.
 ///
 /// Dipakai bersama oleh [AssessmentHistoryScreen], [AssessmentHistoryPreview],
 /// dan Health Record supaya satu entri selalu terbuka dengan tampilan sama.
@@ -320,7 +320,7 @@ class _AssessmentDetailBody extends StatelessWidget {
         if (entry.isAssessmentResult) ...[
           const SizedBox(height: 14),
           Text(
-            'Hasil asesmen adalah alat bantu screening, bukan diagnosis.',
+            'Skor assessment adalah alat bantu screening, bukan diagnosis.',
             style: TextStyle(fontSize: 11.5, color: onSurfaceVariant),
           ),
         ],
@@ -379,7 +379,7 @@ class _ScreeningScoreCard extends StatelessWidget {
   }
 }
 
-/// Daftar jawaban worksheet non-asesmen (hasil terapi) di dalam detail.
+/// Daftar jawaban worksheet non-assessment (therapy record) di dalam detail.
 class _WorksheetAnswerList extends StatelessWidget {
   const _WorksheetAnswerList({
     required this.moduleId,
@@ -437,7 +437,7 @@ class _WorksheetAnswerList extends StatelessWidget {
   }
 }
 
-/// Halaman daftar lengkap hasil asesmen (screening + worksheet asesmen).
+/// Halaman daftar lengkap assessment record (screening + worksheet assessment).
 class AssessmentHistoryScreen extends ConsumerStatefulWidget {
   const AssessmentHistoryScreen({super.key});
 
@@ -464,7 +464,7 @@ class _AssessmentHistoryScreenState
     if (token == null || token.isEmpty) {
       setState(() {
         _isLoading = false;
-        _error = 'Login dulu untuk melihat hasil asesmen.';
+        _error = 'Login dulu untuk melihat assessment record.';
       });
       return;
     }
@@ -501,7 +501,7 @@ class _AssessmentHistoryScreenState
           padding: EdgeInsets.zero,
           children: [
             GradientHeader(
-              title: 'Hasil Assessment',
+              title: 'Assessment Record',
               subtitle: 'Riwayat skrining & asesmen yang tersimpan',
               leading: IconButton(
                 onPressed: () => Navigator.maybePop(context),
@@ -532,11 +532,11 @@ class _AssessmentHistoryScreenState
                   else if (_entries.isEmpty)
                     const EmptyState(
                       icon: Icons.fact_check_rounded,
-                      title: 'Belum ada hasil assessment',
+                      title: 'Belum ada assessment record',
                       subtitle:
                           'Isi DASS-21 atau WHO-5 dari menu Assessment, atau '
-                          'selesaikan screening PHQ-9 + GAD-7. Hasilnya akan '
-                          'muncul di sini.',
+                          'selesaikan screening PHQ-9 + GAD-7. Hasilnya '
+                          'tersimpan di sini.',
                     )
                   else
                     for (final entry in _entries) ...[
@@ -559,7 +559,7 @@ class _AssessmentHistoryScreenState
   }
 }
 
-/// Kartu satu entri hasil asesmen (dipakai halaman riwayat).
+/// Kartu satu entri assessment record (dipakai halaman riwayat).
 class AssessmentHistoryCard extends StatelessWidget {
   const AssessmentHistoryCard({
     super.key,
@@ -622,7 +622,7 @@ class AssessmentHistoryCard extends StatelessWidget {
   }
 }
 
-/// Ringkasan hasil asesmen terbaru untuk halaman Assessment.
+/// Ringkasan assessment record terbaru untuk halaman Assessment.
 ///
 /// Memuat datanya sendiri dan sengaja TIDAK menampilkan spinner besar:
 /// halaman induk tidak boleh tertahan menunggu endpoint ini. Bila kosong atau
@@ -657,7 +657,7 @@ class _AssessmentHistoryPreviewState
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = 'Login dulu untuk melihat hasil asesmen.';
+        _error = 'Login dulu untuk melihat assessment record.';
       });
       return;
     }
@@ -703,7 +703,7 @@ class _AssessmentHistoryPreviewState
             ),
             const SizedBox(width: 12),
             Text(
-              'Memuat hasil asesmen…',
+              'Memuat assessment record…',
               style: TextStyle(fontSize: 12.5, color: onSurfaceVariant),
             ),
           ],
@@ -719,7 +719,7 @@ class _AssessmentHistoryPreviewState
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Hasil asesmen belum bisa dimuat. $_error',
+                'Assessment record belum bisa dimuat. $_error',
                 style: const TextStyle(
                     fontSize: 12.5, fontWeight: FontWeight.w700),
               ),
@@ -738,7 +738,7 @@ class _AssessmentHistoryPreviewState
             SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Belum ada hasil assessment. Isi DASS-21 atau WHO-5 di bawah — '
+                'Belum ada assessment record. Isi DASS-21 atau WHO-5 di bawah — '
                 'hasilnya akan tersimpan di sini.',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
               ),

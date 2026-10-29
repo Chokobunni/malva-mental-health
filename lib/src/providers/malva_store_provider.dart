@@ -959,7 +959,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     _persistAssessments();
   }
 
-  /// Simpan hasil asesmen ke state + tunggu persistensi lokal per akun.
+  /// Simpan assessment ke state + tunggu persistensi lokal per akun.
   Future<void> saveAssessmentResult(AssessmentResult result) async {
     saveAssessment(result);
     await _assessmentDb.saveAll(state.patient.id, state.assessments);

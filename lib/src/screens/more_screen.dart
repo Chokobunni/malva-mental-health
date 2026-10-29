@@ -70,7 +70,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 const SizedBox(height: 10),
                 ActionTile(
                   icon: Icons.folder_copy_rounded,
-                  title: 'Hasil Therapy',
+                  title: 'Therapy Record',
                   subtitle: 'Worksheet terapi tersimpan — unduh & kirim',
                   color: MalvaColors.orchid,
                   onTap: () => Navigator.push(
@@ -277,7 +277,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                           style: TextStyle(fontWeight: FontWeight.w900)),
                       const SizedBox(height: 8),
                       Text(
-                        'Hasil assessment di app ini hanya untuk screening dan triase. Diagnosis dan perubahan terapi tetap harus dibuat profesional.',
+                        'Skor assessment di app ini hanya untuk screening dan triase. Diagnosis dan perubahan terapi tetap harus dibuat profesional.',
                         style: Theme.of(context)
                             .textTheme
                             .bodyMedium

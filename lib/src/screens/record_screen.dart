@@ -35,14 +35,14 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
   bool _isLoading = true;
   String? _loadError;
 
-  /// True selama hasil asesmen & terapi masih dimuat.
+  /// True selama assessment & therapy record masih dimuat.
   ///
   /// Dipisah dari [_isLoading] supaya diagnosis/obat/dokumen tampil segera
   /// setelah data inti siap — daftar Record hanya menambah baris indikator
   /// ringkas selama sumber tambahan belum selesai.
   bool _extrasLoading = true;
 
-  /// Kegagalan sumber tambahan (hasil terapi / riwayat asesmen) — ditampilkan
+  /// Kegagalan sumber tambahan (therapy record / assessment record) — ditampilkan
   /// sebagai keterangan kecil, tidak mengosongkan seluruh layar.
   String? _therapyError;
   String? _screeningError;
@@ -151,8 +151,8 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
     if (mounted) setState(() => _extrasLoading = false);
   }
 
-  /// Gabungkan dokumen unggahan + hasil asesmen + hasil terapi menjadi satu
-  /// daftar kronologis (terbaru dulu, entri tanpa tanggal paling akhir).
+  /// Gabungkan dokumen unggahan + assessment record + therapy record menjadi
+  /// satu daftar kronologis (terbaru dulu, entri tanpa tanggal paling akhir).
   List<_RecordEntry> _buildEntries(
     BuildContext context,
     List<HealthRecord> documents,
@@ -174,7 +174,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
       );
     }
 
-    // 2. Hasil asesmen & 3. hasil terapi dari submission worksheet server.
+    // 2. Assessment record & 3. therapy record dari submission worksheet server.
     for (final submission in _therapySubmissions) {
       final history = assessmentEntryFromSubmission(submission);
       entries.add(
@@ -193,7 +193,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
       );
     }
 
-    // Screening PHQ-9 + GAD-7 termasuk hasil asesmen.
+    // Screening PHQ-9 + GAD-7 termasuk assessment record.
     for (final screening in _screenings) {
       final history = assessmentEntryFromScreening(screening);
       entries.add(
@@ -239,8 +239,8 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
   @override
   Widget build(BuildContext context) {
     final storeState = ref.watch(malvaStoreProvider);
-    // Record = gabungan kronologis dokumen unggahan + hasil asesmen + hasil
-    // terapi agar riwayat klinis pasien terbaca dalam satu daftar.
+    // Record = gabungan kronologis dokumen unggahan + assessment record +
+    // therapy record agar riwayat klinis pasien terbaca dalam satu daftar.
     final entries = _buildEntries(context, storeState.records);
     final visibleEntries =
         entries.where(_matchesFilter).toList(growable: false);
@@ -348,7 +348,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                         ),
                         const SizedBox(width: 10),
                         Text(
-                          'Memuat hasil asesmen & terapi…',
+                          'Memuat assessment & therapy record…',
                           style: TextStyle(
                             fontSize: 12.5,
                             color:
@@ -417,9 +417,9 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                     Text(
                       [
                         if (_therapyError != null)
-                          'Hasil terapi belum termuat: $_therapyError',
+                          'Therapy record belum termuat: $_therapyError',
                         if (_screeningError != null)
-                          'Riwayat asesmen belum termuat: $_screeningError',
+                          'Assessment record belum termuat: $_screeningError',
                       ].join(' • '),
                       style: const TextStyle(
                           fontSize: 11.5, color: MalvaColors.danger),
@@ -444,8 +444,8 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'Upload dokumen, isi asesmen, atau simpan worksheet '
-                            'terapi — semuanya tampil di sini.',
+                            'Upload dokumen, isi assessment, atau simpan '
+                            'worksheet therapy — semuanya tampil di sini.',
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -567,8 +567,8 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
   }
 }
 
-/// Satu baris gabungan di bagian Record: dokumen unggahan, hasil asesmen,
-/// atau hasil terapi. [kind] dipakai filter primer di atas daftar.
+/// Satu baris gabungan di bagian Record: dokumen unggahan, assessment record,
+/// atau therapy record. [kind] dipakai filter primer di atas daftar.
 class _RecordEntry {
   const _RecordEntry({
     required this.kind,

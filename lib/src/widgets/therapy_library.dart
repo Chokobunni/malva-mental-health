@@ -1085,7 +1085,7 @@ Color worksheetFieldFill(BuildContext context) {
 // ============================================================
 
 /// Halaman detail modul terapi: deskripsi + langkah + worksheet.
-/// Worksheet bisa diisi, disimpan ke server (Hasil Therapy), diunduh
+/// Worksheet bisa diisi, disimpan ke server (Therapy Record), diunduh
 /// (share/export), dan dibagikan ke profesional (butuh paket aktif).
 class TherapyDetailScreen extends ConsumerStatefulWidget {
   const TherapyDetailScreen({super.key, required this.module});
@@ -1267,7 +1267,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
         if (sharedTo == null) {
           if (mounted) {
             setState(() => _isSaving = false);
-            _toast('Worksheet tersimpan di Hasil Therapy. '
+            _toast('Worksheet tersimpan di Therapy Record. '
                 'Belum dibagikan ke profesional.');
           }
           return;
@@ -1285,7 +1285,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
       });
       _toast(share
           ? 'Worksheet tersimpan & dibagikan ke profesional.'
-          : 'Worksheet tersimpan di Hasil Therapy.');
+          : 'Worksheet tersimpan di Therapy Record.');
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
@@ -1562,7 +1562,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                         ? 'Pilih jawaban yang paling sesuai untuk setiap '
                             'pernyataan. Semua wajib dijawab agar skor valid.'
                         : 'Isi worksheet ini sesuai kondisimu. Hasilnya bisa '
-                            'disimpan ke Hasil Therapy, diunduh, atau dikirim '
+                            'disimpan ke Therapy Record, diunduh, atau dikirim '
                             'langsung ke profesional (butuh paket sesi aktif).',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant),
@@ -1638,8 +1638,8 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                 SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Worksheet tersimpan di Hasil Therapy (menu More → '
-                    'Hasil Therapy).',
+                    'Worksheet tersimpan di Therapy Record (menu More → '
+                    'Therapy Record).',
                     style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
                   ),
                 ),
@@ -1659,7 +1659,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.save_rounded),
-              label: const Text('Simpan ke Hasil Therapy'),
+              label: const Text('Simpan ke Therapy Record'),
             ),
             const SizedBox(height: 8),
             FilledButton.tonalIcon(
@@ -2800,10 +2800,10 @@ class _MiniScale extends StatelessWidget {
 }
 
 /// Halaman daftar hasil worksheet terapi yang sudah disimpan
-/// (menu More → Hasil Therapy).
+/// (menu More → Therapy Record).
 ///
-/// Hasil asesmen (DASS-21 / WHO-5) TIDAK ditampilkan di sini: hasil asesmen
-/// punya halamannya sendiri (Assessment → Hasil Assessment) agar worksheet
+/// Assessment record (DASS-21 / WHO-5) TIDAK ditampilkan di sini: record
+/// punya halamannya sendiri (Assessment → Assessment Record) agar worksheet
 /// terapi tidak tercampur dengan hasil skrining.
 class TherapySubmissionsScreen extends ConsumerStatefulWidget {
   const TherapySubmissionsScreen({super.key});
@@ -3001,7 +3001,7 @@ class _TherapySubmissionsScreenState
     final items = _therapyItems;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Hasil Therapy'),
+        title: const Text('Therapy Record'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
         actions: [
@@ -3024,11 +3024,11 @@ class _TherapySubmissionsScreenState
               : items.isEmpty
                   ? const EmptyState(
                       icon: Icons.self_improvement_rounded,
-                      title: 'Belum ada hasil therapy',
+                      title: 'Belum ada therapy record',
                       subtitle:
                           'Buka menu Psychological Therapy, pilih modul terapi, '
                           'isi worksheet, lalu simpan. Hasilnya muncul di sini. '
-                          'Hasil asesmen (DASS-21/WHO-5) ada di halaman '
+                          'Assessment record (DASS-21/WHO-5) ada di halaman '
                           'Assessment.',
                     )
                   : RefreshIndicator(
@@ -3131,7 +3131,7 @@ class TherapyCatalogScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            tooltip: 'Hasil Therapy (worksheet tersimpan)',
+            tooltip: 'Therapy Record (worksheet tersimpan)',
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -3154,7 +3154,7 @@ class TherapyCatalogScreen extends StatelessWidget {
                 const Expanded(
                   child: Text(
                     'Isi worksheet pada tiap modul, lalu simpan ke '
-                    'Hasil Therapy — bisa diunduh & dikirim ke profesional '
+                    'Therapy Record — bisa diunduh & dikirim ke profesional '
                     '(butuh paket sesi aktif).',
                     style:
                         TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),

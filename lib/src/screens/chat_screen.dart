@@ -379,7 +379,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
                 (
                   Icons.fact_check_rounded,
-                  'Hasil Assessment',
+                  'Assessment Record',
                   'assessment',
                   MalvaColors.orchid
                 ),
@@ -548,7 +548,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (sent && mounted) _toast('$label terkirim ke chat.');
   }
 
-  /// Bagikan hasil assessment: screening PHQ-9/GAD-7 dan worksheet
+  /// Bagikan assessment record: screening PHQ-9/GAD-7 dan worksheet
   /// DASS-21/WHO-5 diambil dari server, lalu dipilih bila lebih dari satu.
   Future<void> _shareAssessment({
     required String token,
@@ -563,7 +563,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
     if (!mounted) return;
     if (candidates.isEmpty) {
-      _toast('Belum ada hasil assessment untuk dibagikan.');
+      _toast('Belum ada assessment record untuk dibagikan.');
       return;
     }
     var chosen = candidates.first;
@@ -580,7 +580,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (sent && mounted) _toast('$label terkirim ke chat.');
   }
 
-  /// Kandidat hasil assessment: screening server + worksheet DASS/WHO-5.
+  /// Kandidat assessment record: screening server + worksheet DASS/WHO-5.
   /// Bila API gagal total, jatuh ke data store lokal (best effort).
   Future<List<_ShareCandidate>> _assessmentCandidates({
     required String token,
@@ -701,7 +701,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return out;
   }
 
-  /// Bottom sheet pemilihan hasil assessment (dipanggil bila kandidat > 1).
+  /// Bottom sheet pemilihan assessment record (dipanggil bila kandidat > 1).
   Future<_ShareCandidate?> _pickCandidate(List<_ShareCandidate> candidates) {
     return showModalBottomSheet<_ShareCandidate>(
       context: context,
@@ -715,7 +715,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Pilih hasil assessment',
+              const Text('Pilih assessment record',
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
               const SizedBox(height: 4),
               Text(

@@ -132,11 +132,11 @@ class AssessmentListScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 20),
-                // Hasil asesmen dipisah dari daftar Hasil Therapy: semua hasil
-                // skrining (PHQ-9/GAD-7) dan asesmen (DASS-21/WHO-5) dibaca
-                // dari satu tempat ini.
+                // Assessment record dipisah dari daftar Therapy Record: semua
+                // hasil skrining (PHQ-9/GAD-7) dan asesmen (DASS-21/WHO-5)
+                // dibaca dari satu tempat ini.
                 SectionLabel(
-                  'Hasil Assessment',
+                  'Assessment Record',
                   action: TextButton(
                     onPressed: () => Navigator.push(
                       context,
@@ -159,7 +159,7 @@ class AssessmentListScreen extends ConsumerWidget {
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Hasil asesmen adalah alat bantu screening, bukan '
+                          'Skor assessment adalah alat bantu screening, bukan '
                           'diagnosis. Diagnosis hanya dapat diberikan oleh '
                           'profesional terverifikasi setelah sesi konsultasi.',
                           style: TextStyle(
