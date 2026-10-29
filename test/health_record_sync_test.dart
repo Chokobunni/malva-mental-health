@@ -16,7 +16,7 @@ import 'package:malva_mental_health/src/theme.dart';
 // HEALTH RECORD — bagian Record menggabungkan dokumen unggahan
 // (store lokal) + submission asesmen/terapi + screening dalam satu
 // daftar urut tanggal DESC. Filter chip primer
-// Semua|Dokumen|Asesmen|Terapi; chip tipe file hanya tampil saat
+// Semua|Dokumen|Assessment|Therapy; chip tipe file hanya tampil saat
 // filter Dokumen; pencarian judul lintas jenis.
 // ============================================================
 
@@ -130,7 +130,9 @@ MalvaApiClient _api() {
           );
         case '/v1/screenings':
           return http.Response(
-            jsonEncode({'screenings': [_screening()]}),
+            jsonEncode({
+              'screenings': [_screening()]
+            }),
             200,
             headers: {'content-type': 'application/json'},
           );
@@ -186,15 +188,15 @@ void main() {
     );
     addTearDown(container.dispose);
     container.read(malvaStoreProvider.notifier).addRecord(
-      HealthRecord(
-        id: 'doc_pdf_1',
-        // 21/10/2026: antara submission terapi (19/10) dan screening (22/10).
-        date: _documentDate,
-        title: 'Hasil Lab PDF',
-        type: 'PDF',
-        lockedByProfessional: false,
-      ),
-    );
+          HealthRecord(
+            id: 'doc_pdf_1',
+            // 21/10/2026: antara submission terapi (19/10) dan screening (22/10).
+            date: _documentDate,
+            title: 'Hasil Lab PDF',
+            type: 'PDF',
+            lockedByProfessional: false,
+          ),
+        );
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -218,12 +220,12 @@ void main() {
     expect(find.text('Restrukturisasi Kognitif (ABCDE)'), findsOneWidget);
     expect(find.text('Screening PHQ-9 + GAD-7'), findsOneWidget);
 
-    // Filter "Asesmen": hanya entri asesmen tersisa.
+    // Filter "Assessment": hanya entri asesmen tersisa.
     // Bagian Record bisa lebih panjang dari layar uji (800x600) — scroll chip
     // ke dalam viewport dulu (pump diperlukan agar render tree mengikuti).
-    await tester.ensureVisible(find.text('Asesmen'));
+    await tester.ensureVisible(find.text('Assessment'));
     await tester.pump();
-    await tester.tap(find.text('Asesmen'));
+    await tester.tap(find.text('Assessment'));
     await tester.pumpAndSettle();
     expect(find.text('WHO-5 (Well-Being Index)'), findsOneWidget);
     expect(find.text('Screening PHQ-9 + GAD-7'), findsOneWidget);

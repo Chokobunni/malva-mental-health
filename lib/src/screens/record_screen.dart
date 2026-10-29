@@ -25,7 +25,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
   String _searchQuery = '';
   String _typeFilter = 'Semua';
 
-  /// Filter jenis entri Record (dokumen / asesmen / terapi).
+  /// Filter jenis entri Record (dokumen / assessment / therapy).
   String _kindFilter = _RecordEntry.kindAll;
 
   BackendHealthRecord? _healthRecord;
@@ -427,7 +427,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                   ],
                   const SizedBox(height: 10),
                   // Empty state ditahan selama sumber tambahan dimuat: kalau
-                  // tidak, filter "Asesmen"/"Terapi" sempat menampilkan
+                  // tidak, filter "Assessment"/"Therapy" sempat menampilkan
                   // "Tidak ada yang cocok" padahal datanya belum tiba.
                   if (visibleEntries.isEmpty && !_extrasLoading)
                     SoftCard(
@@ -585,8 +585,8 @@ class _RecordEntry {
 
   static const String kindAll = 'Semua';
   static const String kindDocument = 'Dokumen';
-  static const String kindAssessment = 'Asesmen';
-  static const String kindTherapy = 'Terapi';
+  static const String kindAssessment = 'Assessment';
+  static const String kindTherapy = 'Therapy';
 
   final String kind;
   final String title;
@@ -619,7 +619,7 @@ class _RecordEntry {
   }
 }
 
-/// Kartu satu entri Record (dokumen / asesmen / terapi).
+/// Kartu satu entri Record (dokumen / assessment / therapy).
 class _RecordEntryCard extends StatelessWidget {
   const _RecordEntryCard({required this.entry});
 

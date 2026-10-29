@@ -51,9 +51,9 @@ yang seharusnya terjadi, plus screenshot.
 | C1 | Buka menu **More → Health Record** | Bagian **Diagnosis** dan **Medication** tampil seperti sebelumnya (tidak berubah) |
 | C2 | Scroll ke bagian **Record** | Muncul dokumen unggahan + hasil asesmen + hasil terapi dalam **satu daftar**, urut terbaru di atas |
 | C3 | Periksa kartu dokumen | Keterangan memuat tipe file, mis. "Dokumen • PDF • 20/10/2026 09:15" |
-| C4 | Periksa kartu asesmen | Keterangan memuat ringkasan skor, mis. "Asesmen • WHO-5 5/25 (20%) • ..." |
-| C5 | Tap chip filter **Asesmen** | Hanya entri asesmen yang tersisa; dokumen dan terapi hilang |
-| C6 | Tap chip filter **Terapi** | Hanya entri terapi yang tersisa |
+| C4 | Periksa kartu asesmen | Keterangan memuat ringkasan skor, mis. "Assessment • WHO-5 5/25 (20%) • ..." |
+| C5 | Tap chip filter **Assessment** | Hanya entri asesmen yang tersisa; dokumen dan terapi hilang |
+| C6 | Tap chip filter **Therapy** | Hanya entri terapi yang tersisa |
 | C7 | Tap chip filter **Dokumen** | Chip tipe file (Semua/PDF/IMAGE/DOC/OTHER) **muncul**; entri asesmen & terapi hilang |
 | C8 | Pilih chip **PDF** | Hanya dokumen PDF yang tersisa |
 | C9 | Kembali ke chip **Semua** | Semua entri muncul lagi, chip tipe file hilang |
