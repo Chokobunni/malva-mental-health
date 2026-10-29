@@ -43,6 +43,33 @@ erDiagram
 
     notifications ||--o{ notification_outbox : "queued"
 
+    %% --- Relasi domain komersial, safety, dan terapi (migrasi 006–017) ---
+    %% Relasi logis; tabel care_* dan beberapa tabel 012/013 sengaja tanpa FK
+    %% fisik (lihat catatan di §3.21/3.22 dan §3.30).
+    users ||--o{ bookings : "books"
+    bookings ||--o| payments : "paid by"
+    payments ||--o{ payment_events : "gateway events"
+    payments ||--o{ earnings : "generates"
+    care_sessions ||--o| earnings : "recognized at completion"
+    users ||--o{ care_packages : "buys"
+    care_packages ||--o{ care_sessions : "contains"
+    care_packages ||--o{ care_refunds : "refunded"
+    care_sessions ||--o{ care_refunds : "cancellation credit"
+    users ||--o{ emergency_contacts : "has"
+    users ||--o{ crisis_incidents : "triggers"
+    crisis_incidents ||--o{ sos_blast_log : "blasts"
+    users ||--o{ goals : "sets"
+    goals ||--o{ habit_logs : "logged"
+    users ||--o{ therapy_submissions : "submits"
+    users ||--o{ doctor_reviews : "writes"
+    users ||--o{ e_prescriptions : "issues"
+    e_prescriptions ||--o{ e_prescription_items : "contains"
+    users ||--o| professional_credentials : "has"
+    users ||--o{ professional_schedules : "sets"
+    users ||--o{ professional_pricing : "prices"
+    users ||--o{ service_packages : "offers"
+    users ||--o| google_oauth_tokens : "authorizes"
+
     users {
         uuid id PK
         text email UK
