@@ -6,7 +6,9 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
+import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
+import 'assessment_history_screen.dart';
 
 class RecordScreen extends ConsumerStatefulWidget {
   const RecordScreen({super.key, this.session, this.apiClient});
@@ -21,15 +23,39 @@ class RecordScreen extends ConsumerStatefulWidget {
 class _RecordScreenState extends ConsumerState<RecordScreen> {
   String? _selectedFileName;
   String _searchQuery = '';
-  String _typeFilter = 'All';
+  String _typeFilter = 'Semua';
+
+  /// Filter jenis entri Record (dokumen / asesmen / terapi).
+  String _kindFilter = _RecordEntry.kindAll;
 
   BackendHealthRecord? _healthRecord;
   List<BackendMedication> _medications = const [];
+  List<BackendTherapySubmission> _therapySubmissions = const [];
+  List<BackendScreeningSession> _screenings = const [];
   bool _isLoading = true;
   String? _loadError;
 
+  /// True selama hasil asesmen & terapi masih dimuat.
+  ///
+  /// Dipisah dari [_isLoading] supaya diagnosis/obat/dokumen tampil segera
+  /// setelah data inti siap — daftar Record hanya menambah baris indikator
+  /// ringkas selama sumber tambahan belum selesai.
+  bool _extrasLoading = true;
+
+  /// Kegagalan sumber tambahan (hasil terapi / riwayat asesmen) — ditampilkan
+  /// sebagai keterangan kecil, tidak mengosongkan seluruh layar.
+  String? _therapyError;
+  String? _screeningError;
+
   List<String> get _typeOptions =>
-      const ['All', 'PDF', 'IMAGE', 'DOC', 'OTHER'];
+      const ['Semua', 'PDF', 'IMAGE', 'DOC', 'OTHER'];
+
+  List<String> get _kindOptions => const [
+        _RecordEntry.kindAll,
+        _RecordEntry.kindDocument,
+        _RecordEntry.kindAssessment,
+        _RecordEntry.kindTherapy,
+      ];
 
   @override
   void initState() {
@@ -41,15 +67,27 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
     final apiClient = widget.apiClient;
     final accessToken = widget.session?.accessToken;
     if (apiClient == null || accessToken == null || accessToken.isEmpty) {
-      if (mounted) setState(() => _isLoading = false);
+      // Tanpa sesi tidak ada yang dimuat: matikan kedua indikator agar tidak
+      // ada spinner yang berputar selamanya.
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _extrasLoading = false;
+        });
+      }
       return;
     }
     if (mounted) {
       setState(() {
         _isLoading = true;
+        _extrasLoading = true;
         _loadError = null;
+        _therapyError = null;
+        _screeningError = null;
       });
     }
+    // Data inti (diagnosis + obat) dimuat lebih dulu; kegagalannya tetap jadi
+    // error utama layar seperti sebelumnya.
     try {
       final results = await Future.wait([
         apiClient.getHealthRecord(accessToken: accessToken),
@@ -65,7 +103,6 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
       setState(() {
         _healthRecord = record;
         _medications = meds;
-        _isLoading = false;
       });
       ref
           .read(malvaStoreProvider.notifier)
@@ -73,22 +110,140 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _isLoading = false;
         _loadError = e is MalvaApiException ? e.message : null;
       });
     }
+    // Data inti selesai (sukses maupun gagal) → layar langsung tampil, tidak
+    // ikut menunggu dua request tambahan di bawah.
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    // Sumber tambahan dimuat TERPISAH: satu endpoint gagal tidak boleh
+    // mengosongkan dokumen/diagnosis/obat yang sudah tampil.
+    try {
+      final submissions =
+          await apiClient.listTherapySubmissions(accessToken: accessToken);
+      if (!mounted) return;
+      setState(() => _therapySubmissions = submissions);
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() => _therapyError = friendlyErrorMessage(e));
+    }
+
+    // `patient_id` kosong membuat server menolak permintaan (400), jadi
+    // riwayat screening hanya dimuat bila id pasien backend tersedia.
+    final patientId = (widget.session?.backendUserId ?? '').trim();
+    if (patientId.isNotEmpty) {
+      try {
+        final screenings = await apiClient.listScreenings(
+          accessToken: accessToken,
+          patientId: patientId,
+          limit: 50,
+        );
+        if (!mounted) return;
+        setState(() => _screenings = screenings);
+      } on Object catch (e) {
+        if (!mounted) return;
+        setState(() => _screeningError = friendlyErrorMessage(e));
+      }
+    }
+
+    if (mounted) setState(() => _extrasLoading = false);
+  }
+
+  /// Gabungkan dokumen unggahan + hasil asesmen + hasil terapi menjadi satu
+  /// daftar kronologis (terbaru dulu, entri tanpa tanggal paling akhir).
+  List<_RecordEntry> _buildEntries(
+    BuildContext context,
+    List<HealthRecord> documents,
+  ) {
+    final entries = <_RecordEntry>[];
+
+    // 1. Dokumen unggahan — perilaku lama dipertahankan (tanpa aksi tap).
+    for (final document in documents) {
+      entries.add(
+        _RecordEntry(
+          kind: _RecordEntry.kindDocument,
+          title: document.title,
+          date: document.date,
+          fileType: document.type,
+          icon: _getRecordIcon(document.type),
+          color: MalvaColors.seed,
+          locked: document.lockedByProfessional,
+        ),
+      );
+    }
+
+    // 2. Hasil asesmen & 3. hasil terapi dari submission worksheet server.
+    for (final submission in _therapySubmissions) {
+      final history = assessmentEntryFromSubmission(submission);
+      entries.add(
+        _RecordEntry(
+          kind: history.isAssessmentResult
+              ? _RecordEntry.kindAssessment
+              : _RecordEntry.kindTherapy,
+          title: history.title,
+          detail: history.subtitle,
+          date: history.date,
+          icon: history.icon,
+          color: history.color,
+          isShared: history.isShared,
+          onTap: () => showAssessmentHistoryDetail(context, history),
+        ),
+      );
+    }
+
+    // Screening PHQ-9 + GAD-7 termasuk hasil asesmen.
+    for (final screening in _screenings) {
+      final history = assessmentEntryFromScreening(screening);
+      entries.add(
+        _RecordEntry(
+          kind: _RecordEntry.kindAssessment,
+          title: history.title,
+          detail: history.subtitle,
+          date: history.date,
+          icon: history.icon,
+          color: history.color,
+          onTap: () => showAssessmentHistoryDetail(context, history),
+        ),
+      );
+    }
+
+    entries.sort((a, b) {
+      final dateA = a.date;
+      final dateB = b.date;
+      if (dateA == null && dateB == null) return 0;
+      if (dateA == null) return 1;
+      if (dateB == null) return -1;
+      return dateB.compareTo(dateA);
+    });
+    return entries;
+  }
+
+  /// Filter jenis + tipe file + pencarian judul (lintas jenis).
+  bool _matchesFilter(_RecordEntry entry) {
+    if (_kindFilter != _RecordEntry.kindAll && entry.kind != _kindFilter) {
+      return false;
+    }
+    // Tipe file hanya bermakna untuk dokumen unggahan.
+    if (_kindFilter == _RecordEntry.kindDocument &&
+        _typeFilter != 'Semua' &&
+        entry.fileType.toUpperCase() != _typeFilter) {
+      return false;
+    }
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return true;
+    return entry.title.toLowerCase().contains(query);
   }
 
   @override
   Widget build(BuildContext context) {
     final storeState = ref.watch(malvaStoreProvider);
-    final records = storeState.records.where((r) {
-      final matchesType =
-          _typeFilter == 'All' || r.type.toUpperCase() == _typeFilter;
-      final matchesQuery = _searchQuery.isEmpty ||
-          r.title.toLowerCase().contains(_searchQuery.toLowerCase());
-      return matchesType && matchesQuery;
-    }).toList();
+    // Record = gabungan kronologis dokumen unggahan + hasil asesmen + hasil
+    // terapi agar riwayat klinis pasien terbaca dalam satu daftar.
+    final entries = _buildEntries(context, storeState.records);
+    final visibleEntries =
+        entries.where(_matchesFilter).toList(growable: false);
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: _loadFromServer,
@@ -176,24 +331,53 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                   TextField(
                     decoration: const InputDecoration(
                       labelText: 'Search',
-                      hintText: 'Cari dokumen...',
+                      hintText: 'Cari dokumen, asesmen, atau terapi...',
                       prefixIcon: Icon(Icons.search_rounded),
                     ),
                     onChanged: (v) => setState(() => _searchQuery = v),
                   ),
                   const SizedBox(height: 10),
+                  // Sumber tambahan masih dimuat: indikator ringkas saja,
+                  // bukan spinner besar yang menahan seluruh layar.
+                  if (_extrasLoading) ...[
+                    Row(
+                      children: [
+                        const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Memuat hasil asesmen & terapi…',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  // Filter jenis entri (primer).
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        for (final option in _typeOptions)
+                        for (final option in _kindOptions)
                           Padding(
                             padding: const EdgeInsets.only(right: 8),
                             child: FilterChip(
                               label: Text(option),
-                              selected: _typeFilter == option,
-                              onSelected: (_) =>
-                                  setState(() => _typeFilter = option),
+                              selected: _kindFilter == option,
+                              onSelected: (_) => setState(() {
+                                _kindFilter = option;
+                                // Filter tipe file hanya berlaku untuk dokumen;
+                                // direset agar daftar tidak kosong tanpa sebab.
+                                if (option != _RecordEntry.kindDocument) {
+                                  _typeFilter = 'Semua';
+                                }
+                              }),
                               selectedColor:
                                   MalvaColors.seed.withValues(alpha: 0.15),
                               checkmarkColor: MalvaColors.seed,
@@ -202,8 +386,50 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                       ],
                     ),
                   ),
+                  // Filter tipe file hanya tampil saat melihat dokumen.
+                  if (_kindFilter == _RecordEntry.kindDocument) ...[
+                    const SizedBox(height: 8),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final option in _typeOptions)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: FilterChip(
+                                label: Text(option),
+                                selected: _typeFilter == option,
+                                onSelected: (_) =>
+                                    setState(() => _typeFilter = option),
+                                selectedColor:
+                                    MalvaColors.seed.withValues(alpha: 0.15),
+                                checkmarkColor: MalvaColors.seed,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (_therapyError != null || _screeningError != null) ...[
+                    const SizedBox(height: 8),
+                    // Kegagalan satu sumber hanya jadi keterangan kecil:
+                    // dokumen, diagnosis, dan obat tetap tampil.
+                    Text(
+                      [
+                        if (_therapyError != null)
+                          'Hasil terapi belum termuat: $_therapyError',
+                        if (_screeningError != null)
+                          'Riwayat asesmen belum termuat: $_screeningError',
+                      ].join(' • '),
+                      style: const TextStyle(
+                          fontSize: 11.5, color: MalvaColors.danger),
+                    ),
+                  ],
                   const SizedBox(height: 10),
-                  if (records.isEmpty)
+                  // Empty state ditahan selama sumber tambahan dimuat: kalau
+                  // tidak, filter "Asesmen"/"Terapi" sempat menampilkan
+                  // "Tidak ada yang cocok" padahal datanya belum tiba.
+                  if (visibleEntries.isEmpty && !_extrasLoading)
                     SoftCard(
                       child: Column(
                         children: [
@@ -211,46 +437,23 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                               size: 48, color: MalvaColors.seed),
                           const SizedBox(height: 12),
                           Text(
-                            storeState.records.isEmpty
+                            entries.isEmpty
                                 ? 'Belum ada record'
-                                : 'Tidak ada dokumen yang cocok',
+                                : 'Tidak ada yang cocok',
                             style: const TextStyle(fontWeight: FontWeight.w900),
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'Upload dokumen, hasil tes, atau riwayat kesehatan Anda.',
+                            'Upload dokumen, isi asesmen, atau simpan worksheet '
+                            'terapi — semuanya tampil di sini.',
                             textAlign: TextAlign.center,
                           ),
                         ],
                       ),
                     )
                   else
-                    for (final record in records) ...[
-                      SoftCard(
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              child: Icon(_getRecordIcon(record.type)),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(record.title,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w900)),
-                                  Text(
-                                      '${record.type} - ${record.date.day}/${record.date.month}/${record.date.year}'),
-                                ],
-                              ),
-                            ),
-                            if (record.lockedByProfessional)
-                              const Icon(Icons.lock_rounded,
-                                  color: Colors.black45),
-                          ],
-                        ),
-                      ),
+                    for (final entry in visibleEntries) ...[
+                      _RecordEntryCard(entry: entry),
                       const SizedBox(height: 12),
                     ],
                 ],
@@ -359,6 +562,110 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Satu baris gabungan di bagian Record: dokumen unggahan, hasil asesmen,
+/// atau hasil terapi. [kind] dipakai filter primer di atas daftar.
+class _RecordEntry {
+  const _RecordEntry({
+    required this.kind,
+    required this.title,
+    required this.icon,
+    required this.color,
+    this.detail = '',
+    this.date,
+    this.fileType = '',
+    this.locked = false,
+    this.isShared = false,
+    this.onTap,
+  });
+
+  static const String kindAll = 'Semua';
+  static const String kindDocument = 'Dokumen';
+  static const String kindAssessment = 'Asesmen';
+  static const String kindTherapy = 'Terapi';
+
+  final String kind;
+  final String title;
+  final IconData icon;
+  final Color color;
+
+  /// Ringkasan skor/isi; kosong untuk dokumen biasa.
+  final String detail;
+  final DateTime? date;
+
+  /// Tipe file dokumen (PDF/IMAGE/DOC/OTHER); kosong untuk non-dokumen.
+  final String fileType;
+
+  /// Dokumen terkunci oleh profesional (read-only).
+  final bool locked;
+
+  /// Hasil yang sudah dibagikan ke profesional.
+  final bool isShared;
+  final VoidCallback? onTap;
+
+  /// Baris keterangan kartu: jenis • tipe file • ringkasan • tanggal.
+  String get description {
+    final parts = <String>[kind];
+    // Tipe file hanya ada pada dokumen; tanpa ini info PDF/IMAGE hilang dari
+    // kartu dan hanya tersisa di ikon.
+    if (fileType.isNotEmpty) parts.add(fileType);
+    if (detail.isNotEmpty) parts.add(detail);
+    if (date != null) parts.add(formatAssessmentDate(date));
+    return parts.join(' • ');
+  }
+}
+
+/// Kartu satu entri Record (dokumen / asesmen / terapi).
+class _RecordEntryCard extends StatelessWidget {
+  const _RecordEntryCard({required this.entry});
+
+  final _RecordEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+    return SoftCard(
+      onTap: entry.onTap,
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: entry.color.withValues(alpha: 0.14),
+            child: Icon(entry.icon, color: entry.color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.title,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  entry.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, color: onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          if (entry.isShared) ...[
+            const SizedBox(width: 8),
+            const StatusPill(
+              label: 'Dibagikan',
+              color: MalvaColors.mint,
+              icon: Icons.send_rounded,
+            ),
+          ],
+          if (entry.locked)
+            const Icon(Icons.lock_rounded, color: Colors.black45),
+        ],
       ),
     );
   }

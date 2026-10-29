@@ -7,6 +7,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/therapy_library.dart';
+import 'assessment_history_screen.dart';
 import 'assessment_screen.dart';
 
 // ============================================================
@@ -130,6 +131,23 @@ class AssessmentListScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
+                const SizedBox(height: 20),
+                // Hasil asesmen dipisah dari daftar Hasil Therapy: semua hasil
+                // skrining (PHQ-9/GAD-7) dan asesmen (DASS-21/WHO-5) dibaca
+                // dari satu tempat ini.
+                SectionLabel(
+                  'Hasil Assessment',
+                  action: TextButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AssessmentHistoryScreen(),
+                      ),
+                    ),
+                    child: const Text('Lihat semua'),
+                  ),
+                ),
+                const AssessmentHistoryPreview(),
                 const SizedBox(height: 20),
                 SoftCard(
                   color: MalvaColors.amber.withValues(alpha: 0.10),

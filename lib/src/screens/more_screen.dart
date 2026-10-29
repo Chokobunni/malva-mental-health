@@ -70,7 +70,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 const SizedBox(height: 10),
                 ActionTile(
                   icon: Icons.folder_copy_rounded,
-                  title: 'Folder Therapy',
+                  title: 'Hasil Therapy',
                   subtitle: 'Worksheet terapi tersimpan — unduh & kirim',
                   color: MalvaColors.orchid,
                   onTap: () => Navigator.push(

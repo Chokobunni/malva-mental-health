@@ -1085,7 +1085,7 @@ Color worksheetFieldFill(BuildContext context) {
 // ============================================================
 
 /// Halaman detail modul terapi: deskripsi + langkah + worksheet.
-/// Worksheet bisa diisi, disimpan ke server (folder therapy), diunduh
+/// Worksheet bisa diisi, disimpan ke server (Hasil Therapy), diunduh
 /// (share/export), dan dibagikan ke profesional (butuh paket aktif).
 class TherapyDetailScreen extends ConsumerStatefulWidget {
   const TherapyDetailScreen({super.key, required this.module});
@@ -1267,7 +1267,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
         if (sharedTo == null) {
           if (mounted) {
             setState(() => _isSaving = false);
-            _toast('Worksheet tersimpan di folder therapy. '
+            _toast('Worksheet tersimpan di Hasil Therapy. '
                 'Belum dibagikan ke profesional.');
           }
           return;
@@ -1285,7 +1285,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
       });
       _toast(share
           ? 'Worksheet tersimpan & dibagikan ke profesional.'
-          : 'Worksheet tersimpan di folder therapy.');
+          : 'Worksheet tersimpan di Hasil Therapy.');
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
@@ -1549,7 +1549,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
               const SizedBox(height: 10),
             ],
             if (summary != null) ...[
-              _AssessmentResultCard(
+              AssessmentResultCard(
                   moduleId: module.id, answers: _liveAssessmentAnswers()),
               const SizedBox(height: 10),
             ],
@@ -1562,7 +1562,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                         ? 'Pilih jawaban yang paling sesuai untuk setiap '
                             'pernyataan. Semua wajib dijawab agar skor valid.'
                         : 'Isi worksheet ini sesuai kondisimu. Hasilnya bisa '
-                            'disimpan ke folder therapy, diunduh, atau dikirim '
+                            'disimpan ke Hasil Therapy, diunduh, atau dikirim '
                             'langsung ke profesional (butuh paket sesi aktif).',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant),
@@ -1638,8 +1638,8 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                 SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Worksheet tersimpan di folder therapy (menu More → '
-                    'Export / daftar worksheet).',
+                    'Worksheet tersimpan di Hasil Therapy (menu More → '
+                    'Hasil Therapy).',
                     style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
                   ),
                 ),
@@ -1659,7 +1659,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.save_rounded),
-              label: const Text('Simpan ke Folder Therapy'),
+              label: const Text('Simpan ke Hasil Therapy'),
             ),
             const SizedBox(height: 8),
             FilledButton.tonalIcon(
@@ -1741,14 +1741,42 @@ String? _answerText(TherapyWorksheetField field, Object? answer) {
   return s.isEmpty ? null : s;
 }
 
+/// Satu baris jawaban worksheet yang siap dirender layar lain.
+typedef TherapyAnswerEntry = ({String label, String answer});
+
+/// Daftar label → jawaban untuk satu worksheet tersimpan.
+///
+/// Dipakai layar riwayat asesmen & Health Record agar format jawaban identik
+/// dengan viewer profesional ([TherapySubmissionView]) tanpa menduplikasi
+/// logika format (`_answerText`) di layar lain. Field tanpa jawaban dilewati.
+List<TherapyAnswerEntry> therapyAnswerEntries({
+  required String moduleId,
+  required Map<String, dynamic> answers,
+}) {
+  final fields = findTherapyModuleById(moduleId)?.worksheetFields ??
+      const <TherapyWorksheetField>[];
+  final entries = <TherapyAnswerEntry>[];
+  for (final field in fields) {
+    final text = _answerText(field, answers[field.id]);
+    if (text == null) continue;
+    entries.add((label: _fieldHeadline(field), answer: text));
+  }
+  return entries;
+}
+
 /// Kartu hasil skor DASS-21 / WHO-5 (live saat mengisi & untuk viewer).
+///
+/// Publik karena dipakai ulang di layar riwayat asesmen
+/// (`screens/assessment_history_screen.dart`) dan Health Record — isinya
+/// murni presentasi dari [answers] sehingga aman dipakai di beberapa layar.
 ///
 /// Skor di kartu ini DETERMINISTIK (lihat `ai/assessment_scoring.dart`).
 /// Baris "Interpretasi triage" memakai lapisan pakar (forward chaining + CF,
 /// lihat `ai/assessment_interpretation.dart`) yang HANYA menilai keyakinan
 /// rujukan — tidak pernah mengubah skor maupun level subskala.
-class _AssessmentResultCard extends StatelessWidget {
-  const _AssessmentResultCard({
+class AssessmentResultCard extends StatelessWidget {
+  const AssessmentResultCard({
+    super.key,
     required this.moduleId,
     required this.answers,
   });
@@ -2390,13 +2418,15 @@ class _WorksheetFieldBlock extends StatelessWidget {
 
 /// Pilihan skala berlabel (DASS-21 / WHO-5).
 ///
-/// Tiga hal yang WAJIB tampil, karena sebelumnya pasien hanya melihat angka
-/// tanpa arti dan tombolnya turun ke bawah (susah dibandingkan):
-/// 1. Legenda "0 = Tidak pernah", "1 = Kadang-kadang", … di ATAS tombol —
-///    sama seperti legenda PHQ-9/GAD-7 di `assessment_screen.dart`.
-/// 2. Semua opsi dalam SATU baris horizontal (`Row` + `Expanded`), tidak
-///    pernah turun baris walau layar sempit.
-/// 3. Ringkasan pilihan aktif: "Skor: 1 — Kadang-kadang".
+/// Penjelasan arti tiap angka cukup SATU tempat: legenda "0 = Tidak pernah",
+/// "1 = Kadang-kadang", … di ATAS tombol (sama seperti legenda PHQ-9/GAD-7 di
+/// `assessment_screen.dart`). Sebelumnya arti yang sama diulang di dalam tiap
+/// tombol dan di ringkasan "Skor: …" di bawahnya sehingga deretan angka
+/// terlihat ramai — kini tombol hanya berisi angka, dan tidak ada teks apa pun
+/// di bawah deretan tombol.
+///
+/// Semua opsi tetap dalam satu baris horizontal (`Row` + `Expanded`) dan tidak
+/// pernah turun baris walau layar sempit.
 class _ScaleOptions extends StatelessWidget {
   const _ScaleOptions({
     required this.field,
@@ -2413,12 +2443,11 @@ class _ScaleOptions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fill = worksheetFieldFill(context);
-    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     final values = field.scaleValues;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Legenda arti tiap angka — konteks sebelum pasien memilih.
+        // Legenda arti tiap angka — satu-satunya penjelasan yang ditampilkan.
         Wrap(
           spacing: 6,
           runSpacing: 4,
@@ -2446,33 +2475,8 @@ class _ScaleOptions extends StatelessWidget {
         // - <= 4 opsi → SATU baris penuh (DASS-21, 4 opsi muat).
         // - > 4 opsi  → 3 per baris (WHO-5: 0,1,2 lalu 3,4,5). Enam tombol
         //   dalam satu baris hanya menyisakan ~46px per tombol di layar
-        //   360dp sehingga labelnya terpotong dan tak terbaca.
+        //   360dp sehingga angka dan labelnya terpotong.
         ..._optionRows(values, fill),
-        if (value != null) ...[
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: moduleColor.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              // Angka + maknanya, mis. "Skor: 1 — Kadang-kadang".
-              'Skor: $value — ${field.scaleLabel(value!)}',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: moduleColor,
-              ),
-            ),
-          ),
-        ] else ...[
-          const SizedBox(height: 6),
-          Text(
-            'Ketuk salah satu pilihan untuk menjawab.',
-            style: TextStyle(fontSize: 11.5, color: onSurfaceVariant),
-          ),
-        ],
       ],
     );
   }
@@ -2480,7 +2484,7 @@ class _ScaleOptions extends StatelessWidget {
   /// Baris-baris tombol opsi (urutan nilai tidak berubah).
   ///
   /// 4 opsi atau kurang dirender satu baris; lebih dari 4 dipecah 3 per baris
-  /// agar tiap tombol cukup lebar dan label pendeknya terbaca utuh.
+  /// agar tiap tombol cukup lebar.
   List<Widget> _optionRows(List<int> values, Color fill) {
     final perRow = values.length <= 4 ? values.length : 3;
     final rows = <Widget>[];
@@ -2495,7 +2499,8 @@ class _ScaleOptions extends StatelessWidget {
               Expanded(
                 child: _ScaleOptionButton(
                   number: chunk[i],
-                  shortLabel: field.scaleShortLabel(chunk[i]),
+                  // Label lengkap hanya dipakai pembaca layar; tidak dirender
+                  // sebagai teks agar deretan angka tetap bersih.
                   fullLabel: field.scaleLabel(chunk[i]),
                   color: moduleColor,
                   fill: fill,
@@ -2512,11 +2517,15 @@ class _ScaleOptions extends StatelessWidget {
   }
 }
 
-/// Satu tombol skala: angka besar + label pendek (maks 2 baris) di bawahnya.
+/// Satu tombol skala: hanya angka besar, tanpa label di bawahnya.
+///
+/// Arti angka sudah dijelaskan legenda di atas deretan tombol, jadi label
+/// pendek di dalam tombol dihapus agar tidak mengulang informasi yang sama.
+/// [fullLabel] tetap dipakai sebagai label `Semantics` supaya pembaca layar
+/// tetap mengumumkan arti angka (aksesibilitas tidak berkurang).
 class _ScaleOptionButton extends StatelessWidget {
   const _ScaleOptionButton({
     required this.number,
-    required this.shortLabel,
     required this.fullLabel,
     required this.color,
     required this.fill,
@@ -2525,7 +2534,6 @@ class _ScaleOptionButton extends StatelessWidget {
   });
 
   final int number;
-  final String shortLabel;
   final String fullLabel;
   final Color color;
   final Color fill;
@@ -2539,12 +2547,15 @@ class _ScaleOptionButton extends StatelessWidget {
       label: '$number — $fullLabel',
       button: true,
       selected: selected,
+      // Angka di dalam tombol tidak perlu diumumkan lagi: label di atas sudah
+      // menyebut angka + artinya, jadi tanpa ini TalkBack mengulang angka.
+      excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          // 68px: cukup untuk angka + label 2 baris pada font 10.5.
-          height: 68,
+          // 56px: cukup untuk satu angka besar tanpa label pendukung.
+          height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 6),
           decoration: BoxDecoration(
             color: selected ? color : fill,
@@ -2554,38 +2565,20 @@ class _ScaleOptionButton extends StatelessWidget {
               width: selected ? 2 : 1,
             ),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  // Angka skor baku (DASS-21 0-3, WHO-5 0-5).
-                  '$number',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 17,
-                    height: 1.05,
-                    color: textColor,
-                  ),
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                // Angka skor baku (DASS-21 0-3, WHO-5 0-5).
+                '$number',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 20,
+                  height: 1.05,
+                  color: textColor,
                 ),
               ),
-              const SizedBox(height: 2),
-              Expanded(
-                child: Text(
-                  shortLabel,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    height: 1.1,
-                    fontWeight: FontWeight.w700,
-                    color: textColor,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -2806,7 +2799,12 @@ class _MiniScale extends StatelessWidget {
   }
 }
 
-/// Halaman daftar worksheet yang sudah disimpan (folder therapy).
+/// Halaman daftar hasil worksheet terapi yang sudah disimpan
+/// (menu More → Hasil Therapy).
+///
+/// Hasil asesmen (DASS-21 / WHO-5) TIDAK ditampilkan di sini: hasil asesmen
+/// punya halamannya sendiri (Assessment → Hasil Assessment) agar worksheet
+/// terapi tidak tercampur dengan hasil skrining.
 class TherapySubmissionsScreen extends ConsumerStatefulWidget {
   const TherapySubmissionsScreen({super.key});
 
@@ -2820,6 +2818,17 @@ class _TherapySubmissionsScreenState
   List<BackendTherapySubmission> _items = const [];
   bool _isLoading = true;
   String? _error;
+
+  /// Submission yang benar-benar worksheet terapi.
+  ///
+  /// `findTherapyModuleById(...)?.isAssessment != true` sengaja dipakai
+  /// (bukan `== false`) supaya submission dengan modul tak dikenal tetap
+  /// tampil sebagai terapi — data pasien tidak boleh hilang diam-diam hanya
+  /// karena definisi modulnya berubah/terhapus di versi aplikasi.
+  List<BackendTherapySubmission> get _therapyItems => _items
+      .where(
+          (item) => findTherapyModuleById(item.moduleId)?.isAssessment != true)
+      .toList(growable: false);
 
   @override
   void initState() {
@@ -2989,9 +2998,10 @@ class _TherapySubmissionsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final items = _therapyItems;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Folder Therapy'),
+        title: const Text('Hasil Therapy'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
         actions: [
@@ -3011,21 +3021,23 @@ class _TherapySubmissionsScreenState
                     child: Text(_error!, textAlign: TextAlign.center),
                   ),
                 )
-              : _items.isEmpty
+              : items.isEmpty
                   ? const EmptyState(
-                      icon: Icons.folder_open_rounded,
-                      title: 'Belum ada worksheet',
+                      icon: Icons.self_improvement_rounded,
+                      title: 'Belum ada hasil therapy',
                       subtitle:
-                          'Buka menu Psychological Therapy, pilih modul, isi '
-                          'worksheet, lalu simpan. Hasilnya muncul di sini.',
+                          'Buka menu Psychological Therapy, pilih modul terapi, '
+                          'isi worksheet, lalu simpan. Hasilnya muncul di sini. '
+                          'Hasil asesmen (DASS-21/WHO-5) ada di halaman '
+                          'Assessment.',
                     )
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView.builder(
                         padding: const EdgeInsets.all(18),
-                        itemCount: _items.length,
+                        itemCount: items.length,
                         itemBuilder: (context, index) {
-                          final item = _items[index];
+                          final item = items[index];
                           final created = item.createdDateTime;
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 10),
@@ -3119,7 +3131,7 @@ class TherapyCatalogScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            tooltip: 'Folder Therapy (worksheet tersimpan)',
+            tooltip: 'Hasil Therapy (worksheet tersimpan)',
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -3141,8 +3153,9 @@ class TherapyCatalogScreen extends StatelessWidget {
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Text(
-                    'Isi worksheet pada tiap modul, lalu simpan ke folder '
-                    'therapy — bisa diunduh & dikirim ke profesional (butuh paket sesi aktif).',
+                    'Isi worksheet pada tiap modul, lalu simpan ke '
+                    'Hasil Therapy — bisa diunduh & dikirim ke profesional '
+                    '(butuh paket sesi aktif).',
                     style:
                         TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
                   ),
@@ -3242,7 +3255,7 @@ class TherapySubmissionView extends StatelessWidget {
 
     // Untuk modul assessment, kartu hasil skor tetap tampil di bagian atas.
     final Widget? resultCard = (module != null && module.isAssessment)
-        ? _AssessmentResultCard(
+        ? AssessmentResultCard(
             moduleId: module.id,
             answers: {
               for (final f in fields)
