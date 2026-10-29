@@ -49,6 +49,40 @@ flutter build apk --debug --dart-define=MALVA_API_BASE_URL=https://api.malva.id
 flutter build web --dart-define=MALVA_API_BASE_URL=https://api.malva.id
 ```
 
+## flutter test gagal "Invalid WebSocket upgrade request"?
+
+Kalau muncul:
+
+```text
+Failed to load "..._test.dart": Unable to connect to flutter_tester process:
+WebSocketException: Invalid WebSocket upgrade request
+```
+
+itu **bukan** rusaknya test. `flutter_tester` bicara lewat WebSocket ke
+localhost, sedangkan Dart ikut memakai `HTTP_PROXY` / `HTTPS_PROXY` yang ada di
+mesin (proxy WorkBuddy `http://127.0.0.1:xxxxx`), sehingga permintaan upgrade
+WebSocket-nya ditolak.
+
+Solusinya: kosongkan variabel proxy sebelum menjalankan test.
+
+PowerShell (pakai wrapper yang sudah disediakan; di mesin ini hanya ada
+PowerShell 5.1, jadi pakai `powershell`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/flutter_test.ps1
+powershell -ExecutionPolicy Bypass -File scripts/flutter_test.ps1 test/assessment_test.dart
+```
+
+Bash / Git Bash:
+
+```bash
+HTTP_PROXY= http_proxy= HTTPS_PROXY= https_proxy= \
+  NO_PROXY=127.0.0.1,localhost flutter test
+```
+
+Catatan: jangan menghapus proxy secara permanen — `flutter pub get` dan
+pengunduhan paket masih membutuhkannya.
+
 ## Validasi sebelum build production
 
 Jalankan:
