@@ -1,3 +1,5 @@
+> **WIB-only (tanpa UTC):** semua waktu memakai WIB (Asia/Jakarta, UTC+7). Go: `clock.Now()`/`clock.Location()`, dilarang `.UTC()` dan `time.Now()` untuk timestamp bisnis; Dart: `wibNow()`/`toWib()`. Rincian di `AGENTS.md` aturan ke-8 dan `.agents/AGENTS.md` §"Zona waktu (WIB-only)".
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

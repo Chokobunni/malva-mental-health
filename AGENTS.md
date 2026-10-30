@@ -14,7 +14,7 @@ Panduan perilaku agent untuk repo ini **ada di [`.agents/AGENTS.md`](.agents/AGE
 | [`docs/API_ROUTES.md`](docs/API_ROUTES.md) · [`docs/openapi.yaml`](docs/openapi.yaml) | Inventaris 123 endpoint & skema OpenAPI 3.0.3 |
 | [`docs/MODULE_FEATURES.md`](docs/MODULE_FEATURES.md) | Matriks fitur per role |
 
-## Tujuh aturan yang tidak bisa ditawar
+## Delapan aturan yang tidak bisa ditawar
 
 1. **Jangan ubah skema, field, atau DTO** tanpa instruksi eksplisit dari user.
 2. **Tabel/kolom baru = file `backend/migrations/NNN_*.sql`** bernomor urut dan idempoten (`IF NOT EXISTS`); jangan pernah mengedit migrasi yang sudah berjalan di produksi.
@@ -23,6 +23,7 @@ Panduan perilaku agent untuk repo ini **ada di [`.agents/AGENTS.md`](.agents/AGE
 5. **Setelah mengubah route/DTO:** `cd backend && go run ./cmd/apidoc` lalu commit hasilnya. CI gagal bila dokumen API basi.
 6. **Commit pakai Conventional Commits** — `feat|fix|refactor|chore|docs|perf|test|build|ci|style|revert|seo|infra`.
 7. **Plan first:** sampaikan rencana + dampak (radius, ukuran, effort, kompatibilitas) sebelum eksekusi, termasuk saat menerima log error.
+8. **WIB-only, tanpa UTC.** Aplikasi hanya untuk Indonesia. Semua waktu memakai WIB (Asia/Jakarta, UTC+7, tanpa DST) — tidak boleh ada UTC di kode, sesi DB, DTO, maupun tampilan. Go: `clock.Now()`/`clock.Location()`, dilarang `.UTC()` dan `time.Now()` untuk timestamp bisnis; Dart: `wibNow()`/`toWib()`, dilarang `.toLocal()`/`DateTime.now()` untuk tampilan/bisnis. Rincian di [`.agents/AGENTS.md`](.agents/AGENTS.md) §"Zona waktu (WIB-only)".
 
 ## Gate otomatis (dijalankan CI, bisa dijalankan lokal)
 
@@ -32,7 +33,7 @@ gofmt -l .                          # harus kosong
 go build ./... && go vet ./...
 go test ./... -coverprofile=coverage.out
 go run ./cmd/apidoc -check          # dokumen API sinkron
-bash scripts/check_conventions.sh   # format + kebijakan clock.Now() di internal/store
+bash scripts/check_conventions.sh   # format + kebijakan WIB-only (tanpa .UTC()/time.Now() liar)
 bash scripts/check_env_sync.sh      # MALVA_* di config.go ⊆ .env.example
 bash scripts/check_migrations.sh    # penomoran & idempotensi migrasi
 bash scripts/check_coverage.sh coverage.out
@@ -62,7 +63,7 @@ Repo ini dilengkapi [Superpowers](https://github.com/obra/superpowers) — 15 sk
 | Workflow | `finishing-a-development-branch`, `verification-before-completion`, `using-git-worktrees` |
 | Meta | `using-superpowers`, `writing-skills` |
 
-**Prioritas:** aturan Malva (7 aturan non-negosiabel + gate CI) **selalu menang** atas Superpowers. Bila Superpowers menyarankan sesuatu yang bertentangan dengan aturan Malva, ikuti aturan Malva.
+**Prioritas:** aturan Malva (8 aturan non-negosiabel + gate CI) **selalu menang** atas Superpowers. Bila Superpowers menyarankan sesuatu yang bertentangan dengan aturan Malva, ikuti aturan Malva.
 
 ## Graphify (knowledge graph codebase)
 
@@ -90,7 +91,7 @@ Repo ini dilengkapi [Ponytail](https://github.com/DietrichGebert/ponytail) — p
 
 | # | Sumber | Mengatur |
 |---|---|---|
-| 1 | **Aturan Malva** (7 non-negosiabel + gate CI) | keamanan, skema, migrasi, waktu, log, commit |
+| 1 | **Aturan Malva** (8 non-negosiabel + gate CI) | keamanan, skema, migrasi, waktu, log, commit |
 | 2 | **Superpowers** | proses: plan, TDD, review, definisi selesai |
 | 3 | **Ponytail** | ukuran implementasi saja |
 

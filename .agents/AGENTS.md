@@ -171,6 +171,17 @@ Malva **tidak memakai GORM/AutoMigrate**. Skema dikelola lewat file SQL bernomor
 - `time.Now()` hanya untuk **durasi, deadline, JWT expiry, ticker** — bukan nilai yang dipersistensikan.
 - Konsolidasikan `wibLoc` / `locationWIB` / `"Asia/Jakarta"` ke satu sumber (Batch B).
 
+## Zona waktu (WIB-only) — aturan tegas
+
+Aplikasi **hanya untuk Indonesia**. Semua waktu memakai **WIB (Asia/Jakarta, UTC+7, tanpa DST)**.
+
+- **TIDAK BOLEH ada UTC** di kode, sesi DB, DTO, maupun tampilan. Jangan pernah menormalkan waktu bisnis ke UTC.
+- **Go:** pakai `clock.Now()` / `clock.Location()` (paket `internal/clock`). **Dilarang** `time.Now()` untuk timestamp bisnis (simpan/tampil/dibandingkan dengan tanggal) dan **dilarang** `.UTC()`. `time.Now()` hanya sah untuk durasi, `time.Since`/`time.Until`, ticker, deadline context, expiry JWT, dan `UnixNano()`/`UnixMilli()` untuk ID unik. Parsing tanggal bisnis wajib `time.ParseInLocation(..., clock.Location())`.
+- **Koneksi DB:** selalu lewat `store.OpenSQL(dsn)` — mendaftarkan codec `timestamptz` ber-`ScanLocation` WIB dan session `timezone=Asia/Jakarta`, agar hasil scan & `json.Marshal` mengeluarkan offset `+07:00`, bukan `Z`.
+- **Dart:** pakai `wibNow()` / `toWib()` dari `lib/src/time/wib.dart`. **Dilarang** `.toLocal()` dan `DateTime.now()` untuk tampilan/bisnis.
+- **API:** server selalu mengirim offset `+07:00`; klien mengirim `yyyy-MM-ddTHH:mm` (wall-clock WIB, tanpa `Z`).
+- **Gate:** `bash scripts/check_conventions.sh` (Go) + `scripts/check_wib_dart.sh` (Dart) menegakkan aturan ini.
+
 ## Konvensi Request ID
 
 - Header klien: `X-Request-Id`. Bila kosong, server membuatnya.
@@ -194,7 +205,7 @@ Dijalankan di `.github/workflows/backend-ci.yml`; semuanya bisa dijalankan lokal
 |---|---|---|---|
 | `go build ./...` | R8.1 | `go build ./...` | ada paket tidak terkompilasi |
 | `go test ./...` | R12.6 | `go test ./...` | ada test merah |
-| `check_conventions.sh` | R1.4, R4.3 | `bash scripts/check_conventions.sh` | ada file belum `gofmt`, atau `time.Now()` di `internal/store` |
+| `check_conventions.sh` | R1.4, R4.3 | `bash scripts/check_conventions.sh` | ada file belum `gofmt`, `.UTC()` di `internal/`, `time.Parse` tanggal bisnis di server/store, atau `time.Now()` di luar allowlist |
 | `check_env_sync.sh` | R6.1 | `bash scripts/check_env_sync.sh` | ada `MALVA_*` dibaca `config.go` tapi tidak ada di `.env.example` |
 | `check_migrations.sh` | R1.3 | `bash scripts/check_migrations.sh` | nama/nomor migrasi salah, atau migrasi ≥018 tidak idempoten |
 | `check_coverage.sh` | R12.2 | `bash scripts/check_coverage.sh coverage.out` | coverage paket hermetic turun di bawah ambang |
