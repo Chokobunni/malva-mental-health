@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -177,6 +178,8 @@ func (s *Store) ListCarePackages(ctx context.Context, userID, role, scope string
 			q += ` AND cp.patient_id = $2`
 			args = append(args, patient)
 		}
+		// Baris hasil merge tidak ditampilkan agar paket tidak tampil ganda.
+		q += ` AND cp.status <> 'merged'`
 		q += ` ORDER BY cp.created_at DESC LIMIT $` + fmt.Sprint(len(args)+1)
 		args = append(args, limit)
 	default:
@@ -185,6 +188,7 @@ func (s *Store) ListCarePackages(ctx context.Context, userID, role, scope string
 			LEFT JOIN users pat ON pat.id = cp.patient_id
 			LEFT JOIN users pro ON pro.id = cp.professional_id
 			WHERE cp.patient_id = $1
+			  AND cp.status <> 'merged'
 			ORDER BY cp.created_at DESC LIMIT $2`
 		args = []any{userID, limit}
 	}
@@ -231,43 +235,99 @@ func (s *Store) UpdateCarePackageStatus(ctx context.Context, packageID, status s
 	return nil
 }
 
+// mergePackageTotals menjumlahkan total sesi dan harga ketika dua paket pasien
+// dengan profesional yang sama digabung. Dipisah agar bisa diuji tanpa DB.
+func mergePackageTotals(oldTotal, newTotal int, oldPrice, newPrice int64) (int, int64) {
+	return oldTotal + newTotal, oldPrice + newPrice
+}
+
 // ActivatePendingPackage mengaktifkan paket pending terbaru milik pasangan
-// dan mengikatnya ke booking yang baru dibayar. Double-activation dijaga
-// via advisory lock + SELECT FOR UPDATE. Dipakai saat pembayaran booking
-// package_session sukses (bookings.package_id TIDAK dipakai karena kolom
-// itu FK ke service_packages lama).
-func (s *Store) ActivatePendingPackage(ctx context.Context, patientID, professionalID, bookingID string) (CarePackage, error) {
+// dan mengikatnya ke booking yang baru dibayar. Bila pasien sudah punya paket
+// aktif (belum kedaluwarsa) dengan profesional yang sama, paket pending
+// DIGABUNG ke paket aktif tersebut: total sesi & harga dijumlahkan, masa
+// berlaku diambil yang paling akhir, dan sesi lama tetap menunjuk paket target.
+// Double-activation dijaga via advisory lock + SELECT FOR UPDATE. Nilai
+// kembalian bool = true bila terjadi penggabungan.
+func (s *Store) ActivatePendingPackage(ctx context.Context, patientID, professionalID, bookingID string) (CarePackage, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return CarePackage{}, err
+		return CarePackage{}, false, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`,
 		"care_pkg:"+patientID+":"+professionalID); err != nil {
-		return CarePackage{}, err
+		return CarePackage{}, false, err
 	}
-	var id string
-	var price int64
-	err = tx.QueryRowContext(ctx, `SELECT id, price FROM care_packages
+	now := clock.Now()
+	var pendingID string
+	var pendingTotal int
+	var pendingPrice int64
+	var pendingExpires time.Time
+	err = tx.QueryRowContext(ctx, `SELECT id, total_sessions, price, expires_at FROM care_packages
 		WHERE patient_id = $1 AND professional_id = $2 AND status = 'pending_payment'
 		ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, patientID, professionalID).
-		Scan(&id, &price)
+		Scan(&pendingID, &pendingTotal, &pendingPrice, &pendingExpires)
 	if errors.Is(err, sql.ErrNoRows) {
-		return CarePackage{}, errors.New("tidak ada paket pending untuk pasangan ini (mungkin sudah aktif/kedaluwarsa)")
+		return CarePackage{}, false, errors.New("tidak ada paket pending untuk pasangan ini (mungkin sudah aktif/kedaluwarsa)")
 	}
 	if err != nil {
-		return CarePackage{}, err
+		return CarePackage{}, false, err
 	}
+
+	// Paket aktif lain (belum kedaluwarsa) untuk pasangan yang sama -> target gabung.
+	var activeID string
+	var activeTotal int
+	var activePrice int64
+	var activeExpires time.Time
+	err = tx.QueryRowContext(ctx, `SELECT id, total_sessions, price, expires_at FROM care_packages
+		WHERE patient_id = $1 AND professional_id = $2
+		  AND status = 'active' AND expires_at > $3 AND id <> $4
+		ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
+		patientID, professionalID, now, pendingID).
+		Scan(&activeID, &activeTotal, &activePrice, &activeExpires)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return CarePackage{}, false, err
+	}
+	merged := err == nil
+
+	if merged {
+		newTotal, newPrice := mergePackageTotals(activeTotal, pendingTotal, activePrice, pendingPrice)
+		if _, err := tx.ExecContext(ctx, `UPDATE care_packages
+			SET total_sessions = $1, price = $2, expires_at = GREATEST(expires_at, $3), updated_at = now()
+			WHERE id = $4`, newTotal, newPrice, pendingExpires, activeID); err != nil {
+			return CarePackage{}, false, err
+		}
+		// Paket pending ditandai merged; booking_id tetap disimpan agar jejak
+		// pembayaran terbaru tidak hilang.
+		if _, err := tx.ExecContext(ctx, `UPDATE care_packages
+			SET status = 'merged', merged_into = $1, merged_at = $2, booking_id = $3, updated_at = now()
+			WHERE id = $4`, activeID, now, bookingID, pendingID); err != nil {
+			return CarePackage{}, false, err
+		}
+		if err := tx.Commit(); err != nil {
+			return CarePackage{}, false, err
+		}
+		pkg, err := s.GetCarePackage(ctx, activeID)
+		if err != nil {
+			return CarePackage{}, false, err
+		}
+		return pkg, true, nil
+	}
+
+	// Tidak ada paket aktif: perilaku lama, paket pending menjadi aktif.
 	if _, err := tx.ExecContext(ctx, `UPDATE care_packages
 		SET status = 'active', booking_id = $1, updated_at = now()
-		WHERE id = $2`, bookingID, id); err != nil {
-		return CarePackage{}, err
+		WHERE id = $2`, bookingID, pendingID); err != nil {
+		return CarePackage{}, false, err
 	}
 	if err := tx.Commit(); err != nil {
-		return CarePackage{}, err
+		return CarePackage{}, false, err
 	}
-	_ = price
-	return s.GetCarePackage(ctx, id)
+	pkg, err := s.GetCarePackage(ctx, pendingID)
+	if err != nil {
+		return CarePackage{}, false, err
+	}
+	return pkg, false, nil
 }
 
 // ActivePackageBetween true bila ada paket aktif belum kedaluwarsa.
@@ -777,7 +837,7 @@ func (s *Store) ListTimeOff(ctx context.Context, professionalID string, from, to
 }
 
 func (s *Store) AddTimeOff(ctx context.Context, professionalID, offDate, reason string) (ProfessionalTimeOff, error) {
-	if _, err := time.Parse("2006-01-02", strings.TrimSpace(offDate)); err != nil {
+	if _, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(offDate), clock.Location()); err != nil {
 		return ProfessionalTimeOff{}, errors.New("off_date harus format YYYY-MM-DD")
 	}
 	var t ProfessionalTimeOff
@@ -864,6 +924,8 @@ func (s *Store) IsSlotBooked(ctx context.Context, professionalID string, at time
 }
 
 // CountBookedSessions jumlah sesi aktif profesional pada daftar waktu (sekali query).
+// Kunci map = unix detik (bebas zona) agar pembanding dengan slot di handler
+// tetap cocok tanpa menormalkan ke UTC.
 func (s *Store) CountBookedSessions(ctx context.Context, professionalID string, times []time.Time) (map[string]bool, error) {
 	out := map[string]bool{}
 	if len(times) == 0 {
@@ -881,7 +943,7 @@ func (s *Store) CountBookedSessions(ctx context.Context, professionalID string, 
 		if err := rows.Scan(&t); err != nil {
 			return nil, err
 		}
-		out[t.UTC().Format(time.RFC3339)] = true
+		out[strconv.FormatInt(t.Unix(), 10)] = true
 	}
 	return out, rows.Err()
 }
@@ -889,7 +951,7 @@ func (s *Store) CountBookedSessions(ctx context.Context, professionalID string, 
 func timesToArray(times []time.Time) string {
 	parts := make([]string, 0, len(times))
 	for _, t := range times {
-		parts = append(parts, `"`+t.UTC().Format(time.RFC3339)+`"`)
+		parts = append(parts, `"`+t.Format(time.RFC3339)+`"`)
 	}
 	return "{" + strings.Join(parts, ",") + "}"
 }

@@ -128,11 +128,10 @@ func (s *Server) createCarePackage(w http.ResponseWriter, r *http.Request, claim
 		writeError(w, http.StatusNotFound, errors.New("professional not found or not verified"))
 		return
 	}
-	// Tolak bila masih ada paket aktif dengan profesional yang sama.
-	if _, has, _ := s.store.ActivePackageBetween(r.Context(), claims.Subject, professionalID); has {
-		writeError(w, http.StatusConflict, errors.New("kamu masih punya paket aktif dengan profesional ini. Selesaikan dulu sebelum membeli lagi"))
-		return
-	}
+	// Bila sudah ada paket aktif dengan profesional yang sama, paket baru ini
+	// TIDAK ditolak: saat pembayaran lunas paket akan digabung ke paket aktif
+	// (lihat store.ActivatePendingPackage). Klien diberi petunjuk penggabungan.
+	activePkg, hasActive, _ := s.store.ActivePackageBetween(r.Context(), claims.Subject, professionalID)
 	pricing, err := s.store.GetProfessionalPricing(r.Context(), professionalID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -142,7 +141,7 @@ func (s *Server) createCarePackage(w http.ResponseWriter, r *http.Request, claim
 		writeError(w, http.StatusBadRequest, errors.New("profesional belum mengatur harga paket. Pilih Quick Consult atau hubungi profesional"))
 		return
 	}
-	now := time.Now()
+	now := clock.Now()
 	pkg, err := s.store.CreateCarePackage(r.Context(), store.CarePackage{
 		PatientID:      claims.Subject,
 		ProfessionalID: professionalID,
@@ -157,7 +156,12 @@ func (s *Server) createCarePackage(w http.ResponseWriter, r *http.Request, claim
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"package": pkg})
+	resp := map[string]any{"package": pkg}
+	if hasActive {
+		resp["merged"] = true
+		resp["merged_package_id"] = activePkg.ID
+	}
+	writeJSON(w, http.StatusCreated, resp)
 }
 
 func (s *Server) listCarePackages(w http.ResponseWriter, r *http.Request, claims auth.Claims) {

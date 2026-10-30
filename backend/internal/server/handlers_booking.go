@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"malva/backend/internal/auth"
+	"malva/backend/internal/clock"
 	"malva/backend/internal/store"
 )
 
@@ -121,22 +122,24 @@ func (s *Server) slotDurationFor(ctx context.Context, professionalID string, sta
 }
 
 // activatePaidBooking membuat sesi terjadwal (quick) / paket aktif + link.
-func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) error {
+// Nilai kembalian string = id paket target bila paket baru DIGABUNG ke paket
+// aktif yang sudah ada (kosong bila tidak ada penggabungan).
+func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, error) {
 	ctx := r.Context()
 	booking, err := s.store.GetBooking(ctx, p.BookingID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if booking.Status != "paid" {
-		return nil
+		return "", nil
 	}
 	// Paket: aktifkan paket pending milik pasangan + link + jadwalkan sesi
 	// pertama dari slot booking. (bookings.package_id tidak dipakai karena
 	// kolom itu FK ke tabel service_packages lama.)
 	if booking.ServiceType == "package_session" {
-		pkg, err := s.store.ActivatePendingPackage(ctx, booking.PatientID, booking.ProfessionalID, booking.ID)
+		pkg, merged, err := s.store.ActivatePendingPackage(ctx, booking.PatientID, booking.ProfessionalID, booking.ID)
 		if err != nil {
-			return err
+			return "", err
 		}
 		now := time.Now()
 		starts := pkg.StartsAt
@@ -149,7 +152,7 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) error {
 		}
 		start, perr := parseWIBDateTime(booking.BookingDate + "T" + booking.SlotTime)
 		if perr != nil || booking.SlotTime == "" {
-			return errors.New("slot sesi pertama paket tidak valid")
+			return "", errors.New("slot sesi pertama paket tidak valid")
 		}
 		duration := booking.DurationMinutes
 		if duration <= 0 {
@@ -172,7 +175,7 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) error {
 			Status:          "scheduled",
 		})
 		if cerr != nil {
-			return cerr
+			return "", cerr
 		}
 		// Sesi pertama paket bisa bertipe video: buat link Google Meet.
 		// Best-effort — pembayaran sudah lunas, kegagalan Google tidak boleh
@@ -189,7 +192,11 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) error {
 		s.notifyPatient(r, booking.PatientID, "package_activated",
 			"Paket aktif!", pkgBody,
 			map[string]string{"package_id": pkg.ID, "session_id": cs.ID, "meeting_url": cs.MeetingURL})
-		return nil
+		mergedID := ""
+		if merged {
+			mergedID = pkg.ID
+		}
+		return mergedID, nil
 	}
 	start, perr := parseWIBDateTime(booking.BookingDate + "T" + booking.SlotTime)
 	if perr != nil || booking.SlotTime == "" {
@@ -203,7 +210,7 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) error {
 		if earnErr := s.store.RecognizeEarningForPayment(ctx, p.ID); earnErr != nil {
 			s.logger.Warn("recognize earning for legacy booking failed", "payment", p.ID, "error", earnErr)
 		}
-		return nil
+		return "", nil
 	}
 	duration := booking.DurationMinutes
 	if duration <= 0 {
@@ -213,7 +220,7 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) error {
 		// Slot keburu diambil saat pembayaran: kembalikan ke pending agar
 		// pasien memilih ulang (pembayaran tetap tercatat untuk refund manual).
 		_ = s.store.UpdateBookingStatus(ctx, booking.ID, "pending")
-		return errors.New("slot keburu terisi saat pembayaran; booking dikembalikan ke pending")
+		return "", errors.New("slot keburu terisi saat pembayaran; booking dikembalikan ke pending")
 	}
 	cs, cerr := s.store.CreateCareSession(ctx, store.CareSession{
 		BookingID:       &booking.ID,
@@ -225,7 +232,7 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) error {
 		Status:          "scheduled",
 	})
 	if cerr != nil {
-		return cerr
+		return "", cerr
 	}
 	// Quick consult video: buat link Google Meet (best-effort, lihat catatan
 	// pada alur aktivasi paket di atas).
@@ -242,7 +249,7 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) error {
 	s.notifyPatient(r, booking.PatientID, "session_scheduled",
 		"Sesi berhasil dijadwalkan", quickBody,
 		map[string]string{"session_id": cs.ID, "meeting_url": cs.MeetingURL})
-	return nil
+	return "", nil
 }
 
 // ============================================================
@@ -422,7 +429,7 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, claims au
 	}
 	// Generate reference: TXN-YYYYMMDDHHMMSS-RANDOM6
 	reference := fmt.Sprintf("TXN-%s-%06d",
-		time.Now().Format("20060102150405"),
+		clock.Now().Format("20060102150405"),
 		(int64)(time.Now().UnixNano()%1000000),
 	)
 
@@ -540,11 +547,17 @@ func (s *Server) markPaymentPaid(w http.ResponseWriter, r *http.Request, claims 
 
 	// Efek samping pembayaran: quick consult -> sesi terjadwal;
 	// paket -> care package aktif + link pasien-profesional.
-	if err := s.activatePaidBooking(r, p); err != nil {
-		s.logger.Warn("activate paid booking failed", "payment", p.ID, "error", err)
+	mergedPkgID, aerr := s.activatePaidBooking(r, p)
+	if aerr != nil {
+		s.logger.Warn("activate paid booking failed", "payment", p.ID, "error", aerr)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"payment": p, "status": "paid"})
+	resp := map[string]interface{}{"payment": p, "status": "paid"}
+	if mergedPkgID != "" {
+		resp["merged"] = true
+		resp["merged_package_id"] = mergedPkgID
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // cancelPendingBooking membatalkan booking yang masih pending beserta
@@ -667,7 +680,7 @@ func (s *Server) paymentWebhook(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, errors.New("gagal memproses pembayaran"))
 			return
 		}
-		if aerr := s.activatePaidBooking(r, p); aerr != nil {
+		if _, aerr := s.activatePaidBooking(r, p); aerr != nil {
 			s.logger.Warn("webhook activate booking failed", "payment", p.ID, "error", aerr)
 		}
 		_ = s.store.UpdatePaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType, "processed", p.ID, p.BookingID)
@@ -856,7 +869,7 @@ func (s *Server) createEPrescription(w http.ResponseWriter, r *http.Request, cla
 		"str_number":  cred.STRNumber,
 		"sip_number":  cred.SIPNumber,
 		"sipp_number": cred.SIPPNumber,
-		"timestamp":   time.Now().UTC().Format(time.RFC3339),
+		"timestamp":   clock.Now().Format(time.RFC3339),
 	}
 
 	qrToken := fmt.Sprintf("RX-%s-%d", claims.Subject[:8], time.Now().UnixNano()/1e6)
