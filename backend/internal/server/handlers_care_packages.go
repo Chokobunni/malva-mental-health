@@ -265,10 +265,6 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 		return
 	}
 	if sessionType == "video" && meetingURL == "" {
-		if s.calendar == nil {
-			writeError(w, http.StatusNotImplemented, ErrMeetUnavailable)
-			return
-		}
 		opts := s.meetEventOptions(r.Context(), store.CareSession{
 			PatientID:        pkg.PatientID,
 			ProfessionalID:   pkg.ProfessionalID,
@@ -278,26 +274,25 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 			ScheduledAt:      at,
 			DurationMinutes:  duration,
 		})
-		eventID, meetURL, cerr := s.calendar.CreateMeetEvent(r.Context(), pkg.ProfessionalID, opts)
+		eventID, meetURL, cerr := s.createScheduledMeet(r.Context(), s.calendar, pkg.ProfessionalID, opts)
 		if cerr != nil {
+			if errors.Is(cerr, ErrMeetUnavailable) {
+				writeError(w, http.StatusNotImplemented, ErrMeetUnavailable)
+				return
+			}
 			if errors.Is(cerr, googlecal.ErrReauthNeeded) {
 				writeError(w, http.StatusUnauthorized,
 					errors.New("akses Google Calendar profesional kedaluwarsa. Profesional perlu menautkan ulang akun Google"))
 				return
 			}
+			if errors.Is(cerr, errMeetNoLink) {
+				writeError(w, http.StatusBadGateway,
+					errors.New("google tidak mengembalikan link Meet untuk event ini. Coba lagi"))
+				return
+			}
 			s.logger.Warn("gagal membuat event Google Meet", "error", cerr, "professional", pkg.ProfessionalID)
 			writeError(w, http.StatusBadGateway,
 				errors.New("gagal membuat link Google Meet. Coba lagi beberapa saat lagi"))
-			return
-		}
-		if strings.TrimSpace(meetURL) == "" {
-			if eventID != "" {
-				if cerr := s.calendar.CancelMeetEvent(r.Context(), pkg.ProfessionalID, eventID); cerr != nil {
-					s.logger.Warn("gagal membatalkan event Meet tanpa link", "error", cerr, "event_id", eventID)
-				}
-			}
-			writeError(w, http.StatusBadGateway,
-				errors.New("google tidak mengembalikan link Meet untuk event ini. Coba lagi"))
 			return
 		}
 		meetingURL = meetURL
@@ -437,11 +432,7 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 			return
 		}
 		// Best-effort: batalkan event Google Calendar bila ada.
-		if cs.GoogleEventID != "" && s.calendar != nil {
-			if cerr := s.calendar.CancelMeetEvent(r.Context(), cs.ProfessionalID, cs.GoogleEventID); cerr != nil {
-				s.logger.Warn("gagal membatalkan event Meet saat cancel profesional", "error", cerr, "event_id", cs.GoogleEventID)
-			}
-		}
+		s.cancelMeetEventBestEffort(r.Context(), s.calendar, cs.ProfessionalID, cs.GoogleEventID)
 		// Ledger kredit otomatis (idempoten): bukti audit kuota kembali.
 		refund, creditErr := s.recordAutoCredit(r, updated)
 		if creditErr != nil {
@@ -473,11 +464,7 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 			return
 		}
 		// Best-effort: batalkan event Google Calendar bila ada.
-		if cs.GoogleEventID != "" && s.calendar != nil {
-			if cerr := s.calendar.CancelMeetEvent(r.Context(), cs.ProfessionalID, cs.GoogleEventID); cerr != nil {
-				s.logger.Warn("gagal membatalkan event Meet saat cancel pasien", "error", cerr, "event_id", cs.GoogleEventID)
-			}
-		}
+		s.cancelMeetEventBestEffort(r.Context(), s.calendar, cs.ProfessionalID, cs.GoogleEventID)
 		s.notifyPatient(r, cs.ProfessionalID, "session_cancelled_patient",
 			"Pasien membatalkan sesi", "Seorang pasien membatalkan sesi terjadwal.",
 			map[string]string{"session_id": sessionID, "patient_id": cs.PatientID})
@@ -554,12 +541,17 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 	if updated.SessionType == "video" && !isGoogleMeetURL(updated.MeetingURL) {
 		updated = s.ensureMeetLinkBestEffort(r.Context(), updated)
 	}
-	// Best-effort: perbarui event Google Calendar bila ada.
-	if cs.GoogleEventID != "" && s.calendar != nil {
-		newEnd := at.Add(time.Duration(cs.DurationMinutes) * time.Minute)
-		if uerr := s.calendar.UpdateMeetEvent(r.Context(), cs.ProfessionalID, cs.GoogleEventID, at, newEnd); uerr != nil {
-			s.logger.Warn("gagal memperbarui event Meet saat reschedule", "error", uerr, "event_id", cs.GoogleEventID)
-		}
+	// Best-effort: perbarui event Google Calendar bila ada. Jadwal sudah
+	// tersimpan di DB, jadi kegagalan Google TIDAK menggagalkan reschedule —
+	// tetapi kegagalan itu harus TERLIHAT: warning di respons sukses + notifikasi
+	// ke profesional (dulu hanya dicatat ke log sehingga senyap bagi pengguna).
+	warnings := s.updateMeetEventOnReschedule(r.Context(), s.calendar,
+		cs.ProfessionalID, cs.GoogleEventID, at, cs.DurationMinutes)
+	if len(warnings) > 0 {
+		s.notifyUser(r.Context(), cs.ProfessionalID, "session_meet_update_failed",
+			"Event Google Calendar gagal diperbarui",
+			"Jadwal sesi sudah dipindahkan, tetapi event di Google Calendar gagal diperbarui. Tautkan ulang akun Google atau periksa kalender.",
+			map[string]string{"session_id": sessionID})
 	}
 	other := cs.PatientID
 	title := "Sesi di-reschedule profesional"
@@ -575,7 +567,12 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 	}
 	s.notifyPatient(r, other, "session_rescheduled", title,
 		reschedBody, reschedPayload)
-	writeJSON(w, http.StatusOK, map[string]any{"session": updated})
+	resp := map[string]any{"session": updated}
+	if len(warnings) > 0 {
+		// Sinyal eksplisit ke klien: jadwal tersimpan, sinkronisasi Google gagal.
+		resp["warnings"] = warnings
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // chatPermission: boleh kirim teks? boleh share? sesi berikutnya kapan?

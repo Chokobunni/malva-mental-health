@@ -41,8 +41,8 @@ type Server struct {
 	payment payment.PaymentGateway
 	// sos nil = kanal blast SOS (WhatsApp/Fonnte) belum dikonfigurasi.
 	sos *notify.FonnteSender
-	// calendar nil = Google Calendar/Meet belum dikonfigurasi (client secret kosong).
-	calendar *googlecal.CalendarService
+	// calendar nil = Google Calendar/Meet belum dikonfigurasi (client secret kosong); tipe interface kecil agar bisa diuji fake (meet.go).
+	calendar meetCalendar
 }
 
 type registerRequest struct {

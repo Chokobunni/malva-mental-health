@@ -141,12 +141,6 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		if err != nil {
 			return "", err
 		}
-		now := time.Now()
-		starts := pkg.StartsAt
-		if starts.IsZero() || starts.After(now) {
-			starts = now
-		}
-		_ = starts
 		if _, err := s.store.LinkPatientToProfessional(ctx, booking.PatientID, booking.ProfessionalID); err != nil {
 			s.logger.Warn("link patient failed", "error", err)
 		}

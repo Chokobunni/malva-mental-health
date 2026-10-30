@@ -667,9 +667,12 @@ func (s *Store) RescheduleCareSession(ctx context.Context, sessionID string, new
 		_ = pkgStatus
 		_ = expires
 	}
+	// reminder_sent_at direset: sesi yang sudah pernah dikirimi pengingat di
+	// jadwal lama wajib diingatkan lagi pada jadwal baru. Tanpa reset, sweeper
+	// pengingat menganggapnya sudah terkirim dan pasien tidak diingatkan.
 	if _, err := tx.ExecContext(ctx, `UPDATE care_sessions
 		SET scheduled_at = $1, status = 'scheduled', reschedule_count = reschedule_count + 1,
-		    updated_at = now()
+		    reminder_sent_at = NULL, updated_at = now()
 		WHERE id = $2`, newTime, sessionID); err != nil {
 		return CareSession{}, err
 	}

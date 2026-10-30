@@ -1,10 +1,14 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -253,13 +257,27 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 		writeUserError(w, http.StatusBadRequest, "google tidak memberikan refresh token. Cabut akses Malva di https://myaccount.google.com/permissions lalu hubungkan ulang akun Google")
 		return
 	}
-	exchangedIDToken, _ := tok.Extra("id_token").(string)
-	payload, err := idtoken.Validate(r.Context(), exchangedIDToken, s.cfg.GoogleClientID)
-	if err != nil || !validGoogleIdentityPayload(payload) {
-		writeUserError(w, http.StatusUnauthorized, "Google authorization did not return a valid identity token")
-		return
+	// Token endpoint Google hanya mengembalikan id_token bila scope `openid`
+	// ikut diminta. Aplikasi Flutter meminta calendar.events saja, sehingga
+	// id_token sering kosong — dulu alur ini gagal keras 401 dan tombol
+	// "Aktifkan Google Meet" selalu gagal di perangkat nyata. Fallback: ambil
+	// `sub` dari Google UserInfo memakai access token yang baru ditukar.
+	subject := ""
+	if exchangedIDToken, _ := tok.Extra("id_token").(string); strings.TrimSpace(exchangedIDToken) != "" {
+		if payload, verr := idtoken.Validate(r.Context(), exchangedIDToken, s.cfg.GoogleClientID); verr == nil && validGoogleIdentityPayload(payload) {
+			subject = payload.Subject
+		}
 	}
-	if payload.Subject != identity.Subject {
+	if strings.TrimSpace(subject) == "" {
+		fallbackSubject, ferr := googleSubjectFromUserinfo(r.Context(), tok.AccessToken, googleUserinfoEndpoint)
+		if ferr != nil {
+			// Kedua jalur identitas gagal: tolak.
+			writeUserError(w, http.StatusUnauthorized, "Google authorization did not return a valid identity token")
+			return
+		}
+		subject = fallbackSubject
+	}
+	if subject != identity.Subject {
 		writeUserError(w, http.StatusConflict, "authorize Calendar using the Google account already bound to Malva")
 		return
 	}
@@ -268,9 +286,52 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 		writeUserError(w, http.StatusForbidden, "Google Calendar consent is required")
 		return
 	}
-	if err := s.store.UpsertGoogleToken(r.Context(), claims.Subject, tok.RefreshToken, tok.AccessToken, tok.Expiry, scope, payload.Subject); err != nil {
+	if err := s.store.UpsertGoogleToken(r.Context(), claims.Subject, tok.RefreshToken, tok.AccessToken, tok.Expiry, scope, subject); err != nil {
 		writeUserError(w, http.StatusInternalServerError, "could not save Calendar authorization")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// googleUserinfoEndpoint endpoint Google UserInfo (OpenID Connect) yang
+// mengembalikan `sub` akun pemilik access token.
+const googleUserinfoEndpoint = "https://www.googleapis.com/oauth2/v3/userinfo"
+
+// googleSubjectFromUserinfo mengambil `sub` akun Google dari endpoint UserInfo
+// memakai access token OAuth. Dipakai sebagai fallback saat token endpoint
+// tidak mengembalikan id_token (klien tidak meminta scope `openid`).
+// `endpoint` eksplisit agar bisa diuji dengan httptest tanpa jaringan.
+func googleSubjectFromUserinfo(ctx context.Context, accessToken, endpoint string) (string, error) {
+	accessToken = strings.TrimSpace(accessToken)
+	if accessToken == "" {
+		return "", errors.New("access token Google kosong")
+	}
+	if strings.TrimSpace(endpoint) == "" {
+		return "", errors.New("endpoint Google UserInfo kosong")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("gagal menyusun permintaan Google UserInfo: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Accept", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("gagal menghubungi Google UserInfo: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("google UserInfo mengembalikan status %d", resp.StatusCode)
+	}
+	var payload struct {
+		Sub string `json:"sub"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&payload); err != nil {
+		return "", fmt.Errorf("respons Google UserInfo tidak valid: %w", err)
+	}
+	subject := strings.TrimSpace(payload.Sub)
+	if subject == "" {
+		return "", errors.New("google UserInfo tidak memuat sub")
+	}
+	return subject, nil
 }

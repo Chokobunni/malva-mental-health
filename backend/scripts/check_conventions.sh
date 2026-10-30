@@ -7,8 +7,8 @@
 #
 # Yang diperiksa:
 #   1. gofmt bersih (semua berkas .go harus sudah diformat).
-#   2. Larangan .UTC() di internal/ (kecuali _test.go): aplikasi WIB-only,
-#      tidak boleh ada konversi UTC di kode produksi.
+#   2. Larangan .UTC() di internal/ dan cmd/ (kecuali _test.go): aplikasi
+#      WIB-only, tidak boleh ada konversi UTC di kode produksi.
 #   3. Larangan time.Parse("2006-01-02", ...) / time.Parse(layout, ...) untuk
 #      tanggal bisnis di internal/server & internal/store (kecuali _test.go);
 #      wajib time.ParseInLocation(..., clock.Location()).
@@ -30,10 +30,10 @@ if [ -n "$unformatted" ]; then
   fail=1
 fi
 
-# --- 2. Larangan .UTC() di internal/ --------------------------------------
-utc_hits="$(grep -rn --include='*.go' '\.UTC()' internal 2>/dev/null | grep -v '_test\.go' || true)"
+# --- 2. Larangan .UTC() di internal/ & cmd/ -------------------------------
+utc_hits="$(grep -rn --include='*.go' '\.UTC()' internal cmd 2>/dev/null | grep -v '_test\.go' || true)"
 if [ -n "$utc_hits" ]; then
-  printf 'ERROR: internal/ tidak boleh memakai .UTC(); pakai clock.Now()/clock.Location() (WIB-only):\n' >&2
+  printf 'ERROR: internal/ dan cmd/ tidak boleh memakai .UTC(); pakai clock.Now()/clock.Location() (WIB-only):\n' >&2
   printf '%s\n' "$utc_hits" >&2
   fail=1
 fi

@@ -11,6 +11,7 @@ import (
 	calendar "google.golang.org/api/calendar/v3"
 	googleapi "google.golang.org/api/option"
 
+	"malva/backend/internal/clock"
 	"malva/backend/internal/config"
 	"malva/backend/internal/store"
 )
@@ -114,23 +115,22 @@ func (c *CalendarService) calendarSvc(ctx context.Context, professionalUserID st
 	return svc, nil
 }
 
-// CreateMeetEvent membuat event Google Calendar dengan konferensi Meet.
-// Mengembalikan (eventID, meetURL, error).
-func (c *CalendarService) CreateMeetEvent(ctx context.Context, professionalUserID string, opts MeetEventOptions) (string, string, error) {
-	svc, err := c.calendarSvc(ctx, professionalUserID)
-	if err != nil {
-		return "", "", err
-	}
-	requestID := fmt.Sprintf("malva-%d", time.Now().UnixNano())
+// buildMeetEvent menyusun payload event Google Calendar untuk satu sesi.
+// Fungsi murni (tanpa jaringan/DB) agar format waktu WIB dan konferensi Meet
+// bisa diuji langsung. Semua waktu dinormalkan ke zona WIB sehingga Google
+// menerima offset +07:00, bukan Z.
+func buildMeetEvent(opts MeetEventOptions, requestID string) *calendar.Event {
+	start := opts.StartTime.In(clock.Location())
+	end := opts.EndTime.In(clock.Location())
 	event := &calendar.Event{
 		Summary:     opts.Summary,
 		Description: opts.Description,
 		Start: &calendar.EventDateTime{
-			DateTime: opts.StartTime.Format(time.RFC3339),
+			DateTime: start.Format(time.RFC3339),
 			TimeZone: "Asia/Jakarta",
 		},
 		End: &calendar.EventDateTime{
-			DateTime: opts.EndTime.Format(time.RFC3339),
+			DateTime: end.Format(time.RFC3339),
 			TimeZone: "Asia/Jakarta",
 		},
 		ConferenceData: &calendar.ConferenceData{
@@ -150,6 +150,18 @@ func (c *CalendarService) CreateMeetEvent(ctx context.Context, professionalUserI
 		}
 		event.Attendees = append(event.Attendees, &calendar.EventAttendee{Email: email})
 	}
+	return event
+}
+
+// CreateMeetEvent membuat event Google Calendar dengan konferensi Meet.
+// Mengembalikan (eventID, meetURL, error).
+func (c *CalendarService) CreateMeetEvent(ctx context.Context, professionalUserID string, opts MeetEventOptions) (string, string, error) {
+	svc, err := c.calendarSvc(ctx, professionalUserID)
+	if err != nil {
+		return "", "", err
+	}
+	requestID := fmt.Sprintf("malva-%d", time.Now().UnixNano())
+	event := buildMeetEvent(opts, requestID)
 	call := svc.Events.Insert("primary", event).ConferenceDataVersion(1)
 	if len(event.Attendees) > 0 {
 		// sendUpdates=all: Google mengirim email undangan ke peserta.

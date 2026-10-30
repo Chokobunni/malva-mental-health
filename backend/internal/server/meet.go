@@ -19,6 +19,80 @@ import (
 // wajib memakai Google Meet.
 var ErrMeetUnavailable = errors.New("google Meet belum dikonfigurasi di server")
 
+// meetCalendar adalah irisan minimal *googlecal.CalendarService yang benar-benar
+// dipakai handler. Dibuat sebagai interface kecil agar alur Meet bisa diuji
+// dengan fake tanpa memanggil Google. *googlecal.CalendarService otomatis
+// memenuhi interface ini (tidak perlu adapter).
+type meetCalendar interface {
+	CreateMeetEvent(ctx context.Context, professionalUserID string, opts googlecal.MeetEventOptions) (string, string, error)
+	UpdateMeetEvent(ctx context.Context, professionalUserID, eventID string, newStart, newEnd time.Time) error
+	CancelMeetEvent(ctx context.Context, professionalUserID, eventID string) error
+}
+
+// meetUpdateWarning adalah pesan Indonesia yang dikirim ke klien ketika event
+// Google Calendar gagal diperbarui padahal jadwal sesi sudah tersimpan.
+const meetUpdateWarning = "Jadwal tersimpan, tetapi event Google Calendar gagal diperbarui. Minta profesional menautkan ulang Google atau periksa kalender."
+
+// errMeetNoLink: event dibuat tetapi Google tidak mengembalikan entry point
+// Meet. Sesi video tidak boleh dibuat tanpa ruang pertemuan.
+var errMeetNoLink = errors.New("google tidak mengembalikan link Meet untuk event ini")
+
+// createScheduledMeet membuat event Meet untuk sesi video yang dijadwalkan
+// tanpa link manual. Nilai (eventID, meetURL) yang dikembalikan adalah yang
+// kemudian disimpan pemanggil ke care_sessions. Event tanpa entry point Meet
+// dibatalkan agar tidak ada event menggantung di kalender profesional.
+func (s *Server) createScheduledMeet(ctx context.Context, cal meetCalendar, professionalID string, opts googlecal.MeetEventOptions) (string, string, error) {
+	if cal == nil {
+		return "", "", ErrMeetUnavailable
+	}
+	eventID, meetURL, err := cal.CreateMeetEvent(ctx, professionalID, opts)
+	if err != nil {
+		return "", "", err
+	}
+	if strings.TrimSpace(meetURL) == "" {
+		if strings.TrimSpace(eventID) != "" {
+			if cerr := cal.CancelMeetEvent(ctx, professionalID, eventID); cerr != nil && s.logger != nil {
+				s.logger.Warn("gagal membatalkan event Meet tanpa link", "error", cerr, "event_id", eventID)
+			}
+		}
+		return "", "", errMeetNoLink
+	}
+	return eventID, meetURL, nil
+}
+
+// updateMeetEventOnReschedule memindahkan event Meet ke jadwal baru sesi.
+// Jadwal sudah tersimpan di database, jadi kegagalan Google TIDAK menggagalkan
+// reschedule; kegagalan dikembalikan sebagai daftar warning agar bisa
+// ditampilkan di respons dan dinotifikasikan ke profesional.
+func (s *Server) updateMeetEventOnReschedule(ctx context.Context, cal meetCalendar, professionalID, eventID string, newStart time.Time, durationMinutes int) []string {
+	if strings.TrimSpace(eventID) == "" || cal == nil {
+		return nil
+	}
+	if durationMinutes <= 0 {
+		durationMinutes = 30
+	}
+	newEnd := newStart.Add(time.Duration(durationMinutes) * time.Minute)
+	if err := cal.UpdateMeetEvent(ctx, professionalID, eventID, newStart, newEnd); err != nil {
+		if s.logger != nil {
+			s.logger.Warn("gagal memperbarui event Meet saat reschedule", "error", err, "event_id", eventID)
+		}
+		return []string{meetUpdateWarning}
+	}
+	return nil
+}
+
+// cancelMeetEventBestEffort membatalkan event Meet milik sesi yang dibatalkan.
+// Pembatalan sesi sudah tersimpan di database, jadi kegagalan Google hanya
+// dicatat — bukan alasan menggagalkan pembatalan.
+func (s *Server) cancelMeetEventBestEffort(ctx context.Context, cal meetCalendar, professionalID, eventID string) {
+	if strings.TrimSpace(eventID) == "" || cal == nil {
+		return
+	}
+	if err := cal.CancelMeetEvent(ctx, professionalID, eventID); err != nil && s.logger != nil {
+		s.logger.Warn("gagal membatalkan event Meet", "error", err, "event_id", eventID)
+	}
+}
+
 // isGoogleMeetURL true bila URL menunjuk ke Google Meet. Dipakai untuk
 // mengenali link lama dari penyedia lain (mis. Jitsi) yang harus diganti.
 func isGoogleMeetURL(u string) bool {

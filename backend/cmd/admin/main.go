@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"malva/backend/internal/clock"
 	"malva/backend/internal/config"
 	"malva/backend/internal/store"
 )
@@ -255,7 +256,7 @@ func (s *AdminServer) healthCheck(w http.ResponseWriter, r *http.Request) {
 		"status":    "ok",
 		"database":  dbStatus,
 		"uptime":    time.Since(startTime).String(),
-		"timestamp": time.Now().UTC(),
+		"timestamp": clock.Now(),
 	})
 }
 
