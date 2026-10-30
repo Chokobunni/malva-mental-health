@@ -69,9 +69,9 @@ func writeGoogleIdentityError(w http.ResponseWriter, err error) {
 			"code":  googleIdentityBoundCode,
 		})
 	case errors.Is(err, sql.ErrNoRows):
-		writeError(w, http.StatusNotFound, errors.New("Akun tidak ditemukan."))
+		writeUserError(w, http.StatusNotFound, "Akun tidak ditemukan.")
 	default:
-		writeError(w, http.StatusInternalServerError, errors.New("Gagal menyimpan identitas Google."))
+		writeUserError(w, http.StatusInternalServerError, "Gagal menyimpan identitas Google.")
 	}
 }
 
@@ -82,31 +82,31 @@ func (s *Server) bindGoogle(w http.ResponseWriter, r *http.Request, claims auth.
 
 func (s *Server) bindGoogleIdentity(w http.ResponseWriter, r *http.Request, claims auth.Claims, legacy bool) {
 	if claims.Role != "patient" && claims.Role != "professional" {
-		writeError(w, http.StatusForbidden, errors.New("Hanya pasien dan profesional yang dapat menghubungkan Google."))
+		writeUserError(w, http.StatusForbidden, "Hanya pasien dan profesional yang dapat menghubungkan Google.")
 		return
 	}
 	var req bindGoogleRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, errors.New("Permintaan penautan Google tidak valid."))
+		writeUserError(w, http.StatusBadRequest, "Permintaan penautan Google tidak valid.")
 		return
 	}
 	if strings.TrimSpace(req.IDToken) == "" {
-		writeError(w, http.StatusBadRequest, errors.New("id_token wajib diisi."))
+		writeUserError(w, http.StatusBadRequest, "id_token wajib diisi.")
 		return
 	}
 	if s.cfg.GoogleClientID == "" {
-		writeError(w, http.StatusNotImplemented, errors.New("Login Google belum dikonfigurasi di server. Hubungi admin."))
+		writeUserError(w, http.StatusNotImplemented, "Login Google belum dikonfigurasi di server. Hubungi admin.")
 		return
 	}
 	payload, err := idtoken.Validate(r.Context(), strings.TrimSpace(req.IDToken), s.cfg.GoogleClientID)
 	if err != nil || !validGoogleIdentityPayload(payload) {
-		writeError(w, http.StatusUnauthorized, errors.New("Token Google tidak valid atau kedaluwarsa. Silakan coba lagi."))
+		writeUserError(w, http.StatusUnauthorized, "Token Google tidak valid atau kedaluwarsa. Silakan coba lagi.")
 		return
 	}
 	email, _ := payload.Claims["email"].(string)
 	verified, _ := payload.Claims["email_verified"].(bool)
 	if strings.TrimSpace(email) == "" || !verified {
-		writeError(w, http.StatusUnauthorized, errors.New("Email Google belum terverifikasi. Gunakan akun Google yang sudah terverifikasi."))
+		writeUserError(w, http.StatusUnauthorized, "Email Google belum terverifikasi. Gunakan akun Google yang sudah terverifikasi.")
 		return
 	}
 	ident, err := s.store.LinkGoogleIdentity(r.Context(), claims.Subject, payload.Subject, email, req.ReplaceEmail)
@@ -123,7 +123,7 @@ func (s *Server) bindGoogleIdentity(w http.ResponseWriter, r *http.Request, clai
 
 func (s *Server) googleIdentityStatus(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if claims.Role != "patient" && claims.Role != "professional" {
-		writeError(w, http.StatusForbidden, errors.New("Hanya pasien dan profesional yang dapat menghubungkan Google."))
+		writeUserError(w, http.StatusForbidden, "Hanya pasien dan profesional yang dapat menghubungkan Google.")
 		return
 	}
 	ident, err := s.store.GetGoogleIdentity(r.Context(), claims.Subject)
@@ -151,7 +151,7 @@ type unbindGoogleRequest struct {
 // alih-alih 400 agar UI tahu harus meminta password baru.
 func (s *Server) unbindGoogle(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if claims.Role != "patient" && claims.Role != "professional" {
-		writeError(w, http.StatusForbidden, errors.New("Hanya pasien dan profesional yang dapat menghubungkan Google."))
+		writeUserError(w, http.StatusForbidden, "Hanya pasien dan profesional yang dapat menghubungkan Google.")
 		return
 	}
 	// Body opsional: baca mentah dulu, hanya unmarshal bila ada isi.
@@ -159,19 +159,19 @@ func (s *Server) unbindGoogle(w http.ResponseWriter, r *http.Request, claims aut
 	if r.Body != nil {
 		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 		if err != nil {
-			writeError(w, http.StatusBadRequest, errors.New("Permintaan pelepasan Google tidak valid."))
+			writeUserError(w, http.StatusBadRequest, "Permintaan pelepasan Google tidak valid.")
 			return
 		}
 		if len(raw) > 0 {
 			if err := json.Unmarshal(raw, &req); err != nil {
-				writeError(w, http.StatusBadRequest, errors.New("Permintaan pelepasan Google tidak valid."))
+				writeUserError(w, http.StatusBadRequest, "Permintaan pelepasan Google tidak valid.")
 				return
 			}
 		}
 	}
 	user, err := s.store.GetUserByID(r.Context(), claims.Subject)
 	if errors.Is(err, sql.ErrNoRows) {
-		writeError(w, http.StatusNotFound, errors.New("Akun tidak ditemukan."))
+		writeUserError(w, http.StatusNotFound, "Akun tidak ditemukan.")
 		return
 	}
 	if err != nil {

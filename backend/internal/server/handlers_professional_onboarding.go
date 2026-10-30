@@ -24,23 +24,23 @@ type completeProfessionalRequest struct {
 
 func (s *Server) completeProfessionalProfile(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if claims.Role != "professional" {
-		writeError(w, http.StatusForbidden, errors.New("only professionals can complete this profile"))
+		writeUserError(w, http.StatusForbidden, "only professionals can complete this profile")
 		return
 	}
 	var req completeProfessionalRequest
 	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, errors.New("invalid professional profile request"))
+		writeUserError(w, http.StatusBadRequest, "invalid professional profile request")
 		return
 	}
 	strNumber := strings.TrimSpace(req.STRNumber)
 	sipNumber := strings.TrimSpace(req.SIPNumber)
 	specialization := strings.TrimSpace(req.Specialization)
 	if strNumber == "" || sipNumber == "" {
-		writeError(w, http.StatusBadRequest, errors.New("STR and SIP are required"))
+		writeUserError(w, http.StatusBadRequest, "STR and SIP are required")
 		return
 	}
 	if !validSpecialization(specialization) {
-		writeError(w, http.StatusBadRequest, errors.New("specialization must be Sp.KJ or M.Psi"))
+		writeUserError(w, http.StatusBadRequest, "specialization must be Sp.KJ or M.Psi")
 		return
 	}
 	if err := s.rejectTakenProfessionalIdentifier(r, strNumber, sipNumber, claims.Subject); err != nil {
@@ -73,11 +73,11 @@ func (s *Server) completeProfessionalProfile(w http.ResponseWriter, r *http.Requ
 
 func (s *Server) createQuickMeet(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if claims.Role != "professional" {
-		writeError(w, http.StatusForbidden, errors.New("only professionals can create Meet links"))
+		writeUserError(w, http.StatusForbidden, "only professionals can create Meet links")
 		return
 	}
 	if s.calendar == nil {
-		writeError(w, http.StatusNotImplemented, errors.New("Google Calendar is not configured"))
+		writeUserError(w, http.StatusNotImplemented, "Google Calendar is not configured")
 		return
 	}
 	now := clock.Now()
@@ -86,10 +86,10 @@ func (s *Server) createQuickMeet(w http.ResponseWriter, r *http.Request, claims 
 	})
 	if err != nil {
 		if errors.Is(err, googlecal.ErrReauthNeeded) {
-			writeError(w, http.StatusUnauthorized, errors.New("authorize Google Calendar for the bound Google account"))
+			writeUserError(w, http.StatusUnauthorized, "authorize Google Calendar for the bound Google account")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, errors.New("could not create video call link"))
+		writeUserError(w, http.StatusInternalServerError, "could not create video call link")
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"meet_url": meetURL, "event_id": eventID})

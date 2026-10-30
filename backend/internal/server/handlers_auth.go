@@ -31,21 +31,21 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(req.IDToken) == "" {
-		writeError(w, http.StatusBadRequest, errors.New("id_token wajib diisi"))
+		writeUserError(w, http.StatusBadRequest, "id_token wajib diisi")
 		return
 	}
 	if s.cfg.GoogleClientID == "" {
-		writeError(w, http.StatusNotImplemented, errors.New("login Google belum dikonfigurasi di server. Hubungi admin untuk mengisi MALVA_GOOGLE_CLIENT_ID"))
+		writeUserError(w, http.StatusNotImplemented, "login Google belum dikonfigurasi di server. Hubungi admin untuk mengisi MALVA_GOOGLE_CLIENT_ID")
 		return
 	}
 	payload, err := idtoken.Validate(r.Context(), strings.TrimSpace(req.IDToken), s.cfg.GoogleClientID)
 	if err != nil {
 		s.secLogger.LogAuthFailure(r, "google", "invalid id_token")
-		writeError(w, http.StatusUnauthorized, errors.New("token Google tidak valid atau kedaluwarsa. Silakan coba lagi"))
+		writeUserError(w, http.StatusUnauthorized, "token Google tidak valid atau kedaluwarsa. Silakan coba lagi")
 		return
 	}
 	if !validGoogleIdentityPayload(payload) {
-		writeError(w, http.StatusUnauthorized, errors.New("token Google tidak valid atau kedaluwarsa. Silakan coba lagi"))
+		writeUserError(w, http.StatusUnauthorized, "token Google tidak valid atau kedaluwarsa. Silakan coba lagi")
 		return
 	}
 	email, _ := payload.Claims["email"].(string)
@@ -53,7 +53,7 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 	displayName, _ := payload.Claims["name"].(string)
 	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" || !emailVerified {
-		writeError(w, http.StatusUnauthorized, errors.New("email Google belum terverifikasi. Gunakan akun Google yang sudah terverifikasi"))
+		writeUserError(w, http.StatusUnauthorized, "email Google belum terverifikasi. Gunakan akun Google yang sudah terverifikasi")
 		return
 	}
 	if strings.TrimSpace(displayName) == "" {
@@ -64,7 +64,7 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.Role) != "" {
 		role, err = auth.NormalizeRole(req.Role)
 		if err != nil || role == "admin" {
-			writeError(w, http.StatusBadRequest, errors.New("role harus patient atau professional"))
+			writeUserError(w, http.StatusBadRequest, "role harus patient atau professional")
 			return
 		}
 	}
@@ -96,7 +96,7 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 		s.writeAuthResponseWithCompletion(w, r, http.StatusOK, user, needsCompletion)
 		return
 	} else if !errors.Is(err, sql.ErrNoRows) {
-		writeError(w, http.StatusInternalServerError, errors.New("could not process Google authentication"))
+		writeUserError(w, http.StatusInternalServerError, "could not process Google authentication")
 		return
 	}
 
@@ -108,7 +108,7 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		linked, err := s.store.GetUserByID(r.Context(), user.ID)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, errors.New("could not process Google authentication"))
+			writeUserError(w, http.StatusInternalServerError, "could not process Google authentication")
 			return
 		}
 		s.secLogger.LogAuthSuccess(r, linked.ID)
@@ -123,7 +123,7 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 		s.writeAuthResponseWithCompletion(w, r, http.StatusOK, linked, needsCompletion)
 		return
 	} else if !errors.Is(err, sql.ErrNoRows) {
-		writeError(w, http.StatusInternalServerError, errors.New("could not process Google authentication"))
+		writeUserError(w, http.StatusInternalServerError, "could not process Google authentication")
 		return
 	}
 
@@ -131,12 +131,12 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 	// 30 byte random -> 60 hex + prefiks 11 = 71 byte, di bawah batas bcrypt 72.
 	random := make([]byte, 30)
 	if _, err := rand.Read(random); err != nil {
-		writeError(w, http.StatusInternalServerError, errors.New("could not process Google authentication"))
+		writeUserError(w, http.StatusInternalServerError, "could not process Google authentication")
 		return
 	}
 	unusableHash, err := auth.HashPassword("sso-google-" + hex.EncodeToString(random))
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errors.New("could not process Google authentication"))
+		writeUserError(w, http.StatusInternalServerError, "could not process Google authentication")
 		return
 	}
 	params := store.CreateUserParams{
@@ -163,10 +163,10 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 	user, err := s.store.CreateUser(r.Context(), params)
 	if err != nil {
 		if isDuplicateKeyError(err) || errors.Is(err, store.ErrEmailOwnedByOther) {
-			writeError(w, http.StatusConflict, errors.New("email ini sudah terdaftar. Silakan masuk dengan email & password, lalu tautkan Google"))
+			writeUserError(w, http.StatusConflict, "email ini sudah terdaftar. Silakan masuk dengan email & password, lalu tautkan Google")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, errors.New("could not create Google account"))
+		writeUserError(w, http.StatusInternalServerError, "could not create Google account")
 		return
 	}
 	s.secLogger.LogAuthSuccess(r, user.ID)
@@ -207,7 +207,7 @@ type googleTokenExchangeRequest struct {
 // menjadi refresh+access token, lalu menyimpannya untuk akses Calendar API.
 func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if claims.Role != "professional" {
-		writeError(w, http.StatusForbidden, errors.New("endpoint ini hanya untuk profesional"))
+		writeUserError(w, http.StatusForbidden, "endpoint ini hanya untuk profesional")
 		return
 	}
 	var req googleTokenExchangeRequest
@@ -217,11 +217,11 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 	}
 	code := strings.TrimSpace(req.AuthorizationCode)
 	if code == "" {
-		writeError(w, http.StatusBadRequest, errors.New("authorization_code wajib diisi"))
+		writeUserError(w, http.StatusBadRequest, "authorization_code wajib diisi")
 		return
 	}
 	if s.cfg.GoogleClientID == "" || s.cfg.GoogleClientSecret == "" {
-		writeError(w, http.StatusNotImplemented, errors.New("google OAuth client secret belum dikonfigurasi"))
+		writeUserError(w, http.StatusNotImplemented, "google OAuth client secret belum dikonfigurasi")
 		return
 	}
 	identity, err := s.store.GetGoogleIdentity(r.Context(), claims.Subject)
@@ -230,7 +230,7 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 		return
 	}
 	if !identity.Linked {
-		writeError(w, http.StatusConflict, errors.New("bind Google before authorizing Calendar"))
+		writeUserError(w, http.StatusConflict, "bind Google before authorizing Calendar")
 		return
 	}
 	oauthCfg := &oauth2.Config{
@@ -243,33 +243,33 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 	// Exchange options cannot add scopes or consent to an already issued code.
 	tok, err := oauthCfg.Exchange(r.Context(), code)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errors.New("gagal menukar authorization code. Pastikan code masih berlaku"))
+		writeUserError(w, http.StatusBadRequest, "gagal menukar authorization code. Pastikan code masih berlaku")
 		return
 	}
 	// Refresh token kosong tidak boleh disimpan: kalau tersimpan, akses
 	// Calendar akan selalu ErrReauthNeeded dan menautkan ulang menghasilkan
 	// token kosong lagi (loop tanpa akhir).
 	if strings.TrimSpace(tok.RefreshToken) == "" {
-		writeError(w, http.StatusBadRequest, errors.New("google tidak memberikan refresh token. Cabut akses Malva di https://myaccount.google.com/permissions lalu hubungkan ulang akun Google"))
+		writeUserError(w, http.StatusBadRequest, "google tidak memberikan refresh token. Cabut akses Malva di https://myaccount.google.com/permissions lalu hubungkan ulang akun Google")
 		return
 	}
 	exchangedIDToken, _ := tok.Extra("id_token").(string)
 	payload, err := idtoken.Validate(r.Context(), exchangedIDToken, s.cfg.GoogleClientID)
 	if err != nil || !validGoogleIdentityPayload(payload) {
-		writeError(w, http.StatusUnauthorized, errors.New("Google authorization did not return a valid identity token"))
+		writeUserError(w, http.StatusUnauthorized, "Google authorization did not return a valid identity token")
 		return
 	}
 	if payload.Subject != identity.Subject {
-		writeError(w, http.StatusConflict, errors.New("authorize Calendar using the Google account already bound to Malva"))
+		writeUserError(w, http.StatusConflict, "authorize Calendar using the Google account already bound to Malva")
 		return
 	}
 	scope, _ := tok.Extra("scope").(string)
 	if !store.HasCalendarScope(scope) {
-		writeError(w, http.StatusForbidden, errors.New("Google Calendar consent is required"))
+		writeUserError(w, http.StatusForbidden, "Google Calendar consent is required")
 		return
 	}
 	if err := s.store.UpsertGoogleToken(r.Context(), claims.Subject, tok.RefreshToken, tok.AccessToken, tok.Expiry, scope, payload.Subject); err != nil {
-		writeError(w, http.StatusInternalServerError, errors.New("could not save Calendar authorization"))
+		writeUserError(w, http.StatusInternalServerError, "could not save Calendar authorization")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

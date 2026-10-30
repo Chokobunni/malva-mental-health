@@ -2231,3 +2231,11 @@ func writeError(w http.ResponseWriter, status int, err error) {
 	}
 	writeJSON(w, status, map[string]string{"error": message})
 }
+
+// writeUserError mengirim pesan yang memang ditujukan untuk dibaca pengguna
+// (bukan error internal). Dipisahkan dari writeError supaya pesan berbahasa
+// Indonesia tetap boleh berhuruf kapital dan berakhir titik, tanpa melanggar
+// ST1005 yang hanya berlaku untuk string error Go.
+func writeUserError(w http.ResponseWriter, status int, message string) {
+	writeJSON(w, status, map[string]string{"error": message})
+}

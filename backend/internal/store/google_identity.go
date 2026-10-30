@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	ErrGoogleAlreadyLinked         = errors.New("Google identity belongs to another account")
+	ErrGoogleAlreadyLinked         = errors.New("google identity belongs to another account")
 	ErrGoogleIdentityBound         = errors.New("account is already bound to a different Google identity")
 	ErrEmailOwnedByOther           = errors.New("email belongs to another account")
 	ErrProfessionalIdentifierTaken = errors.New("STR or SIP is already registered to another professional")
