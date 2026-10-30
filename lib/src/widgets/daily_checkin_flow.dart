@@ -8,6 +8,7 @@ import '../providers/providers.dart';
 import '../services/server_clock.dart';
 import '../theme.dart';
 import 'malva_components.dart';
+import '../time/wib.dart';
 
 // ============================================================
 // DAILY CHECK-IN (Home paling atas) — alur interaktif bertahap:
@@ -32,11 +33,11 @@ bool hasCheckedInToday(List<MoodEntry> moods) {
 /// Streak hari beruntun check-in (mood tersimpan > 0 hari berturut-turut).
 int checkInStreak(List<MoodEntry> moods) {
   if (moods.isEmpty) return 0;
-  // Tanggal kalender LOKAL, lalu dibekukan sebagai UTC-midnight supaya
-  // selisih hari dihitung bersih (tidak terpengaruh offset/DST).
+  // Hari kalender WIB, dibekukan sebagai WIB-midnight supaya selisih hari
+  // dihitung bersih. Terikat pada zona WIB agar benar di semua perangkat.
   DateTime dayOnly(DateTime value) {
-    final local = value.toLocal();
-    return DateTime.utc(local.year, local.month, local.day);
+    final wib = toWib(value);
+    return DateTime(wib.year, wib.month, wib.day);
   }
 
   final days = moods.map((m) => dayOnly(m.date)).toSet().toList()
@@ -170,7 +171,7 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
     final energy = switch (_energyLevel) { 0 => 2, 1 => 5, _ => 9 };
     final sleep = _sleepHours + _sleepMinutes / 60.0;
     final entry = MoodEntry(
-      date: DateTime.now(),
+      date: wibNow(),
       mood: mood,
       sleepHours: sleep,
       energy: energy,

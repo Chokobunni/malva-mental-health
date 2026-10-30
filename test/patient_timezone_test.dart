@@ -4,6 +4,7 @@ import 'package:malva_mental_health/src/screens/assessment_history_screen.dart';
 import 'package:malva_mental_health/src/screens/mood_screen.dart';
 import 'package:malva_mental_health/src/screens/record_screen.dart';
 import 'package:malva_mental_health/src/services/server_clock.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 
 // ============================================================
 // REGRESI ZONA WAKTU — LAYAR PASIEN (N1–N3)
@@ -37,7 +38,7 @@ void main() {
   test(
       'formatMoodCalendarDate: check-in dini hari (UTC kemarin) tetap hari ini',
       () {
-    final now = DateTime.now();
+    final now = wibNow();
     // 00:30 lokal hari ini = 17:30Z kemarin.
     final utc = DateTime(now.year, now.month, now.day, 0, 30).toUtc();
     if (now.timeZoneOffset >= const Duration(minutes: 30)) {
@@ -77,7 +78,7 @@ void main() {
   });
 
   test('formatAssessmentDate: entri lokal (DateTime.now) tidak berubah', () {
-    final now = DateTime.now();
+    final now = wibNow();
     String two(int value) => value.toString().padLeft(2, '0');
     final expected = '${two(now.day)}/${two(now.month)}/${now.year} '
         '${two(now.hour)}:${two(now.minute)}';
@@ -98,7 +99,7 @@ void main() {
   // ----------------------------------------------------------------------
   test('formatHealthRecordUpdatedDate: timestamp UTC dini hari → tanggal lokal',
       () {
-    final now = DateTime.now();
+    final now = wibNow();
     final utc = DateTime(now.year, now.month, now.day, 0, 30).toUtc();
     expect(utc.isUtc, isTrue);
     if (now.timeZoneOffset >= const Duration(minutes: 30)) {

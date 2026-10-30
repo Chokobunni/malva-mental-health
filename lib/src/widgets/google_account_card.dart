@@ -562,7 +562,7 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
   /// Format tanggal ringkas Indonesia: `dd MMM yyyy` (mis. 05 Okt 2026).
   String _formatDate(DateTime? date) {
     if (date == null) return '';
-    final local = date.toLocal();
+    final local = date;
     const months = [
       'Jan',
       'Feb',

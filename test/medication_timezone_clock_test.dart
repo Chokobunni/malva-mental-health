@@ -13,6 +13,7 @@ import 'package:malva_mental_health/src/screens/medication_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/services/offline_sync_service.dart';
 import 'package:malva_mental_health/src/services/server_clock.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 import 'package:malva_mental_health/src/theme.dart';
 
 // ============================================================
@@ -75,13 +76,13 @@ int _adherence(List<Medication> meds, List<MedicationLog> logs) =>
 
 /// Waktu LOKAL hari ini pada jam tertentu.
 DateTime _todayAt(int hour, int minute) {
-  final now = DateTime.now();
+  final now = wibNow();
   return DateTime(now.year, now.month, now.day, hour, minute);
 }
 
 /// Waktu LOKAL kemarin pada jam tertentu.
 DateTime _yesterdayAt(int hour, int minute) {
-  final now = DateTime.now();
+  final now = wibNow();
   return DateTime(now.year, now.month, now.day, hour, minute)
       .subtract(const Duration(days: 1));
 }
@@ -158,7 +159,7 @@ void main() {
   test(
       'regresi UTC: dosis pukul 00:05 WIB (tersimpan sebagai hari sebelumnya di UTC) tetap 100%',
       () {
-    final now = DateTime.now();
+    final now = wibNow();
     // 00:05 waktu LOKAL hari ini. Di WIB (UTC+7) ini menjadi 17:05 UTC
     // KEMARIN — bentuk yang persis dikirim backend Go.
     final takenLocalEarly = _todayAt(0, 5);
@@ -246,7 +247,7 @@ void main() {
     expect(ServerClock.isSynced, isTrue);
 
     // now() bergeser sebesar offset.
-    final deltaMs = ServerClock.now().difference(DateTime.now()).inMilliseconds;
+    final deltaMs = ServerClock.now().difference(wibNow()).inMilliseconds;
     expect(deltaMs, inInclusiveRange(900, 1100),
         reason: 'now() harus bergeser ~1 detik dari jam perangkat');
 
@@ -453,7 +454,7 @@ void main() {
     final client = MalvaApiClient(
       baseUrl: 'http://backend.test',
       httpClient: _FakeClient((request) async {
-        final serverNow = DateTime.now().toUtc().add(const Duration(hours: 3));
+        final serverNow = wibNow().toUtc().add(const Duration(hours: 3));
         return http.Response(
           jsonEncode({'medications': <dynamic>[]}),
           200,

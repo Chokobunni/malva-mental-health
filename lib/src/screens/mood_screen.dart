@@ -8,11 +8,12 @@ import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
+import '../time/wib.dart';
 
 /// Tanggal check-in mood pada kalender (`30 Oktober 2026`) dalam waktu LOKAL.
 ///
 /// `MoodEntry.date` diisi dari `occurredAt` server (UTC) oleh
-/// `loadCheckinHistory`, jadi WAJIB `.toLocal()` lebih dulu — tanpa itu
+/// `loadCheckinHistory`, jadi WAJIB `` lebih dulu — tanpa itu
 /// check-in pukul 00:30 WIB tampil sebagai tanggal kemarin.
 String formatMoodCalendarDate(DateTime date) {
   const months = [
@@ -29,7 +30,7 @@ String formatMoodCalendarDate(DateTime date) {
     'November',
     'Desember'
   ];
-  final local = date.toLocal();
+  final local = toWib(date);
   return '${local.day} ${months[local.month - 1]} ${local.year}';
 }
 
@@ -90,7 +91,7 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
       final entries = backendEntries
           .map(
             (b) => MoodEntry(
-              date: b.occurredAt ?? DateTime.now(),
+              date: b.occurredAt ?? wibNow(),
               mood: MoodValue.values.firstWhere(
                 (m) => m.name == b.mood,
                 orElse: () => MoodValue.okay,
@@ -463,7 +464,7 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
 
   void _saveEntry() {
     final entry = MoodEntry(
-      date: DateTime.now(),
+      date: wibNow(),
       mood: _mood,
       sleepHours: _sleep,
       energy: _energy.round(),

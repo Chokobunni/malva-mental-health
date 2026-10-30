@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../models.dart';
+import '../time/wib.dart';
 
 class ChatService {
   ChatService({
@@ -169,14 +170,14 @@ class ChatService {
     final event = {
       'type': 'chat_message',
       'data': {
-        'id': 'msg_${DateTime.now().millisecondsSinceEpoch}',
+        'id': 'msg_${wibNow().millisecondsSinceEpoch}',
         'sender_id': userId,
         'sender_name': senderName,
         'recipient_id': recipientId,
         'text': trimmed,
         'kind': kind,
         if (metadata != null) 'metadata': metadata,
-        'timestamp': DateTime.now().toIso8601String(),
+        'timestamp': wibNow().toIso8601String(),
       },
     };
 

@@ -9,17 +9,17 @@ import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import 'assessment_history_screen.dart';
+import '../time/wib.dart';
 
 /// Tanggal "Diperbarui" pada kartu diagnosis (`d/M/yyyy`) dalam waktu LOKAL.
 ///
 /// `updatedAt` health record berasal dari server (UTC), jadi WAJIB
-/// `.toLocal()` lebih dulu — tanpa itu pembaruan dini hari WIB tampil sebagai
+/// `` lebih dulu — tanpa itu pembaruan dini hari WIB tampil sebagai
 /// tanggal kemarin. Pola keluaran dipertahankan seperti sebelumnya (tanpa
 /// padding) agar tampilan tidak berubah selain kebenaran tanggalnya.
 String formatHealthRecordUpdatedDate(DateTime? value) {
   if (value == null) return '';
-  final local = value.toLocal();
-  return '${local.day}/${local.month}/${local.year}';
+  return formatWibDate(value);
 }
 
 class RecordScreen extends ConsumerStatefulWidget {
@@ -555,8 +555,8 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                 if (title.isEmpty) return;
                 ref.read(malvaStoreProvider.notifier).addRecord(
                       HealthRecord(
-                        id: 'record_${DateTime.now().millisecondsSinceEpoch}',
-                        date: DateTime.now(),
+                        id: 'record_${wibNow().millisecondsSinceEpoch}',
+                        date: wibNow(),
                         title: title,
                         type: selectedType,
                         lockedByProfessional: false,

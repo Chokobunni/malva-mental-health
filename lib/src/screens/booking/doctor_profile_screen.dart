@@ -8,6 +8,7 @@ import '../../models.dart';
 import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
+import '../../time/wib.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 import '../../widgets/professional_avatar.dart';
@@ -715,7 +716,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
 
   static String _reviewDate(String? iso) {
     if (iso == null || iso.isEmpty) return '';
-    final d = DateTime.tryParse(iso)?.toLocal();
+    final d = toWibOrNull(DateTime.tryParse(iso));
     if (d == null) return '';
     return '${d.day}/${d.month}/${d.year}';
   }

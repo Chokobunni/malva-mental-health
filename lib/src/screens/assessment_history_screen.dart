@@ -7,6 +7,7 @@ import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/therapy_library.dart';
+import '../time/wib.dart';
 
 // ============================================================
 // ASSESSMENT RECORD — riwayat skrining & assessment pasien.
@@ -76,16 +77,13 @@ class AssessmentHistoryEntry {
 /// Format tanggal + jam assessment record (`dd/MM/yyyy HH:mm`) dalam waktu
 /// LOKAL.
 ///
-/// `createdAt` screening berasal dari server (UTC), jadi WAJIB `.toLocal()`
+/// `createdAt` screening berasal dari server (UTC), jadi WAJIB ``
 /// lebih dulu; tanpa itu screening dini hari WIB tampil mundur 7 jam dan
-/// tanggalnya bisa jadi kemarin. Entri lokal (dibuat `DateTime.now()`) tidak
-/// terpengaruh karena `.toLocal()` bersifat idempoten.
+/// tanggalnya bisa jadi kemarin. Entri lokal (dibuat `wibNow()`) tidak
+/// terpengaruh karena `` bersifat idempoten.
 String formatAssessmentDate(DateTime? date) {
   if (date == null) return 'Tanggal tidak tercatat';
-  final local = date.toLocal();
-  String two(int value) => value.toString().padLeft(2, '0');
-  return '${two(local.day)}/${two(local.month)}/${local.year} '
-      '${two(local.hour)}:${two(local.minute)}';
+  return formatWibDateTime(date);
 }
 
 /// Ringkasan skor satu subskala screening, mis. `PHQ-9 12/27 (Sedang)`.

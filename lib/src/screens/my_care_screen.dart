@@ -188,11 +188,19 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
       ];
     }
     return [
-      for (final p in _packages) ...[
-        _PackageCard(
-          package: p,
-          onOpen: () => _openPackage(p),
-        ),
+      for (final group in _packageGroups) ...[
+        if (group.merged)
+          _MergedPackageCard(
+            package: group.display,
+            primary: group.primary,
+            count: group.count,
+            onOpen: () => _openPackage(group.primary),
+          )
+        else
+          _PackageCard(
+            package: group.primary,
+            onOpen: () => _openPackage(group.primary),
+          ),
         const SizedBox(height: 10),
       ],
     ];
@@ -250,17 +258,62 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
     ];
   }
 
-  /// Paket terbaru (aktif didahulukan) untuk profesional tsb, atau null.
+  /// Paket dikelompokkan per profesional: pasien yang membeli beberapa paket
+  /// dari profesional yang sama melihat SATU kartu gabungan dengan total
+  /// pertemuan dijumlahkan (aturan bisnis: kuota digabung). Backend
+  /// menjamin satu paket aktif per pasangan lewat merge (`status=merged`,
+  /// sudah difilter server); pengelompokan di sini adalah pengaman untuk
+  /// data lama/race. Grup non-aktif tetap dirender per paket.
+  List<_PackageDisplay> get _packageGroups {
+    final order = <String>[];
+    final byPro = <String, List<BackendCarePackage>>{};
+    for (final p in _packages) {
+      if (!byPro.containsKey(p.professionalId)) {
+        order.add(p.professionalId);
+        byPro[p.professionalId] = [];
+      }
+      byPro[p.professionalId]!.add(p);
+    }
+    final out = <_PackageDisplay>[];
+    for (final proId in order) {
+      final list = byPro[proId]!;
+      final active = list.where((p) => p.isActive).toList(growable: false);
+      if (active.length > 1) {
+        out.add(_PackageDisplay(
+            primary: active.reduce((a, b) =>
+                b.remainingSessions > a.remainingSessions ? b : a),
+            display: _mergedAggregate(active),
+            count: active.length));
+      } else {
+        final sorted = List<BackendCarePackage>.from(list)
+          ..sort((a, b) => switch ((a.isActive, b.isActive)) {
+                (true, false) => -1,
+                (false, true) => 1,
+                _ => (b.createdAt ?? '').compareTo(a.createdAt ?? ''),
+              });
+        for (final p in sorted) {
+          out.add(_PackageDisplay(primary: p, display: p, count: 1));
+        }
+      }
+    }
+    return out;
+  }
+
+  /// Paket untuk kartu Professionals: seluruh paket AKTIF profesional yang
+  /// sama digabung (total/terpakai/sisa), paket non-aktif terbaru sebagai
+  /// fallback bila tidak ada yang aktif.
   BackendCarePackage? _packageForProfessional(String professionalId) {
+    final active = _packages
+        .where((p) => p.professionalId == professionalId && p.isActive)
+        .toList(growable: false);
+    if (active.isNotEmpty) {
+      if (active.length == 1) return active.first;
+      return _mergedAggregate(active);
+    }
     BackendCarePackage? best;
     for (final p in _packages) {
       if (p.professionalId != professionalId) continue;
       if (best == null) {
-        best = p;
-        continue;
-      }
-      if (best.isActive && !p.isActive) continue;
-      if (!best.isActive && p.isActive) {
         best = p;
         continue;
       }
@@ -269,6 +322,49 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
       if (a != null && b != null && a.compareTo(b) > 0) best = p;
     }
     return best;
+  }
+
+  /// Menggabungkan beberapa paket aktif (profesional sama) menjadi satu baris
+  /// tampilan: total/terpakai/sisa dijumlahkan, kedaluwarsa ambil yang paling
+  /// akhir, harga/refund ikut dijumlahkan.
+  static BackendCarePackage _mergedAggregate(List<BackendCarePackage> active) {
+    final primary = active.reduce((a, b) =>
+        b.remainingSessions > a.remainingSessions ? b : a);
+    var total = 0;
+    var used = 0;
+    var remaining = 0;
+    var refunded = 0;
+    var price = 0;
+    DateTime? latest;
+    for (final p in active) {
+      total += p.totalSessions;
+      used += p.usedSessions;
+      remaining += p.remainingSessions;
+      refunded += p.refundedAmount;
+      price += p.price;
+      final e = p.expiresDateTime;
+      if (e != null && (latest == null || e.isAfter(latest))) latest = e;
+    }
+    return BackendCarePackage(
+      id: primary.id,
+      patientId: primary.patientId,
+      professionalId: primary.professionalId,
+      patientName: primary.patientName,
+      professionalName: primary.professionalName,
+      totalSessions: total,
+      usedSessions: used,
+      remainingSessions: remaining,
+      refundValue: primary.refundValue,
+      refundedAmount: refunded,
+      validityDays: primary.validityDays,
+      price: price,
+      status: 'active',
+      startsAt: primary.startsAt,
+      expiresAt:
+          latest != null ? latest.toIso8601String() : primary.expiresAt,
+      createdAt: primary.createdAt,
+      photoIntroUrl: primary.photoIntroUrl,
+    );
   }
 
   void _openPackage(BackendCarePackage p) {
@@ -379,15 +475,38 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   }
 }
 
+/// Satu baris tampilan paket: paket utama (untuk navigasi) + paket yang
+/// ditampilkan (bisa hasil gabungan beberapa paket aktif) + jumlah paket.
+class _PackageDisplay {
+  const _PackageDisplay({
+    required this.primary,
+    required this.display,
+    required this.count,
+  });
+
+  final BackendCarePackage primary;
+  final BackendCarePackage display;
+  final int count;
+
+  bool get merged => count > 1;
+}
+
 class _PackageCard extends StatelessWidget {
-  const _PackageCard({required this.package, required this.onOpen});
+  const _PackageCard({
+    required this.package,
+    required this.onOpen,
+    this.footerNote,
+  });
 
   final BackendCarePackage package;
   final VoidCallback onOpen;
 
+  /// Catatan kecil di bawah kartu (dipakai kartu gabungan).
+  final String? footerNote;
+
   @override
   Widget build(BuildContext context) {
-    final expires = package.expiresDateTime?.toLocal();
+    final expires = package.expiresDateTime;
     return SoftCard(
       bordered: true,
       onTap: onOpen,
@@ -435,6 +554,16 @@ class _PackageCard extends StatelessWidget {
             '${expires == null ? '' : ' • s/d ${expires.day}/${expires.month}/${expires.year}'}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
+          if (footerNote != null && footerNote!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              footerNote!,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ],
           // F-12: ringkasan kredit/refund bila ada dana yang dikembalikan.
           if (package.refundedAmount > 0) ...[
             const SizedBox(height: 4),
@@ -451,6 +580,37 @@ class _PackageCard extends StatelessWidget {
     );
   }
 }
+
+/// Kartu paket gabungan: total/terpakai/sisa dijumlahkan dari beberapa paket
+/// aktif profesional yang sama. Ketuk membuka paket utama (sisa terbanyak).
+class _MergedPackageCard extends StatelessWidget {
+  const _MergedPackageCard({
+    required this.package,
+    required this.primary,
+    required this.count,
+    required this.onOpen,
+  });
+
+  /// Baris agregat (total/terpakai/sisa/expired hasil penjumlahan).
+  final BackendCarePackage package;
+  final BackendCarePackage primary;
+
+  /// Jumlah paket yang digabung.
+  final int count;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return _PackageCard(
+      package: package,
+      onOpen: onOpen,
+      footerNote: 'Digabung dari $count paket',
+    );
+  }
+}
+
+/// Expiry agregat dihitung di `_mergedAggregate`; helper ini hanya menegaskan
+/// tipe agar tidak ada logika baru tersembunyi di sini.
 
 /// Format nilai rupiah sederhana (tanpa pemisah ribuan berlebih).
 String _rupiah(int value) => 'Rp ${value.toString().replaceAllMapped(
@@ -473,7 +633,7 @@ class _SessionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final at = session.scheduledDateTime?.toLocal();
+    final at = session.scheduledDateTime;
     final dateLabel = at == null
         ? '-'
         : '${at.day}/${at.month}/${at.year} ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';

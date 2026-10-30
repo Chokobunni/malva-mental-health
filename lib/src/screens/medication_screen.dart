@@ -9,6 +9,7 @@ import '../services/malva_api_client.dart';
 import '../services/medication_reminder_service.dart';
 import '../services/server_clock.dart';
 import '../theme.dart';
+import '../time/wib.dart';
 import '../widgets/home_personalization.dart';
 import '../widgets/malva_components.dart';
 
@@ -28,16 +29,11 @@ class MedicationScreen extends ConsumerStatefulWidget {
   final MalvaApiClient? apiClient;
   final MedicationReminderService? medicationReminderService;
 
-  /// Format waktu log untuk riwayat: `dd/MM/yyyy HH:mm` dalam waktu LOKAL.
+  /// Format waktu log untuk riwayat: `dd/MM/yyyy HH:mm` dalam WIB.
   ///
-  /// `takenAt` dari server berbentuk UTC (`...Z`); tanpa toLocal() riwayat
-  /// menampilkan jam UTC (mundur 7 jam / tanggal sebelumnya untuk WIB).
-  static String formatLogTime(DateTime dt) {
-    final local = dt.toLocal();
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return '${local.day}/${local.month}/${local.year} $h:$m';
-  }
+  /// `takenAt` dari server berupa instant; tanpa `toWib()` riwayat
+  /// menampilkan jam instant mentah (mundur 7 jam / tanggal sebelumnya).
+  static String formatLogTime(DateTime dt) => formatWibDateTime(dt);
 
   @override
   ConsumerState<MedicationScreen> createState() => _MedicationScreenState();
@@ -576,7 +572,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
     if (_isLogging) return;
     // Debounce per obat + status: tap ganda dalam 3 detik diabaikan.
     final key = '${medication.id}|$status';
-    final now = DateTime.now();
+    final now = wibNow();
     final last = _lastLogAt;
     if (_lastLogKey == key &&
         last != null &&
@@ -1045,7 +1041,7 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
 
   void _save() {
     final id =
-        widget.initial?.id ?? 'med_${DateTime.now().millisecondsSinceEpoch}';
+        widget.initial?.id ?? 'med_${wibNow().millisecondsSinceEpoch}';
     widget.onSave(
       Medication(
         id: id,

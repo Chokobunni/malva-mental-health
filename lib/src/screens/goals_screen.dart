@@ -9,6 +9,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
+import '../time/wib.dart';
 
 class GoalsScreen extends ConsumerStatefulWidget {
   const GoalsScreen({super.key});
@@ -285,7 +286,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
   /// penyelesaian hari ini.
   int _serverDonePercent() {
     if (_serverGoals.isEmpty) return 0;
-    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final today = wibDateKey(wibNow());
     final done = _serverGoals.where((g) => g.lastLoggedOn == today).length;
     return ((done / _serverGoals.length) * 100).round();
   }
@@ -294,7 +295,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
   Future<void> _toggleServerGoal(BackendGoal goal) async {
     final token = ref.read(currentSessionProvider)?.accessToken;
     if (token == null || token.isEmpty) return;
-    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final today = wibDateKey(wibNow());
     final alreadyDone = goal.lastLoggedOn == today;
     try {
       await ref.read(apiClientProvider).logHabit(
@@ -460,7 +461,7 @@ class _ServerGoalCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final today = wibDateKey(wibNow());
     final doneToday = goal.lastLoggedOn == today;
     return SoftCard(
       child: Row(
@@ -793,7 +794,7 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
     final title = _title.text.trim().isEmpty ? 'Goal baru' : _title.text.trim();
     widget.onSave(
       GoalItem(
-        id: existingGoal?.id ?? 'goal_${DateTime.now().millisecondsSinceEpoch}',
+        id: existingGoal?.id ?? 'goal_${wibNow().millisecondsSinceEpoch}',
         title: title,
         frequency: _frequency,
         streakDays: existingGoal?.streakDays ?? 0,

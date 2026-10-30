@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../assessment_engine.dart';
 import '../malva_store_provider.dart';
+import '../../time/wib.dart';
 
 // ============================================================
 // CRISIS HOTLINE CONSTANTS
@@ -56,7 +57,7 @@ class CrisisNotifier extends StateNotifier<CrisisState> {
     final uri = Uri(scheme: 'tel', path: crisisHotlineNumber);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
-      state = state.copyWith(lastTriggered: DateTime.now());
+      state = state.copyWith(lastTriggered: wibNow());
     }
   }
 
@@ -65,7 +66,7 @@ class CrisisNotifier extends StateNotifier<CrisisState> {
         Uri(scheme: 'tel', path: '$crisisHotlineNumber$crisisHotlineExtension');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
-      state = state.copyWith(lastTriggered: DateTime.now());
+      state = state.copyWith(lastTriggered: wibNow());
     }
   }
 

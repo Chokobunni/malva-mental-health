@@ -417,7 +417,7 @@ class _UpcomingSessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isVideo = session.isVideo;
-    final date = session.scheduledDateTime?.toLocal();
+    final date = session.scheduledDateTime;
     final dateLabel = date != null
         ? '${_days[date.weekday - 1]}, ${date.day.toString().padLeft(2, '0')} '
             '${_months[date.month - 1]} ${date.year} • '
@@ -778,7 +778,7 @@ class _JoinMeetingBannerState extends ConsumerState<_JoinMeetingBanner> {
     });
     if (!_loaded || _nextVideoSession == null) return const SizedBox.shrink();
     final s = _nextVideoSession!;
-    final at = s.scheduledDateTime?.toLocal();
+    final at = s.scheduledDateTime;
     final dateLabel = at == null
         ? ''
         : '${at.day}/${at.month}/${at.year} ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';

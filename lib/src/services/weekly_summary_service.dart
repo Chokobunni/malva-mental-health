@@ -1,4 +1,5 @@
 import 'malva_api_client.dart';
+import '../time/wib.dart';
 
 // ============================================================
 // METRIK RINGKASAN 14 HARI (Mini Summary & fitur bagikan ke profesional)
@@ -75,7 +76,7 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
   List<LocalMoodPoint> localMoods = const [],
   List<LocalMedicationLog> localLogs = const [],
 }) async {
-  final cutoff = DateTime.now().subtract(const Duration(days: 14));
+  final cutoff = wibNow().subtract(const Duration(days: 14));
 
   var moodKnown = false;
   var moodFromApi = false;

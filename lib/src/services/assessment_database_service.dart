@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../assessment_engine.dart';
 import '../models.dart';
+import '../time/wib.dart';
 
 /// Penyimpanan lokal riwayat asesmen (PHQ-9 / GAD-7) per akun.
 ///
@@ -133,7 +134,7 @@ class AssessmentDatabaseService {
         crisisFlag: json['crisisFlag'] == true,
         rulesFired: rules,
         createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
-            DateTime.now(),
+            wibNow(),
         ruleVersion: json['ruleVersion']?.toString() ?? '',
         certaintyFactor: (json['certaintyFactor'] as num?)?.toDouble() ?? 0.0,
       );

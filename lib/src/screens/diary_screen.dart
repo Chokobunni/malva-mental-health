@@ -8,6 +8,7 @@ import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
+import '../time/wib.dart';
 
 class DiaryScreen extends ConsumerStatefulWidget {
   const DiaryScreen({
@@ -56,7 +57,7 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
           .map(
             (b) => DiaryEntry(
               id: b.id,
-              createdAt: b.occurredAt ?? DateTime.now(),
+              createdAt: b.occurredAt ?? wibNow(),
               mood: MoodValue.values.firstWhere(
                 (m) => m.name == b.mood,
                 orElse: () => MoodValue.okay,
@@ -339,7 +340,7 @@ class _DiaryCard extends StatelessWidget {
     // `DiaryEntry.createdAt` diisi dari `occurred_at` server (UTC), jadi
     // tampilkan dalam waktu lokal — kalau tidak, entri malam hari tampil
     // sebagai tanggal/jam kemarin.
-    final local = date.toLocal();
+    final local = date;
     final h = local.hour.toString().padLeft(2, '0');
     final m = local.minute.toString().padLeft(2, '0');
     return '${local.day}/${local.month}/${local.year} $h:$m';
@@ -482,8 +483,8 @@ class _DiaryFormSheetState extends State<DiaryFormSheet> {
     widget.onSave(
       DiaryEntry(
         id: existingEntry?.id ??
-            'diary_${DateTime.now().millisecondsSinceEpoch}',
-        createdAt: existingEntry?.createdAt ?? DateTime.now(),
+            'diary_${wibNow().millisecondsSinceEpoch}',
+        createdAt: existingEntry?.createdAt ?? wibNow(),
         mood: _mood,
         title: _title.text.trim().isEmpty ? _mood.label : _title.text.trim(),
         note: _note.text.trim().isEmpty

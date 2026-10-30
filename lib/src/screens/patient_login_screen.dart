@@ -7,6 +7,7 @@ import '../services/google_auth_service.dart';
 import '../theme.dart';
 import '../widgets/password_field.dart';
 import 'auth_widgets.dart';
+import '../time/wib.dart';
 
 /// Halaman login/daftar KHUSUS PASIEN.
 /// Email + nama + password. Tidak ada field profesional di sini.
@@ -132,7 +133,7 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
   }
 
   Future<void> _pickBirthDate() async {
-    final now = DateTime.now();
+    final now = wibNow();
     final picked = await showDatePicker(
       context: context,
       initialDate: _birthDate ?? DateTime(now.year - 18, now.month, now.day),

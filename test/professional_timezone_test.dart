@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:malva_mental_health/src/screens/portal/crisis_incident_log_screen.dart';
 import 'package:malva_mental_health/src/screens/professional_dashboard_screen.dart';
 import 'package:malva_mental_health/src/services/server_clock.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 import 'package:malva_mental_health/src/widgets/therapy_library.dart';
 
 // ============================================================
@@ -59,7 +60,7 @@ void main() {
   test(
       'formatIncidentDate: insiden dini hari (UTC hari sebelumnya) → tanggal lokal',
       () {
-    final now = DateTime.now();
+    final now = wibNow();
     // 00:30 lokal hari ini = 17:30Z kemarin (bentuk yang dikirim server).
     final utc = DateTime(now.year, now.month, now.day, 0, 30).toUtc();
     expect(utc.isUtc, isTrue);
@@ -69,7 +70,7 @@ void main() {
     }
 
     final label = formatIncidentDate(utc);
-    final local = utc.toLocal();
+    final local = toWib(utc);
     expect(label, '${local.day}/${local.month}/${local.year} 00:30',
         reason: 'insiden harus tercatat di tanggal LOKAL, bukan tanggal UTC');
     expect(label.contains('${local.day}/${local.month}/${local.year}'), isTrue);
@@ -94,9 +95,9 @@ void main() {
 
   test('formatTherapyRecordDate: dini hari UTC jatuh ke tanggal lokal hari ini',
       () {
-    final now = DateTime.now();
+    final now = wibNow();
     final utc = DateTime(now.year, now.month, now.day, 0, 15).toUtc();
-    final local = utc.toLocal();
+    final local = toWib(utc);
     expect(formatTherapyRecordDate(utc),
         '${local.day}/${local.month}/${local.year} 00:15');
     expect(formatTherapyRecordDate(null), '',

@@ -129,7 +129,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
         unawaited(_load(silent: true));
       }
     });
-    final expires = _package.expiresDateTime?.toLocal();
+    final expires = _package.expiresDateTime;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Paket Saya'),
@@ -1154,7 +1154,7 @@ class _PackageSessionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final at = session.scheduledDateTime?.toLocal();
+    final at = session.scheduledDateTime;
     final dateLabel = at == null
         ? '-'
         : '${at.day}/${at.month}/${at.year} ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';

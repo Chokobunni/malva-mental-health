@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/screens/chat_screen.dart';
 import 'package:malva_mental_health/src/services/server_clock.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 import 'package:malva_mental_health/src/widgets/daily_checkin_flow.dart';
 
 // ============================================================
@@ -30,13 +31,13 @@ MoodEntry _moodUtc(DateTime utc, {double sleepHours = 7}) => MoodEntry(
 /// Waktu LOKAL hari ini pada jam tertentu, dikembalikan sebagai UTC
 /// (bentuk yang persis dikirim server).
 DateTime _todayLocalAsUtc(int hour, int minute) {
-  final now = DateTime.now();
+  final now = wibNow();
   return DateTime(now.year, now.month, now.day, hour, minute).toUtc();
 }
 
 /// Waktu LOKAL `daysAgo` hari lalu pada jam tertentu, sebagai UTC.
 DateTime _daysAgoLocalAsUtc(int daysAgo, int hour, int minute) {
-  final now = DateTime.now();
+  final now = wibNow();
   return DateTime(now.year, now.month, now.day, hour, minute)
       .subtract(Duration(days: daysAgo))
       .toUtc();
@@ -66,7 +67,7 @@ void main() {
   test('hasCheckedInToday: mood 00:30 WIB (UTC hari sebelumnya) tetap check-in',
       () {
     final occurredAtUtc = _todayLocalAsUtc(0, 30);
-    final now = DateTime.now();
+    final now = wibNow();
     // Di WIB, 00:30 lokal = 17:30Z KEMARIN → kode lama menghitung false.
     if (now.timeZoneOffset >= const Duration(minutes: 30)) {
       expect(occurredAtUtc.day, isNot(now.day),
@@ -147,7 +148,7 @@ void main() {
     expect(timeLabel, '03:20', reason: 'jam gelembung harus jam lokal (WIB)');
     // Bila "hari ini" lokal = 30/10/2026 → label "Hari ini 03:20",
     // selain itu tanggal lokal 30/10/2026 dengan jam 03:20.
-    final now = DateTime.now();
+    final now = wibNow();
     final isToday = now.year == 2026 && now.month == 10 && now.day == 30;
     expect(
       label,
@@ -171,8 +172,8 @@ void main() {
   test('isSameLocalDay: timestamp UTC dini hari tetap hari ini secara lokal',
       () {
     final utc = _todayLocalAsUtc(0, 30);
-    expect(isSameLocalDay(utc, DateTime.now()), isTrue);
-    expect(utc.toLocal().hour, 0);
-    expect(utc.toLocal().minute, 30);
+    expect(isSameLocalDay(utc, wibNow()), isTrue);
+    expect(toWib(utc).hour, 0);
+    expect(toWib(utc).minute, 30);
   });
 }

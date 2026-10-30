@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../time/wib.dart';
 
 enum SyncStatus { idle, syncing, error }
 
@@ -35,7 +36,7 @@ class DashboardSyncService {
   String? get lastSyncAgo {
     final last = _lastSyncTime;
     if (last == null) return null;
-    final diff = DateTime.now().difference(last);
+    final diff = wibNow().difference(last);
     if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
@@ -75,7 +76,7 @@ class DashboardSyncService {
 
     try {
       await _onRefresh!();
-      _lastSyncTime = DateTime.now();
+      _lastSyncTime = wibNow();
       _status = SyncStatus.idle;
     } on Object catch (error) {
       _status = SyncStatus.error;

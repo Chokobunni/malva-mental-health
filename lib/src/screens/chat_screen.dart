@@ -14,6 +14,7 @@ import '../theme.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/mini_summary.dart';
 import '../widgets/professional_avatar.dart';
+import '../time/wib.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({
@@ -35,22 +36,12 @@ class ChatScreen extends ConsumerStatefulWidget {
   /// lebih dulu: tanpa itu jamnya mundur 7 jam (WIB) dan pesan malam hari
   /// tampil sebagai "kemarin".
   static String formatMessageDate(DateTime d) {
-    final local = d.toLocal();
-    final now = ServerClock.now().toLocal();
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    if (isSameLocalDay(local, now)) {
-      return 'Hari ini $h:$m';
-    }
-    return '${local.day}/${local.month}/${local.year} $h:$m';
+    return formatWibBubbleDate(d);
   }
 
-  /// Jam kecil di bawah setiap gelembung pesan (`HH:mm`, waktu lokal).
+  /// Jam kecil di bawah setiap gelembung pesan (`HH:mm`, WIB).
   static String formatMessageTime(DateTime d) {
-    final local = d.toLocal();
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return '$h:$m';
+    return formatWibBubbleTime(d);
   }
 
   @override
@@ -170,7 +161,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               senderId: msg.senderId,
               senderName: msg.senderName,
               text: msg.text,
-              timestamp: msg.createdDateTime ?? DateTime.now(),
+              timestamp: msg.createdDateTime ?? wibNow(),
               isMine: msg.senderId == myId,
               kind: msg.kind,
               metadata: msg.metadata,
@@ -338,7 +329,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               senderId: sent.senderId,
               senderName: sent.senderName,
               text: sent.text,
-              timestamp: sent.createdDateTime ?? DateTime.now(),
+              timestamp: sent.createdDateTime ?? wibNow(),
               isMine: true,
               kind: sent.kind,
               metadata: sent.metadata,
@@ -641,7 +632,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             'crisis_flag': screening.crisisFlag,
             'summary': text,
             'shared_at':
-                (screening.createdAt ?? DateTime.now()).toIso8601String(),
+                (screening.createdAt ?? wibNow()).toIso8601String(),
           },
         ));
       }
@@ -672,7 +663,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             'submission_id': sub.id,
             'summary': summary,
             'shared_at':
-                (sub.createdDateTime ?? DateTime.now()).toIso8601String(),
+                (sub.createdDateTime ?? wibNow()).toIso8601String(),
           },
         ));
       }
@@ -884,7 +875,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             'title': latest.title,
             'mood': latest.mood,
             'occurred_at':
-                (latest.occurredAt ?? DateTime.now()).toIso8601String(),
+                (latest.occurredAt ?? wibNow()).toIso8601String(),
           },
         );
       }
@@ -913,8 +904,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Label tanggal ringkas untuk subjudul pilihan (mis. "7/9/2026").
   static String _dateLabel(DateTime? date) {
     if (date == null) return 'Tanggal tidak tercatat';
-    final local = date.toLocal();
-    return '${local.day}/${local.month}/${local.year}';
+    return formatWibDate(date);
   }
 
   void _toast(String message) {

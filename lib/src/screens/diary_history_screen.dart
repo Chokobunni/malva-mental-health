@@ -10,6 +10,7 @@ import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import 'diary_screen.dart';
+import '../time/wib.dart';
 
 // ============================================================
 // MY DIARY HISTORY — sesuai Figma frame "Diary History":
@@ -120,7 +121,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
         for (final item in moods)
           _HistoryRow(
             id: item.id,
-            at: item.occurredAt ?? DateTime.now(),
+            at: item.occurredAt ?? wibNow(),
             mood: _moodFromString(item.mood),
             moodScore: _moodScore(item.mood, item.energy),
             sleepHours: item.sleepHours,
@@ -135,7 +136,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
         for (final entry in diaries)
           _HistoryRow(
             id: entry.id,
-            at: entry.occurredAt ?? DateTime.now(),
+            at: entry.occurredAt ?? wibNow(),
             mood: _moodFromString(entry.mood),
             moodScore: _moodFromString(entry.mood).score * 2,
             sleepHours: 0,
@@ -334,7 +335,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
   static String _groupKey(DateTime date) {
     // Kunci kelompok = TANGGAL LOKAL. Data dari server berbentuk UTC; tanpa
     // toLocal() entri pukul 22:00 WIB masuk ke kelompok hari sebelumnya.
-    final local = date.toLocal();
+    final local = date;
     const months = [
       'January',
       'February',
@@ -530,7 +531,7 @@ class _DiaryEntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // `row.at` berasal dari server (UTC) → tampilkan dalam jam lokal.
-    final localAt = row.at.toLocal();
+    final localAt = row.at;
     final hh = localAt.hour.toString().padLeft(2, '0');
     final mm = localAt.minute.toString().padLeft(2, '0');
     final hasNote = row.note.isNotEmpty && row.note != 'Tidak ada catatan.';

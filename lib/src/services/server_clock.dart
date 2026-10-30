@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../time/wib.dart';
+
 /// Jam acuan bersama: waktu perangkat + offset terhadap server.
 ///
 /// Sumber waktu yang benar adalah SERVER, bukan jam perangkat. Offset dihitung
@@ -41,8 +43,8 @@ class ServerClock {
   /// True bila offset pernah dihitung dari respons server (atau cache lokal).
   static bool get isSynced => _isSynced;
 
-  /// Waktu sekarang menurut acuan server (fallback: jam perangkat).
-  static DateTime now() => DateTime.now().add(_offset);
+  /// Waktu sekarang menurut acuan server (fallback: jam perangkat), dalam WIB.
+  static DateTime now() => toWib(wibDeviceInstant().add(_offset));
 
   /// Terapkan header `Date` dari respons HTTP.
   ///
@@ -90,7 +92,7 @@ class ServerClock {
       );
       await _storage.write(
         key: savedAtStorageKey,
-        value: DateTime.now().toUtc().toIso8601String(),
+        value: wibNow().toIso8601String(),
       );
     } on Object {
       // Storage tidak tersedia: offset tetap berlaku untuk sesi berjalan.

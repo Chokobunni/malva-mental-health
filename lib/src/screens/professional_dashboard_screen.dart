@@ -23,6 +23,7 @@ import 'pro_patient_detail_screen.dart';
 import 'pro_pricing_screen.dart';
 import 'professional_profile_editor_screen.dart';
 import 'pro_schedule_screen.dart';
+import '../time/wib.dart';
 
 class ProfessionalDashboardScreen extends ConsumerStatefulWidget {
   const ProfessionalDashboardScreen({
@@ -507,7 +508,7 @@ class _ProfessionalDashboardScreenState
             (entry) => _AuditEntry(
               title: entry.action,
               body: entry.entityType,
-              createdAt: entry.createdAt ?? DateTime.now(),
+              createdAt: entry.createdAt ?? wibNow(),
             ),
           ),
         );
@@ -523,7 +524,7 @@ class _ProfessionalDashboardScreenState
         _reviewedScreeningIds.addAll(reviewedScreeningIds);
         _selectedPatientId ??= links.isEmpty ? null : links.first.patientId;
         _isLoadingOnlineData = false;
-        _lastSyncTime = DateTime.now();
+        _lastSyncTime = wibNow();
       });
     } on MalvaApiException catch (error) {
       if (!mounted) return;
@@ -1316,7 +1317,7 @@ class _ProfessionalDashboardScreenState
 
     final StringBuffer csv = StringBuffer();
     csv.writeln('Malva Professional Dashboard Export');
-    csv.writeln('Date: ${DateTime.now()}');
+    csv.writeln('Date: ${wibNow()}');
     csv.writeln();
 
     csv.writeln('--- Patient Info ---');
@@ -1610,14 +1611,14 @@ class _SyncStatusBar extends StatelessWidget {
 
   Color get _stalenessColor {
     if (lastSyncTime == null) return Colors.grey;
-    final diff = DateTime.now().difference(lastSyncTime!);
+    final diff = wibNow().difference(lastSyncTime!);
     if (diff.inMinutes < 5) return MalvaColors.mint;
     if (diff.inMinutes < 30) return MalvaColors.amber;
     return MalvaColors.danger;
   }
 
   String _formatTimeAgo(DateTime time) {
-    final diff = DateTime.now().difference(time);
+    final diff = wibNow().difference(time);
     if (diff.inSeconds < 60) return '${diff.inSeconds}s lalu';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m lalu';
     if (diff.inHours < 24) return '${diff.inHours}j lalu';
@@ -2473,7 +2474,7 @@ class _ScreeningView {
   factory _ScreeningView.fromBackend(BackendScreeningSession session) {
     return _ScreeningView(
       id: session.id,
-      createdAt: session.createdAt,
+      createdAt: toWibOrNull(session.createdAt),
       overallLevel: session.overallLevel,
       crisisFlag: session.crisisFlag,
       phq9Score: session.phq9.score,
@@ -2571,15 +2572,12 @@ Color _riskColor(String value) {
 /// Tanggal screening untuk TAMPILAN **dan** EKSPOR (text/CSV).
 ///
 /// `createdAt` dari server berbentuk UTC; laporan klinis harus mengikuti
-/// kalender LOKAL tenaga medis (WIB), jadi selalu `.toLocal()` lebih dulu.
+/// kalender LOKAL tenaga medis (WIB), jadi selalu `` lebih dulu.
 /// Satu implementasi dipakai bersama agar angka di layar dan di berkas ekspor
 /// tidak pernah berbeda tanggal.
 String formatScreeningDate(DateTime? value) {
   if (value == null) return 'Belum ada tanggal';
-  final local = value.toLocal();
-  final day = local.day.toString().padLeft(2, '0');
-  final month = local.month.toString().padLeft(2, '0');
-  return '$day/$month/${local.year}';
+  return formatWibDate(value);
 }
 
 class _SyncStatusIndicator extends StatelessWidget {
@@ -2623,14 +2621,14 @@ class _SyncStatusIndicator extends StatelessWidget {
 
   Color get _stalenessColor {
     if (lastSyncTime == null) return Colors.grey;
-    final diff = DateTime.now().difference(lastSyncTime!);
+    final diff = wibNow().difference(lastSyncTime!);
     if (diff.inMinutes < 5) return MalvaColors.mint;
     if (diff.inMinutes < 30) return MalvaColors.amber;
     return MalvaColors.danger;
   }
 
   String _formatTimeAgo(DateTime time) {
-    final diff = DateTime.now().difference(time);
+    final diff = wibNow().difference(time);
     if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';

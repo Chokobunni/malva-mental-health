@@ -10,6 +10,7 @@ import '../widgets/malva_components.dart';
 import '../widgets/meet_join_button.dart';
 import 'chat_screen.dart';
 import 'pro_patient_detail_screen.dart';
+import '../time/wib.dart';
 
 // ============================================================
 // PRO SCHEDULE — tab "Jadwal" dashboard profesional:
@@ -234,7 +235,7 @@ class _ProSessionCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final at = session.scheduledDateTime?.toLocal();
+    final at = session.scheduledDateTime;
     final dateLabel = at == null
         ? '-'
         : '${at.day}/${at.month}/${at.year} ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
@@ -674,10 +675,9 @@ const _monthShort = [
   'Des',
 ];
 
-/// YYYY-MM-DD dari DateTime lokal (bukan UTC: hari libur adalah tanggal
-/// kalender di zona waktu profesional).
-String _ymdFrom(DateTime d) =>
-    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+/// `yyyy-MM-dd` dari instant apa pun, selalu dalam kalender WIB
+/// (hari libur adalah tanggal kalender di zona waktu profesional).
+String _ymdFrom(DateTime d) => wibDateKey(d);
 
 /// "2026-11-03" -> "Sen, 3 Nov 2026".
 String _formatYmdId(String ymd) {
@@ -714,7 +714,7 @@ class _AvailabilitySummary extends StatelessWidget {
     for (final s in schedules) {
       (byDay[s.dayOfWeek] ??= []).add(s);
     }
-    final todayYmd = _ymdFrom(DateTime.now());
+    final todayYmd = _ymdFrom(wibNow());
     final upcomingOff = timeOff
         .where((t) => t.offDate.compareTo(todayYmd) >= 0)
         .toList()
@@ -1207,13 +1207,13 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   /// Tanggal lampau tidak ditampilkan karena tidak lagi berguna
   /// (tidak memblokir slot apa pun).
   List<BackendTimeOff> get _upcomingTimeOff {
-    final today = _ymdFrom(DateTime.now());
+    final today = _ymdFrom(wibNow());
     return _timeOff.where((t) => t.offDate.compareTo(today) >= 0).toList()
       ..sort((a, b) => a.offDate.compareTo(b.offDate));
   }
 
   Future<void> _pickOffDate() async {
-    final now = DateTime.now();
+    final now = wibNow();
     final picked = await showDatePicker(
       context: context,
       initialDate: _offDate ?? now,

@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../assessment_engine.dart';
 import '../models.dart';
+import '../time/wib.dart';
 
 // ============================================================
 // EXPORT SERVICE
@@ -94,7 +95,7 @@ class ExportService {
     required List<DiaryEntry> diaryEntries,
   }) {
     final data = {
-      'exportedAt': DateTime.now().toIso8601String(),
+      'exportedAt': wibNow().toIso8601String(),
       'patient': {
         'id': patient.id,
         'name': patient.name,

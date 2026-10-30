@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'firebase_options.dart';
 import 'src/malva_app.dart';
+import 'src/time/wib.dart';
 
 class _LoggingObserver extends ProviderObserver {
   @override
@@ -46,6 +47,9 @@ class _LoggingObserver extends ProviderObserver {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Semua waktu aplikasi memakai WIB — siapkan zona sebelum UI berjalan.
+  initializeWib();
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,

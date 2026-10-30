@@ -1,5 +1,6 @@
 import 'models.dart';
 import 'ai/ai.dart' as ai;
+import './time/wib.dart';
 
 enum AssessmentType { phq9, gad7 }
 
@@ -287,7 +288,7 @@ class AssessmentEngine {
       summary: summary,
       crisisFlag: inferenceResult.isCrisis,
       rulesFired: rulesFired,
-      createdAt: DateTime.now(),
+      createdAt: wibNow(),
       ruleVersion: ruleVersion,
       certaintyFactor: inferenceResult.certaintyFactor,
     );

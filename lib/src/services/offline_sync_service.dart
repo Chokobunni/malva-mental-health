@@ -8,6 +8,7 @@ import '../assessment_engine.dart';
 import '../models.dart';
 import 'malva_api_client.dart';
 import 'server_clock.dart';
+import '../time/wib.dart';
 
 // ============================================================
 // OFFLINE SYNC QUEUE MODELS
@@ -83,7 +84,7 @@ class SyncItem {
       ),
       payload: Map<String, dynamic>.from(json['payload'] as Map? ?? {}),
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
-          DateTime.now(),
+          wibNow(),
       status: SyncStatus.values.firstWhere(
         (e) => e.name == json['status'],
         orElse: () => SyncStatus.pending,
@@ -167,7 +168,7 @@ class OfflineSyncService {
 
   Future<void> enqueueMood(MoodEntry entry) async {
     final item = SyncItem(
-      id: 'sync_mood_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'sync_mood_${wibNow().millisecondsSinceEpoch}',
       operation: SyncOperation.moodEntry,
       payload: {
         'date': entry.date.toIso8601String(),
@@ -178,7 +179,7 @@ class OfflineSyncService {
         'irritability': entry.irritability,
         'note': entry.note,
       },
-      createdAt: DateTime.now(),
+      createdAt: wibNow(),
       userId: _activeUserId,
     );
     await _addItem(item);
@@ -191,7 +192,7 @@ class OfflineSyncService {
     required String source,
   }) async {
     final item = SyncItem(
-      id: 'sync_screening_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'sync_screening_${wibNow().millisecondsSinceEpoch}',
       operation: SyncOperation.screeningBundle,
       payload: {
         'phq9': phq9Answers,
@@ -199,7 +200,7 @@ class OfflineSyncService {
         'isInitial': isInitial,
         'source': source,
       },
-      createdAt: DateTime.now(),
+      createdAt: wibNow(),
       userId: _activeUserId,
     );
     await _addItem(item);
@@ -211,7 +212,7 @@ class OfflineSyncService {
     required String status,
   }) async {
     final item = SyncItem(
-      id: 'sync_medlog_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'sync_medlog_${wibNow().millisecondsSinceEpoch}',
       operation: SyncOperation.medicationLog,
       payload: {
         'medication_id': medicationId,
@@ -222,7 +223,7 @@ class OfflineSyncService {
         // ini" tidak bergeser bila jam perangkat meleset.
         'taken_at': ServerClock.now().toIso8601String(),
       },
-      createdAt: DateTime.now(),
+      createdAt: wibNow(),
       userId: _activeUserId,
     );
     await _addItem(item);
@@ -230,7 +231,7 @@ class OfflineSyncService {
 
   Future<void> enqueueDiary(DiaryEntry entry) async {
     final item = SyncItem(
-      id: 'sync_diary_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'sync_diary_${wibNow().millisecondsSinceEpoch}',
       operation: SyncOperation.diaryEntry,
       payload: {
         'id': entry.id,
@@ -239,7 +240,7 @@ class OfflineSyncService {
         'note': entry.note,
         'created_at': entry.createdAt.toIso8601String(),
       },
-      createdAt: DateTime.now(),
+      createdAt: wibNow(),
       userId: _activeUserId,
     );
     await _addItem(item);
@@ -297,7 +298,7 @@ class OfflineSyncService {
     }
 
     // Remove completed items older than 24h
-    final now = DateTime.now();
+    final now = wibNow();
     _queue.removeWhere((item) =>
         item.status == SyncStatus.completed &&
         now.difference(item.createdAt).inHours > 24);
@@ -322,7 +323,7 @@ class OfflineSyncService {
           anxiety: (item.payload['anxiety'] as num).toInt(),
           irritability: (item.payload['irritability'] as num).toInt(),
           note: item.payload['note'] as String,
-          occurredAt: DateTime.parse(item.payload['date'] as String),
+          occurredAt: toWib(DateTime.parse(item.payload['date'] as String)),
         );
       case SyncOperation.screeningBundle:
         await apiClient.submitScreening(
@@ -337,7 +338,7 @@ class OfflineSyncService {
               summary: '',
               crisisFlag: false,
               rulesFired: const [],
-              createdAt: DateTime.now(),
+              createdAt: wibNow(),
               ruleVersion: 'offline-queue',
             ),
             gad7: AssessmentResult(
@@ -348,10 +349,10 @@ class OfflineSyncService {
               summary: '',
               crisisFlag: false,
               rulesFired: const [],
-              createdAt: DateTime.now(),
+              createdAt: wibNow(),
               ruleVersion: 'offline-queue',
             ),
-            createdAt: DateTime.now(),
+            createdAt: wibNow(),
             isInitial: item.payload['isInitial'] as bool,
             source: item.payload['source'] as String,
           ),
@@ -364,7 +365,7 @@ class OfflineSyncService {
           medicationId: item.payload['medication_id'] as String,
           medicationName: item.payload['medication_name'] as String,
           status: item.payload['status'] as String,
-          takenAt: DateTime.parse(item.payload['taken_at'] as String),
+          takenAt: toWib(DateTime.parse(item.payload['taken_at'] as String)),
         );
       case SyncOperation.diaryEntry:
         // Harus sama dengan jalur online (diary_history_screen):

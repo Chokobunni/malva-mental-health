@@ -5,6 +5,7 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
+import '../time/wib.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/therapy_library.dart';
@@ -1091,7 +1092,7 @@ class _AssessmentTrendCard extends StatelessWidget {
 
   static String _shortDate(String? iso) {
     if (iso == null || iso.isEmpty) return '';
-    final dt = DateTime.tryParse(iso)?.toLocal();
+    final dt = toWibOrNull(DateTime.tryParse(iso));
     if (dt == null) return iso;
     return '${dt.day}/${dt.month}/${dt.year}';
   }
@@ -1201,7 +1202,7 @@ class _TrendLine extends StatelessWidget {
 /// Tanggal screening ringkas (dd/mm/yyyy) untuk header kartu yang dilipat.
 String _screeningDate(DateTime? dt) {
   if (dt == null) return 'Tanggal tidak diketahui';
-  final local = dt.toLocal();
+  final local = dt;
   return '${local.day}/${local.month}/${local.year}';
 }
 

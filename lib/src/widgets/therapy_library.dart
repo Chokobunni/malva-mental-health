@@ -12,6 +12,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import 'friendly_error.dart';
 import 'malva_components.dart';
+import '../time/wib.dart';
 
 // Skoring baku DASS-21/WHO-5 kini tinggal di `ai/assessment_scoring.dart`
 // agar lapisan interpretasi (CF) bisa memakainya tanpa impor melingkar.
@@ -20,16 +21,13 @@ export '../ai/assessment_scoring.dart';
 
 /// Waktu therapy record (`dd/MM/yyyy HH:mm`) dalam waktu LOKAL.
 ///
-/// `createdDateTime` berasal dari server (UTC), jadi WAJIB `.toLocal()` lebih
+/// `createdDateTime` berasal dari server (UTC), jadi WAJIB `` lebih
 /// dulu. Satu helper dipakai oleh daftar Therapy Record maupun kartu pratinjau
 /// supaya kedua tempat tidak pernah menampilkan tanggal yang berbeda.
 /// Mengembalikan string kosong bila waktunya tidak tersedia.
 String formatTherapyRecordDate(DateTime? value) {
   if (value == null) return '';
-  final local = value.toLocal();
-  final h = local.hour.toString().padLeft(2, '0');
-  final m = local.minute.toString().padLeft(2, '0');
-  return '${local.day}/${local.month}/${local.year} $h:$m';
+  return formatWibDateTime(value);
 }
 
 // ============================================================
@@ -1423,7 +1421,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
       ..writeln('MALVA — Worksheet Terapi')
       ..writeln(module.title)
       ..writeln('Kategori: ${module.category ?? 'Terapi'}')
-      ..writeln('Tanggal: ${DateTime.now().toIso8601String()}');
+      ..writeln('Tanggal: ${wibNow().toIso8601String()}');
     final summary = assessmentSummary(module.id, answers);
     if (summary.isNotEmpty) {
       buffer.writeln('Hasil: $summary');
@@ -1442,7 +1440,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
     final tmp = await getTemporaryDirectory();
     final file = File(
         '${tmp.path}/malva-worksheet-${module.id.isEmpty ? 'terapi' : module.id}-'
-        '${DateTime.now().millisecondsSinceEpoch}.txt');
+        '${wibNow().millisecondsSinceEpoch}.txt');
     await file.writeAsString(text);
     await SharePlus.instance.share(
       ShareParams(

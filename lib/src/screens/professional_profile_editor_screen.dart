@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/professional_avatar.dart';
+import '../time/wib.dart';
 
 // ============================================================
 // EDITOR PROFIL PROFESIONAL
@@ -367,7 +368,7 @@ class _ProfessionalProfileEditorScreenState
 
   void _addEducation() {
     setState(() {
-      _education.add({'degree': '', 'school': '', 'year': DateTime.now().year});
+      _education.add({'degree': '', 'school': '', 'year': wibNow().year});
     });
   }
 

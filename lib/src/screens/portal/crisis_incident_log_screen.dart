@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
+import '../../time/wib.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 
@@ -325,12 +326,9 @@ class _IncidentCard extends StatelessWidget {
 
 /// Waktu insiden krisis (`dd/MM/yyyy HH:mm`) dalam waktu LOKAL.
 ///
-/// `created_at` insiden berasal dari server (UTC), jadi WAJIB `.toLocal()`
+/// `created_at` insiden berasal dari server (UTC), jadi WAJIB ``
 /// lebih dulu — kalau tidak, insiden dini hari tercatat di tanggal kemarin.
 String formatIncidentDate(DateTime? date) {
   if (date == null) return '';
-  final local = date.toLocal();
-  final h = local.hour.toString().padLeft(2, '0');
-  final m = local.minute.toString().padLeft(2, '0');
-  return '${local.day}/${local.month}/${local.year} $h:$m';
+  return formatWibDateTime(date);
 }

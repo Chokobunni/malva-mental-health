@@ -9,6 +9,7 @@ import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 import '../care_package_screen.dart';
 import '../my_care_screen.dart';
+import '../../time/wib.dart';
 
 // ============================================================
 // PAYMENT SUCCESS — reference + receipt + langkah lanjut:
@@ -205,7 +206,7 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen> {
             _row('Status', 'PAID'),
             _row(
                 'Tanggal',
-                DateTime.now()
+                wibNow()
                     .toString()
                     .substring(0, 16)
                     .replaceAll('T', ' ')),

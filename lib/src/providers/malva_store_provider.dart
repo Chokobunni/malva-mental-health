@@ -10,6 +10,7 @@ import '../services/malva_api_client.dart';
 import '../services/server_clock.dart';
 import 'auth_providers.dart';
 import 'data/assessment_provider.dart';
+import '../time/wib.dart';
 
 const _sessionKey = 'malva_active_session';
 const _continuousConsentKey = 'malva_continuous_support_consent';
@@ -870,7 +871,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       'health_record': healthRecord,
       'mood_checkin': moodCheckin,
       'medication_checkin': medicationCheckin,
-      'granted_at': DateTime.now().toIso8601String(),
+      'granted_at': wibNow().toIso8601String(),
     });
     await _secureStorage.write(key: _continuousConsentKey, value: data);
   }
@@ -1251,10 +1252,10 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       answers: gad7Answers,
     );
     var bundle = ScreeningBundle(
-      id: 'screening_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'screening_${wibNow().millisecondsSinceEpoch}',
       phq9: phq9,
       gad7: gad7,
-      createdAt: DateTime.now(),
+      createdAt: wibNow(),
       isInitial: isInitial,
       source: source,
     );

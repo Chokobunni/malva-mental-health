@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import './time/wib.dart';
 
 enum UserRole { patient, professional, admin }
 
@@ -59,7 +60,7 @@ class BackendGoogleIdentity {
       email: json['email']?.toString() ?? '',
       linkedAt: rawLinkedAt == null || rawLinkedAt.trim().isEmpty
           ? null
-          : DateTime.tryParse(rawLinkedAt),
+          : toWibOrNull(DateTime.tryParse(rawLinkedAt)),
       emailIsPlaceholder: json['email_is_placeholder'] == true,
     );
   }
@@ -226,14 +227,14 @@ class Medication {
   String get lastTakenLabel {
     final taken = lastTakenAt;
     if (taken == null) return 'Belum pernah diminum';
-    // Selalu bandingkan/format dalam waktu LOKAL: `lastTakenAt` bisa berasal
-    // dari server (UTC), sehingga tanpa toLocal() jamnya mundur 7 jam dan
+    // Selalu bandingkan/format dalam WIB: `lastTakenAt` bisa berasal dari
+    // server (instant), sehingga tanpa konversi ke WIB jamnya mundur 7 jam dan
     // "hari ini" bisa terbaca sebagai kemarin.
-    final local = taken.toLocal();
-    final sameDay = isSameLocalDay(taken, DateTime.now());
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return sameDay ? 'Taken $h:$m' : 'Taken ${local.day}/${local.month} $h:$m';
+    final wib = toWib(taken);
+    final sameDay = isSameLocalDay(taken, wibNow());
+    final h = wib.hour.toString().padLeft(2, '0');
+    final m = wib.minute.toString().padLeft(2, '0');
+    return sameDay ? 'Taken $h:$m' : 'Taken ${wib.day}/${wib.month} $h:$m';
   }
 
   Medication copyWith({
@@ -268,13 +269,13 @@ bool isTemporaryMedicationId(String id) {
   return value.isEmpty || value.startsWith('med_');
 }
 
-/// True bila dua waktu jatuh pada hari kalender LOKAL yang sama.
+/// True bila dua waktu jatuh pada hari kalender WIB yang sama.
 ///
-/// Waktu dari server bisa UTC (`...Z`); tanpa toLocal() dosis 03:20 WIB
-/// terbaca sebagai hari sebelumnya sehingga adherence jatuh ke 0%.
+/// Waktu dari server bisa berupa instant (`...Z`); tanpa konversi ke WIB dosis
+/// 03:20 WIB terbaca sebagai hari sebelumnya sehingga adherence jatuh ke 0%.
 bool isSameLocalDay(DateTime a, DateTime b) {
-  final la = a.toLocal();
-  final lb = b.toLocal();
+  final la = toWib(a);
+  final lb = toWib(b);
   return la.year == lb.year && la.month == lb.month && la.day == lb.day;
 }
 
@@ -436,8 +437,9 @@ class ChatMessage {
       senderId: json['sender_id']?.toString() ?? '',
       senderName: json['sender_name']?.toString() ?? '',
       text: json['text']?.toString() ?? '',
-      timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ??
-          DateTime.now(),
+      timestamp:
+          toWibOrNull(DateTime.tryParse(json['timestamp']?.toString() ?? '')) ??
+              wibNow(),
       isMine: json['sender_id']?.toString() == currentUserId,
       kind: json['kind']?.toString() ?? 'text',
       metadata: (json['metadata'] as Map?)?.cast<String, dynamic>() ??

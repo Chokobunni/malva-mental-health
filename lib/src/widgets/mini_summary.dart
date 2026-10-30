@@ -8,6 +8,7 @@ import '../providers/providers.dart';
 import '../services/weekly_summary_service.dart';
 import '../theme.dart';
 import 'malva_components.dart';
+import '../time/wib.dart';
 
 // ============================================================
 // CHAT MINI SUMMARY (Weekly) — ringkasan 14 hari untuk dokter
@@ -106,7 +107,7 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
   Widget build(BuildContext context) {
     final store = ref.watch(malvaStoreProvider);
     final metrics = _metrics;
-    final cutoff = DateTime.now().subtract(const Duration(days: 14));
+    final cutoff = wibNow().subtract(const Duration(days: 14));
 
     // Diary & goals tetap dari store (bukan bagian metrik yang diperbaiki).
     final diaries =

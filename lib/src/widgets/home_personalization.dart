@@ -6,6 +6,7 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../theme.dart';
 import 'malva_components.dart';
+import '../time/wib.dart';
 
 // ============================================================
 // HOME PERSONALIZATION (condition banner + small wins + exercises)
@@ -152,7 +153,7 @@ class InlineMoodCheckIn extends ConsumerWidget {
                   onTap: () {
                     ref.read(malvaStoreProvider.notifier).addMood(
                           MoodEntry(
-                            date: DateTime.now(),
+                            date: wibNow(),
                             mood: mood,
                             sleepHours: 0,
                             energy: 5,

@@ -9,6 +9,7 @@ import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 import '../../widgets/professional_avatar.dart';
 import 'payment_screen.dart';
+import '../../time/wib.dart';
 
 // ============================================================
 // BOOKING DETAIL — Quick Consult satu kali:
@@ -462,8 +463,8 @@ class _DayChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final day = DateTime.tryParse(date) ?? DateTime.now();
-    final now = DateTime.now();
+    final day = DateTime.tryParse(date) ?? wibNow();
+    final now = wibNow();
     final isToday =
         day.year == now.year && day.month == now.month && day.day == now.day;
     return InkWell(

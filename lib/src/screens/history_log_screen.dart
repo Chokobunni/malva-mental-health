@@ -6,6 +6,7 @@ import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/server_clock.dart';
 import '../theme.dart';
+import '../time/wib.dart';
 import '../widgets/malva_components.dart';
 
 // ============================================================
@@ -69,12 +70,12 @@ class _HistoryEntryCard extends StatelessWidget {
   final MoodEntry entry;
 
   String get _relativeDay {
-    // `MoodEntry.date` diisi dari `occurred_at` server (UTC) saat riwayat
-    // dimuat ulang, jadi "Today"/"Yesterday" WAJIB dihitung per hari LOKAL.
-    final now = ServerClock.now();
-    final local = entry.date.toLocal();
-    final today = DateTime.utc(now.year, now.month, now.day);
-    final day = DateTime.utc(local.year, local.month, local.day);
+    // `MoodEntry.date` diisi dari `occurred_at` server (instant) saat riwayat
+    // dimuat ulang, jadi "Today"/"Yesterday" WAJIB dihitung per hari WIB.
+    final now = toWib(ServerClock.now());
+    final local = toWib(entry.date);
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(local.year, local.month, local.day);
     final diff = today.difference(day).inDays;
     if (diff == 0) return 'Today';
     if (diff == 1) return 'Yesterday';
