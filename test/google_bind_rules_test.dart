@@ -237,7 +237,7 @@ void main() {
 
     final identityBound = await messageFor(
       'akun_sudah_taut_google_lain',
-      'Akun ini sudah terhubung ke akun Google lain. Hubungi admin bila ingin mengganti.',
+      'Akun ini sudah terhubung ke akun Google lain. Lepas Gmail tersebut dulu untuk menggantinya.',
     );
 
     // Pesan berbeda, spesifik, dan berbahasa Indonesia (bukan generik).

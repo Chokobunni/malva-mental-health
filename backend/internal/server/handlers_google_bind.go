@@ -65,7 +65,7 @@ func writeGoogleIdentityError(w http.ResponseWriter, err error) {
 		})
 	case errors.Is(err, store.ErrGoogleIdentityBound):
 		writeJSON(w, http.StatusConflict, map[string]string{
-			"error": "Akun ini sudah terhubung ke akun Google lain. Hubungi admin bila ingin mengganti.",
+			"error": "Akun ini sudah terhubung ke akun Google lain. Lepas Gmail tersebut dulu untuk menggantinya.",
 			"code":  googleIdentityBoundCode,
 		})
 	case errors.Is(err, sql.ErrNoRows):
@@ -191,7 +191,8 @@ func (s *Server) unbindGoogle(w http.ResponseWriter, r *http.Request, claims aut
 		}
 	case strings.TrimSpace(req.NewPassword) != "":
 		if err := security.ValidatePassword(req.NewPassword, user.Email); err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			// Samakan dengan register: pesan kebijakan password berbahasa Indonesia.
+			writeError(w, http.StatusBadRequest, errors.New(security.IndonesianMessage(err)))
 			return
 		}
 		hash, herr := auth.HashPassword(req.NewPassword)

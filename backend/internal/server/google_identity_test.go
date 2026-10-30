@@ -441,7 +441,7 @@ func TestWriteGoogleIdentityErrorCodes(t *testing.T) {
 		{
 			"identity bound to another google", store.ErrGoogleIdentityBound,
 			http.StatusConflict, googleIdentityBoundCode,
-			"Akun ini sudah terhubung ke akun Google lain. Hubungi admin bila ingin mengganti.",
+			"Akun ini sudah terhubung ke akun Google lain. Lepas Gmail tersebut dulu untuk menggantinya.",
 		},
 	}
 	for _, tc := range cases {

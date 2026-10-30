@@ -243,7 +243,7 @@ Get current authenticated user info.
 
 #### `POST /v1/auth/unbind-google`
 
-Lepas tautan akun Google (Gmail) dari akun pasien/profesional **tanpa mengubah UUID user**. Bila akun dibuat lewat "Login Google" (hash password acak), `new_password` **wajib** diisi agar akun tetap bisa login setelah Gmail dilepas; akun ber-password boleh memakai `current_password`. Unbind juga menghapus token OAuth Google (Google Meet ikut nonaktif) dan memulihkan email placeholder profesional bila memungkinkan.
+Lepas tautan akun Google (Gmail) dari akun pasien/profesional **tanpa mengubah UUID user**. Bila akun dibuat lewat "Login Google" (hash password acak), `new_password` **wajib** diisi agar akun tetap bisa login setelah Gmail dilepas; akun ber-password boleh memakai `current_password`. Unbind juga menghapus token OAuth Google (Google Meet ikut nonaktif). Kolom `email` akun **tidak diubah**: setelah unbind akun tetap ada dan Gmail itu tetap email kontaknya.
 
 **Auth:** Bearer (patient/professional), rate-limited
 

@@ -173,17 +173,14 @@ func (s *Store) LinkGoogleIdentity(ctx context.Context, userID, subject, email s
 // UnbindGoogleIdentity melepas tautan Google tanpa mengubah UUID user.
 //
 // Perilaku (dalam SATU transaksi, di bawah advisory lock kepemilikan email):
-//  1. Mengunci baris user lalu membaca status SSO, email akun, role, dan
-//     professional_id (bila ada).
+//  1. Mengunci baris user lalu membaca status SSO dan email akun.
 //  2. Menolak bila akun tidak tertaut ke Google (ErrGoogleNotLinked).
-//  3. Memulihkan email placeholder profesional bila email akun saat ini sama
-//     dengan email Google yang dilepas — supaya Gmail itu bebas dipakai akun
-//     Malva lain. Bila placeholder sudah dipakai akun lain, email lama
-//     dipertahankan (unbind tidak boleh gagal hanya karena bentrok email).
-//  4. Menghapus tautan SSO (sso_* = NULL) dan, bila diminta, mengganti
+//  3. Menghapus tautan SSO (sso_* = NULL) dan, bila diminta, mengganti
 //     password_hash dalam UPDATE yang sama (akun Google-only belum punya
-//     password yang bisa dipakai).
-//  5. Menghapus token OAuth Google agar Google Meet ikut nonaktif.
+//     password yang bisa dipakai). Kolom email TIDAK diubah: setelah unbind
+//     akun tetap ada dan Gmail itu memang email kontaknya — mengembalikannya
+//     ke placeholder fiktif akan merusak data dan memutus notifikasi.
+//  4. Menghapus token OAuth Google agar Google Meet ikut nonaktif.
 //
 // newPasswordHash kosong berarti password tidak diubah.
 func (s *Store) UnbindGoogleIdentity(ctx context.Context, userID, newPasswordHash string) (GoogleIdentity, error) {
@@ -199,46 +196,25 @@ func (s *Store) UnbindGoogleIdentity(ctx context.Context, userID, newPasswordHas
 		return GoogleIdentity{}, err
 	}
 	var provider, ssoID sql.NullString
-	var ssoEmail, accountEmail, role, profID string
-	err = tx.QueryRowContext(ctx, `SELECT u.sso_provider, u.sso_id, COALESCE(u.sso_email,''), u.email,
-			u.role::text, COALESCE(pp.professional_id,'')
-		FROM users u
-		LEFT JOIN professional_profiles pp ON pp.user_id = u.id
-		WHERE u.id = $1 AND u.disabled_at IS NULL
-		FOR UPDATE OF u`, userID).
-		Scan(&provider, &ssoID, &ssoEmail, &accountEmail, &role, &profID)
+	var accountEmail string
+	err = tx.QueryRowContext(ctx, `SELECT sso_provider, sso_id, email
+		FROM users WHERE id = $1 AND disabled_at IS NULL FOR UPDATE`, userID).
+		Scan(&provider, &ssoID, &accountEmail)
 	if err != nil {
 		return GoogleIdentity{}, err
 	}
 	if provider.String != "google" || strings.TrimSpace(ssoID.String) == "" {
 		return GoogleIdentity{}, ErrGoogleNotLinked
 	}
-	// Default: pertahankan email akun apa adanya. Hanya placeholder profesional
-	// yang bisa dipulihkan, dan hanya bila email akun saat ini memang Gmail
-	// yang dilepas (bukan Gmail lain yang sengaja dipakai akun lama).
-	restoredEmail := accountEmail
-	if role == "professional" &&
-		strings.EqualFold(accountEmail, ssoEmail) &&
-		profID != "" && !strings.HasPrefix(profID, "g-") {
-		candidate := profID + "@professional.malva.local"
-		if err := checkEmailOwnership(ctx, tx, candidate, userID); err != nil {
-			if !errors.Is(err, ErrEmailOwnedByOther) {
-				return GoogleIdentity{}, err
-			}
-			// Placeholder sudah dipakai akun lain → pertahankan email lama.
-		} else {
-			restoredEmail = candidate
-		}
-	}
 	now := clock.Now().Truncate(time.Microsecond)
 	if newPasswordHash != "" {
 		_, err = tx.ExecContext(ctx, `UPDATE users SET sso_provider = NULL, sso_id = NULL,
-			sso_email = NULL, sso_linked_at = NULL, email = $2, updated_at = $3, password_hash = $4
-			WHERE id = $1`, userID, restoredEmail, now, newPasswordHash)
+			sso_email = NULL, sso_linked_at = NULL, updated_at = $2, password_hash = $3
+			WHERE id = $1`, userID, now, newPasswordHash)
 	} else {
 		_, err = tx.ExecContext(ctx, `UPDATE users SET sso_provider = NULL, sso_id = NULL,
-			sso_email = NULL, sso_linked_at = NULL, email = $2, updated_at = $3
-			WHERE id = $1`, userID, restoredEmail, now)
+			sso_email = NULL, sso_linked_at = NULL, updated_at = $2
+			WHERE id = $1`, userID, now)
 	}
 	if err != nil {
 		return GoogleIdentity{}, googleIdentityWriteError(err)
@@ -249,7 +225,7 @@ func (s *Store) UnbindGoogleIdentity(ctx context.Context, userID, newPasswordHas
 	if err := tx.Commit(); err != nil {
 		return GoogleIdentity{}, err
 	}
-	return GoogleIdentity{Linked: false, EmailIsPlaceholder: IsPlaceholderProfessionalEmail(restoredEmail)}, nil
+	return GoogleIdentity{Linked: false, EmailIsPlaceholder: IsPlaceholderProfessionalEmail(accountEmail)}, nil
 }
 
 func IsPlaceholderProfessionalEmail(email string) bool {

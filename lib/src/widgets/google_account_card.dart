@@ -178,40 +178,23 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
     }
   }
 
-  /// Melepas tautan Gmail. Menampilkan dialog konfirmasi lebih dulu; bila
-  /// server menuntut password baru (`perlu_password`, akun Google-only),
+  /// Melepas tautan Gmail. Menampilkan dialog konfirmasi (dengan field password
+  /// akun OPSIONAL) lebih dulu. Bila akun ber-password → kirim `current_password`;
+  /// bila dikosongkan (akun Google-only) server membalas `perlu_password`, lalu
   /// tampilkan dialog kedua untuk menetapkan password baru.
   Future<void> _unbind() async {
     if (_busy) return;
     final token = widget.session.accessToken;
     if (token == null || token.isEmpty) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Lepas Gmail?'),
-        content: const Text(
-          'Setelah dilepas, Anda tidak bisa masuk dengan Google ini dan '
-          'Google Meet (bila aktif) akan nonaktif. Email & password akun '
-          'tetap bisa dipakai.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Lepas'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+    final currentPassword = await _confirmUnbind();
+    // null = dibatalkan; string kosong = lanjut tanpa password akun.
+    if (currentPassword == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      final identity = await ref
-          .read(apiClientProvider)
-          .unbindGoogleIdentity(accessToken: token);
+      final identity = await ref.read(apiClientProvider).unbindGoogleIdentity(
+            accessToken: token,
+            currentPassword: currentPassword,
+          );
       if (!mounted) return;
       _applyUnlinked(identity);
     } on MalvaApiException catch (error) {
@@ -231,6 +214,49 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Dialog konfirmasi "Lepas Gmail?" dengan field password akun opsional.
+  /// Mengembalikan: null bila dibatalkan; selain itu password akun (boleh
+  /// kosong) yang akan dikirim sebagai `current_password`.
+  Future<String?> _confirmUnbind() {
+    var password = '';
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Lepas Gmail?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Setelah dilepas, Anda tidak bisa masuk dengan Google ini dan '
+              'Google Meet (bila aktif) akan nonaktif. Email & password akun '
+              'tetap bisa dipakai.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              obscureText: true,
+              onChanged: (v) => password = v,
+              decoration: const InputDecoration(
+                labelText: 'Password akun (opsional)',
+                helperText: 'Kosongkan bila Anda selalu masuk dengan Google.',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(null),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(password),
+            child: const Text('Lepas'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Unbind dengan menyertakan password baru (jalur akun Google-only).

@@ -357,6 +357,54 @@ void main() {
     );
     expect(find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
   });
+
+  testWidgets(
+      'unbind dengan password akun mengirim current_password tanpa minta password baru',
+      (tester) async {
+    final unbindBodies = <String>[];
+    final api = MalvaApiClient(
+      baseUrl: 'http://backend.test',
+      httpClient: _FakeClient((request) async {
+        switch ('${request.method} ${request.url.path}') {
+          case 'GET /v1/auth/google-identity':
+            return _json({
+              'linked': true,
+              'email': 'pasien@gmail.com',
+              'linked_at': '2026-10-05T10:00:00.000Z',
+            });
+          case 'POST /v1/auth/unbind-google':
+            unbindBodies.add(request.body);
+            return _json({'linked': false, 'email_is_placeholder': false});
+          default:
+            return _json(const {});
+        }
+      }),
+    );
+
+    await tester.pumpWidget(_wrap(
+      api,
+      _patientSession,
+      const GoogleAccountCard(session: _patientSession),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Lepas Gmail'));
+    await tester.pumpAndSettle();
+
+    // Dialog konfirmasi punya field password akun opsional.
+    await tester.enterText(find.byType(TextField), 'PasswordAkun123!');
+    await tester.tap(find.widgetWithText(FilledButton, 'Lepas'));
+    await tester.pumpAndSettle();
+
+    // Request memuat current_password, bukan new_password.
+    expect(unbindBodies, hasLength(1));
+    final body = jsonDecode(unbindBodies.single) as Map;
+    expect(body['current_password'], 'PasswordAkun123!');
+    expect(body.containsKey('new_password'), isFalse);
+    // Tidak ada dialog password baru; kartu langsung jadi belum tertaut.
+    expect(find.widgetWithText(FilledButton, 'Simpan & Lepas'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
+  });
 }
 
 /// Klien HTTP palsu (pola repo, lihat `test/health_record_sync_test.dart`).

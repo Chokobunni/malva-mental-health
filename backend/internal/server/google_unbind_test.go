@@ -103,16 +103,14 @@ func TestUnbindGoogleWithNewPassword(t *testing.T) {
 	}
 }
 
-//  3. Profesional placeholder → bind → unbind → email kembali ke placeholder
-//     berbasis professional_id.
-func TestUnbindGoogleRestoresProfessionalPlaceholderEmail(t *testing.T) {
+//  3. Profesional placeholder → bind → unbind → email TETAP Gmail.
+//     Ini keputusan sadar (bukan lupa): setelah unbind akun tetap ada dan Gmail
+//     itu memang email kontaknya; mengembalikannya ke placeholder fiktif akan
+//     merusak data dan memutus notifikasi.
+func TestUnbindGoogleKeepsGmailForProfessional(t *testing.T) {
 	db, st := openOnboardingTestStore(t)
 	ctx := context.Background()
 	u := createIdentityTestUser(t, db, st, "professional", &store.ProfessionalCredential{Specialization: "Sp.KJ"})
-	var profID string
-	if err := db.QueryRow(`SELECT professional_id FROM professional_profiles WHERE user_id=$1`, u.ID).Scan(&profID); err != nil {
-		t.Fatal(err)
-	}
 	gmail := "pro-gmail-" + u.ID + "@example.test"
 	if _, err := st.LinkGoogleIdentity(ctx, u.ID, "sub-"+u.ID, gmail, false); err != nil {
 		t.Fatal(err)
@@ -126,10 +124,10 @@ func TestUnbindGoogleRestoresProfessionalPlaceholderEmail(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d %s", rec.Code, rec.Body.String())
 	}
-	want := profID + "@professional.malva.local"
+	// Email tetap Gmail (sengaja TIDAK dipulihkan ke placeholder).
 	finalUser, err := st.GetUserByID(ctx, u.ID)
-	if err != nil || finalUser.Email != want {
-		t.Fatalf("email tidak dipulihkan: got %q want %q (%v)", finalUser.Email, want, err)
+	if err != nil || finalUser.Email != gmail {
+		t.Fatalf("email berubah saat unbind: got %q want %q (%v)", finalUser.Email, gmail, err)
 	}
 }
 
