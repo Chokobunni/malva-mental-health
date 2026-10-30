@@ -187,13 +187,16 @@ class Medication {
   String get lastTakenLabel {
     final taken = lastTakenAt;
     if (taken == null) return 'Belum pernah diminum';
-    final today = DateTime.now();
-    final sameDay = taken.year == today.year &&
-        taken.month == today.month &&
-        taken.day == today.day;
-    final h = taken.hour.toString().padLeft(2, '0');
-    final m = taken.minute.toString().padLeft(2, '0');
-    return sameDay ? 'Taken $h:$m' : 'Taken ${taken.day}/${taken.month} $h:$m';
+    // Selalu bandingkan/format dalam waktu LOKAL: `lastTakenAt` bisa berasal
+    // dari server (UTC), sehingga tanpa toLocal() jamnya mundur 7 jam dan
+    // "hari ini" bisa terbaca sebagai kemarin.
+    final local = taken.toLocal();
+    final sameDay = isSameLocalDay(taken, DateTime.now());
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    return sameDay
+        ? 'Taken $h:$m'
+        : 'Taken ${local.day}/${local.month} $h:$m';
   }
 
   Medication copyWith({
@@ -219,6 +222,23 @@ class Medication {
       lastTakenAt: lastTakenAt ?? this.lastTakenAt,
     );
   }
+}
+
+/// True bila [id] belum berupa id server: kosong atau id sementara
+/// `med_<timestamp>` (obat yang dicatat sebelum sync ke server berhasil).
+bool isTemporaryMedicationId(String id) {
+  final value = id.trim();
+  return value.isEmpty || value.startsWith('med_');
+}
+
+/// True bila dua waktu jatuh pada hari kalender LOKAL yang sama.
+///
+/// Waktu dari server bisa UTC (`...Z`); tanpa toLocal() dosis 03:20 WIB
+/// terbaca sebagai hari sebelumnya sehingga adherence jatuh ke 0%.
+bool isSameLocalDay(DateTime a, DateTime b) {
+  final la = a.toLocal();
+  final lb = b.toLocal();
+  return la.year == lb.year && la.month == lb.month && la.day == lb.day;
 }
 
 class MedicationLog {

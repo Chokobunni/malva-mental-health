@@ -332,6 +332,9 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
   }
 
   static String _groupKey(DateTime date) {
+    // Kunci kelompok = TANGGAL LOKAL. Data dari server berbentuk UTC; tanpa
+    // toLocal() entri pukul 22:00 WIB masuk ke kelompok hari sebelumnya.
+    final local = date.toLocal();
     const months = [
       'January',
       'February',
@@ -346,7 +349,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
       'November',
       'December',
     ];
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
+    return '${local.day} ${months[local.month - 1]} ${local.year}';
   }
 
   // ----------------------------------------------------------
@@ -526,8 +529,10 @@ class _DiaryEntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hh = row.at.hour.toString().padLeft(2, '0');
-    final mm = row.at.minute.toString().padLeft(2, '0');
+    // `row.at` berasal dari server (UTC) → tampilkan dalam jam lokal.
+    final localAt = row.at.toLocal();
+    final hh = localAt.hour.toString().padLeft(2, '0');
+    final mm = localAt.minute.toString().padLeft(2, '0');
     final hasNote = row.note.isNotEmpty && row.note != 'Tidak ada catatan.';
     final moodColor = row.mood == MoodValue.great || row.mood == MoodValue.good
         ? MalvaColors.mint

@@ -9,6 +9,30 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 
+/// Tanggal check-in mood pada kalender (`30 Oktober 2026`) dalam waktu LOKAL.
+///
+/// `MoodEntry.date` diisi dari `occurredAt` server (UTC) oleh
+/// `loadCheckinHistory`, jadi WAJIB `.toLocal()` lebih dulu — tanpa itu
+/// check-in pukul 00:30 WIB tampil sebagai tanggal kemarin.
+String formatMoodCalendarDate(DateTime date) {
+  const months = [
+    'Januari',
+    'Februari',
+    'Maret',
+    'April',
+    'Mei',
+    'Juni',
+    'Juli',
+    'Agustus',
+    'September',
+    'Oktober',
+    'November',
+    'Desember'
+  ];
+  final local = date.toLocal();
+  return '${local.day} ${months[local.month - 1]} ${local.year}';
+}
+
 class MoodScreen extends ConsumerStatefulWidget {
   const MoodScreen({
     super.key,
@@ -391,7 +415,7 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            '${entry.mood.label} • ${_calDate(entry.date)}',
+                            '${entry.mood.label} • ${formatMoodCalendarDate(entry.date)}',
                             style: const TextStyle(fontWeight: FontWeight.w900),
                           ),
                         ),
@@ -435,24 +459,6 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
         ),
       ),
     );
-  }
-
-  static String _calDate(DateTime date) {
-    const months = [
-      'Januari',
-      'Februari',
-      'Maret',
-      'April',
-      'Mei',
-      'Juni',
-      'Juli',
-      'Agustus',
-      'September',
-      'Oktober',
-      'November',
-      'Desember'
-    ];
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
   void _saveEntry() {

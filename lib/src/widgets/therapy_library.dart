@@ -18,6 +18,20 @@ import 'malva_components.dart';
 // Diekspor ulang supaya pemanggil lama (mis. layar profesional) tetap jalan.
 export '../ai/assessment_scoring.dart';
 
+/// Waktu therapy record (`dd/MM/yyyy HH:mm`) dalam waktu LOKAL.
+///
+/// `createdDateTime` berasal dari server (UTC), jadi WAJIB `.toLocal()` lebih
+/// dulu. Satu helper dipakai oleh daftar Therapy Record maupun kartu pratinjau
+/// supaya kedua tempat tidak pernah menampilkan tanggal yang berbeda.
+/// Mengembalikan string kosong bila waktunya tidak tersedia.
+String formatTherapyRecordDate(DateTime? value) {
+  if (value == null) return '';
+  final local = value.toLocal();
+  final h = local.hour.toString().padLeft(2, '0');
+  final m = local.minute.toString().padLeft(2, '0');
+  return '${local.day}/${local.month}/${local.year} $h:$m';
+}
+
 // ============================================================
 // TERAPI LIBRARY — konten edukasi dengan penjelasan singkat
 // dan langkah-langkah (tutorial) untuk setiap modul:
@@ -2996,9 +3010,7 @@ class _TherapySubmissionsScreenState
                                   if (created != null) ...[
                                     const SizedBox(height: 4),
                                     Text(
-                                      '${created.day}/${created.month}/${created.year} '
-                                      '${created.hour.toString().padLeft(2, '0')}:'
-                                      '${created.minute.toString().padLeft(2, '0')}',
+                                      formatTherapyRecordDate(created),
                                       style: TextStyle(
                                           fontSize: 12,
                                           color: Theme.of(context)
@@ -3228,9 +3240,7 @@ class _TherapyRecordPreviewCard extends StatelessWidget {
           if (created != null) ...[
             const SizedBox(height: 4),
             Text(
-              '${created.day}/${created.month}/${created.year} '
-              '${created.hour.toString().padLeft(2, '0')}:'
-              '${created.minute.toString().padLeft(2, '0')}',
+              formatTherapyRecordDate(created),
               style: TextStyle(
                   fontSize: 12,
                   color: Theme.of(context).colorScheme.onSurfaceVariant),

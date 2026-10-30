@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
+import '../services/server_clock.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 
@@ -68,9 +69,12 @@ class _HistoryEntryCard extends StatelessWidget {
   final MoodEntry entry;
 
   String get _relativeDay {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final day = DateTime(entry.date.year, entry.date.month, entry.date.day);
+    // `MoodEntry.date` diisi dari `occurred_at` server (UTC) saat riwayat
+    // dimuat ulang, jadi "Today"/"Yesterday" WAJIB dihitung per hari LOKAL.
+    final now = ServerClock.now();
+    final local = entry.date.toLocal();
+    final today = DateTime.utc(now.year, now.month, now.day);
+    final day = DateTime.utc(local.year, local.month, local.day);
     final diff = today.difference(day).inDays;
     if (diff == 0) return 'Today';
     if (diff == 1) return 'Yesterday';
@@ -88,7 +92,7 @@ class _HistoryEntryCard extends StatelessWidget {
       'Nov',
       'Dec'
     ];
-    return '${entry.date.day} ${months[entry.date.month - 1]}';
+    return '${local.day} ${months[local.month - 1]}';
   }
 
   String _level(int score) {

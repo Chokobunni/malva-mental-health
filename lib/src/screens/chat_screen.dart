@@ -8,6 +8,7 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/chat_service.dart';
 import '../services/malva_api_client.dart';
+import '../services/server_clock.dart';
 import '../services/weekly_summary_service.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
@@ -27,6 +28,30 @@ class ChatScreen extends ConsumerStatefulWidget {
 
   /// URL foto lawan bicara (profesional). Kosong = pakai gradien + inisial.
   final String otherUserPhotoUrl;
+
+  /// Label pemisah tanggal pesan (`Hari ini HH:mm` / `dd/MM/yyyy HH:mm`).
+  ///
+  /// Waktu pesan dari server berbentuk UTC, jadi WAJIB diubah ke waktu lokal
+  /// lebih dulu: tanpa itu jamnya mundur 7 jam (WIB) dan pesan malam hari
+  /// tampil sebagai "kemarin".
+  static String formatMessageDate(DateTime d) {
+    final local = d.toLocal();
+    final now = ServerClock.now().toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    if (isSameLocalDay(local, now)) {
+      return 'Hari ini $h:$m';
+    }
+    return '${local.day}/${local.month}/${local.year} $h:$m';
+  }
+
+  /// Jam kecil di bawah setiap gelembung pesan (`HH:mm`, waktu lokal).
+  static String formatMessageTime(DateTime d) {
+    final local = d.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -1235,23 +1260,13 @@ class _TimestampLabel extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Text(
-        _formatDate(date),
+        ChatScreen.formatMessageDate(date),
         style: Theme.of(context)
             .textTheme
             .bodySmall
             ?.copyWith(color: Colors.black38, fontWeight: FontWeight.w700),
       ),
     );
-  }
-
-  static String _formatDate(DateTime d) {
-    final now = DateTime.now();
-    final h = d.hour.toString().padLeft(2, '0');
-    final m = d.minute.toString().padLeft(2, '0');
-    if (d.year == now.year && d.month == now.month && d.day == now.day) {
-      return 'Hari ini $h:$m';
-    }
-    return '${d.day}/${d.month}/${d.year} $h:$m';
   }
 }
 
@@ -1319,7 +1334,7 @@ class _ChatBubble extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              _timeLabel(message.timestamp),
+              ChatScreen.formatMessageTime(message.timestamp),
               style: TextStyle(
                 fontSize: 10,
                 color: isMine
@@ -1331,12 +1346,6 @@ class _ChatBubble extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static String _timeLabel(DateTime d) {
-    final h = d.hour.toString().padLeft(2, '0');
-    final m = d.minute.toString().padLeft(2, '0');
-    return '$h:$m';
   }
 }
 

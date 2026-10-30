@@ -272,7 +272,7 @@ class _IncidentCard extends StatelessWidget {
                     Text(row.patientName,
                         style: const TextStyle(fontWeight: FontWeight.w900)),
                     Text(
-                      _dateLabel(row.incident.createdAt),
+                      formatIncidentDate(row.incident.createdAt),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -321,11 +321,16 @@ class _IncidentCard extends StatelessWidget {
       ),
     );
   }
+}
 
-  static String _dateLabel(DateTime? date) {
-    if (date == null) return '';
-    final h = date.hour.toString().padLeft(2, '0');
-    final m = date.minute.toString().padLeft(2, '0');
-    return '${date.day}/${date.month}/${date.year} $h:$m';
-  }
+/// Waktu insiden krisis (`dd/MM/yyyy HH:mm`) dalam waktu LOKAL.
+///
+/// `created_at` insiden berasal dari server (UTC), jadi WAJIB `.toLocal()`
+/// lebih dulu — kalau tidak, insiden dini hari tercatat di tanggal kemarin.
+String formatIncidentDate(DateTime? date) {
+  if (date == null) return '';
+  final local = date.toLocal();
+  final h = local.hour.toString().padLeft(2, '0');
+  final m = local.minute.toString().padLeft(2, '0');
+  return '${local.day}/${local.month}/${local.year} $h:$m';
 }

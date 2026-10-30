@@ -287,8 +287,10 @@ class _NotificationCard extends StatelessWidget {
 
   static String _dateLabel(DateTime? date) {
     if (date == null) return '';
-    final h = date.hour.toString().padLeft(2, '0');
-    final m = date.minute.toString().padLeft(2, '0');
-    return '${date.day}/${date.month}/${date.year} $h:$m';
+    // `created_at` notifikasi berasal dari server (UTC) → tampilkan lokal.
+    final local = date.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    return '${local.day}/${local.month}/${local.year} $h:$m';
   }
 }

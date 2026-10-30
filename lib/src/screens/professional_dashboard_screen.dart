@@ -600,7 +600,7 @@ class _ProfessionalDashboardScreenState
             screening: screening,
             title: 'Crisis alert',
             body:
-                '${patient.displayName} memiliki crisis flag pada screening ${_formatDate(screening.createdAt)}.',
+                '${patient.displayName} memiliki crisis flag pada screening ${formatScreeningDate(screening.createdAt)}.',
             color: MalvaColors.danger,
           ),
         );
@@ -927,7 +927,7 @@ class _ProfessionalDashboardScreenState
                                         fontWeight: FontWeight.w900),
                                   ),
                                   Text(
-                                    '${item.title} • ${_formatDate(item.screening.createdAt)}',
+                                    '${item.title} • ${formatScreeningDate(item.screening.createdAt)}',
                                     style: Theme.of(sheetContext)
                                         .textTheme
                                         .bodySmall
@@ -1012,7 +1012,7 @@ class _ProfessionalDashboardScreenState
                                 fontWeight: FontWeight.w900, fontSize: 17),
                           ),
                           Text(
-                            '${item.patient.displayName} • ${_formatDate(screening.createdAt)}',
+                            '${item.patient.displayName} • ${formatScreeningDate(screening.createdAt)}',
                             style: Theme.of(sheetContext)
                                 .textTheme
                                 .bodySmall
@@ -1183,7 +1183,7 @@ class _ProfessionalDashboardScreenState
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Tanggal: ${_formatDate(screening.createdAt)}'),
+              Text('Tanggal: ${formatScreeningDate(screening.createdAt)}'),
               const SizedBox(height: 8),
               Text(
                 'PHQ-9: ${screening.phq9Score}/${screening.phq9MaxScore} (${screening.phq9LevelLabel})',
@@ -1363,7 +1363,7 @@ class _ProfessionalDashboardScreenState
       'Patient ID: ${patient.patientId}',
       'Status relasi: ${patient.status}',
       if (latest != null) ...[
-        'Screening terakhir: ${_formatDate(latest.createdAt)}',
+        'Screening terakhir: ${formatScreeningDate(latest.createdAt)}',
         'Overall: ${latest.overallLevelLabel}',
         'PHQ-9: ${latest.phq9Score}/${latest.phq9MaxScore}',
         'GAD-7: ${latest.gad7Score}/${latest.gad7MaxScore}',
@@ -1379,7 +1379,7 @@ class _ProfessionalDashboardScreenState
       'Patient ID,${patient.patientId}',
       'Status,${patient.status}',
       if (latest != null) ...[
-        'Screening Date,${_formatDate(latest.createdAt)}',
+        'Screening Date,${formatScreeningDate(latest.createdAt)}',
         'Overall Level,${latest.overallLevelLabel}',
         'PHQ-9 Score,${latest.phq9Score}/${latest.phq9MaxScore}',
         'GAD-7 Score,${latest.gad7Score}/${latest.gad7MaxScore}',
@@ -2020,7 +2020,7 @@ class _AuditAndExportSection extends StatelessWidget {
                                   const TextStyle(fontWeight: FontWeight.w900),
                             ),
                             Text(
-                                '${entry.body} - ${_formatDate(entry.createdAt)}'),
+                                '${entry.body} - ${formatScreeningDate(entry.createdAt)}'),
                           ],
                         ),
                       ),
@@ -2324,7 +2324,7 @@ class _PriorityCard extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w900)),
                     const SizedBox(height: 2),
                     Text(
-                      '${item.patient.displayName} • ${_formatDate(screening.createdAt)}',
+                      '${item.patient.displayName} • ${formatScreeningDate(screening.createdAt)}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color:
                               Theme.of(context).colorScheme.onSurfaceVariant),
@@ -2544,11 +2544,18 @@ Color _riskColor(String value) {
   };
 }
 
-String _formatDate(DateTime? value) {
+/// Tanggal screening untuk TAMPILAN **dan** EKSPOR (text/CSV).
+///
+/// `createdAt` dari server berbentuk UTC; laporan klinis harus mengikuti
+/// kalender LOKAL tenaga medis (WIB), jadi selalu `.toLocal()` lebih dulu.
+/// Satu implementasi dipakai bersama agar angka di layar dan di berkas ekspor
+/// tidak pernah berbeda tanggal.
+String formatScreeningDate(DateTime? value) {
   if (value == null) return 'Belum ada tanggal';
-  final day = value.day.toString().padLeft(2, '0');
-  final month = value.month.toString().padLeft(2, '0');
-  return '$day/$month/${value.year}';
+  final local = value.toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  final month = local.month.toString().padLeft(2, '0');
+  return '$day/$month/${local.year}';
 }
 
 class _SyncStatusIndicator extends StatelessWidget {

@@ -7,6 +7,7 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/medication_reminder_service.dart';
+import '../services/server_clock.dart';
 import '../theme.dart';
 import '../widgets/home_personalization.dart';
 import '../widgets/malva_components.dart';
@@ -26,6 +27,17 @@ class MedicationScreen extends ConsumerStatefulWidget {
   final AuthSession? session;
   final MalvaApiClient? apiClient;
   final MedicationReminderService? medicationReminderService;
+
+  /// Format waktu log untuk riwayat: `dd/MM/yyyy HH:mm` dalam waktu LOKAL.
+  ///
+  /// `takenAt` dari server berbentuk UTC (`...Z`); tanpa toLocal() riwayat
+  /// menampilkan jam UTC (mundur 7 jam / tanggal sebelumnya untuk WIB).
+  static String formatLogTime(DateTime dt) {
+    final local = dt.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    return '${local.day}/${local.month}/${local.year} $h:$m';
+  }
 
   @override
   ConsumerState<MedicationScreen> createState() => _MedicationScreenState();
@@ -180,7 +192,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Weekly Adherence',
+                              'Kepatuhan Hari Ini',
                               style: TextStyle(
                                   color: Colors.white70,
                                   fontWeight: FontWeight.w800),
@@ -308,7 +320,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
                                       fontWeight: FontWeight.w800),
                                 ),
                                 Text(
-                                  '${log.status.toUpperCase()} — ${_formatLogTime(log.takenAt)}',
+                                  '${log.status.toUpperCase()} — ${MedicationScreen.formatLogTime(log.takenAt)}',
                                   style: Theme.of(context).textTheme.bodySmall,
                                 ),
                               ],
@@ -419,12 +431,6 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
         ],
       ),
     );
-  }
-
-  static String _formatLogTime(DateTime dt) {
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    return '${dt.day}/${dt.month}/${dt.year} $h:$m';
   }
 
   /// Ikon status log obat. 'partial' (sebagian diminum) punya ikon sendiri;
@@ -597,14 +603,28 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
       if (accessToken != null && accessToken.isNotEmpty) {
         unawaited(store.loadMedicationLogs(_apiClient, accessToken));
       }
-    } else if (consumed) {
-      // Gagal kirim: penanda pending DIBIARKAN supaya stok di layar tetap
-      // terpotong dan tidak naik kembali saat refresh. Pesan dibuat jujur.
+    } else {
+      // Gagal kirim: MASUKKAN ke antrean offline. Sebelumnya hanya SnackBar
+      // ditampilkan, sehingga log hilang permanen saat app ditutup.
+      //
+      // `medicationId` hanya dikirim bila sudah berupa id server: backend
+      // menerima id kosong (hanya tidak memotong stok), dan lebih baik log
+      // tercatat tanpa pemotongan stok daripada hilang sama sekali.
+      unawaited(
+        ref.read(offlineSyncServiceProvider).enqueueMedicationLog(
+              medicationId:
+                  _looksLikeServerId(medication.id) ? medication.id : '',
+              medicationName: medication.name,
+              status: status,
+            ),
+      );
+      // Penanda pending DIBIARKAN (tidak confirmDose) supaya stok di layar
+      // tetap terpotong dan tidak naik kembali saat refresh.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'Log obat tersimpan di perangkat, tetapi belum terkirim ke '
-              'server. Stok akan disesuaikan otomatis saat koneksi kembali.'),
+              'Log obat masuk antrean offline dan akan dikirim otomatis saat '
+              'koneksi kembali.'),
           backgroundColor: MalvaColors.amber,
         ),
       );
@@ -745,7 +765,9 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
         medicationId: serverId,
         medicationName: medication.name,
         status: status,
-        takenAt: DateTime.now(),
+        // Waktu minum memakai acuan server (bukan jam perangkat) agar dosis
+        // tidak tercatat di hari yang salah bila jam perangkat meleset.
+        takenAt: ServerClock.now(),
       );
       return serverId != null;
     } on Object catch (error) {

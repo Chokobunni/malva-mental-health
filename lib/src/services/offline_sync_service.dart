@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../assessment_engine.dart';
 import '../models.dart';
 import 'malva_api_client.dart';
+import 'server_clock.dart';
 
 // ============================================================
 // OFFLINE SYNC QUEUE MODELS
@@ -216,7 +217,10 @@ class OfflineSyncService {
         'medication_id': medicationId,
         'medication_name': medicationName,
         'status': status,
-        'taken_at': DateTime.now().toIso8601String(),
+        // Waktu minum memakai acuan SERVER, bukan jam perangkat: log yang
+        // dikirim belakangan tetap tercatat pada jam yang benar, dan "hari
+        // ini" tidak bergeser bila jam perangkat meleset.
+        'taken_at': ServerClock.now().toIso8601String(),
       },
       createdAt: DateTime.now(),
       userId: _activeUserId,

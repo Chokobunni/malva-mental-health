@@ -336,9 +336,13 @@ class _DiaryCard extends StatelessWidget {
   }
 
   static String _dateLabel(DateTime date) {
-    final h = date.hour.toString().padLeft(2, '0');
-    final m = date.minute.toString().padLeft(2, '0');
-    return '${date.day}/${date.month}/${date.year} $h:$m';
+    // `DiaryEntry.createdAt` diisi dari `occurred_at` server (UTC), jadi
+    // tampilkan dalam waktu lokal — kalau tidak, entri malam hari tampil
+    // sebagai tanggal/jam kemarin.
+    final local = date.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    return '${local.day}/${local.month}/${local.year} $h:$m';
   }
 }
 

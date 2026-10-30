@@ -73,12 +73,19 @@ class AssessmentHistoryEntry {
       module?.color ?? (isScreening ? MalvaColors.seed : MalvaColors.orchid);
 }
 
-/// Format tanggal + jam assessment record (`dd/MM/yyyy HH:mm`).
+/// Format tanggal + jam assessment record (`dd/MM/yyyy HH:mm`) dalam waktu
+/// LOKAL.
+///
+/// `createdAt` screening berasal dari server (UTC), jadi WAJIB `.toLocal()`
+/// lebih dulu; tanpa itu screening dini hari WIB tampil mundur 7 jam dan
+/// tanggalnya bisa jadi kemarin. Entri lokal (dibuat `DateTime.now()`) tidak
+/// terpengaruh karena `.toLocal()` bersifat idempoten.
 String formatAssessmentDate(DateTime? date) {
   if (date == null) return 'Tanggal tidak tercatat';
+  final local = date.toLocal();
   String two(int value) => value.toString().padLeft(2, '0');
-  return '${two(date.day)}/${two(date.month)}/${date.year} '
-      '${two(date.hour)}:${two(date.minute)}';
+  return '${two(local.day)}/${two(local.month)}/${local.year} '
+      '${two(local.hour)}:${two(local.minute)}';
 }
 
 /// Ringkasan skor satu subskala screening, mis. `PHQ-9 12/27 (Sedang)`.

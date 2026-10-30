@@ -10,6 +10,18 @@ import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import 'assessment_history_screen.dart';
 
+/// Tanggal "Diperbarui" pada kartu diagnosis (`d/M/yyyy`) dalam waktu LOKAL.
+///
+/// `updatedAt` health record berasal dari server (UTC), jadi WAJIB
+/// `.toLocal()` lebih dulu — tanpa itu pembaruan dini hari WIB tampil sebagai
+/// tanggal kemarin. Pola keluaran dipertahankan seperti sebelumnya (tanpa
+/// padding) agar tampilan tidak berubah selain kebenaran tanggalnya.
+String formatHealthRecordUpdatedDate(DateTime? value) {
+  if (value == null) return '';
+  final local = value.toLocal();
+  return '${local.day}/${local.month}/${local.year}';
+}
+
 class RecordScreen extends ConsumerStatefulWidget {
   const RecordScreen({super.key, this.session, this.apiClient});
 
@@ -718,7 +730,7 @@ class _DiagnosisCard extends StatelessWidget {
           if (updated != null) ...[
             const SizedBox(height: 2),
             Text(
-              'Diperbarui: ${updated.day}/${updated.month}/${updated.year}',
+              'Diperbarui: ${formatHealthRecordUpdatedDate(updated)}',
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
           ],

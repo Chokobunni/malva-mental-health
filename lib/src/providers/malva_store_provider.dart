@@ -7,6 +7,7 @@ import '../assessment_engine.dart';
 import '../models.dart';
 import '../services/assessment_database_service.dart';
 import '../services/malva_api_client.dart';
+import '../services/server_clock.dart';
 import 'auth_providers.dart';
 import 'data/assessment_provider.dart';
 
@@ -70,24 +71,67 @@ class MalvaStoreState {
   ScreeningBundle? get latestScreeningBundle =>
       screeningBundles.isEmpty ? null : screeningBundles.last;
 
-  /// Persentase kepatuhan minum obat HARI INI.
+  /// Persentase obat yang sudah diminum HARI INI (bukan jumlah dosis).
   ///
-  /// Aturan (jangan diubah tanpa alasan klinis): hanya log berstatus `taken`
+  /// Aturan klinis (jangan diubah tanpa alasan): hanya log berstatus `taken`
   /// yang menaikkan kepatuhan. Status `partial`/`skipped`/`missed` TIDAK
   /// dihitung — meski `partial` tetap memotong stok di server, ia bukan dosis
   /// penuh sehingga tidak boleh membuat angka kepatuhan terlihat 100%.
+  ///
+  /// Satu obat yang dicatat dua kali tetap dihitung satu, supaya angka tidak
+  /// melebihi porsi obat yang benar-benar sudah diminum saat pasien punya
+  /// banyak obat. Log untuk obat yang tidak ada di daftar [medications]
+  /// (mis. obat sudah dihapus) juga tidak dihitung.
+  ///
+  /// Perbandingan hari WAJIB memakai [isSameLocalDay] + [ServerClock.now]:
+  /// `takenAt` dari server berbentuk UTC, sehingga perbandingan `.day` mentah
+  /// membuat dosis 03:20 WIB terbaca sebagai hari sebelumnya (adherence 0%).
   int get adherencePercent {
     if (medications.isEmpty) return 0;
-    final today = DateTime.now();
-    final todayLogs = medicationLogs
-        .where((log) =>
-            log.takenAt.day == today.day &&
-            log.takenAt.month == today.month &&
-            log.takenAt.year == today.year &&
-            log.status == 'taken')
-        .length;
-    return ((todayLogs / medications.length) * 100).clamp(0, 100).round();
+    final now = ServerClock.now();
+    final takenMedicationIds = <String>{};
+    for (final log in medicationLogs) {
+      if (log.status != 'taken') continue;
+      if (!isSameLocalDay(log.takenAt, now)) continue;
+      final identity = _medicationIdentityForAdherence(log);
+      if (identity == null) continue; // obat tidak dikenal → jangan dihitung
+      takenMedicationIds.add(identity);
+    }
+    if (takenMedicationIds.isEmpty) return 0;
+    return ((takenMedicationIds.length / medications.length) * 100)
+        .clamp(0, 100)
+        .round();
   }
+
+  /// Identitas obat pada daftar [medications] yang cocok dengan [log].
+  ///
+  /// Mengembalikan id obat yang terdaftar, atau null bila log tidak bisa
+  /// dipetakan (mis. obatnya sudah dihapus). Log lokal optimistis bisa
+  /// membawa id sementara/kosong; untuk itu pencocokan dilakukan lewat nama
+  /// ternormalisasi agar dosis yang baru dicatat tetap terhitung.
+  String? _medicationIdentityForAdherence(MedicationLog log) {
+    final logId = log.medicationId.trim();
+    if (logId.isNotEmpty) {
+      for (final medication in medications) {
+        if (medication.id == logId) return medication.id;
+      }
+      // Id server yang sah tetapi tidak ada di daftar = obat sudah dihapus.
+      // Jangan dicocokkan lewat nama: nama bisa sama untuk resep berbeda.
+      if (!isTemporaryMedicationId(logId)) return null;
+    }
+    final normalizedName = _normalizeMedicationName(log.medicationName);
+    if (normalizedName.isEmpty) return null;
+    for (final medication in medications) {
+      if (_normalizeMedicationName(medication.name) == normalizedName) {
+        return medication.id;
+      }
+    }
+    return null;
+  }
+
+  /// Nama obat ternormalisasi untuk pencocokan log tanpa id server.
+  static String _normalizeMedicationName(String name) =>
+      name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
   int get completedGoalPercent {
     if (goals.isEmpty) return 0;
@@ -202,6 +246,11 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   /// Muat data dari server secara paralel setelah login (non-blocking).
   /// Kegagalan satu panggilan tidak menghalangi panggilan lain.
   Future<void> _loadServerDataAsync(AuthSession session) async {
+    // Pulihkan offset jam server lebih dulu agar pemuatan data memakai acuan
+    // waktu yang benar sejak awal (cold start offline tetap memakai offset
+    // terakhir yang tersimpan).
+    await ServerClock.loadPersisted();
+
     // Hidrasi cache log obat LOKAL lebih dulu agar riwayat kepatuhan tetap
     // tampil walau offline / server belum merespons (akar bug "adherence &
     // riwayat reset setelah logout/login"). Harus SEBELUM merge data server
@@ -318,7 +367,10 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     try {
       final logs = await api.listMedicationLogs(
         accessToken: token,
-        limit: 50,
+        // 100 = batas maksimum backend. Log diurut `taken_at DESC`, jadi 100
+        // entri terbaru pasti memuat seluruh dosis hari ini untuk pemakaian
+        // wajar (termasuk pasien dengan banyak obat / banyak dosis).
+        limit: 100,
       );
       final mapped = <MedicationLog>[];
       for (final log in logs) {
@@ -744,7 +796,10 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     final index = state.medications.indexWhere((m) => m.id == medicationId);
     if (index == -1) return;
     final med = state.medications[index];
-    final now = DateTime.now();
+    // Waktu dicatat dari acuan SERVER, bukan jam perangkat: bila jam perangkat
+    // meleset, dosis bisa tersimpan di hari yang salah dan kepatuhan "hari ini"
+    // ikut salah (fallback ke jam perangkat bila offset belum tersinkron).
+    final now = ServerClock.now();
     // Hanya dosis yang benar-benar masuk (utuh atau sebagian) yang mengurangi
     // stok dan memperbarui penanda "terakhir diminum".
     final consumed = status == 'taken' || status == 'partial';
@@ -878,10 +933,8 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
 
   /// True bila id belum berupa id server: kosong atau id sementara
   /// `med_<timestamp>` (obat yang dicatat sebelum sync berhasil).
-  static bool _isTemporaryId(String id) {
-    final value = id.trim();
-    return value.isEmpty || value.startsWith('med_');
-  }
+  /// Delegasi ke helper bersama di `models.dart` agar aturannya satu sumber.
+  static bool _isTemporaryId(String id) => isTemporaryMedicationId(id);
 
   /// True bila dua log adalah DOSIS YANG SAMA: obat sama, status sama, dan
   /// waktunya berdekatan (<= [_doseMatchWindow]).

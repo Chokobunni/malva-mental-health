@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
+import '../services/server_clock.dart';
 import '../theme.dart';
 import 'malva_components.dart';
 
@@ -19,25 +20,29 @@ import 'malva_components.dart';
 // ============================================================
 
 /// Cek apakah hari ini sudah check-in lengkap (ada mood dengan sleep).
+///
+/// `MoodEntry.date` berasal dari server (UTC) saat riwayat dimuat ulang,
+/// jadi perbandingan WAJIB lewat hari kalender lokal — kalau tidak, check-in
+/// pukul 22:00 WIB terbaca sebagai kemarin dan pasien diminta check-in lagi.
 bool hasCheckedInToday(List<MoodEntry> moods) {
-  final now = DateTime.now();
-  return moods.any((m) =>
-      m.date.year == now.year &&
-      m.date.month == now.month &&
-      m.date.day == now.day &&
-      m.sleepHours > 0);
+  final now = ServerClock.now();
+  return moods.any((m) => isSameLocalDay(m.date, now) && m.sleepHours > 0);
 }
 
 /// Streak hari beruntun check-in (mood tersimpan > 0 hari berturut-turut).
 int checkInStreak(List<MoodEntry> moods) {
   if (moods.isEmpty) return 0;
-  final days = moods
-      .map((m) => DateTime(m.date.year, m.date.month, m.date.day))
-      .toSet()
-      .toList()
+  // Tanggal kalender LOKAL, lalu dibekukan sebagai UTC-midnight supaya
+  // selisih hari dihitung bersih (tidak terpengaruh offset/DST).
+  DateTime dayOnly(DateTime value) {
+    final local = value.toLocal();
+    return DateTime.utc(local.year, local.month, local.day);
+  }
+
+  final days = moods.map((m) => dayOnly(m.date)).toSet().toList()
     ..sort((a, b) => b.compareTo(a));
   var streak = 0;
-  var cursor = DateTime.now();
+  var cursor = dayOnly(ServerClock.now());
   for (final day in days) {
     final diff = cursor.difference(day).inDays;
     if (diff == 0 || diff == 1) {

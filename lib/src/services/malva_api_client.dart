@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../assessment_engine.dart';
 import '../models.dart';
+import 'server_clock.dart';
 
 /// Kode mesin pada balasan 409 `POST /v1/auth/complete-professional` yang
 /// berarti: nomor STR sudah terdaftar di akun profesional lain dan pengguna
@@ -2525,6 +2526,10 @@ class MalvaApiClient {
       if (extraHeaders != null) ...extraHeaders,
     };
     late final http.Response response;
+    // Jam perangkat saat permintaan dikirim — dipakai ServerClock untuk
+    // menghitung offset terhadap header `Date` respons (kompensasi setengah
+    // RTT). Dicatat SEBELUM request agar tidak terpengaruh latensi.
+    final requestStartedAt = DateTime.now();
     try {
       final encodedBody = body == null ? null : jsonEncode(body);
       response = await switch (method) {
@@ -2613,6 +2618,16 @@ class MalvaApiClient {
         code: decoded['code']?.toString(),
       );
     }
+
+    // Sinkronkan jam perangkat ke jam server memakai header `Date` (Go
+    // net/http selalu mengirimnya). Non-blocking & tidak pernah melempar:
+    // kegagalan parsing/persistensi hanya membuat jam perangkat dipakai.
+    ServerClock.applyHttpDate(
+      response.headers['date'],
+      requestStarted: requestStartedAt,
+      responseReceived: DateTime.now(),
+    );
+
     return decoded;
   }
 
