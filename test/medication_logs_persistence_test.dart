@@ -227,7 +227,8 @@ void main() {
 
     final t = DateTime.now();
     store.replaceMedicationLogs([dose(at: t)]);
-    store.replaceMedicationLogs([dose(at: t.subtract(const Duration(seconds: 2)))]);
+    store.replaceMedicationLogs(
+        [dose(at: t.subtract(const Duration(seconds: 2)))]);
 
     expect(store.state.medicationLogs, hasLength(1),
         reason: 'selisih jam server 2 detik di belakang bukan dosis baru');
@@ -275,7 +276,8 @@ void main() {
     );
   });
 
-  test('dua dosis berbeda 4 jam untuk obat sama → 2 entri (jendela tidak menelan dosis nyata)',
+  test(
+      'dua dosis berbeda 4 jam untuk obat sama → 2 entri (jendela tidak menelan dosis nyata)',
       () async {
     final api = _api();
     final store = _container(api).read(malvaStoreProvider.notifier);
@@ -284,13 +286,15 @@ void main() {
 
     final t = DateTime.now();
     store.replaceMedicationLogs([dose(at: t)]);
-    store.replaceMedicationLogs([dose(at: t.subtract(const Duration(hours: 4)))]);
+    store.replaceMedicationLogs(
+        [dose(at: t.subtract(const Duration(hours: 4)))]);
 
     expect(store.state.medicationLogs, hasLength(2),
         reason: 'dosis 4 jam berbeda bukan dosis yang sama');
   });
 
-  test('id sementara (med_...) lokal vs id UUID server, dosis sama → 1 entri (cocok via nama)',
+  test(
+      'id sementara (med_...) lokal vs id UUID server, dosis sama → 1 entri (cocok via nama)',
       () async {
     final api = _api();
     final store = _container(api).read(malvaStoreProvider.notifier);
@@ -304,12 +308,14 @@ void main() {
     ]);
     // Server mengembalikan dosis yang sama dengan id UUID asli, waktu berdekatan.
     store.replaceMedicationLogs([
-      dose(id: 'a1111111-2222-3333-4444-555555555555',
+      dose(
+          id: 'a1111111-2222-3333-4444-555555555555',
           at: t.subtract(const Duration(seconds: 1))),
     ]);
 
     expect(store.state.medicationLogs, hasLength(1),
-        reason: 'id sementara vs UUID untuk dosis sama harus digabung via nama');
+        reason:
+            'id sementara vs UUID untuk dosis sama harus digabung via nama');
   });
 
   test('dua id server BERBEDA, nama obat sama, waktu berdekatan → 2 entri',

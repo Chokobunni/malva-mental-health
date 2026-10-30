@@ -27,14 +27,16 @@ void main() {
   test('formatScreeningDate: 2026-10-29T20:20:00Z → 30/10/2026 (bukan 29/10)',
       () {
     final utc = DateTime.parse('2026-10-29T20:20:00Z');
-    expect(utc.isUtc, isTrue, reason: 'bentuk timestamp harus sama dengan server');
+    expect(utc.isUtc, isTrue,
+        reason: 'bentuk timestamp harus sama dengan server');
     expect(formatScreeningDate(utc), '30/10/2026',
         reason: 'di WIB 20:20Z sudah tanggal 30, bukan 29 (UTC)');
     expect(formatScreeningDate(utc), isNot('29/10/2026'),
         reason: 'tanggal UTC mentah tidak boleh dipakai di laporan klinis');
   });
 
-  test('formatScreeningDate: null → "Belum ada tanggal"; waktu siang tetap hari yang sama',
+  test(
+      'formatScreeningDate: null → "Belum ada tanggal"; waktu siang tetap hari yang sama',
       () {
     expect(formatScreeningDate(null), 'Belum ada tanggal');
     // 03:00Z = 10:00 WIB hari yang sama → tanggal tidak bergeser.
@@ -54,7 +56,8 @@ void main() {
   // ----------------------------------------------------------------------
   // #2 — Waktu insiden krisis
   // ----------------------------------------------------------------------
-  test('formatIncidentDate: insiden dini hari (UTC hari sebelumnya) → tanggal lokal',
+  test(
+      'formatIncidentDate: insiden dini hari (UTC hari sebelumnya) → tanggal lokal',
       () {
     final now = DateTime.now();
     // 00:30 lokal hari ini = 17:30Z kemarin (bentuk yang dikirim server).

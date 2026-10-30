@@ -154,7 +154,8 @@ class ServerClock {
     if (text.isEmpty) return null;
     // Buang prefix nama hari ("Wed,") bila ada.
     final commaIndex = text.indexOf(',');
-    final body = (commaIndex >= 0 ? text.substring(commaIndex + 1) : text).trim();
+    final body =
+        (commaIndex >= 0 ? text.substring(commaIndex + 1) : text).trim();
     final parts = body.split(RegExp(r'\s+'));
     if (parts.length < 4) return null;
 
@@ -184,7 +185,8 @@ class ServerClock {
       return null;
     }
 
-    final parsed = DateTime.utc(year, monthIndex + 1, day, hour, minute, second);
+    final parsed =
+        DateTime.utc(year, monthIndex + 1, day, hour, minute, second);
     // Tolak tanggal yang "meluber" (mis. 31 Feb) yang digeser oleh DateTime.
     if (parsed.month != monthIndex + 1 || parsed.day != day) return null;
     return parsed;

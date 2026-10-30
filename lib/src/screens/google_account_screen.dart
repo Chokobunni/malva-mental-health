@@ -44,8 +44,7 @@ class GoogleAccountScreen extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.shield_outlined,
-                        color: MalvaColors.seed),
+                    const Icon(Icons.shield_outlined, color: MalvaColors.seed),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(

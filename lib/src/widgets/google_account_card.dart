@@ -171,8 +171,7 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
       _showSnack('Google Meet diaktifkan.');
     } on Object catch (error) {
       if (!mounted) return;
-      _showSnack(
-          error is MalvaApiException ? error.message : error.toString());
+      _showSnack(error is MalvaApiException ? error.message : error.toString());
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -414,7 +413,10 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
             ],
           ),
           const SizedBox(height: 12),
-          if (linked) ..._linkedContent(context, identity!) else ..._unlinkedContent(isProfessional),
+          if (linked)
+            ..._linkedContent(context, identity!)
+          else
+            ..._unlinkedContent(isProfessional),
           if (isProfessional && widget.showMeet) ...[
             const Divider(height: 28),
             ..._meetContent(context),
@@ -459,7 +461,8 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
     ];
   }
 
-  List<Widget> _linkedContent(BuildContext context, BackendGoogleIdentity identity) {
+  List<Widget> _linkedContent(
+      BuildContext context, BackendGoogleIdentity identity) {
     final dateLabel = _formatDate(identity.linkedAt);
     return [
       Text(
@@ -503,7 +506,8 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
         Row(
           children: [
             SizedBox.square(
-              dimension: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                dimension: 16,
+                child: CircularProgressIndicator(strokeWidth: 2)),
             SizedBox(width: 10),
             Expanded(child: Text('Memeriksa status Google Meet...')),
           ],
@@ -560,8 +564,18 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
     if (date == null) return '';
     final local = date.toLocal();
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-      'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des',
     ];
     final day = local.day.toString().padLeft(2, '0');
     return '$day ${months[local.month - 1]} ${local.year}';

@@ -2524,7 +2524,6 @@ class _ScaleOptions extends StatelessWidget {
   }
 }
 
-
 /// Stepper angka (mis. jumlah siklus napas): tombol - / +.
 class _NumberStepper extends StatelessWidget {
   const _NumberStepper({
@@ -3223,11 +3222,8 @@ class _TherapyRecordPreviewCard extends StatelessWidget {
               ),
               StatusPill(
                 label: item.isShared ? 'Dibagikan' : 'Tersimpan',
-                color:
-                    item.isShared ? MalvaColors.mint : MalvaColors.amber,
-                icon: item.isShared
-                    ? Icons.send_rounded
-                    : Icons.folder_rounded,
+                color: item.isShared ? MalvaColors.mint : MalvaColors.amber,
+                icon: item.isShared ? Icons.send_rounded : Icons.folder_rounded,
               ),
             ],
           ),

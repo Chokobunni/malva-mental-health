@@ -100,14 +100,15 @@ void main() {
     await tester.pumpAndSettle();
 
     // Belum tertaut -> tombol Hubungkan Gmail tersedia.
-    expect(find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
+    expect(
+        find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Hubungkan Gmail'));
     await tester.pumpAndSettle();
 
     // POST /v1/auth/bind-google terkirim dengan id_token yang di-inject.
-    final bind = requests.firstWhere((r) =>
-        r.method == 'POST' && r.url.path == '/v1/auth/bind-google');
+    final bind = requests.firstWhere(
+        (r) => r.method == 'POST' && r.url.path == '/v1/auth/bind-google');
     expect((jsonDecode(bind.body) as Map)['id_token'], 'id-token-123');
 
     // UI menampilkan email hasil bind.
@@ -154,10 +155,12 @@ void main() {
       findsOneWidget,
     );
     // Masih belum tertaut -> tombol tetap ada.
-    expect(find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
+    expect(
+        find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
   });
 
-  testWidgets('profesional showMeet: status connected menampilkan Google Meet aktif',
+  testWidgets(
+      'profesional showMeet: status connected menampilkan Google Meet aktif',
       (tester) async {
     final api = MalvaApiClient(
       baseUrl: 'http://backend.test',
@@ -189,10 +192,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Google Meet aktif'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Aktifkan Google Meet'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Aktifkan Google Meet'),
+        findsNothing);
   });
 
-  testWidgets('profesional showMeet: status belum connected menampilkan tombol Aktifkan',
+  testWidgets(
+      'profesional showMeet: status belum connected menampilkan tombol Aktifkan',
       (tester) async {
     final api = MalvaApiClient(
       baseUrl: 'http://backend.test',
@@ -201,7 +206,8 @@ void main() {
           case 'GET /v1/auth/google-identity':
             return _json({'linked': true, 'email': 'dr.hafid@gmail.com'});
           case 'GET /v1/google/status':
-            return _json({'server_configured': true, 'connected': false, 'scope': ''});
+            return _json(
+                {'server_configured': true, 'connected': false, 'scope': ''});
           default:
             return _json(const {});
         }
@@ -244,8 +250,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(
-        find.widgetWithText(OutlinedButton, 'Lepas Gmail'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Lepas Gmail'), findsOneWidget);
   });
 
   testWidgets(
@@ -289,12 +294,13 @@ void main() {
 
     // Endpoint unbind benar-benar dipanggil.
     expect(
-      requests.any((r) =>
-          r.method == 'POST' && r.url.path == '/v1/auth/unbind-google'),
+      requests.any(
+          (r) => r.method == 'POST' && r.url.path == '/v1/auth/unbind-google'),
       isTrue,
     );
     // Kartu berubah ke kondisi belum tertaut.
-    expect(find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
+    expect(
+        find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Lepas Gmail'), findsNothing);
   });
 
@@ -355,7 +361,8 @@ void main() {
       (jsonDecode(unbindBodies.single) as Map)['new_password'],
       'PasswordBaru123!',
     );
-    expect(find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
+    expect(
+        find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
   });
 
   testWidgets(
@@ -403,7 +410,8 @@ void main() {
     expect(body.containsKey('new_password'), isFalse);
     // Tidak ada dialog password baru; kartu langsung jadi belum tertaut.
     expect(find.widgetWithText(FilledButton, 'Simpan & Lepas'), findsNothing);
-    expect(find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
+    expect(
+        find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
   });
 }
 

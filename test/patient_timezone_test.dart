@@ -24,7 +24,8 @@ void main() {
   // ----------------------------------------------------------------------
   test('formatMoodCalendarDate: 2026-10-29T20:20:00Z → 30 Oktober 2026', () {
     final utc = DateTime.parse('2026-10-29T20:20:00Z');
-    expect(utc.isUtc, isTrue, reason: 'bentuk timestamp harus sama dengan server');
+    expect(utc.isUtc, isTrue,
+        reason: 'bentuk timestamp harus sama dengan server');
 
     final label = formatMoodCalendarDate(utc);
     expect(label, '30 Oktober 2026',
@@ -33,7 +34,8 @@ void main() {
         reason: 'tanggal UTC mentah tidak boleh tampil di kalender mood');
   });
 
-  test('formatMoodCalendarDate: check-in dini hari (UTC kemarin) tetap hari ini',
+  test(
+      'formatMoodCalendarDate: check-in dini hari (UTC kemarin) tetap hari ini',
       () {
     final now = DateTime.now();
     // 00:30 lokal hari ini = 17:30Z kemarin.
@@ -70,7 +72,8 @@ void main() {
         reason: 'harus tanggal + jam LOKAL (WIB = UTC+7)');
     expect(label.contains('29/10/2026'), isFalse,
         reason: 'tanggal UTC mentah tidak boleh tampil');
-    expect(label.contains('20:20'), isFalse, reason: 'jam UTC mentah tidak boleh tampil');
+    expect(label.contains('20:20'), isFalse,
+        reason: 'jam UTC mentah tidak boleh tampil');
   });
 
   test('formatAssessmentDate: entri lokal (DateTime.now) tidak berubah', () {
@@ -102,7 +105,8 @@ void main() {
       expect(utc.day, isNot(now.day),
           reason: 'di UTC tanggalnya memang hari sebelumnya');
     }
-    expect(formatHealthRecordUpdatedDate(utc), '${now.day}/${now.month}/${now.year}',
+    expect(formatHealthRecordUpdatedDate(utc),
+        '${now.day}/${now.month}/${now.year}',
         reason: 'label "Diperbarui" harus tanggal LOKAL, bukan tanggal UTC');
   });
 

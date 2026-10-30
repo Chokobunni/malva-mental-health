@@ -109,7 +109,8 @@ void main() {
   // ---------------------------------------------------------
   // 1. PASIEN: tidak ada bagian Google Meet sama sekali.
   // ---------------------------------------------------------
-  testWidgets('pasien tidak melihat bagian Google Meet, hanya ajakan hubungkan Gmail',
+  testWidgets(
+      'pasien tidak melihat bagian Google Meet, hanya ajakan hubungkan Gmail',
       (tester) async {
     final api = MalvaApiClient(
       baseUrl: 'http://backend.test',
@@ -128,7 +129,8 @@ void main() {
     expect(find.text('Hubungkan Gmail'), findsWidgets);
     // Tidak ada jejak Google Meet untuk pasien.
     expect(find.textContaining('Google Meet'), findsNothing);
-    expect(find.widgetWithText(FilledButton, 'Aktifkan Google Meet'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Aktifkan Google Meet'),
+        findsNothing);
   });
 
   // ---------------------------------------------------------
@@ -143,7 +145,8 @@ void main() {
           case 'GET /v1/auth/google-identity':
             return _json({'linked': true, 'email': 'dr.hafid@gmail.com'});
           case 'GET /v1/google/status':
-            return _json({'server_configured': true, 'connected': false, 'scope': ''});
+            return _json(
+                {'server_configured': true, 'connected': false, 'scope': ''});
           default:
             return _json(const {});
         }
@@ -152,14 +155,16 @@ void main() {
 
     await _pumpCard(tester, api, _proSession, showMeet: true);
 
-    expect(find.widgetWithText(FilledButton, 'Aktifkan Google Meet'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Aktifkan Google Meet'),
+        findsOneWidget);
     expect(find.text('Google Meet aktif'), findsNothing);
   });
 
   // ---------------------------------------------------------
   // 2b. PROFESIONAL: saat connected, tombol hilang dan status berubah.
   // ---------------------------------------------------------
-  testWidgets('profesional connected: tombol Aktifkan hilang, status aktif tampil',
+  testWidgets(
+      'profesional connected: tombol Aktifkan hilang, status aktif tampil',
       (tester) async {
     final api = MalvaApiClient(
       baseUrl: 'http://backend.test',
@@ -186,13 +191,15 @@ void main() {
     await _pumpCard(tester, api, _proSession, showMeet: true);
 
     expect(find.text('Google Meet aktif'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Aktifkan Google Meet'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Aktifkan Google Meet'),
+        findsNothing);
   });
 
   // ---------------------------------------------------------
   // 3. Konflik 409: dua kode berbeda -> dua pesan Indonesia berbeda.
   // ---------------------------------------------------------
-  testWidgets('409 email_sudah_dipakai dan akun_sudah_taut_google_lain beri pesan berbeda',
+  testWidgets(
+      '409 email_sudah_dipakai dan akun_sudah_taut_google_lain beri pesan berbeda',
       (tester) async {
     Future<String> messageFor(String code, String serverError) async {
       final api = MalvaApiClient(
@@ -253,7 +260,8 @@ void main() {
     'pasien': _patientSession,
     'profesional': _proSession,
   }.entries) {
-    testWidgets('SettingsScreen menampilkan tile "Akun Google" untuk ${entry.key}',
+    testWidgets(
+        'SettingsScreen menampilkan tile "Akun Google" untuk ${entry.key}',
         (tester) async {
       final api = MalvaApiClient(
         baseUrl: 'http://backend.test',
@@ -303,7 +311,8 @@ void main() {
         if (request.method == 'POST' &&
             request.url.path == '/v1/auth/complete-professional') {
           return _json({
-            'error': 'Nomor STR atau SIP ini sudah terdaftar pada akun profesional lain.',
+            'error':
+                'Nomor STR atau SIP ini sudah terdaftar pada akun profesional lain.',
             'code': 'str_sip_sudah_terdaftar',
           }, status: 409);
         }
@@ -339,8 +348,7 @@ void main() {
     // Request benar-benar dikirim ke endpoint completion.
     expect(
       requests.any((r) =>
-          r.method == 'POST' &&
-          r.url.path == '/v1/auth/complete-professional'),
+          r.method == 'POST' && r.url.path == '/v1/auth/complete-professional'),
       isTrue,
     );
 
@@ -357,7 +365,8 @@ void main() {
   testWidgets(
       'unbind: perlu_password, password_salah, google_belum_tertaut dipetakan ke pesan Indonesia',
       (tester) async {
-    Future<void> triggerUnbind(String code, String serverError, int status) async {
+    Future<void> triggerUnbind(
+        String code, String serverError, int status) async {
       final api = MalvaApiClient(
         baseUrl: 'http://backend.test',
         httpClient: _FakeClient((request) async {
@@ -365,7 +374,8 @@ void main() {
             case 'GET /v1/auth/google-identity':
               return _json({'linked': true, 'email': 'dr.hafid@gmail.com'});
             case 'POST /v1/auth/unbind-google':
-              return _json({'error': serverError, 'code': code}, status: status);
+              return _json({'error': serverError, 'code': code},
+                  status: status);
             default:
               return _json(const {});
           }

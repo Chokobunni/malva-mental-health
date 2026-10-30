@@ -121,7 +121,8 @@ void main() {
   // ----------------------------------------------------------------------
   // #1 — SKENARIO PERSIS LAPORAN USER
   // ----------------------------------------------------------------------
-  test('laporan user: adherence & riwayat pulih dari SERVER setelah login ulang, stok tetap',
+  test(
+      'laporan user: adherence & riwayat pulih dari SERVER setelah login ulang, stok tetap',
       () async {
     // Sesi 1: obat stok 3, server belum punya log. Pasien minum → stok 2.
     final api1 = _api(medications: [_medJson('med_1', 3)], logs: const []);
@@ -133,7 +134,8 @@ void main() {
 
     expect(store1.state.adherencePercent, 100, reason: 'adherence sesi 1');
     expect(store1.state.medicationLogs, hasLength(1), reason: 'riwayat sesi 1');
-    expect(store1.state.medications.first.currentStock, 2, reason: 'stok sesi 1');
+    expect(store1.state.medications.first.currentStock, 2,
+        reason: 'stok sesi 1');
 
     // Kosongkan cache agar sesi 2 murni menguji pemuatan dari SERVER.
     FlutterSecureStorage.setMockInitialValues(<String, String>{});
@@ -253,7 +255,8 @@ void main() {
     await store.loadMedicationLogs(apiServer, _session.accessToken);
 
     expect(store.state.medicationLogs, hasLength(1),
-        reason: 'satu dosis tidak boleh jadi 2 entri setelah reload dari server '
+        reason:
+            'satu dosis tidak boleh jadi 2 entri setelah reload dari server '
             'yang jamnya sedikit di belakang perangkat');
   });
 
@@ -261,7 +264,8 @@ void main() {
   // #2c — ANTI-DUPLIKAT: jam server sedikit DI DEPAN perangkat (kontrol)
   //        Membuktikan mekanisme dedupe memang jalan saat server >= lokal.
   // ----------------------------------------------------------------------
-  test('anti-duplikat (kontrol): jam server sedikit di DEPAN perangkat dedupe jadi 1',
+  test(
+      'anti-duplikat (kontrol): jam server sedikit di DEPAN perangkat dedupe jadi 1',
       () async {
     final api = _api();
     final store = _container(api).read(malvaStoreProvider.notifier);
@@ -321,9 +325,11 @@ void main() {
     store.replaceMedicationLogs([serverOlder]);
 
     expect(store.state.medicationLogs.any((l) => l.medicationId == 'med_1'),
-        isTrue, reason: 'log lokal baru tidak boleh hilang');
+        isTrue,
+        reason: 'log lokal baru tidak boleh hilang');
     expect(store.state.medicationLogs.any((l) => l.medicationId == 'med_0'),
-        isTrue, reason: 'log server lama tetap masuk');
+        isTrue,
+        reason: 'log server lama tetap masuk');
     // Urut terbaru dulu.
     expect(store.state.medicationLogs.first.medicationId, 'med_1');
   });
@@ -331,7 +337,8 @@ void main() {
   // ----------------------------------------------------------------------
   // #4 — CACHE LOKAL: riwayat tetap tampil saat offline setelah takeMedication
   // ----------------------------------------------------------------------
-  test('cache lokal: log tetap tampil tanpa server (token kosong) setelah takeMedication',
+  test(
+      'cache lokal: log tetap tampil tanpa server (token kosong) setelah takeMedication',
       () async {
     final api = _api(medications: [_medJson('med_1', 3)], logs: const []);
     final store1 = _container(api).read(malvaStoreProvider.notifier);
@@ -434,14 +441,18 @@ void main() {
         );
 
     expect(adherence([log('taken', today)]), 100, reason: 'taken hari ini');
-    expect(adherence([log('partial', today)]), 0, reason: 'partial tidak dihitung');
-    expect(adherence([log('skipped', today)]), 0, reason: 'skipped tidak dihitung');
-    expect(adherence([log('missed', today)]), 0, reason: 'missed tidak dihitung');
+    expect(adherence([log('partial', today)]), 0,
+        reason: 'partial tidak dihitung');
+    expect(adherence([log('skipped', today)]), 0,
+        reason: 'skipped tidak dihitung');
+    expect(adherence([log('missed', today)]), 0,
+        reason: 'missed tidak dihitung');
     expect(adherence([log('taken', yesterday)]), 0,
         reason: 'taken kemarin tidak dihitung untuk hari ini');
     // Kombinasi: 1 taken hari ini dari 1 obat → 100 walau ada status lain.
     expect(
-      adherence([log('taken', today), log('partial', today), log('missed', today)]),
+      adherence(
+          [log('taken', today), log('partial', today), log('missed', today)]),
       100,
     );
   });

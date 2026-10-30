@@ -267,12 +267,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Hasil WHO-5'), findsOneWidget);
-    expect(find.text('Skor assessment adalah alat bantu screening, bukan diagnosis.'),
+    expect(
+        find.text(
+            'Skor assessment adalah alat bantu screening, bukan diagnosis.'),
         findsOneWidget);
   });
 
-  testWidgets(
-      'tap entri screening -> bottom sheet berisi skor PHQ-9 dan GAD-7',
+  testWidgets('tap entri screening -> bottom sheet berisi skor PHQ-9 dan GAD-7',
       (tester) async {
     final api = _api(submissions: const [], screenings: [_screening()]);
 

@@ -233,9 +233,7 @@ class Medication {
     final sameDay = isSameLocalDay(taken, DateTime.now());
     final h = local.hour.toString().padLeft(2, '0');
     final m = local.minute.toString().padLeft(2, '0');
-    return sameDay
-        ? 'Taken $h:$m'
-        : 'Taken ${local.day}/${local.month} $h:$m';
+    return sameDay ? 'Taken $h:$m' : 'Taken ${local.day}/${local.month} $h:$m';
   }
 
   Medication copyWith({

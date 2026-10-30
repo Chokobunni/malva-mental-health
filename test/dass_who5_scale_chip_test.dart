@@ -39,8 +39,8 @@ Widget _detailApp(TherapyModule module) {
         MalvaApiClient(
           baseUrl: 'http://backend.test',
           httpClient: _FakeClient(
-            (request) async =>
-                http.Response('{}', 200, headers: {'content-type': 'application/json'}),
+            (request) async => http.Response('{}', 200,
+                headers: {'content-type': 'application/json'}),
           ),
         ),
       ),
@@ -130,10 +130,12 @@ void main() {
     // Chip DASS-21 kini chip Material standar — sama tinggi dengan PHQ-9.
     expect((dassHeight - phqHeight).abs(), lessThanOrEqualTo(1.0),
         reason: 'tinggi chip DASS ($dassHeight) harus ≈ PHQ-9 ($phqHeight)');
-    expect(dassHeight, lessThan(56), reason: 'chip tidak boleh setinggi kotak lama');
+    expect(dassHeight, lessThan(56),
+        reason: 'chip tidak boleh setinggi kotak lama');
   });
 
-  testWidgets('T3: tidak ada lagi teks angka skala fontSize 20 di DASS-21/WHO-5',
+  testWidgets(
+      'T3: tidak ada lagi teks angka skala fontSize 20 di DASS-21/WHO-5',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 6000);
     tester.view.devicePixelRatio = 1.0;
@@ -213,7 +215,8 @@ void main() {
         reason: 'raw 15, persen = 15×4 = 60');
   });
 
-  testWidgets('T3: WHO-5 punya 6 chip (0-5) yang ter-tap di layar 360dp tanpa overflow',
+  testWidgets(
+      'T3: WHO-5 punya 6 chip (0-5) yang ter-tap di layar 360dp tanpa overflow',
       (tester) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1.0;

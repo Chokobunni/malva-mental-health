@@ -80,7 +80,8 @@ void main() {
   // #2 — hasCheckedInToday: mood kemarin (lokal) → false
   // ----------------------------------------------------------------------
   test('hasCheckedInToday: mood kemarin (lokal) → false', () {
-    expect(hasCheckedInToday([_moodUtc(_daysAgoLocalAsUtc(1, 22, 0))]), isFalse);
+    expect(
+        hasCheckedInToday([_moodUtc(_daysAgoLocalAsUtc(1, 22, 0))]), isFalse);
     expect(hasCheckedInToday([_moodUtc(_daysAgoLocalAsUtc(2, 9, 0))]), isFalse);
     // Tanpa durasi tidur tercatat = check-in belum lengkap.
     expect(hasCheckedInToday([_moodUtc(_todayLocalAsUtc(8, 0), sleepHours: 0)]),

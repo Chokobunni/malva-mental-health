@@ -117,7 +117,9 @@ MalvaApiClient _careApi(String photoUrl) => MalvaApiClient(
           case '/v1/care-sessions':
             return _json({'sessions': <dynamic>[]});
           case '/v1/patient-professional-links':
-            return _json({'links': [_link(photoUrl)]});
+            return _json({
+              'links': [_link(photoUrl)]
+            });
           default:
             return _json(<String, dynamic>{});
         }
@@ -164,7 +166,8 @@ void main() {
     final buttonLeft = tester.getTopLeft(find.text('Lihat semua')).dx;
     expect((buttonTop - sectionTop).abs(), lessThan(24),
         reason: '"Lihat semua" harus sebaris dengan judul Assessment Record');
-    expect(buttonLeft, greaterThan(tester.getTopLeft(find.text('Assessment Record')).dx));
+    expect(buttonLeft,
+        greaterThan(tester.getTopLeft(find.text('Assessment Record')).dx));
 
     // Tap membuka halaman Assessment Record lengkap.
     await tester.tap(find.text('Lihat semua'));
@@ -175,10 +178,11 @@ void main() {
   // ============================================================
   // T4
   // ============================================================
-  testWidgets('T4: kartu profesional (URL raster) memakai foto, bukan ikon orang',
+  testWidgets(
+      'T4: kartu profesional (URL raster) memakai foto, bukan ikon orang',
       (tester) async {
-    await tester.pumpWidget(_careApp(_careApi(
-        'https://api.malva.web.id/uploads/foto_profesional.png')));
+    await tester.pumpWidget(_careApp(
+        _careApi('https://api.malva.web.id/uploads/foto_profesional.png')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Professionals'));
     await tester.pumpAndSettle();
@@ -209,10 +213,10 @@ void main() {
     expect(find.byIcon(Icons.person_rounded), findsNothing);
   });
 
-  testWidgets('T4: URL SVG (DiceBear) dirutekan ke ProfessionalPhoto, bukan Image.network',
+  testWidgets(
+      'T4: URL SVG (DiceBear) dirutekan ke ProfessionalPhoto, bukan Image.network',
       (tester) async {
-    const svgUrl =
-        'https://api.dicebear.com/9.x/notionists/svg?seed=abc';
+    const svgUrl = 'https://api.dicebear.com/9.x/notionists/svg?seed=abc';
     expect(isSvgPhotoUrl(svgUrl), isTrue);
 
     // ProfessionalAvatar dengan URL SVG membangun ProfessionalPhoto.
@@ -250,7 +254,8 @@ void main() {
   // ============================================================
   // T5
   // ============================================================
-  testWidgets('T5: MoreScreen tidak lagi memuat Health/Therapy Record, tile lain tetap',
+  testWidgets(
+      'T5: MoreScreen tidak lagi memuat Health/Therapy Record, tile lain tetap',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 3600);
     tester.view.devicePixelRatio = 1.0;

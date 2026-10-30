@@ -54,7 +54,8 @@ Medication _med(String id, String name, {int stock = 10}) => Medication(
       dosage: '50mg',
       form: 'Tablet',
       reminders: const [
-        MedicationReminder(time: TimeOfDay(hour: 8, minute: 0), relationToMeal: ''),
+        MedicationReminder(
+            time: TimeOfDay(hour: 8, minute: 0), relationToMeal: ''),
       ],
       currentStock: stock,
       alertBelow: 1,
@@ -88,7 +89,8 @@ DateTime _yesterdayLocal(int hour, int minute) =>
 
 /// True bila mesin uji berada di zona yang "di depan" UTC cukup jauh sehingga
 /// jam 03:20 lokal benar-benar jatuh di tanggal UTC sebelumnya (kasus WIB).
-bool get _tzAheadOfUtc => DateTime.now().timeZoneOffset >= const Duration(hours: 4);
+bool get _tzAheadOfUtc =>
+    DateTime.now().timeZoneOffset >= const Duration(hours: 4);
 
 http.Response _json(Object body, int status) => http.Response(
       jsonEncode(body),
@@ -139,9 +141,16 @@ void main() {
   test('A1: sesi 1 — takeMedication → adherence 100%, riwayat 1, stok turun',
       () async {
     final api = _api(medications: [
-      {'id': _serverMedId, 'name': 'Sertraline', 'current_stock': 3,
-        'alert_below': 1, 'dosage': '50mg', 'form': 'Tablet',
-        'reminder_time': '08:00', 'source': 'resep'},
+      {
+        'id': _serverMedId,
+        'name': 'Sertraline',
+        'current_stock': 3,
+        'alert_below': 1,
+        'dosage': '50mg',
+        'form': 'Tablet',
+        'reminder_time': '08:00',
+        'source': 'resep'
+      },
     ]);
     final store = _container(api).read(malvaStoreProvider.notifier);
     store.applySession(_session);
@@ -164,15 +173,26 @@ void main() {
 
     final api = _api(
       medications: [
-        {'id': _serverMedId, 'name': 'Sertraline', 'current_stock': 2,
-          'alert_below': 1, 'dosage': '50mg', 'form': 'Tablet',
-          'reminder_time': '08:00', 'source': 'resep'},
+        {
+          'id': _serverMedId,
+          'name': 'Sertraline',
+          'current_stock': 2,
+          'alert_below': 1,
+          'dosage': '50mg',
+          'form': 'Tablet',
+          'reminder_time': '08:00',
+          'source': 'resep'
+        },
       ],
       logs: [
-        {'id': 'log1', 'medication_id': _serverMedId,
-          'medication_name': 'Sertraline', 'status': 'taken',
+        {
+          'id': 'log1',
+          'medication_id': _serverMedId,
+          'medication_name': 'Sertraline',
+          'status': 'taken',
           'taken_at': takenAtUtc.toIso8601String(),
-          'created_at': takenAtUtc.toIso8601String()},
+          'created_at': takenAtUtc.toIso8601String()
+        },
       ],
     );
     final store = _container(api).read(malvaStoreProvider.notifier);
@@ -192,7 +212,8 @@ void main() {
       () {
     final localNow = DateTime.now();
     // 03:20 waktu LOKAL hari ini. Di WIB → 20:20Z KEMARIN.
-    final takenLocal = DateTime(localNow.year, localNow.month, localNow.day, 3, 20);
+    final takenLocal =
+        DateTime(localNow.year, localNow.month, localNow.day, 3, 20);
     final takenAtUtc = takenLocal.toUtc();
     expect(takenAtUtc.isUtc, isTrue);
 
@@ -248,7 +269,9 @@ void main() {
   });
 
   test('B6: log obat yang sudah dihapus tidak menaikkan angka > 100%', () {
-    final percent = _adherence([_med(_serverMedId, 'Sertraline')], [
+    final percent = _adherence([
+      _med(_serverMedId, 'Sertraline')
+    ], [
       _log(_serverMedId, 'Sertraline', _todayLocal(8, 0).toUtc()),
       // id UUID sah tetapi tidak ada di daftar medications → obat dihapus.
       _log('ffffffff-0000-4000-8000-000000000009', 'Obat Dihapus',
@@ -266,7 +289,8 @@ void main() {
     expect(_adherence(meds, logs), 40);
   });
 
-  test('B8: log kemarin (lokal) tidak dihitung; log 00:05 WIB hari ini dihitung',
+  test(
+      'B8: log kemarin (lokal) tidak dihitung; log 00:05 WIB hari ini dihitung',
       () {
     final meds = [_med(_serverMedId, 'Sertraline')];
     expect(
@@ -289,7 +313,8 @@ void main() {
   // C. SERVER CLOCK
   // ============================================================
 
-  test('C9: applyHttpDate RFC1123 → offset benar (kompensasi ½ RTT), now() bergeser',
+  test(
+      'C9: applyHttpDate RFC1123 → offset benar (kompensasi ½ RTT), now() bergeser',
       () async {
     final started = DateTime.utc(2026, 10, 30, 3, 20, 0);
     final received = started.add(const Duration(seconds: 2));
@@ -302,14 +327,14 @@ void main() {
     expect(ServerClock.offset.inSeconds, 1,
         reason: 'kompensasi setengah RTT = 1 detik');
     expect(ServerClock.isSynced, isTrue);
-    final deltaMs =
-        ServerClock.now().difference(DateTime.now()).inMilliseconds;
+    final deltaMs = ServerClock.now().difference(DateTime.now()).inMilliseconds;
     expect(deltaMs, inInclusiveRange(900, 1100),
         reason: 'now() harus bergeser ~1 detik dari jam perangkat');
     await pumpEventQueue();
   });
 
-  test('C10: header null/rusak/offset > 24 jam tidak mengubah offset, tidak melempar',
+  test(
+      'C10: header null/rusak/offset > 24 jam tidak mengubah offset, tidak melempar',
       () async {
     final started = DateTime.utc(2026, 10, 30, 3, 20, 0);
     final received = started.add(const Duration(seconds: 2));
@@ -351,7 +376,8 @@ void main() {
     expect(ServerClock.isSynced, isTrue);
   });
 
-  test('C12: respons HTTP sukses dengan header Date menyinkronkan ServerClock (via klien API)',
+  test(
+      'C12: respons HTTP sukses dengan header Date menyinkronkan ServerClock (via klien API)',
       () async {
     final client = MalvaApiClient(
       baseUrl: 'http://backend.test',
@@ -374,7 +400,8 @@ void main() {
     expect(ServerClock.offset.inMinutes, inInclusiveRange(170, 190));
   });
 
-  test('C13 (negatif): setelah reset, now() == DateTime.now() (fallback aman)', () {
+  test('C13 (negatif): setelah reset, now() == DateTime.now() (fallback aman)',
+      () {
     ServerClock.reset();
     expect(ServerClock.offset, Duration.zero);
     expect(ServerClock.isSynced, isFalse);
@@ -397,7 +424,8 @@ void main() {
         note: 'catatan',
       );
 
-  test('D14: hasCheckedInToday — mood 00:30 WIB (UTC kemarin) = true; mood kemarin = false',
+  test(
+      'D14: hasCheckedInToday — mood 00:30 WIB (UTC kemarin) = true; mood kemarin = false',
       () {
     final localNow = DateTime.now();
     final earlyUtc =
@@ -410,23 +438,24 @@ void main() {
     expect(hasCheckedInToday([_moodUtc(earlyUtc)]), isTrue,
         reason: 'check-in dini hari tidak boleh dianggap belum check-in');
 
-    expect(hasCheckedInToday([_moodUtc(_yesterdayLocal(22, 0).toUtc())]),
-        isFalse);
+    expect(
+        hasCheckedInToday([_moodUtc(_yesterdayLocal(22, 0).toUtc())]), isFalse);
   });
 
-  test('D15: checkInStreak — 3 hari berturut dengan timestamp UTC malam = 3', () {
+  test('D15: checkInStreak — 3 hari berturut dengan timestamp UTC malam = 3',
+      () {
     final moods = [
       _moodUtc(_todayLocal(20, 0).toUtc()),
       _moodUtc(_yesterdayLocal(20, 0).toUtc()),
-      _moodUtc(
-          _todayLocal(20, 0).subtract(const Duration(days: 2)).toUtc()),
+      _moodUtc(_todayLocal(20, 0).subtract(const Duration(days: 2)).toUtc()),
     ];
     expect(moods.every((m) => m.date.isUtc), isTrue);
     expect(checkInStreak(moods), 3,
         reason: 'streak tidak boleh 0/1 hanya karena timestamp UTC');
   });
 
-  test('D16: chat formatMessageTime(20:20Z)=03:20; formatMessageDate tidak memuat tanggal UTC mentah',
+  test(
+      'D16: chat formatMessageTime(20:20Z)=03:20; formatMessageDate tidak memuat tanggal UTC mentah',
       () {
     final utc = DateTime.parse('2026-10-29T20:20:00Z');
     expect(utc.isUtc, isTrue);
@@ -442,7 +471,8 @@ void main() {
         reason: 'tanggal UTC mentah tidak boleh tampil');
   });
 
-  test('D17: formatScreeningDate(20:20Z)=30/10/2026 dan CSV memakai tanggal lokal yang sama',
+  test(
+      'D17: formatScreeningDate(20:20Z)=30/10/2026 dan CSV memakai tanggal lokal yang sama',
       () {
     final utc = DateTime.parse('2026-10-29T20:20:00Z');
     expect(formatScreeningDate(utc), '30/10/2026');
@@ -451,7 +481,8 @@ void main() {
     expect(csvRow, 'Screening Date,30/10/2026');
   });
 
-  test('D18: formatIncidentDate & formatTherapyRecordDate untuk UTC → tanggal/jam lokal',
+  test(
+      'D18: formatIncidentDate & formatTherapyRecordDate untuk UTC → tanggal/jam lokal',
       () {
     final utc = DateTime.parse('2026-10-29T20:20:00Z');
     expect(formatIncidentDate(utc), '30/10/2026 03:20');
@@ -476,8 +507,18 @@ void main() {
 String _formatHttpDate(DateTime utc) {
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   final d = utc.toUtc();
   String two(int v) => v.toString().padLeft(2, '0');

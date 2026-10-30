@@ -97,7 +97,8 @@ void main() {
   });
 
   // A — dua obat BERBEDA (UUID + nama beda) pada menit sama → 2 entri.
-  test('A: dua obat berbeda pada menit sama tidak digabung (2 entri)', () async {
+  test('A: dua obat berbeda pada menit sama tidak digabung (2 entri)',
+      () async {
     final api = _api();
     final store = _container(api).read(malvaStoreProvider.notifier);
     store.applySession(_session);
@@ -132,7 +133,8 @@ void main() {
     ]);
 
     expect(store.state.medicationLogs, hasLength(2),
-        reason: 'dua id server sah yang berbeda = dua resep (mis. 20mg vs 50mg)');
+        reason:
+            'dua id server sah yang berbeda = dua resep (mis. 20mg vs 50mg)');
   });
 
   // C — batas jendela: tepat 2 menit = satu dosis; 2 menit 1 detik = dua.
@@ -160,8 +162,8 @@ void main() {
     final base = DateTime(2026, 3, 1, 8, 0, 0);
     store.replaceMedicationLogs([_log('uuid-x', 'X', base, 'taken')]);
     store.replaceMedicationLogs([
-      _log('uuid-x', 'X',
-          base.add(const Duration(minutes: 2, seconds: 1)), 'taken'),
+      _log('uuid-x', 'X', base.add(const Duration(minutes: 2, seconds: 1)),
+          'taken'),
     ]);
     expect(store.state.medicationLogs, hasLength(2),
         reason: 'Δt 121 detik (> batas) = dua dosis berbeda');
@@ -169,7 +171,8 @@ void main() {
 
   // D — status berbeda pada waktu berdekatan (partial lalu taken) → 2 entri,
   //     adherence hanya menghitung yang 'taken'.
-  test('D: partial lalu taken (obat sama, 1 menit) = 2 entri; adherence hanya taken',
+  test(
+      'D: partial lalu taken (obat sama, 1 menit) = 2 entri; adherence hanya taken',
       () async {
     // Dua obat dimuat agar adherence bisa membedakan "partial dihitung/tidak".
     final api = _api(medications: [
@@ -219,7 +222,8 @@ void main() {
 
   // F — cache ditulis ulang setelah merge; sesi offline memuat gabungan
   //     termasuk log lokal lama yang dipertahankan.
-  test('F: cache menyimpan gabungan (log lokal lama + server) untuk sesi offline',
+  test(
+      'F: cache menyimpan gabungan (log lokal lama + server) untuk sesi offline',
       () async {
     final api = _api(medications: [_medJson('uuid-1', 'X', 5)], logs: const []);
     final store1 = _container(api).read(malvaStoreProvider.notifier);
@@ -231,12 +235,14 @@ void main() {
     final oldLocal = _log('uuid-1', 'X', DateTime(2026, 3, 1, 8, 0), 'taken');
     store1.replaceMedicationLogs([oldLocal]);
     // Server punya dosis jam 20:00 (12 jam kemudian) → bukan dosis sama.
-    final serverLate = _log('uuid-1', 'X', DateTime(2026, 3, 1, 20, 0), 'taken');
+    final serverLate =
+        _log('uuid-1', 'X', DateTime(2026, 3, 1, 20, 0), 'taken');
     store1.replaceMedicationLogs([serverLate]);
     await pumpEventQueue();
 
     expect(store1.state.medicationLogs, hasLength(2),
-        reason: 'log lokal lama tidak boleh dibuang oleh log server lebih baru');
+        reason:
+            'log lokal lama tidak boleh dibuang oleh log server lebih baru');
 
     // Sesi baru OFFLINE: hidrasi dari cache harus memuat gabungan terakhir.
     final store2 = _container(api).read(malvaStoreProvider.notifier);
@@ -257,7 +263,8 @@ void main() {
   });
 
   // #5 — tidak ada kebocoran async dari unawaited(_persistMedicationLogs()).
-  test('merge berulang tidak menghasilkan unhandled exception (persist fire-and-forget)',
+  test(
+      'merge berulang tidak menghasilkan unhandled exception (persist fire-and-forget)',
       () async {
     final api = _api(medications: [_medJson('uuid-1', 'X', 5)], logs: const []);
     final store = _container(api).read(malvaStoreProvider.notifier);
@@ -267,8 +274,8 @@ void main() {
     // 50 merge beruntun; tiap merge memicu unawaited persist.
     for (var i = 0; i < 50; i++) {
       store.replaceMedicationLogs([
-        _log('uuid-1', 'X',
-            DateTime(2026, 3, 1).add(Duration(minutes: i * 5)), 'taken'),
+        _log('uuid-1', 'X', DateTime(2026, 3, 1).add(Duration(minutes: i * 5)),
+            'taken'),
       ]);
     }
     await pumpEventQueue();

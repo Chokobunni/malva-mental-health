@@ -49,14 +49,16 @@ Medication _med(String id, String name, {int stock = 10}) => Medication(
       dosage: '50mg',
       form: 'Tablet',
       reminders: const [
-        MedicationReminder(time: TimeOfDay(hour: 8, minute: 0), relationToMeal: ''),
+        MedicationReminder(
+            time: TimeOfDay(hour: 8, minute: 0), relationToMeal: ''),
       ],
       currentStock: stock,
       alertBelow: 1,
       source: 'resep',
     );
 
-MedicationLog _log(String id, String name, DateTime at, {String status = 'taken'}) =>
+MedicationLog _log(String id, String name, DateTime at,
+        {String status = 'taken'}) =>
     MedicationLog(
       medicationId: id,
       medicationName: name,
@@ -103,8 +105,8 @@ MalvaApiClient _api({
           return _json({'medications': medications}, 200);
         case '/v1/medication-logs':
           if (request.method == 'POST') {
-            return _json({'error': 'server sedang tidak tersedia'},
-                medicationLogStatus);
+            return _json(
+                {'error': 'server sedang tidak tersedia'}, medicationLogStatus);
           }
           return _json({'medication_logs': logs}, 200);
         default:
@@ -185,7 +187,9 @@ void main() {
   // ----------------------------------------------------------------------
   // #2 — RIWAYAT: jam yang tampil harus jam LOKAL, bukan jam UTC
   // ----------------------------------------------------------------------
-  test('riwayat: log UTC 2026-10-29T20:20:00Z diformat sebagai 30/10/2026 03:20', () {
+  test(
+      'riwayat: log UTC 2026-10-29T20:20:00Z diformat sebagai 30/10/2026 03:20',
+      () {
     final utc = DateTime.parse('2026-10-29T20:20:00Z');
     expect(utc.isUtc, isTrue);
     final formatted = MedicationScreen.formatLogTime(utc);
@@ -220,7 +224,8 @@ void main() {
   // ----------------------------------------------------------------------
   // #3 — SERVER CLOCK: offset, header rusak, reset
   // ----------------------------------------------------------------------
-  test('ServerClock: applyHttpDate menghitung offset dengan kompensasi setengah RTT',
+  test(
+      'ServerClock: applyHttpDate menghitung offset dengan kompensasi setengah RTT',
       () async {
     // Semua waktu uji dalam UTC agar hasilnya tidak bergantung zona mesin.
     final started = DateTime.utc(2026, 10, 30, 3, 20, 0);
@@ -248,7 +253,8 @@ void main() {
     await pumpEventQueue();
   });
 
-  test('ServerClock: header rusak/null tidak mengubah offset dan tidak melempar',
+  test(
+      'ServerClock: header rusak/null tidak mengubah offset dan tidak melempar',
       () async {
     final started = DateTime.utc(2026, 10, 30, 3, 20, 0);
     final received = started.add(const Duration(seconds: 2));
@@ -315,7 +321,8 @@ void main() {
 
     await ServerClock.loadPersisted();
     expect(ServerClock.offset.inSeconds, 1,
-        reason: 'offset terakhir harus terpakai lagi (mis. cold start offline)');
+        reason:
+            'offset terakhir harus terpakai lagi (mis. cold start offline)');
     expect(ServerClock.isSynced, isTrue);
   });
 
@@ -328,7 +335,8 @@ void main() {
       _log('med_1', 'Obat 1', _todayAt(7, 0)),
       _log('med_1', 'Obat 1', _todayAt(19, 0)),
     ]);
-    expect(percent, 10, reason: 'satu obat dua kali tetap satu obat (bukan 20%)');
+    expect(percent, 10,
+        reason: 'satu obat dua kali tetap satu obat (bukan 20%)');
   });
 
   test('adherence banyak obat: 3 obat berbeda dari 10 obat = 30%', () {
@@ -341,7 +349,8 @@ void main() {
     expect(percent, 30);
   });
 
-  test('adherence: log obat yang sudah dihapus tidak menaikkan angka di atas 100%',
+  test(
+      'adherence: log obat yang sudah dihapus tidak menaikkan angka di atas 100%',
       () {
     final meds = [_med(_serverMedId, 'Sertraline')];
     final percent = _adherence(meds, [
@@ -357,12 +366,14 @@ void main() {
   // ----------------------------------------------------------------------
   // #6 — BATAS HARI (LOKAL)
   // ----------------------------------------------------------------------
-  test('batas hari: log kemarin tidak dihitung, log 00:05 WIB hari ini dihitung',
+  test(
+      'batas hari: log kemarin tidak dihitung, log 00:05 WIB hari ini dihitung',
       () {
     final meds = [_med(_serverMedId, 'Sertraline')];
 
     expect(
-      _adherence(meds, [_log(_serverMedId, 'Sertraline', _yesterdayAt(23, 59))]),
+      _adherence(
+          meds, [_log(_serverMedId, 'Sertraline', _yesterdayAt(23, 59))]),
       0,
       reason: 'dosis kemarin 23:59 bukan bagian hari ini',
     );
@@ -384,7 +395,8 @@ void main() {
   // ----------------------------------------------------------------------
   // #7 — DURABILITAS OFFLINE: POST gagal → masuk antrean offline
   // ----------------------------------------------------------------------
-  testWidgets('POST log gagal: log masuk antrean offline dengan taken_at dari ServerClock',
+  testWidgets(
+      'POST log gagal: log masuk antrean offline dengan taken_at dari ServerClock',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 4000);
     tester.view.devicePixelRatio = 1.0;
@@ -467,8 +479,18 @@ void main() {
 String _formatHttpDate(DateTime utc) {
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   final d = utc.toUtc();
   String two(int v) => v.toString().padLeft(2, '0');

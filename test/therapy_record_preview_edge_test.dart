@@ -71,7 +71,8 @@ MalvaApiClient _apiWith(
   );
 }
 
-Widget _app(MalvaApiClient api, {required Widget home, bool withSession = true}) {
+Widget _app(MalvaApiClient api,
+    {required Widget home, bool withSession = true}) {
   return ProviderScope(
     overrides: [
       apiClientProvider.overrideWithValue(api),
@@ -119,7 +120,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Kartu error tampil + tombol Coba, tanpa crash.
-    expect(find.textContaining('Therapy record belum bisa dimuat'), findsOneWidget);
+    expect(find.textContaining('Therapy record belum bisa dimuat'),
+        findsOneWidget);
     expect(find.text('Coba'), findsOneWidget);
     // Katalog tetap ter-render (tidak blank).
     expect(find.text(allTherapyModules.first.title), findsWidgets);
@@ -168,7 +170,8 @@ void main() {
     await tester.pumpWidget(
       _app(
         api,
-        home: const Scaffold(body: SingleChildScrollView(child: TherapyRecordPreview())),
+        home: const Scaffold(
+            body: SingleChildScrollView(child: TherapyRecordPreview())),
       ),
     );
     await tester.pumpAndSettle();
@@ -192,7 +195,8 @@ void main() {
     await tester.pumpWidget(
       _app(
         api,
-        home: const Scaffold(body: SingleChildScrollView(child: TherapyRecordPreview())),
+        home: const Scaffold(
+            body: SingleChildScrollView(child: TherapyRecordPreview())),
       ),
     );
     await tester.pumpAndSettle();
@@ -216,7 +220,8 @@ void main() {
     await tester.pumpWidget(
       _app(
         api,
-        home: const Scaffold(body: SingleChildScrollView(child: TherapyRecordPreview())),
+        home: const Scaffold(
+            body: SingleChildScrollView(child: TherapyRecordPreview())),
       ),
     );
     await tester.pumpAndSettle();
@@ -241,7 +246,8 @@ void main() {
     await tester.pumpWidget(
       _app(
         api,
-        home: const Scaffold(body: SingleChildScrollView(child: TherapyRecordPreview())),
+        home: const Scaffold(
+            body: SingleChildScrollView(child: TherapyRecordPreview())),
       ),
     );
     await tester.pumpAndSettle();
