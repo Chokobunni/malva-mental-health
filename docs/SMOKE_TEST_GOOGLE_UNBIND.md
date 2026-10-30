@@ -30,8 +30,8 @@ Checklist uji manual end-to-end untuk fitur **Akun Google → Lepas Gmail**
 1. Login sebagai **pasien**.
 2. Buka **Pengaturan → Akun Google**, tekan **Hubungkan Gmail**, selesaikan login Google.
    - Harapan: kartu berubah jadi **"Gmail tertaut"** + menampilkan email Gmail + pill **"Terhubung"**.
-3. Tekan **Lepas Gmail**, konfirmasi **Lepas**.
-   - Harapan: muncul dialog **"Tetapkan password baru"** (akun belum tentu punya password terpakai).
+3. Tekan **Lepas Gmail**. Dialog konfirmasi kini punya field **"Password akun (opsional)"**. Biarkan **kosong** (akun Google-only), lalu tekan **Lepas**.
+   - Harapan: server membalas `perlu_password`, lalu muncul dialog kedua **"Tetapkan password baru"**.
 4. Isi password baru yang kuat (mis. `NewPassword123!`), tekan **Simpan & Lepas**.
    - Harapan: kartu berubah ke mode **"Hubungkan Gmail"**, muncul snackbar **"Gmail berhasil dilepas."**
 5. Logout, lalu login lagi memakai **email akun + password baru**.
@@ -100,6 +100,11 @@ Checklist uji manual end-to-end untuk fitur **Akun Google → Lepas Gmail**
 2. Login sebagai **pasien B** (akun berbeda), **Hubungkan Gmail** memakai `shared@gmail.com`.
    - Harapan: berhasil (`linked:true`) — Gmail benar-benar bebas, bukan terkunci ke A.
 - **Status:** VERIFIED otomatis (`TestUnbindGoogleFreesGmailForAnotherPatient` langkah 10).
+- **Catatan (penting):** kebebasan Gmail ini berlaku untuk akun yang email-nya **bukan** Gmail
+  itu sendiri (mis. pasien, atau profesional ber-email asli berbeda). Untuk **profesional
+  placeholder** yang email akunnya **di-upgrade** menjadi Gmail saat bind (lihat skenario 3),
+  Gmail itu **tetap menjadi email akun** setelah unbind sehingga **tidak** bebas dipakai akun
+  lain — ini konsekuensi sadar dari "email tidak diubah saat unbind".
 
 ### 11. Tampilan kartu sebelum vs sesudah unbind
 1. Sebelum tertaut: kartu berjudul **"Hubungkan Gmail"**, ada tombol **Hubungkan Gmail**, tidak ada tombol Lepas.
@@ -112,6 +117,14 @@ Checklist uji manual end-to-end untuk fitur **Akun Google → Lepas Gmail**
 2. Buka kartu Akun Google.
    - Harapan: hanya ada tombol **Hubungkan Gmail**; **tidak ada** tombol **Lepas Gmail**.
 - **Status:** VERIFIED otomatis (`test/google_account_card_test.dart`; setelah unbind `Lepas Gmail` = `findsNothing`).
+
+### 13. Pasien mengisi password akun → unbind langsung tanpa dialog password baru
+1. Login sebagai **pasien tertaut** yang punya password.
+2. Tekan **Lepas Gmail**. Di dialog konfirmasi, isi field **"Password akun (opsional)"** dengan password yang benar, lalu tekan **Lepas**.
+   - Harapan: request mengirim `current_password` (bukan `new_password`); **tidak** muncul dialog "Tetapkan password baru"; kartu langsung berubah ke **"Hubungkan Gmail"**.
+3. (Negatif) Ulangi tetapi isi password **salah**.
+   - Harapan: HTTP **401** `password_salah`, snackbar "Password saat ini salah.", tautan **tetap ada**.
+- **Status:** VERIFIED otomatis (`test/google_account_card_test.dart` → "unbind dengan password akun mengirim current_password tanpa minta password baru"; jalur salah oleh `TestUnbindGoogleWrongCurrentPassword`). Interaksi ketik di perangkat **NOT-VERIFIED (butuh perangkat)**.
 
 ---
 
@@ -131,10 +144,11 @@ Checklist uji manual end-to-end untuk fitur **Akun Google → Lepas Gmail**
 | 10 | Pasien lain bisa pakai Gmail yang dilepas | VERIFIED |
 | 11 | Tampilan kartu sebelum/sesudah | VERIFIED (widget) / NOT-VERIFIED (perangkat) |
 | 12 | Tombol "Lepas Gmail" tidak muncul saat belum tertaut | VERIFIED |
+| 13 | Isi password akun → unbind tanpa dialog password baru | VERIFIED (widget/backend) / NOT-VERIFIED (perangkat) |
 
 **Catatan:** Skenario yang menyentuh sign-in Google asli dan rendering visual di HP
 tidak dapat dijalankan di mesin QA (tidak ada perangkat/akun Google) dan ditandai
-**NOT-VERIFIED (butuh perangkat)** — bukan PASS. Skenario **4** (bug P1 email asli
-dirusak) sudah **DIPERBAIKI**: logika pemulihan placeholder dihapus, sehingga email
-akun (placeholder yang sudah di-upgrade maupun email asli) **tidak diubah** saat
-unbind.
+**NOT-VERIFIED (butuh perangkat)** — bukan PASS. Semua skenario lain **VERIFIED**.
+Skenario **4** (dulu bug P1: email asli dirusak) sudah **DIPERBAIKI**: logika
+pemulihan placeholder dihapus, sehingga `users.email` **tidak pernah** diubah saat
+unbind — email asli maupun Gmail hasil upgrade-bind tetap dipertahankan.
