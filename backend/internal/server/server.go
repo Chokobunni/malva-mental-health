@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"malva/backend/internal/auth"
+	"malva/backend/internal/clock"
 	"malva/backend/internal/config"
 	googlecal "malva/backend/internal/google"
 	"malva/backend/internal/notify"
@@ -459,7 +460,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 	}
 	dateOfBirth := strings.TrimSpace(req.DateOfBirth)
 	if dateOfBirth != "" {
-		if d, err := time.Parse("2006-01-02", dateOfBirth); err != nil || d.After(time.Now()) {
+		if d, err := time.ParseInLocation("2006-01-02", dateOfBirth, clock.Location()); err != nil || d.After(clock.Now()) {
 			writeError(w, http.StatusBadRequest, errors.New("format tanggal lahir tidak valid (YYYY-MM-DD)"))
 			return
 		}
@@ -721,7 +722,7 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, claims auth.Cl
 	if req.DateOfBirth != nil {
 		dateOfBirth = strings.TrimSpace(*req.DateOfBirth)
 		if dateOfBirth != "" {
-			if d, err := time.Parse("2006-01-02", dateOfBirth); err != nil || d.After(time.Now()) {
+			if d, err := time.ParseInLocation("2006-01-02", dateOfBirth, clock.Location()); err != nil || d.After(clock.Now()) {
 				writeError(w, http.StatusBadRequest, errors.New("format tanggal lahir tidak valid (YYYY-MM-DD)"))
 				return
 			}
@@ -1653,7 +1654,7 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 		Text:           text,
 		Kind:           req.Kind,
 		Metadata:       req.Metadata,
-		CreatedAt:      time.Now(),
+		CreatedAt:      clock.Now(),
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)

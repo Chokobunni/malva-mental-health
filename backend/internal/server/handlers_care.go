@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"malva/backend/internal/auth"
+	"malva/backend/internal/clock"
 	"malva/backend/internal/realtime"
 	"malva/backend/internal/security"
 	"malva/backend/internal/store"
@@ -421,7 +422,7 @@ func (s *Server) appendTherapyShareChat(r *http.Request, claims auth.Claims,
 		return ""
 	}
 	kind, text := therapyShareChat(sub.ModuleID, sub.Title, sub.Summary)
-	sharedAt := time.Now()
+	sharedAt := clock.Now()
 	if sub.SharedAt != nil {
 		sharedAt = *sub.SharedAt
 	}
@@ -448,7 +449,7 @@ func (s *Server) appendTherapyShareChat(r *http.Request, claims auth.Claims,
 		Text:           text,
 		Kind:           kind,
 		Metadata:       metadata,
-		CreatedAt:      time.Now(),
+		CreatedAt:      clock.Now(),
 	})
 	if err != nil {
 		if s.logger != nil {

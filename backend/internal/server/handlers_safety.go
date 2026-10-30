@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"malva/backend/internal/auth"
+	"malva/backend/internal/clock"
 	"malva/backend/internal/security"
 	"malva/backend/internal/store"
 )
@@ -256,7 +257,7 @@ func (s *Server) handleCrisisAlertV2(w http.ResponseWriter, r *http.Request, cla
 			"latitude":      req.Latitude,
 			"longitude":     req.Longitude,
 			"message":       req.Message,
-			"timestamp":     time.Now().UTC().Format(time.RFC3339),
+			"timestamp":     clock.Now().Format(time.RFC3339),
 		},
 	}
 	s.hub.Broadcast(event)
@@ -711,7 +712,7 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "date is required (YYYY-MM-DD)"})
 		return
 	}
-	target, err := time.Parse("2006-01-02", dateStr)
+	target, err := time.ParseInLocation("2006-01-02", dateStr, wibLoc)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid date format"})
 		return
@@ -728,7 +729,7 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 	parseClock := func(v string) (time.Time, bool) {
 		v = strings.TrimSpace(v)
 		for _, layout := range []string{"15:04:05", "15:04"} {
-			if t, err := time.Parse(layout, v); err == nil {
+			if t, err := time.ParseInLocation(layout, v, wibLoc); err == nil {
 				return t, true
 			}
 		}
@@ -757,7 +758,7 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 		}
 	}
 	_ = dayStart
-	nowWIB := time.Now().In(wibLoc)
+	nowWIB := clock.Now()
 
 	slots := make([]interface{}, 0)
 	for _, sch := range schedules {
@@ -805,7 +806,7 @@ func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, c
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	nowWIB := time.Now().In(wibLoc)
+	nowWIB := clock.Now()
 	startDate := time.Date(nowWIB.Year(), nowWIB.Month(), nowWIB.Day(), 0, 0, 0, 0, wibLoc)
 	endDate := startDate.AddDate(0, 0, 13)
 
@@ -821,7 +822,7 @@ func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, c
 	parseClockLocal := func(v string) (int, bool) {
 		v = strings.TrimSpace(v)
 		for _, layout := range []string{"15:04:05", "15:04"} {
-			if t, err := time.Parse(layout, v); err == nil {
+			if t, err := time.ParseInLocation(layout, v, wibLoc); err == nil {
 				return t.Hour()*60 + t.Minute(), true
 			}
 		}
@@ -887,7 +888,7 @@ func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, c
 		dateStr := day.Format("2006-01-02")
 		freeSlots := 0
 		for _, slotTime := range candidates[i] {
-			if !booked[slotTime.UTC().Format(time.RFC3339)] {
+			if !booked[strconv.FormatInt(slotTime.Unix(), 10)] {
 				freeSlots++
 			}
 		}
@@ -957,11 +958,11 @@ func (s *Server) updateMySchedules(w http.ResponseWriter, r *http.Request, claim
 		if len(end) > 5 {
 			end = end[:5]
 		}
-		if _, err := time.Parse("15:04", start); err != nil {
+		if _, err := time.ParseInLocation("15:04", start, wibLoc); err != nil {
 			writeError(w, http.StatusBadRequest, errors.New("start_time harus HH:MM"))
 			return
 		}
-		if _, err := time.Parse("15:04", end); err != nil {
+		if _, err := time.ParseInLocation("15:04", end, wibLoc); err != nil {
 			writeError(w, http.StatusBadRequest, errors.New("end_time harus HH:MM"))
 			return
 		}

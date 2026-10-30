@@ -451,7 +451,7 @@ func normalizeDateInput(dateOfBirth string) string {
 	if d == "" {
 		return ""
 	}
-	t, err := time.Parse("2006-01-02", d)
+	t, err := time.ParseInLocation("2006-01-02", d, clock.Location())
 	if err != nil {
 		return ""
 	}

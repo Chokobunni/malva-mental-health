@@ -208,7 +208,7 @@ func (s *Store) LogHabit(ctx context.Context, patientID, goalID, loggedOn string
 	if strings.TrimSpace(loggedOn) == "" {
 		loggedOn = clock.Now().Format("2006-01-02")
 	}
-	if _, err := time.Parse("2006-01-02", loggedOn); err != nil {
+	if _, err := time.ParseInLocation("2006-01-02", loggedOn, clock.Location()); err != nil {
 		return HabitLog{}, errors.New("logged_on must be YYYY-MM-DD")
 	}
 	// Pastikan goal milik pasien ini.

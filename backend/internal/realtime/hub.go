@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"malva/backend/internal/clock"
 	"malva/backend/internal/store"
 )
 
@@ -282,7 +283,7 @@ func (c *client) handleChatMessage(raw json.RawMessage) {
 		c.hub.logger.Warn("ws: text rejected outside session", "sender", c.userID)
 		return
 	}
-	timestamp := time.Now()
+	timestamp := clock.Now()
 	if msg.Timestamp != "" {
 		if t, err := time.Parse(time.RFC3339, msg.Timestamp); err == nil {
 			timestamp = t
