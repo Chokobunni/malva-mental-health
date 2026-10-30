@@ -44,6 +44,11 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     needs: analyze
+    # Test format tanggal/jam mengunci WIB (Asia/Jakarta) karena itu zona
+    # pengguna Indonesia dan perangkat pengembang. Runner GitHub default UTC,
+    # sehingga 14 test zona waktu gagal tanpa ini.
+    env:
+      TZ: Asia/Jakarta
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
