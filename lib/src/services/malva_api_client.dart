@@ -255,6 +255,31 @@ class MalvaApiClient {
     return BackendGoogleIdentity.fromJson(payload);
   }
 
+  /// Lepas tautan akun Google (pasien maupun profesional).
+  /// POST /v1/auth/unbind-google — membutuhkan Bearer token.
+  ///
+  /// [currentPassword] dipakai akun ber-password; [newPassword] wajib untuk
+  /// akun Google-only (agar tetap bisa login setelah Gmail dilepas). Hanya
+  /// field yang tidak kosong yang dikirim. Server membalas 409 dengan `code`
+  /// `perlu_password` bila keduanya kosong, yang dipetakan UI ke dialog
+  /// penetapan password baru.
+  Future<BackendGoogleIdentity> unbindGoogleIdentity({
+    required String accessToken,
+    String currentPassword = '',
+    String newPassword = '',
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/auth/unbind-google',
+      accessToken: accessToken,
+      body: {
+        if (currentPassword.isNotEmpty) 'current_password': currentPassword,
+        if (newPassword.isNotEmpty) 'new_password': newPassword,
+      },
+    );
+    return BackendGoogleIdentity.fromJson(payload);
+  }
+
   /// Tukar authorization code Google Calendar dengan backend.
   /// POST /v1/auth/google-token-exchange — membutuhkan Bearer token profesional.
   Future<void> exchangeGoogleToken({

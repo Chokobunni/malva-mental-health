@@ -350,6 +350,52 @@ void main() {
       findsWidgets,
     );
   });
+
+  // ---------------------------------------------------------
+  // 6. Unbind: kode error dipetakan ke pesan/dialog Indonesia.
+  // ---------------------------------------------------------
+  testWidgets(
+      'unbind: perlu_password, password_salah, google_belum_tertaut dipetakan ke pesan Indonesia',
+      (tester) async {
+    Future<void> triggerUnbind(String code, String serverError, int status) async {
+      final api = MalvaApiClient(
+        baseUrl: 'http://backend.test',
+        httpClient: _FakeClient((request) async {
+          switch ('${request.method} ${request.url.path}') {
+            case 'GET /v1/auth/google-identity':
+              return _json({'linked': true, 'email': 'dr.hafid@gmail.com'});
+            case 'POST /v1/auth/unbind-google':
+              return _json({'error': serverError, 'code': code}, status: status);
+            default:
+              return _json(const {});
+          }
+        }),
+      );
+      await _pumpCard(tester, api, _proSession);
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Lepas Gmail'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Lepas'));
+      await tester.pumpAndSettle();
+    }
+
+    // password_salah -> snackbar Indonesia spesifik.
+    await triggerUnbind('password_salah', 'Password saat ini salah.', 401);
+    expect(find.text('Password saat ini salah.'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+
+    // google_belum_tertaut -> snackbar Indonesia spesifik.
+    await triggerUnbind(
+        'google_belum_tertaut', 'Akun ini belum terhubung ke Gmail.', 409);
+    expect(find.text('Akun ini belum terhubung ke Gmail.'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+
+    // perlu_password -> dialog penetapan password baru muncul.
+    await triggerUnbind('perlu_password', 'Tetapkan password baru dulu.', 409);
+    expect(find.widgetWithText(FilledButton, 'Simpan & Lepas'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+  });
 }
 
 /// Klien HTTP palsu (pola repo, lihat `test/health_record_sync_test.dart`).

@@ -178,6 +178,122 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
     }
   }
 
+  /// Melepas tautan Gmail. Menampilkan dialog konfirmasi lebih dulu; bila
+  /// server menuntut password baru (`perlu_password`, akun Google-only),
+  /// tampilkan dialog kedua untuk menetapkan password baru.
+  Future<void> _unbind() async {
+    if (_busy) return;
+    final token = widget.session.accessToken;
+    if (token == null || token.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Lepas Gmail?'),
+        content: const Text(
+          'Setelah dilepas, Anda tidak bisa masuk dengan Google ini dan '
+          'Google Meet (bila aktif) akan nonaktif. Email & password akun '
+          'tetap bisa dipakai.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Lepas'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final identity = await ref
+          .read(apiClientProvider)
+          .unbindGoogleIdentity(accessToken: token);
+      if (!mounted) return;
+      _applyUnlinked(identity);
+    } on MalvaApiException catch (error) {
+      if (!mounted) return;
+      if (error.code == 'perlu_password') {
+        // Akun Google-only belum punya password terpakai — minta password
+        // baru agar akun tidak mati setelah Gmail dilepas.
+        final newPassword = await _askNewPassword();
+        if (newPassword == null || newPassword.isEmpty || !mounted) return;
+        await _unbindWithNewPassword(token, newPassword);
+        return;
+      }
+      _showSnack(_unbindErrorMessage(error));
+    } on Object catch (error) {
+      if (!mounted) return;
+      _showSnack(error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Unbind dengan menyertakan password baru (jalur akun Google-only).
+  Future<void> _unbindWithNewPassword(String token, String newPassword) async {
+    try {
+      final identity = await ref.read(apiClientProvider).unbindGoogleIdentity(
+            accessToken: token,
+            newPassword: newPassword,
+          );
+      if (!mounted) return;
+      _applyUnlinked(identity);
+    } on MalvaApiException catch (error) {
+      if (!mounted) return;
+      _showSnack(_unbindErrorMessage(error));
+    } on Object catch (error) {
+      if (!mounted) return;
+      _showSnack(error.toString());
+    }
+  }
+
+  /// Terapkan hasil unbind: perbarui kartu, segarkan Meet, beri snackbar.
+  void _applyUnlinked(BackendGoogleIdentity identity) {
+    setState(() => _identity = identity);
+    if (widget.showMeet && widget.session.role == UserRole.professional) {
+      _loadMeetStatus();
+    }
+    _showSnack('Gmail berhasil dilepas.');
+  }
+
+  /// Dialog penetapan password baru (minimal 8 karakter). Mengembalikan
+  /// password baru atau null bila dibatalkan.
+  Future<String?> _askNewPassword() async {
+    var value = '';
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Tetapkan password baru'),
+        content: TextField(
+          obscureText: true,
+          onChanged: (v) => value = v,
+          decoration: const InputDecoration(
+            labelText: 'Password baru',
+            helperText: 'Minimal 8 karakter.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(null),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (value.trim().length < 8) return;
+              Navigator.of(dialogContext).pop(value);
+            },
+            child: const Text('Simpan & Lepas'),
+          ),
+        ],
+      ),
+    );
+    return result;
+  }
+
   /// Memetakan kode mesin server ke pesan Indonesia yang actionable.
   String _bindErrorMessage(MalvaApiException error) {
     switch (error.code) {
@@ -189,7 +305,22 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
             'Masuk ke akun tersebut lalu hubungkan Gmail dari sana.';
       case 'akun_sudah_taut_google_lain':
         return 'Akun ini sudah terhubung ke Gmail lain. '
-            'Hubungi admin untuk mengganti.';
+            'Lepas Gmail tersebut dulu untuk menggantinya.';
+      default:
+        return error.message;
+    }
+  }
+
+  /// Memetakan kode mesin endpoint unbind ke pesan Indonesia.
+  String _unbindErrorMessage(MalvaApiException error) {
+    switch (error.code) {
+      case 'perlu_password':
+        return 'Tetapkan password baru dulu agar akun tetap bisa dipakai '
+            'setelah Gmail dilepas.';
+      case 'password_salah':
+        return 'Password saat ini salah.';
+      case 'google_belum_tertaut':
+        return 'Akun ini belum terhubung ke Gmail.';
       default:
         return error.message;
     }
@@ -290,6 +421,15 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
             : const Icon(Icons.link_rounded),
         label: Text(_busy ? 'Menghubungkan...' : 'Hubungkan Gmail'),
       ),
+      const SizedBox(height: 10),
+      Text(
+        "Penting: jangan menekan 'Login Google' sebelum Gmail dihubungkan di "
+        'sini — itu akan membuat akun Malva baru.',
+        style: Theme.of(context)
+            .textTheme
+            .bodySmall
+            ?.copyWith(color: Colors.black54),
+      ),
     ];
   }
 
@@ -318,6 +458,15 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
             .textTheme
             .bodySmall
             ?.copyWith(color: Colors.black54),
+      ),
+      const SizedBox(height: 12),
+      OutlinedButton.icon(
+        onPressed: _busy ? null : _unbind,
+        icon: const Icon(Icons.link_off_rounded),
+        label: const Text('Lepas Gmail'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Theme.of(context).colorScheme.error,
+        ),
       ),
     ];
   }

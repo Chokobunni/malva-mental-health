@@ -218,6 +218,145 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Aktifkan Google Meet'),
         findsOneWidget);
   });
+
+  testWidgets('tertaut: tombol "Lepas Gmail" tampil saat linked:true',
+      (tester) async {
+    final api = MalvaApiClient(
+      baseUrl: 'http://backend.test',
+      httpClient: _FakeClient((request) async {
+        switch ('${request.method} ${request.url.path}') {
+          case 'GET /v1/auth/google-identity':
+            return _json({
+              'linked': true,
+              'email': 'pasien@gmail.com',
+              'linked_at': '2026-10-05T10:00:00.000Z',
+            });
+          default:
+            return _json(const {});
+        }
+      }),
+    );
+
+    await tester.pumpWidget(_wrap(
+      api,
+      _patientSession,
+      const GoogleAccountCard(session: _patientSession),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.widgetWithText(OutlinedButton, 'Lepas Gmail'), findsOneWidget);
+  });
+
+  testWidgets(
+      'tap Lepas Gmail -> dialog konfirmasi -> POST unbind -> kartu jadi Hubungkan Gmail',
+      (tester) async {
+    final requests = <http.Request>[];
+    final api = MalvaApiClient(
+      baseUrl: 'http://backend.test',
+      httpClient: _FakeClient((request) async {
+        switch ('${request.method} ${request.url.path}') {
+          case 'GET /v1/auth/google-identity':
+            return _json({
+              'linked': true,
+              'email': 'pasien@gmail.com',
+              'linked_at': '2026-10-05T10:00:00.000Z',
+            });
+          case 'POST /v1/auth/unbind-google':
+            requests.add(request);
+            return _json({'linked': false, 'email_is_placeholder': false});
+          default:
+            return _json(const {});
+        }
+      }),
+    );
+
+    await tester.pumpWidget(_wrap(
+      api,
+      _patientSession,
+      const GoogleAccountCard(session: _patientSession),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Lepas Gmail'));
+    await tester.pumpAndSettle();
+
+    // Dialog konfirmasi muncul.
+    expect(find.text('Lepas Gmail?'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Lepas'));
+    await tester.pumpAndSettle();
+
+    // Endpoint unbind benar-benar dipanggil.
+    expect(
+      requests.any((r) =>
+          r.method == 'POST' && r.url.path == '/v1/auth/unbind-google'),
+      isTrue,
+    );
+    // Kartu berubah ke kondisi belum tertaut.
+    expect(find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Lepas Gmail'), findsNothing);
+  });
+
+  testWidgets(
+      'unbind 409 perlu_password -> dialog password -> request kedua memuat new_password',
+      (tester) async {
+    final unbindBodies = <String>[];
+    var unbindCalls = 0;
+    final api = MalvaApiClient(
+      baseUrl: 'http://backend.test',
+      httpClient: _FakeClient((request) async {
+        switch ('${request.method} ${request.url.path}') {
+          case 'GET /v1/auth/google-identity':
+            return _json({
+              'linked': true,
+              'email': 'pasien@gmail.com',
+              'linked_at': '2026-10-05T10:00:00.000Z',
+            });
+          case 'POST /v1/auth/unbind-google':
+            unbindCalls++;
+            if (unbindCalls == 1) {
+              return _json({
+                'error':
+                    'Tetapkan password baru dulu agar akun tetap bisa dipakai setelah Gmail dilepas.',
+                'code': 'perlu_password',
+              }, status: 409);
+            }
+            unbindBodies.add(request.body);
+            return _json({'linked': false, 'email_is_placeholder': false});
+          default:
+            return _json(const {});
+        }
+      }),
+    );
+
+    await tester.pumpWidget(_wrap(
+      api,
+      _patientSession,
+      const GoogleAccountCard(session: _patientSession),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Lepas Gmail'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Lepas'));
+    await tester.pumpAndSettle();
+
+    // Dialog password baru muncul.
+    expect(find.widgetWithText(FilledButton, 'Simpan & Lepas'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'PasswordBaru123!');
+    await tester.tap(find.widgetWithText(FilledButton, 'Simpan & Lepas'));
+    await tester.pumpAndSettle();
+
+    // Request kedua membawa new_password.
+    expect(unbindBodies, hasLength(1));
+    expect(
+      (jsonDecode(unbindBodies.single) as Map)['new_password'],
+      'PasswordBaru123!',
+    );
+    expect(find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
+  });
 }
 
 /// Klien HTTP palsu (pola repo, lihat `test/health_record_sync_test.dart`).
