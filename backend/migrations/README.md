@@ -32,6 +32,32 @@ CI dan `apply_migrations.sh --all` memindai **semua** `migrations/*.sql` dan men
 - **Backfill dipisah** dari DDL (langkah/file sendiri) agar DDL cepat dan aman.
 - Semua kolom waktu memakai `timestamptz`.
 
+## Pre-check migrasi 021 (STR/SIP unik)
+
+Migrasi `021_professional_identifier_unique.sql` membuat unique index per jenis pada
+`professional_credentials` (`professional_credentials_str_uidx` & `professional_credentials_sip_uidx`).
+Index **akan gagal dibuat** bila database yang sudah berisi data punya nomor STR/SIP duplikat.
+Sebelum deploy di DB berisi data, cek dan bersihkan duplikat lebih dulu:
+
+```sql
+-- Duplikat STR (perbandingan setelah normalisasi lower + btrim)
+SELECT lower(btrim(str_number)) AS nomor, count(*) AS jumlah
+FROM professional_credentials
+WHERE str_number IS NOT NULL AND btrim(str_number) <> ''
+GROUP BY lower(btrim(str_number))
+HAVING count(*) > 1;
+
+-- Duplikat SIP
+SELECT lower(btrim(sip_number)) AS nomor, count(*) AS jumlah
+FROM professional_credentials
+WHERE sip_number IS NOT NULL AND btrim(sip_number) <> ''
+GROUP BY lower(btrim(sip_number))
+HAVING count(*) > 1;
+```
+
+Bila ada baris hasil, selesaikan dulu (gabungkan/rapikan kredensial milik pemilik sah) sebelum
+menjalankan migrasi. Migrasi juga mengisi `users.sso_email` (backfill) — aman dijalankan ulang.
+
 ## Cara menerapkan
 
 ### Lokal (dev)
@@ -71,4 +97,4 @@ Karena itu, menambah file `migrations/NNN_*.sql` **otomatis** ikut ter-apply di 
 
 ## Ringkasan migrasi saat ini
 
-`001_initial` → `017_google_meet_integration` (17 migrasi). Nomor berikutnya: **018**.
+`001_initial` → `021_professional_identifier_unique` (21 migrasi). Nomor berikutnya: **022**.

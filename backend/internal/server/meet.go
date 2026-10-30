@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"strings"
@@ -272,21 +273,29 @@ func (s *Server) googleStatusHandler(w http.ResponseWriter, r *http.Request, cla
 		writeError(w, http.StatusForbidden, errors.New("endpoint ini hanya untuk profesional"))
 		return
 	}
+	identity, err := s.store.GetGoogleIdentity(r.Context(), claims.Subject)
+	if err != nil {
+		writeGoogleIdentityError(w, err)
+		return
+	}
 	resp := map[string]any{
 		"server_configured": s.calendar != nil,
+		"identity_bound":    identity.Linked,
+		"calendar_ready":    false,
 		"connected":         false,
 	}
-	if s.calendar == nil {
-		writeJSON(w, http.StatusOK, resp)
-		return
-	}
 	info, err := s.store.GetGoogleTokenInfo(r.Context(), claims.Subject)
-	if err != nil {
-		// Tidak ada baris token = belum pernah menautkan.
+	if errors.Is(err, sql.ErrNoRows) {
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
-	resp["connected"] = info.HasRefreshToken
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errors.New("could not load Calendar status"))
+		return
+	}
+	ready := s.calendar != nil && identity.Linked && info.GoogleSubject == identity.Subject && info.HasRefreshToken && store.HasCalendarScope(info.Scope)
+	resp["connected"] = ready
+	resp["calendar_ready"] = ready
 	resp["scope"] = info.Scope
 	resp["expires_at"] = info.TokenExpiry
 	resp["updated_at"] = info.UpdatedAt

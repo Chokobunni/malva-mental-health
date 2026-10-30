@@ -207,6 +207,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/auth/login", s.rateLimit(s.login))
 	mux.HandleFunc("POST /v1/auth/google", s.rateLimit(s.googleLogin))
 	mux.HandleFunc("POST /v1/auth/link-google", s.requireAuth(s.linkGoogle))
+	mux.HandleFunc("POST /v1/auth/bind-google", s.requireAuth(s.bindGoogle))
+	mux.HandleFunc("GET /v1/auth/google-identity", s.requireAuth(s.googleIdentityStatus))
 	mux.HandleFunc("POST /v1/auth/google-token-exchange", s.requireAuth(s.exchangeGoogleToken))
 	mux.HandleFunc("POST /v1/auth/complete-professional", s.rateLimit(s.requireAuth(s.completeProfessionalProfile)))
 	mux.HandleFunc("POST /v1/auth/refresh", s.rateLimit(s.refresh))
@@ -480,6 +482,11 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, errors.New("spesialisasi harus Sp.KJ (psikiater) atau M.Psi (psikolog)"))
 			return
 		}
+		// Preflight improves errors; normalized per-kind DB indexes close races.
+		if err := s.rejectTakenProfessionalIdentifier(r, strNumber, sipNumber, ""); err != nil {
+			writeProfessionalError(w, err)
+			return
+		}
 		// Kode profesi (16 digit) = nomor STR bila tidak diisi eksplisit.
 		if professionalID == "" {
 			professionalID = strNumber
@@ -502,30 +509,25 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		DateOfBirth:    dateOfBirth,
 		Gender:         gender,
 		ProfessionalID: professionalID,
+		Credential:     &store.ProfessionalCredential{STRNumber: strNumber, SIPNumber: sipNumber, Specialization: specialization},
 	})
 	if err != nil {
-		if isDuplicateKeyError(err) {
+		if role == "professional" {
+			writeProfessionalError(w, err)
+			return
+		}
+		if isDuplicateKeyError(err) || errors.Is(err, store.ErrEmailOwnedByOther) {
 			writeError(w, http.StatusConflict, errors.New("email ini sudah terdaftar. Silakan masuk dengan akun tersebut"))
 			return
 		}
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	// Simpan kredensial STR/SIP (status PENDING sampai diverifikasi admin).
 	if role == "professional" {
-		if _, err := s.store.UpsertProfessionalCredential(r.Context(), store.ProfessionalCredential{
-			UserID:         user.ID,
-			STRNumber:      strNumber,
-			SIPNumber:      sipNumber,
-			Specialization: specialization,
-		}); err != nil {
-			s.logger.Warn("simpan kredensial pendaftaran gagal", "error", err, "user", user.ID)
-		} else {
-			s.notifyPatient(r, user.ID, "credential_pending",
-				"Pendaftaran diterima",
-				"Kredensial STR/SIP kamu sedang ditinjau admin. Kamu akan dihubungi setelah terverifikasi.",
-				map[string]string{"str_number": strNumber})
-		}
+		s.notifyPatient(r, user.ID, "credential_pending",
+			"Pendaftaran diterima",
+			"Kredensial STR/SIP kamu sedang ditinjau admin. Kamu akan dihubungi setelah terverifikasi.",
+			map[string]string{"str_number": strNumber})
 	}
 	s.secLogger.LogAuthSuccess(r, user.ID)
 	s.writeAuthResponse(w, r, http.StatusCreated, user)

@@ -578,6 +578,14 @@ func (s *Server) uploadCredentials(w http.ResponseWriter, r *http.Request, claim
 			return
 		}
 	}
+	// Aturan bisnis MENGIKAT: 1 STR/SIP = 1 akun profesional. Menyimpan profil
+	// dengan nomor milik akun lain harus ditolak — termasuk saat pemanggil
+	// mencoba "menukar" nomor ke akunnya sendiri. Nomornya sendiri tetap boleh
+	// disimpan ulang (excludeUserID = pemanggil).
+	if err := s.rejectTakenProfessionalIdentifier(r, merged.STRNumber, merged.SIPNumber, claims.Subject); err != nil {
+		writeProfessionalError(w, err)
+		return
+	}
 	// Profesional yang sebelumnya DITOLAK lalu memperbaiki STR/SIP/SIPP/dokumen
 	// perlu masuk kembali ke antrean review admin. Status VERIFIED sengaja
 	// TIDAK PERNAH di-reset di sini — lihat catatan pada
@@ -590,7 +598,7 @@ func (s *Server) uploadCredentials(w http.ResponseWriter, r *http.Request, claim
 			strings.TrimSpace(merged.DocumentURL) != existing.DocumentURL)
 	cred, err := s.store.UpsertProfessionalCredential(r.Context(), merged)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+		writeProfessionalError(w, err)
 		return
 	}
 	// Bila STR/SIP/SIPP/dokumen diperbaiki setelah ditolak, buka kembali review.

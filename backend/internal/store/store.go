@@ -53,6 +53,10 @@ type CreateUserParams struct {
 	// SSOProvider/SSOID diisi saat akun dibuat via login sosial (mis. google).
 	SSOProvider string
 	SSOID       string
+	// SSOEmail adalah alamat email dari penyedia SSO, disimpan sebagai jejak
+	// audit agar Pengaturan bisa menampilkan "Terhubung dengan <gmail>".
+	SSOEmail   string
+	Credential *ProfessionalCredential
 }
 
 type PatientProfessionalLink struct {
@@ -253,14 +257,25 @@ func (s *Store) CreateUser(ctx context.Context, params CreateUserParams) (User, 
 		return User{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := lockIdentityOwnership(ctx, tx); err != nil {
+		return User{}, err
+	}
+	if err := checkEmailOwnership(ctx, tx, email, ""); err != nil {
+		return User{}, err
+	}
+	ssoEmail := strings.ToLower(strings.TrimSpace(params.SSOEmail))
+	if err := checkEmailOwnership(ctx, tx, ssoEmail, ""); err != nil {
+		return User{}, err
+	}
 	var user User
 	err = tx.QueryRowContext(ctx, `
-		INSERT INTO users (email, password_hash, role, display_name, phone, date_of_birth, gender, sso_provider, sso_id)
-		VALUES ($1, $2, $3::user_role, $4, NULLIF($5, ''), NULLIF($6, '')::date, NULLIF($7, ''), NULLIF($8, ''), NULLIF($9, ''))
+		INSERT INTO users (email, password_hash, role, display_name, phone, date_of_birth, gender, sso_provider, sso_id, sso_linked_at, sso_email)
+		VALUES ($1, $2, $3::user_role, $4, NULLIF($5, ''), NULLIF($6, '')::date, NULLIF($7, ''), NULLIF($8, ''), NULLIF($9, ''),
+		        CASE WHEN NULLIF($8, '') IS NULL THEN NULL ELSE $10::timestamptz END, NULLIF($11, ''))
 		RETURNING id, email, role::text, display_name, phone, date_of_birth, gender, password_hash
 	`, email, params.PasswordHash, role, displayName,
 		normalizePhoneInput(params.Phone), normalizeDateInput(params.DateOfBirth), normalizeGenderInput(params.Gender),
-		strings.TrimSpace(params.SSOProvider), strings.TrimSpace(params.SSOID)).
+		strings.TrimSpace(params.SSOProvider), strings.TrimSpace(params.SSOID), clock.Now(), ssoEmail).
 		Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.Phone, &user.DateOfBirth, &user.Gender, &user.PasswordHash)
 	if err != nil {
 		return User{}, err
@@ -283,6 +298,14 @@ func (s *Store) CreateUser(ctx context.Context, params CreateUserParams) (User, 
 		return User{}, err
 	}
 
+	if role == "professional" && params.Credential != nil {
+		credential := *params.Credential
+		credential.UserID = user.ID
+		if err := writeProfessionalCredential(ctx, tx, credential); err != nil {
+			return User{}, err
+		}
+	}
+
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO audit_logs (actor_id, action, entity_type, entity_id)
 		VALUES ($1, 'user.registered', 'user', $1)
@@ -302,7 +325,7 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (User, error) 
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, email, role::text, display_name, phone, date_of_birth, gender, password_hash
 		FROM users
-		WHERE email = $1 AND disabled_at IS NULL
+		WHERE lower(btrim(email)) = $1 AND disabled_at IS NULL
 	`, strings.ToLower(strings.TrimSpace(email))).
 		Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.Phone, &user.DateOfBirth, &user.Gender, &user.PasswordHash)
 	return user, err
@@ -342,17 +365,36 @@ func (s *Store) FindUserByProfessionalIdentifier(ctx context.Context, identifier
 	if identifier == "" {
 		return User{}, sql.ErrNoRows
 	}
-	err := s.db.QueryRowContext(ctx, `
+	rows, err := s.db.QueryContext(ctx, `
 		SELECT u.id, u.email, u.role::text, u.display_name, u.phone, u.date_of_birth, u.gender, u.password_hash
 		FROM users u
 		LEFT JOIN professional_profiles pp ON pp.user_id = u.id
 		LEFT JOIN professional_credentials pc ON pc.user_id = u.id
 		WHERE u.role = 'professional'
 		  AND u.disabled_at IS NULL
-		  AND (pp.professional_id = $1 OR pc.str_number = $1 OR pc.sip_number = $1)
-		LIMIT 1
-	`, identifier).Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.Phone, &user.DateOfBirth, &user.Gender, &user.PasswordHash)
-	return user, err
+		  AND (lower(btrim(pp.professional_id)) = lower($1)
+		    OR lower(btrim(pc.str_number)) = lower($1) OR lower(btrim(pc.sip_number)) = lower($1))
+		ORDER BY u.created_at ASC, u.id ASC
+		LIMIT 2
+	`, identifier)
+	if err != nil {
+		return User{}, err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return User{}, err
+		}
+		return User{}, sql.ErrNoRows
+	}
+	if err := rows.Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.Phone, &user.DateOfBirth, &user.Gender, &user.PasswordHash); err != nil {
+		return User{}, err
+	}
+	// Separate STR/SIP namespaces may collide; never select an arbitrary owner at login.
+	if rows.Next() {
+		return User{}, sql.ErrNoRows
+	}
+	return user, rows.Err()
 }
 
 // UpdateDisplayName mengubah nama tampilan pengguna.

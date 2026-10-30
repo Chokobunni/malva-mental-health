@@ -2,12 +2,15 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
+
+	"malva/backend/internal/clock"
 )
 
 // ============================================================
@@ -120,6 +123,21 @@ func pgTextArray(values []string) string {
 // menulis 'PENDING' karena profesional baru memang wajib menunggu persetujuan
 // admin sebelum tampil di direktori.
 func (s *Store) UpsertProfessionalCredential(ctx context.Context, c ProfessionalCredential) (ProfessionalCredential, error) {
+	if err := writeProfessionalCredential(ctx, s.db, c); err != nil {
+		return ProfessionalCredential{}, err
+	}
+	out, err := s.GetProfessionalCredential(ctx, c.UserID)
+	if err != nil {
+		return ProfessionalCredential{}, err
+	}
+	_ = s.AddAuditLog(ctx, c.UserID, c.UserID, "credentials.uploaded", "professional_credentials", out.ID,
+		map[string]any{"spec": c.Specialization})
+	return out, nil
+}
+
+func writeProfessionalCredential(ctx context.Context, db interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}, c ProfessionalCredential) error {
 	// Avatar default otomatis: bila PhotoIntroURL kosong, gunakan DiceBear API
 	// agar setiap profesional punya avatar meskipun belum mengunggah foto.
 	if strings.TrimSpace(c.PhotoIntroURL) == "" {
@@ -141,11 +159,11 @@ func (s *Store) UpsertProfessionalCredential(ctx context.Context, c Professional
 		photo_intro_url=$12, video_intro_url=$13, bio=$14, education=$15::jsonb, document_url=$16,
 		years_experience=$17, price_from=$18
 		WHERE user_id = $1`
-	res, err := s.db.ExecContext(ctx, upd, c.UserID, c.STRNumber, c.SIPNumber, c.SIPPNumber, c.Specialization, sub,
+	res, err := db.ExecContext(ctx, upd, c.UserID, c.STRNumber, c.SIPNumber, c.SIPPNumber, c.Specialization, sub,
 		c.HospitalLat, c.HospitalLng, c.HospitalName, c.AddressDetails, c.IsBPJSSupported,
 		c.PhotoIntroURL, c.VideoIntroURL, c.Bio, edu, c.DocumentURL, c.YearsExperience, c.PriceFrom)
 	if err != nil {
-		return ProfessionalCredential{}, err
+		return err
 	}
 	if aff, _ := res.RowsAffected(); aff == 0 {
 		const ins = `INSERT INTO professional_credentials
@@ -153,20 +171,46 @@ func (s *Store) UpsertProfessionalCredential(ctx context.Context, c Professional
 			 hospital_lat, hospital_lng, hospital_name, address_details, is_bpjs_supported,
 			 photo_intro_url, video_intro_url, bio, education, document_url, years_experience, price_from, verification_status)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16,$17,$18,'PENDING')`
-		if _, err := s.db.ExecContext(ctx, ins, c.UserID, c.STRNumber, c.SIPNumber, c.SIPPNumber, c.Specialization, sub,
+		if _, err := db.ExecContext(ctx, ins, c.UserID, c.STRNumber, c.SIPNumber, c.SIPPNumber, c.Specialization, sub,
 			c.HospitalLat, c.HospitalLng, c.HospitalName, c.AddressDetails, c.IsBPJSSupported,
 			c.PhotoIntroURL, c.VideoIntroURL, c.Bio, edu, c.DocumentURL, c.YearsExperience, c.PriceFrom); err != nil {
-			return ProfessionalCredential{}, err
+			return err
 		}
 	}
-	var out ProfessionalCredential
-	out, err = s.GetProfessionalCredential(ctx, c.UserID)
+	return nil
+}
+
+// CompleteProfessionalProfile updates identifiers and credentials atomically.
+func (s *Store) CompleteProfessionalProfile(ctx context.Context, c ProfessionalCredential, displayName string) (ProfessionalCredential, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return ProfessionalCredential{}, err
 	}
-	_ = s.AddAuditLog(ctx, c.UserID, c.UserID, "credentials.uploaded", "professional_credentials", out.ID,
-		map[string]any{"spec": c.Specialization})
-	return out, nil
+	defer func() { _ = tx.Rollback() }()
+	// Serialize completion of the same account without touching other profiles.
+	var id string
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM users WHERE id = $1 AND role = 'professional' AND disabled_at IS NULL FOR UPDATE`, c.UserID).Scan(&id); err != nil {
+		return ProfessionalCredential{}, err
+	}
+	if err := writeProfessionalCredential(ctx, tx, c); err != nil {
+		return ProfessionalCredential{}, err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE professional_profiles SET professional_id = $2 WHERE user_id = $1`, c.UserID, strings.TrimSpace(c.STRNumber))
+	if err != nil {
+		return ProfessionalCredential{}, err
+	}
+	if n, err := res.RowsAffected(); err != nil || n != 1 {
+		return ProfessionalCredential{}, errors.New("professional profile not found")
+	}
+	if strings.TrimSpace(displayName) != "" {
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET display_name = $2, updated_at = $3 WHERE id = $1`, c.UserID, strings.TrimSpace(displayName), clock.Now()); err != nil {
+			return ProfessionalCredential{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return ProfessionalCredential{}, err
+	}
+	return s.GetProfessionalCredential(ctx, c.UserID)
 }
 
 // UpdateProfessionalID mengganti professional_id di tabel professional_profiles.

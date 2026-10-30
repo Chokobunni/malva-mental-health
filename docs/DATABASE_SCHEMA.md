@@ -6,9 +6,9 @@
 |---|---|
 | Database | PostgreSQL 18 |
 | Total Tables | 44 |
-| Total Indexes | 41 (CREATE INDEX eksplisit; belum termasuk UNIQUE/PK inline) |
+| Total Indexes | 44 (CREATE INDEX eksplisit; belum termasuk UNIQUE/PK inline) |
 | Custom Types | 4 enums |
-| Migrasi | 001–020 (`backend/migrations/`) |
+| Migrasi | 001–021 (`backend/migrations/`) |
 
 ---
 
@@ -327,9 +327,13 @@ CREATE TYPE notification_status AS ENUM ('pending', 'sent', 'failed');
 | `phone_verified_at` | timestamptz | NULLABLE (006) | Waktu verifikasi nomor |
 | `sso_provider` | varchar(50) | NULLABLE (006), UNIQUE bersama `sso_id` | Penyedia SSO (mis. google) |
 | `sso_id` | varchar(255) | NULLABLE (006) | ID subjek di penyedia SSO |
+| `sso_email` | varchar(255) | NULLABLE (021) | Email Google terverifikasi yang ditautkan |
+| `sso_linked_at` | timestamptz | NULLABLE (021) | Waktu akun Google ditautkan |
 | `created_at` | timestamptz | NOT NULL, DEFAULT now() | Account creation time |
 | `updated_at` | timestamptz | NOT NULL, DEFAULT now() | Last profile update |
 | `disabled_at` | timestamptz | NULLABLE | Account deactivation time |
+
+**Index:** `users_sso_email_uidx` UNIQUE ON (lower(btrim(sso_email))) WHERE sso_email IS NOT NULL AND btrim(sso_email) <> '' (021) — 1 Gmail = 1 akun.
 
 ### 3.2 patient_profiles
 
@@ -868,6 +872,8 @@ Kredensial & profil praktik profesional (STR/SIP/SIPP, faskes, foto/video intro)
 | `created_at` | timestamptz | DEFAULT CURRENT_TIMESTAMP | Waktu dibuat |
 
 **Index:** `professional_credentials_user_uidx` UNIQUE (user_id).
+**Index:** `professional_credentials_str_uidx` UNIQUE ON (lower(btrim(str_number))) WHERE str_number IS NOT NULL AND btrim(str_number) <> '' (021) — 1 STR = 1 profesional.
+**Index:** `professional_credentials_sip_uidx` UNIQUE ON (lower(btrim(sip_number))) WHERE sip_number IS NOT NULL AND btrim(sip_number) <> '' (021) — 1 SIP = 1 profesional.
 
 ### 3.34 doctor_reviews (migrasi 006)
 
@@ -1027,6 +1033,7 @@ Refresh token Google OAuth per profesional untuk Google Calendar + Meet.
 | `access_token` | text | NOT NULL, DEFAULT '' | Access token terakhir |
 | `token_expiry` | timestamptz | NOT NULL, DEFAULT now() | Kedaluwarsa access token |
 | `scope` | text | NOT NULL, DEFAULT '' | Scope yang diberikan |
+| `google_subject` | varchar(255) | NULLABLE (021) | Subjek Google pemilik grant (validasi Calendar) |
 | `updated_at` | timestamptz | NOT NULL, DEFAULT now() | Pembaruan terakhir |
 
 ### 3.44 psychological_tests_catalog (migrasi 006)

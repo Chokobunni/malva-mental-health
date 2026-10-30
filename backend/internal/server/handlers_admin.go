@@ -293,28 +293,22 @@ func (s *Server) createAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 			return
 		}
 	}
+	// Aturan bisnis MENGIKAT: 1 STR/SIP = 1 akun profesional, termasuk untuk
+	// dokter yang dibuat admin. Tanpa pemeriksaan ini admin bisa membuat dua
+	// akun dengan nomor identik, dan pasien melihat dua "dokter" berbeda yang
+	// mengaku memegang nomor yang sama.
+	if err := s.rejectTakenProfessionalIdentifier(r,
+		strings.TrimSpace(req.Credentials.STRNumber),
+		strings.TrimSpace(req.Credentials.SIPNumber), ""); err != nil {
+		writeProfessionalError(w, err)
+		return
+	}
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	user, err := s.store.CreateUser(r.Context(), store.CreateUserParams{
-		Email:          req.Email,
-		PasswordHash:   hash,
-		Role:           "professional",
-		DisplayName:    strings.TrimSpace(req.DisplayName),
-		ProfessionalID: strings.TrimSpace(req.ProfessionalID),
-	})
-	if err != nil {
-		if isDuplicateKeyError(err) {
-			writeError(w, http.StatusConflict, errors.New("email atau ID profesional sudah terdaftar"))
-			return
-		}
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	cred, err := s.store.UpsertProfessionalCredential(r.Context(), store.ProfessionalCredential{
-		UserID:          user.ID,
+	credential := store.ProfessionalCredential{
 		STRNumber:       strings.TrimSpace(req.Credentials.STRNumber),
 		SIPNumber:       strings.TrimSpace(req.Credentials.SIPNumber),
 		SIPPNumber:      strings.TrimSpace(req.Credentials.SIPPNumber),
@@ -332,9 +326,19 @@ func (s *Server) createAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 		DocumentURL:     strings.TrimSpace(req.Credentials.DocumentURL),
 		YearsExperience: req.Credentials.YearsExperience,
 		PriceFrom:       req.Credentials.PriceFrom,
+	}
+	user, err := s.store.CreateUser(r.Context(), store.CreateUserParams{
+		Email: req.Email, PasswordHash: hash, Role: "professional",
+		DisplayName: strings.TrimSpace(req.DisplayName), ProfessionalID: strings.TrimSpace(req.ProfessionalID),
+		Credential: &credential,
 	})
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeProfessionalError(w, err)
+		return
+	}
+	cred, err := s.store.GetProfessionalCredential(r.Context(), user.ID)
+	if err != nil {
+		writeProfessionalError(w, err)
 		return
 	}
 	// Dokter buatan admin langsung terverifikasi agar tampil di direktori.
@@ -451,9 +455,16 @@ func (s *Server) updateAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 	// Upsert tidak lagi mengubah status verifikasi (lihat
 	// UpsertProfessionalCredential), jadi admin menyetel ulang secara eksplisit
 	// agar dokter hasil edit admin tetap tampil di direktori.
+	//
+	// Nomor STR/SIP tetap harus unik: kalau admin memindahkan nomor milik
+	// dokter lain ke akun ini, akun asal akan kehilangan identitasnya.
+	if err := s.rejectTakenProfessionalIdentifier(r, merged.STRNumber, merged.SIPNumber, userID); err != nil {
+		writeProfessionalError(w, err)
+		return
+	}
 	cred, err := s.store.UpsertProfessionalCredential(r.Context(), merged)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeProfessionalError(w, err)
 		return
 	}
 	if err := s.store.VerifyProfessionalCredential(r.Context(), cred.ID, claims.Subject, "approve", ""); err != nil {

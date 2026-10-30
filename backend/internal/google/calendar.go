@@ -59,8 +59,12 @@ func (c *CalendarService) oauth2Config() *oauth2.Config {
 // getClient mengambil stored token, membuat HTTP client terautentikasi,
 // dan memperbarui token bila terjadi auto-refresh oleh library oauth2.
 func (c *CalendarService) getClient(ctx context.Context, professionalUserID string) (*oauth2.Token, error) {
+	identity, err := c.store.GetGoogleIdentity(ctx, professionalUserID)
+	if err != nil || !identity.Linked {
+		return nil, ErrReauthNeeded
+	}
 	stored, err := c.store.GetGoogleToken(ctx, professionalUserID)
-	if err != nil {
+	if err != nil || stored.GoogleSubject != identity.Subject || strings.TrimSpace(stored.RefreshToken) == "" || !store.HasCalendarScope(stored.Scope) {
 		return nil, ErrReauthNeeded
 	}
 	tok := &oauth2.Token{
@@ -88,7 +92,7 @@ func (c *CalendarService) getClient(ctx context.Context, professionalUserID stri
 		if refresh == "" {
 			refresh = stored.RefreshToken // refresh token tidak selalu dikembalikan
 		}
-		if uerr := c.store.UpsertGoogleToken(ctx, professionalUserID, refresh, newTok.AccessToken, newTok.Expiry, stored.Scope); uerr != nil {
+		if uerr := c.store.UpsertGoogleToken(ctx, professionalUserID, refresh, newTok.AccessToken, newTok.Expiry, stored.Scope, stored.GoogleSubject); uerr != nil {
 			// Log saja, jangan gagalkan operasi kalender.
 			_ = uerr
 		}

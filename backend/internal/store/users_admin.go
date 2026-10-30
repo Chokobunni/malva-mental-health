@@ -22,35 +22,11 @@ func (s *Store) GetUserBySSO(ctx context.Context, provider, ssoID string) (User,
 		return User{}, errors.New("sso provider and sso id are required")
 	}
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, email, role::text, display_name, phone, date_of_birth, gender, password_hash
-		FROM users
+		SELECT id, email, role::text, display_name, phone, date_of_birth, gender, password_hash		FROM users
 		WHERE sso_provider = $1 AND sso_id = $2 AND disabled_at IS NULL
 	`, provider, ssoID).
 		Scan(&user.ID, &user.Email, &user.Role, &user.DisplayName, &user.Phone, &user.DateOfBirth, &user.Gender, &user.PasswordHash)
 	return user, err
-}
-
-// LinkSSO menautkan akun SSO ke pengguna yang sudah ada (mis. daftar email
-// dulu, lalu login Google dengan email yang sama).
-func (s *Store) LinkSSO(ctx context.Context, userID, provider, ssoID string) error {
-	provider = strings.ToLower(strings.TrimSpace(provider))
-	ssoID = strings.TrimSpace(ssoID)
-	if userID == "" || provider == "" || ssoID == "" {
-		return errors.New("user_id, provider, and sso id are required")
-	}
-	res, err := s.db.ExecContext(ctx, `
-		UPDATE users
-		SET sso_provider = $2, sso_id = $3, updated_at = now()
-		WHERE id = $1 AND disabled_at IS NULL
-	`, userID, provider, ssoID)
-	if err != nil {
-		return err
-	}
-	aff, _ := res.RowsAffected()
-	if aff == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
 }
 
 // AdminUser adalah proyeksi pengguna untuk panel admin.
