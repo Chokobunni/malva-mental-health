@@ -656,16 +656,16 @@ func (s *Store) RescheduleCareSession(ctx context.Context, sessionID string, new
 		return CareSession{}, errors.New("slot sudah terisi, pilih jam lain")
 	}
 	if packageID.Valid {
-		var expires time.Time
-		var pkgStatus string
-		if err := tx.QueryRowContext(ctx, `SELECT status, expires_at FROM care_packages WHERE id = $1`, packageID.String).
-			Scan(&pkgStatus, &expires); err != nil {
+		// Guard keberadaan paket: reschedule tidak boleh menempel pada paket
+		// yang sudah tidak ada. Status & expires_at sengaja TIDAK dibaca —
+		// reschedule oleh profesional karena kesalahan profesional boleh
+		// melewati tanggal kedaluwarsa, sedangkan reschedule pasien tidak
+		// melewati fungsi ini (keputusan otorisasi ada di handler).
+		var exists bool
+		if err := tx.QueryRowContext(ctx, `SELECT true FROM care_packages WHERE id = $1`, packageID.String).
+			Scan(&exists); err != nil {
 			return CareSession{}, err
 		}
-		// Reschedule oleh profesional karena kesalahan profesional boleh
-		// melewati tanggal kedaluwarsa; reschedule pasien tidak.
-		_ = pkgStatus
-		_ = expires
 	}
 	// reminder_sent_at direset: sesi yang sudah pernah dikirimi pengingat di
 	// jadwal lama wajib diingatkan lagi pada jadwal baru. Tanpa reset, sweeper

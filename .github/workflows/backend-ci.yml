@@ -49,6 +49,10 @@ jobs:
           --health-retries 5
     env:
       MALVA_DATABASE_URL: postgres://malva:test_password@localhost:5432/malva_test?sslmode=disable
+      # Test store (internal/store) membaca MALVA_TEST_DATABASE_URL. Tanpa
+      # variabel ini seluruh integration test DB (merge paket, refund, zona
+      # waktu) akan SKIP di CI walau service Postgres di atas tersedia.
+      MALVA_TEST_DATABASE_URL: postgres://malva:test_password@localhost:5432/malva_test?sslmode=disable
       MALVA_JWT_SECRET: test-jwt-secret-for-ci-must-be-at-least-32-chars-long
       MALVA_ALLOWED_ORIGINS: http://localhost:3000
     steps:

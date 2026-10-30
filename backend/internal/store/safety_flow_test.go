@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"os"
 	"testing"
 	"time"
 
@@ -11,10 +10,7 @@ import (
 )
 
 func TestSOSBlastUpdateFlowDebug(t *testing.T) {
-	dsn := "postgres://malva:malva_dev_password@localhost:5432/malva?sslmode=disable"
-	if v := os.Getenv("MALVA_TEST_DATABASE_URL"); v != "" {
-		dsn = v
-	}
+	dsn := testDatabaseDSN(t)
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		t.Skipf("db unavailable: %v", err)

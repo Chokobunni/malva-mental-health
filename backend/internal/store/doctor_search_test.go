@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -30,10 +29,7 @@ import (
 // dan tidak mengenai koneksi yang sudah tertutup.
 func openDoctorSearchTestStore(t *testing.T) (*Store, *sql.DB) {
 	t.Helper()
-	dsn := os.Getenv("MALVA_TEST_DATABASE_URL")
-	if dsn == "" {
-		dsn = "postgres://malva:malva_dev_password@localhost:5432/malva?sslmode=disable"
-	}
+	dsn := testDatabaseDSN(t)
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		t.Skipf("db unavailable: %v", err)

@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"os"
 	"testing"
 	"time"
 
@@ -14,10 +13,7 @@ import (
 // Skip bila DB tak tersedia atau migrasi 013 belum diterapkan (CI-safe).
 func openLedgerTestStore(t *testing.T) (*Store, *sql.DB) {
 	t.Helper()
-	dsn := os.Getenv("MALVA_TEST_DATABASE_URL")
-	if dsn == "" {
-		dsn = "postgres://malva:malva_dev_password@localhost:5432/malva?sslmode=disable"
-	}
+	dsn := testDatabaseDSN(t)
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		t.Skipf("db unavailable: %v", err)

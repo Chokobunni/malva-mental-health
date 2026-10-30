@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"os"
 	"testing"
 	"time"
 )
@@ -25,10 +24,7 @@ func TestOpenSQLDummyDSN(t *testing.T) {
 // di zona WIB (+7), bukan UTC. Skip bila DB tak tersedia (pola sama dengan
 // care_refund_test.go).
 func TestOpenSQLDecodesTimestamptzInWIB(t *testing.T) {
-	dsn := os.Getenv("MALVA_TEST_DATABASE_URL")
-	if dsn == "" {
-		dsn = "postgres://malva:malva_dev_password@localhost:5432/malva?sslmode=disable"
-	}
+	dsn := testDatabaseDSN(t)
 	db, err := OpenSQL(dsn)
 	if err != nil {
 		t.Skipf("db unavailable: %v", err)
