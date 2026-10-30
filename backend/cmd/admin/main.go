@@ -13,8 +13,7 @@ import (
 	"time"
 
 	"malva/backend/internal/config"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"malva/backend/internal/store"
 )
 
 type AdminServer struct {
@@ -58,7 +57,8 @@ func main() {
 		dbURL = "postgres://malva:malva_dev_password@localhost:5432/malva?sslmode=disable"
 	}
 
-	db, err := sql.Open("pgx", dbURL)
+	// Koneksi DB terpusat: timestamptz di-decode dalam zona WIB (lihat store.OpenSQL).
+	db, err := store.OpenSQL(dbURL)
 	if err != nil {
 		logger.Error("failed to connect to database", "error", err)
 		os.Exit(1)

@@ -4,15 +4,13 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	"malva/backend/internal/config"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"malva/backend/internal/store"
 )
 
 func main() {
@@ -31,7 +29,8 @@ func run() error {
 	if dbURL == "" {
 		return fmt.Errorf("MALVA_DATABASE_URL wajib diisi")
 	}
-	db, err := sql.Open("pgx", dbURL)
+	// Koneksi DB terpusat: timestamptz di-decode dalam zona WIB (lihat store.OpenSQL).
+	db, err := store.OpenSQL(dbURL)
 	if err != nil {
 		return err
 	}

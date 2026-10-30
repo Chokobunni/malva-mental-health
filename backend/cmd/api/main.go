@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -18,8 +17,6 @@ import (
 	"malva/backend/internal/realtime"
 	"malva/backend/internal/server"
 	"malva/backend/internal/store"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func main() {
@@ -42,7 +39,8 @@ func run() error {
 	logger := logging.New(cfg.LogLevel, os.Stdout)
 	logging.SetDefault(logger)
 
-	db, err := sql.Open("pgx", cfg.DatabaseURL)
+	// Koneksi DB terpusat: timestamptz di-decode dalam zona WIB (lihat store.OpenSQL).
+	db, err := store.OpenSQL(cfg.DatabaseURL)
 	if err != nil {
 		return err
 	}
