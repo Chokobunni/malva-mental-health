@@ -132,23 +132,9 @@ class AssessmentListScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 20),
-                // Assessment record dipisah dari daftar Therapy Record: semua
-                // hasil skrining (PHQ-9/GAD-7) dan asesmen (DASS-21/WHO-5)
-                // dibaca dari satu tempat ini.
-                SectionLabel(
-                  'Assessment Record',
-                  action: TextButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const AssessmentHistoryScreen(),
-                      ),
-                    ),
-                    child: const Text('Lihat semua'),
-                  ),
-                ),
-                const AssessmentHistoryPreview(),
-                const SizedBox(height: 20),
+                // Disclaimer diletakkan DI ATAS daftar Assessment Record agar
+                // pasien membaca konteks (skor = screening, bukan diagnosis)
+                // sebelum melihat riwayat skornya.
                 SoftCard(
                   color: MalvaColors.amber.withValues(alpha: 0.10),
                   child: const Row(
@@ -169,7 +155,24 @@ class AssessmentListScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 18),
+                // Assessment record dipisah dari daftar Therapy Record: semua
+                // hasil skrining (PHQ-9/GAD-7) dan asesmen (DASS-21/WHO-5)
+                // dibaca dari satu tempat ini. Satu-satunya tombol
+                // "Lihat semua" ada di sini.
+                SectionLabel(
+                  'Assessment Record',
+                  action: TextButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AssessmentHistoryScreen(),
+                      ),
+                    ),
+                    child: const Text('Lihat semua'),
+                  ),
+                ),
+                const AssessmentHistoryPreview(),
+                const SizedBox(height: 20),
                 OutlinedButton.icon(
                   onPressed: () => Navigator.push(
                     context,

@@ -682,13 +682,6 @@ class _AssessmentHistoryPreviewState
     }
   }
 
-  void _openAll() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AssessmentHistoryScreen()),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
@@ -749,6 +742,10 @@ class _AssessmentHistoryPreviewState
     }
 
     final preview = _entries.take(_maxPreview).toList(growable: false);
+    // Tombol "Lihat semua" sengaja TIDAK dirender di sini: pintu masuk ke
+    // halaman lengkap cukup satu, yaitu aksi pada `SectionLabel('Assessment
+    // Record')` di halaman induk (`AssessmentListScreen`). Menampilkannya di
+    // sini membuat dua tombol "Lihat semua" bertumpuk.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -759,13 +756,6 @@ class _AssessmentHistoryPreviewState
           ),
           const SizedBox(height: 10),
         ],
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: _openAll,
-            child: const Text('Lihat semua'),
-          ),
-        ),
       ],
     );
   }

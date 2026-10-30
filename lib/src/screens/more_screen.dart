@@ -6,9 +6,7 @@ import '../providers/data/export_provider.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
-import '../widgets/therapy_library.dart';
 import 'consent_management_screen.dart';
-import 'record_screen.dart';
 import 'admin/admin_panel_screen.dart';
 import 'safety/emergency_contacts_screen.dart';
 import 'settings_screens.dart';
@@ -57,29 +55,6 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
             padding: const EdgeInsets.all(18),
             child: Column(
               children: [
-                ActionTile(
-                  icon: Icons.folder_shared_rounded,
-                  title: 'Health Record',
-                  subtitle: 'Diagnosis, obat, dan file klinis',
-                  color: MalvaColors.mint,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const RecordScreen()),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.folder_copy_rounded,
-                  title: 'Therapy Record',
-                  subtitle: 'Worksheet terapi tersimpan — unduh & kirim',
-                  color: MalvaColors.orchid,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const TherapySubmissionsScreen()),
-                  ),
-                ),
-                const SizedBox(height: 10),
                 ActionTile(
                   icon: Icons.contact_emergency_rounded,
                   title: 'Kontak Darurat',

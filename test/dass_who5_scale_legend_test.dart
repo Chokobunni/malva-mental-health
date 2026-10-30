@@ -113,12 +113,16 @@ void main() {
     final optionTop = tester.getTopLeft(optionOne.first);
     expect(legendTop.dy, lessThan(optionTop.dy));
 
-    // Tinggi tombol 56px (diukur dari render box, bukan properti Container).
-    final optionButtonSize = tester.getSize(
-      find.descendant(of: optionOne.first, matching: find.byType(Container))
-          .first,
-    );
-    expect(optionButtonSize.height, 56);
+    // Chip kini setinggi chip Material standar (48px, sama dengan chip
+    // PHQ-9/GAD-7) — jauh lebih ringkas dari kotak angka 56px yang lama.
+    final chipSize = tester.getSize(optionOne.first);
+    expect(chipSize.height, lessThan(56));
+
+    // Tidak ada lagi Text angka skala berukuran fontSize 20 (kotak besar lama).
+    final bigNumberTexts = tester
+        .widgetList<Text>(find.byType(Text))
+        .where((t) => t.style?.fontSize == 20);
+    expect(bigNumberTexts, isEmpty);
 
     // Tap salah satu angka: tetap tidak ada chip "Skor:", legenda tetap ada.
     await tester.ensureVisible(optionOne.first);

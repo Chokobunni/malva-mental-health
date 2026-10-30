@@ -591,6 +591,12 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
     if (accepted) {
       if (consumed) store.confirmDose(medication.id);
       unawaited(_reloadMedications());
+      // Muat ulang log dari server agar entri optimistis digantikan versi
+      // server (id/timestamp otoritatif) dan riwayat tidak dobel.
+      final accessToken = _session?.accessToken;
+      if (accessToken != null && accessToken.isNotEmpty) {
+        unawaited(store.loadMedicationLogs(_apiClient, accessToken));
+      }
     } else if (consumed) {
       // Gagal kirim: penanda pending DIBIARKAN supaya stok di layar tetap
       // terpotong dan tidak naik kembali saat refresh. Pesan dibuat jujur.

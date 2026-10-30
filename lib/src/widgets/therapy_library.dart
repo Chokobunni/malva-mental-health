@@ -1054,6 +1054,16 @@ TherapyModule? findTherapyModuleById(String id) {
   return null;
 }
 
+/// True bila sebuah submission adalah worksheet TERAPI (bukan hasil asesmen).
+///
+/// Aturan tunggal ini dipakai bersama oleh `TherapySubmissionsScreen` dan
+/// `TherapyRecordPreview` supaya keduanya tidak pernah berbeda filter.
+/// `!= true` sengaja dipakai (bukan `== false`) agar submission dengan modul
+/// tak dikenal tetap dianggap terapi — data pasien tidak boleh hilang
+/// diam-diam hanya karena definisi modul berubah/terhapus di versi aplikasi.
+bool isTherapyRecordSubmission(BackendTherapySubmission item) =>
+    findTherapyModuleById(item.moduleId)?.isAssessment != true;
+
 /// Warna level keparahan (tetap dalam palet Malva).
 Color severityColor(String level) {
   switch (level.toLowerCase()) {
@@ -2419,14 +2429,14 @@ class _WorksheetFieldBlock extends StatelessWidget {
 /// Pilihan skala berlabel (DASS-21 / WHO-5).
 ///
 /// Penjelasan arti tiap angka cukup SATU tempat: legenda "0 = Tidak pernah",
-/// "1 = Kadang-kadang", … di ATAS tombol (sama seperti legenda PHQ-9/GAD-7 di
-/// `assessment_screen.dart`). Sebelumnya arti yang sama diulang di dalam tiap
-/// tombol dan di ringkasan "Skor: …" di bawahnya sehingga deretan angka
-/// terlihat ramai — kini tombol hanya berisi angka, dan tidak ada teks apa pun
-/// di bawah deretan tombol.
+/// "1 = Kadang-kadang", … di ATAS chip (sama seperti legenda PHQ-9/GAD-7 di
+/// `assessment_screen.dart`).
 ///
-/// Semua opsi tetap dalam satu baris horizontal (`Row` + `Expanded`) dan tidak
-/// pernah turun baris walau layar sempit.
+/// Deretan pilihan memakai `ChoiceChip` di dalam `Wrap` — visualnya sama
+/// dengan skala PHQ-9/GAD-7. Sebelumnya tiap opsi berupa kotak angka besar
+/// (tinggi 56px, fontSize 20) yang jauh lebih menonjol dari instrumen lain;
+/// kini chip ringkas yang muat rapi untuk 4 opsi (DASS-21) maupun 6 opsi
+/// (WHO-5) tanpa memaksa satu baris.
 class _ScaleOptions extends StatelessWidget {
   const _ScaleOptions({
     required this.field,
@@ -2442,7 +2452,6 @@ class _ScaleOptions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fill = worksheetFieldFill(context);
     final values = field.scaleValues;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2471,120 +2480,36 @@ class _ScaleOptions extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        // Susunan opsi tetap "ke samping" seperti PHQ-9/GAD-7:
-        // - <= 4 opsi → SATU baris penuh (DASS-21, 4 opsi muat).
-        // - > 4 opsi  → 3 per baris (WHO-5: 0,1,2 lalu 3,4,5). Enam tombol
-        //   dalam satu baris hanya menyisakan ~46px per tombol di layar
-        //   360dp sehingga angka dan labelnya terpotong.
-        ..._optionRows(values, fill),
+        // Deretan pilihan: ChoiceChip dalam Wrap, sama seperti skala
+        // PHQ-9/GAD-7. `Semantics` membungkus tiap chip dengan label
+        // "<angka> — <arti>" agar pembaca layar tetap mengumumkan artinya
+        // (angka di dalam chip tidak diulang: excludeSemantics).
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final v in values)
+              Semantics(
+                label: '$v — ${field.scaleLabel(v)}',
+                button: true,
+                selected: value == v,
+                excludeSemantics: true,
+                child: ChoiceChip(
+                  // Chip menampilkan ANGKA skor (DASS-21 0-3, WHO-5 0-5).
+                  label: Text('$v'),
+                  tooltip: field.scaleLabel(v),
+                  selected: value == v,
+                  selectedColor: moduleColor.withValues(alpha: 0.2),
+                  onSelected: onSelect == null ? null : (_) => onSelect!(v),
+                ),
+              ),
+          ],
+        ),
       ],
     );
   }
-
-  /// Baris-baris tombol opsi (urutan nilai tidak berubah).
-  ///
-  /// 4 opsi atau kurang dirender satu baris; lebih dari 4 dipecah 3 per baris
-  /// agar tiap tombol cukup lebar.
-  List<Widget> _optionRows(List<int> values, Color fill) {
-    final perRow = values.length <= 4 ? values.length : 3;
-    final rows = <Widget>[];
-    for (var start = 0; start < values.length; start += perRow) {
-      final chunk = values.skip(start).take(perRow).toList(growable: false);
-      if (rows.isNotEmpty) rows.add(const SizedBox(height: 4));
-      rows.add(
-        Row(
-          children: [
-            for (var i = 0; i < chunk.length; i++) ...[
-              if (i > 0) const SizedBox(width: 4),
-              Expanded(
-                child: _ScaleOptionButton(
-                  number: chunk[i],
-                  // Label lengkap hanya dipakai pembaca layar; tidak dirender
-                  // sebagai teks agar deretan angka tetap bersih.
-                  fullLabel: field.scaleLabel(chunk[i]),
-                  color: moduleColor,
-                  fill: fill,
-                  selected: value == chunk[i],
-                  onTap: () => onSelect?.call(chunk[i]),
-                ),
-              ),
-            ],
-          ],
-        ),
-      );
-    }
-    return rows;
-  }
 }
 
-/// Satu tombol skala: hanya angka besar, tanpa label di bawahnya.
-///
-/// Arti angka sudah dijelaskan legenda di atas deretan tombol, jadi label
-/// pendek di dalam tombol dihapus agar tidak mengulang informasi yang sama.
-/// [fullLabel] tetap dipakai sebagai label `Semantics` supaya pembaca layar
-/// tetap mengumumkan arti angka (aksesibilitas tidak berkurang).
-class _ScaleOptionButton extends StatelessWidget {
-  const _ScaleOptionButton({
-    required this.number,
-    required this.fullLabel,
-    required this.color,
-    required this.fill,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final int number;
-  final String fullLabel;
-  final Color color;
-  final Color fill;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final textColor = selected ? Colors.white : color;
-    return Semantics(
-      label: '$number — $fullLabel',
-      button: true,
-      selected: selected,
-      // Angka di dalam tombol tidak perlu diumumkan lagi: label di atas sudah
-      // menyebut angka + artinya, jadi tanpa ini TalkBack mengulang angka.
-      excludeSemantics: true,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          // 56px: cukup untuk satu angka besar tanpa label pendukung.
-          height: 56,
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 6),
-          decoration: BoxDecoration(
-            color: selected ? color : fill,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? color : color.withValues(alpha: 0.35),
-              width: selected ? 2 : 1,
-            ),
-          ),
-          child: Center(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                // Angka skor baku (DASS-21 0-3, WHO-5 0-5).
-                '$number',
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 20,
-                  height: 1.05,
-                  color: textColor,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /// Stepper angka (mis. jumlah siklus napas): tombol - / +.
 class _NumberStepper extends StatelessWidget {
@@ -2821,14 +2746,10 @@ class _TherapySubmissionsScreenState
 
   /// Submission yang benar-benar worksheet terapi.
   ///
-  /// `findTherapyModuleById(...)?.isAssessment != true` sengaja dipakai
-  /// (bukan `== false`) supaya submission dengan modul tak dikenal tetap
-  /// tampil sebagai terapi — data pasien tidak boleh hilang diam-diam hanya
-  /// karena definisi modulnya berubah/terhapus di versi aplikasi.
-  List<BackendTherapySubmission> get _therapyItems => _items
-      .where(
-          (item) => findTherapyModuleById(item.moduleId)?.isAssessment != true)
-      .toList(growable: false);
+  /// Memakai helper bersama [isTherapyRecordSubmission] agar filter di sini
+  /// dan di [TherapyRecordPreview] tidak pernah berbeda.
+  List<BackendTherapySubmission> get _therapyItems =>
+      _items.where(isTherapyRecordSubmission).toList(growable: false);
 
   @override
   void initState() {
@@ -3116,6 +3037,211 @@ class _TherapySubmissionsScreenState
   }
 }
 
+/// Ringkasan therapy record terbaru untuk halaman Psychological Therapy.
+///
+/// Memuat datanya sendiri (pola sama dengan `AssessmentHistoryPreview`):
+/// sengaja TIDAK menampilkan spinner besar agar halaman katalog tidak
+/// tertahan menunggu endpoint ini. Menampilkan maksimal 3 kartu read-only
+/// (tanpa tombol Bagikan/Hapus). Tap kartu membuka halaman Therapy Record
+/// lengkap.
+class TherapyRecordPreview extends ConsumerStatefulWidget {
+  const TherapyRecordPreview({super.key});
+
+  @override
+  ConsumerState<TherapyRecordPreview> createState() =>
+      _TherapyRecordPreviewState();
+}
+
+class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
+  List<BackendTherapySubmission> _items = const [];
+  bool _isLoading = true;
+  String? _error;
+
+  /// Batas kartu yang ditampilkan di halaman induk.
+  static const int _maxPreview = 3;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final token = ref.read(currentSessionProvider)?.accessToken;
+    if (token == null || token.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _error = 'Login dulu untuk melihat therapy record.';
+      });
+      return;
+    }
+    try {
+      final items = await ref
+          .read(apiClientProvider)
+          .listTherapySubmissions(accessToken: token);
+      // Filter dengan aturan yang sama persis seperti TherapySubmissionsScreen,
+      // lalu urutkan terbaru dulu (createdDateTime bisa null → taruh di akhir).
+      final therapy = items.where(isTherapyRecordSubmission).toList();
+      therapy.sort((a, b) {
+        final ad = a.createdDateTime;
+        final bd = b.createdDateTime;
+        if (ad == null && bd == null) return 0;
+        if (ad == null) return 1;
+        if (bd == null) return -1;
+        return bd.compareTo(ad);
+      });
+      if (!mounted) return;
+      setState(() {
+        _items = therapy;
+        _isLoading = false;
+        _error = null;
+      });
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _error = friendlyErrorMessage(e);
+      });
+    }
+  }
+
+  void _openAll() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const TherapySubmissionsScreen()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+    // Placeholder ringkas: baris teks + indikator kecil, bukan spinner besar.
+    if (_isLoading) {
+      return SoftCard(
+        child: Row(
+          children: [
+            const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Memuat therapy record…',
+              style: TextStyle(fontSize: 12.5, color: onSurfaceVariant),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_error != null) {
+      return SoftCard(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.cloud_off_rounded, color: MalvaColors.amber),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Therapy record belum bisa dimuat. $_error',
+                style: const TextStyle(
+                    fontSize: 12.5, fontWeight: FontWeight.w700),
+              ),
+            ),
+            TextButton(onPressed: _load, child: const Text('Coba')),
+          ],
+        ),
+      );
+    }
+    if (_items.isEmpty) {
+      return const SoftCard(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.self_improvement_rounded, color: MalvaColors.orchid),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Belum ada therapy record. Isi worksheet pada modul terapi lalu '
+                'simpan — hasilnya muncul di sini.',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final preview = _items.take(_maxPreview).toList(growable: false);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final item in preview) ...[
+          _TherapyRecordPreviewCard(item: item, onTap: _openAll),
+          const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+}
+
+/// Kartu read-only satu therapy record di halaman pratinjau.
+///
+/// Tanpa tombol Bagikan/Hapus — aksi itu hanya ada di halaman Therapy Record
+/// lengkap yang dibuka lewat tap kartu atau tombol "Lihat semua".
+class _TherapyRecordPreviewCard extends StatelessWidget {
+  const _TherapyRecordPreviewCard({required this.item, this.onTap});
+
+  final BackendTherapySubmission item;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final created = item.createdDateTime;
+    return SoftCard(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(item.title,
+                    style: const TextStyle(fontWeight: FontWeight.w900)),
+              ),
+              StatusPill(
+                label: item.isShared ? 'Dibagikan' : 'Tersimpan',
+                color:
+                    item.isShared ? MalvaColors.mint : MalvaColors.amber,
+                icon: item.isShared
+                    ? Icons.send_rounded
+                    : Icons.folder_rounded,
+              ),
+            ],
+          ),
+          if (item.summary.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(item.summary,
+                style: const TextStyle(
+                    fontSize: 12.5, fontStyle: FontStyle.italic)),
+          ],
+          if (created != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              '${created.day}/${created.month}/${created.year} '
+              '${created.hour.toString().padLeft(2, '0')}:'
+              '${created.minute.toString().padLeft(2, '0')}',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /// Halaman katalog terapi (dipakai dari Home > Psychological Therapy).
 class TherapyCatalogScreen extends StatelessWidget {
   const TherapyCatalogScreen({super.key});
@@ -3195,6 +3321,24 @@ class TherapyCatalogScreen extends StatelessWidget {
               ),
             const SizedBox(height: 8),
           ],
+          // Therapy Record di bawah semua daftar modul: pasien bisa langsung
+          // melihat worksheet terapi yang sudah tersimpan tanpa harus membuka
+          // halaman penuh. `SectionLabel` di sini child langsung `Column`
+          // (aman — tidak dipasang di dalam Row tanpa Expanded).
+          const SizedBox(height: 20),
+          SectionLabel(
+            'Therapy Record',
+            action: TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const TherapySubmissionsScreen(),
+                ),
+              ),
+              child: const Text('Lihat semua'),
+            ),
+          ),
+          const TherapyRecordPreview(),
         ],
       ),
     );

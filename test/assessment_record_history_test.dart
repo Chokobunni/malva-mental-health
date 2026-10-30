@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/providers/auth_providers.dart';
 import 'package:malva_mental_health/src/screens/assessment_history_screen.dart';
+import 'package:malva_mental_health/src/screens/assessment_list_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
 
@@ -195,50 +196,49 @@ void main() {
   });
 
   testWidgets(
-      'AssessmentHistoryPreview menampilkan maksimal 3 entri + tombol Lihat semua membuka halaman lengkap',
+      'AssessmentListScreen: hanya SATU "Lihat semua", disclaimer di atas Assessment Record, tap membuka halaman lengkap',
       (tester) async {
+    // Viewport tinggi agar seluruh ListView (lazy) di halaman Assessment
+    // ter-build — disclaimer, seksi record, dan tombol semuanya terukur.
+    tester.view.physicalSize = const Size(1200, 3200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final api = _api(
       submissions: [
-        for (var i = 1; i <= 4; i++)
-          _submission(
-            id: 'sub_who5_$i',
-            moduleId: 'who5',
-            title: 'WHO-5 (Well-Being Index) #$i',
-            createdAt: '2026-10-0${i}T09:00:00.000Z',
-            summary: 'WHO-5 15/25 (60%) — Cukup',
-            answers: _who5Answers(),
-          ),
+        _submission(
+          id: 'sub_who5',
+          moduleId: 'who5',
+          title: 'WHO-5 (Well-Being Index)',
+          createdAt: '2026-10-20T09:00:00.000Z',
+          summary: 'WHO-5 15/25 (60%) — Cukup',
+          answers: _who5Answers(),
+        ),
       ],
       screenings: [_screening()],
     );
 
     await tester.pumpWidget(
-      _buildApp(
-        api,
-        home: const Scaffold(
-          body: SafeArea(
-            child: SingleChildScrollView(
-              child: AssessmentHistoryPreview(),
-            ),
-          ),
-        ),
-      ),
+      _buildApp(api, home: const AssessmentListScreen()),
     );
     await tester.pumpAndSettle();
 
-    // 5 entri dimuat, preview hanya 3 kartu.
-    expect(find.byType(AssessmentHistoryCard), findsNWidgets(3));
-    expect(find.text('WHO-5 (Well-Being Index) #4'), findsOneWidget);
-    expect(find.text('WHO-5 (Well-Being Index) #1'), findsNothing);
+    // Hanya SATU tombol "Lihat semua" — aksi pada SectionLabel Assessment
+    // Record. Footer di dalam preview sudah dihapus.
     expect(find.text('Lihat semua'), findsOneWidget);
 
+    // Disclaimer berada DI ATAS judul 'Assessment Record'.
+    final disclaimerTop =
+        tester.getTopLeft(find.textContaining('alat bantu screening')).dy;
+    final sectionTop = tester.getTopLeft(find.text('Assessment Record')).dy;
+    expect(disclaimerTop, lessThan(sectionTop));
+
+    // Tap "Lihat semua" membuka halaman Assessment Record lengkap.
     await tester.tap(find.text('Lihat semua'));
     await tester.pumpAndSettle();
-
-    // Halaman lengkap Assessment Record terbuka.
     expect(find.byType(AssessmentHistoryScreen), findsOneWidget);
-    expect(find.text('Assessment Record'), findsOneWidget);
-    expect(find.text('WHO-5 (Well-Being Index) #1'), findsOneWidget);
+    expect(find.text('WHO-5 (Well-Being Index)'), findsOneWidget);
   });
 
   testWidgets(

@@ -3107,6 +3107,8 @@ class BackendMedicationLog {
     required this.medicationName,
     required this.status,
     required this.takenAt,
+    this.medicationId = '',
+    this.createdAt,
   });
 
   factory BackendMedicationLog.fromJson(Map<String, dynamic> json) {
@@ -3115,6 +3117,11 @@ class BackendMedicationLog {
       medicationName: json['medication_name']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
       takenAt: DateTime.tryParse(json['taken_at']?.toString() ?? ''),
+      // `medication_id` di server bersifat opsional (omitempty) — log lama
+      // tanpa id obat tetap sah. `created_at` dipakai sebagai fallback waktu
+      // bila `taken_at` null saat dipetakan ke MedicationLog lokal.
+      medicationId: json['medication_id']?.toString() ?? '',
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
     );
   }
 
@@ -3122,6 +3129,8 @@ class BackendMedicationLog {
   final String medicationName;
   final String status;
   final DateTime? takenAt;
+  final String medicationId;
+  final DateTime? createdAt;
 }
 
 class BackendTimelineEvent {

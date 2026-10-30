@@ -619,10 +619,16 @@ class _ProfessionalLinkCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                backgroundColor: MalvaColors.mint.withValues(alpha: 0.12),
-                child:
-                    const Icon(Icons.person_rounded, color: MalvaColors.mint),
+              // Foto profesional (photo_intro_url dari server) bila tersedia;
+              // fallback gradien + inisial bila kosong. Sebelumnya kartu ini
+              // memakai ikon orang statis sehingga foto profesional tidak
+              // pernah tampil walau datanya sudah dikirim backend.
+              _ProAvatar(
+                professionalId: link.professionalUserId,
+                displayName: link.professionalDisplayName,
+                photoUrl: link.professionalPhotoUrl.isNotEmpty
+                    ? link.professionalPhotoUrl
+                    : null,
               ),
               const SizedBox(width: 12),
               Expanded(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,10 @@ import 'data/assessment_provider.dart';
 
 const _sessionKey = 'malva_active_session';
 const _continuousConsentKey = 'malva_continuous_support_consent';
+
+/// Prefix cache lokal log minum obat per akun (`..._<backendUserId>`).
+/// Selaras dengan isolasi per-akun yang dipakai sesi & consent di atas.
+const _medicationLogsKeyPrefix = 'malva_medication_logs_';
 const _secureStorage = FlutterSecureStorage();
 
 /// Hasil penyimpanan screening.
@@ -65,6 +70,12 @@ class MalvaStoreState {
   ScreeningBundle? get latestScreeningBundle =>
       screeningBundles.isEmpty ? null : screeningBundles.last;
 
+  /// Persentase kepatuhan minum obat HARI INI.
+  ///
+  /// Aturan (jangan diubah tanpa alasan klinis): hanya log berstatus `taken`
+  /// yang menaikkan kepatuhan. Status `partial`/`skipped`/`missed` TIDAK
+  /// dihitung — meski `partial` tetap memotong stok di server, ia bukan dosis
+  /// penuh sehingga tidak boleh membuat angka kepatuhan terlihat 100%.
   int get adherencePercent {
     if (medications.isEmpty) return 0;
     final today = DateTime.now();
@@ -191,14 +202,21 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   /// Muat data dari server secara paralel setelah login (non-blocking).
   /// Kegagalan satu panggilan tidak menghalangi panggilan lain.
   Future<void> _loadServerDataAsync(AuthSession session) async {
+    // Hidrasi cache log obat LOKAL lebih dulu agar riwayat kepatuhan tetap
+    // tampil walau offline / server belum merespons (akar bug "adherence &
+    // riwayat reset setelah logout/login"). Harus SEBELUM merge data server
+    // supaya log lama server tidak salah dianggap lebih baru dari cache.
+    await _hydrateMedicationLogsCache();
+
     final api = _apiClient;
     final token = session.accessToken;
     if (api == null || token == null || token.isEmpty) return;
 
-    // Jalankan kedua pemuatan secara paralel.
+    // Jalankan pemuatan secara paralel (mood, daftar obat, log obat).
     await Future.wait([
       loadCheckinHistory(api, token).catchError((_) {}),
       loadMedications(api, token).catchError((_) {}),
+      loadMedicationLogs(api, token).catchError((_) {}),
     ]);
   }
 
@@ -278,6 +296,42 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         );
       }).toList();
       replaceMedications(medications);
+    } on Object {
+      // Gagal memuat (offline/server error): jangan halangi UI.
+    }
+  }
+
+  /// Muat riwayat log minum obat dari server dan gabungkan ke store.
+  ///
+  /// Dipanggil saat login (dan setelah log baru diterima server) agar riwayat
+  /// kepatuhan tidak hilang setelah logout/login atau ganti perangkat.
+  /// `takenAt` di model backend bisa null; pakai `createdAt` sebagai fallback
+  /// dan buang entri yang dua-duanya null (tidak bisa ditempatkan di tanggal).
+  Future<void> loadMedicationLogs([
+    MalvaApiClient? apiOverride,
+    String? tokenOverride,
+  ]) async {
+    final api = apiOverride ?? _apiClient;
+    if (api == null) return;
+    final token = tokenOverride ?? _currentAccessToken;
+    if (token == null || token.isEmpty) return;
+    try {
+      final logs = await api.listMedicationLogs(
+        accessToken: token,
+        limit: 50,
+      );
+      final mapped = <MedicationLog>[];
+      for (final log in logs) {
+        final takenAt = log.takenAt ?? log.createdAt;
+        if (takenAt == null) continue; // buang entri tanpa waktu sama sekali
+        mapped.add(MedicationLog(
+          medicationId: log.medicationId,
+          medicationName: log.medicationName,
+          takenAt: takenAt,
+          status: log.status,
+        ));
+      }
+      replaceMedicationLogs(mapped);
     } on Object {
       // Gagal memuat (offline/server error): jangan halangi UI.
     }
@@ -718,6 +772,9 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       medications: newMeds,
       medicationLogs: [newLog, ...state.medicationLogs],
     );
+    // Tulis cache lokal agar log baru tidak hilang bila app ditutup paksa
+    // sebelum sempat sync ke server.
+    unawaited(_persistMedicationLogs());
   }
 
   void upsertMedication(Medication medication) {
@@ -803,6 +860,136 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       );
     }
     state = state.copyWith(medications: adjusted);
+  }
+
+  // ============================================================
+  // LOG MINUM OBAT — merge server + cache lokal per akun
+  // ============================================================
+
+  /// Jendela toleransi pencocokan satu dosis.
+  ///
+  /// Timestamp eksak tidak bisa dipakai: server bisa menyimpan/mengembalikan
+  /// `taken_at` yang sedikit berbeda dari waktu optimistis di perangkat (jam
+  /// server di belakang, normalisasi zona waktu, atau pembulatan detik).
+  /// Dua dosis obat yang SAMA tidak mungkin diminum dalam rentang 2 menit,
+  /// jadi jendela ini aman untuk menggabungkan pasangan "optimistis + server"
+  /// tanpa menelan dosis yang benar-benar berbeda.
+  static const _doseMatchWindow = Duration(minutes: 2);
+
+  /// True bila id belum berupa id server: kosong atau id sementara
+  /// `med_<timestamp>` (obat yang dicatat sebelum sync berhasil).
+  static bool _isTemporaryId(String id) {
+    final value = id.trim();
+    return value.isEmpty || value.startsWith('med_');
+  }
+
+  /// True bila dua log adalah DOSIS YANG SAMA: obat sama, status sama, dan
+  /// waktunya berdekatan (<= [_doseMatchWindow]).
+  ///
+  /// Nama obat hanya dipakai sebagai jembatan saat salah satu id masih
+  /// sementara/kosong. Dua id server yang sah tetapi berbeda adalah dua resep
+  /// berbeda (mis. "Lamictal" 20mg dan 50mg) — tidak boleh dianggap satu dosis
+  /// walau namanya sama, karena akan menghilangkan satu dosis dari riwayat dan
+  /// menurunkan adherence secara palsu.
+  static bool _isSameDose(MedicationLog a, MedicationLog b) {
+    if (a.status != b.status) return false;
+    final idA = a.medicationId.trim();
+    final idB = b.medicationId.trim();
+    final sameId = idA.isNotEmpty && idA == idB;
+    final sameName = a.medicationName.trim().toLowerCase() ==
+        b.medicationName.trim().toLowerCase();
+    final bridgedByName =
+        sameName && (_isTemporaryId(idA) || _isTemporaryId(idB));
+    if (!sameId && !bridgedByName) return false;
+    return a.takenAt.difference(b.takenAt).abs() <= _doseMatchWindow;
+  }
+
+  /// GABUNGKAN log dari server ke log lokal (bukan menimpa buta).
+  ///
+  /// Aturan merge (tanpa heuristik "lebih baru dari log server terbaru"):
+  /// 1. Semua log server masuk.
+  /// 2. Log lokal yang TIDAK punya padanan dosis di server DIPERTAHANKAN —
+  ///    termasuk yang waktunya lebih lama. Ini mencegah log offline (gagal
+  ///    kirim) hilang diam-diam saat data server dimuat.
+  /// 3. Padanan dosis dicocokkan dengan jendela toleransi waktu
+  ///    ([_doseMatchWindow]) via [_isSameDose], bukan timestamp eksak, agar
+  ///    pasangan "optimistis lokal + versi server" tidak jadi dua baris. Nama
+  ///    obat hanya menjadi jembatan bila salah satu id masih sementara/kosong;
+  ///    dua id server yang sah dan berbeda tetap dianggap dua dosis berbeda.
+  /// 4. Hasil diurutkan `takenAt` DESC (terbaru dulu).
+  void replaceMedicationLogs(List<MedicationLog> logs) {
+    final merged = <MedicationLog>[...logs];
+    for (final local in state.medicationLogs) {
+      // Pertahankan log lokal HANYA bila tidak ada padanannya di server.
+      if (merged.any((server) => _isSameDose(server, local))) continue;
+      merged.add(local);
+    }
+    merged.sort((a, b) => b.takenAt.compareTo(a.takenAt));
+    state = state.copyWith(medicationLogs: merged);
+    // Persist gabungan agar konsisten dengan cache saat app dibuka lagi.
+    unawaited(_persistMedicationLogs());
+  }
+
+  /// Simpan daftar log minum obat ke secure storage (per akun).
+  ///
+  /// Fire-and-forget; kegagalan storage tidak menghalangi UI. Key mengandung
+  /// id akun sehingga data pasien lain tidak pernah tercampur.
+  Future<void> _persistMedicationLogs() async {
+    final accountId = state.patient.id;
+    if (accountId.isEmpty) return;
+    try {
+      final data = jsonEncode(state.medicationLogs
+          .map((log) => {
+                'medication_id': log.medicationId,
+                'medication_name': log.medicationName,
+                'taken_at': log.takenAt.toIso8601String(),
+                'status': log.status,
+              })
+          .toList());
+      await _secureStorage.write(
+        key: '$_medicationLogsKeyPrefix$accountId',
+        value: data,
+      );
+    } on Object {
+      // Storage tidak tersedia (test/offline): abaikan.
+    }
+  }
+
+  /// Hidrasi log minum obat dari cache lokal akun aktif.
+  ///
+  /// Dipanggil di awal [applySession] (via [_loadServerDataAsync]) SEBELUM
+  /// data server dimuat, supaya riwayat kepatuhan langsung tampil dan merge
+  /// server berikutnya tidak salah menganggap log lama server lebih baru.
+  Future<void> _hydrateMedicationLogsCache() async {
+    final accountId = state.patient.id;
+    if (accountId.isEmpty) return;
+    try {
+      final raw = await _secureStorage.read(
+        key: '$_medicationLogsKeyPrefix$accountId',
+      );
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      final cached = <MedicationLog>[];
+      for (final entry in decoded.whereType<Map>()) {
+        final map = Map<String, dynamic>.from(entry);
+        final takenAt = DateTime.tryParse(map['taken_at']?.toString() ?? '');
+        if (takenAt == null) continue;
+        cached.add(MedicationLog(
+          medicationId: map['medication_id']?.toString() ?? '',
+          medicationName: map['medication_name']?.toString() ?? '',
+          takenAt: takenAt,
+          status: map['status']?.toString() ?? '',
+        ));
+      }
+      if (cached.isEmpty) return;
+      // state.medicationLogs kosong saat hidrasi (baru applySession) → hasil
+      // akhir = cache. Bila sudah terisi (mis. server lebih dulu), merge tetap
+      // aman karena replaceMedicationLogs menggabungkan, bukan menimpa.
+      replaceMedicationLogs(cached);
+    } on Object {
+      // Cache rusak/tidak tersedia: abaikan, tetap lanjut muat dari server.
+    }
   }
 
   // ============================================================
