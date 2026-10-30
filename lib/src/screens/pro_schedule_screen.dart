@@ -549,15 +549,30 @@ class _ProSessionCard extends ConsumerWidget {
     final token = ref.read(currentSessionProvider)?.accessToken;
     if (token == null || token.isEmpty) return;
     try {
-      await api.rescheduleCareSession(
+      final result = await api.rescheduleCareSession(
         accessToken: token,
         sessionId: session.id,
         scheduledAt: scheduledAt,
       );
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sesi berhasil di-reschedule.')),
-      );
+      // Bila server mengirim peringatan non-fatal (mis. event Google Calendar
+      // gagal diperbarui), tampilkan HANYA pesan bahaya — jangan "berhasil"
+      // lebih dulu, karena itu bertentangan dan menyesatkan. Pesan peringatan
+      // server sudah menyebut jadwal tersimpan.
+      final messenger = ScaffoldMessenger.of(context);
+      if (result.warnings.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Sesi berhasil di-reschedule.')),
+        );
+      } else {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(result.warnings.join(' ')),
+            backgroundColor: MalvaColors.danger,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
       await onChanged();
     } on Object catch (e) {
       if (!context.mounted) return;

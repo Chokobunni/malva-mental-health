@@ -203,6 +203,12 @@ class _NotificationCard extends StatelessWidget {
           Icons.edit_calendar_rounded,
           MalvaColors.orchid
         ),
+      // Reschedule tersimpan tetapi event Google Calendar gagal diperbarui:
+      // kalender profesional perlu diperiksa, bukan sesi yang gagal.
+      'session_meet_update_failed' => (
+          Icons.event_busy_rounded,
+          MalvaColors.amber
+        ),
       'session_cancelled_professional' => (
           Icons.event_busy_rounded,
           MalvaColors.amber

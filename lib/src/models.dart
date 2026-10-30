@@ -58,9 +58,7 @@ class BackendGoogleIdentity {
     return BackendGoogleIdentity(
       linked: json['linked'] == true,
       email: json['email']?.toString() ?? '',
-      linkedAt: rawLinkedAt == null || rawLinkedAt.trim().isEmpty
-          ? null
-          : toWibOrNull(DateTime.tryParse(rawLinkedAt)),
+      linkedAt: parseWibStored(rawLinkedAt),
       emailIsPlaceholder: json['email_is_placeholder'] == true,
     );
   }
@@ -437,9 +435,7 @@ class ChatMessage {
       senderId: json['sender_id']?.toString() ?? '',
       senderName: json['sender_name']?.toString() ?? '',
       text: json['text']?.toString() ?? '',
-      timestamp:
-          toWibOrNull(DateTime.tryParse(json['timestamp']?.toString() ?? '')) ??
-              wibNow(),
+      timestamp: parseWibStored(json['timestamp']?.toString()) ?? wibNow(),
       isMine: json['sender_id']?.toString() == currentUserId,
       kind: json['kind']?.toString() ?? 'text',
       metadata: (json['metadata'] as Map?)?.cast<String, dynamic>() ??
@@ -454,7 +450,7 @@ class ChatMessage {
         'text': text,
         'kind': kind,
         if (metadata != null) 'metadata': metadata,
-        'timestamp': timestamp.toIso8601String(),
+        'timestamp': wibIso(timestamp),
       };
 }
 

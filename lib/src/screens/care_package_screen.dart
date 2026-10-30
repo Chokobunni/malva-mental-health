@@ -355,6 +355,31 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
     );
   }
 
+  /// Tampilkan hasil reschedule: sukses saja, ATAU hanya peringatan server.
+  ///
+  /// Bila server mengirim `warnings` (mis. event Google Calendar gagal
+  /// diperbarui), jangan tampilkan "berhasil" lebih dulu: dua pesan yang
+  /// bertentangan membuat pengguna membaca "berhasil" padahal kalender
+  /// profesional masih di jam lama. Pesan peringatan dari server sudah
+  /// menyatakan jadwal tersimpan, jadi informasi sukses tidak hilang.
+  void _showRescheduleResult(BackendRescheduleResult result) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (result.warnings.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Sesi berhasil di-reschedule.')),
+      );
+      return;
+    }
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(result.warnings.join(' ')),
+        backgroundColor: MalvaColors.danger,
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
   Future<void> _openScheduler(BuildContext context,
       {BackendCareSession? existing}) async {
     final token = widget.session?.accessToken;
@@ -378,15 +403,13 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
     if (picked == null || !mounted) return;
     try {
       if (existing != null) {
-        await apiClient.rescheduleCareSession(
+        final result = await apiClient.rescheduleCareSession(
           accessToken: token,
           sessionId: existing.id,
           scheduledAt: picked,
         );
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sesi berhasil di-reschedule.')),
-        );
+        _showRescheduleResult(result);
       } else {
         final parts = picked.split('|');
         await apiClient.scheduleSession(

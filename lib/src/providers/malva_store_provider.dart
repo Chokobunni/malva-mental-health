@@ -871,7 +871,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       'health_record': healthRecord,
       'mood_checkin': moodCheckin,
       'medication_checkin': medicationCheckin,
-      'granted_at': wibNow().toIso8601String(),
+      'granted_at': wibIso(wibNow()),
     });
     await _secureStorage.write(key: _continuousConsentKey, value: data);
   }
@@ -994,7 +994,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
           .map((log) => {
                 'medication_id': log.medicationId,
                 'medication_name': log.medicationName,
-                'taken_at': log.takenAt.toIso8601String(),
+                'taken_at': wibIso(log.takenAt),
                 'status': log.status,
               })
           .toList());
@@ -1025,7 +1025,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       final cached = <MedicationLog>[];
       for (final entry in decoded.whereType<Map>()) {
         final map = Map<String, dynamic>.from(entry);
-        final takenAt = DateTime.tryParse(map['taken_at']?.toString() ?? '');
+        final takenAt = parseWibStored(map['taken_at']?.toString());
         if (takenAt == null) continue;
         cached.add(MedicationLog(
           medicationId: map['medication_id']?.toString() ?? '',
@@ -1225,7 +1225,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   }
 
   static String _assessmentKey(AssessmentResult r) =>
-      '${r.type.name}|${r.createdAt.toIso8601String()}';
+      '${r.type.name}|${wibIso(r.createdAt)}';
 
   /// Menyimpan hasil screening dan MENGIRIMKANNYA ke server.
   ///

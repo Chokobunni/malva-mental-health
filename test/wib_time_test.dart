@@ -141,7 +141,9 @@ void main() {
     }
 
     expect(find.text('Dr. Sinta'), findsOneWidget);
-    expect(find.text('7/8 sesi tersisa'), findsOneWidget);
+    // UI merender SATU Text berisi sisa sesi + tanggal berlaku
+    // (mis. '7/8 sesi tersisa • s/d 31/10/2026'), jadi pakai textContaining.
+    expect(find.textContaining('7/8 sesi tersisa'), findsOneWidget);
     expect(find.text('Digabung dari 2 paket'), findsOneWidget);
   });
 
@@ -166,7 +168,8 @@ void main() {
     }
 
     expect(find.text('Dr. Sinta'), findsOneWidget);
-    expect(find.text('3/4 sesi tersisa'), findsOneWidget);
+    // Idem: satu Text berisi sisa sesi + tanggal berlaku.
+    expect(find.textContaining('3/4 sesi tersisa'), findsOneWidget);
     expect(find.textContaining('Digabung'), findsNothing);
   });
 

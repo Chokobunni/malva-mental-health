@@ -1421,7 +1421,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
       ..writeln('MALVA — Worksheet Terapi')
       ..writeln(module.title)
       ..writeln('Kategori: ${module.category ?? 'Terapi'}')
-      ..writeln('Tanggal: ${wibNow().toIso8601String()}');
+      ..writeln('Tanggal: ${wibIso(wibNow())}');
     final summary = assessmentSummary(module.id, answers);
     if (summary.isNotEmpty) {
       buffer.writeln('Hasil: $summary');

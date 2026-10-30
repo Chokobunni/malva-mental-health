@@ -92,7 +92,7 @@ class ServerClock {
       );
       await _storage.write(
         key: savedAtStorageKey,
-        value: wibNow().toIso8601String(),
+        value: wibIso(wibNow()),
       );
     } on Object {
       // Storage tidak tersedia: offset tetap berlaku untuk sesi berjalan.

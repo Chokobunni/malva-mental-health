@@ -95,3 +95,103 @@ String wibApiDateTime(DateTime value) {
   return '${d.year}-${_two(d.month)}-${_two(d.day)}'
       'T${_two(d.hour)}:${_two(d.minute)}';
 }
+
+// ============================================================
+// SERIALISASI NILAI WAKTU (storage lokal & payload internal)
+// ============================================================
+//
+// KENAPA TIDAK `toIso8601String()` SAJA:
+// implementasi Dart MEMBUANG offset untuk waktu non-UTC. Jadi
+// `wibNow().toIso8601String()` menghasilkan `2026-11-01T10:00:00.000` TANPA
+// `+07:00` — zonanya hilang. Saat string itu dibaca kembali di perangkat
+// non-WIB, nilainya ditafsirkan sebagai jam lokal perangkat lalu digeser 7 jam
+// (mood, diary, dan log obat terkirim dengan jam salah). Karena itu:
+//   - MENULIS nilai waktu -> [wibIso] (offset `+07:00` eksplisit),
+//   - MEMBACA nilai tersimpan -> [parseWibStored] (toleran data lama),
+//   - nilai dari date/time picker -> [wibFromParts] (wall-clock, bukan instant).
+
+/// ISO 8601 dengan offset eksplisit (`yyyy-MM-ddTHH:mm:ss.SSS+07:00`).
+///
+/// Berbeda dengan `DateTime.toIso8601String()` yang membuang offset untuk
+/// waktu non-UTC, string ini selalu membawa zonanya sehingga pembaca di
+/// perangkat mana pun menghasilkan instant yang sama.
+String wibIso(DateTime value) {
+  final d = toWib(value);
+  final offset = d.timeZoneOffset;
+  final sign = offset.isNegative ? '-' : '+';
+  final absOffset = offset.abs();
+  return '${d.year}-${_two(d.month)}-${_two(d.day)}'
+      'T${_two(d.hour)}:${_two(d.minute)}:${_two(d.second)}'
+      '.${d.millisecond.toString().padLeft(3, '0')}'
+      '$sign${_two(absOffset.inHours)}:${_two(absOffset.inMinutes % 60)}';
+}
+
+/// Pola wall-clock tanpa zona: `yyyy-MM-dd`, `yyyy-MM-ddTHH:mm`,
+/// `yyyy-MM-dd HH:mm`, dengan detik/pecahan detik opsional.
+final RegExp _wallClockPattern = RegExp(
+  r'^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?)?$',
+);
+
+int _microsecondsFromFraction(String fraction) {
+  if (fraction.isEmpty) return 0;
+  return int.parse(fraction.padRight(6, '0').substring(0, 6));
+}
+
+bool _inRange(int value, int min, int max) => value >= min && value <= max;
+
+/// Baca nilai waktu tersimpan (storage lokal / antrean offline / chat).
+///
+/// - Kosong atau tidak valid -> `null`.
+/// - Punya offset (`+07:00`) atau berakhiran `Z` -> di-parse sebagai instant,
+///   lalu dikonversi ke WIB lewat [toWib].
+/// - TANPA offset/`Z` (data lama hasil `toIso8601String()` yang membuang zona)
+///   -> komponennya ditafsirkan sebagai **wall-clock WIB**, BUKAN jam
+///   perangkat. Ini yang mencegah pergeseran 7 jam di perangkat non-WIB.
+DateTime? parseWibStored(String? raw) {
+  final text = raw?.trim() ?? '';
+  if (text.isEmpty) return null;
+  final wall = _wallClockPattern.firstMatch(text);
+  if (wall != null) {
+    final year = int.parse(wall.group(1)!);
+    final month = int.parse(wall.group(2)!);
+    final day = int.parse(wall.group(3)!);
+    final hour = int.tryParse(wall.group(4) ?? '') ?? 0;
+    final minute = int.tryParse(wall.group(5) ?? '') ?? 0;
+    final second = int.tryParse(wall.group(6) ?? '') ?? 0;
+    final micros = _microsecondsFromFraction(wall.group(7) ?? '');
+    final valid =
+        _inRange(month, 1, 12) &&
+        _inRange(day, 1, 31) &&
+        _inRange(hour, 0, 23) &&
+        _inRange(minute, 0, 59) &&
+        _inRange(second, 0, 59);
+    if (!valid) return null;
+    return tz.TZDateTime(
+      wibLocation,
+      year,
+      month,
+      day,
+      hour,
+      minute,
+      second,
+      micros ~/ 1000,
+      micros % 1000,
+    );
+  }
+  final parsed = DateTime.tryParse(text);
+  return parsed == null ? null : toWib(parsed);
+}
+
+/// Bangun WIB dari komponen kalender (mis. hasil date/time picker).
+///
+/// Nilai picker adalah **wall-clock** ("user memilih 1 November pukul 10.00"),
+/// bukan instant. Membangunnya lewat `DateTime(...)` membuat zona perangkat
+/// ikut campur, sehingga tanggal yang dipilih bisa bergeser sehari di
+/// perangkat non-WIB. Selalu pakai helper ini untuk nilai dari picker.
+DateTime wibFromParts(
+  int year,
+  int month,
+  int day, [
+  int hour = 0,
+  int minute = 0,
+]) => tz.TZDateTime(wibLocation, year, month, day, hour, minute);

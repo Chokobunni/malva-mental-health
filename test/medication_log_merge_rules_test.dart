@@ -251,13 +251,19 @@ void main() {
 
     expect(store2.state.medicationLogs, hasLength(2),
         reason: 'cache harus memuat 2 entri gabungan');
+    // Cache menyimpan instant ber-offset WIB, jadi pembacaan kembali
+    // menghasilkan TZDateTime WIB. Yang diuji adalah "dosis yang sama"
+    // (instant sama), bukan identitas objek DateTime — operator `==` pada
+    // DateTime juga membandingkan representasi zona.
     expect(
-      store2.state.medicationLogs.any((l) => l.takenAt == oldLocal.takenAt),
+      store2.state.medicationLogs
+          .any((l) => l.takenAt.isAtSameMomentAs(oldLocal.takenAt)),
       isTrue,
       reason: 'log lokal lama harus ikut tersimpan di cache',
     );
     expect(
-      store2.state.medicationLogs.any((l) => l.takenAt == serverLate.takenAt),
+      store2.state.medicationLogs
+          .any((l) => l.takenAt.isAtSameMomentAs(serverLate.takenAt)),
       isTrue,
     );
   });

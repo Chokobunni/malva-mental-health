@@ -809,7 +809,7 @@ class MalvaApiClient {
         'irritability': irritability,
         'note': note,
         'medication_taken': medicationTaken,
-        if (occurredAt != null) 'occurred_at': occurredAt.toIso8601String(),
+        if (occurredAt != null) 'occurred_at': wibIso(occurredAt),
       },
     );
     return BackendMoodCheckin.fromJson(
@@ -857,7 +857,7 @@ class MalvaApiClient {
         'title': title,
         'note': note,
         'shared_with_professionals': sharedWithProfessionals,
-        if (occurredAt != null) 'occurred_at': occurredAt.toIso8601String(),
+        if (occurredAt != null) 'occurred_at': wibIso(occurredAt),
       },
     );
     return BackendDiaryEntry.fromJson(
@@ -1385,7 +1385,7 @@ class MalvaApiClient {
         if (medicationId != null) 'medication_id': medicationId,
         'medication_name': medicationName,
         'status': status,
-        if (takenAt != null) 'taken_at': takenAt.toIso8601String(),
+        if (takenAt != null) 'taken_at': wibIso(takenAt),
       },
     );
     return BackendMedicationLog.fromJson(
@@ -1692,7 +1692,13 @@ class MalvaApiClient {
     );
   }
 
-  Future<BackendCareSession> rescheduleCareSession({
+  /// Pindahkan jadwal sesi (POST /v1/care-sessions/{id}/reschedule).
+  ///
+  /// Server dapat menyertakan `warnings` (mis. event Google Calendar gagal
+  /// diperbarui). Peringatan itu WAJIB diteruskan ke pemanggil — jangan
+  /// dibuang — supaya UI tidak berpura-pura sukses: jadwal tersimpan, tetapi
+  /// kalender profesional bisa masih menunjuk jam lama.
+  Future<BackendRescheduleResult> rescheduleCareSession({
     required String accessToken,
     required String sessionId,
     required String scheduledAt,
@@ -1703,9 +1709,7 @@ class MalvaApiClient {
       accessToken: accessToken,
       body: {'scheduled_at': scheduledAt},
     );
-    return BackendCareSession.fromJson(
-      _expectMap(payload['session'], 'Respons sesi tidak valid.'),
-    );
+    return BackendRescheduleResult.fromJson(payload);
   }
 
   /// Minta/mencatat refund paket (POST /v1/care-sessions/{id}/refund).
@@ -3987,6 +3991,52 @@ class BackendCareSession {
     }
     return 'Bisa bergabung';
   }
+}
+
+/// Hasil pemindahan jadwal sesi (POST /v1/care-sessions/{id}/reschedule).
+///
+/// `warnings` berisi peringatan NON-FATAL dari server: jadwal sudah tersimpan,
+/// tetapi ada langkah lanjutan yang gagal (mis. event Google Calendar tidak
+/// ikut diperbarui). UI wajib menampilkannya agar pengguna tidak menyimpulkan
+/// "berhasil sepenuhnya". Daftar kosong berarti tidak ada peringatan.
+class BackendRescheduleResult {
+  const BackendRescheduleResult({
+    required this.session,
+    this.warnings = const <String>[],
+  });
+
+  /// Bangun hasil dari payload `{"session": {...}, "warnings": [...]}`.
+  ///
+  /// `warnings` bersifat opsional dan aditif: bila tidak ada, bukan `List`,
+  /// atau berisi elemen kosong/non-string, hasilnya daftar kosong — tidak
+  /// pernah melempar karena peringatan. Sebaliknya `session` wajib ada.
+  factory BackendRescheduleResult.fromJson(Map<String, dynamic> json) {
+    final rawSession = json['session'];
+    if (rawSession is! Map<String, dynamic>) {
+      throw const MalvaApiException('Respons sesi tidak valid.');
+    }
+    final rawWarnings = json['warnings'];
+    final warnings = rawWarnings is List
+        ? rawWarnings
+            .where((value) => value != null)
+            .map((value) => value.toString().trim())
+            .where((text) => text.isNotEmpty)
+            .toList(growable: false)
+        : const <String>[];
+    return BackendRescheduleResult(
+      session: BackendCareSession.fromJson(rawSession),
+      warnings: warnings,
+    );
+  }
+
+  /// Sesi terbaru setelah dipindahkan.
+  final BackendCareSession session;
+
+  /// Peringatan non-fatal dari server (kosong bila semuanya beres).
+  final List<String> warnings;
+
+  /// True bila server mengirim minimal satu peringatan.
+  bool get hasWarnings => warnings.isNotEmpty;
 }
 
 /// Ledger refund/kredit pembatalan sesi (tabel `care_refunds`).

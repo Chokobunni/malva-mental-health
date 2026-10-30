@@ -73,7 +73,7 @@ class AssessmentDatabaseService {
         'summary': r.summary,
         'crisisFlag': r.crisisFlag,
         'certaintyFactor': r.certaintyFactor,
-        'createdAt': r.createdAt.toIso8601String(),
+        'createdAt': wibIso(r.createdAt),
         'ruleVersion': r.ruleVersion,
         'rulesFired': [
           for (final t in r.rulesFired)
@@ -133,8 +133,7 @@ class AssessmentDatabaseService {
         summary: json['summary']?.toString() ?? '',
         crisisFlag: json['crisisFlag'] == true,
         rulesFired: rules,
-        createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
-            wibNow(),
+        createdAt: parseWibStored(json['createdAt']?.toString()) ?? wibNow(),
         ruleVersion: json['ruleVersion']?.toString() ?? '',
         certaintyFactor: (json['certaintyFactor'] as num?)?.toDouble() ?? 0.0,
       );

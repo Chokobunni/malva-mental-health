@@ -68,7 +68,7 @@ class SyncItem {
         'id': id,
         'operation': operation.name,
         'payload': payload,
-        'createdAt': createdAt.toIso8601String(),
+        'createdAt': wibIso(createdAt),
         'status': status.name,
         'retryCount': retryCount,
         'lastError': lastError,
@@ -83,8 +83,7 @@ class SyncItem {
         orElse: () => SyncOperation.moodEntry,
       ),
       payload: Map<String, dynamic>.from(json['payload'] as Map? ?? {}),
-      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
-          wibNow(),
+      createdAt: parseWibStored(json['createdAt']?.toString()) ?? wibNow(),
       status: SyncStatus.values.firstWhere(
         (e) => e.name == json['status'],
         orElse: () => SyncStatus.pending,
@@ -171,7 +170,7 @@ class OfflineSyncService {
       id: 'sync_mood_${wibNow().millisecondsSinceEpoch}',
       operation: SyncOperation.moodEntry,
       payload: {
-        'date': entry.date.toIso8601String(),
+        'date': wibIso(entry.date),
         'mood': entry.mood.name,
         'sleepHours': entry.sleepHours,
         'energy': entry.energy,
@@ -221,7 +220,7 @@ class OfflineSyncService {
         // Waktu minum memakai acuan SERVER, bukan jam perangkat: log yang
         // dikirim belakangan tetap tercatat pada jam yang benar, dan "hari
         // ini" tidak bergeser bila jam perangkat meleset.
-        'taken_at': ServerClock.now().toIso8601String(),
+        'taken_at': wibIso(ServerClock.now()),
       },
       createdAt: wibNow(),
       userId: _activeUserId,
@@ -238,7 +237,7 @@ class OfflineSyncService {
         'mood': entry.mood.name,
         'title': entry.title,
         'note': entry.note,
-        'created_at': entry.createdAt.toIso8601String(),
+        'created_at': wibIso(entry.createdAt),
       },
       createdAt: wibNow(),
       userId: _activeUserId,
@@ -323,7 +322,8 @@ class OfflineSyncService {
           anxiety: (item.payload['anxiety'] as num).toInt(),
           irritability: (item.payload['irritability'] as num).toInt(),
           note: item.payload['note'] as String,
-          occurredAt: toWib(DateTime.parse(item.payload['date'] as String)),
+          occurredAt:
+              parseWibStored(item.payload['date'] as String?) ?? wibNow(),
         );
       case SyncOperation.screeningBundle:
         await apiClient.submitScreening(
@@ -365,7 +365,8 @@ class OfflineSyncService {
           medicationId: item.payload['medication_id'] as String,
           medicationName: item.payload['medication_name'] as String,
           status: item.payload['status'] as String,
-          takenAt: toWib(DateTime.parse(item.payload['taken_at'] as String)),
+          takenAt: parseWibStored(item.payload['taken_at'] as String?) ??
+              ServerClock.now(),
         );
       case SyncOperation.diaryEntry:
         // Harus sama dengan jalur online (diary_history_screen):
@@ -376,9 +377,8 @@ class OfflineSyncService {
         //   - occurredAt diambil dari waktu tulis asli (created_at saat masuk
         //     antrean). Tanpa ini, entri hasil sinkronisasi tercap dengan jam
         //     server dan linimasa mood pasien bergeser.
-        final occurredAt = DateTime.tryParse(
-          (item.payload['created_at'] as String?) ?? '',
-        );
+        final occurredAt =
+            parseWibStored(item.payload['created_at'] as String?);
         await apiClient.createDiaryEntry(
           accessToken: accessToken,
           mood: item.payload['mood'] as String,

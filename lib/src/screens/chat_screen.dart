@@ -8,7 +8,6 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/chat_service.dart';
 import '../services/malva_api_client.dart';
-import '../services/server_clock.dart';
 import '../services/weekly_summary_service.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
@@ -631,8 +630,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             'gad7_score': screening.gad7.score,
             'crisis_flag': screening.crisisFlag,
             'summary': text,
-            'shared_at':
-                (screening.createdAt ?? wibNow()).toIso8601String(),
+            'shared_at': wibIso(screening.createdAt ?? wibNow()),
           },
         ));
       }
@@ -662,8 +660,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             'module_id': sub.moduleId,
             'submission_id': sub.id,
             'summary': summary,
-            'shared_at':
-                (sub.createdDateTime ?? wibNow()).toIso8601String(),
+            'shared_at': wibIso(sub.createdDateTime ?? wibNow()),
           },
         ));
       }
@@ -692,7 +689,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             'overall_level': bundle.overallLevel.label,
             'crisis_flag': bundle.crisisFlag,
             'summary': text,
-            'shared_at': bundle.createdAt.toIso8601String(),
+            'shared_at': wibIso(bundle.createdAt),
           },
         ));
       }
@@ -709,7 +706,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             'source': 'therapy',
             'module_id': result.type.name,
             'summary': text,
-            'shared_at': result.createdAt.toIso8601String(),
+            'shared_at': wibIso(result.createdAt),
           },
         ));
       }
@@ -874,8 +871,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           metadata: {
             'title': latest.title,
             'mood': latest.mood,
-            'occurred_at':
-                (latest.occurredAt ?? wibNow()).toIso8601String(),
+            'occurred_at': wibIso(latest.occurredAt ?? wibNow()),
           },
         );
       }
@@ -896,7 +892,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       metadata: {
         'title': latest.title,
         'mood': latest.mood.label,
-        'occurred_at': latest.createdAt.toIso8601String(),
+        'occurred_at': wibIso(latest.createdAt),
       },
     );
   }

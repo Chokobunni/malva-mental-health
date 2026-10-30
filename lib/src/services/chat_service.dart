@@ -177,7 +177,7 @@ class ChatService {
         'text': trimmed,
         'kind': kind,
         if (metadata != null) 'metadata': metadata,
-        'timestamp': wibNow().toIso8601String(),
+        'timestamp': wibIso(wibNow()),
       },
     };
 

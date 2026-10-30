@@ -8,6 +8,7 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
+import '../time/wib.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/professional_avatar.dart';
@@ -360,8 +361,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
       price: price,
       status: 'active',
       startsAt: primary.startsAt,
-      expiresAt:
-          latest != null ? latest.toIso8601String() : primary.expiresAt,
+      expiresAt: latest != null ? wibIso(latest) : primary.expiresAt,
       createdAt: primary.createdAt,
       photoIntroUrl: primary.photoIntroUrl,
     );

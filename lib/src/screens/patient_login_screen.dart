@@ -55,6 +55,17 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
       setState(() => _isSubmitting = true);
       _validateFields();
       final store = ref.read(malvaStoreProvider.notifier);
+      // Tanggal lahir berasal dari date picker (wall-clock, bukan instant):
+      // bangun lewat wibFromParts agar tanggal yang dipilih tidak bergeser di
+      // perangkat non-WIB.
+      final pickedBirthDate = _birthDate;
+      final dateOfBirth = pickedBirthDate == null
+          ? null
+          : wibDateKey(wibFromParts(
+              pickedBirthDate.year,
+              pickedBirthDate.month,
+              pickedBirthDate.day,
+            ));
       final session = _isLogin
           ? await store.loginPatientOnline(
               email: _emailController.text,
@@ -65,9 +76,7 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
               password: _passwordController.text,
               displayName: _nameController.text,
               phone: _phoneController.text.trim(),
-              dateOfBirth: _birthDate != null
-                  ? _birthDate!.toIso8601String().substring(0, 10)
-                  : null,
+              dateOfBirth: dateOfBirth,
               gender: _gender,
             );
       if (!mounted) return;
