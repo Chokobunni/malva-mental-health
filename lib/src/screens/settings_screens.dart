@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
-import '../services/google_auth_service.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/password_field.dart';
+import 'google_account_screen.dart';
 
 // ============================================================
 // SETTINGS / PROFILE / SECURITY
@@ -86,9 +86,10 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 10),
-          // Tombol hubungkan Google untuk profesional (video call via Meet).
-          if (session?.role == UserRole.professional) ...[
-            _GoogleLinkTile(session: session),
+          // Kelola akun Google (pasien & profesional) — hubungkan Gmail,
+          // dan untuk profesional aktifkan Google Meet.
+          if (session != null) ...[
+            _GoogleAccountTile(session: session!),
             const SizedBox(height: 10),
           ],
           ActionTile(
@@ -303,21 +304,20 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
   }
 }
 
-/// Tombol untuk menghubungkan akun Google profesional dengan Calendar scope.
-/// Langkah: 1) signInIdToken -> link-google, 2) signInWithCalendarScope -> google-token-exchange.
-class _GoogleLinkTile extends ConsumerStatefulWidget {
-  const _GoogleLinkTile({this.session});
+/// Tile "Akun Google" untuk kedua role. Subtitle dinamis: email Gmail bila
+/// sudah tertaut, atau ajakan menghubungkan bila belum. Membuka
+/// [GoogleAccountScreen] dan menyegarkan status setelah layar ditutup.
+class _GoogleAccountTile extends ConsumerStatefulWidget {
+  const _GoogleAccountTile({required this.session});
 
-  final AuthSession? session;
+  final AuthSession session;
 
   @override
-  ConsumerState<_GoogleLinkTile> createState() => _GoogleLinkTileState();
+  ConsumerState<_GoogleAccountTile> createState() => _GoogleAccountTileState();
 }
 
-class _GoogleLinkTileState extends ConsumerState<_GoogleLinkTile> {
-  bool _isLinking = false;
-  bool _loadingStatus = true;
-  bool _connected = false;
+class _GoogleAccountTileState extends ConsumerState<_GoogleAccountTile> {
+  BackendGoogleIdentity? _identity;
 
   @override
   void initState() {
@@ -325,95 +325,50 @@ class _GoogleLinkTileState extends ConsumerState<_GoogleLinkTile> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadStatus());
   }
 
-  /// Memeriksa apakah akun Google profesional masih tertaut, agar pengguna
-  /// tahu perlu menautkan ulang sebelum sesi video dimulai.
   Future<void> _loadStatus() async {
-    final accessToken = widget.session?.accessToken;
-    if (accessToken == null || accessToken.isEmpty) {
-      if (mounted) setState(() => _loadingStatus = false);
-      return;
-    }
-    try {
-      final status = await ref
-          .read(apiClientProvider)
-          .googleStatus(accessToken: accessToken);
-      if (!mounted) return;
-      setState(() {
-        _connected = status.connected;
-        _loadingStatus = false;
-      });
-    } on Object {
-      if (mounted) setState(() => _loadingStatus = false);
-    }
-  }
-
-  Future<void> _linkGoogle() async {
-    if (_isLinking) return;
-    final accessToken = widget.session?.accessToken;
+    final accessToken = widget.session.accessToken;
     if (accessToken == null || accessToken.isEmpty) return;
-
-    setState(() => _isLinking = true);
     try {
-      final apiClient = ref.read(apiClientProvider);
-
-      // Langkah 1: Tautkan akun Google (ID Token).
-      final idToken = await GoogleAuthService.signInIdToken();
-      if (idToken == null) return; // Pengguna membatalkan.
+      final identity = await ref
+          .read(apiClientProvider)
+          .fetchGoogleIdentity(accessToken: accessToken);
       if (!mounted) return;
-      await apiClient.linkGoogleAccount(
-        accessToken: accessToken,
-        idToken: idToken,
-      );
-
-      // Langkah 2: Dapatkan authorization code untuk Calendar.
-      final authCode = await GoogleAuthService.signInWithCalendarScope();
-      if (authCode != null && mounted) {
-        await apiClient.exchangeGoogleToken(
-          accessToken: accessToken,
-          authorizationCode: authCode,
-        );
-      }
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Google berhasil dihubungkan untuk Video Call.'),
-        ),
-      );
-      await _loadStatus();
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
-    } finally {
-      if (mounted) setState(() => _isLinking = false);
+      setState(() => _identity = identity);
+    } on Object {
+      // Best-effort: subtitle jatuh ke default bila status gagal dimuat.
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final identity = _identity;
+    final linked = identity?.linked ?? false;
     final String subtitle;
-    if (_isLinking) {
-      subtitle = 'Menghubungkan...';
-    } else if (_loadingStatus) {
-      subtitle = 'Memeriksa status...';
-    } else if (_connected) {
-      subtitle = 'Terhubung — Google Meet siap dipakai';
+    if (linked) {
+      subtitle = (identity?.email.isNotEmpty ?? false)
+          ? identity!.email
+          : 'Gmail tertaut';
     } else {
-      subtitle = 'Belum terhubung — wajib untuk sesi video';
+      subtitle = 'Hubungkan Gmail Anda';
     }
     return ActionTile(
-      icon: _connected
-          ? Icons.video_camera_front_rounded
-          : Icons.videocam_rounded,
-      title: _connected
-          ? 'Google Meet aktif'
-          : 'Hubungkan Google untuk Video Call',
+      icon: Icons.alternate_email_rounded,
+      title: 'Akun Google',
       subtitle: subtitle,
-      color: _connected ? MalvaColors.mint : MalvaColors.amber,
-      onTap: () {
-        if (!_isLinking) _linkGoogle();
+      color: MalvaColors.seed,
+      onTap: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => GoogleAccountScreen(
+              session: widget.session,
+              apiClient: ref.read(apiClientProvider),
+              showMeet: widget.session.role == UserRole.professional,
+            ),
+          ),
+        );
+        // Segarkan subtitle setelah kembali dari layar Akun Google.
+        if (mounted) await _loadStatus();
       },
     );
   }

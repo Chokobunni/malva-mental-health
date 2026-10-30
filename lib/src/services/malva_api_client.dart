@@ -8,23 +8,6 @@ import '../assessment_engine.dart';
 import '../models.dart';
 import 'server_clock.dart';
 
-/// Kode mesin pada balasan 409 `POST /v1/auth/complete-professional` yang
-/// berarti: nomor STR sudah terdaftar di akun profesional lain dan pengguna
-/// harus membuktikan kepemilikan (password akun lama) sebelum akun Google-nya
-/// boleh ditautkan.
-///
-/// Harus SAMA dengan `mergeVerificationRequiredCode` di server
-/// (backend/internal/server/handlers_professional_onboarding.go).
-const professionalMergeVerificationRequiredCode =
-    'str_terdaftar_perlu_verifikasi';
-
-/// Kode mesin pada balasan 429 endpoint yang sama: lockout per-akun aktif
-/// karena terlalu banyak percobaan verifikasi identitas. Berbeda dari
-/// [professionalMergeVerificationRequiredCode] — jangan ditangani sama.
-///
-/// Harus SAMA dengan `mergeTooManyAttemptsCode` di server.
-const professionalMergeTooManyAttemptsCode = 'terlalu_banyak_percobaan';
-
 class MalvaApiClient {
   MalvaApiClient({
     http.Client? httpClient,
@@ -206,7 +189,6 @@ class MalvaApiClient {
     required String sipNumber,
     required String specialization,
     String? displayName,
-    String existingPassword = '',
   }) async {
     final payload = await _send(
       'POST',
@@ -218,9 +200,6 @@ class MalvaApiClient {
         'specialization': specialization.trim(),
         if (displayName != null && displayName.trim().isNotEmpty)
           'display_name': displayName.trim(),
-        // Bukti kepemilikan akun lama. Hanya dikirim bila diisi — jalur normal
-        // (akun Google baru / email sama) tidak perlu password.
-        if (existingPassword.isNotEmpty) 'existing_password': existingPassword,
       },
     );
     // Respons berisi user + credential; ambil user untuk sesi.
@@ -244,18 +223,36 @@ class MalvaApiClient {
     );
   }
 
-  /// Tautkan akun Google ke profesional yang sudah ada.
-  /// POST /v1/auth/link-google — membutuhkan Bearer token.
-  Future<void> linkGoogleAccount({
+  /// Status tautan akun Google pengguna saat ini.
+  /// GET /v1/auth/google-identity — membutuhkan Bearer token.
+  Future<BackendGoogleIdentity> fetchGoogleIdentity({
+    required String accessToken,
+  }) async {
+    final payload = await _send(
+      'GET',
+      '/v1/auth/google-identity',
+      accessToken: accessToken,
+    );
+    return BackendGoogleIdentity.fromJson(payload);
+  }
+
+  /// Tautkan akun Google (pasien maupun profesional) ke akun Malva saat ini.
+  /// POST /v1/auth/bind-google — membutuhkan Bearer token.
+  ///
+  /// Mengembalikan status identitas terbaru. Bila konflik (Gmail/akun sudah
+  /// tertaut ke akun lain) server membalas 409 dengan `code` mesin yang
+  /// dipetakan UI ke pesan actionable.
+  Future<BackendGoogleIdentity> bindGoogleIdentity({
     required String accessToken,
     required String idToken,
   }) async {
-    await _send(
+    final payload = await _send(
       'POST',
-      '/v1/auth/link-google',
+      '/v1/auth/bind-google',
       accessToken: accessToken,
       body: {'id_token': idToken},
     );
+    return BackendGoogleIdentity.fromJson(payload);
   }
 
   /// Tukar authorization code Google Calendar dengan backend.

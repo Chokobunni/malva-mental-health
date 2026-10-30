@@ -224,6 +224,13 @@ class _ProfessionalLoginScreenState
                           color: Theme.of(context).colorScheme.outline),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Sudah punya akun lokal? Masuk dengan email & password '
+                    'dulu, lalu hubungkan Gmail di menu Akun Google & Meet.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
                   const SizedBox(height: 12),
                   Row(
                     children: [

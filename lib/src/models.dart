@@ -39,6 +39,45 @@ class AuthFailure implements Exception {
   String toString() => message;
 }
 
+/// Status tautan akun Google milik pengguna yang sedang login.
+///
+/// Dipakai oleh `GET /v1/auth/google-identity` dan `POST /v1/auth/bind-google`.
+/// `fromJson` sengaja toleran terhadap field null/absen agar UI tidak crash
+/// bila server mengirim payload minimal.
+class BackendGoogleIdentity {
+  const BackendGoogleIdentity({
+    required this.linked,
+    required this.email,
+    this.linkedAt,
+    this.emailIsPlaceholder = false,
+  });
+
+  factory BackendGoogleIdentity.fromJson(Map<String, dynamic> json) {
+    final rawLinkedAt = json['linked_at']?.toString();
+    return BackendGoogleIdentity(
+      linked: json['linked'] == true,
+      email: json['email']?.toString() ?? '',
+      linkedAt: rawLinkedAt == null || rawLinkedAt.trim().isEmpty
+          ? null
+          : DateTime.tryParse(rawLinkedAt),
+      emailIsPlaceholder: json['email_is_placeholder'] == true,
+    );
+  }
+
+  /// true bila akun sudah tertaut ke sebuah identitas Google.
+  final bool linked;
+
+  /// Email Google yang tertaut (kosong bila belum tertaut).
+  final String email;
+
+  /// Waktu penautan (null bila belum tertaut / tidak tersedia).
+  final DateTime? linkedAt;
+
+  /// true bila email akun masih placeholder profesional
+  /// (`...@professional.malva.local`) — belum di-upgrade ke Gmail.
+  final bool emailIsPlaceholder;
+}
+
 enum InitialScreeningStatus { pending, completed, skipped }
 
 enum RiskLevel { minimal, mild, moderate, moderatelySevere, severe, crisis }

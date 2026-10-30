@@ -14,6 +14,7 @@ import '../theme.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/professional_avatar.dart';
 import 'booking/credential_screens.dart';
+import 'google_account_screen.dart';
 import 'notifications_screen.dart';
 import 'portal/crisis_incident_log_screen.dart';
 import 'portal/e_prescription_screen.dart';
@@ -2188,6 +2189,29 @@ class _ProfessionalPortalSectionState
             _handleProfileSaved();
           }),
         ),
+        if (session != null) ...[
+          const SizedBox(height: 10),
+          // Akun Google & Meet: hubungkan Gmail, aktifkan Google Meet.
+          ActionTile(
+            icon: Icons.alternate_email_rounded,
+            title: 'Akun Google & Meet',
+            subtitle: 'Hubungkan Gmail, aktifkan Google Meet',
+            color: MalvaColors.seed,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => GoogleAccountScreen(
+                  session: session!,
+                  apiClient: apiClient ?? ref.read(apiClientProvider),
+                  showMeet: true,
+                ),
+              ),
+            ).then((_) {
+              // Segarkan kartu identitas (email) setelah kembali.
+              _handleProfileSaved();
+            }),
+          ),
+        ],
         const SizedBox(height: 10),
         const SectionLabel('Operasional'),
         ActionTile(

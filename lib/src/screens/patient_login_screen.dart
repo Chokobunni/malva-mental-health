@@ -313,6 +313,15 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
                   isLogin: _isLogin,
                   onPressed: _isSubmitting ? null : _signInWithGoogle,
                 ),
+                if (_isLogin) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Sudah punya akun dengan email & password? Masuk dengan '
+                    'email dulu, lalu hubungkan Gmail di menu Akun Google.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                ],
               ],
             ),
           ),
