@@ -17,6 +17,7 @@ var (
 	ErrGoogleIdentityBound         = errors.New("account is already bound to a different Google identity")
 	ErrEmailOwnedByOther           = errors.New("email belongs to another account")
 	ErrProfessionalIdentifierTaken = errors.New("STR or SIP is already registered to another professional")
+	ErrGoogleNotLinked             = errors.New("account has no linked Google identity")
 )
 
 func IsUniqueViolation(err error) bool {
@@ -167,6 +168,88 @@ func (s *Store) LinkGoogleIdentity(ctx context.Context, userID, subject, email s
 	}
 	return GoogleIdentity{Linked: true, Subject: subject, Email: email, LinkedAt: &linkedAt.Time,
 		EmailIsPlaceholder: IsPlaceholderProfessionalEmail(accountEmail)}, nil
+}
+
+// UnbindGoogleIdentity melepas tautan Google tanpa mengubah UUID user.
+//
+// Perilaku (dalam SATU transaksi, di bawah advisory lock kepemilikan email):
+//  1. Mengunci baris user lalu membaca status SSO, email akun, role, dan
+//     professional_id (bila ada).
+//  2. Menolak bila akun tidak tertaut ke Google (ErrGoogleNotLinked).
+//  3. Memulihkan email placeholder profesional bila email akun saat ini sama
+//     dengan email Google yang dilepas — supaya Gmail itu bebas dipakai akun
+//     Malva lain. Bila placeholder sudah dipakai akun lain, email lama
+//     dipertahankan (unbind tidak boleh gagal hanya karena bentrok email).
+//  4. Menghapus tautan SSO (sso_* = NULL) dan, bila diminta, mengganti
+//     password_hash dalam UPDATE yang sama (akun Google-only belum punya
+//     password yang bisa dipakai).
+//  5. Menghapus token OAuth Google agar Google Meet ikut nonaktif.
+//
+// newPasswordHash kosong berarti password tidak diubah.
+func (s *Store) UnbindGoogleIdentity(ctx context.Context, userID, newPasswordHash string) (GoogleIdentity, error) {
+	if strings.TrimSpace(userID) == "" {
+		return GoogleIdentity{}, errors.New("user is required")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return GoogleIdentity{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := lockIdentityOwnership(ctx, tx); err != nil {
+		return GoogleIdentity{}, err
+	}
+	var provider, ssoID sql.NullString
+	var ssoEmail, accountEmail, role, profID string
+	err = tx.QueryRowContext(ctx, `SELECT u.sso_provider, u.sso_id, COALESCE(u.sso_email,''), u.email,
+			u.role::text, COALESCE(pp.professional_id,'')
+		FROM users u
+		LEFT JOIN professional_profiles pp ON pp.user_id = u.id
+		WHERE u.id = $1 AND u.disabled_at IS NULL
+		FOR UPDATE OF u`, userID).
+		Scan(&provider, &ssoID, &ssoEmail, &accountEmail, &role, &profID)
+	if err != nil {
+		return GoogleIdentity{}, err
+	}
+	if provider.String != "google" || strings.TrimSpace(ssoID.String) == "" {
+		return GoogleIdentity{}, ErrGoogleNotLinked
+	}
+	// Default: pertahankan email akun apa adanya. Hanya placeholder profesional
+	// yang bisa dipulihkan, dan hanya bila email akun saat ini memang Gmail
+	// yang dilepas (bukan Gmail lain yang sengaja dipakai akun lama).
+	restoredEmail := accountEmail
+	if role == "professional" &&
+		strings.EqualFold(accountEmail, ssoEmail) &&
+		profID != "" && !strings.HasPrefix(profID, "g-") {
+		candidate := profID + "@professional.malva.local"
+		if err := checkEmailOwnership(ctx, tx, candidate, userID); err != nil {
+			if !errors.Is(err, ErrEmailOwnedByOther) {
+				return GoogleIdentity{}, err
+			}
+			// Placeholder sudah dipakai akun lain → pertahankan email lama.
+		} else {
+			restoredEmail = candidate
+		}
+	}
+	now := clock.Now().Truncate(time.Microsecond)
+	if newPasswordHash != "" {
+		_, err = tx.ExecContext(ctx, `UPDATE users SET sso_provider = NULL, sso_id = NULL,
+			sso_email = NULL, sso_linked_at = NULL, email = $2, updated_at = $3, password_hash = $4
+			WHERE id = $1`, userID, restoredEmail, now, newPasswordHash)
+	} else {
+		_, err = tx.ExecContext(ctx, `UPDATE users SET sso_provider = NULL, sso_id = NULL,
+			sso_email = NULL, sso_linked_at = NULL, email = $2, updated_at = $3
+			WHERE id = $1`, userID, restoredEmail, now)
+	}
+	if err != nil {
+		return GoogleIdentity{}, googleIdentityWriteError(err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM google_oauth_tokens WHERE user_id = $1`, userID); err != nil {
+		return GoogleIdentity{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return GoogleIdentity{}, err
+	}
+	return GoogleIdentity{Linked: false, EmailIsPlaceholder: IsPlaceholderProfessionalEmail(restoredEmail)}, nil
 }
 
 func IsPlaceholderProfessionalEmail(email string) bool {

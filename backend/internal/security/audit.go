@@ -113,6 +113,22 @@ func (sl *SecurityLogger) LogSessionInvalidated(r *http.Request, userID, reason 
 	)
 }
 
+// LogIdentityChange mencatat perubahan identitas (bind/unbind SSO) sebagai
+// jejak audit. Tidak pernah mencatat email atau token mentah — hanya aksi
+// (mis. "google_unlinked") dan metadata permintaan.
+func (sl *SecurityLogger) LogIdentityChange(r *http.Request, userID, action string) {
+	sl.logger.Info("identity_change",
+		"event_type", "identity_change",
+		"severity", "low",
+		"user_id", userID,
+		"ip", clientIP(r),
+		"user_agent", r.UserAgent(),
+		"path", r.URL.Path,
+		"method", r.Method,
+		"action", action,
+	)
+}
+
 func (sl *SecurityLogger) LogCSRFViolation(r *http.Request) {
 	sl.logger.Warn("csrf_violation",
 		"event_type", "csrf_violation",

@@ -241,6 +241,37 @@ Get current authenticated user info.
 
 ---
 
+#### `POST /v1/auth/unbind-google`
+
+Lepas tautan akun Google (Gmail) dari akun pasien/profesional **tanpa mengubah UUID user**. Bila akun dibuat lewat "Login Google" (hash password acak), `new_password` **wajib** diisi agar akun tetap bisa login setelah Gmail dilepas; akun ber-password boleh memakai `current_password`. Unbind juga menghapus token OAuth Google (Google Meet ikut nonaktif) dan memulihkan email placeholder profesional bila memungkinkan.
+
+**Auth:** Bearer (patient/professional), rate-limited
+
+**Request (body opsional — boleh kosong):**
+```json
+{
+  "current_password": "opsional — password saat ini",
+  "new_password": "opsional — password baru (wajib bila akun Google-only)"
+}
+```
+
+**Response:** `200 OK` (bentuk sama dengan `GET /v1/auth/google-identity`)
+```json
+{
+  "linked": false,
+  "email_is_placeholder": false
+}
+```
+
+**Error 409 `perlu_password`** (kredensial belum diberikan):
+```json
+{ "error": "Tetapkan password baru dulu agar akun tetap bisa dipakai setelah Gmail dilepas.", "code": "perlu_password" }
+```
+
+Kode mesin lain: `password_salah` (401, password saat ini salah), `google_belum_tertaut` (409, akun belum tertaut Google).
+
+---
+
 ### 3.3 Device Tokens
 
 ---

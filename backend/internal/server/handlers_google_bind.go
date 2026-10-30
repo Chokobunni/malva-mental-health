@@ -2,7 +2,9 @@ package server
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
@@ -10,6 +12,7 @@ import (
 	"google.golang.org/api/idtoken"
 
 	"malva/backend/internal/auth"
+	"malva/backend/internal/security"
 	"malva/backend/internal/store"
 )
 
@@ -19,6 +22,10 @@ const (
 	googleAlreadyLinkedCode = "google_sudah_tertaut"
 	googleEmailTakenCode    = "email_sudah_dipakai"
 	googleIdentityBoundCode = "akun_sudah_taut_google_lain"
+	// Kode mesin endpoint unbind-google.
+	googleNotLinkedCode        = "google_belum_tertaut"
+	googlePasswordRequiredCode = "perlu_password"
+	googlePasswordWrongCode    = "password_salah"
 )
 
 type bindGoogleRequest struct {
@@ -124,5 +131,94 @@ func (s *Server) googleIdentityStatus(w http.ResponseWriter, r *http.Request, cl
 		writeGoogleIdentityError(w, err)
 		return
 	}
+	writeJSON(w, http.StatusOK, ident)
+}
+
+type unbindGoogleRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// unbindGoogle melepas tautan Google dari akun pasien/profesional.
+//
+// Alasan current_password ATAU new_password wajib: akun yang dibuat lewat
+// "Login Google" memakai hash password acak yang tidak bisa dipakai untuk
+// login. Bila Gmail dilepas tanpa menetapkan password, akun itu mati permanen
+// (tidak bisa login lagi dan changePassword menuntut password lama yang tak
+// diketahui). Jadi sebelum melepas, pengguna harus membuktikan kepemilikan
+// password saat ini (akun password) ATAU menetapkan password baru (akun
+// Google-only). Body boleh kosong — server membalas 409 `perlu_password`
+// alih-alih 400 agar UI tahu harus meminta password baru.
+func (s *Server) unbindGoogle(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "patient" && claims.Role != "professional" {
+		writeError(w, http.StatusForbidden, errors.New("Hanya pasien dan profesional yang dapat menghubungkan Google."))
+		return
+	}
+	// Body opsional: baca mentah dulu, hanya unmarshal bila ada isi.
+	var req unbindGoogleRequest
+	if r.Body != nil {
+		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("Permintaan pelepasan Google tidak valid."))
+			return
+		}
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &req); err != nil {
+				writeError(w, http.StatusBadRequest, errors.New("Permintaan pelepasan Google tidak valid."))
+				return
+			}
+		}
+	}
+	user, err := s.store.GetUserByID(r.Context(), claims.Subject)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, errors.New("Akun tidak ditemukan."))
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	// Tentukan kredensial: password lama (bila ada) atau password baru.
+	newPasswordHash := ""
+	switch {
+	case strings.TrimSpace(req.CurrentPassword) != "":
+		if !auth.CheckPassword(user.PasswordHash, req.CurrentPassword) {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{
+				"error": "Password saat ini salah.",
+				"code":  googlePasswordWrongCode,
+			})
+			return
+		}
+	case strings.TrimSpace(req.NewPassword) != "":
+		if err := security.ValidatePassword(req.NewPassword, user.Email); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		hash, herr := auth.HashPassword(req.NewPassword)
+		if herr != nil {
+			writeError(w, http.StatusInternalServerError, herr)
+			return
+		}
+		newPasswordHash = hash
+	default:
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "Tetapkan password baru dulu agar akun tetap bisa dipakai setelah Gmail dilepas.",
+			"code":  googlePasswordRequiredCode,
+		})
+		return
+	}
+	ident, err := s.store.UnbindGoogleIdentity(r.Context(), claims.Subject, newPasswordHash)
+	if errors.Is(err, store.ErrGoogleNotLinked) {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "Akun ini belum terhubung ke Gmail.",
+			"code":  googleNotLinkedCode,
+		})
+		return
+	}
+	if err != nil {
+		writeGoogleIdentityError(w, err)
+		return
+	}
+	s.secLogger.LogIdentityChange(r, claims.Subject, "google_unlinked")
 	writeJSON(w, http.StatusOK, ident)
 }
