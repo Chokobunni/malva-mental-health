@@ -23,7 +23,7 @@ Panduan perilaku agent untuk repo ini **ada di [`.agents/AGENTS.md`](.agents/AGE
 5. **Setelah mengubah route/DTO:** `cd backend && go run ./cmd/apidoc` lalu commit hasilnya. CI gagal bila dokumen API basi.
 6. **Commit pakai Conventional Commits** — `feat|fix|refactor|chore|docs|perf|test|build|ci|style|revert|seo|infra`.
 7. **Plan first:** sampaikan rencana + dampak (radius, ukuran, effort, kompatibilitas) sebelum eksekusi, termasuk saat menerima log error.
-8. **WIB-only, tanpa UTC.** Aplikasi hanya untuk Indonesia. Semua waktu memakai WIB (Asia/Jakarta, UTC+7, tanpa DST) — tidak boleh ada UTC di kode, sesi DB, DTO, maupun tampilan. Go: `clock.Now()`/`clock.Location()`, dilarang `.UTC()` dan `time.Now()` untuk timestamp bisnis; Dart: `wibNow()`/`toWib()`, dilarang `.toLocal()`/`DateTime.now()` untuk tampilan/bisnis. Rincian di [`.agents/AGENTS.md`](.agents/AGENTS.md) §"Zona waktu (WIB-only)".
+8. **WIB-only, tanpa UTC.** Aplikasi hanya untuk Indonesia. Semua waktu memakai WIB (Asia/Jakarta, UTC+7, tanpa DST) — tidak boleh ada UTC di kode, sesi DB, DTO, maupun tampilan, termasuk `.UTC()` di `cmd/` dan timestamp `Z` pada keluaran API/CLI. Go: `clock.Now()`/`clock.Location()`, dilarang `.UTC()` dan `time.Now()` untuk timestamp bisnis; Dart: `wibNow()`/`toWib()`, dilarang `.toLocal()`/`DateTime.now()` untuk tampilan/bisnis. Instant (epoch, deadline, ticker, JWT) bukan UTC dan tetap sah. Rincian di [`.agents/AGENTS.md`](.agents/AGENTS.md) §"Zona waktu (WIB-only)".
 
 ## Gate otomatis (dijalankan CI, bisa dijalankan lokal)
 
