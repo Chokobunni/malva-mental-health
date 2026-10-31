@@ -42,6 +42,7 @@ tags:
   - name: pricing
   - name: bookings
   - name: payments
+  - name: config
   - name: webhooks
   - name: care-packages
   - name: care-sessions
@@ -1953,6 +1954,54 @@ paths:
       summary: markPaymentPaid
       security:
         - bearerAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/OK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  "/v1/payments/{reference}":
+    get:
+      tags:
+        - payments
+      summary: getPaymentStatus
+      parameters:
+        - name: reference
+          in: path
+          required: true
+          schema:
+            type: string
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/OK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  "/v1/config/payment":
+    get:
+      tags:
+        - config
+      summary: paymentConfigHandler
       responses:
         '200':
           $ref: '#/components/responses/OK'

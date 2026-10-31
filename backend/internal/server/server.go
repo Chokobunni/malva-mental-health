@@ -287,6 +287,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/bookings/{booking_id}/cancel", s.requireAuth(s.cancelPendingBooking))
 	mux.HandleFunc("POST /v1/payments", s.requireAuth(s.createPayment))
 	mux.HandleFunc("POST /v1/payments/mark-paid", s.requireAuth(s.markPaymentPaid))
+	// Status pembayaran untuk klien (setelah kembali dari halaman gateway).
+	mux.HandleFunc("GET /v1/payments/{reference}", s.requireAuth(s.getPaymentStatus))
+	// Konfigurasi mode pembayaran (publik; tanpa key apa pun).
+	mux.HandleFunc("GET /v1/config/payment", s.paymentConfigHandler)
 	// Webhook gateway pembayaran (publik; keaslian diverifikasi via signature).
 	mux.HandleFunc("POST /v1/webhooks/payment", s.paymentWebhook)
 	mux.HandleFunc("GET /v1/bookings", s.requireAuth(s.listBookings))

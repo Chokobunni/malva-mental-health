@@ -2407,6 +2407,25 @@ class MalvaApiClient {
         _expectMap(payload['payment'], 'Respons status tidak valid.'));
   }
 
+  /// Memeriksa status pembayaran (mode gateway: satu-satunya cara klien tahu
+  /// pembayaran sudah lunas setelah kembali dari halaman Midtrans).
+  Future<BackendPaymentStatus> getPaymentStatus({
+    required String accessToken,
+    required String reference,
+  }) async {
+    final payload = await _send(
+        'GET', '/v1/payments/${Uri.encodeComponent(reference)}',
+        accessToken: accessToken);
+    return BackendPaymentStatus.fromJson(payload);
+  }
+
+  /// Konfigurasi mode pembayaran (publik). Dipakai layar pembayaran untuk
+  /// menyembunyikan pilihan metode palsu saat gateway aktif.
+  Future<BackendPaymentConfig> getPaymentConfig() async {
+    final payload = await _send('GET', '/v1/config/payment');
+    return BackendPaymentConfig.fromJson(payload);
+  }
+
   Future<List<BackendBooking>> listBookings({
     required String accessToken,
     int limit = 20,
@@ -4485,6 +4504,9 @@ class BackendPayment {
     required this.bookingId,
     required this.reference,
     required this.status,
+    this.redirectUrl = '',
+    this.snapToken = '',
+    this.paidAt,
   });
 
   factory BackendPayment.fromJson(Map<String, dynamic> json) {
@@ -4493,6 +4515,9 @@ class BackendPayment {
       bookingId: json['booking_id']?.toString() ?? '',
       reference: json['reference']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
+      redirectUrl: json['redirect_url']?.toString() ?? '',
+      snapToken: json['snap_token']?.toString() ?? '',
+      paidAt: parseWibStored(json['paid_at']?.toString()),
     );
   }
 
@@ -4500,6 +4525,61 @@ class BackendPayment {
   final String bookingId;
   final String reference;
   final String status;
+
+  /// URL halaman pembayaran gateway (Midtrans Snap). Kosong pada mode
+  /// simulasi — klien memakainya sebagai penanda "pembayaran lewat gateway":
+  /// bila terisi, konfirmasi manual (mark-paid) TIDAK boleh dipanggil.
+  final String redirectUrl;
+
+  /// Token Snap (opsional; klien saat ini memakai [redirectUrl]).
+  final String snapToken;
+
+  /// Waktu pembayaran lunas (WIB) bila sudah dibayar.
+  final DateTime? paidAt;
+}
+
+/// Konfigurasi mode pembayaran dari `GET /v1/config/payment`.
+///
+/// Tidak pernah memuat kredensial: klien hanya perlu tahu apakah metode
+/// pembayaran dipilih di halaman gateway (Midtrans) atau disimulasikan.
+class BackendPaymentConfig {
+  const BackendPaymentConfig({
+    required this.mode,
+    required this.provider,
+    required this.env,
+  });
+
+  factory BackendPaymentConfig.fromJson(Map<String, dynamic> json) {
+    return BackendPaymentConfig(
+      mode: json['mode']?.toString() ?? 'simulation',
+      provider: json['provider']?.toString() ?? 'midtrans',
+      env: json['env']?.toString() ?? 'sandbox',
+    );
+  }
+
+  final String mode;
+  final String provider;
+  final String env;
+
+  /// True bila metode pembayaran dipilih di halaman gateway (bukan simulasi).
+  bool get isGateway => mode == 'gateway';
+}
+
+/// Hasil `GET /v1/payments/{reference}`: status pembayaran + sesi yang lahir
+/// dari pembayaran itu (kosong bila belum ada).
+class BackendPaymentStatus {
+  const BackendPaymentStatus({required this.payment, required this.sessionId});
+
+  factory BackendPaymentStatus.fromJson(Map<String, dynamic> json) {
+    return BackendPaymentStatus(
+      payment: BackendPayment.fromJson(
+          json['payment'] as Map<String, dynamic>? ?? const {}),
+      sessionId: json['session_id']?.toString() ?? '',
+    );
+  }
+
+  final BackendPayment payment;
+  final String sessionId;
 }
 
 class BackendEarningsSummary {

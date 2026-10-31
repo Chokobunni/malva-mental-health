@@ -330,6 +330,32 @@ func (s *Store) PaymentStatusByReference(ctx context.Context, reference string) 
 	return status, nil
 }
 
+// GetPaymentByReference membaca satu pembayaran berdasarkan `reference`
+// (= order_id gateway). Dipakai klien untuk memeriksa status pembayarannya
+// sendiri setelah kembali dari halaman gateway.
+//
+// sql.ErrNoRows dipetakan ke ErrPaymentNotFound agar handler bisa membalas 404
+// tanpa membocorkan perbedaan "tidak ada" vs "galat database".
+func (s *Store) GetPaymentByReference(ctx context.Context, reference string) (Payment, error) {
+	const q = `SELECT id, booking_id, payment_method, gross_amount, service_fee_amount,
+			platform_fee_amount, net_amount, reference, COALESCE(external_id, ''), status,
+			COALESCE(gateway, ''), COALESCE(snap_token, ''), COALESCE(redirect_url, ''),
+			paid_at, created_at
+		FROM payments WHERE reference = $1`
+	var p Payment
+	err := s.db.QueryRowContext(ctx, q, reference).
+		Scan(&p.ID, &p.BookingID, &p.PaymentMethod, &p.GrossAmount, &p.ServiceFeeAmount,
+			&p.PlatformFeeAmount, &p.NetAmount, &p.Reference, &p.ExternalID, &p.Status,
+			&p.Gateway, &p.SnapToken, &p.RedirectURL, &p.PaidAt, &p.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Payment{}, ErrPaymentNotFound
+		}
+		return Payment{}, err
+	}
+	return p, nil
+}
+
 // PaymentContextByReference membaca konteks sebuah pembayaran beserta booking
 // dan pemiliknya dalam SATU query JOIN, berdasarkan `reference` (= order_id
 // gateway).
