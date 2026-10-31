@@ -70,25 +70,21 @@ func run() error {
 
 	app := server.New(cfg, authManager, st, hub, logger)
 
-	// Backfill sekali saat start: sesi video terjadwal yang belum punya link
-	// Google Meet (termasuk yang masih memakai link penyedia lama) dibuatkan
-	// sekarang, agar pasien tidak menemukan sesi tanpa ruang pertemuan.
-	go func() {
-		bctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		if n, err := app.BackfillMissingMeetLinks(bctx, 25); err != nil {
-			logger.Warn("backfill link Meet gagal", "error", err)
-		} else if n > 0 {
-			logger.Info("backfill link Meet selesai", "created", n)
-		}
-	}()
-
 	// Sweeper paket/sesi: kedaluwarsakan paket 6 minggu, hanguskan
-	// pending_payment, auto-complete sesi lama, dan kirim pengingat sesi
-	// video yang akan dimulai. Tiap 10 menit.
+	// pending_payment, auto-complete sesi lama, kirim pengingat sesi video
+	// yang akan dimulai, dan ISI LINK Google Meet yang belum ada.
+	//
+	// Backfill link Meet dulu hanya dipanggil SEKALI saat start, sehingga sesi
+	// berbayar yang lahir "menunggu link" tidak mendapat link sampai server
+	// restart atau sampai pengingat 15-25 menit sebelum sesi. Sekarang ikut
+	// setiap tick (10 menit) dengan limit kecil: daftar sesi diurutkan
+	// scheduled_at ASC, jadi sesi yang paling dekat selalu dicoba lebih dulu.
 	go func() {
 		ticker := time.NewTicker(10 * time.Minute)
 		defer ticker.Stop()
+		// Run pertama langsung dijalankan (menangani tumpukan sesi lama saat
+		// start) dengan limit lebih besar; tick berikutnya cukup limit kecil.
+		firstRun := true
 		sweep := func() {
 			sctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
@@ -104,6 +100,25 @@ func run() error {
 				logger.Warn("session reminder failed", "error", rerr)
 			} else if sent > 0 {
 				logger.Info("session reminders sent", "count", sent)
+			}
+
+			limit := 10
+			if firstRun {
+				limit = 25
+				firstRun = false
+			}
+			bctx, bcancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			n, berr := app.RunMeetLinkBackfill(bctx, limit)
+			bcancel()
+			switch {
+			case errors.Is(berr, server.ErrMeetUnavailable):
+				// Server belum dikonfigurasi Google (MALVA_GOOGLE_CLIENT_SECRET
+				// kosong): keadaan deployment, bukan kegagalan per tick — jangan
+				// Warn tiap 10 menit.
+			case berr != nil:
+				logger.Warn("backfill link Meet gagal", "error", berr)
+			case n > 0:
+				logger.Info("backfill link Meet selesai", "created", n)
 			}
 		}
 		sweep()

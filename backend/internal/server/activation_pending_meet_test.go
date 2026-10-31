@@ -299,3 +299,108 @@ func assertMeetMissingNotified(t *testing.T, st *store.Store, profID, sessionID 
 	}
 	t.Errorf("profesional tidak menerima notifikasi session_meet_missing untuk sesi %q", sessionID)
 }
+
+// findNotification mengembalikan notifikasi bertipe kind milik userID.
+// Dipakai test pesan: yang diuji adalah isi teks yang dibaca pengguna.
+func findNotification(t *testing.T, st *store.Store, userID, kind string) store.Notification {
+	t.Helper()
+	items, err := st.ListNotifications(context.Background(), userID, 50)
+	if err != nil {
+		t.Fatalf("baca notifikasi %q: %v", kind, err)
+	}
+	for _, n := range items {
+		if n.Type == kind {
+			return n
+		}
+	}
+	t.Fatalf("notifikasi bertipe %q untuk user %q tidak ditemukan", kind, userID)
+	return store.Notification{}
+}
+
+// TestActivateVideoServerNotConfiguredDoesNotAskProfessionalToPressButton
+// mengunci celah C3: saat integrasi Google di SERVER mati (ErrMeetUnavailable),
+// tombol "Buat link Meet" akan membalas 501. Karena itu profesional tidak boleh
+// disuruh menekannya, dan pasien tidak boleh dijanjikan link "sebelum sesi
+// dimulai" — janji yang tidak bisa dipenuhi siapa pun sampai admin
+// mengaktifkan integrasi. Sesi & uang tetap aman (tidak ada kegagalan).
+func TestActivateVideoServerNotConfiguredDoesNotAskProfessionalToPressButton(t *testing.T) {
+	db, st := openOnboardingTestStore(t)
+	f := newActivationFixture(t, db, st, nil) // calendar nil = server belum dikonfigurasi
+
+	booking, payment := f.paidBooking(t, "quick_consult_video", "video")
+
+	if err := f.activate(t, payment); err != nil {
+		t.Fatalf("ErrMeetUnavailable tidak boleh menggagalkan aktivasi berbayar: %v", err)
+	}
+	session, err := st.GetCareSessionByBookingID(context.Background(), booking.ID)
+	if err != nil {
+		t.Fatalf("sesi berbayar tidak tersimpan: %v", err)
+	}
+	if session.SessionType != "video" || strings.TrimSpace(session.MeetingURL) != "" {
+		t.Errorf("sesi = %+v, mau video tanpa meeting_url", session)
+	}
+
+	profNote := findNotification(t, st, f.prof.ID, "session_meet_missing")
+	for _, forbidden := range []string{"Buat link Meet", "tekan"} {
+		if strings.Contains(profNote.Body, forbidden) {
+			t.Errorf("pesan profesional memuat %q padahal tombolnya akan 501: %q", forbidden, profNote.Body)
+		}
+	}
+	if !strings.Contains(strings.ToLower(profNote.Body), "integrasi") {
+		t.Errorf("pesan profesional harus menjelaskan integrasi server belum aktif: %q", profNote.Body)
+	}
+
+	patientNote := findNotification(t, st, f.patient.ID, "session_scheduled")
+	if strings.Contains(patientNote.Body, "sebelum sesi dimulai") {
+		t.Errorf("pesan pasien menjanjikan link sebelum sesi padahal integrasi server mati: %q", patientNote.Body)
+	}
+	// Tetap menenangkan: sesi & pembayaran tidak hangus.
+	if !strings.Contains(patientNote.Body, "Sesi pada") {
+		t.Errorf("pesan pasien harus tetap menyebut sesi terjadwal: %q", patientNote.Body)
+	}
+}
+
+// TestActivatePackageNotifiesActualSessionCount mengunci celah C4: paket bisa
+// DIGABUNG (store.ActivatePendingPackage menjumlahkan total_sessions), sehingga
+// teks "Paket 4 sesi / 6 minggu" hardcoded menyesatkan. Pesan harus memakai
+// jumlah sesi sebenarnya dari paket.
+func TestActivatePackageNotifiesActualSessionCount(t *testing.T) {
+	db, st := openOnboardingTestStore(t)
+	const wantURL = "https://meet.google.com/eig-hts-ok"
+	fake := &fakeMeetCalendar{createEventID: "evt-8", createMeetURL: wantURL}
+	f := newActivationFixture(t, db, st, fake)
+	linkReadyProfessional(t, st, f.prof.ID)
+
+	// Paket hasil penggabungan: 8 sesi, bukan 4.
+	if _, err := st.CreateCarePackage(context.Background(), store.CarePackage{
+		PatientID:      f.patient.ID,
+		ProfessionalID: f.prof.ID,
+		Status:         "pending_payment",
+		TotalSessions:  8,
+		ValidityDays:   42,
+		Price:          200000,
+	}); err != nil {
+		t.Fatalf("buat paket 8 sesi: %v", err)
+	}
+	_, payment := f.paidBooking(t, "package_session", "video")
+
+	if err := f.activate(t, payment); err != nil {
+		t.Fatalf("aktivasi paket tidak boleh error: %v", err)
+	}
+
+	profNote := findNotification(t, st, f.prof.ID, "package_activated")
+	if !strings.Contains(profNote.Body, "paket 8 sesi") {
+		t.Errorf("pesan profesional = %q, mau menyebut \"paket 8 sesi\"", profNote.Body)
+	}
+	if strings.Contains(profNote.Body, "paket 4 sesi") {
+		t.Errorf("pesan profesional masih memakai angka hardcoded 4: %q", profNote.Body)
+	}
+
+	patientNote := findNotification(t, st, f.patient.ID, "package_activated")
+	if !strings.Contains(patientNote.Body, "Paket 8 sesi") {
+		t.Errorf("pesan pasien = %q, mau menyebut \"Paket 8 sesi\"", patientNote.Body)
+	}
+	if strings.Contains(patientNote.Body, "Paket 4 sesi") {
+		t.Errorf("pesan pasien masih memakai angka hardcoded 4: %q", patientNote.Body)
+	}
+}

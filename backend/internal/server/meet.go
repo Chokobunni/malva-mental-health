@@ -43,6 +43,26 @@ const meetPendingWarning = "Jadwal tersimpan, tetapi link Google Meet belum ters
 // menampilkan tombol "Hubungkan" ke layar Akun Google.
 const meetPendingCode = "meet_belum_aktif"
 
+// meetPendingNotices menyusun teks notifikasi "link Meet belum ada" untuk
+// pasien (sufiks badan) dan profesional (judul + badan).
+//
+// serverUnavailable=true berarti integrasi Google di server mati
+// (ErrMeetUnavailable): tombol "Buat link Meet" akan membalas 501, sehingga
+// profesional TIDAK boleh disuruh menekannya (jalan buntu), dan pasien tidak
+// boleh dijanjikan link "sebelum sesi dimulai" karena tidak ada yang bisa
+// memenuhi janji itu sampai admin mengaktifkan integrasi. Pesannya tetap
+// menenangkan: sesi sudah terjadwal dan pembayaran tidak hangus.
+func meetPendingNotices(when string, serverUnavailable bool) (patientSuffix, profTitle, profBody string) {
+	if serverUnavailable {
+		return " Link video akan dibuat otomatis setelah integrasi video di server aktif; hubungi dukungan bila sesi sudah dekat dan link belum muncul.",
+			"Link Google Meet belum bisa dibuat",
+			"Sesi video dengan pasien dijadwalkan pada " + when + " tetapi integrasi Google Meet di server belum aktif. Tidak ada tindakan yang bisa dilakukan dari akun Anda; link dibuat otomatis begitu admin mengaktifkan integrasi."
+	}
+	return " Link video akan tersedia sebelum sesi dimulai.",
+		"Buat link Google Meet untuk sesi ini",
+		"Sesi video dengan pasien dijadwalkan pada " + when + " tetapi link Meet belum ada. Buka detail sesi lalu tekan \"Buat link Meet\"."
+}
+
 // errMeetNoLink: event dibuat tetapi Google tidak mengembalikan entry point
 // Meet. Sesi video tidak boleh dibuat tanpa ruang pertemuan.
 var errMeetNoLink = errors.New("google tidak mengembalikan link Meet untuk event ini")
@@ -550,10 +570,33 @@ func (s *Server) RunSessionReminders(ctx context.Context) (int, error) {
 	return sent, nil
 }
 
-// BackfillMissingMeetLinks membuat link Meet untuk sesi video terjadwal yang
-// belum punya link (mis. sesi lama sebelum integrasi dipasang, atau sesi yang
-// pembuatan link-nya gagal saat pembayaran). Dibatasi limit per pemanggilan.
-func (s *Server) BackfillMissingMeetLinks(ctx context.Context, limit int) (int, error) {
+// RunMeetLinkBackfill membuat link Meet untuk sesi video terjadwal yang belum
+// punya link (sesi lama sebelum integrasi dipasang, atau sesi berbayar yang
+// lahir "menunggu link" karena Google profesional sedang bermasalah).
+// Dibatasi limit per pemanggilan.
+//
+// Dipanggil BERKALA oleh sweeper (10 menit), bukan hanya sekali saat start:
+// satu-satunya jalur lain yang mengisi link adalah pengingat sesi (jendela
+// 15-25 menit sebelum sesi), sehingga tanpa backfill periodik sesi berbayar
+// bisa tampil tanpa link hampir sampai jam mulai — atau sampai server restart.
+//
+// Dua perbedaan penting dari backfill "buta":
+//   - Sesi milik profesional yang Google-nya belum siap DILEWATI tanpa
+//     memanggil Google dan tanpa menulis log, agar tidak membanjiri log tiap
+//     tick. Begitu profesional menyambungkan Google, tick berikutnya mengisi
+//     link-nya otomatis (sesi tetap ada di daftar selama belum punya link).
+//   - Urutan ListCareSessionsNeedingMeetLink adalah scheduled_at ASC, jadi
+//     dengan limit kecil pun sesi yang paling dekat dimulai selalu dicoba
+//     lebih dulu — inilah yang memberi percobaan ulang nyata bagi sesi yang
+//     gagal dibuatkan link tepat pada tick pengingat.
+//
+// Bila server belum dikonfigurasi Google, ErrMeetUnavailable dikembalikan
+// tanpa log: pemanggil memperlakukannya sebagai keadaan normal (bukan
+// kegagalan per tick).
+func (s *Server) RunMeetLinkBackfill(ctx context.Context, limit int) (int, error) {
+	if s.store == nil {
+		return 0, errors.New("store belum diinisialisasi")
+	}
 	if s.calendar == nil {
 		return 0, ErrMeetUnavailable
 	}
@@ -561,10 +604,25 @@ func (s *Server) BackfillMissingMeetLinks(ctx context.Context, limit int) (int, 
 	if err != nil {
 		return 0, err
 	}
+	// Kesiapan Google dihitung sekali per profesional: satu pemeriksaan
+	// mencakup beberapa sesi bila pasien/profesional sama.
+	ready := make(map[string]bool, len(sessions))
 	created := 0
 	for _, cs := range sessions {
+		isReady, seen := ready[cs.ProfessionalID]
+		if !seen {
+			isReady = s.googleCalendarReady(ctx, cs.ProfessionalID)
+			ready[cs.ProfessionalID] = isReady
+		}
+		if !isReady {
+			continue
+		}
 		if _, err := s.createMeetLink(ctx, cs); err != nil {
-			s.logger.Warn("backfill link Meet gagal", "error", err, "session", cs.ID)
+			// s.logger selalu terisi pada Server produksi (dibuat di New);
+			// guard ini menjaga Server parsial (test).
+			if s.logger != nil {
+				s.logger.Warn("backfill link Meet gagal", "error", err, "session", cs.ID)
+			}
 			continue
 		}
 		created++

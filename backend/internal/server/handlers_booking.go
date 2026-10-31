@@ -14,6 +14,7 @@ import (
 
 	"malva/backend/internal/auth"
 	"malva/backend/internal/clock"
+	"malva/backend/internal/payment"
 	"malva/backend/internal/store"
 )
 
@@ -122,6 +123,139 @@ func (s *Server) slotDurationFor(ctx context.Context, professionalID string, sta
 	return 30
 }
 
+// Penyebab slot sesi berbayar tidak bisa dipakai. Dipakai jalur terminal
+// handlePaidBookingSlotUnusable / handlePaidBookingNoSchedule.
+const (
+	slotCausePassed     = "slot_lewat"
+	slotCauseTaken      = "slot_terisi"
+	slotCauseNoSchedule = "jadwal_tidak_terbaca"
+)
+
+// notifNeedsReschedule adalah tipe notifikasi "sesi berbayar perlu dijadwalkan
+// ulang" (slot lewat / slot terisi / jadwal tidak terbaca).
+const notifNeedsReschedule = "session_needs_reschedule"
+
+// notifPaymentReconciliation adalah tipe notifikasi untuk dana yang masuk pada
+// pembayaran yang sudah dibatalkan (perlu pengembalian dana manual).
+const notifPaymentReconciliation = "payment_needs_reconciliation"
+
+// slotAlreadyPassed true bila jam sesi sudah lewat melewati toleransi yang SAMA
+// dengan store.CreateCareSession (1 menit), agar handler dan store tidak pernah
+// berbeda pendapat.
+//
+// Deteksi ini harus dilakukan SEBELUM memanggil CreateCareSession: store
+// menolak jadwal masa lalu, dan error itu membuat webhook pembayaran membalas
+// 5xx selamanya padahal uang pasien sudah masuk (kasus VA/QRIS yang settle
+// beberapa menit setelah jam sesi dimulai).
+func slotAlreadyPassed(start time.Time) bool {
+	return start.Before(clock.Now().Add(-time.Minute))
+}
+
+// alreadyNotifiedForBooking true bila notifikasi bertipe kind untuk booking ini
+// sudah pernah dibuat untuk userID.
+func (s *Server) alreadyNotifiedForBooking(ctx context.Context, userID, kind, bookingID string) bool {
+	return s.hasNotificationMatching(ctx, userID, kind, "booking_id", bookingID)
+}
+
+// alreadyNotifiedForReference true bila notifikasi bertipe kind untuk reference
+// pembayaran (order_id gateway) ini sudah pernah dibuat untuk userID.
+//
+// Dipakai jalur webhook terminal: event berstatus 'ignored' TIDAK menghentikan
+// replay (hanya 'processed' yang short-circuit di paymentWebhook), sehingga
+// dedupe harus berdasarkan reference pembayaran, bukan status event.
+func (s *Server) alreadyNotifiedForReference(ctx context.Context, userID, kind, reference string) bool {
+	return s.hasNotificationMatching(ctx, userID, kind, "reference", reference)
+}
+
+// hasNotificationMatching mencari notifikasi bertipe kind yang data[dataKey]
+// sama dengan want. Dipakai agar jalur terminal idempoten tanpa skema/kolom
+// baru. Nilai kosong tidak pernah dianggap cocok (mencegah dedupe "global").
+func (s *Server) hasNotificationMatching(ctx context.Context, userID, kind, dataKey, want string) bool {
+	if strings.TrimSpace(want) == "" || s.store == nil {
+		return false
+	}
+	items, err := s.store.ListNotifications(ctx, userID, 50)
+	if err != nil {
+		return false
+	}
+	for _, n := range items {
+		if n.Type == kind && n.Data[dataKey] == want {
+			return true
+		}
+	}
+	return false
+}
+
+// handlePaidBookingSlotUnusable menangani pembayaran yang SUDAH LUNAS tetapi
+// slot sesinya tidak bisa dipakai (jamnya sudah lewat, atau slot keburu terisi
+// sesi lain).
+//
+// Terminal, bukan error:
+//   - tidak membuat sesi — sesi bertanggal masa lalu akan ditandai no_show oleh
+//     sweeper, memakan kuota paket, dan memalsukan riwayat pasien;
+//   - tidak mengembalikan error — webhook 5xx diulang gateway selamanya;
+//   - pembayaran tetap berstatus 'paid' untuk rekonsiliasi manual, dan booking
+//     TIDAK dikembalikan ke 'pending' (itu yang dulu memungkinkan pasien
+//     membayar dua kali untuk satu sesi);
+//   - pasien & profesional diberi tahu langkah berikutnya yang nyata:
+//     profesional membuat sesi pengganti lewat POST /v1/care-sessions.
+func (s *Server) handlePaidBookingSlotUnusable(ctx context.Context, booking store.Booking, paymentID string, start time.Time, cause, patientNote string) {
+	when := start.In(wibLoc).Format("02 Jan 2006 15:04")
+	logMsg := "pembayaran lunas tetapi slot sudah lewat; perlu penjadwalan ulang manual"
+	causeText := "jam sesi itu sudah lewat saat pembayaran terkonfirmasi"
+	if cause == slotCauseTaken {
+		logMsg = "pembayaran lunas tetapi slot sudah terisi sesi lain; perlu penjadwalan ulang manual"
+		causeText = "slot itu sudah terisi sesi lain saat pembayaran terkonfirmasi"
+	}
+	s.logger.Error(logMsg, "booking", booking.ID, "payment", paymentID, "slot", when)
+	// Dedupe PER PENERIMA: kalau proses mati setelah notifikasi pasien terkirim
+	// tetapi sebelum notifikasi profesional, percobaan ulang harus tetap
+	// mengirim notifikasi profesional — jangan ada return dini yang melewati
+	// penerima lain.
+	if !s.alreadyNotifiedForBooking(ctx, booking.PatientID, notifNeedsReschedule, booking.ID) {
+		s.notifyUser(ctx, booking.PatientID, notifNeedsReschedule,
+			"Sesi perlu dijadwalkan ulang",
+			"Pembayaran sesi "+when+" sudah kami terima, tetapi "+causeText+". "+patientNote+
+				"Profesional akan membuatkan sesi pengganti; Anda tidak perlu membayar lagi.",
+			map[string]string{"booking_id": booking.ID, "slot": when, "cause": cause})
+	}
+	if !s.alreadyNotifiedForBooking(ctx, booking.ProfessionalID, notifNeedsReschedule, booking.ID) {
+		s.notifyUser(ctx, booking.ProfessionalID, notifNeedsReschedule,
+			"Sesi berbayar perlu dijadwalkan ulang",
+			"Pembayaran pasien untuk slot "+when+" sudah lunas, tetapi "+causeText+
+				". Buat sesi pengganti dari menu Jadwal agar pasien tidak kehilangan sesi yang sudah dibayar.",
+			map[string]string{"booking_id": booking.ID, "slot": when, "cause": cause, "patient_id": booking.PatientID})
+	}
+}
+
+// handlePaidBookingNoSchedule menangani pembayaran paket yang SUDAH LUNAS
+// tetapi jadwal sesi pertamanya tidak terbaca (bookings.slot_time NULLABLE —
+// data legacy tanpa jam).
+//
+// Terminal, bukan error: paket sudah aktif (ActivatePendingPackage berjalan
+// sebelum titik ini), jadi pasien tidak kehilangan kuota. Yang tidak boleh
+// dilakukan: menebak jam sesi, membuat sesi tanpa jam, atau membalas 5xx yang
+// akan diulang gateway selamanya.
+func (s *Server) handlePaidBookingNoSchedule(ctx context.Context, booking store.Booking, paymentID string, pkg store.CarePackage) {
+	s.logger.Error("pembayaran lunas tetapi jadwal sesi pertama paket tidak terbaca; paket tetap aktif",
+		"booking", booking.ID, "payment", paymentID, "package", pkg.ID,
+		"booking_date", booking.BookingDate, "slot_time", booking.SlotTime)
+	expires := pkg.ExpiresAt.In(wibLoc).Format("02 Jan 2006")
+	if !s.alreadyNotifiedForBooking(ctx, booking.PatientID, notifNeedsReschedule, booking.ID) {
+		s.notifyUser(ctx, booking.PatientID, notifNeedsReschedule,
+			"Sesi pertama belum terjadwal",
+			fmt.Sprintf("Paket %d sesi Anda sudah aktif (sampai %s), tetapi jadwal sesi pertama tidak terbaca sehingga belum bisa dijadwalkan. Pilih jadwal sesi dari menu paket; Anda tidak perlu membayar lagi.",
+				pkg.TotalSessions, expires),
+			map[string]string{"booking_id": booking.ID, "package_id": pkg.ID, "cause": slotCauseNoSchedule})
+	}
+	if !s.alreadyNotifiedForBooking(ctx, booking.ProfessionalID, notifNeedsReschedule, booking.ID) {
+		s.notifyUser(ctx, booking.ProfessionalID, notifNeedsReschedule,
+			"Sesi pertama paket perlu dijadwalkan",
+			"Pembayaran pasien sudah lunas dan paketnya aktif, tetapi jadwal sesi pertama tidak terbaca. Buat sesi untuk pasien ini dari menu Jadwal agar kuota paketnya bisa dipakai.",
+			map[string]string{"booking_id": booking.ID, "package_id": pkg.ID, "patient_id": booking.PatientID, "cause": slotCauseNoSchedule})
+	}
+}
+
 // activatePaidBooking membuat sesi terjadwal (quick) / paket aktif + link.
 // Nilai kembalian string = id paket target bila paket baru DIGABUNG ke paket
 // aktif yang sudah ada (kosong bila tidak ada penggabungan).
@@ -164,11 +298,22 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		}
 		start, perr := parseWIBDateTime(booking.BookingDate + "T" + booking.SlotTime)
 		if perr != nil || booking.SlotTime == "" {
-			return "", errors.New("slot sesi pertama paket tidak valid")
+			// Data legacy: bookings.slot_time NULLABLE, jadi baris paket tanpa
+			// jam memang ada. Paket sudah aktif di atas; sesi pertama tidak bisa
+			// dijadwalkan tanpa menebak jam. Terminal — bukan 5xx selamanya.
+			s.handlePaidBookingNoSchedule(ctx, booking, p.ID, pkg)
+			return "", nil
 		}
 		duration := booking.DurationMinutes
 		if duration <= 0 {
 			duration = s.slotDurationFor(ctx, booking.ProfessionalID, start)
+		}
+		// Slot sesi pertama paket bisa sudah lewat saat pembayaran settle (VA/
+		// QRIS lunas beberapa menit setelah jam mulai). Paket sudah diaktifkan
+		// di atas dan tetap utuh; hanya sesi pertamanya yang tidak dibuat.
+		if slotAlreadyPassed(start) {
+			s.handlePaidBookingSlotUnusable(ctx, booking, p.ID, start, slotCausePassed, "Paket Anda tetap aktif. ")
+			return "", nil
 		}
 		// Sesi pertama paket bisa bertipe video. Link Google Meet dibuat
 		// SEBELUM baris sesi disimpan, tetapi kegagalan Google TIDAK boleh
@@ -186,6 +331,12 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		// link — jadi tetap dibuat "menunggu link" dan kegagalan dicatat.
 		meetingURL, googleEventID := "", ""
 		meetPending := false
+		// meetServerUnavailable menandai penyebab "menunggu link" adalah
+		// integrasi Google di server yang mati (ErrMeetUnavailable), bukan akun
+		// Google profesional. Pesan ke pengguna HARUS dibedakan: pada kasus ini
+		// tombol "Buat link Meet" membalas 501, jadi profesional tidak boleh
+		// disuruh menekannya (lihat meetPendingNotices).
+		meetServerUnavailable := false
 		if isVideoSession(booking.SessionType) {
 			meetURL, eventID, pending, merr := s.prepareMeetEventFor(ctx, booking.PatientID, booking.ProfessionalID, start, duration)
 			if merr != nil {
@@ -193,7 +344,15 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 					s.logger.Error("google Meet belum dikonfigurasi; sesi berbayar tetap dibuat menunggu link",
 						"booking", booking.ID, "error", merr)
 					meetPending = true
+					meetServerUnavailable = true
 				} else {
+					// prepareMeetEventFor saat ini hanya bisa mengembalikan
+					// ErrMeetUnavailable: galat Google lain (ErrReauthNeeded,
+					// tanpa link Meet, 5xx) sudah didegradasi menjadi "menunggu
+					// link" di dalam prepareScheduledMeet. Cabang ini disimpan
+					// sebagai jaring pengaman agar galat keras baru tetap
+					// menggagalkan aktivasi seperti perilaku lama — jangan
+					// dihapus tanpa memeriksa helper tersebut.
 					return "", merr
 				}
 			} else {
@@ -227,20 +386,31 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 			if googleEventID != "" {
 				s.cancelMeetEventBestEffort(ctx, s.calendar, booking.ProfessionalID, googleEventID)
 			}
+			// Balapan sempit: slot bisa terisi di antara pemeriksaan di atas dan
+			// INSERT. Bila sekarang benar-benar terisi, jadikan terminal
+			// (notifikasi + 200) alih-alih 5xx yang diulang selamanya.
+			if booked, berr := s.store.IsSlotBooked(ctx, booking.ProfessionalID, start); berr == nil && booked {
+				s.handlePaidBookingSlotUnusable(ctx, booking, p.ID, start, slotCauseTaken, "Paket Anda tetap aktif. ")
+				return "", nil
+			}
 			return "", cerr
 		}
+		// Jumlah sesi diambil dari paket sebenarnya, bukan angka 4: paket bisa
+		// DIGABUNG ke paket aktif (store.ActivatePendingPackage) sehingga
+		// total_sessions menjadi 4+4 dan masa berlakunya melewati 42 hari.
 		s.notifyPatient(r, booking.ProfessionalID, "package_activated",
-			"Paket baru aktif", "Pasien membeli paket 4 sesi.",
+			"Paket baru aktif", fmt.Sprintf("Pasien membeli paket %d sesi.", pkg.TotalSessions),
 			map[string]string{"package_id": pkg.ID, "patient_id": booking.PatientID})
 		when := start.In(wibLoc).Format("02 Jan 2006 15:04")
-		pkgBody := "Paket 4 sesi / 6 minggu aktif. Sesi pertama: " + when + "."
+		pkgBody := fmt.Sprintf("Paket %d sesi aktif (sampai %s). Sesi pertama: %s.",
+			pkg.TotalSessions, pkg.ExpiresAt.In(wibLoc).Format("02 Jan 2006"), when)
 		if meetPending {
-			// Link belum ada: jangan janjikan link yang tidak ada, dan minta
-			// profesional membuatnya (hanya dia yang bisa).
-			pkgBody += " Link video akan tersedia sebelum sesi dimulai."
+			// Link belum ada: pesan menyesuaikan penyebabnya, dan profesional
+			// hanya diminta membuat link bila tombolnya memang berfungsi.
+			patientSuffix, profTitle, profBody := meetPendingNotices(when, meetServerUnavailable)
+			pkgBody += patientSuffix
 			s.notifyPatient(r, booking.ProfessionalID, "session_meet_missing",
-				"Buat link Google Meet untuk sesi ini",
-				"Sesi video dengan pasien dijadwalkan pada "+when+" tetapi link Meet belum ada. Buka detail sesi lalu tekan \"Buat link Meet\".",
+				profTitle, profBody,
 				map[string]string{"session_id": cs.ID, "patient_id": booking.PatientID, "meet_pending": "true"})
 		} else if strings.TrimSpace(cs.MeetingURL) != "" {
 			pkgBody += " Link video call: " + cs.MeetingURL
@@ -272,11 +442,22 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 	if duration <= 0 {
 		duration = s.slotDurationFor(ctx, booking.ProfessionalID, start)
 	}
-	if booked, berr := s.store.IsSlotBooked(ctx, booking.ProfessionalID, start); berr != nil || booked {
-		// Slot keburu diambil saat pembayaran: kembalikan ke pending agar
-		// pasien memilih ulang (pembayaran tetap tercatat untuk refund manual).
-		_ = s.store.UpdateBookingStatus(ctx, booking.ID, "pending")
-		return "", errors.New("slot keburu terisi saat pembayaran; booking dikembalikan ke pending")
+	// Slot sudah lewat saat pembayaran settle: terminal, bukan 5xx (lihat
+	// handlePaidBookingSlotUnusable). Sesi bertanggal masa lalu TIDAK dibuat.
+	if slotAlreadyPassed(start) {
+		s.handlePaidBookingSlotUnusable(ctx, booking, p.ID, start, slotCausePassed, "")
+		return "", nil
+	}
+	if booked, berr := s.store.IsSlotBooked(ctx, booking.ProfessionalID, start); berr != nil {
+		// Galat baca database: transien, biarkan gateway mengulang webhook.
+		return "", berr
+	} else if booked {
+		// Slot keburu terisi sesi lain. JANGAN kembalikan booking ke 'pending':
+		// pembayaran sudah lunas (MarkPaymentPaid) dan createPayment hanya
+		// menolak booking yang bukan 'pending', sehingga mengembalikannya ke
+		// pending membuat pasien bisa membayar LAGI untuk sesi yang sama.
+		s.handlePaidBookingSlotUnusable(ctx, booking, p.ID, start, slotCauseTaken, "")
+		return "", nil
 	}
 	// Quick consult video: link dibuat SEBELUM sesi disimpan, tetapi kegagalan
 	// Google TIDAK boleh membuat pasien kehilangan sesi yang sudah dibayar.
@@ -284,6 +465,9 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 	// (prepareMeetEventFor / prepareScheduledMeet).
 	meetingURL, googleEventID := "", ""
 	meetPending := false
+	// Lihat catatan di cabang paket: penyebab "menunggu link" menentukan pesan
+	// yang boleh dikirim (server belum dikonfigurasi vs akun Google profesional).
+	meetServerUnavailable := false
 	if isVideoSession(booking.SessionType) {
 		meetURL, eventID, pending, merr := s.prepareMeetEventFor(ctx, booking.PatientID, booking.ProfessionalID, start, duration)
 		if merr != nil {
@@ -291,7 +475,10 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 				s.logger.Error("google Meet belum dikonfigurasi; sesi berbayar tetap dibuat menunggu link",
 					"booking", booking.ID, "error", merr)
 				meetPending = true
+				meetServerUnavailable = true
 			} else {
+				// Jaring pengaman (saat ini tidak reachable): lihat catatan di
+				// cabang paket.
 				return "", merr
 			}
 		} else {
@@ -315,6 +502,12 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		if googleEventID != "" {
 			s.cancelMeetEventBestEffort(ctx, s.calendar, booking.ProfessionalID, googleEventID)
 		}
+		// Balapan sempit: slot terisi di antara pemeriksaan dan INSERT. Lihat
+		// catatan di cabang paket.
+		if booked, berr := s.store.IsSlotBooked(ctx, booking.ProfessionalID, start); berr == nil && booked {
+			s.handlePaidBookingSlotUnusable(ctx, booking, p.ID, start, slotCauseTaken, "")
+			return "", nil
+		}
 		return "", cerr
 	}
 	// Quick consult: buat relasi agar chat sesi bisa dipakai (tanpa data sharing).
@@ -325,12 +518,13 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 	when := start.In(wibLoc).Format("02 Jan 2006 15:04")
 	quickBody := "Sesi pada " + when + "."
 	if meetPending {
-		// Link belum ada: link dibuat menyusul, dan profesional diminta
-		// membuatnya (hanya dia yang bisa).
-		quickBody += " Link video akan tersedia sebelum sesi dimulai."
+		// Link belum ada: pesan menyesuaikan penyebabnya (lihat
+		// meetPendingNotices) agar profesional tidak disuruh menekan tombol
+		// yang akan membalas 501 saat integrasi server mati.
+		patientSuffix, profTitle, profBody := meetPendingNotices(when, meetServerUnavailable)
+		quickBody += patientSuffix
 		s.notifyPatient(r, booking.ProfessionalID, "session_meet_missing",
-			"Buat link Google Meet untuk sesi ini",
-			"Sesi video dengan pasien dijadwalkan pada "+when+" tetapi link Meet belum ada. Buka detail sesi lalu tekan \"Buat link Meet\".",
+			profTitle, profBody,
 			map[string]string{"session_id": cs.ID, "patient_id": booking.PatientID, "meet_pending": "true"})
 	} else if strings.TrimSpace(cs.MeetingURL) != "" {
 		quickBody += " Link video call: " + cs.MeetingURL
@@ -763,19 +957,35 @@ func (s *Server) paymentWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		p, perr := s.store.MarkPaymentPaid(r.Context(), evt.OrderID, evt.TransactionID)
 		if perr != nil {
-			// Notifikasi settlement ganda untuk payment yang sudah lunas bukan
-			// kegagalan: cukup tandai event selesai lalu balas 200.
-			if st, serr := s.store.PaymentStatusByReference(r.Context(), evt.OrderID); serr == nil && st == "paid" {
+			// Baca status SEKALI, lalu klasifikasikan. MarkPaymentPaid hanya
+			// berhasil untuk payment berstatus 'pending', sehingga kegagalan di
+			// sini berarti salah satu dari tiga hal: sudah lunas (settlement
+			// ganda), sudah dibatalkan/kedaluwarsa (dana telanjur masuk), atau
+			// kegagalan DB yang sesungguhnya.
+			st, serr := s.store.PaymentStatusByReference(r.Context(), evt.OrderID)
+			switch {
+			case serr == nil && st == "paid":
+				// Notifikasi settlement ganda untuk payment yang sudah lunas
+				// bukan kegagalan: cukup tandai event selesai lalu balas 200.
 				_ = s.store.UpdatePaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType, "processed", "", "")
 				writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 				return
+			case serr == nil && st != "" && st != "pending":
+				// Status terminal lain: 'cancelled' (pasien membatalkan sesi
+				// tetapi VA/QRIS yang sudah terbuka tetap dibayar), 'refunded',
+				// 'expired', 'deny', dst. Uang sudah masuk dan TIDAK akan hilang
+				// dengan mengulang webhook — jadi terminal + rekonsiliasi
+				// manual, bukan 5xx selamanya.
+				s.handlePaymentAfterCancellation(r.Context(), evt, st)
+				writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
+				return
 			}
-			// Kegagalan sesungguhnya (mis. DB sedang tidak tersedia). Dulu
-			// handler membalas 200 + menandai 'ignored' sehingga gateway tidak
-			// pernah mengulang dan pembayaran hilang. Sekarang balas 5xx dan
-			// biarkan status event tetap 'received' agar percobaan ulang
-			// gateway benar-benar diproses.
-			s.logger.Error("webhook mark paid failed", "order_id", evt.OrderID, "error", perr)
+			// 'pending' atau gagal membaca status: transien. Dulu handler
+			// membalas 200 + menandai 'ignored' sehingga gateway tidak pernah
+			// mengulang dan pembayaran hilang. Sekarang balas 5xx dan biarkan
+			// status event tetap 'received' agar percobaan ulang gateway
+			// benar-benar diproses.
+			s.logger.Error("webhook mark paid failed", "order_id", evt.OrderID, "error", perr, "payment_status", st)
 			writeError(w, http.StatusInternalServerError, errors.New("gagal memproses pembayaran"))
 			return
 		}
@@ -798,6 +1008,51 @@ func (s *Server) paymentWebhook(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
 		return
 	}
+}
+
+// handlePaymentAfterCancellation menangani dana yang masuk untuk pembayaran
+// yang TIDAK bisa ditandai lunas lagi (mis. pasien sudah menekan "Batalkan"
+// sehingga payments.status='cancelled', tetapi VA/QRIS yang sudah terbuka
+// tetap dibayar). Kelas bug yang sama dengan 17f903f: uang masuk, tidak ada
+// yang tahu, dan webhook 5xx diulang selamanya.
+//
+// Terminal — sengaja TIDAK:
+//   - mengaktifkan ulang booking/sesi (keputusan produk: sesi sudah dibatalkan
+//     pasien, bukan wewenang webhook untuk menghidupkannya kembali),
+//   - membuat refund otomatis (butuh keputusan produk & jalur pembayaran).
+//
+// Yang dilakukan: catat event, log Error bertanda untuk rekonsiliasi manual,
+// dan beri tahu pasien agar tidak membayar lagi.
+func (s *Server) handlePaymentAfterCancellation(ctx context.Context, evt payment.WebhookEvent, paymentStatus string) {
+	eventType := strings.ToLower(strings.TrimSpace(evt.Status))
+	// 'ignored', bukan 'processed': tidak ada yang selesai diproses, dan replay
+	// tetap diproses ulang (paymentWebhook hanya short-circuit untuk
+	// 'processed'). Karena itu notifikasi di-dedupe lewat reference, bukan
+	// lewat status event.
+	_ = s.store.UpdatePaymentEventStatus(ctx, "midtrans", evt.OrderID, eventType, "ignored", "", "")
+	pc, err := s.store.PaymentContextByReference(ctx, evt.OrderID)
+	if err != nil {
+		// Tanpa konteks pembayaran, penerima notifikasi tidak bisa ditentukan —
+		// catat saja (jangan menebak pasien dari order_id).
+		s.logger.Error("dana masuk untuk pembayaran yang sudah dibatalkan; perlu rekonsiliasi manual",
+			"order_id", evt.OrderID, "status", paymentStatus, "gross_amount", evt.GrossAmount, "error", err)
+		return
+	}
+	s.logger.Error("dana masuk untuk pembayaran yang sudah dibatalkan; perlu rekonsiliasi manual",
+		"order_id", evt.OrderID, "status", paymentStatus, "gross_amount", evt.GrossAmount,
+		"payment", pc.PaymentID, "booking", pc.BookingID)
+	if s.alreadyNotifiedForReference(ctx, pc.PatientID, notifPaymentReconciliation, evt.OrderID) {
+		return
+	}
+	s.notifyUser(ctx, pc.PatientID, notifPaymentReconciliation,
+		"Pembayaran perlu ditindaklanjuti",
+		"Pembayaran Anda kami terima setelah sesi ini dibatalkan, sehingga sesinya tidak dapat diaktifkan kembali. Tim Malva akan menghubungi Anda untuk pengembalian dana — mohon jangan membayar lagi.",
+		map[string]string{
+			"reference":    evt.OrderID,
+			"booking_id":   pc.BookingID,
+			"status":       paymentStatus,
+			"gross_amount": evt.GrossAmount,
+		})
 }
 
 // parseGrossAmount mengubah "150000.00" menjadi 150000 (rupiah utuh).

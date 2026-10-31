@@ -53,6 +53,17 @@ type Payment struct {
 	CreatedAt         time.Time  `json:"created_at"`
 }
 
+// PaymentContext adalah konteks minimal sebuah pembayaran untuk keperluan
+// notifikasi/rekonsiliasi webhook: id payment & booking, pemiliknya, dan
+// status pembayaran saat ini.
+type PaymentContext struct {
+	PaymentID      string
+	BookingID      string
+	PatientID      string
+	ProfessionalID string
+	Status         string
+}
+
 type EarningsSummary struct {
 	TotalSessions int   `json:"total_sessions"`
 	GrossAmount   int64 `json:"gross_amount"`
@@ -317,6 +328,31 @@ func (s *Store) PaymentStatusByReference(ctx context.Context, reference string) 
 		return "", err
 	}
 	return status, nil
+}
+
+// PaymentContextByReference membaca konteks sebuah pembayaran beserta booking
+// dan pemiliknya dalam SATU query JOIN, berdasarkan `reference` (= order_id
+// gateway).
+//
+// Dipakai webhook saat dana masuk untuk pembayaran yang tidak bisa ditandai
+// lunas (mis. sudah 'cancelled' karena pasien membatalkan sesi): notifikasi
+// rekonsiliasi harus diarahkan ke pasien yang benar, dan order_id gateway
+// tidak boleh ditebak-tebak untuk menentukan pemiliknya.
+func (s *Store) PaymentContextByReference(ctx context.Context, reference string) (PaymentContext, error) {
+	var pc PaymentContext
+	const q = `SELECT p.id, p.booking_id, b.patient_id, b.professional_id, p.status
+		FROM payments p
+		JOIN bookings b ON b.id = p.booking_id
+		WHERE p.reference = $1`
+	err := s.db.QueryRowContext(ctx, q, reference).
+		Scan(&pc.PaymentID, &pc.BookingID, &pc.PatientID, &pc.ProfessionalID, &pc.Status)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return PaymentContext{}, ErrPaymentNotFound
+		}
+		return PaymentContext{}, err
+	}
+	return pc, nil
 }
 
 // ensureEarningRow mencatat satu baris pendapatan untuk sebuah pembayaran bila
