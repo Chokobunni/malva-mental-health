@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -421,6 +422,8 @@ func TestGoogleBindingRoutesRequireAuthentication(t *testing.T) {
 // respons HTTP + kode mesin yang dikonsumsi UI Flutter. Test ini murni
 // (tanpa database) sehingga selalu berjalan di CI.
 func TestWriteGoogleIdentityErrorCodes(t *testing.T) {
+	srv := &Server{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	req := httptest.NewRequest("POST", "/v1/auth/bind-google", nil)
 	cases := []struct {
 		name   string
 		err    error
@@ -443,11 +446,38 @@ func TestWriteGoogleIdentityErrorCodes(t *testing.T) {
 			http.StatusConflict, googleIdentityBoundCode,
 			"Akun ini sudah terhubung ke akun Google lain. Lepas Gmail tersebut dulu untuk menggantinya.",
 		},
+		{
+			// Skema tertinggal: undefined_column dari migrasi 021 yang belum
+			// diterapkan. Dulu hanya terlihat sebagai 500 opaque.
+			"undefined column", &pgconn.PgError{Code: "42703", ColumnName: "sso_linked_at"},
+			http.StatusServiceUnavailable, googleSchemaNotReadyCode,
+			"Layanan identitas Google belum siap: skema database tertinggal. Hubungi admin.",
+		},
+		{
+			"undefined table", &pgconn.PgError{Code: "42P01"},
+			http.StatusServiceUnavailable, googleSchemaNotReadyCode,
+			"Layanan identitas Google belum siap: skema database tertinggal. Hubungi admin.",
+		},
+		{
+			"undefined object", &pgconn.PgError{Code: "42704"},
+			http.StatusServiceUnavailable, googleSchemaNotReadyCode,
+			"Layanan identitas Google belum siap: skema database tertinggal. Hubungi admin.",
+		},
+		{
+			"undefined function", &pgconn.PgError{Code: "42883"},
+			http.StatusServiceUnavailable, googleSchemaNotReadyCode,
+			"Layanan identitas Google belum siap: skema database tertinggal. Hubungi admin.",
+		},
+		{
+			"unknown error", errors.New("boom"),
+			http.StatusInternalServerError, googleIdentitySaveFailedCode,
+			"Gagal menyimpan identitas Google.",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			writeGoogleIdentityError(rec, tc.err)
+			srv.writeGoogleIdentityError(rec, req, tc.err)
 			var body map[string]string
 			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 				t.Fatalf("respons bukan JSON: %v", err)
@@ -460,28 +490,61 @@ func TestWriteGoogleIdentityErrorCodes(t *testing.T) {
 
 	// Raw unique violation pada index SSO -> google_sudah_tertaut.
 	rec := httptest.NewRecorder()
-	writeGoogleIdentityError(rec, &pgconn.PgError{Code: "23505", ConstraintName: "users_sso_unique"})
+	srv.writeGoogleIdentityError(rec, req, &pgconn.PgError{Code: "23505", ConstraintName: "users_sso_unique"})
 	var body map[string]string
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body["code"] != googleAlreadyLinkedCode {
 		t.Fatalf("unique users_sso_unique: %d %+v %v", rec.Code, body, err)
 	}
 	// Unique violation lain -> email_sudah_dipakai.
 	rec = httptest.NewRecorder()
-	writeGoogleIdentityError(rec, &pgconn.PgError{Code: "23505", ConstraintName: "users_email_key"})
+	srv.writeGoogleIdentityError(rec, req, &pgconn.PgError{Code: "23505", ConstraintName: "users_email_key"})
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body["code"] != googleEmailTakenCode {
 		t.Fatalf("unique email: %d %+v %v", rec.Code, body, err)
 	}
 	// Akun tidak ditemukan -> 404 tanpa kode mesin.
 	rec = httptest.NewRecorder()
-	writeGoogleIdentityError(rec, sql.ErrNoRows)
+	srv.writeGoogleIdentityError(rec, req, sql.ErrNoRows)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("no rows: %d", rec.Code)
 	}
-	// Error tak dikenal -> 500.
-	rec = httptest.NewRecorder()
-	writeGoogleIdentityError(rec, errors.New("boom"))
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("unknown error: %d", rec.Code)
+}
+
+// TestWriteGoogleIdentityErrorNilSafety memastikan tidak ada nil-pointer pada
+// dua jalur yang mudah luput: (1) Server tanpa logger (mis. konstruksi ringan
+// di test / server yang belum di-wire), dan (2) error yang BUKAN *pgconn.PgError
+// sehingga akses pgErr.ConstraintName harus ter-short-circuit. Juga menguji
+// request nil (r == nil) agar helper log tidak panik.
+func TestWriteGoogleIdentityErrorNilSafety(t *testing.T) {
+	// Server dengan logger nil: jalur default (500) dan skema-drift (503) sama-
+	// sama memanggil logGoogleIdentityError; harus aman tanpa logger.
+	noLogger := &Server{}
+	plainErr := errors.New("bukan pg error")
+	cases := []struct {
+		name   string
+		req    *http.Request
+		err    error
+		status int
+	}{
+		{"non-pg error, nil logger", httptest.NewRequest("POST", "/v1/auth/bind-google", nil), plainErr, http.StatusInternalServerError},
+		{"nil request, non-pg error", nil, plainErr, http.StatusInternalServerError},
+		{"nil request, schema drift", nil, &pgconn.PgError{Code: "42703"}, http.StatusServiceUnavailable},
+		// pg error code lain (bukan 23505/42xxx) dengan ConstraintName kosong:
+		// harus jatuh ke default 500, bukan panik.
+		{"pg error code lain", httptest.NewRequest("POST", "/v1/auth/bind-google", nil), &pgconn.PgError{Code: "23514"}, http.StatusInternalServerError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				if rec := recover(); rec != nil {
+					t.Fatalf("panic (nil-pointer?): %v", rec)
+				}
+			}()
+			rec := httptest.NewRecorder()
+			noLogger.writeGoogleIdentityError(rec, tc.req, tc.err)
+			if rec.Code != tc.status {
+				t.Fatalf("dapat %d, ingin %d", rec.Code, tc.status)
+			}
+		})
 	}
 }
 

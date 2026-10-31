@@ -660,10 +660,21 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request, claims a
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if !auth.CheckPassword(user.PasswordHash, req.CurrentPassword) {
-		s.secLogger.LogAuthFailure(r, user.Email, "invalid current password")
-		writeError(w, http.StatusUnauthorized, errors.New("current password is incorrect"))
-		return
+	// Akun yang dibuat lewat "Login Google" memakai hash password acak yang
+	// tidak diketahui pemiliknya, jadi mustahil mengirim current_password.
+	// Untuk akun yang tertaut Google, current_password boleh kosong: pemeriksaan
+	// password lama dilewati (password baru tetap divalidasi & sesi tetap
+	// diinvalidasi). Presedennya endpoint unbind-google yang juga menerima
+	// new_password tanpa password lama. Akun tanpa tautan Google tetap wajib
+	// membuktikan password lama — 401 seperti sebelumnya.
+	identity, identErr := s.store.GetGoogleIdentity(r.Context(), claims.Subject)
+	googleLinked := identErr == nil && identity.Linked
+	if !googleLinked || strings.TrimSpace(req.CurrentPassword) != "" {
+		if !auth.CheckPassword(user.PasswordHash, req.CurrentPassword) {
+			s.secLogger.LogAuthFailure(r, user.Email, "invalid current password")
+			writeError(w, http.StatusUnauthorized, errors.New("current password is incorrect"))
+			return
+		}
 	}
 	if err := security.ValidatePassword(req.NewPassword, user.Email); err != nil {
 		writeError(w, http.StatusBadRequest, err)

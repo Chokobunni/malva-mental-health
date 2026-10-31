@@ -201,31 +201,39 @@ Buka **Actions → Deploy All (manual) → Run workflow**, pilih `target`:
 Untuk APK, buka **Actions → Build & Deploy APK → Run workflow** bila ingin
 mengatur `target_platform` dan apakah APK diunggah ke server.
 
-## 9. Migrasi database (tetap manual)
+## 9. Migrasi database
 
-Backend **tidak** menjalankan migrasi otomatis saat start, dan workflow
-deploy backend **hanya mengirim binary** (`scp backend/malva-api`) — folder
-`migrations/` **tidak** ikut tersalin. Jadi setiap ada migrasi baru, dua hal
-harus dilakukan: salin berkasnya, lalu terapkan.
+Backend **tidak** menjalankan migrasi otomatis saat start. Workflow deploy
+backend kini menyalin `backend/migrations/` + `apply_migrations.sh` ke VM dan
+menjalankannya **sebelum** service di-restart, jadi skema tidak lagi tertinggal
+dari kode.
 
-### 9.1 Menyalin berkas migrasi ke VM
+> Sebelum perbaikan 2026-11, langkah deploy hanya mengirim binary
+> (`scp backend/malva-api`) dan folder `migrations/` **tidak pernah tersalin**.
+> Akibatnya produksi tertahan di migrasi 020 dan registrasi/login Google balas
+> 500 (`undefined_column`: kolom `users.sso_email`/`sso_linked_at` belum ada).
+> Dokumen ini sebelumnya menyatakan "CI menerapkan migrasi" — yang benar adalah
+> CI backend menerapkan migrasi pada database uji kosong, sedangkan deploy ke VM
+> tidak. Kini keduanya menerapkan migrasi.
 
-```bash
-# dari root repo, di laptop
-scp -i ~/.ssh/malva_azure backend/migrations/*.sql \
-  malva@api.malva.web.id:/tmp/malva-migrations/
+Deploy **gagal** bila migrasi gagal (`set -euo pipefail` + `ON_ERROR_STOP`).
 
-ssh -i ~/.ssh/malva_azure malva@api.malva.web.id '
-  sudo mkdir -p /opt/malva/app/backend/migrations
-  sudo cp /tmp/malva-migrations/*.sql /opt/malva/app/backend/migrations/
-  ls -1 /opt/malva/app/backend/migrations/
-'
-```
+### 9.1 Diterapkan otomatis oleh workflow
 
-### 9.2 Menerapkan migrasi
+`.github/workflows/deploy-backend.yml` (langkah "Terapkan migrasi database")
+melakukan, untuk setiap push ke `backend/**`:
 
-Gunakan skrip di `backend/deploy/scripts/apply_migrations.sh` (idempoten,
-menghentikan diri pada error SQL pertama, dan langsung memverifikasi hasilnya).
+1. `scp -r backend/migrations` → `/tmp/malva-migrations` di VM.
+2. `scp backend/deploy/scripts/apply_migrations.sh` → `/tmp/apply_migrations.sh`.
+3. `sudo cp` keduanya ke `/opt/malva/app/backend/`.
+4. `sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh --all`.
+
+`--all` hanya menjalankan berkas yang belum tercatat di ledger
+`schema_migrations`, tiap berkas dalam satu transaksi (`psql -1`). Pada database
+lama yang belum punya ledger, migrasi `001`–`020` ditandai sudah diterapkan
+secara otomatis (bootstrap).
+
+### 9.2 Menjalankan manual (bila perlu)
 
 ```bash
 # lihat migrasi yang tersedia
@@ -234,12 +242,11 @@ sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh --list
 # periksa kesehatan skema tanpa mengubah apa pun
 sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh --check
 
-# terapkan satu migrasi tertentu (disarankan: eksplisit per nomor)
-sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh 015
-sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh 016
-
-# terapkan semua migrasi berurutan (perilaku lama)
+# terapkan semua migrasi yang belum tercatat di ledger
 sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh --all
+
+# terapkan satu migrasi tertentu (eksplisit per nomor)
+sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh 021
 ```
 
 Migrasi terbaru yang harus jalan sebelum binary versi ini dipakai:
@@ -248,20 +255,22 @@ Migrasi terbaru yang harus jalan sebelum binary versi ini dipakai:
 |---|---|---|
 | `015` | `medication_logs.status` menerima `partial` | Log obat "Partial" ditolak database |
 | `016` | `earnings.session_id` + unique parsial | Menandai sesi selesai **gagal** (kolom tidak ada) → pendapatan tidak tercatat |
+| `021` | kolom `users.sso_email`/`users.sso_linked_at`, `google_oauth_tokens.google_subject`, unique index STR/SIP/email | **Registrasi & login Google balas 500** (`undefined_column`) |
 
-Skrip membaca `MALVA_DATABASE_URL` dari `/etc/malva/malva-api.env`; bila berkas
-itu tidak terbaca, berikan URL lewat lingkungan:
+Skrip membaca `MALVA_DATABASE_URL` dari `/etc/malva/malva-api.env` dan **tidak
+pernah mencetak kredensial**. Bila berkas itu tidak terbaca, berikan URL lewat
+lingkungan:
 
 ```bash
 sudo MALVA_DATABASE_URL='postgres://...' \
-  /opt/malva/app/backend/deploy/scripts/apply_migrations.sh 015
+  /opt/malva/app/backend/deploy/scripts/apply_migrations.sh --all
 ```
 
 Tanpa skrip, setara dengan:
 
 ```bash
 for f in /opt/malva/app/backend/migrations/*.sql; do
-  sudo -u malva psql "$MALVA_DATABASE_URL" -f "$f"
+  sudo -u malva psql "$MALVA_DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f "$f"
 done
 ```
 
@@ -301,6 +310,26 @@ sudo -u malva psql "$MALVA_DATABASE_URL" -c "
 Dua-duanya harus mengembalikan satu baris. Cara cepat: `apply_migrations.sh
 --check` mencetak `earnings.session_id : OK` dan
 `earnings.session_unique: OK — pendapatan per sesi tidak bisa ganda`.
+
+Migrasi `021` menambah kolom identitas Google + unique index STR/SIP/email. Bila
+terlewat, **registrasi & login Google balas 500** (`undefined_column`) — insiden
+2026-11. Periksa:
+
+```bash
+sudo -u malva psql "$MALVA_DATABASE_URL" -c "
+  SELECT table_name, column_name FROM information_schema.columns
+  WHERE table_name IN ('users','google_oauth_tokens')
+    AND column_name IN ('sso_email','sso_linked_at','google_subject');"
+sudo -u malva psql "$MALVA_DATABASE_URL" -c "
+  SELECT indexname FROM pg_indexes
+  WHERE indexname IN ('professional_credentials_str_uidx',
+                      'professional_credentials_sip_uidx',
+                      'users_sso_email_uidx');"
+```
+
+Harus mengembalikan tiga kolom dan tiga index. Cara cepat: `apply_migrations.sh
+--check` mencetak `... : OK — kolom ada` / `index ... : OK — index ada`, atau
+`BELUM ADA (021 belum jalan)` bila tertinggal.
 
 ### 9.4 Mengubah variabel lingkungan service
 

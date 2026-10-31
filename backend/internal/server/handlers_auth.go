@@ -76,12 +76,12 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 	// 1. Akun SSO sudah pernah login -> langsung masuk.
 	if user, err := s.store.GetUserBySSO(r.Context(), "google", payload.Subject); err == nil {
 		if _, err := s.store.LinkGoogleIdentity(r.Context(), user.ID, payload.Subject, email, false); err != nil {
-			writeGoogleIdentityError(w, err)
+			s.writeGoogleIdentityError(w, r, err)
 			return
 		}
 		user, err = s.store.GetUserByID(r.Context(), user.ID)
 		if err != nil {
-			writeGoogleIdentityError(w, err)
+			s.writeGoogleIdentityError(w, r, err)
 			return
 		}
 		s.secLogger.LogAuthSuccess(r, user.ID)
@@ -107,7 +107,7 @@ func (s *Server) googleLogin(w http.ResponseWriter, r *http.Request) {
 	// 2. Email sudah terdaftar via password -> tautkan SSO lalu masuk.
 	if user, err := s.store.GetUserByEmail(r.Context(), email); err == nil {
 		if _, err := s.store.LinkGoogleIdentity(r.Context(), user.ID, payload.Subject, email, false); err != nil {
-			writeGoogleIdentityError(w, err)
+			s.writeGoogleIdentityError(w, r, err)
 			return
 		}
 		linked, err := s.store.GetUserByID(r.Context(), user.ID)
@@ -230,7 +230,7 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 	}
 	identity, err := s.store.GetGoogleIdentity(r.Context(), claims.Subject)
 	if err != nil {
-		writeGoogleIdentityError(w, err)
+		s.writeGoogleIdentityError(w, r, err)
 		return
 	}
 	if !identity.Linked {

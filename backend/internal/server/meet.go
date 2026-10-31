@@ -429,7 +429,7 @@ func (s *Server) googleStatusHandler(w http.ResponseWriter, r *http.Request, cla
 	}
 	identity, err := s.store.GetGoogleIdentity(r.Context(), claims.Subject)
 	if err != nil {
-		writeGoogleIdentityError(w, err)
+		s.writeGoogleIdentityError(w, r, err)
 		return
 	}
 	resp := map[string]any{

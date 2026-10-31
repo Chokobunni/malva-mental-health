@@ -16,7 +16,7 @@ import (
 	"malva/backend/internal/store"
 )
 
-// Kode mesin pada balasan 409 endpoint identitas Google, supaya UI Flutter
+// Kode mesin pada balasan endpoint identitas Google, supaya UI Flutter
 // bisa menampilkan pesan spesifik dan actionable per kasus (bukan generik).
 const (
 	googleAlreadyLinkedCode = "google_sudah_tertaut"
@@ -26,6 +26,10 @@ const (
 	googleNotLinkedCode        = "google_belum_tertaut"
 	googlePasswordRequiredCode = "perlu_password"
 	googlePasswordWrongCode    = "password_salah"
+	// Kode mesin saat skema database tertinggal (mis. migrasi 021 belum
+	// diterapkan) atau kegagalan penyimpanan identitas yang tak terklasifikasi.
+	googleSchemaNotReadyCode     = "skema_belum_siap"
+	googleIdentitySaveFailedCode = "identitas_google_gagal_disimpan"
 )
 
 type bindGoogleRequest struct {
@@ -45,12 +49,24 @@ func validGoogleIdentityPayload(payload *idtoken.Payload) bool {
 //   - Email Google sudah dipakai akun lain -> 409 email_sudah_dipakai
 //   - Akun sudah tertaut ke Google lain  -> 409 akun_sudah_taut_google_lain
 //   - Akun tidak ditemukan               -> 404
+//   - Skema database tertinggal          -> 503 skema_belum_siap
+//   - Kegagalan lain                     -> 500 identitas_google_gagal_disimpan
 //
 // Semua kasus 409 memakai writeJSON (body `{"error","code"}`), bukan
 // writeError, supaya kode mesin ikut terkirim.
-func writeGoogleIdentityError(w http.ResponseWriter, err error) {
+//
+// Error asli SELALU dicatat lewat logger untuk kasus 503/500. Sebelum ini
+// fungsi package-level tidak punya logger sehingga insiden "login Google
+// gagal" tidak meninggalkan jejak apa pun di log server.
+func (s *Server) writeGoogleIdentityError(w http.ResponseWriter, r *http.Request, err error) {
 	var pgErr *pgconn.PgError
-	uniqueViolation := errors.As(err, &pgErr) && pgErr.Code == "23505"
+	isPgError := errors.As(err, &pgErr)
+	uniqueViolation := isPgError && pgErr.Code == "23505"
+	// Skema yang tertinggal (migrasi belum jalan) memunculkan
+	// undefined_column / undefined_table / undefined_object / undefined_function.
+	// Tanpa deteksi ini penyebab sebenarnya hanya terlihat sebagai 500 opaque.
+	schemaDrift := isPgError && (pgErr.Code == "42703" || pgErr.Code == "42P01" ||
+		pgErr.Code == "42704" || pgErr.Code == "42883")
 	switch {
 	case errors.Is(err, store.ErrGoogleAlreadyLinked),
 		(uniqueViolation && pgErr.ConstraintName == "users_sso_unique"):
@@ -70,9 +86,33 @@ func writeGoogleIdentityError(w http.ResponseWriter, err error) {
 		})
 	case errors.Is(err, sql.ErrNoRows):
 		writeUserError(w, http.StatusNotFound, "Akun tidak ditemukan.")
+	case schemaDrift:
+		s.logGoogleIdentityError(r, err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "Layanan identitas Google belum siap: skema database tertinggal. Hubungi admin.",
+			"code":  googleSchemaNotReadyCode,
+		})
 	default:
-		writeUserError(w, http.StatusInternalServerError, "Gagal menyimpan identitas Google.")
+		s.logGoogleIdentityError(r, err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "Gagal menyimpan identitas Google.",
+			"code":  googleIdentitySaveFailedCode,
+		})
 	}
+}
+
+// logGoogleIdentityError mencatat error identitas Google yang tidak
+// terklasifikasi beserta path-nya. Aman dipanggil pada Server tanpa logger
+// (mis. test ringan) maupun request tanpa URL.
+func (s *Server) logGoogleIdentityError(r *http.Request, err error) {
+	if s == nil || s.logger == nil {
+		return
+	}
+	path := ""
+	if r != nil && r.URL != nil {
+		path = r.URL.Path
+	}
+	s.logger.Error("gagal menyimpan identitas Google", "error", err, "path", path)
 }
 
 // Legacy link-google shares validation and storage, retaining its success body.
@@ -111,7 +151,7 @@ func (s *Server) bindGoogleIdentity(w http.ResponseWriter, r *http.Request, clai
 	}
 	ident, err := s.store.LinkGoogleIdentity(r.Context(), claims.Subject, payload.Subject, email, req.ReplaceEmail)
 	if err != nil {
-		writeGoogleIdentityError(w, err)
+		s.writeGoogleIdentityError(w, r, err)
 		return
 	}
 	if legacy {
@@ -128,7 +168,7 @@ func (s *Server) googleIdentityStatus(w http.ResponseWriter, r *http.Request, cl
 	}
 	ident, err := s.store.GetGoogleIdentity(r.Context(), claims.Subject)
 	if err != nil {
-		writeGoogleIdentityError(w, err)
+		s.writeGoogleIdentityError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, ident)
@@ -217,7 +257,7 @@ func (s *Server) unbindGoogle(w http.ResponseWriter, r *http.Request, claims aut
 		return
 	}
 	if err != nil {
-		writeGoogleIdentityError(w, err)
+		s.writeGoogleIdentityError(w, r, err)
 		return
 	}
 	s.secLogger.LogIdentityChange(r, claims.Subject, "google_unlinked")

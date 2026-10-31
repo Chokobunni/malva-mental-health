@@ -2,10 +2,15 @@
 # ============================================================
 # Malva — terapkan migrasi SQL ke database produksi
 # ============================================================
-# Backend TIDAK menjalankan migrasi otomatis saat start
-# (lihat docs/CI_CD.md §9), jadi skema hanya berubah bila skrip ini
-# dijalankan. CI juga tidak menyalin folder migrations/ ke VM — yang
-# dikirim hanya binary — sehingga berkas .sql harus disalin terpisah.
+# Backend TIDAK menjalankan migrasi otomatis saat start. Sejak perbaikan
+# 2026-11, workflow .github/workflows/deploy-backend.yml menyalin folder
+# migrations/ + skrip ini ke VM lalu menjalankan `--all` SEBELUM service
+# di-restart, sehingga skema tidak tertinggal dari kode.
+#
+# Ledger `schema_migrations(version, applied_at)` mencatat berkas mana yang
+# sudah diterapkan. Mode `--all` hanya menjalankan berkas yang BELUM tercatat,
+# tiap berkas dalam satu transaksi (psql -1). Ini memperbaiki bug lama: `--all`
+# dulu menjalankan ulang 001 yang TIDAK idempoten sehingga selalu gagal.
 #
 # Pemakaian:
 #   sudo ./apply_migrations.sh --list
@@ -15,12 +20,16 @@
 #       Terapkan satu migrasi (cocokkan awalan nama berkas).
 #
 #   sudo ./apply_migrations.sh --all
-#       Terapkan SEMUA migrasi berurutan (perilaku docs/CI_CD.md §9).
-#       Aman karena migrasi di repo idempoten, tetapi tetap lebih berisiko
-#       daripada menyebut nomor secara eksplisit.
+#   sudo ./apply_migrations.sh --pending
+#       Terapkan SEMUA migrasi yang belum tercatat di ledger, berurutan.
 #
 #   sudo ./apply_migrations.sh --check
 #       Hanya periksa kesehatan skema, tidak mengubah apa pun.
+#
+# Bootstrap: bila tabel `users` sudah ada tetapi ledger kosong (database
+# produksi lama yang belum punya ledger), migrasi 001–020 ditandai sudah
+# diterapkan. Bila `users` belum ada (database baru), ledger dibiarkan kosong
+# sehingga semua migrasi dijalankan.
 #
 # Kenapa sudo: berkas /etc/malva/malva-api.env milik root dan berisi
 # kredensial database. Skrip membacanya untuk mendapatkan URL koneksi,
@@ -37,6 +46,9 @@
 set -euo pipefail
 
 SERVICE_ENV_FILE="${MALVA_ENV_FILE:-/etc/malva/malva-api.env}"
+LEDGER_TABLE="schema_migrations"
+# Nomor migrasi tertinggi yang sudah berjalan di produksi sebelum ledger ada.
+BOOTSTRAP_MAX=20
 
 log() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -101,7 +113,83 @@ require_db() {
 # Hentikan pada error SQL pertama, jangan lanjut diam-diam.
 psql_run() { psql "$DB_URL" -v ON_ERROR_STOP=1 -q "$@"; }
 
-# --- 3. Pemeriksaan skema -------------------------------------------------
+# --- 3. Ledger migrasi ----------------------------------------------------
+ensure_ledger() {
+  psql_run -c "CREATE TABLE IF NOT EXISTS ${LEDGER_TABLE} (
+    version text PRIMARY KEY,
+    applied_at timestamptz NOT NULL DEFAULT now()
+  );"
+}
+
+# version_for <file> -> nama berkas tanpa ekstensi .sql (mis. 021_professional_identifier_unique)
+version_for() { basename "$1" .sql; }
+
+is_applied() {
+  local count
+  count="$(psql_run -tAc "SELECT count(*) FROM ${LEDGER_TABLE} WHERE version = '$1';")"
+  [ "${count:-0}" = "1" ]
+}
+
+# Bila ledger kosong dan tabel users sudah ada, tandai 001–020 sebagai
+# sudah diterapkan. Bila users belum ada (DB baru), ledger tetap kosong
+# sehingga seluruh migrasi dijalankan dari awal.
+bootstrap_ledger() {
+  local ledger_count users_exists
+  ledger_count="$(psql_run -tAc "SELECT count(*) FROM ${LEDGER_TABLE};")"
+  if [ "${ledger_count:-0}" != "0" ]; then
+    return 0
+  fi
+  users_exists="$(psql_run -tAc "SELECT to_regclass('public.users') IS NOT NULL;")"
+  if [ "$users_exists" != "t" ]; then
+    log "Bootstrap: database baru (tabel users belum ada) — semua migrasi akan dijalankan."
+    return 0
+  fi
+
+  log "Bootstrap: tabel users sudah ada & ledger kosong — migrasi 001–${BOOTSTRAP_MAX} ditandai sudah diterapkan."
+  local f base num marked=0
+  for f in "$MIG_DIR"/*.sql; do
+    [ -e "$f" ] || continue
+    base="$(version_for "$f")"
+    num=$((10#$(printf '%s' "$base" | cut -c1-3)))
+    if [ "$num" -le "$BOOTSTRAP_MAX" ]; then
+      psql_run -c "INSERT INTO ${LEDGER_TABLE}(version) VALUES ('$base') ON CONFLICT (version) DO NOTHING;"
+      marked=$((marked + 1))
+    fi
+  done
+  log "  $marked migrasi lama ditandai."
+}
+
+# Terapkan satu berkas + catat versinya dalam SATU transaksi.
+apply_file() {
+  local file="$1"
+  local base
+  base="$(version_for "$file")"
+  log "-> $base"
+  psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -q -f "$file" \
+    -c "INSERT INTO ${LEDGER_TABLE}(version) VALUES ('$base') ON CONFLICT (version) DO NOTHING;"
+  log "   selesai"
+}
+
+# Terapkan semua migrasi yang belum tercatat di ledger, berurutan.
+apply_pending() {
+  ensure_ledger
+  bootstrap_ledger
+  local f base applied=0 skipped=0
+  for f in "$MIG_DIR"/*.sql; do
+    [ -e "$f" ] || continue
+    base="$(version_for "$f")"
+    if is_applied "$base"; then
+      skipped=$((skipped + 1))
+      continue
+    fi
+    apply_file "$f"
+    applied=$((applied + 1))
+  done
+  log ""
+  log "Total migrasi baru diterapkan: $applied (dilewati karena sudah ada: $skipped)"
+}
+
+# --- 4. Pemeriksaan skema -------------------------------------------------
 # Migrasi 015 mengubah CHECK constraint medication_logs. Bila constraint
 # lama masih aktif, log "partial" akan DITOLAK database walau handler sudah
 # menerimanya. Keberadaan 'partial' di definisi constraint dipakai sebagai
@@ -114,22 +202,21 @@ check_schema() {
     "SELECT to_regclass('public.medication_logs') IS NOT NULL;")"
   if [ "$table_exists" != "t" ]; then
     log "  medication_logs        : BELUM ADA (migrasi 003 belum jalan)"
-    return 0
-  fi
-
-  local defs
-  defs="$(psql_run -tAc \
-    "SELECT pg_get_constraintdef(oid) FROM pg_constraint
-     WHERE conrelid = 'medication_logs'::regclass AND contype = 'c'
-       AND pg_get_constraintdef(oid) LIKE '%status%';")"
-
-  if [ -z "$defs" ]; then
-    log "  medication_logs.status : TIDAK ada CHECK constraint (perlu 015)"
-  elif printf '%s' "$defs" | grep -q "partial"; then
-    log "  medication_logs.status : OK — 'partial' diterima"
   else
-    log "  medication_logs.status : MASIH MENOLAK 'partial' (015 belum jalan)"
-    log "    definisi saat ini: $defs"
+    local defs
+    defs="$(psql_run -tAc \
+      "SELECT pg_get_constraintdef(oid) FROM pg_constraint
+       WHERE conrelid = 'medication_logs'::regclass AND contype = 'c'
+         AND pg_get_constraintdef(oid) LIKE '%status%';")"
+
+    if [ -z "$defs" ]; then
+      log "  medication_logs.status : TIDAK ada CHECK constraint (perlu 015)"
+    elif printf '%s' "$defs" | grep -q "partial"; then
+      log "  medication_logs.status : OK — 'partial' diterima"
+    else
+      log "  medication_logs.status : MASIH MENOLAK 'partial' (015 belum jalan)"
+      log "    definisi saat ini: $defs"
+    fi
   fi
 
   # Migrasi 014 (unique index jadwal) gagal bila masih ada baris duplikat.
@@ -170,9 +257,43 @@ check_schema() {
       log "  earnings.session_unique: BELUM ADA (016 belum jalan)"
     fi
   fi
+
+  check_migration_021
 }
 
-# --- 4. Aksi --------------------------------------------------------------
+# Migrasi 021 menambah kolom identitas Google + unique index STR/SIP/email.
+# Tanpa kolom ini, registrasi & login Google gagal 500 (undefined_column) —
+# persis insiden 2026-11 yang membuat semua registrasi balas 500.
+check_migration_021() {
+  local pair table column
+  for pair in "users:sso_email" "users:sso_linked_at" "google_oauth_tokens:google_subject"; do
+    table="${pair%%:*}"
+    column="${pair##*:}"
+    if [ "$(psql_run -tAc \
+        "SELECT count(*) FROM information_schema.columns
+         WHERE table_schema = current_schema()
+           AND table_name = '$table' AND column_name = '$column';")" = "1" ]; then
+      log "  $table.$column : OK — kolom ada"
+    else
+      log "  $table.$column : BELUM ADA (021 belum jalan)"
+    fi
+  done
+
+  local idx
+  for idx in professional_credentials_str_uidx \
+             professional_credentials_sip_uidx \
+             users_sso_email_uidx; do
+    if [ "$(psql_run -tAc \
+        "SELECT count(*) FROM pg_indexes
+         WHERE schemaname = current_schema() AND indexname = '$idx';")" = "1" ]; then
+      log "  index $idx : OK — index ada"
+    else
+      log "  index $idx : BELUM ADA (021 belum jalan)"
+    fi
+  done
+}
+
+# --- 5. Aksi --------------------------------------------------------------
 list_migrations() {
   log "Folder migrasi: $MIG_DIR"
   log ""
@@ -183,25 +304,7 @@ list_migrations() {
   done
 }
 
-apply_one() {
-  local file="$1"
-  log "-> $(basename "$file")"
-  psql_run -f "$file"
-  log "   selesai"
-}
-
-apply_all() {
-  local f applied=0
-  for f in "$MIG_DIR"/*.sql; do
-    [ -e "$f" ] || continue
-    apply_one "$f"
-    applied=$((applied + 1))
-  done
-  log ""
-  log "Total migrasi diterapkan: $applied"
-}
-
-# --- 5. Main --------------------------------------------------------------
+# --- 6. Main --------------------------------------------------------------
 case "$MODE" in
   --list)
     list_migrations
@@ -210,15 +313,15 @@ case "$MODE" in
     require_db
     check_schema
     ;;
-  --all)
+  --all|--pending)
     require_db
-    log "Menerapkan SEMUA migrasi di $MIG_DIR"
-    apply_all
+    log "Menerapkan migrasi yang belum tercatat di $MIG_DIR"
+    apply_pending
     log ""
     check_schema
     ;;
   ""|-h|--help)
-    sed -n '2,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,45p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 0
     ;;
   *)
@@ -236,8 +339,9 @@ $matches
 Sebutkan nomor yang lebih spesifik."
     fi
     require_db
+    ensure_ledger
     log "Menerapkan migrasi: $(basename "$matches")"
-    apply_one "$matches"
+    apply_file "$matches"
     log ""
     check_schema
     ;;

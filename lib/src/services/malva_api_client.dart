@@ -184,11 +184,16 @@ class MalvaApiClient {
 
   /// Lengkapi profil profesional baru yang login via Google (STR/SIP belum ada).
   /// POST /v1/auth/complete-professional — membutuhkan Bearer token.
+  ///
+  /// [password] wajib: akun yang dibuat lewat Google memakai hash acak yang
+  /// tidak bisa dipakai login, jadi password inilah yang dipakai bersama
+  /// nomor STR pada login berikutnya.
   Future<BackendAuthResult> completeProfessionalProfile({
     required String accessToken,
     required String strNumber,
     required String sipNumber,
     required String specialization,
+    required String password,
     String? displayName,
   }) async {
     final payload = await _send(
@@ -199,6 +204,7 @@ class MalvaApiClient {
         'str_number': strNumber.trim(),
         'sip_number': sipNumber.trim(),
         'specialization': specialization.trim(),
+        'password': password,
         if (displayName != null && displayName.trim().isNotEmpty)
           'display_name': displayName.trim(),
       },

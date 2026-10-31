@@ -10,6 +10,7 @@ import (
 	"malva/backend/internal/auth"
 	"malva/backend/internal/clock"
 	googlecal "malva/backend/internal/google"
+	"malva/backend/internal/security"
 	"malva/backend/internal/store"
 )
 
@@ -18,6 +19,11 @@ type completeProfessionalRequest struct {
 	SIPNumber      string `json:"sip_number"`
 	Specialization string `json:"specialization"`
 	DisplayName    string `json:"display_name"`
+	// Password opsional: akun yang dibuat lewat Google memakai hash acak yang
+	// tidak bisa dipakai login. Dengan mengisi password di sini, profesional
+	// bisa masuk berikutnya memakai nomor STR + password. Kosong = password
+	// tidak diubah (kompatibilitas klien lama).
+	Password string `json:"password"`
 	// Accepted for old clients, but never used to merge or authorize another account.
 	ExistingPassword string `json:"existing_password"`
 }
@@ -43,6 +49,27 @@ func (s *Server) completeProfessionalProfile(w http.ResponseWriter, r *http.Requ
 		writeUserError(w, http.StatusBadRequest, "specialization must be Sp.KJ or M.Psi")
 		return
 	}
+	// Password opsional divalidasi SEBELUM profil ditulis, agar kegagalan
+	// kebijakan password tidak meninggalkan perubahan separuh jalan. Hash
+	// disiapkan di sini dan baru disimpan setelah profil tersimpan.
+	var newPasswordHash string
+	if req.Password != "" {
+		current, uerr := s.store.GetUserByID(r.Context(), claims.Subject)
+		if uerr != nil {
+			writeProfessionalError(w, uerr)
+			return
+		}
+		if verr := security.ValidatePassword(req.Password, current.Email); verr != nil {
+			writeUserError(w, http.StatusBadRequest, security.IndonesianMessage(verr))
+			return
+		}
+		hash, herr := auth.HashPassword(req.Password)
+		if herr != nil {
+			writeProfessionalError(w, herr)
+			return
+		}
+		newPasswordHash = hash
+	}
 	if err := s.rejectTakenProfessionalIdentifier(r, strNumber, sipNumber, claims.Subject); err != nil {
 		writeProfessionalError(w, err)
 		return
@@ -62,6 +89,14 @@ func (s *Server) completeProfessionalProfile(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		writeProfessionalError(w, err)
 		return
+	}
+	// Simpan password baru (bila diisi) setelah profil tersimpan. Dengan ini
+	// profesional yang masuk lewat Google bisa login memakai STR + password.
+	if newPasswordHash != "" {
+		if err := s.store.UpdatePassword(r.Context(), claims.Subject, newPasswordHash); err != nil {
+			writeProfessionalError(w, err)
+			return
+		}
 	}
 	user, err := s.store.GetUserByID(r.Context(), claims.Subject)
 	if err != nil {

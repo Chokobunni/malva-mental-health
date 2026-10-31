@@ -325,6 +325,27 @@ paths:
       tags:
         - auth
       summary: completeProfessionalProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                str_number:
+                  type: string
+                sip_number:
+                  type: string
+                specialization:
+                  type: string
+                display_name:
+                  type: string
+                password:
+                  type: string
+              required:
+                - str_number
+                - sip_number
+                - specialization
       security:
         - bearerAuth: []
       responses:
@@ -410,7 +431,6 @@ paths:
                 new_password:
                   type: string
               required:
-                - current_password
                 - new_password
       security:
         - bearerAuth: []

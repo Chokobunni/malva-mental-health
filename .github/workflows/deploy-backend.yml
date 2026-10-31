@@ -93,6 +93,34 @@ jobs:
           scp -i ~/.ssh/deploy_key -P "$DEPLOY_PORT" \
             backend/malva-api "$DEPLOY_USER@$DEPLOY_HOST:/tmp/malva-api.new"
 
+      - name: Terapkan migrasi database
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          # Folder migrations/ TIDAK ikut terkirim bersama binary. Dulu hanya
+          # binary yang di-scp, sehingga migrasi 021/022 tidak pernah sampai ke
+          # VM dan skema tertinggal — akibatnya registrasi & login Google balas
+          # 500 (undefined_column). Sekarang folder migrasi + skrip dikirim
+          # ulang tiap deploy lalu diterapkan SEBELUM binary baru di-restart.
+          # Deploy GAGAL bila migrasi gagal (set -euo pipefail + ON_ERROR_STOP).
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            'rm -rf /tmp/malva-migrations /tmp/apply_migrations.sh &&
+             sudo mkdir -p /opt/malva/app/backend/migrations /opt/malva/app/backend/deploy/scripts'
+          scp -i ~/.ssh/deploy_key -P "$DEPLOY_PORT" -r \
+            backend/migrations "$DEPLOY_USER@$DEPLOY_HOST:/tmp/malva-migrations"
+          scp -i ~/.ssh/deploy_key -P "$DEPLOY_PORT" \
+            backend/deploy/scripts/apply_migrations.sh \
+            "$DEPLOY_USER@$DEPLOY_HOST:/tmp/apply_migrations.sh"
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" '
+            set -euo pipefail
+            sudo cp -f /tmp/malva-migrations/*.sql /opt/malva/app/backend/migrations/
+            sudo install -m 0755 /tmp/apply_migrations.sh /opt/malva/app/backend/deploy/scripts/apply_migrations.sh
+            rm -rf /tmp/malva-migrations /tmp/apply_migrations.sh
+            sudo /opt/malva/app/backend/deploy/scripts/apply_migrations.sh --all
+          '
+
       - name: Install & restart service
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}

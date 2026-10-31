@@ -301,8 +301,14 @@ void main() {
   // 5. ProfessionalCompletionScreen: `str_sip_sudah_terdaftar`.
   // ---------------------------------------------------------
   testWidgets(
-      'complete-professional: str_sip_sudah_terdaftar tampilkan aturan, tanpa kolom password',
+      'complete-professional: str_sip_sudah_terdaftar tampilkan aturan, dengan kolom password wajib',
       (tester) async {
+    // Layar tinggi agar seluruh isi ListView (kolom password + tombol simpan)
+    // ikut dibangun — ListView bersifat lazy.
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final requests = <http.Request>[];
     final api = MalvaApiClient(
       baseUrl: 'http://backend.test',
@@ -334,14 +340,17 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // Tidak ada kolom "password akun lama" lagi.
+    // Kolom password WAJIB ada: akun Google-only memakai hash acak, jadi
+    // password inilah yang dipakai login memakai nomor STR.
     expect(find.textContaining(RegExp('password', caseSensitive: false)),
-        findsNothing);
+        findsWidgets);
 
-    // Isi STR & SIP (name sudah ter-prefill dari sesi).
+    // Isi STR & SIP (name sudah ter-prefill dari sesi) + password.
     final fields = find.byType(TextField);
     await tester.enterText(fields.at(1), 'STR-DUP-1');
     await tester.enterText(fields.at(2), 'SIP-DUP-1');
+    await tester.enterText(fields.at(3), 'RahasiaKlinik123!');
+    await tester.enterText(fields.at(4), 'RahasiaKlinik123!');
     await tester.tap(find.widgetWithText(FilledButton, 'Simpan & Lanjutkan'));
     await tester.pumpAndSettle();
 

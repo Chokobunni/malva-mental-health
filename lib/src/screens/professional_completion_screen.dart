@@ -9,6 +9,8 @@ import '../services/google_auth_service.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/password_field.dart';
+import 'auth_widgets.dart';
 
 /// Kode mesin server saat nomor STR/SIP sudah dimiliki akun profesional lain.
 /// Sama dengan `professionalIdentifierTakenCode` di backend
@@ -45,6 +47,8 @@ class _ProfessionalCompletionScreenState
   late final TextEditingController _nameController;
   final _strController = TextEditingController();
   final _sipController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   String _specialization = 'Sp.KJ';
   bool _isSubmitting = false;
 
@@ -52,6 +56,8 @@ class _ProfessionalCompletionScreenState
   String? _nameError;
   String? _strError;
   String? _sipError;
+  String? _passwordError;
+  String? _confirmPasswordError;
 
   @override
   void initState() {
@@ -65,6 +71,8 @@ class _ProfessionalCompletionScreenState
     _nameController.dispose();
     _strController.dispose();
     _sipController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -75,12 +83,37 @@ class _ProfessionalCompletionScreenState
     final name = _nameController.text.trim();
     final str = _strController.text.trim();
     final sip = _sipController.text.trim();
+    final password = _passwordController.text;
+    final confirmPassword = _confirmPasswordController.text;
+
+    // Password wajib: akun yang dibuat lewat Google memakai hash acak yang
+    // tidak bisa dipakai login, jadi password inilah yang nanti dipakai
+    // bersama nomor STR. Kebijakannya sama dengan layar registrasi.
+    String? passwordError;
+    if (password.isEmpty) {
+      passwordError = 'Password wajib diisi.';
+    } else {
+      passwordError = validatePasswordForRegister(password);
+    }
+    String? confirmError;
+    if (confirmPassword.isEmpty) {
+      confirmError = 'Konfirmasi password wajib diisi.';
+    } else if (passwordError == null && confirmPassword != password) {
+      confirmError = 'Konfirmasi password tidak sama.';
+    }
+
     setState(() {
       _nameError = name.isEmpty ? 'Nama lengkap wajib diisi.' : null;
       _strError = str.isEmpty ? 'Nomor STR wajib diisi.' : null;
       _sipError = sip.isEmpty ? 'Nomor SIP wajib diisi.' : null;
+      _passwordError = passwordError;
+      _confirmPasswordError = confirmError;
     });
-    return _nameError == null && _strError == null && _sipError == null;
+    return _nameError == null &&
+        _strError == null &&
+        _sipError == null &&
+        _passwordError == null &&
+        _confirmPasswordError == null;
   }
 
   Future<void> _submit() async {
@@ -100,6 +133,7 @@ class _ProfessionalCompletionScreenState
         sipNumber: _sipController.text,
         specialization: _specialization,
         displayName: _nameController.text,
+        password: _passwordController.text,
         currentRefreshToken: widget.session.refreshToken ?? '',
       );
       if (!mounted) return;
@@ -277,6 +311,36 @@ class _ProfessionalCompletionScreenState
               ],
               onChanged: (v) =>
                   setState(() => _specialization = v ?? _specialization),
+            ),
+            const SizedBox(height: 18),
+            const SectionLabel('Keamanan Akun', icon: Icons.lock_rounded),
+            Text(
+              'Tetapkan password untuk masuk berikutnya. Setelah profil ini '
+              'tersimpan, Anda bisa login memakai nomor STR + password ini — '
+              'tidak harus lewat Google lagi.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.black54),
+            ),
+            const SizedBox(height: 10),
+            PasswordField(
+              controller: _passwordController,
+              labelText: 'Password',
+              hintText: 'Min. 8 karakter: A-z, 0-9, simbol',
+              prefixIcon: const Icon(Icons.lock_rounded),
+              textInputAction: TextInputAction.next,
+              errorText: _passwordError,
+              helperText: passwordRequirementHint,
+            ),
+            const SizedBox(height: 10),
+            PasswordField(
+              controller: _confirmPasswordController,
+              labelText: 'Konfirmasi password',
+              hintText: 'Ulangi password',
+              prefixIcon: const Icon(Icons.lock_outline_rounded),
+              textInputAction: TextInputAction.done,
+              errorText: _confirmPasswordError,
             ),
             const SizedBox(height: 22),
             FilledButton.icon(

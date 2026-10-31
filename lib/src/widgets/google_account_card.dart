@@ -440,6 +440,15 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
             .bodyMedium
             ?.copyWith(color: Colors.black54),
       ),
+      const SizedBox(height: 6),
+      Text(
+        'Menghubungkan Gmail TIDAK mengubah email login akun Anda — email & '
+        'password yang sekarang tetap dipakai untuk masuk.',
+        style: Theme.of(context)
+            .textTheme
+            .bodySmall
+            ?.copyWith(color: Colors.black54),
+      ),
       const SizedBox(height: 14),
       FilledButton.icon(
         onPressed: _busy ? null : _bind,
@@ -483,6 +492,15 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
       Text(
         'Gmail ini tidak bisa dipakai akun Malva lain. '
         'Satu Gmail hanya untuk satu akun.',
+        style: Theme.of(context)
+            .textTheme
+            .bodySmall
+            ?.copyWith(color: Colors.black54),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        'Melepas Gmail TIDAK menghapus akun Anda. Email & password login '
+        'tetap bisa dipakai untuk masuk seperti biasa.',
         style: Theme.of(context)
             .textTheme
             .bodySmall

@@ -561,12 +561,14 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   }
 
   /// Lengkapi onboarding profesional baru (STR/SIP/spesialisasi) setelah login Google.
+  /// [password] dipakai untuk login berikutnya memakai nomor STR.
   /// Mengembalikan sesi yang sudah diperbarui.
   Future<AuthSession> completeProfessionalOnboarding({
     required String accessToken,
     required String strNumber,
     required String sipNumber,
     required String specialization,
+    required String password,
     String? displayName,
     String currentRefreshToken = '',
   }) async {
@@ -578,6 +580,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         strNumber: strNumber,
         sipNumber: sipNumber,
         specialization: specialization,
+        password: password,
         displayName: displayName,
       );
       // Jalur non-merge tidak mengembalikan refresh token; pertahankan token

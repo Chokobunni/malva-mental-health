@@ -484,8 +484,17 @@ var requestBodies = map[string][]bodyField{
 		{"refresh_token", "string", "", true},
 	},
 	"POST /v1/auth/change-password": {
-		{"current_password", "string", "", true},
+		// current_password opsional: akun yang tertaut Google tidak punya
+		// password yang diketahui, jadi boleh dikosongkan.
+		{"current_password", "string", "", false},
 		{"new_password", "string", "", true},
+	},
+	"POST /v1/auth/complete-professional": {
+		{"str_number", "string", "", true},
+		{"sip_number", "string", "", true},
+		{"specialization", "string", "", true},
+		{"display_name", "string", "", false},
+		{"password", "string", "", false},
 	},
 	"POST /v1/screenings": {
 		{"patient_id", "string", "", false},
