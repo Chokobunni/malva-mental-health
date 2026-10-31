@@ -120,6 +120,19 @@ func run() error {
 			case n > 0:
 				logger.Info("backfill link Meet selesai", "created", n)
 			}
+
+			// Periksa umur refresh token Google (mode Testing = 7 hari) dan
+			// kirim peringatan H-1 ke profesional agar menekan "Perbarui izin".
+			// Kegagalan TIDAK boleh menggagalkan tick: cukup dicatat sebagai
+			// warning dan tick berikutnya mencoba lagi.
+			tctx, tcancel := context.WithTimeout(context.Background(), 30*time.Second)
+			notified, terr := app.RunGoogleTokenExpiryCheck(tctx)
+			tcancel()
+			if terr != nil {
+				logger.Warn("pemeriksaan umur token Google gagal", "error", terr)
+			} else if notified > 0 {
+				logger.Info("pemeriksaan umur token Google", "notified", notified)
+			}
 		}
 		sweep()
 		for {
