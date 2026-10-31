@@ -170,16 +170,35 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		if duration <= 0 {
 			duration = s.slotDurationFor(ctx, booking.ProfessionalID, start)
 		}
-		// Sesi pertama paket bisa bertipe video. Link Google Meet WAJIB dibuat
-		// SEBELUM baris sesi disimpan: store menolak sesi video tanpa link, dan
-		// kegagalan Google tidak boleh menyisakan sesi yang tidak bisa dipakai.
+		// Sesi pertama paket bisa bertipe video. Link Google Meet dibuat
+		// SEBELUM baris sesi disimpan, tetapi kegagalan Google TIDAK boleh
+		// membuat pasien kehilangan sesi yang SUDAH DIBAYAR.
+		//
+		// Semantik degradasi sengaja disamakan dengan jalur penjadwalan
+		// (prepareScheduledMeet): bila Google profesional bermasalah
+		// (ErrReauthNeeded / tanpa link / galat Google lain) sesi dibuat
+		// "menunggu link" (AllowPendingMeet) dan link dibuat menyusul.
+		//
+		// PEMBEDAAN dari jalur penjadwalan: bila server belum dikonfigurasi
+		// Google (ErrMeetUnavailable), scheduleSession membalas 501 karena
+		// pasien belum membayar. Di sini uang pasien SUDAH masuk — webhook
+		// pembayaran yang mengulang terus lebih buruk daripada sesi tanpa
+		// link — jadi tetap dibuat "menunggu link" dan kegagalan dicatat.
 		meetingURL, googleEventID := "", ""
+		meetPending := false
 		if isVideoSession(booking.SessionType) {
-			eventID, meetURL, merr := s.createMeetEventFor(ctx, booking.PatientID, booking.ProfessionalID, start, duration)
+			meetURL, eventID, pending, merr := s.prepareMeetEventFor(ctx, booking.PatientID, booking.ProfessionalID, start, duration)
 			if merr != nil {
-				return "", merr
+				if errors.Is(merr, ErrMeetUnavailable) {
+					s.logger.Error("google Meet belum dikonfigurasi; sesi berbayar tetap dibuat menunggu link",
+						"booking", booking.ID, "error", merr)
+					meetPending = true
+				} else {
+					return "", merr
+				}
+			} else {
+				meetingURL, googleEventID, meetPending = meetURL, eventID, pending
 			}
-			meetingURL, googleEventID = meetURL, eventID
 		}
 		cs, cerr := s.store.CreateCareSession(ctx, store.CareSession{
 			// WAJIB memakai pkg.ID (care_packages), BUKAN booking.PackageID.
@@ -198,6 +217,9 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 			Status:          "scheduled",
 			MeetingURL:      meetingURL,
 			GoogleEventID:   googleEventID,
+			// Izin eksplisit: sesi video berbayar boleh lahir tanpa link bila
+			// Google profesional sedang bermasalah (lihat prepareMeetEventFor).
+			AllowPendingMeet: meetPending,
 		})
 		if cerr != nil {
 			// Event sudah lahir di kalender profesional; jangan biarkan
@@ -210,8 +232,17 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		s.notifyPatient(r, booking.ProfessionalID, "package_activated",
 			"Paket baru aktif", "Pasien membeli paket 4 sesi.",
 			map[string]string{"package_id": pkg.ID, "patient_id": booking.PatientID})
-		pkgBody := "Paket 4 sesi / 6 minggu aktif. Sesi pertama: " + start.In(wibLoc).Format("02 Jan 2006 15:04") + "."
-		if strings.TrimSpace(cs.MeetingURL) != "" {
+		when := start.In(wibLoc).Format("02 Jan 2006 15:04")
+		pkgBody := "Paket 4 sesi / 6 minggu aktif. Sesi pertama: " + when + "."
+		if meetPending {
+			// Link belum ada: jangan janjikan link yang tidak ada, dan minta
+			// profesional membuatnya (hanya dia yang bisa).
+			pkgBody += " Link video akan tersedia sebelum sesi dimulai."
+			s.notifyPatient(r, booking.ProfessionalID, "session_meet_missing",
+				"Buat link Google Meet untuk sesi ini",
+				"Sesi video dengan pasien dijadwalkan pada "+when+" tetapi link Meet belum ada. Buka detail sesi lalu tekan \"Buat link Meet\".",
+				map[string]string{"session_id": cs.ID, "patient_id": booking.PatientID, "meet_pending": "true"})
+		} else if strings.TrimSpace(cs.MeetingURL) != "" {
 			pkgBody += " Link video call: " + cs.MeetingURL
 		}
 		s.notifyPatient(r, booking.PatientID, "package_activated",
@@ -247,15 +278,25 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		_ = s.store.UpdateBookingStatus(ctx, booking.ID, "pending")
 		return "", errors.New("slot keburu terisi saat pembayaran; booking dikembalikan ke pending")
 	}
-	// Quick consult video: link WAJIB ada sebelum sesi disimpan (lihat catatan
-	// pada alur aktivasi paket di atas).
+	// Quick consult video: link dibuat SEBELUM sesi disimpan, tetapi kegagalan
+	// Google TIDAK boleh membuat pasien kehilangan sesi yang sudah dibayar.
+	// Semantik degradasi disamakan dengan alur aktivasi paket di atas
+	// (prepareMeetEventFor / prepareScheduledMeet).
 	meetingURL, googleEventID := "", ""
+	meetPending := false
 	if isVideoSession(booking.SessionType) {
-		eventID, meetURL, merr := s.createMeetEventFor(ctx, booking.PatientID, booking.ProfessionalID, start, duration)
+		meetURL, eventID, pending, merr := s.prepareMeetEventFor(ctx, booking.PatientID, booking.ProfessionalID, start, duration)
 		if merr != nil {
-			return "", merr
+			if errors.Is(merr, ErrMeetUnavailable) {
+				s.logger.Error("google Meet belum dikonfigurasi; sesi berbayar tetap dibuat menunggu link",
+					"booking", booking.ID, "error", merr)
+				meetPending = true
+			} else {
+				return "", merr
+			}
+		} else {
+			meetingURL, googleEventID, meetPending = meetURL, eventID, pending
 		}
-		meetingURL, googleEventID = meetURL, eventID
 	}
 	cs, cerr := s.store.CreateCareSession(ctx, store.CareSession{
 		BookingID:       &booking.ID,
@@ -267,6 +308,8 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		Status:          "scheduled",
 		MeetingURL:      meetingURL,
 		GoogleEventID:   googleEventID,
+		// Izin eksplisit: sesi video berbayar boleh lahir tanpa link.
+		AllowPendingMeet: meetPending,
 	})
 	if cerr != nil {
 		if googleEventID != "" {
@@ -279,8 +322,17 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 	s.notifyPatient(r, booking.ProfessionalID, "session_scheduled",
 		"Sesi baru dijadwalkan", "Ada sesi quick consult baru.",
 		map[string]string{"session_id": cs.ID, "patient_id": booking.PatientID})
-	quickBody := "Sesi pada " + start.In(wibLoc).Format("02 Jan 2006 15:04") + "."
-	if strings.TrimSpace(cs.MeetingURL) != "" {
+	when := start.In(wibLoc).Format("02 Jan 2006 15:04")
+	quickBody := "Sesi pada " + when + "."
+	if meetPending {
+		// Link belum ada: link dibuat menyusul, dan profesional diminta
+		// membuatnya (hanya dia yang bisa).
+		quickBody += " Link video akan tersedia sebelum sesi dimulai."
+		s.notifyPatient(r, booking.ProfessionalID, "session_meet_missing",
+			"Buat link Google Meet untuk sesi ini",
+			"Sesi video dengan pasien dijadwalkan pada "+when+" tetapi link Meet belum ada. Buka detail sesi lalu tekan \"Buat link Meet\".",
+			map[string]string{"session_id": cs.ID, "patient_id": booking.PatientID, "meet_pending": "true"})
+	} else if strings.TrimSpace(cs.MeetingURL) != "" {
 		quickBody += " Link video call: " + cs.MeetingURL
 	}
 	s.notifyPatient(r, booking.PatientID, "session_scheduled",

@@ -328,14 +328,24 @@ func (s *Server) createMeetLinkAt(ctx context.Context, cs store.CareSession, sta
 	return updated, nil
 }
 
-// createMeetEventFor membuat event Meet untuk sesi yang BELUM tersimpan.
+// prepareMeetEventFor mencoba membuat link Meet untuk sesi yang BELUM
+// tersimpan, memakai semantik degradasi yang SAMA dengan jalur penjadwalan
+// (prepareScheduledMeet).
 //
-// Dipakai aktivasi pembayaran: baris care_sessions baru boleh dibuat setelah
-// link tersedia (store menolak sesi video tanpa link), sehingga event harus
-// dibuat lebih dulu. Ringkasan event memuat nama pasien dan profesional.
-func (s *Server) createMeetEventFor(ctx context.Context, patientID, professionalID string, start time.Time, durationMinutes int) (string, string, error) {
+// Dipakai aktivasi pembayaran: baris care_sessions dibuat setelah helper ini
+// selesai (store menolak sesi video tanpa link kecuali AllowPendingMeet).
+// Ringkasan event memuat nama pasien dan profesional.
+//
+// Nilai kembalian sama dengan prepareScheduledMeet:
+//   - (meetURL, eventID, false, nil) -> link siap, simpan apa adanya;
+//   - ("", "", true, nil)            -> sesi dibuat "menunggu link";
+//   - ("", "", false, ErrMeetUnavailable) -> server belum dikonfigurasi Google.
+func (s *Server) prepareMeetEventFor(ctx context.Context, patientID, professionalID string, start time.Time, durationMinutes int) (string, string, bool, error) {
+	// Cek konfigurasi server lebih dulu agar GetUserByID tidak dipanggil pada
+	// Server parsial (test) yang store-nya nil. prepareScheduledMeet juga
+	// memeriksa ini, tetapi di sini opsi event dibangun sebelum memanggilnya.
 	if s.calendar == nil {
-		return "", "", ErrMeetUnavailable
+		return "", "", false, ErrMeetUnavailable
 	}
 	if durationMinutes <= 0 {
 		durationMinutes = 30
@@ -355,7 +365,7 @@ func (s *Server) createMeetEventFor(ctx context.Context, patientID, professional
 	if u, err := s.store.GetUserByID(ctx, professionalID); err == nil && strings.TrimSpace(u.DisplayName) != "" {
 		opts.Description += "\nProfesional: " + strings.TrimSpace(u.DisplayName)
 	}
-	return s.createScheduledMeet(ctx, s.calendar, professionalID, opts)
+	return s.prepareScheduledMeet(ctx, professionalID, opts)
 }
 
 // googleCalendarReady melaporkan apakah profesional dapat membuat link Meet
