@@ -357,7 +357,7 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 	isPatient := claims.Role == "patient" && claims.Subject == cs.PatientID
 	isProf := claims.Role == "professional" && claims.Subject == cs.ProfessionalID
 	if !isPatient && !isProf {
-		writeError(w, http.StatusForbidden, errors.New("Anda tidak berhak atas sesi ini."))
+		writeUserError(w, http.StatusForbidden, "Anda tidak berhak atas sesi ini.")
 		return
 	}
 	var req updateSessionRequest
@@ -487,7 +487,7 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 	isPatient := claims.Role == "patient" && claims.Subject == cs.PatientID
 	isProf := claims.Role == "professional" && claims.Subject == cs.ProfessionalID
 	if !isPatient && !isProf {
-		writeError(w, http.StatusForbidden, errors.New("Anda tidak berhak atas sesi ini."))
+		writeUserError(w, http.StatusForbidden, "Anda tidak berhak atas sesi ini.")
 		return
 	}
 	var req rescheduleSessionRequest
@@ -758,7 +758,7 @@ func (s *Server) refundCareSession(w http.ResponseWriter, r *http.Request, claim
 	isProf := claims.Role == "professional" && claims.Subject == cs.ProfessionalID
 	isAdmin := claims.Role == "admin"
 	if !isPatient && !isProf && !isAdmin {
-		writeError(w, http.StatusForbidden, errors.New("Anda tidak berhak atas sesi ini."))
+		writeUserError(w, http.StatusForbidden, "Anda tidak berhak atas sesi ini.")
 		return
 	}
 	var req refundRequest
