@@ -147,6 +147,9 @@ type privacyConsentRequest struct {
 	ShareTimeline     bool   `json:"share_timeline"`
 	ShareHealthRecord *bool  `json:"share_health_record"`
 	ShareGoals        *bool  `json:"share_goals"`
+	// ShareTherapyRecords: izin kategori Therapy Record (worksheet CBT/DBT).
+	// Pointer agar "tidak dikirim" berbeda dari "false" — default-nya MATI.
+	ShareTherapyRecords *bool `json:"share_therapy_records"`
 }
 
 type passwordChangeRequest struct {
@@ -1529,15 +1532,20 @@ func (s *Server) updatePrivacyConsent(w http.ResponseWriter, r *http.Request, cl
 	if req.ShareGoals != nil {
 		shareGoals = *req.ShareGoals
 	}
+	shareTherapyRecords := false
+	if req.ShareTherapyRecords != nil {
+		shareTherapyRecords = *req.ShareTherapyRecords
+	}
 	consent, err := s.store.UpdatePatientDataConsent(r.Context(), store.PatientDataConsent{
-		PatientID:         claims.Subject,
-		ProfessionalID:    req.ProfessionalID,
-		ShareScreenings:   req.ShareScreenings,
-		ShareMoodDiary:    req.ShareMoodDiary,
-		ShareMedications:  req.ShareMedications,
-		ShareTimeline:     req.ShareTimeline,
-		ShareHealthRecord: shareHealthRecord,
-		ShareGoals:        shareGoals,
+		PatientID:           claims.Subject,
+		ProfessionalID:      req.ProfessionalID,
+		ShareScreenings:     req.ShareScreenings,
+		ShareMoodDiary:      req.ShareMoodDiary,
+		ShareMedications:    req.ShareMedications,
+		ShareTimeline:       req.ShareTimeline,
+		ShareHealthRecord:   shareHealthRecord,
+		ShareGoals:          shareGoals,
+		ShareTherapyRecords: shareTherapyRecords,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -1862,6 +1870,10 @@ func (s *Server) consentAllows(r *http.Request, patientID, professionalID, scope
 		return consent.ShareHealthRecord
 	case "goals":
 		return consent.ShareGoals
+	case "therapy_records":
+		// Izin kategori Therapy Record: profesional boleh melihat SEMUA
+		// worksheet terapi pasien, bukan hanya yang dibagikan satu per satu.
+		return consent.ShareTherapyRecords
 	default:
 		return false
 	}

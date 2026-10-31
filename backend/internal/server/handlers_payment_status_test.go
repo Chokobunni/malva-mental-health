@@ -124,6 +124,20 @@ func TestGetPaymentStatusProfessionalForbidden(t *testing.T) {
 	}
 }
 
+// TestGetPaymentStatusUnknownReferenceNotFound mengunci klaim #1: reference
+// yang tidak pernah diterbitkan dibalas 404 (bukan 500), sehingga polling
+// klien berhenti dengan pesan "tidak ditemukan", bukan galat server.
+func TestGetPaymentStatusUnknownReferenceNotFound(t *testing.T) {
+	db, st := openOnboardingTestStore(t)
+	f := newPaymentStatusFixture(t, db, st)
+
+	rec := f.getStatus(t, "REF-TIDAK-ADA-"+fmt.Sprint(time.Now().UnixNano()),
+		auth.Claims{Subject: f.patient.ID, Role: "patient"})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, mau 404 untuk reference tak dikenal (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
 // TestGetPaymentStatusPaidActivatesSession mengunci manfaat utama endpoint ini:
 // pembayaran sudah 'paid' (webhook sudah menandai lunas) tetapi sesinya belum
 // ada — karena aktivasi webhook gagal/tertunda. Pemeriksaan status oleh pasien

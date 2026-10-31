@@ -204,16 +204,20 @@ type MedicationLog struct {
 }
 
 type PatientDataConsent struct {
-	PatientID         string    `json:"patient_id"`
-	ProfessionalID    string    `json:"professional_id"`
-	ShareScreenings   bool      `json:"share_screenings"`
-	ShareMoodDiary    bool      `json:"share_mood_diary"`
-	ShareMedications  bool      `json:"share_medications"`
-	ShareTimeline     bool      `json:"share_timeline"`
-	ShareHealthRecord bool      `json:"share_health_record"`
-	ShareGoals        bool      `json:"share_goals"`
-	ShareDiaryCheckin bool      `json:"share_diary_checkin"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	PatientID         string `json:"patient_id"`
+	ProfessionalID    string `json:"professional_id"`
+	ShareScreenings   bool   `json:"share_screenings"`
+	ShareMoodDiary    bool   `json:"share_mood_diary"`
+	ShareMedications  bool   `json:"share_medications"`
+	ShareTimeline     bool   `json:"share_timeline"`
+	ShareHealthRecord bool   `json:"share_health_record"`
+	ShareGoals        bool   `json:"share_goals"`
+	ShareDiaryCheckin bool   `json:"share_diary_checkin"`
+	// ShareTherapyRecords mengizinkan profesional melihat SEMUA worksheet
+	// terapi (CBT/DBT) pasien, bukan hanya yang dibagikan satu per satu.
+	// Default MATI (opt-in) — lihat migrasi 023.
+	ShareTherapyRecords bool      `json:"share_therapy_records"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 type TimelineEvent struct {
@@ -1680,23 +1684,32 @@ func (s *Store) ListMedicationLogs(ctx context.Context, patientID string, limit 
 }
 
 func (s *Store) GetPatientDataConsent(ctx context.Context, patientID, professionalID string) (PatientDataConsent, error) {
+	// Kolom opsional (share_goals/share_diary_checkin/share_therapy_records)
+	// dideteksi lebih dulu: DB yang migrasinya belum lengkap tetap bisa dibaca.
+	// Pemeriksaan WAJIB dibatasi `table_schema = current_schema()` — tanpa itu,
+	// kolom bernama sama di schema lain (mis. sisa schema test) membuat query
+	// menyebut kolom yang tidak ada di schema aktif dan seluruh pembacaan
+	// consent gagal.
 	var consent PatientDataConsent
 	err := s.db.QueryRowContext(ctx, `
 		SELECT patient_id, professional_id, share_screenings, share_mood_diary,
 		       share_medications, share_timeline, share_health_record,
 		       CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
-		           WHERE table_name = 'patient_data_consents' AND column_name = 'share_goals')
+		           WHERE table_schema = current_schema() AND table_name = 'patient_data_consents' AND column_name = 'share_goals')
 		            THEN share_goals ELSE true END,
 		       CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
-		           WHERE table_name = 'patient_data_consents' AND column_name = 'share_diary_checkin')
+		           WHERE table_schema = current_schema() AND table_name = 'patient_data_consents' AND column_name = 'share_diary_checkin')
 		            THEN share_diary_checkin ELSE share_mood_diary END,
+		       CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+		           WHERE table_schema = current_schema() AND table_name = 'patient_data_consents' AND column_name = 'share_therapy_records')
+		            THEN share_therapy_records ELSE false END,
 		       updated_at
 		FROM patient_data_consents WHERE patient_id = $1 AND professional_id = $2
 	`, patientID, professionalID).Scan(&consent.PatientID, &consent.ProfessionalID,
 		&consent.ShareScreenings, &consent.ShareMoodDiary,
 		&consent.ShareMedications, &consent.ShareTimeline,
 		&consent.ShareHealthRecord, &consent.ShareGoals, &consent.ShareDiaryCheckin,
-		&consent.UpdatedAt)
+		&consent.ShareTherapyRecords, &consent.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Belum ada baris consent = belum ada izin (default MATI).
 		consent = PatientDataConsent{
@@ -1708,14 +1721,18 @@ func (s *Store) GetPatientDataConsent(ctx context.Context, patientID, profession
 }
 
 func (s *Store) UpdatePatientDataConsent(ctx context.Context, consent PatientDataConsent) (PatientDataConsent, error) {
-	// Kolom share_goals/share_diary_checkin (migrasi 006) mungkin belum
-	// ada di DB produksi bila migrasi dijalankan user non-owner — deteksi
-	// kolom dulu agar update tetap jalan dengan kolom yang tersedia.
-	hasGoals, hasDiary := false, false
+	// Kolom share_goals/share_diary_checkin (migrasi 006) dan
+	// share_therapy_records (migrasi 023) mungkin belum ada di DB yang
+	// migrasinya belum lengkap — deteksi kolom dulu agar update tetap jalan
+	// dengan kolom yang tersedia. Seperti di GetPatientDataConsent, deteksi
+	// dibatasi schema aktif (`table_schema = current_schema()`).
+	hasGoals, hasDiary, hasTherapy := false, false, false
 	_ = s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns
-		WHERE table_name = 'patient_data_consents' AND column_name = 'share_goals')`).Scan(&hasGoals)
+		WHERE table_schema = current_schema() AND table_name = 'patient_data_consents' AND column_name = 'share_goals')`).Scan(&hasGoals)
 	_ = s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns
-		WHERE table_name = 'patient_data_consents' AND column_name = 'share_diary_checkin')`).Scan(&hasDiary)
+		WHERE table_schema = current_schema() AND table_name = 'patient_data_consents' AND column_name = 'share_diary_checkin')`).Scan(&hasDiary)
+	_ = s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+		WHERE table_schema = current_schema() AND table_name = 'patient_data_consents' AND column_name = 'share_therapy_records')`).Scan(&hasTherapy)
 	cols := "patient_id, professional_id, share_screenings, share_mood_diary, share_medications, share_timeline, share_health_record"
 	vals := "$1, $2, $3, $4, $5, $6, $7"
 	setClause := `share_screenings = EXCLUDED.share_screenings,
@@ -1728,27 +1745,34 @@ func (s *Store) UpdatePatientDataConsent(ctx context.Context, consent PatientDat
 	args := []any{consent.PatientID, consent.ProfessionalID, consent.ShareScreenings,
 		consent.ShareMoodDiary, consent.ShareMedications, consent.ShareTimeline,
 		consent.ShareHealthRecord}
+	// Placeholder dihitung dari jumlah argumen: kolom opsional (migrasi 006/023)
+	// bisa ada atau tidak di DB, jadi nomor $n tidak boleh di-hardcode.
+	nextPlaceholder := func() string { return fmt.Sprintf("$%d", len(args)+1) }
 	if hasGoals {
 		cols += ", share_goals"
-		vals += ", $8"
+		vals += ", " + nextPlaceholder()
 		setClause += ", share_goals = EXCLUDED.share_goals"
 		returnCols += ", share_goals"
 		args = append(args, consent.ShareGoals)
 	}
 	if hasDiary {
-		ph := "$8"
-		if hasGoals {
-			ph = "$9"
-		}
 		cols += ", share_diary_checkin"
-		vals += ", " + ph
+		vals += ", " + nextPlaceholder()
 		setClause += ", share_diary_checkin = EXCLUDED.share_diary_checkin"
 		returnCols += ", share_diary_checkin"
 		args = append(args, consent.ShareMoodDiary)
 	}
+	if hasTherapy {
+		cols += ", share_therapy_records"
+		vals += ", " + nextPlaceholder()
+		setClause += ", share_therapy_records = EXCLUDED.share_therapy_records"
+		returnCols += ", share_therapy_records"
+		args = append(args, consent.ShareTherapyRecords)
+	}
 	var saved PatientDataConsent
 	saved.ShareGoals = consent.ShareGoals
 	saved.ShareDiaryCheckin = consent.ShareMoodDiary
+	saved.ShareTherapyRecords = consent.ShareTherapyRecords
 	q := `INSERT INTO patient_data_consents (` + cols + `)
 		VALUES (` + vals + `)
 		ON CONFLICT (patient_id, professional_id) DO UPDATE
@@ -1762,6 +1786,9 @@ func (s *Store) UpdatePatientDataConsent(ctx context.Context, consent PatientDat
 	}
 	if hasDiary {
 		scanArgs = append(scanArgs, &saved.ShareDiaryCheckin)
+	}
+	if hasTherapy {
+		scanArgs = append(scanArgs, &saved.ShareTherapyRecords)
 	}
 	scanArgs = append(scanArgs, &saved.UpdatedAt)
 	err := s.db.QueryRowContext(ctx, q, args...).Scan(scanArgs...)

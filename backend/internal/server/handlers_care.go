@@ -298,6 +298,13 @@ func (s *Server) listTherapySubmissions(w http.ResponseWriter, r *http.Request, 
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
+		// Izin kategori "Therapy Record" aktif (Manage Data) -> profesional
+		// boleh melihat SEMUA worksheet pasien ini. Tanpa izin, perilaku lama
+		// dipertahankan: hanya worksheet yang dibagikan satu per satu.
+		if s.consentAllows(r, patientID, claims.Subject, "therapy_records") {
+			writeJSON(w, http.StatusOK, map[string]any{"submissions": all})
+			return
+		}
 		shared := make([]store.TherapySubmission, 0, len(all))
 		for _, sub := range all {
 			if sub.SharedWithProfessionalID != nil && *sub.SharedWithProfessionalID == claims.Subject {
