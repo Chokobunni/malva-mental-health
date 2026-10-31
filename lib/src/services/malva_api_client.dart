@@ -1718,10 +1718,21 @@ class MalvaApiClient {
   /// `/v1/professionals/{id}/meet-status`).
   ///
   /// [reason] salah satu: `ready`, `not_linked`, `no_calendar_scope`,
-  /// `token_expired`, atau `server_not_configured`. Dipakai klien untuk
-  /// memberi tahu pasien bahwa sesi video tetap bisa dijadwalkan (link
-  /// menyusul) dan untuk mengarahkan profesional ke tindakan yang tepat.
-  Future<({bool ready, String reason})> professionalMeetStatus({
+  /// `token_expired`, `token_hampir_kedaluwarsa`, atau `server_not_configured`.
+  /// Dipakai klien untuk memberi tahu pasien bahwa sesi video tetap bisa
+  /// dijadwalkan (link menyusul) dan untuk mengarahkan profesional ke tindakan
+  /// yang tepat.
+  ///
+  /// [refreshTokenAgeDays] umur grant izin Google dalam hari (0 bila tidak
+  /// ada token). [refreshTokenExpiresInDays] sisa hari sebelum izin dianggap
+  /// kedaluwarsa (-1 bila tidak diketahui / peringatan nonaktif).
+  Future<
+      ({
+        bool ready,
+        String reason,
+        int refreshTokenAgeDays,
+        int refreshTokenExpiresInDays,
+      })> professionalMeetStatus({
     required String accessToken,
     required String professionalId,
   }) async {
@@ -1733,6 +1744,10 @@ class MalvaApiClient {
     return (
       ready: payload['ready'] == true,
       reason: payload['reason']?.toString() ?? '',
+      refreshTokenAgeDays:
+          (payload['refresh_token_age_days'] as num?)?.toInt() ?? 0,
+      refreshTokenExpiresInDays:
+          (payload['refresh_token_expires_in_days'] as num?)?.toInt() ?? -1,
     );
   }
 

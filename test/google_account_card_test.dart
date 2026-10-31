@@ -413,6 +413,78 @@ void main() {
     expect(
         find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
   });
+  testWidgets(
+      'profesional showMeet: reason token_hampir_kedaluwarsa menampilkan tombol Perbarui izin sekarang',
+      (tester) async {
+    var freshCalls = 0;
+    var normalCalls = 0;
+    final api = MalvaApiClient(
+      baseUrl: 'http://backend.test',
+      httpClient: _FakeClient((request) async {
+        switch ('${request.method} ${request.url.path}') {
+          case 'GET /v1/auth/google-identity':
+            return _json({
+              'linked': true,
+              'email': 'dr.hafid@gmail.com',
+              'linked_at': '2026-10-05T10:00:00.000Z',
+            });
+          case 'GET /v1/professionals/user_pro_1/meet-status':
+            return _json({
+              'ready': true,
+              'reason': 'token_hampir_kedaluwarsa',
+              'refresh_token_age_days': 6,
+              'refresh_token_expires_in_days': 1,
+            });
+          case 'GET /v1/google/status':
+            return _json({
+              'server_configured': true,
+              'connected': true,
+              'scope': 'https://www.googleapis.com/auth/calendar.events',
+            });
+          case 'POST /v1/auth/google-token-exchange':
+            return _json({'status': 'ok'});
+          default:
+            return _json(const {});
+        }
+      }),
+    );
+
+    await tester.pumpWidget(_wrap(
+      api,
+      _proSession,
+      GoogleAccountCard(
+        session: _proSession,
+        showMeet: true,
+        calendarCodeProvider: () async {
+          normalCalls++;
+          return 'code-normal';
+        },
+        calendarCodeProviderFresh: () async {
+          freshCalls++;
+          return 'code-fresh';
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Teks peringatan mode Testing tampil, lengkap dengan sisa hari.
+    expect(find.textContaining('mode Testing'), findsOneWidget);
+    expect(find.textContaining('dalam 1 hari'), findsOneWidget);
+    // Tombol perpanjangan khusus tampil.
+    expect(find.widgetWithText(FilledButton, 'Perbarui izin sekarang'),
+        findsOneWidget);
+    // Tombol lama "Hubungkan Google Calendar" tidak muncul di keadaan ini.
+    expect(find.widgetWithText(FilledButton, 'Hubungkan Google Calendar'),
+        findsNothing);
+
+    await tester
+        .tap(find.widgetWithText(FilledButton, 'Perbarui izin sekarang'));
+    await tester.pumpAndSettle();
+
+    // Perpanjangan WAJIB memakai otorisasi baru (fresh consent), bukan lama.
+    expect(freshCalls, 1);
+    expect(normalCalls, 0);
+  });
 }
 
 /// Klien HTTP palsu (pola repo, lihat `test/health_record_sync_test.dart`).
