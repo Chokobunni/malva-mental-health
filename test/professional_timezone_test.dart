@@ -82,6 +82,17 @@ void main() {
         '30/10/2026 03:20');
   });
 
+  // Tanggal TETAP dengan angka satu digit: mengunci format `d/M/yyyy HH:mm`
+  // (tanggal tanpa padding, jam ber-padding) tanpa bergantung tanggal hari ini.
+  test(
+      'formatIncidentDate: 2026-10-05T20:20:00Z → 6/10/2026 03:20 (tanggal tanpa padding)',
+      () {
+    final label = formatIncidentDate(DateTime.parse('2026-10-05T20:20:00Z'));
+    expect(label, '6/10/2026 03:20');
+    expect(label, isNot('06/10/2026 03:20'),
+        reason: 'tanggal insiden memakai tanggal tanpa padding');
+  });
+
   // ----------------------------------------------------------------------
   // #3 — Therapy record (daftar + kartu pratinjau memakai helper yang SAMA)
   // ----------------------------------------------------------------------
@@ -102,5 +113,17 @@ void main() {
         '${local.day}/${local.month}/${local.year} 00:15');
     expect(formatTherapyRecordDate(null), '',
         reason: 'tanpa waktu tersedia, helper mengembalikan string kosong');
+  });
+
+  // Tanggal TETAP dengan angka satu digit: mengunci format `d/M/yyyy HH:mm`
+  // pada therapy record tanpa bergantung tanggal hari ini.
+  test(
+      'formatTherapyRecordDate: 2026-10-05T20:20:00Z → 6/10/2026 03:20 (tanggal tanpa padding)',
+      () {
+    final label =
+        formatTherapyRecordDate(DateTime.parse('2026-10-05T20:20:00Z'));
+    expect(label, '6/10/2026 03:20');
+    expect(label, isNot('06/10/2026 03:20'),
+        reason: 'tanggal therapy record memakai tanggal tanpa padding');
   });
 }

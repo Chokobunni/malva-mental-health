@@ -19,15 +19,16 @@ import '../time/wib.dart';
 // Diekspor ulang supaya pemanggil lama (mis. layar profesional) tetap jalan.
 export '../ai/assessment_scoring.dart';
 
-/// Waktu therapy record (`dd/MM/yyyy HH:mm`) dalam waktu LOKAL.
+/// Waktu therapy record (`d/M/yyyy HH:mm`) dalam waktu WIB.
 ///
-/// `createdDateTime` berasal dari server (UTC), jadi WAJIB `` lebih
+/// `createdDateTime` berasal dari server (UTC), jadi WAJIB `toWib()` lebih
 /// dulu. Satu helper dipakai oleh daftar Therapy Record maupun kartu pratinjau
 /// supaya kedua tempat tidak pernah menampilkan tanggal yang berbeda.
-/// Mengembalikan string kosong bila waktunya tidak tersedia.
+/// Tanggal sengaja TANPA padding (jam tetap `HH:mm`) seperti format yang sudah
+/// dirilis. Mengembalikan string kosong bila waktunya tidak tersedia.
 String formatTherapyRecordDate(DateTime? value) {
   if (value == null) return '';
-  return formatWibDateTime(value);
+  return formatWibDateTimeShort(value);
 }
 
 // ============================================================

@@ -252,6 +252,29 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     );
   }
 
+  /// Beranda sesuai peran, dipakai rute bernama '/home'.
+  ///
+  /// Rute ini adalah tujuan tap notifikasi (lihat `_routeForType` di
+  /// PushNotificationService: follow_up, session_meet_missing,
+  /// session_meet_ready). Sebelumnya '/home' sudah dipakai sebagai tujuan
+  /// tetapi tidak punya generator, sehingga `pushNamed('/home')` gagal dan tap
+  /// notifikasi menjadi dead-end.
+  Widget _buildRoleHome(AuthState authState) {
+    final session = authState.session;
+    if (session == null) {
+      return LoginScreen(onAuthenticated: _handleAuthenticated);
+    }
+    if (authState.isProfessional) {
+      return ProfessionalDashboardScreen(
+        session: session,
+        apiClient: ref.read(apiClientProvider),
+        syncService: _dashboardSyncService,
+        onLogout: _handleLogout,
+      );
+    }
+    return _buildPatientHome();
+  }
+
   Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
     final name = settings.name;
     if (name == null) return null;
@@ -259,6 +282,10 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     final authState = ref.read(authStateProvider);
 
     return switch (name) {
+      '/home' => MaterialPageRoute(
+          builder: (_) => _buildRoleHome(authState),
+          settings: settings,
+        ),
       '/crisis-alert' => MaterialPageRoute(
           builder: (_) => _buildPatientHome(),
           settings: settings,

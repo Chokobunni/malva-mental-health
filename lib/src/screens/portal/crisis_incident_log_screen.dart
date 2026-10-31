@@ -324,11 +324,13 @@ class _IncidentCard extends StatelessWidget {
   }
 }
 
-/// Waktu insiden krisis (`dd/MM/yyyy HH:mm`) dalam waktu LOKAL.
+/// Waktu insiden krisis (`d/M/yyyy HH:mm`) dalam waktu WIB.
 ///
-/// `created_at` insiden berasal dari server (UTC), jadi WAJIB ``
+/// `created_at` insiden berasal dari server (UTC), jadi WAJIB `toWib()`
 /// lebih dulu — kalau tidak, insiden dini hari tercatat di tanggal kemarin.
+/// Tanggal sengaja TANPA padding (jam tetap `HH:mm`) seperti format yang
+/// sudah dirilis.
 String formatIncidentDate(DateTime? date) {
   if (date == null) return '';
-  return formatWibDateTime(date);
+  return formatWibDateTimeShort(date);
 }

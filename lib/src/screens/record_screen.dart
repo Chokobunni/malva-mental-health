@@ -11,15 +11,16 @@ import '../widgets/malva_components.dart';
 import 'assessment_history_screen.dart';
 import '../time/wib.dart';
 
-/// Tanggal "Diperbarui" pada kartu diagnosis (`d/M/yyyy`) dalam waktu LOKAL.
+/// Tanggal "Diperbarui" pada kartu diagnosis (`d/M/yyyy`) dalam waktu WIB.
 ///
 /// `updatedAt` health record berasal dari server (UTC), jadi WAJIB
-/// `` lebih dulu — tanpa itu pembaruan dini hari WIB tampil sebagai
-/// tanggal kemarin. Pola keluaran dipertahankan seperti sebelumnya (tanpa
-/// padding) agar tampilan tidak berubah selain kebenaran tanggalnya.
+/// `toWib()` lebih dulu — tanpa itu pembaruan dini hari WIB tampil sebagai
+/// tanggal kemarin. Pola keluaran dipertahankan seperti sebelumnya (tanggal
+/// TANPA padding, mis. `1/11/2026`) agar tampilan tidak berubah selain
+/// kebenaran tanggalnya.
 String formatHealthRecordUpdatedDate(DateTime? value) {
   if (value == null) return '';
-  return formatWibDate(value);
+  return formatWibDateShort(value);
 }
 
 class RecordScreen extends ConsumerStatefulWidget {

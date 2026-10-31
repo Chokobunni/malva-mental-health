@@ -217,6 +217,16 @@ class PushNotificationService {
     final route = _routeForType(type, data);
     if (route == null) return;
 
+    // Beranda: tap notifikasi TIDAK boleh menumpuk shell beranda baru di atas
+    // beranda yang sedang tampil (tap berulang = tumpukan bertambah, tombol
+    // back terasa rusak). Bersihkan tumpukan sampai root lalu buka satu
+    // beranda. Rute lain tetap pushNamed seperti sebelumnya.
+    if (route == '/home') {
+      navigatorKey.currentState
+          ?.pushNamedAndRemoveUntil('/home', (route) => route.isFirst);
+      return;
+    }
+
     navigatorKey.currentState?.pushNamed(route);
   }
 
@@ -226,6 +236,14 @@ class PushNotificationService {
       'follow_up' => '/home',
       'medication_reminder' => '/medication',
       'screening_result' => '/assessment/result',
+      // Notifikasi sesi video (link Meet belum ada / sudah siap): satu-satunya
+      // aksi yang diminta adalah membuka detail sesi, dan aplikasi belum punya
+      // rute detail sesi. Rute paling aman yang sudah ada adalah beranda
+      // per-peran ('/home'): pasien melihat daftar sesinya, profesional melihat
+      // dasbor sesi. Tanpa pemetaan ini tap notifikasi tidak melakukan apa pun
+      // (dead-end) padahal notifikasi itu meminta tindakan.
+      'session_meet_missing' => '/home',
+      'session_meet_ready' => '/home',
       _ => null,
     };
   }

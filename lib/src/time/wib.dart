@@ -88,6 +88,25 @@ String formatWibDateTime(DateTime value) {
       '${_two(d.hour)}:${_two(d.minute)}';
 }
 
+/// Tanggal **tanpa padding** `d/M/yyyy` dalam WIB.
+///
+/// Hanya untuk layar yang sejak versi rilis memang menampilkan tanggal tanpa
+/// padding (mis. "Diperbarui 1/11/2026"). Tampilan baru pakai [formatWibDate]
+/// yang ber-padding 2 digit.
+String formatWibDateShort(DateTime value) {
+  final d = toWib(value);
+  return '${d.day}/${d.month}/${d.year}';
+}
+
+/// Tanggal **tanpa padding** + jam `d/M/yyyy HH:mm` dalam WIB.
+///
+/// Tanggal tidak di-pad, jam tetap `HH:mm` ber-padding — sama seperti
+/// [formatWibDateShort], hanya untuk layar yang sudah merilis format itu.
+String formatWibDateTimeShort(DateTime value) {
+  final d = toWib(value);
+  return '${d.day}/${d.month}/${d.year} ${_two(d.hour)}:${_two(d.minute)}';
+}
+
 /// Label pemisah tanggal pesan (`Hari ini HH:mm` / `dd/MM/yyyy HH:mm`).
 String formatWibBubbleDate(DateTime value) {
   final d = toWib(value);

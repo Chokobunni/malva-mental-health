@@ -118,4 +118,18 @@ void main() {
     expect(label, isNot('29/10/2026'));
     expect(formatHealthRecordUpdatedDate(null), '');
   });
+
+  // Tanggal TETAP dengan angka satu digit: mengunci format layar ini
+  // (`d/M/yyyy`, tanpa padding) tanpa bergantung tanggal hari ini. Tanpa test
+  // ini, regresi padding (01/11 alih-alih 1/11) hanya muncul pada tanggal 1-9
+  // sehingga lolos di sebagian besar hari.
+  test(
+      'formatHealthRecordUpdatedDate: 2026-10-05T20:20:00Z → 6/10/2026 (tanpa padding)',
+      () {
+    final label =
+        formatHealthRecordUpdatedDate(DateTime.parse('2026-10-05T20:20:00Z'));
+    expect(label, '6/10/2026');
+    expect(label, isNot('06/10/2026'),
+        reason: 'label "Diperbarui" memakai tanggal tanpa padding');
+  });
 }
