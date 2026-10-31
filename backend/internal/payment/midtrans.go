@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -21,6 +22,9 @@ type MidtransConfig struct {
 	ClientKey string // dipakai klien (opsional di server)
 	Env       string // sandbox | production
 	SnapBase  string // override base URL (test/mock); kosong = dari Env
+	// APIBase override base URL API status (`/v2/{order_id}/status`) untuk
+	// test/mock; kosong = dari Env. Host API BERBEDA dari host Snap.
+	APIBase string
 }
 
 // MidtransGateway implementasi PaymentGateway untuk Midtrans Snap.
@@ -28,6 +32,7 @@ type MidtransGateway struct {
 	serverKey string
 	clientKey string
 	snapBase  string
+	apiBase   string
 	http      *http.Client
 }
 
@@ -37,27 +42,47 @@ const (
 	SnapBaseProduction = "https://app.midtrans.com"
 )
 
-// NewMidtransGateway membuat gateway Midtrans. Bila SnapBase kosong,
+// APIBaseSandbox / APIBaseProduction base URL API Midtrans (cek status
+// transaksi). Berbeda host dari Snap: `api.*`, bukan `app.*`.
+const (
+	APIBaseSandbox    = "https://api.sandbox.midtrans.com"
+	APIBaseProduction = "https://api.midtrans.com"
+)
+
+// NewMidtransGateway membuat gateway Midtrans. Bila SnapBase/APIBase kosong,
 // base URL dipilih dari Env (default sandbox).
 func NewMidtransGateway(cfg MidtransConfig) *MidtransGateway {
+	production := strings.EqualFold(strings.TrimSpace(cfg.Env), "production")
 	base := strings.TrimRight(strings.TrimSpace(cfg.SnapBase), "/")
 	if base == "" {
-		if strings.EqualFold(strings.TrimSpace(cfg.Env), "production") {
+		if production {
 			base = SnapBaseProduction
 		} else {
 			base = SnapBaseSandbox
+		}
+	}
+	apiBase := strings.TrimRight(strings.TrimSpace(cfg.APIBase), "/")
+	if apiBase == "" {
+		if production {
+			apiBase = APIBaseProduction
+		} else {
+			apiBase = APIBaseSandbox
 		}
 	}
 	return &MidtransGateway{
 		serverKey: strings.TrimSpace(cfg.ServerKey),
 		clientKey: strings.TrimSpace(cfg.ClientKey),
 		snapBase:  base,
+		apiBase:   apiBase,
 		http:      &http.Client{Timeout: 20 * time.Second},
 	}
 }
 
 // SnapBase mengembalikan base URL Snap yang dipakai (untuk log/diagnostik).
 func (g *MidtransGateway) SnapBase() string { return g.snapBase }
+
+// APIBase mengembalikan base URL API status yang dipakai (log/diagnostik).
+func (g *MidtransGateway) APIBase() string { return g.apiBase }
 
 // midtransChargeRequest body POST /snap/v1/transactions.
 type midtransChargeRequest struct {
@@ -125,6 +150,114 @@ func (g *MidtransGateway) CreateTransaction(ctx context.Context, orderID string,
 		return PaymentIntent{}, fmt.Errorf("midtrans snap tidak mengembalikan token: %s", strings.TrimSpace(string(respBody)))
 	}
 	return PaymentIntent{OrderID: orderID, Token: out.Token, RedirectURL: out.RedirectURL}, nil
+}
+
+// midtransStatusResponse respons `GET /v2/{order_id}/status` (subset).
+type midtransStatusResponse struct {
+	OrderID           string `json:"order_id"`
+	StatusCode        string `json:"status_code"`
+	StatusMessage     string `json:"status_message"`
+	GrossAmount       string `json:"gross_amount"`
+	TransactionStatus string `json:"transaction_status"`
+	FraudStatus       string `json:"fraud_status"`
+	TransactionID     string `json:"transaction_id"`
+	SignatureKey      string `json:"signature_key"`
+}
+
+// FetchStatus menanyakan status transaksi terkini ke API Midtrans
+// (`GET /v2/{order_id}/status`). Dipakai saat webhook belum tiba sehingga
+// polling klien tidak bergantung pada ketepatan waktu notifikasi.
+//
+// Keamanan: respons TIDAK dipercaya sebelum `signature_key`-nya cocok dengan
+// sha512(order_id + status_code + gross_amount + serverKey) — sama seperti
+// verifikasi webhook. Tanpa itu, siapa pun yang bisa memalsukan respons bisa
+// menandai pembayaran lunas.
+//
+// "Transaksi belum ada" BUKAN kegagalan dan TIDAK membawa signature: Midtrans
+// membalas HTTP 200 dengan `status_code:"404"` di dalam body. Itu dikembalikan
+// sebagai status "pending" tanpa error (lihat catatan di badan fungsi).
+func (g *MidtransGateway) FetchStatus(ctx context.Context, orderID string) (GatewayStatus, error) {
+	if g.serverKey == "" {
+		return GatewayStatus{}, errors.New("midtrans server key belum dikonfigurasi")
+	}
+	orderID = strings.TrimSpace(orderID)
+	if orderID == "" {
+		return GatewayStatus{}, errors.New("order_id wajib diisi")
+	}
+	endpoint := g.apiBase + "/v2/" + url.PathEscape(orderID) + "/status"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return GatewayStatus{}, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(g.serverKey+":")))
+
+	resp, err := g.http.Do(req)
+	if err != nil {
+		return GatewayStatus{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return GatewayStatus{}, err
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		// Transaksi belum ada di sisi Midtrans (mis. token baru dibuat dan
+		// belum dipakai membayar). Perlakukan seperti pending.
+		return GatewayStatus{Status: "pending", StatusCode: "404"}, nil
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return GatewayStatus{}, fmt.Errorf("midtrans status error %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var out midtransStatusResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return GatewayStatus{}, fmt.Errorf("respons status midtrans tidak valid: %w", err)
+	}
+	// PENTING (hasil uji langsung ke sandbox): untuk transaksi yang BELUM ADA,
+	// Midtrans membalas **HTTP 200** dengan `status_code: "404"` DI DALAM BODY
+	// — bukan HTTP 404 — dan respons itu TIDAK membawa `signature_key` maupun
+	// `gross_amount`:
+	//   {"status_code":"404","status_message":"Transaction doesn't exist.",...}
+	// Kondisi ini normal (token Snap baru dibuat, pengguna belum membayar), jadi
+	// harus diperlakukan pending TANPA error — kalau tidak, endpoint polling
+	// mencatat error tiap 3 detik dan bisa menolak respons karena signature kosong.
+	statusCode := strings.TrimSpace(out.StatusCode)
+	msg := strings.ToLower(strings.TrimSpace(out.StatusMessage))
+	notFound := statusCode == "404" ||
+		strings.Contains(msg, "doesn't exist") ||
+		strings.Contains(msg, "doesnt exist")
+	if notFound {
+		return GatewayStatus{Status: "pending", StatusCode: statusCode}, nil
+	}
+
+	// Kode status lain di luar "200" tidak kita pahami: perlakukan sebagai
+	// pending tanpa error agar polling tidak pernah gagal karena hal yang tidak
+	// dikenali.
+	if statusCode != "200" {
+		return GatewayStatus{Status: "pending", StatusCode: statusCode}, nil
+	}
+
+	// Verifikasi signature HANYA untuk respons yang benar-benar memuat
+	// transaksi. Tanpa ini, respons palsu bisa menandai pembayaran lunas.
+	expected := MidtransSignature(orderID, statusCode, out.GrossAmount, g.serverKey)
+	if !subtleConstantEqual(expected, strings.ToLower(strings.TrimSpace(out.SignatureKey))) {
+		return GatewayStatus{}, errors.New("signature respons status midtrans tidak valid")
+	}
+
+	// `transaction_status` kosong/tak dikenal juga diperlakukan pending.
+	txStatus := strings.ToLower(strings.TrimSpace(out.TransactionStatus))
+	switch txStatus {
+	case "settlement", "capture", "pending", "expire", "cancel", "deny":
+	default:
+		txStatus = "pending"
+	}
+	return GatewayStatus{
+		Status:        txStatus,
+		FraudStatus:   strings.ToLower(strings.TrimSpace(out.FraudStatus)),
+		StatusCode:    statusCode,
+		GrossAmount:   strings.TrimSpace(out.GrossAmount),
+		TransactionID: strings.TrimSpace(out.TransactionID),
+	}, nil
 }
 
 // ParseWebhook mendekode notifikasi Midtrans menjadi WebhookEvent.

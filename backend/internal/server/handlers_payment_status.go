@@ -4,8 +4,10 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"malva/backend/internal/auth"
+	"malva/backend/internal/payment"
 	"malva/backend/internal/store"
 )
 
@@ -57,6 +59,13 @@ func (s *Server) getPaymentStatus(w http.ResponseWriter, r *http.Request, claims
 		writeError(w, http.StatusNotFound, errors.New("pembayaran tidak ditemukan"))
 		return
 	}
+	if payment.Status == "pending" {
+		// Webhook bisa telat (atau URL notifikasi belum diisi di dashboard
+		// gateway). Tanya langsung ke gateway agar pasien yang SUDAH membayar
+		// tidak menunggu 5 menit lalu menyerah. Best-effort: apa pun yang
+		// gagal di sini tidak boleh menggagalkan respons.
+		payment = s.reconcilePendingPayment(r, payment)
+	}
 	if payment.Status == "paid" {
 		// Best-effort: kegagalan aktivasi TIDAK menggagalkan pemeriksaan status
 		// (webhook tetap jalur utama dan akan mengulang sendiri). Hanya dicatat.
@@ -75,6 +84,87 @@ func (s *Server) getPaymentStatus(w http.ResponseWriter, r *http.Request, claims
 		"payment":    payment,
 		"session_id": sessionID,
 	})
+}
+
+// paymentReconcileMinAge menunda pemeriksaan ke gateway beberapa detik setelah
+// payment dibuat, agar tidak berlomba dengan pembuatan transaksi Snap (token
+// baru saja dibuat dan transaksi mungkin belum terdaftar di gateway).
+const paymentReconcileMinAge = 5 * time.Second
+
+// reconcilePendingPayment menanyakan status transaksi langsung ke gateway
+// (otoritatif) untuk pembayaran yang masih `pending` di DB.
+//
+// Kenapa perlu: status `paid` di DB hanya lahir dari webhook. Bila notifikasi
+// gateway telat atau URL notifikasi belum dikonfigurasi, pasien yang sudah
+// membayar akan terus melihat "Menunggu pembayaran" padahal uangnya masuk.
+//
+// Aturan aman:
+//   - hanya untuk gateway yang mengimplementasikan payment.StatusFetcher;
+//   - hanya untuk payment ber-gateway "midtrans" dan berumur > 5 detik;
+//   - settlement/capture (fraud kosong/accept) -> tandai lunas + aktivasi;
+//   - status lain (pending/expire/cancel/deny, fraud challenge) -> TIDAK
+//     mengubah apa pun; webhook tetap yang menangani;
+//   - semua kegagalan hanya dicatat, respons tetap memakai status DB.
+//
+// Idempoten: MarkPaymentPaid menolak payment yang bukan `pending`, dan
+// activatePaidBooking menjaga sesi lewat GetCareSessionByBookingID.
+func (s *Server) reconcilePendingPayment(r *http.Request, p store.Payment) store.Payment {
+	if s.payment == nil {
+		return p
+	}
+	fetcher, ok := s.payment.(payment.StatusFetcher)
+	if !ok {
+		return p
+	}
+	if !strings.EqualFold(strings.TrimSpace(p.Gateway), "midtrans") {
+		return p
+	}
+	if p.CreatedAt.IsZero() || time.Since(p.CreatedAt) < paymentReconcileMinAge {
+		return p
+	}
+	status, err := fetcher.FetchStatus(r.Context(), p.Reference)
+	if err != nil {
+		// Endpoint ini dipanggil klien tiap 3 detik: jangan pernah jadi sumber
+		// error. Cukup dicatat.
+		if s.logger != nil {
+			s.logger.Warn("cek status ke gateway gagal; memakai status DB",
+				"reference", p.Reference, "error", err)
+		}
+		return p
+	}
+	switch strings.ToLower(strings.TrimSpace(status.Status)) {
+	case "settlement", "capture":
+		// fraud_status kosong atau "accept" = sah. challenge/deny tidak boleh
+		// menandai lunas.
+		if fs := strings.ToLower(strings.TrimSpace(status.FraudStatus)); fs != "" && fs != "accept" {
+			return p
+		}
+	default:
+		// pending / expire / cancel / deny: biarkan webhook yang memutuskan.
+		return p
+	}
+	if _, err := s.store.MarkPaymentPaid(r.Context(), p.Reference, status.TransactionID); err != nil {
+		if s.logger != nil {
+			s.logger.Warn("tandai lunas dari cek status gateway gagal",
+				"reference", p.Reference, "error", err)
+		}
+		return p
+	}
+	// MarkPaymentPaid tidak mengembalikan seluruh kolom: baca ulang agar
+	// respons memuat status/gateway/redirect_url yang sebenarnya.
+	fresh, err := s.store.GetPaymentByReference(r.Context(), p.Reference)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn("baca ulang payment setelah cek status gagal",
+				"reference", p.Reference, "error", err)
+		}
+		return p
+	}
+	if _, aerr := s.activatePaidBooking(r, fresh); aerr != nil && s.logger != nil {
+		s.logger.Warn("aktivasi setelah cek status gateway gagal",
+			"reference", p.Reference, "error", aerr)
+	}
+	return fresh
 }
 
 // paymentConfigHandler menangani GET /v1/config/payment (publik).

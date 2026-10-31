@@ -39,3 +39,21 @@ type PaymentGateway interface {
 	// VerifySignature memvalidasi keaslian notifikasi (tanpa network).
 	VerifySignature(evt WebhookEvent) bool
 }
+
+// GatewayStatus hasil pemeriksaan status transaksi langsung ke gateway.
+type GatewayStatus struct {
+	Status        string // settlement | capture | pending | expire | cancel | deny
+	FraudStatus   string
+	StatusCode    string
+	GrossAmount   string
+	TransactionID string
+}
+
+// StatusFetcher adalah kemampuan OPSIONAL gateway untuk ditanya status
+// transaksi terkini (dipakai saat webhook belum tiba).
+//
+// Sengaja dipisah dari PaymentGateway: gateway (atau fake di test) yang tidak
+// mendukung pemeriksaan status tidak perlu ikut berubah.
+type StatusFetcher interface {
+	FetchStatus(ctx context.Context, orderID string) (GatewayStatus, error)
+}
