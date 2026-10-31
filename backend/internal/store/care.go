@@ -222,6 +222,23 @@ func (s *Store) GetCarePackage(ctx context.Context, packageID string) (CarePacka
 	return p, nil
 }
 
+// GetCarePackageByBookingID mencari paket yang diaktifkan oleh satu booking.
+//
+// Dipakai idempotensi aktivasi pembayaran: bila aktivasi paket sudah berhasil
+// tetapi pembuatan sesi pertama gagal (mis. Google sedang tidak tersedia),
+// webhook yang dikirim ulang harus memakai paket yang SAMA, bukan mencari
+// paket pending yang sudah tidak ada. Mengembalikan sql.ErrNoRows bila tidak
+// ada paket yang mencatat booking tersebut.
+func (s *Store) GetCarePackageByBookingID(ctx context.Context, bookingID string) (CarePackage, error) {
+	var packageID string
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM care_packages
+		WHERE booking_id = $1 ORDER BY created_at DESC LIMIT 1`, bookingID).Scan(&packageID)
+	if err != nil {
+		return CarePackage{}, err
+	}
+	return s.GetCarePackage(ctx, packageID)
+}
+
 func (s *Store) UpdateCarePackageStatus(ctx context.Context, packageID, status string) error {
 	const q = `UPDATE care_packages SET status = $1, updated_at = now() WHERE id = $2`
 	res, err := s.db.ExecContext(ctx, q, status, packageID)
@@ -395,6 +412,15 @@ func (s *Store) CreateCareSession(ctx context.Context, cs CareSession) (CareSess
 	if cs.SessionType != "chat" && cs.SessionType != "video" {
 		return CareSession{}, errors.New("session_type harus chat atau video")
 	}
+	// Invarian: sesi video WAJIB punya ruang pertemuan sejak baris dibuat.
+	// Dulu pemanggil boleh menyisipkan sesi video lalu mengisi link menyusul
+	// (best-effort); bila pembuatan link gagal, pasien menerima sesi video
+	// tanpa tombol "Gabung". Pemeriksaan di sini adalah satu-satunya pintu
+	// INSERT care_sessions, sehingga tidak ada jalur yang bisa melewatinya.
+	// Sesi berstatus chat tetap boleh tanpa link.
+	if cs.SessionType == "video" && strings.TrimSpace(cs.MeetingURL) == "" {
+		return CareSession{}, errors.New("sesi video wajib memiliki link Google Meet")
+	}
 	start := cs.ScheduledAt
 	if start.Before(clock.Now().Add(-time.Minute)) {
 		return CareSession{}, errors.New("jadwal sesi harus di masa depan")
@@ -489,6 +515,23 @@ func (s *Store) GetCareSession(ctx context.Context, sessionID string) (CareSessi
 		LEFT JOIN users pro ON pro.id = cs.professional_id
 		WHERE cs.id = $1`
 	return scanCareSession(s.db.QueryRowContext(ctx, q, sessionID))
+}
+
+// GetCareSessionByBookingID mencari sesi yang lahir dari satu booking.
+//
+// Dipakai untuk idempotensi aktivasi pembayaran: webhook gateway bisa dikirim
+// ulang (mis. setelah 5xx karena Google sedang gagal), dan pemrosesan kedua
+// tidak boleh membuat sesi duplikat atau menabrak unique index slot.
+// Mengembalikan sql.ErrNoRows bila booking belum punya sesi.
+func (s *Store) GetCareSessionByBookingID(ctx context.Context, bookingID string) (CareSession, error) {
+	const q = `SELECT ` + careSessionColumns + `
+		FROM care_sessions cs
+		LEFT JOIN users pat ON pat.id = cs.patient_id
+		LEFT JOIN users pro ON pro.id = cs.professional_id
+		WHERE cs.booking_id = $1
+		ORDER BY cs.created_at ASC
+		LIMIT 1`
+	return scanCareSession(s.db.QueryRowContext(ctx, q, bookingID))
 }
 
 // ListCareSessions scope: upcoming | today | past | all, untuk pasien / profesional.

@@ -357,7 +357,7 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 	isPatient := claims.Role == "patient" && claims.Subject == cs.PatientID
 	isProf := claims.Role == "professional" && claims.Subject == cs.ProfessionalID
 	if !isPatient && !isProf {
-		writeError(w, http.StatusForbidden, errors.New("not authorized for this session"))
+		writeError(w, http.StatusForbidden, errors.New("Anda tidak berhak atas sesi ini."))
 		return
 	}
 	var req updateSessionRequest
@@ -487,7 +487,7 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 	isPatient := claims.Role == "patient" && claims.Subject == cs.PatientID
 	isProf := claims.Role == "professional" && claims.Subject == cs.ProfessionalID
 	if !isPatient && !isProf {
-		writeError(w, http.StatusForbidden, errors.New("not authorized for this session"))
+		writeError(w, http.StatusForbidden, errors.New("Anda tidak berhak atas sesi ini."))
 		return
 	}
 	var req rescheduleSessionRequest
@@ -529,17 +529,27 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 		writeError(w, http.StatusBadRequest, verr)
 		return
 	}
+	// Sesi video yang belum punya link (data lama, atau link penyedia lain)
+	// WAJIB dibuatkan ruang pertemuan SEBELUM jadwal dipindahkan. Bila dibuat
+	// setelahnya, kegagalan Google akan menyisakan sesi video tanpa tombol
+	// "Gabung" pada jam baru. Event langsung dibuat di jam BARU.
+	if cs.SessionType == "video" && !isGoogleMeetURL(cs.MeetingURL) {
+		if _, cerr := s.createMeetLinkAt(r.Context(), cs, at); cerr != nil {
+			if errors.Is(cerr, googlecal.ErrReauthNeeded) {
+				writeError(w, http.StatusConflict,
+					errors.New("akses Google Calendar profesional kedaluwarsa. Profesional perlu menautkan ulang akun Google sebelum jadwal dipindahkan"))
+				return
+			}
+			s.logger.Warn("gagal menyiapkan link Meet saat reschedule", "error", cerr, "session", sessionID)
+			writeError(w, http.StatusBadGateway,
+				errors.New("gagal menyiapkan link Google Meet untuk jadwal baru. Coba lagi beberapa saat lagi"))
+			return
+		}
+	}
 	updated, err := s.store.RescheduleCareSession(r.Context(), sessionID, at)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
-	}
-	// Reschedule bisa memindahkan sesi video yang belum punya link ke jadwal
-	// baru. Buatkan link bila kosong (best-effort, sama seperti booking).
-	// Reschedule profesional bisa menjadwal ulang sesi chat menjadi sesi yang
-	// butuh link; pasien memakai jendela gabung 10 menit.
-	if updated.SessionType == "video" && !isGoogleMeetURL(updated.MeetingURL) {
-		updated = s.ensureMeetLinkBestEffort(r.Context(), updated)
 	}
 	// Best-effort: perbarui event Google Calendar bila ada. Jadwal sudah
 	// tersimpan di DB, jadi kegagalan Google TIDAK menggagalkan reschedule —
@@ -748,7 +758,7 @@ func (s *Server) refundCareSession(w http.ResponseWriter, r *http.Request, claim
 	isProf := claims.Role == "professional" && claims.Subject == cs.ProfessionalID
 	isAdmin := claims.Role == "admin"
 	if !isPatient && !isProf && !isAdmin {
-		writeError(w, http.StatusForbidden, errors.New("not authorized for this session"))
+		writeError(w, http.StatusForbidden, errors.New("Anda tidak berhak atas sesi ini."))
 		return
 	}
 	var req refundRequest

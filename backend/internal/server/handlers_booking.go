@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -133,11 +134,28 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 	if booking.Status != "paid" {
 		return "", nil
 	}
+	// Idempotensi aktivasi: webhook gateway bisa dikirim ulang setelah balasan
+	// 5xx (mis. Google sedang gagal saat membuat link Meet). Bila booking ini
+	// sudah punya sesi, jangan buat sesi kedua — unique index slot akan
+	// menolaknya dan pengulangan berikutnya gagal selamanya.
+	if existing, serr := s.store.GetCareSessionByBookingID(ctx, booking.ID); serr == nil && existing.ID != "" {
+		return "", nil
+	} else if serr != nil && !errors.Is(serr, sql.ErrNoRows) {
+		return "", serr
+	}
 	// Paket: aktifkan paket pending milik pasangan + link + jadwalkan sesi
 	// pertama dari slot booking. (bookings.package_id tidak dipakai karena
 	// kolom itu FK ke tabel service_packages lama.)
 	if booking.ServiceType == "package_session" {
 		pkg, merged, err := s.store.ActivatePendingPackage(ctx, booking.PatientID, booking.ProfessionalID, booking.ID)
+		if err != nil {
+			// Pengulangan webhook setelah aktivasi paket berhasil tetapi sesi
+			// pertama gagal dibuat: paket pending sudah tidak ada, jadi pakai
+			// paket yang sudah mencatat booking ini.
+			if existing, gerr := s.store.GetCarePackageByBookingID(ctx, booking.ID); gerr == nil && existing.ID != "" {
+				pkg, merged, err = existing, false, nil
+			}
+		}
 		if err != nil {
 			return "", err
 		}
@@ -151,6 +169,17 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		duration := booking.DurationMinutes
 		if duration <= 0 {
 			duration = s.slotDurationFor(ctx, booking.ProfessionalID, start)
+		}
+		// Sesi pertama paket bisa bertipe video. Link Google Meet WAJIB dibuat
+		// SEBELUM baris sesi disimpan: store menolak sesi video tanpa link, dan
+		// kegagalan Google tidak boleh menyisakan sesi yang tidak bisa dipakai.
+		meetingURL, googleEventID := "", ""
+		if isVideoSession(booking.SessionType) {
+			eventID, meetURL, merr := s.createMeetEventFor(ctx, booking.PatientID, booking.ProfessionalID, start, duration)
+			if merr != nil {
+				return "", merr
+			}
+			meetingURL, googleEventID = meetURL, eventID
 		}
 		cs, cerr := s.store.CreateCareSession(ctx, store.CareSession{
 			// WAJIB memakai pkg.ID (care_packages), BUKAN booking.PackageID.
@@ -167,15 +196,17 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 			ScheduledAt:     start,
 			DurationMinutes: duration,
 			Status:          "scheduled",
+			MeetingURL:      meetingURL,
+			GoogleEventID:   googleEventID,
 		})
 		if cerr != nil {
+			// Event sudah lahir di kalender profesional; jangan biarkan
+			// menggantung tanpa sesi yang menunjuknya.
+			if googleEventID != "" {
+				s.cancelMeetEventBestEffort(ctx, s.calendar, booking.ProfessionalID, googleEventID)
+			}
 			return "", cerr
 		}
-		// Sesi pertama paket bisa bertipe video: buat link Google Meet.
-		// Best-effort — pembayaran sudah lunas, kegagalan Google tidak boleh
-		// membatalkan aktivasi paket. Link bisa dibuat menyusul lewat
-		// POST /v1/care-sessions/{id}/meet-link.
-		cs = s.ensureMeetLinkBestEffort(ctx, cs)
 		s.notifyPatient(r, booking.ProfessionalID, "package_activated",
 			"Paket baru aktif", "Pasien membeli paket 4 sesi.",
 			map[string]string{"package_id": pkg.ID, "patient_id": booking.PatientID})
@@ -216,6 +247,16 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		_ = s.store.UpdateBookingStatus(ctx, booking.ID, "pending")
 		return "", errors.New("slot keburu terisi saat pembayaran; booking dikembalikan ke pending")
 	}
+	// Quick consult video: link WAJIB ada sebelum sesi disimpan (lihat catatan
+	// pada alur aktivasi paket di atas).
+	meetingURL, googleEventID := "", ""
+	if isVideoSession(booking.SessionType) {
+		eventID, meetURL, merr := s.createMeetEventFor(ctx, booking.PatientID, booking.ProfessionalID, start, duration)
+		if merr != nil {
+			return "", merr
+		}
+		meetingURL, googleEventID = meetURL, eventID
+	}
 	cs, cerr := s.store.CreateCareSession(ctx, store.CareSession{
 		BookingID:       &booking.ID,
 		PatientID:       booking.PatientID,
@@ -224,13 +265,15 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		ScheduledAt:     start,
 		DurationMinutes: duration,
 		Status:          "scheduled",
+		MeetingURL:      meetingURL,
+		GoogleEventID:   googleEventID,
 	})
 	if cerr != nil {
+		if googleEventID != "" {
+			s.cancelMeetEventBestEffort(ctx, s.calendar, booking.ProfessionalID, googleEventID)
+		}
 		return "", cerr
 	}
-	// Quick consult video: buat link Google Meet (best-effort, lihat catatan
-	// pada alur aktivasi paket di atas).
-	cs = s.ensureMeetLinkBestEffort(ctx, cs)
 	// Quick consult: buat relasi agar chat sesi bisa dipakai (tanpa data sharing).
 	_, _ = s.store.LinkPatientToProfessional(ctx, booking.PatientID, booking.ProfessionalID)
 	s.notifyPatient(r, booking.ProfessionalID, "session_scheduled",
@@ -326,6 +369,16 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 	case "chat":
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_type harus chat atau video"})
+		return
+	}
+	// Setiap sesi video WAJIB punya ruang pertemuan, jadi kemampuan profesional
+	// membuat link Meet diperiksa SEBELUM pasien membayar. Menolak di sini jauh
+	// lebih baik daripada menerima uang lalu gagal membuat link saat aktivasi.
+	if sessionType == "video" && !s.googleCalendarReady(r.Context(), professionalID) {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "Profesional ini belum mengaktifkan Google Meet, sehingga sesi video belum bisa dipesan. Pilih sesi chat, atau minta profesional mengaktifkan Google Meet lebih dulu.",
+			"code":  "meet_belum_aktif",
+		})
 		return
 	}
 	// Harga dihitung server dari tarif profesional (bukan dari klien).
@@ -675,7 +728,14 @@ func (s *Server) paymentWebhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if _, aerr := s.activatePaidBooking(r, p); aerr != nil {
-			s.logger.Warn("webhook activate booking failed", "payment", p.ID, "error", aerr)
+			// Jangan tandai 'processed': pembayaran sudah lunas tetapi sesi
+			// (termasuk link Google Meet-nya) belum siap. Balas 5xx agar
+			// gateway mengirim ulang. Aktivasi idempoten — sesi dicari lewat
+			// booking_id dan paket lewat booking_id — sehingga pengulangan
+			// tidak membuat data ganda.
+			s.logger.Error("webhook activate booking failed", "payment", p.ID, "error", aerr)
+			writeError(w, http.StatusInternalServerError, errors.New("gagal mengaktifkan booking"))
+			return
 		}
 		_ = s.store.UpdatePaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType, "processed", p.ID, p.BookingID)
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

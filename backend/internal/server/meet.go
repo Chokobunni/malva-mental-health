@@ -99,6 +99,11 @@ func isGoogleMeetURL(u string) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(u)), "meet.google.com/")
 }
 
+// isVideoSession true bila tipe sesi menuntut ruang pertemuan.
+func isVideoSession(sessionType string) bool {
+	return strings.EqualFold(strings.TrimSpace(sessionType), "video")
+}
+
 // meetAttendees mengumpulkan email peserta yang diundang ke event Calendar.
 // Email pasien diundang agar menerima undangan + pengingat dari Google.
 // Kegagalan mengambil email tidak menggagalkan pembuatan link.
@@ -141,6 +146,16 @@ func (s *Server) meetEventOptions(ctx context.Context, cs store.CareSession) goo
 // Pemanggil bertanggung jawab memastikan sesi bertipe video dan berstatus
 // scheduled.
 func (s *Server) createMeetLink(ctx context.Context, cs store.CareSession) (store.CareSession, error) {
+	return s.createMeetLinkAt(ctx, cs, time.Time{})
+}
+
+// createMeetLinkAt seperti createMeetLink, tetapi event dibuat pada jam [start]
+// bila tidak zero.
+//
+// Dipakai saat reschedule sesi video lama yang belum punya link: event harus
+// lahir di jam BARU, bukan jam lama, agar kalender profesional tidak sempat
+// menampilkan slot yang salah.
+func (s *Server) createMeetLinkAt(ctx context.Context, cs store.CareSession, start time.Time) (store.CareSession, error) {
 	// Tanpa integrasi Google, tidak ada yang bisa dibuat — gagal cepat tanpa
 	// menyentuh database. Urutan penting: GetCareSession di bawah memakai
 	// s.store yang bisa nil pada Server parsial (test).
@@ -155,6 +170,9 @@ func (s *Server) createMeetLink(ctx context.Context, cs store.CareSession) (stor
 	if strings.TrimSpace(cs.MeetingURL) != "" && isGoogleMeetURL(cs.MeetingURL) {
 		return cs, nil
 	}
+	if !start.IsZero() {
+		cs.ScheduledAt = start
+	}
 	// Link lama dari penyedia lain (Jitsi dsb.) dianggap belum ada: Google
 	// Meet adalah satu-satunya penyedia yang didukung sekarang.
 	cs.MeetingURL = ""
@@ -166,7 +184,7 @@ func (s *Server) createMeetLink(ctx context.Context, cs store.CareSession) (stor
 		// Event dibuat tetapi Google tidak mengembalikan entry point Meet.
 		// Jangan simpan event tanpa link: batalkan agar tidak ada event
 		// menggantung di kalender profesional.
-		if cerr := s.calendar.CancelMeetEvent(ctx, cs.ProfessionalID, eventID); cerr != nil {
+		if cerr := s.calendar.CancelMeetEvent(ctx, cs.ProfessionalID, eventID); cerr != nil && s.logger != nil {
 			s.logger.Warn("gagal membatalkan event Meet tanpa link", "error", cerr, "event_id", eventID)
 		}
 		return cs, errors.New("google tidak mengembalikan link Meet untuk event ini")
@@ -176,6 +194,68 @@ func (s *Server) createMeetLink(ctx context.Context, cs store.CareSession) (stor
 		return cs, err
 	}
 	return updated, nil
+}
+
+// createMeetEventFor membuat event Meet untuk sesi yang BELUM tersimpan.
+//
+// Dipakai aktivasi pembayaran: baris care_sessions baru boleh dibuat setelah
+// link tersedia (store menolak sesi video tanpa link), sehingga event harus
+// dibuat lebih dulu. Ringkasan event memuat nama pasien dan profesional.
+func (s *Server) createMeetEventFor(ctx context.Context, patientID, professionalID string, start time.Time, durationMinutes int) (string, string, error) {
+	if s.calendar == nil {
+		return "", "", ErrMeetUnavailable
+	}
+	if durationMinutes <= 0 {
+		durationMinutes = 30
+	}
+	opts := googlecal.MeetEventOptions{
+		Summary:        "Sesi Malva",
+		Description:    "Sesi video konsultasi Malva. Bergabung melalui tombol \"Gabung\" di aplikasi Malva.",
+		StartTime:      start,
+		EndTime:        start.Add(time.Duration(durationMinutes) * time.Minute),
+		AttendeeEmails: s.meetAttendees(ctx, patientID),
+	}
+	// Nama hanya pelengkap; kegagalan membaca nama tidak boleh menggagalkan
+	// pembuatan ruang pertemuan.
+	if u, err := s.store.GetUserByID(ctx, patientID); err == nil && strings.TrimSpace(u.DisplayName) != "" {
+		opts.Summary = "Sesi Malva - " + strings.TrimSpace(u.DisplayName)
+	}
+	if u, err := s.store.GetUserByID(ctx, professionalID); err == nil && strings.TrimSpace(u.DisplayName) != "" {
+		opts.Description += "\nProfesional: " + strings.TrimSpace(u.DisplayName)
+	}
+	return s.createScheduledMeet(ctx, s.calendar, professionalID, opts)
+}
+
+// googleCalendarReady melaporkan apakah profesional dapat membuat link Meet
+// saat ini: server terkonfigurasi, identitas tertaut, token milik akun Google
+// yang sama, punya refresh token, dan memberi izin calendar.events.
+//
+// Dipakai sebelum booking sesi video dibuat, agar pasien tidak membayar untuk
+// sesi yang ruang pertemuannya tidak mungkin dibuat.
+func (s *Server) googleCalendarReady(ctx context.Context, professionalID string) bool {
+	if s.calendar == nil || s.store == nil {
+		return false
+	}
+	identity, err := s.store.GetGoogleIdentity(ctx, professionalID)
+	if err != nil {
+		return false
+	}
+	info, err := s.store.GetGoogleTokenInfo(ctx, professionalID)
+	if err != nil {
+		return false
+	}
+	return meetReady(true, identity, info)
+}
+
+// meetReady adalah satu-satunya definisi "Google Meet siap" untuk seorang
+// profesional. Dipakai status handler maupun pemeriksaan sebelum booking,
+// supaya kedua tempat tidak pernah berbeda pendapat.
+func meetReady(serverConfigured bool, identity store.GoogleIdentity, info store.GoogleTokenInfo) bool {
+	return serverConfigured &&
+		identity.Linked &&
+		info.GoogleSubject == identity.Subject &&
+		info.HasRefreshToken &&
+		store.HasCalendarScope(info.Scope)
 }
 
 // ensureMeetLinkBestEffort dipakai di alur yang tidak boleh gagal karena
@@ -367,7 +447,7 @@ func (s *Server) googleStatusHandler(w http.ResponseWriter, r *http.Request, cla
 		writeError(w, http.StatusInternalServerError, errors.New("Gagal memuat status Google Calendar."))
 		return
 	}
-	ready := s.calendar != nil && identity.Linked && info.GoogleSubject == identity.Subject && info.HasRefreshToken && store.HasCalendarScope(info.Scope)
+	ready := meetReady(s.calendar != nil, identity, info)
 	resp["connected"] = ready
 	resp["calendar_ready"] = ready
 	resp["scope"] = info.Scope
