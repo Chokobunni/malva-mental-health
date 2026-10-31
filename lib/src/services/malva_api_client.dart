@@ -1495,6 +1495,7 @@ class MalvaApiClient {
     required bool shareTimeline,
     bool shareHealthRecord = true,
     bool shareGoals = true,
+    bool shareTherapyRecords = false,
   }) async {
     final payload = await _send(
       'PUT',
@@ -1508,6 +1509,7 @@ class MalvaApiClient {
         'share_timeline': shareTimeline,
         'share_health_record': shareHealthRecord,
         'share_goals': shareGoals,
+        'share_therapy_records': shareTherapyRecords,
       },
     );
     return BackendPatientDataConsent.fromJson(
@@ -3290,6 +3292,7 @@ class BackendPatientDataConsent {
     this.shareHealthRecord = true,
     this.shareGoals = true,
     this.shareDiaryCheckin = true,
+    this.shareTherapyRecords = false,
   });
 
   factory BackendPatientDataConsent.fromJson(Map<String, dynamic> json) {
@@ -3302,6 +3305,10 @@ class BackendPatientDataConsent {
       shareHealthRecord: json['share_health_record'] != false,
       shareGoals: json['share_goals'] != false,
       shareDiaryCheckin: json['share_diary_checkin'] != false,
+      // Kategori ini OPT-IN: default MATI. Jangan pakai `!= false` seperti
+      // kategori lain — nilai yang tidak dikirim server harus dibaca sebagai
+      // "belum memberi izin", bukan "izin aktif".
+      shareTherapyRecords: json['share_therapy_records'] == true,
     );
   }
 
@@ -3313,6 +3320,9 @@ class BackendPatientDataConsent {
   final bool shareHealthRecord;
   final bool shareGoals;
   final bool shareDiaryCheckin;
+
+  /// Izin kategori Therapy Record (worksheet CBT/DBT). Opt-in: default MATI.
+  final bool shareTherapyRecords;
 }
 
 class BackendNotification {

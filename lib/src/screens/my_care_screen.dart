@@ -31,6 +31,12 @@ class MyCareScreen extends ConsumerStatefulWidget {
 
 class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   String _tab = 'Paket';
+
+  /// Filter status daftar sesi, DIPISAH per tab supaya pilihan di satu tab
+  /// tidak bocor ke tab lain (dan tidak memicu empty state yang salah).
+  /// Default "semua".
+  String _filterUpcoming = 'semua';
+  String _filterPast = 'semua';
   List<BackendCarePackage> _packages = const [];
   List<BackendCareSession> _sessions = const [];
   List<BackendPatientProfessionalLink> _links = const [];
@@ -101,6 +107,75 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   List<BackendCareSession> get _past =>
       _sessions.where((s) => !s.isScheduled).toList(growable: false)
         ..sort((a, b) => (b.scheduledAt ?? '').compareTo(a.scheduledAt ?? ''));
+
+  // ============================================================
+  // FILTER STATUS SESI
+  //
+  // Filter dijalankan di KLIEN atas data yang sudah dimuat (tidak menambah
+  // round-trip). Hanya berlaku untuk daftar SESI — kartu paket di tab "Paket"
+  // tidak difilter. Nilai status mengikuti CHECK constraint
+  // `care_sessions_status_check` di DB.
+  //
+  // PENTING: state filter DIPISAH per tab (Jadwal vs Riwayat) dan himpunan
+  // chip-nya juga per tab. Satu state bersama membuat chip yang mustahil
+  // terisi (mis. "Selesai" di tab Jadwal) tampil sebagai 0, dan pilihan
+  // "Dibatalkan" di Riwayat bisa membawa empty state yang salah ke tab
+  // Jadwal — tab itu memang tidak pernah memuat sesi batal.
+  // ============================================================
+
+  /// Status DB yang termasuk tiap filter. `semua` tidak ada di map = cocok
+  /// dengan apa pun.
+  static const _statusByFilter = <String, Set<String>>{
+    'aktif': {'scheduled', 'pending_payment'},
+    'selesai': {'completed'},
+    'dibatalkan': {
+      'cancelled_by_patient',
+      'cancelled_by_professional',
+      'expired_unpaid',
+    },
+    'tidak_hadir': {'no_show'},
+  };
+
+  bool _matchesSessionFilter(BackendCareSession s, String filter) {
+    final statuses = _statusByFilter[filter];
+    if (statuses == null) return true;
+    return statuses.contains(s.status);
+  }
+
+  String _filterFor({required bool upcoming}) =>
+      upcoming ? _filterUpcoming : _filterPast;
+
+  void _setFilter({required bool upcoming, required String value}) {
+    setState(() {
+      if (upcoming) {
+        _filterUpcoming = value;
+      } else {
+        _filterPast = value;
+      }
+    });
+  }
+
+  /// Chip yang relevan untuk satu tab, diturunkan dari isi tab itu:
+  ///   - `_upcoming` hanya memuat status `scheduled` -> cukup "Semua"+"Aktif";
+  ///   - `_past` memuat completed/no_show/cancelled/expired DAN
+  ///     `pending_payment` (sesi itu belum `scheduled`, jadi tidak masuk
+  ///     `_upcoming`). Karena itu "Aktif" hanya ditambahkan di tab Riwayat
+  ///     bila memang ada sesi seperti itu — tanpa itu, sesi `pending_payment`
+  ///     hanya terlihat di "Semua" dan tidak bisa difilter.
+  List<(String, String)> _filtersFor(
+      {required bool upcoming, required List<BackendCareSession> base}) {
+    if (upcoming) {
+      return const [('semua', 'Semua'), ('aktif', 'Aktif')];
+    }
+    return [
+      ('semua', 'Semua'),
+      if (base.any((s) => _matchesSessionFilter(s, 'aktif')))
+        ('aktif', 'Aktif'),
+      ('selesai', 'Selesai'),
+      ('dibatalkan', 'Dibatalkan'),
+      ('tidak_hadir', 'Tidak hadir'),
+    ];
+  }
 
   List<BackendPatientProfessionalLink> get _activeLinks =>
       _links.where((l) => l.status == 'active').toList();
@@ -208,31 +283,103 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   }
 
   List<Widget> _scheduleBody({required bool upcoming}) {
-    final list = upcoming ? _upcoming : _past;
-    if (list.isEmpty) {
-      return [
-        EmptyState(
-          icon:
-              upcoming ? Icons.event_available_outlined : Icons.history_rounded,
-          title:
-              upcoming ? 'Tidak ada sesi mendatang' : 'Belum ada riwayat sesi',
-          subtitle: upcoming
-              ? 'Jadwalkan sesi dari paketmu.'
-              : 'Sesi yang selesai akan tercatat di sini.',
-        ),
-      ];
-    }
+    final base = upcoming ? _upcoming : _past;
+    final filter = _filterFor(upcoming: upcoming);
+    final filtered = base
+        .where((s) => _matchesSessionFilter(s, filter))
+        .toList(growable: false);
     return [
-      for (final s in list) ...[
-        _SessionCard(
-          session: s,
-          onOpenChat: () => _openChat(s),
-          onJoin: () => _joinSession(s),
-          onManage: () => _openPackageFor(s),
-        ),
-        const SizedBox(height: 10),
-      ],
+      _sessionFilterChips(upcoming: upcoming, base: base),
+      const SizedBox(height: 12),
+      if (filtered.isEmpty)
+        _sessionEmptyState(upcoming: upcoming)
+      else
+        for (final s in filtered) ...[
+          _SessionCard(
+            session: s,
+            onOpenChat: () => _openChat(s),
+            onJoin: () => _joinSession(s),
+            onManage: () => _openPackageFor(s),
+          ),
+          const SizedBox(height: 10),
+        ],
     ];
+  }
+
+  /// Baris chip filter status untuk daftar sesi (bisa digeser horizontal).
+  /// Jumlah sesi per filter ditampilkan agar pasien tahu isinya tanpa harus
+  /// menekan chip satu per satu.
+  Widget _sessionFilterChips(
+      {required bool upcoming, required List<BackendCareSession> base}) {
+    final current = _filterFor(upcoming: upcoming);
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final (value, label)
+              in _filtersFor(upcoming: upcoming, base: base))
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(
+                  _filterLabel(value, label, base),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                selected: current == value,
+                onSelected: (_) => _setFilter(upcoming: upcoming, value: value),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _filterLabel(
+      String value, String label, List<BackendCareSession> base) {
+    final count = base.where((s) => _matchesSessionFilter(s, value)).length;
+    return count == 0 ? label : '$label $count';
+  }
+
+  /// Empty state SPESIFIK per filter: daftar kosong tidak boleh tampil tanpa
+  /// penjelasan (pasien perlu tahu bahwa tidak ada sesi pada kategori itu,
+  /// bukan datanya gagal dimuat).
+  Widget _sessionEmptyState({required bool upcoming}) {
+    final filter = _filterFor(upcoming: upcoming);
+    final (IconData icon, String title, String subtitle) = switch (filter) {
+      'aktif' => (
+          Icons.event_available_outlined,
+          'Tidak ada sesi aktif',
+          'Sesi terjadwal atau yang menunggu pembayaran akan muncul di sini.',
+        ),
+      'selesai' => (
+          Icons.check_circle_outline_rounded,
+          'Belum ada sesi selesai',
+          'Sesi yang sudah selesai akan tercatat di sini.',
+        ),
+      'dibatalkan' => (
+          Icons.cancel_outlined,
+          'Belum ada sesi yang dibatalkan',
+          'Sesi yang dibatalkan pasien/profesional atau kedaluwarsa karena '
+              'tidak dibayar akan muncul di sini.',
+        ),
+      'tidak_hadir' => (
+          Icons.person_off_outlined,
+          'Belum ada sesi tidak hadir',
+          'Sesi yang ditandai tidak hadir akan muncul di sini.',
+        ),
+      _ => upcoming
+          ? (
+              Icons.event_available_outlined,
+              'Tidak ada sesi mendatang',
+              'Jadwalkan sesi dari paketmu.',
+            )
+          : (
+              Icons.history_rounded,
+              'Belum ada riwayat sesi',
+              'Sesi yang selesai akan tercatat di sini.',
+            ),
+    };
+    return EmptyState(icon: icon, title: title, subtitle: subtitle);
   }
 
   List<Widget> _professionalsBody() {
@@ -895,6 +1042,8 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
   bool _timeline = false;
   bool _healthRecord = false;
   bool _goals = false;
+  // Kategori Therapy Record (worksheet CBT/DBT) — OPT-IN, default MATI.
+  bool _therapyRecords = false;
   bool _isLoading = true;
   bool _isSaving = false;
   String? _error;
@@ -931,6 +1080,7 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
         _timeline = consent.shareTimeline;
         _healthRecord = consent.shareHealthRecord;
         _goals = consent.shareGoals;
+        _therapyRecords = consent.shareTherapyRecords;
         _isLoading = false;
       });
     } on Object catch (e) {
@@ -990,6 +1140,13 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
                 value: _healthRecord,
                 onChanged: (v) => setState(() => _healthRecord = v)),
             _Toggle(
+                label: 'Therapy Record (Psikologis)',
+                description:
+                    'Profesional dapat melihat worksheet terapi CBT/DBT yang kamu isi '
+                    '(ABCDE, Thinking Traps, TIPP, dll).',
+                value: _therapyRecords,
+                onChanged: (v) => setState(() => _therapyRecords = v)),
+            _Toggle(
                 label: 'Timeline',
                 value: _timeline,
                 onChanged: (v) => setState(() => _timeline = v)),
@@ -1028,6 +1185,7 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
         shareTimeline: _timeline,
         shareHealthRecord: _healthRecord,
         shareGoals: _goals,
+        shareTherapyRecords: _therapyRecords,
       );
       if (!mounted) return;
       Navigator.pop(context);
@@ -1046,11 +1204,17 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
 
 class _Toggle extends StatelessWidget {
   const _Toggle(
-      {required this.label, required this.value, required this.onChanged});
+      {required this.label,
+      required this.value,
+      required this.onChanged,
+      this.description});
 
   final String label;
   final bool value;
   final ValueChanged<bool> onChanged;
+
+  /// Penjelasan singkat di bawah label (dipakai kategori yang butuh konteks).
+  final String? description;
 
   @override
   Widget build(BuildContext context) {
@@ -1058,6 +1222,9 @@ class _Toggle extends StatelessWidget {
       value: value,
       onChanged: onChanged,
       title: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: description == null
+          ? null
+          : Text(description!, style: Theme.of(context).textTheme.bodySmall),
       activeThumbColor: MalvaColors.seed,
       contentPadding: EdgeInsets.zero,
     );
