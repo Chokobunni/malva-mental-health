@@ -232,7 +232,8 @@ void main() {
     expect(link.professionalDisplayName, 'dr. Malva');
   });
 
-  test('exchangeGoogleToken tidak mengulang permintaan saat server membalas 401',
+  test(
+      'exchangeGoogleToken tidak mengulang permintaan saat server membalas 401',
       () async {
     final paths = <String>[];
     final api = MalvaApiClient(
