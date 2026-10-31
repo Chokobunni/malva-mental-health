@@ -72,13 +72,20 @@ class _HistoryEntryCard extends StatelessWidget {
   String get _relativeDay {
     // `MoodEntry.date` diisi dari `occurred_at` server (instant) saat riwayat
     // dimuat ulang, jadi "Today"/"Yesterday" WAJIB dihitung per hari WIB.
+    //
+    // Perbandingan memakai `wibDateKey()` (string `yyyy-MM-dd` WIB), BUKAN
+    // `DateTime(y, m, d)` — konstruktor itu memakai zona PERANGKAT, sehingga di
+    // perangkat non-WIB selisih harinya bisa salah satu hari.
     final now = toWib(ServerClock.now());
+    final todayKey = wibDateKey(now);
     final local = toWib(entry.date);
-    final today = DateTime(now.year, now.month, now.day);
-    final day = DateTime(local.year, local.month, local.day);
-    final diff = today.difference(day).inDays;
-    if (diff == 0) return 'Today';
-    if (diff == 1) return 'Yesterday';
+    final dayKey = wibDateKey(local);
+    if (todayKey == dayKey) return 'Today';
+
+    final yesterdayKey =
+        wibDateKey(wibFromParts(now.year, now.month, now.day - 1));
+    if (dayKey == yesterdayKey) return 'Yesterday';
+
     const months = [
       'Jan',
       'Feb',

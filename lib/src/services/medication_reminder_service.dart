@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../models.dart';
+import '../time/wib.dart';
 
 /// Layanan pengingat minum obat berbasis notifikasi lokal.
 ///
@@ -39,7 +39,11 @@ class MedicationReminderService {
   /// Aman dipanggil berulang (mis. setiap cold start): permintaan izin yang
   /// sudah pernah dijawab tidak memunculkan dialog lagi.
   Future<void> initialize() async {
-    tz.initializeTimeZones();
+    // WAJIB lewat initializeWib(): ia menginisialisasi database zona SEKALIGUS
+    // memaksa zona lokal proses ke Asia/Jakarta. Memanggil
+    // `tzdata.initializeTimeZones()` langsung akan mengembalikan zona lokal ke
+    // Etc/UTC (bawaan paket), sehingga jadwal pengingat bergeser 7 jam.
+    initializeWib();
 
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -268,18 +272,45 @@ class MedicationReminderService {
   }
 
   /// Waktu pengingat berikutnya (hari ini bila belum lewat, besok bila lewat).
-  tz.TZDateTime _nextOccurrence(TimeOfDay time) {
-    final now = tz.TZDateTime.now(tz.local);
-    var scheduled = tz.TZDateTime(
-      tz.local,
-      now.year,
-      now.month,
-      now.day,
+  tz.TZDateTime _nextOccurrence(TimeOfDay time) =>
+      nextReminderOccurrence(time);
+
+  /// Perhitungan MURNI waktu pengingat berikutnya, selalu dalam zona WIB.
+  ///
+  /// [now] hanya untuk pengujian (default [wibNow]) agar test tidak
+  /// bergantung pada jam/zona mesin uji.
+  ///
+  /// KENAPA TIDAK MEMAKAI ZONA LOKAL PROSES: zona lokal bawaan paket
+  /// `timezone` adalah Etc/UTC, sehingga jam 10:00 yang dibangun di zona itu
+  /// menjadi 10:00 UTC = 17:00 WIB — pengingat obat telat 7 jam (keluhan nyata
+  /// pasien). Karena itu komponen tanggal DAN jam di sini selalu dibangun di
+  /// [wibLocation] lewat [wibFromParts].
+  ///
+  /// Mengembalikan [tz.TZDateTime] ber-zona Asia/Jakarta, yang langsung dipakai
+  /// `zonedSchedule(matchDateTimeComponents: DateTimeComponents.time)` sehingga
+  /// pengulangan hariannya juga jatuh pada jam WIB yang sama.
+  static tz.TZDateTime nextReminderOccurrence(
+    TimeOfDay time, {
+    DateTime? now,
+  }) {
+    final base = toWib(now ?? wibNow());
+    var scheduled = wibFromParts(
+      base.year,
+      base.month,
+      base.day,
       time.hour,
       time.minute,
     );
-    if (!scheduled.isAfter(now)) {
-      scheduled = scheduled.add(const Duration(days: 1));
+    if (!scheduled.isAfter(base)) {
+      // Besok pada jam yang sama — dibangun ulang lewat komponen kalender
+      // (bukan `add(Duration(days: 1))`) supaya tetap wall-clock WIB yang sama.
+      scheduled = wibFromParts(
+        base.year,
+        base.month,
+        base.day + 1,
+        time.hour,
+        time.minute,
+      );
     }
     return scheduled;
   }

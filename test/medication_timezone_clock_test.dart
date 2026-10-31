@@ -74,16 +74,19 @@ int _adherence(List<Medication> meds, List<MedicationLog> logs) =>
       medicationLogs: logs,
     ).adherencePercent;
 
-/// Waktu LOKAL hari ini pada jam tertentu.
+/// Wall-clock WIB hari ini pada jam tertentu.
+///
+/// WAJIB lewat [wibFromParts]: `DateTime(...)` memakai zona perangkat sehingga
+/// di mesin UTC instant-nya bergeser 7 jam.
 DateTime _todayAt(int hour, int minute) {
   final now = wibNow();
-  return DateTime(now.year, now.month, now.day, hour, minute);
+  return wibFromParts(now.year, now.month, now.day, hour, minute);
 }
 
-/// Waktu LOKAL kemarin pada jam tertentu.
+/// Wall-clock WIB kemarin pada jam tertentu.
 DateTime _yesterdayAt(int hour, int minute) {
   final now = wibNow();
-  return DateTime(now.year, now.month, now.day, hour, minute)
+  return wibFromParts(now.year, now.month, now.day, hour, minute)
       .subtract(const Duration(days: 1));
 }
 

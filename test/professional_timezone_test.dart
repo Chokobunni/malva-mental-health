@@ -61,8 +61,8 @@ void main() {
       'formatIncidentDate: insiden dini hari (UTC hari sebelumnya) → tanggal lokal',
       () {
     final now = wibNow();
-    // 00:30 lokal hari ini = 17:30Z kemarin (bentuk yang dikirim server).
-    final utc = DateTime(now.year, now.month, now.day, 0, 30).toUtc();
+    // 00:30 wall-clock WIB hari ini = 17:30Z kemarin (bentuk yang dikirim server).
+    final utc = wibFromParts(now.year, now.month, now.day, 0, 30).toUtc();
     expect(utc.isUtc, isTrue);
     if (now.timeZoneOffset >= const Duration(minutes: 30)) {
       expect(utc.day, isNot(now.day),
@@ -96,7 +96,7 @@ void main() {
   test('formatTherapyRecordDate: dini hari UTC jatuh ke tanggal lokal hari ini',
       () {
     final now = wibNow();
-    final utc = DateTime(now.year, now.month, now.day, 0, 15).toUtc();
+    final utc = wibFromParts(now.year, now.month, now.day, 0, 15).toUtc();
     final local = toWib(utc);
     expect(formatTherapyRecordDate(utc),
         '${local.day}/${local.month}/${local.year} 00:15');

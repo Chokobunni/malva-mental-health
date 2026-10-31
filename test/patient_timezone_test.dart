@@ -39,8 +39,8 @@ void main() {
       'formatMoodCalendarDate: check-in dini hari (UTC kemarin) tetap hari ini',
       () {
     final now = wibNow();
-    // 00:30 lokal hari ini = 17:30Z kemarin.
-    final utc = DateTime(now.year, now.month, now.day, 0, 30).toUtc();
+    // 00:30 wall-clock WIB hari ini = 17:30Z kemarin.
+    final utc = wibFromParts(now.year, now.month, now.day, 0, 30).toUtc();
     if (now.timeZoneOffset >= const Duration(minutes: 30)) {
       expect(utc.day, isNot(now.day),
           reason: 'di UTC tanggalnya memang hari sebelumnya');
@@ -100,7 +100,7 @@ void main() {
   test('formatHealthRecordUpdatedDate: timestamp UTC dini hari → tanggal lokal',
       () {
     final now = wibNow();
-    final utc = DateTime(now.year, now.month, now.day, 0, 30).toUtc();
+    final utc = wibFromParts(now.year, now.month, now.day, 0, 30).toUtc();
     expect(utc.isUtc, isTrue);
     if (now.timeZoneOffset >= const Duration(minutes: 30)) {
       expect(utc.day, isNot(now.day),

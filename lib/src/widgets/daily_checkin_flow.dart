@@ -33,11 +33,13 @@ bool hasCheckedInToday(List<MoodEntry> moods) {
 /// Streak hari beruntun check-in (mood tersimpan > 0 hari berturut-turut).
 int checkInStreak(List<MoodEntry> moods) {
   if (moods.isEmpty) return 0;
-  // Hari kalender WIB, dibekukan sebagai WIB-midnight supaya selisih hari
-  // dihitung bersih. Terikat pada zona WIB agar benar di semua perangkat.
+  // Hari kalender WIB, dibekukan sebagai WIB tengah malam supaya selisih hari
+  // dihitung bersih. Dibangun lewat `wibFromParts` (zona WIB), BUKAN
+  // `DateTime(...)` yang memakai zona perangkat: selain bergeser di perangkat
+  // non-WIB, hari yang punya DST bisa membuat `difference().inDays` meleset.
   DateTime dayOnly(DateTime value) {
     final wib = toWib(value);
-    return DateTime(wib.year, wib.month, wib.day);
+    return wibFromParts(wib.year, wib.month, wib.day);
   }
 
   final days = moods.map((m) => dayOnly(m.date)).toSet().toList()

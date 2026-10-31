@@ -265,6 +265,19 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   /// menjamin satu paket aktif per pasangan lewat merge (`status=merged`,
   /// sudah difilter server); pengelompokan di sini adalah pengaman untuk
   /// data lama/race. Grup non-aktif tetap dirender per paket.
+  /// True bila paket boleh dihitung sebagai kuota yang masih SAH.
+  ///
+  /// `isActive` hanya mengecek `status == 'active'`. Paket yang sudah lewat
+  /// `expires_at` tetapi belum disapu sweeper tetap berstatus aktif, sehingga
+  /// dulu ikut digabung dan sisa sesi tampak lebih banyak dari yang sah
+  /// (aturan bisnis: sisa hangus setelah masa berlaku habis). Karena itu
+  /// penggabungan di MyCare juga mensyaratkan belum kedaluwarsa.
+  static bool _isUsablePackage(BackendCarePackage p) {
+    if (!p.isActive) return false;
+    final expires = p.expiresDateTime;
+    return expires == null || expires.isAfter(wibNow());
+  }
+
   List<_PackageDisplay> get _packageGroups {
     final order = <String>[];
     final byPro = <String, List<BackendCarePackage>>{};
@@ -278,7 +291,8 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
     final out = <_PackageDisplay>[];
     for (final proId in order) {
       final list = byPro[proId]!;
-      final active = list.where((p) => p.isActive).toList(growable: false);
+      final active =
+          list.where(_isUsablePackage).toList(growable: false);
       if (active.length > 1) {
         out.add(_PackageDisplay(
             primary: active.reduce((a, b) =>
@@ -287,7 +301,8 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
             count: active.length));
       } else {
         final sorted = List<BackendCarePackage>.from(list)
-          ..sort((a, b) => switch ((a.isActive, b.isActive)) {
+          ..sort((a, b) => switch (
+                (_isUsablePackage(a), _isUsablePackage(b))) {
                 (true, false) => -1,
                 (false, true) => 1,
                 _ => (b.createdAt ?? '').compareTo(a.createdAt ?? ''),
@@ -305,7 +320,8 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   /// fallback bila tidak ada yang aktif.
   BackendCarePackage? _packageForProfessional(String professionalId) {
     final active = _packages
-        .where((p) => p.professionalId == professionalId && p.isActive)
+        .where((p) =>
+            p.professionalId == professionalId && _isUsablePackage(p))
         .toList(growable: false);
     if (active.isNotEmpty) {
       if (active.length == 1) return active.first;

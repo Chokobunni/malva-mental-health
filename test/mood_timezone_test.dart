@@ -28,17 +28,20 @@ MoodEntry _moodUtc(DateTime utc, {double sleepHours = 7}) => MoodEntry(
       note: 'catatan',
     );
 
-/// Waktu LOKAL hari ini pada jam tertentu, dikembalikan sebagai UTC
+/// Wall-clock WIB hari ini pada jam tertentu, dikembalikan sebagai UTC
 /// (bentuk yang persis dikirim server).
+///
+/// WAJIB lewat [wibFromParts]: `DateTime(...)` memakai zona perangkat sehingga
+/// di mesin UTC instant-nya bergeser 7 jam.
 DateTime _todayLocalAsUtc(int hour, int minute) {
   final now = wibNow();
-  return DateTime(now.year, now.month, now.day, hour, minute).toUtc();
+  return wibFromParts(now.year, now.month, now.day, hour, minute).toUtc();
 }
 
-/// Waktu LOKAL `daysAgo` hari lalu pada jam tertentu, sebagai UTC.
+/// Wall-clock WIB `daysAgo` hari lalu pada jam tertentu, sebagai UTC.
 DateTime _daysAgoLocalAsUtc(int daysAgo, int hour, int minute) {
   final now = wibNow();
-  return DateTime(now.year, now.month, now.day, hour, minute)
+  return wibFromParts(now.year, now.month, now.day, hour, minute)
       .subtract(Duration(days: daysAgo))
       .toUtc();
 }

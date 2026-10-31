@@ -15,6 +15,7 @@ import 'package:malva_mental_health/src/screens/portal/crisis_incident_log_scree
 import 'package:malva_mental_health/src/screens/professional_dashboard_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/services/server_clock.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 import 'package:malva_mental_health/src/widgets/daily_checkin_flow.dart';
 import 'package:malva_mental_health/src/widgets/therapy_library.dart';
 
@@ -78,19 +79,22 @@ int _adherence(List<Medication> meds, List<MedicationLog> logs) =>
       medicationLogs: logs,
     ).adherencePercent;
 
-/// Waktu LOKAL hari ini pada jam tertentu (belum di-UTC-kan).
+/// Wall-clock WIB hari ini pada jam tertentu (belum di-UTC-kan).
+///
+/// WAJIB lewat [wibFromParts]: konstruktor `DateTime(...)` memakai zona
+/// perangkat, sehingga di mesin UTC (leg CI) instant-nya bergeser 7 jam.
 DateTime _todayLocal(int hour, int minute) {
-  final now = DateTime.now();
-  return DateTime(now.year, now.month, now.day, hour, minute);
+  final now = wibNow();
+  return wibFromParts(now.year, now.month, now.day, hour, minute);
 }
 
 DateTime _yesterdayLocal(int hour, int minute) =>
     _todayLocal(hour, minute).subtract(const Duration(days: 1));
 
-/// True bila mesin uji berada di zona yang "di depan" UTC cukup jauh sehingga
-/// jam 03:20 lokal benar-benar jatuh di tanggal UTC sebelumnya (kasus WIB).
+/// True bila jam WIB "di depan" UTC cukup jauh sehingga jam 03:20 WIB
+/// benar-benar jatuh di tanggal UTC sebelumnya. WIB selalu +7 jam.
 bool get _tzAheadOfUtc =>
-    DateTime.now().timeZoneOffset >= const Duration(hours: 4);
+    wibNow().timeZoneOffset >= const Duration(hours: 4);
 
 http.Response _json(Object body, int status) => http.Response(
       jsonEncode(body),
@@ -210,10 +214,10 @@ void main() {
   test(
       'A3 (paling penting): dosis 03:20 WIB (=20:20Z kemarin) tetap 100% — kode lama akan gagal',
       () {
-    final localNow = DateTime.now();
-    // 03:20 waktu LOKAL hari ini. Di WIB → 20:20Z KEMARIN.
+    final localNow = wibNow();
+    // 03:20 wall-clock WIB hari ini. Di UTC → 20:20Z KEMARIN.
     final takenLocal =
-        DateTime(localNow.year, localNow.month, localNow.day, 3, 20);
+        wibFromParts(localNow.year, localNow.month, localNow.day, 3, 20);
     final takenAtUtc = takenLocal.toUtc();
     expect(takenAtUtc.isUtc, isTrue);
 
@@ -234,9 +238,10 @@ void main() {
   });
 
   test('A3b: dosis dini hari 00:05 WIB (bentuk UTC) juga 100%', () {
-    final localNow = DateTime.now();
+    final localNow = wibNow();
     final takenUtc =
-        DateTime(localNow.year, localNow.month, localNow.day, 0, 5).toUtc();
+        wibFromParts(localNow.year, localNow.month, localNow.day, 0, 5)
+            .toUtc();
     expect(isSameLocalDay(takenUtc, localNow), isTrue);
     expect(
       _adherence([_med(_serverMedId, 'Sertraline')],
@@ -427,9 +432,10 @@ void main() {
   test(
       'D14: hasCheckedInToday — mood 00:30 WIB (UTC kemarin) = true; mood kemarin = false',
       () {
-    final localNow = DateTime.now();
+    final localNow = wibNow();
     final earlyUtc =
-        DateTime(localNow.year, localNow.month, localNow.day, 0, 30).toUtc();
+        wibFromParts(localNow.year, localNow.month, localNow.day, 0, 30)
+            .toUtc();
     expect(earlyUtc.isUtc, isTrue);
     if (_tzAheadOfUtc) {
       expect(earlyUtc.day, isNot(localNow.day),
@@ -463,7 +469,7 @@ void main() {
         reason: 'jam gelembung harus jam lokal (WIB)');
 
     final label = ChatScreen.formatMessageDate(utc);
-    final now = DateTime.now();
+    final now = wibNow();
     final isToday = now.year == 2026 && now.month == 10 && now.day == 30;
     expect(label, isToday ? 'Hari ini 03:20' : '30/10/2026 03:20',
         reason: 'tanggal harus tanggal LOKAL');

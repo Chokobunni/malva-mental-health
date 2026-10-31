@@ -6,9 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest_all.dart' as tz;
 
 import '../models.dart';
+import '../time/wib.dart';
 import 'malva_api_client.dart';
 
 @pragma('vm:entry-point')
@@ -35,7 +35,10 @@ class PushNotificationService {
     if (_initialized) return;
     _initialized = true;
 
-    tz.initializeTimeZones();
+    // Inisialisasi database zona + paksa zona lokal proses ke WIB sekaligus.
+    // Jangan panggil `tzdata.initializeTimeZones()` langsung: itu mengembalikan
+    // zona lokal ke Etc/UTC sehingga jadwal notifikasi bergeser 7 jam.
+    initializeWib();
 
     // ── Local notifications setup ──
     const androidSettings =
@@ -274,7 +277,9 @@ class PushNotificationService {
     );
 
     if (scheduledTime != null) {
-      final tzScheduled = tz.TZDateTime.from(scheduledTime, tz.local);
+      // Selalu konversi ke zona WIB — bukan zona lokal proses (bawaan paket
+      // timezone adalah Etc/UTC, yang membuat notifikasi bergeser 7 jam).
+      final tzScheduled = tz.TZDateTime.from(scheduledTime, wibLocation);
       await _localNotifications.zonedSchedule(
         id: id,
         title: title,

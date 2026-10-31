@@ -13,11 +13,35 @@ const String wibLocationName = 'Asia/Jakarta';
 
 tz.Location? _wib;
 
-/// Inisialisasi zona WIB. Idempoten — aman dipanggil berkali-kali.
+/// Inisialisasi zona WIB **dan** memaksa zona lokal proses ke WIB.
+///
+/// Idempoten — aman dipanggil berkali-kali (dan memang dipanggil dari banyak
+/// tempat: `main()`, layanan notifikasi, serta setiap helper di bawah).
+///
+/// KENAPA `setLocalLocation` DI SINI (akar bug pengingat obat telat 7 jam):
+/// paket `timezone` menginisialisasi zona lokal ke **Etc/UTC** — lihat
+/// `initializeDatabase()` yang memanggil `setLocalLocation(_utc)`. Artinya
+/// selama tidak ada yang menyetelnya, `tz.local` adalah UTC, dan kode yang
+/// membangun jadwal dengan `tz.local` menghasilkan **10:00 UTC = 17:00 WIB**
+/// (telat 7 jam). `flutter_local_notifications` menyimpan jadwal dari
+/// `tz.TZDateTime` yang kita berikan, jadi zona itu langsung menentukan jam
+/// berbunyinya notifikasi. Karena itu zona lokal proses DIPAKSA ke WIB di sini
+/// — satu kali, untuk seluruh aplikasi.
+///
+/// CATATAN PENTING: `tzdata.initializeTimeZones()` / `initializeTimeZones()`
+/// dari `package:timezone/data/*` MENGHAPUS paksaan ini (karena memanggil
+/// `setLocalLocation(_utc)`). Jangan panggil `initializeTimeZones()` langsung
+/// di kode aplikasi — panggil [initializeWib] (fungsi ini) supaya zona lokal
+/// tetap WIB. Gate `scripts/check_wib_dart.sh` melarang `tz.local` di luar
+/// berkas ini agar bug yang sama tidak muncul lagi.
 void initializeWib() {
-  if (_wib != null) return;
-  tzdata.initializeTimeZones();
-  _wib = tz.getLocation(wibLocationName);
+  if (_wib == null) {
+    tzdata.initializeTimeZones();
+    _wib = tz.getLocation(wibLocationName);
+  }
+  // Selalu (idempoten) pasang ulang: murah, dan menjamin `tz.local` kembali
+  // ke WIB walau ada kode lain yang sempat menginisialisasi ulang database.
+  tz.setLocalLocation(_wib!);
 }
 
 /// Zona WIB yang dipakai bersama.
@@ -27,7 +51,7 @@ tz.Location get wibLocation {
 }
 
 /// Sekarang, dalam WIB — TIDAK bergantung zona perangkat.
-DateTime wibNow() => tz.TZDateTime.now(wibLocation);
+tz.TZDateTime wibNow() => tz.TZDateTime.now(wibLocation);
 
 /// Instant perangkat mentah (sumber mentah jam sistem).
 ///
@@ -188,7 +212,10 @@ DateTime? parseWibStored(String? raw) {
 /// bukan instant. Membangunnya lewat `DateTime(...)` membuat zona perangkat
 /// ikut campur, sehingga tanggal yang dipilih bisa bergeser sehari di
 /// perangkat non-WIB. Selalu pakai helper ini untuk nilai dari picker.
-DateTime wibFromParts(
+///
+/// Mengembalikan [tz.TZDateTime] ber-zona WIB (bukan `DateTime` biasa) supaya
+/// bisa langsung dipakai `zonedSchedule` tanpa konversi zona tambahan.
+tz.TZDateTime wibFromParts(
   int year,
   int month,
   int day, [

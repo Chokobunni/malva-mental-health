@@ -120,17 +120,19 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    // Masa berlaku RELATIF terhadap sekarang: paket yang sudah lewat
+    // `expires_at` tidak ikut digabung (lihat `_isUsablePackage` di MyCare).
     final api = _apiWith([
       _package(
           id: 'pkg_lama',
           total: 4,
           used: 1,
-          expiresAt: '2026-10-13T10:00:00+07:00'),
+          expiresAt: wibIso(wibNow().add(const Duration(days: 7)))),
       _package(
           id: 'pkg_baru',
           total: 4,
           used: 0,
-          expiresAt: '2026-10-31T10:00:00+07:00'),
+          expiresAt: wibIso(wibNow().add(const Duration(days: 30)))),
     ]);
 
     await tester.pumpWidget(_buildApp(api));
@@ -159,7 +161,7 @@ void main() {
           id: 'pkg_satu',
           total: 4,
           used: 1,
-          expiresAt: '2026-10-13T10:00:00+07:00'),
+          expiresAt: wibIso(wibNow().add(const Duration(days: 7)))),
     ]);
 
     await tester.pumpWidget(_buildApp(api));
@@ -171,6 +173,43 @@ void main() {
     // Idem: satu Text berisi sisa sesi + tanggal berlaku.
     expect(find.textContaining('3/4 sesi tersisa'), findsOneWidget);
     expect(find.textContaining('Digabung'), findsNothing);
+  });
+
+  testWidgets(
+      'paket aktif yang sudah kedaluwarsa TIDAK ikut digabung ke kartu',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 4000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final api = _apiWith([
+      // status 'active' tetapi masa berlaku sudah lewat: sisa sesinya hangus,
+      // jadi tidak boleh menambah kuota gabungan.
+      _package(
+          id: 'pkg_kedaluwarsa',
+          total: 4,
+          used: 1,
+          expiresAt: wibIso(wibNow().subtract(const Duration(days: 1)))),
+      _package(
+          id: 'pkg_valid',
+          total: 4,
+          used: 0,
+          expiresAt: wibIso(wibNow().add(const Duration(days: 30)))),
+    ]);
+
+    await tester.pumpWidget(_buildApp(api));
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    // Kuota sah hanya dari paket yang masih berlaku: tidak ada kartu 7/8 dan
+    // tidak ada label gabungan.
+    expect(find.textContaining('7/8 sesi tersisa'), findsNothing);
+    expect(find.textContaining('Digabung dari 2 paket'), findsNothing);
+    expect(find.textContaining('4/4 sesi tersisa'), findsOneWidget);
+    // Paket kedaluwarsa tetap tampil sebagai kartu terpisah (riwayat pasien).
+    expect(find.textContaining('3/4 sesi tersisa'), findsOneWidget);
   });
 
   test('toWib mengubah ...Z menjadi WIB tanpa bergantung zona perangkat',

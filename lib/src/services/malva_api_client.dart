@@ -619,7 +619,7 @@ class MalvaApiClient {
       id: screening['id']?.toString() ?? '',
       overallLevel: screening['overall_level']?.toString() ?? '',
       crisisFlag: screening['crisis_flag'] == true,
-      createdAt: toWibOrNull(DateTime.tryParse(screening['created_at']?.toString() ?? '')),
+      createdAt: parseWibStored(screening['created_at']?.toString()),
     );
   }
 
@@ -2741,7 +2741,7 @@ class BackendUserProfile {
   DateTime? get birthDateTime {
     final raw = dateOfBirth;
     if (raw == null || raw.isEmpty) return null;
-    return toWibOrNull(DateTime.tryParse(raw));
+    return parseWibStored(raw);
   }
 }
 
@@ -2804,7 +2804,7 @@ class BackendScreeningSession {
       patientId: json['patient_id']?.toString() ?? '',
       overallLevel: json['overall_level']?.toString() ?? '',
       crisisFlag: json['crisis_flag'] == true,
-      createdAt: toWibOrNull(DateTime.tryParse(json['created_at']?.toString() ?? '')),
+      createdAt: parseWibStored(json['created_at']?.toString()),
       phq9: BackendAssessmentSummary.fromJson(
         bundle['phq9'] is Map<String, dynamic>
             ? bundle['phq9'] as Map<String, dynamic>
@@ -2881,7 +2881,7 @@ class BackendScreeningReview {
       professionalId: json['professional_id']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
       note: json['note']?.toString() ?? '',
-      updatedAt: toWibOrNull(DateTime.tryParse(json['updated_at']?.toString() ?? '')),
+      updatedAt: parseWibStored(json['updated_at']?.toString()),
     );
   }
 
@@ -2911,7 +2911,7 @@ class BackendProfessionalNote {
       professionalId: json['professional_id']?.toString() ?? '',
       body: json['body']?.toString() ?? '',
       visibility: json['visibility']?.toString() ?? '',
-      updatedAt: toWibOrNull(DateTime.tryParse(json['updated_at']?.toString() ?? '')),
+      updatedAt: parseWibStored(json['updated_at']?.toString()),
     );
   }
 
@@ -2941,8 +2941,8 @@ class BackendFollowUpMessage {
       professionalId: json['professional_id']?.toString() ?? '',
       body: json['body']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
-      createdAt: toWibOrNull(DateTime.tryParse(json['created_at']?.toString() ?? '')),
-      readAt: toWibOrNull(DateTime.tryParse(json['read_at']?.toString() ?? '')),
+      createdAt: parseWibStored(json['created_at']?.toString()),
+      readAt: parseWibStored(json['read_at']?.toString()),
     );
   }
 
@@ -2988,7 +2988,7 @@ class BackendMoodCheckin {
       id: json['id']?.toString() ?? '',
       mood: json['mood']?.toString() ?? '',
       note: json['note']?.toString() ?? '',
-      occurredAt: toWibOrNull(DateTime.tryParse(json['occurred_at']?.toString() ?? '')),
+      occurredAt: parseWibStored(json['occurred_at']?.toString()),
       sleepHours: (json['sleep_hours'] as num?)?.toDouble() ?? 0,
       energy: (json['energy'] as num?)?.toInt() ?? 0,
       anxiety: (json['anxiety'] as num?)?.toInt() ?? 0,
@@ -3026,7 +3026,7 @@ class BackendDiaryEntry {
       title: json['title']?.toString() ?? '',
       note: json['note']?.toString() ?? '',
       mood: json['mood']?.toString() ?? '',
-      occurredAt: toWibOrNull(DateTime.tryParse(json['occurred_at']?.toString() ?? '')),
+      occurredAt: parseWibStored(json['occurred_at']?.toString()),
       professionalFeedback: json['professional_feedback']?.toString(),
     );
   }
@@ -3095,7 +3095,7 @@ class BackendHealthRecord {
       diagnosisSummary: json['diagnosis_summary']?.toString() ?? '',
       hasDiagnosis: json['has_diagnosis'] == true,
       primaryProfessional: json['primary_professional']?.toString() ?? '',
-      updatedAt: toWibOrNull(DateTime.tryParse(json['updated_at']?.toString() ?? '')),
+      updatedAt: parseWibStored(json['updated_at']?.toString()),
       medicationCount: (json['medication_count'] as num?)?.toInt() ?? 0,
       medications: medsList
               ?.whereType<Map<String, dynamic>>()
@@ -3158,12 +3158,12 @@ class BackendMedicationLog {
       id: json['id']?.toString() ?? '',
       medicationName: json['medication_name']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
-      takenAt: toWibOrNull(DateTime.tryParse(json['taken_at']?.toString() ?? '')),
+      takenAt: parseWibStored(json['taken_at']?.toString()),
       // `medication_id` di server bersifat opsional (omitempty) — log lama
       // tanpa id obat tetap sah. `created_at` dipakai sebagai fallback waktu
       // bila `taken_at` null saat dipetakan ke MedicationLog lokal.
       medicationId: json['medication_id']?.toString() ?? '',
-      createdAt: toWibOrNull(DateTime.tryParse(json['created_at']?.toString() ?? '')),
+      createdAt: parseWibStored(json['created_at']?.toString()),
     );
   }
 
@@ -3190,7 +3190,7 @@ class BackendTimelineEvent {
       type: json['type']?.toString() ?? '',
       title: json['title']?.toString() ?? '',
       body: json['body']?.toString() ?? '',
-      createdAt: toWibOrNull(DateTime.tryParse(json['created_at']?.toString() ?? '')),
+      createdAt: parseWibStored(json['created_at']?.toString()),
     );
   }
 
@@ -3214,7 +3214,7 @@ class BackendAuditLog {
       id: json['id']?.toString() ?? '',
       action: json['action']?.toString() ?? '',
       entityType: json['entity_type']?.toString() ?? '',
-      createdAt: toWibOrNull(DateTime.tryParse(json['created_at']?.toString() ?? '')),
+      createdAt: parseWibStored(json['created_at']?.toString()),
     );
   }
 
@@ -3279,8 +3279,8 @@ class BackendNotification {
       title: json['title']?.toString() ?? '',
       body: json['body']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
-      createdAt: toWibOrNull(DateTime.tryParse(json['created_at']?.toString() ?? '')),
-      readAt: toWibOrNull(DateTime.tryParse(json['read_at']?.toString() ?? '')),
+      createdAt: parseWibStored(json['created_at']?.toString()),
+      readAt: parseWibStored(json['read_at']?.toString()),
       data: rawData is Map
           ? rawData.map(
               (key, value) => MapEntry(key.toString(), value.toString()),
@@ -3360,8 +3360,8 @@ class BackendCrisisIncident {
       longitude: (json['longitude'] as num?)?.toDouble(),
       status: json['status']?.toString() ?? '',
       resolutionNotes: json['resolution_notes']?.toString() ?? '',
-      createdAt: toWibOrNull(DateTime.tryParse(json['created_at']?.toString() ?? '')),
-      resolvedAt: toWibOrNull(DateTime.tryParse(json['resolved_at']?.toString() ?? '')),
+      createdAt: parseWibStored(json['created_at']?.toString()),
+      resolvedAt: parseWibStored(json['resolved_at']?.toString()),
       patientName: json['patient_display_name']?.toString() ?? '',
     );
   }
@@ -3845,7 +3845,7 @@ class BackendCarePackage {
 
   bool get isActive => status == 'active';
   DateTime? get expiresDateTime =>
-      expiresAt == null ? null : toWibOrNull(DateTime.tryParse(expiresAt!));
+      expiresAt == null ? null : parseWibStored(expiresAt!);
 }
 
 class BackendCareSession {
@@ -3917,7 +3917,7 @@ class BackendCareSession {
   final String photoIntroUrl;
 
   DateTime? get scheduledDateTime =>
-      scheduledAt == null ? null : toWibOrNull(DateTime.tryParse(scheduledAt!));
+      scheduledAt == null ? null : parseWibStored(scheduledAt!);
 
   bool get isScheduled => status == 'scheduled';
   bool get isVideo => sessionType == 'video';
@@ -4282,7 +4282,7 @@ class BackendTherapySubmission {
   bool get isShared => (sharedWithProfessionalId ?? '').isNotEmpty;
 
   DateTime? get createdDateTime =>
-      createdAt == null ? null : toWibOrNull(DateTime.tryParse(createdAt!));
+      createdAt == null ? null : parseWibStored(createdAt!);
 }
 
 /// Pesan chat dari GET/POST /v1/messages.
@@ -4319,7 +4319,7 @@ class BackendChatMessage {
   final String? createdAt;
 
   DateTime? get createdDateTime =>
-      createdAt == null ? null : toWibOrNull(DateTime.tryParse(createdAt!));
+      createdAt == null ? null : parseWibStored(createdAt!);
 }
 
 class BackendDoctorProfile {
@@ -4533,7 +4533,7 @@ class BackendEarningsTransaction {
       gross: (json['gross'] as num?)?.toInt() ?? 0,
       platformFee: (json['platform_fee'] as num?)?.toInt() ?? 0,
       net: (json['net'] as num?)?.toInt() ?? 0,
-      paidAt: toWibOrNull(DateTime.tryParse(json['paid_at']?.toString() ?? '')),
+      paidAt: parseWibStored(json['paid_at']?.toString()),
       payoutStatus: json['payout_status']?.toString() ?? '',
     );
   }
