@@ -75,7 +75,8 @@ void main() {
       expect(scheduled.toUtc(), DateTime.utc(2026, 11, 1, 3, 0));
     });
 
-    test('bukti regresi: membangun jadwal di zona UTC menggeser 10:00 → 17:00 WIB',
+    test(
+        'bukti regresi: membangun jadwal di zona UTC menggeser 10:00 → 17:00 WIB',
         () {
       // Persis pola kode LAMA (`tz.local` saat masih UTC). Dipertahankan di
       // sini sebagai dokumentasi angka sebelum/sesudah perbaikan.
@@ -109,7 +110,8 @@ void main() {
       expect(scheduled.toUtc(), DateTime.utc(2026, 11, 2, 3, 0));
     });
 
-    test('jam yang tepat sama dengan sekarang dijadwalkan besok (bukan masa lalu)',
+    test(
+        'jam yang tepat sama dengan sekarang dijadwalkan besok (bukan masa lalu)',
         () {
       final now = wibFromParts(2026, 11, 1, 10, 0);
       final scheduled = MedicationReminderService.nextReminderOccurrence(

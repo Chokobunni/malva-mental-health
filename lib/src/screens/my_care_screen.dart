@@ -291,18 +291,16 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
     final out = <_PackageDisplay>[];
     for (final proId in order) {
       final list = byPro[proId]!;
-      final active =
-          list.where(_isUsablePackage).toList(growable: false);
+      final active = list.where(_isUsablePackage).toList(growable: false);
       if (active.length > 1) {
         out.add(_PackageDisplay(
-            primary: active.reduce((a, b) =>
-                b.remainingSessions > a.remainingSessions ? b : a),
+            primary: active.reduce(
+                (a, b) => b.remainingSessions > a.remainingSessions ? b : a),
             display: _mergedAggregate(active),
             count: active.length));
       } else {
         final sorted = List<BackendCarePackage>.from(list)
-          ..sort((a, b) => switch (
-                (_isUsablePackage(a), _isUsablePackage(b))) {
+          ..sort((a, b) => switch ((_isUsablePackage(a), _isUsablePackage(b))) {
                 (true, false) => -1,
                 (false, true) => 1,
                 _ => (b.createdAt ?? '').compareTo(a.createdAt ?? ''),
@@ -320,8 +318,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   /// fallback bila tidak ada yang aktif.
   BackendCarePackage? _packageForProfessional(String professionalId) {
     final active = _packages
-        .where((p) =>
-            p.professionalId == professionalId && _isUsablePackage(p))
+        .where((p) => p.professionalId == professionalId && _isUsablePackage(p))
         .toList(growable: false);
     if (active.isNotEmpty) {
       if (active.length == 1) return active.first;
@@ -345,8 +342,8 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   /// tampilan: total/terpakai/sisa dijumlahkan, kedaluwarsa ambil yang paling
   /// akhir, harga/refund ikut dijumlahkan.
   static BackendCarePackage _mergedAggregate(List<BackendCarePackage> active) {
-    final primary = active.reduce((a, b) =>
-        b.remainingSessions > a.remainingSessions ? b : a);
+    final primary = active
+        .reduce((a, b) => b.remainingSessions > a.remainingSessions ? b : a);
     var total = 0;
     var used = 0;
     var remaining = 0;

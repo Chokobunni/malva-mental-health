@@ -1040,8 +1040,7 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
   }
 
   void _save() {
-    final id =
-        widget.initial?.id ?? 'med_${wibNow().millisecondsSinceEpoch}';
+    final id = widget.initial?.id ?? 'med_${wibNow().millisecondsSinceEpoch}';
     widget.onSave(
       Medication(
         id: id,

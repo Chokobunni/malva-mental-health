@@ -107,11 +107,11 @@ void main() {
     await tester.pump();
 
     expect(find.text('Password wajib diisi.'), findsOneWidget);
-    expect(bodies, isEmpty, reason: 'API tidak boleh dipanggil saat password kosong');
+    expect(bodies, isEmpty,
+        reason: 'API tidak boleh dipanggil saat password kosong');
   });
 
-  testWidgets('menolak konfirmasi password yang berbeda',
-      (tester) async {
+  testWidgets('menolak konfirmasi password yang berbeda', (tester) async {
     _useTallScreen(tester);
     final bodies = <String>[];
     final api = MalvaApiClient(

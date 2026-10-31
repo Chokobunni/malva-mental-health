@@ -93,8 +93,7 @@ DateTime _yesterdayLocal(int hour, int minute) =>
 
 /// True bila jam WIB "di depan" UTC cukup jauh sehingga jam 03:20 WIB
 /// benar-benar jatuh di tanggal UTC sebelumnya. WIB selalu +7 jam.
-bool get _tzAheadOfUtc =>
-    wibNow().timeZoneOffset >= const Duration(hours: 4);
+bool get _tzAheadOfUtc => wibNow().timeZoneOffset >= const Duration(hours: 4);
 
 http.Response _json(Object body, int status) => http.Response(
       jsonEncode(body),
@@ -240,8 +239,7 @@ void main() {
   test('A3b: dosis dini hari 00:05 WIB (bentuk UTC) juga 100%', () {
     final localNow = wibNow();
     final takenUtc =
-        wibFromParts(localNow.year, localNow.month, localNow.day, 0, 5)
-            .toUtc();
+        wibFromParts(localNow.year, localNow.month, localNow.day, 0, 5).toUtc();
     expect(isSameLocalDay(takenUtc, localNow), isTrue);
     expect(
       _adherence([_med(_serverMedId, 'Sertraline')],

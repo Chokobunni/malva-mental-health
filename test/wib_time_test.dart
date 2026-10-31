@@ -113,8 +113,7 @@ void main() {
 
   tearDown(ServerClock.reset);
 
-  testWidgets(
-      'dua paket aktif profesional sama digabung jadi satu kartu 7/8',
+  testWidgets('dua paket aktif profesional sama digabung jadi satu kartu 7/8',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 4000);
     tester.view.devicePixelRatio = 1.0;
@@ -175,8 +174,7 @@ void main() {
     expect(find.textContaining('Digabung'), findsNothing);
   });
 
-  testWidgets(
-      'paket aktif yang sudah kedaluwarsa TIDAK ikut digabung ke kartu',
+  testWidgets('paket aktif yang sudah kedaluwarsa TIDAK ikut digabung ke kartu',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 4000);
     tester.view.devicePixelRatio = 1.0;
@@ -212,8 +210,7 @@ void main() {
     expect(find.textContaining('3/4 sesi tersisa'), findsOneWidget);
   });
 
-  test('toWib mengubah ...Z menjadi WIB tanpa bergantung zona perangkat',
-      () {
+  test('toWib mengubah ...Z menjadi WIB tanpa bergantung zona perangkat', () {
     initializeWib();
     final wib = toWib(DateTime.parse('2026-10-29T20:20:00Z'));
     expect(wib.day, 30);

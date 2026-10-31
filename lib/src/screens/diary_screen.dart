@@ -482,8 +482,7 @@ class _DiaryFormSheetState extends State<DiaryFormSheet> {
     final existingEntry = widget.initialEntry;
     widget.onSave(
       DiaryEntry(
-        id: existingEntry?.id ??
-            'diary_${wibNow().millisecondsSinceEpoch}',
+        id: existingEntry?.id ?? 'diary_${wibNow().millisecondsSinceEpoch}',
         createdAt: existingEntry?.createdAt ?? wibNow(),
         mood: _mood,
         title: _title.text.trim().isEmpty ? _mood.label : _title.text.trim(),

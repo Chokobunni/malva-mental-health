@@ -204,12 +204,8 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen> {
           children: [
             _row('Reference', '#${widget.reference}'),
             _row('Status', 'PAID'),
-            _row(
-                'Tanggal',
-                wibNow()
-                    .toString()
-                    .substring(0, 16)
-                    .replaceAll('T', ' ')),
+            _row('Tanggal',
+                wibNow().toString().substring(0, 16).replaceAll('T', ' ')),
             const SizedBox(height: 8),
             const Text(
               'Simpan nomor referensi ini untuk keperluan audit dan refund.',

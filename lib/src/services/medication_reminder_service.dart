@@ -272,8 +272,7 @@ class MedicationReminderService {
   }
 
   /// Waktu pengingat berikutnya (hari ini bila belum lewat, besok bila lewat).
-  tz.TZDateTime _nextOccurrence(TimeOfDay time) =>
-      nextReminderOccurrence(time);
+  tz.TZDateTime _nextOccurrence(TimeOfDay time) => nextReminderOccurrence(time);
 
   /// Perhitungan MURNI waktu pengingat berikutnya, selalu dalam zona WIB.
   ///

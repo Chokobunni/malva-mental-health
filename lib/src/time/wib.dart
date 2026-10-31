@@ -183,8 +183,7 @@ DateTime? parseWibStored(String? raw) {
     final minute = int.tryParse(wall.group(5) ?? '') ?? 0;
     final second = int.tryParse(wall.group(6) ?? '') ?? 0;
     final micros = _microsecondsFromFraction(wall.group(7) ?? '');
-    final valid =
-        _inRange(month, 1, 12) &&
+    final valid = _inRange(month, 1, 12) &&
         _inRange(day, 1, 31) &&
         _inRange(hour, 0, 23) &&
         _inRange(minute, 0, 59) &&
@@ -221,4 +220,5 @@ tz.TZDateTime wibFromParts(
   int day, [
   int hour = 0,
   int minute = 0,
-]) => tz.TZDateTime(wibLocation, year, month, day, hour, minute);
+]) =>
+    tz.TZDateTime(wibLocation, year, month, day, hour, minute);
