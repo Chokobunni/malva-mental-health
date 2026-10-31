@@ -976,6 +976,16 @@ func (s *Server) paymentWebhook(w http.ResponseWriter, r *http.Request) {
 			// akan mengubah nominal — rekonsiliasi manual. Status event dibuat
 			// 'rejected' (satu-satunya nilai terminal yang diizinkan selain
 			// received/processed/ignored) agar terlihat di audit.
+			//
+			// Payment sudah terminal (cancelled/refunded/expired) tetapi dana
+			// masuk dengan nominal berbeda: tetap jalankan jalur rekonsiliasi
+			// agar pasien diberi tahu dananya diterima dan tidak membayar lagi.
+			// Dipanggil SEBELUM menulis 'rejected' karena
+			// handlePaymentAfterCancellation menulis 'ignored' lebih dulu;
+			// 'rejected' harus menjadi status akhir agar terlihat di audit.
+			if p0.Status != "" && p0.Status != "pending" {
+				s.handlePaymentAfterCancellation(r.Context(), evt, p0.Status)
+			}
 			_ = s.store.UpdatePaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType, "rejected", "", "")
 			s.logger.Error("webhook gross_amount tidak cocok",
 				"order_id", evt.OrderID,

@@ -126,6 +126,74 @@ func TestPaymentWebhookRejectsGrossAmountMismatch(t *testing.T) {
 	}
 }
 
+// TestPaymentWebhookGrossMismatchOnCancelledPaymentStillNotifies (REGRESI
+// pasca-guard gross_amount): payment yang SUDAH terminal (cancelled) tetapi
+// dana masuk dengan nominal TIDAK cocok harus TETAP memicu notifikasi
+// rekonsiliasi. Sebelum perbaikan, guard gross_amount menghentikan alur lebih
+// dulu sehingga handlePaymentAfterCancellation tidak pernah jalan dan pasien
+// tidak diberi tahu dananya diterima.
+//
+// Yang dikunci: 200 {"status":"mismatch"}, payments tetap 'cancelled', tidak ada
+// sesi, event 'rejected', dan TEPAT SATU notifikasi payment_needs_reconciliation.
+func TestPaymentWebhookGrossMismatchOnCancelledPaymentStillNotifies(t *testing.T) {
+	db, st := openOnboardingTestStore(t)
+	srv := newWebhookServer(t, db, nil)
+	ctx := context.Background()
+
+	patient := createIdentityTestUser(t, db, st, "patient", nil)
+	prof := createIdentityTestUser(t, db, st, "professional", &store.ProfessionalCredential{
+		Specialization: "Sp.KJ",
+		STRNumber:      fmt.Sprint("STR-GC-", time.Now().UnixNano()),
+		SIPNumber:      fmt.Sprint("SIP-GC-", time.Now().UnixNano()),
+	})
+	start := clock.Now().In(wibLoc).AddDate(0, 0, 3)
+	booking, pay := createPendingBookingAt(t, db, st, patient.ID, prof.ID, "quick_consult", "chat", start)
+
+	// Pasien membatalkan sesi: payment & booking menjadi 'cancelled', tetapi
+	// VA/QRIS yang sudah terbuka tetap dibayar — dengan nominal yang salah.
+	if _, err := db.ExecContext(ctx, `UPDATE payments SET status='cancelled' WHERE id=$1`, pay.ID); err != nil {
+		t.Fatalf("tandai payment cancelled: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE bookings SET status='cancelled' WHERE id=$1`, booking.ID); err != nil {
+		t.Fatalf("tandai booking cancelled: %v", err)
+	}
+
+	// Settlement sah (signature benar) tetapi nominal Rp1.000 (tagihan 102.000).
+	rec := postPaymentNotification(t, srv, pay.Reference, "1000.00", "settlement", "200", "accept")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, mau 200: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"status":"mismatch"`) {
+		t.Fatalf("respons = %s, mau memuat status mismatch", rec.Body.String())
+	}
+
+	// Payment tetap 'cancelled' (tidak dihidupkan / ditandai lunas).
+	status, err := st.PaymentStatusByReference(ctx, pay.Reference)
+	if err != nil {
+		t.Fatalf("baca status: %v", err)
+	}
+	if status != "cancelled" {
+		t.Fatalf("payment berubah menjadi %q, mau tetap \"cancelled\"", status)
+	}
+	// Tidak ada sesi.
+	if _, serr := st.GetCareSessionByBookingID(ctx, booking.ID); !errors.Is(serr, sql.ErrNoRows) {
+		t.Fatalf("sesi dibuat untuk pembayaran cancelled: err = %v", serr)
+	}
+	// Event 'rejected' (status akhir setelah rekonsiliasi menulis 'ignored').
+	evtStatus, found, eerr := st.PaymentEventStatus(ctx, "midtrans", pay.Reference, "settlement")
+	if eerr != nil || !found {
+		t.Fatalf("event tidak tercatat: found=%v err=%v", found, eerr)
+	}
+	if evtStatus != "rejected" {
+		t.Fatalf("status event = %q, mau \"rejected\"", evtStatus)
+	}
+	// TEPAT SATU notifikasi rekonsiliasi (dedupe berdasarkan reference).
+	if n := countNotifications(t, st, patient.ID, notifPaymentReconciliation, booking.ID); n != 1 {
+		t.Fatalf("notifikasi %s pasien = %d, mau 1 (pasien harus diberi tahu dananya masuk)",
+			notifPaymentReconciliation, n)
+	}
+}
+
 // ---- (c) REPLAY EVENT BERTIPE LAIN SETELAH PAID ----------------------
 
 // TestPaymentWebhookDowngradeEventsDoNotRevokePaid (AMAN) mengunci bahwa
@@ -244,7 +312,7 @@ func TestPaymentWebhookSettlementReplayCreatesSession(t *testing.T) {
 		t.Fatalf("prasyarat: seharusnya belum ada sesi, dapat err = %v", serr)
 	}
 
-	// Retry gateway.
+	// Retry gateway (replay pertama).
 	rec := postPaymentNotification(t, srv, pay.Reference, gross, "settlement", "200", "accept")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("retry = %d, mau 200: %s", rec.Code, rec.Body.String())
@@ -261,6 +329,15 @@ func TestPaymentWebhookSettlementReplayCreatesSession(t *testing.T) {
 	}
 	if evtStatus != "processed" {
 		t.Fatalf("status event = %q, mau \"processed\"", evtStatus)
+	}
+
+	// Replay KEDUA: aktivasi idempoten — TIDAK boleh membuat sesi kedua.
+	rec2 := postPaymentNotification(t, srv, pay.Reference, gross, "settlement", "200", "accept")
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("replay kedua = %d, mau 200: %s", rec2.Code, rec2.Body.String())
+	}
+	if n := countSessionsForBooking(t, db, booking.ID); n != 1 {
+		t.Fatalf("jumlah sesi setelah replay kedua = %d, mau 1 (aktivasi harus idempoten)", n)
 	}
 }
 
