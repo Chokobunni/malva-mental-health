@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Tema splash Android 12+ untuk mode gelap.
+
+  Diperlukan karena kualifikasi `night` lebih dipilih daripada `version`:
+  tanpa berkas ini, `values-night/styles.xml` menang atas `values-v31/styles.xml`
+  pada perangkat gelap Android 12+, sehingga splash sistem kembali memakai
+  latar bawaan (putih). Isinya harus sama dengan `values-v31/styles.xml`.
+-->
+<resources>
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">@color/malva_splash_top</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/malva_splash_top</item>
+    </style>
+</resources>

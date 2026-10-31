@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Tema splash untuk Android 12+ (API 31).
+
+  Android 12 memperkenalkan SplashScreen API sistem: aplikasi SELALU
+  menampilkan splash sistem lebih dulu, dan tanpa atribut di bawah splash itu
+  memakai latar putih bawaan tema — inilah sumber halaman putih berlogo kecil
+  yang dilaporkan pengguna sebelum splash Flutter tampil.
+
+  Catatan penting: atribut `android:postSplashScreenTheme` TIDAK ADA di
+  platform Android (sudah diperiksa pada attrs.xml SDK 36); yang ada hanyalah
+  `postSplashScreenTheme` milik library androidx.core:core-splashscreen, dan
+  library itu tidak dipakai proyek ini. Perpindahan ke NormalTheme setelah
+  splash sudah ditangani Flutter lewat meta-data
+  `io.flutter.embedding.android.NormalTheme` di AndroidManifest, sehingga
+  perilaku yang diinginkan tetap tercapai tanpa menambah dependensi.
+-->
+<resources>
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <!-- Latar splash sistem = warna brand teratas gradien Flutter. -->
+        <item name="android:windowSplashScreenBackground">@color/malva_splash_top</item>
+        <!-- Ikon splash sistem: ikon peluncur (foreground adaptive icon). -->
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <!-- Warna cincin di belakang ikon, disamakan dengan latar brand. -->
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/malva_splash_top</item>
+    </style>
+</resources>

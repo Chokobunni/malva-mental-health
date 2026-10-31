@@ -1,10 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Splash Malva: latar putih + logo di tengah -->
+<!--
+  Splash native Malva (API 21+): gradien vertikal tiga warna + logo 140dp.
+  Isi sengaja identik dengan res/drawable/launch_background.xml agar kedua
+  varian resource tidak pernah berbeda tampilan.
+-->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
     <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@mipmap/launch_image" />
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:centerColor="@color/malva_splash_mid"
+                android:endColor="@color/malva_splash_bottom"
+                android:startColor="@color/malva_splash_top"
+                android:type="linear" />
+        </shape>
     </item>
+    <item
+        android:width="140dp"
+        android:height="140dp"
+        android:drawable="@mipmap/launch_image"
+        android:gravity="center" />
 </layer-list>

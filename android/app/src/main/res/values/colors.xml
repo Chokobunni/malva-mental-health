@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Warna brand Malva untuk splash native (launch screen).
+
+  Nilai HARUS sama dengan gradien `SplashScreen` Flutter
+  (lib/src/screens/splash_screen.dart): #5A2A7A -> #C566D1 -> #EFA0EC.
+  Bila salah satu berubah, ubah keduanya agar tidak ada lompatan warna antara
+  splash native dan frame pertama Flutter.
+-->
+<resources>
+    <!-- Warna teratas gradien splash (juga dipakai Android 12 system splash). -->
+    <color name="malva_splash_top">#FF5A2A7A</color>
+    <!-- Warna tengah gradien splash. -->
+    <color name="malva_splash_mid">#FFC566D1</color>
+    <!-- Warna terbawah gradien splash. -->
+    <color name="malva_splash_bottom">#FFEFA0EC</color>
+    <!-- Latar jendela setelah splash (mencegah kedipan putih). -->
+    <color name="malva_window_background">#FF5A2A7A</color>
+</resources>
