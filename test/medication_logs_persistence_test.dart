@@ -49,6 +49,15 @@ Map<String, dynamic> _medJson(String id, int stock) => {
       'source': 'resep',
     };
 
+/// Bentuk baris log seperti yang dikirim server: instant UTC berakhiran `Z`.
+///
+/// WAJIB `.toUtc()` sebelum `toIso8601String()`. Untuk DateTime non-UTC, Dart
+/// membuang offset sehingga hasilnya `2026-10-31T20:57:00.000` tanpa penanda
+/// zona. `parseWibStored` sengaja menafsirkan string tanpa zona sebagai
+/// wall-clock WIB (aturan data lama), jadi di runner CI yang memakai TZ=UTC
+/// fixture itu terbaca sebagai jam WIB hari kemarin dan adherence menjadi 0% —
+/// padahal di mesin WIB test yang sama lulus. Server tidak pernah mengirim
+/// timestamp tanpa zona, jadi `.toUtc()` juga membuat fixture ini realistis.
 Map<String, dynamic> _logJson(
   String id,
   String name,
@@ -61,8 +70,8 @@ Map<String, dynamic> _logJson(
       'medication_id': id,
       'medication_name': name,
       'status': status,
-      'taken_at': takenAt.toIso8601String(),
-      'created_at': takenAt.toIso8601String(),
+      'taken_at': takenAt.toUtc().toIso8601String(),
+      'created_at': takenAt.toUtc().toIso8601String(),
     };
 
 MalvaApiClient _api({
