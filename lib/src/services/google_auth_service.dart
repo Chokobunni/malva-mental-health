@@ -118,7 +118,8 @@ class GoogleAuthService {
   /// masih "Testing" dan Gmail profesional belum terdaftar sebagai Test user,
   /// atau aplikasinya belum diverifikasi). Panduan konsol:
   /// `docs/GOOGLE_CALENDAR_SETUP.md`.
-  static Future<String?> signInWithCalendarScope() async {
+  static Future<String?> signInWithCalendarScope(
+      {bool freshAuthorization = false}) async {
     _lastErrorCode = null;
     if (!GoogleConfig.isConfigured) {
       throw _fail(
@@ -128,6 +129,12 @@ class GoogleAuthService {
       );
     }
     await _ensureInitialized();
+    if (freshAuthorization) {
+      // Percobaan ulang harus MEMAKSA otorisasi baru: tanpa reset, Play
+      // Services bisa mengembalikan otorisasi lama yang kodenya sudah terpakai
+      // (penyebab invalid_grant berulang).
+      await resetAuthorization();
+    }
     late final GoogleSignInAccount account;
     try {
       // Langkah 1: login saja (tanpa scopeHint).
@@ -258,6 +265,19 @@ class GoogleAuthService {
       await GoogleSignIn.instance.signOut();
     } catch (_) {
       // Abaikan: sign-out lokal tidak boleh menggagalkan logout aplikasi.
+    }
+  }
+
+  /// Mereset otorisasi Google di perangkat.
+  ///
+  /// Dipakai SEBELUM percobaan ulang aktivasi Google Calendar agar Google Play
+  /// Services tidak mengembalikan otorisasi lama yang authorization code-nya
+  /// sudah terpakai — memaksa pengguna memberi izin baru dari awal.
+  static Future<void> resetAuthorization() async {
+    try {
+      await GoogleSignIn.instance.signOut();
+    } catch (_) {
+      // Abaikan: kegagalan reset lokal tidak boleh menggagalkan percobaan ulang.
     }
   }
 

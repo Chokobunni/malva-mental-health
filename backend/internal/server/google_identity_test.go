@@ -123,7 +123,7 @@ func TestGoogleHTTPIdentityProtections(t *testing.T) {
 		status             int
 	}{
 		{"different account", sign("other-"+subject, "other-"+email, true), "https://www.googleapis.com/auth/calendar.events", 409},
-		{"missing ID token", "", "https://www.googleapis.com/auth/calendar.events", 401},
+		{"missing ID token", "", "https://www.googleapis.com/auth/calendar.events", 422},
 		{"missing consent", sign(subject, email, true), "openid email", 403},
 		{"matching account", sign(subject, email, true), "openid email https://www.googleapis.com/auth/calendar.events", 200},
 	} {

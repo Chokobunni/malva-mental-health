@@ -159,6 +159,61 @@ menolak refresh (`invalid_grant`), sehingga status berubah menjadi
 
 ---
 
+## 7. Branding terverifikasi ≠ selesai
+
+Setelah *branding* OAuth consent screen disetujui Google (nama aplikasi & logo
+tampil tanpa peringatan), banyak yang mengira integrasi sudah beres. **Tidak.**
+`invalid_grant` / `invalid_client` masih bisa muncul bila konfigurasi di bawah
+ini belum lengkap. Bila penukaran authorization code gagal, server kini
+membalas kode mesin yang jelas (lihat tabel di bagian 8) — bukan lagi pesan
+opaque "gagal menukar authorization code".
+
+Checklist konsol Google Cloud (`malva-7084e`):
+
+1. **Publishing status harus `In production`.** Bila masih `Testing`, refresh
+   token hanya berlaku 7 hari. Buka **OAuth consent screen** → **Publish app**.
+2. **Data Access wajib memuat scope `https://www.googleapis.com/auth/calendar.events`.**
+   Buka **OAuth consent screen** → **Data Access** → **Add or remove scopes**,
+   pastikan scope Calendar Events terdaftar. Tanpa ini Google menolak
+   memberikan token untuk scope tersebut.
+3. **Google Calendar API harus ENABLED.** Buka **APIs & Services → Library** →
+   cari **Google Calendar API** → **Enable**. Scope yang diizinkan pengguna
+   tetap tidak berguna bila API-nya mati.
+4. **Client yang dipakai adalah OAuth client tipe `Web application` yang sama
+   dengan `MALVA_GOOGLE_CLIENT_ID`.** Penukaran authorization code memakai
+   `client_id` + `client_secret` di server; bila `MALVA_GOOGLE_CLIENT_ID`
+   menunjuk ke client Android/iOS (bukan Web), Google membalas
+   `invalid_client`/`unauthorized_client`. Cocokkan nilainya di
+   **APIs & Services → Credentials**.
+5. **Bila muncul `invalid_grant`:** authorization code bersifat **sekali pakai**
+   dan berumur pendek. Cabut akses Malva di
+   <https://myaccount.google.com/permissions> (**Malva → Remove access**), lalu
+   dari aplikasi tekan **"Hubungkan Google Calendar"** lagi. Aplikasi memaksa
+   otorisasi baru pada percobaan ulang agar Play Services tidak mengembalikan
+   otorisasi lama.
+
+---
+
+## 8. Kode mesin penukaran token
+
+`POST /v1/auth/google-token-exchange` kini membalas `400`/`422` dengan `code`
+mesin di bawah ini (plus `google_error`/`google_error_description` dari Google
+bila ada). UI Flutter memakai `code` untuk menampilkan pesan actionable.
+
+| `code` | HTTP | Arti | Tindakan |
+|---|---|---|---|
+| `google_code_kedaluwarsa` | 400 | Google menolak code (`invalid_grant`): sudah dipakai / kedaluwarsa | Cabut akses di myaccount.google.com/permissions lalu hubungkan ulang |
+| `google_konfigurasi_server` | 400 | `invalid_client`/`unauthorized_client`: client ID/secret server tidak cocok | Admin: samakan `MALVA_GOOGLE_CLIENT_ID`/`SECRET` dengan OAuth client Web |
+| `google_penukaran_gagal` | 400 | Kegagalan lain saat menukar code (termasuk gangguan jaringan) | Coba lagi; bila berulang hubungi admin |
+| `google_identitas_gagal` | 422 | Code sudah ditukar tetapi identitas Google tidak bisa dipastikan | Tekan "Hubungkan Google Calendar" lagi (code lama sudah terpakai) |
+
+> Catatan penting: kegagalan setelah code terpakai **tidak pernah** membalas
+> `401`. `401` membuat klien mengira access token Malva kedaluwarsa, me-refresh,
+> lalu mengirim ulang code yang sama — dijamin `invalid_grant`. Karena itu
+> kegagalan identitas memakai `422`.
+
+---
+
 ## Lihat juga
 
 - `docs/GOOGLE_SIGNIN_SETUP.md` — Login dengan Google (identitas, bukan Calendar).

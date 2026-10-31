@@ -298,6 +298,11 @@ class MalvaApiClient {
       '/v1/auth/google-token-exchange',
       accessToken: accessToken,
       body: {'authorization_code': authorizationCode},
+      // Kode otorisasi Google SEKALI PAKAI. Bila server membalas 401 (mis.
+      // identitas gagal), me-refresh token lalu mengirim ulang body yang sama
+      // dijamin gagal (invalid_grant) karena kodenya sudah terpakai. Jangan
+      // pernah retry permintaan ini.
+      retryOnAuth: false,
     );
   }
 
@@ -2590,10 +2595,14 @@ class MalvaApiClient {
     String? accessToken,
     Map<String, Object?>? body,
     Map<String, String>? extraHeaders,
+    bool retryOnAuth = true,
   }) async {
     final uri = baseUri.replace(path: path);
     return _sendUri(method, uri,
-        accessToken: accessToken, body: body, extraHeaders: extraHeaders);
+        accessToken: accessToken,
+        body: body,
+        extraHeaders: extraHeaders,
+        retryOnAuth: retryOnAuth);
   }
 
   Future<Map<String, dynamic>> _sendUri(

@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"golang.org/x/oauth2"
 	googoauth "golang.org/x/oauth2/google"
@@ -247,7 +248,37 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 	// Exchange options cannot add scopes or consent to an already issued code.
 	tok, err := oauthCfg.Exchange(r.Context(), code)
 	if err != nil {
-		writeUserError(w, http.StatusBadRequest, "gagal menukar authorization code. Pastikan code masih berlaku")
+		// Dulu error Google ditelan total (tanpa log, tanpa kode) sehingga
+		// kegagalan penukaran tidak bisa didiagnosis. Sekarang ekstrak detail
+		// dari *oauth2.RetrieveError agar kode mesin + ErrorCode Google bisa
+		// dilihat dari log server MAUPUN dari layar pengguna.
+		var re *oauth2.RetrieveError
+		if errors.As(err, &re) {
+			status := 0
+			if re.Response != nil {
+				status = re.Response.StatusCode
+			}
+			s.logger.Error("google token exchange gagal",
+				"user", claims.Subject,
+				"status", status,
+				"google_error", re.ErrorCode,
+				"google_description", re.ErrorDescription,
+				"error", err)
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error":                    googleExchangeUserMessage(re.ErrorCode, re.ErrorDescription),
+				"code":                     googleExchangeErrorCode(re.ErrorCode),
+				"google_error":             re.ErrorCode,
+				"google_error_description": re.ErrorDescription,
+			})
+			return
+		}
+		// Bukan RetrieveError (mis. jaringan putus): tetap log error mentah.
+		s.logger.Error("google token exchange gagal", "user", claims.Subject, "error", err)
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Gagal menukar authorization code ke Google. Periksa koneksi lalu coba lagi; " +
+				"bila berulang hubungi admin.",
+			"code": "google_penukaran_gagal",
+		})
 		return
 	}
 	// Refresh token kosong tidak boleh disimpan: kalau tersimpan, akses
@@ -271,9 +302,17 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 	if strings.TrimSpace(subject) == "" {
 		fallbackSubject, ferr := googleSubjectFromUserinfo(r.Context(), tok.AccessToken, googleUserinfoEndpoint)
 		if ferr != nil {
-			// Kedua jalur identitas gagal: tolak.
-			writeUserError(w, http.StatusUnauthorized,
-				"Google tidak mengembalikan identitas akun yang valid. Coba lagi.")
+			// Kode Google SUDAH terpakai di titik ini (pertukaran token sukses).
+			// Membalas 401 akan membuat klien mengira access token Malva
+			// kedaluwarsa, me-refresh token, lalu MENGIRIM ULANG kode yang sama
+			// — dijamin invalid_grant karena kode otorisasi Google sekali pakai.
+			// Karena itu 422 (kegagalan semantik, bukan autentikasi) dengan kode
+			// mesin yang jelas.
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
+				"error": "Google tidak mengembalikan identitas akun yang valid setelah kode ditukar. " +
+					"Tekan \"Hubungkan Google Calendar\" lagi — kode lama sudah terpakai dan tidak bisa dipakai ulang.",
+				"code": "google_identitas_gagal",
+			})
 			return
 		}
 		subject = fallbackSubject
@@ -295,6 +334,40 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// googleExchangeErrorCode memetakan ErrorCode dari token endpoint Google ke
+// kode mesin yang dikonsumsi UI Flutter.
+func googleExchangeErrorCode(googleError string) string {
+	switch googleError {
+	case "invalid_grant":
+		return "google_code_kedaluwarsa"
+	case "invalid_client", "unauthorized_client":
+		return "google_konfigurasi_server"
+	default:
+		return "google_penukaran_gagal"
+	}
+}
+
+// googleExchangeUserMessage menyusun pesan Indonesia yang actionable untuk
+// kegagalan penukaran token, menyertakan kode Google bila ada.
+func googleExchangeUserMessage(googleError, description string) string {
+	switch googleError {
+	case "invalid_grant":
+		return "Kode otorisasi Google sudah dipakai atau kedaluwarsa (Google: invalid_grant). " +
+			"Cabut akses Malva di https://myaccount.google.com/permissions lalu tekan " +
+			"\"Hubungkan Google Calendar\" lagi."
+	case "invalid_client", "unauthorized_client":
+		return "Konfigurasi Google di server tidak cocok (Google: " + googleError + "). " +
+			"Hubungi admin agar MALVA_GOOGLE_CLIENT_ID dan MALVA_GOOGLE_CLIENT_SECRET sama dengan " +
+			"OAuth client tipe Web application di Google Cloud Console."
+	default:
+		msg := "Google menolak menukar authorization code (Google: " + googleError + ")"
+		if strings.TrimSpace(description) != "" {
+			msg += ": " + description
+		}
+		return msg + "."
+	}
 }
 
 // googleUserinfoEndpoint endpoint Google UserInfo (OpenID Connect) yang
@@ -319,7 +392,10 @@ func googleSubjectFromUserinfo(ctx context.Context, accessToken, endpoint string
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	// Klien dengan timeout: http.DefaultClient tidak punya batas waktu, sehingga
+	// gangguan jaringan ke Google bisa menggantung permintaan tanpa akhir.
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("gagal menghubungi Google UserInfo: %w", err)
 	}

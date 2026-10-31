@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
 import '../providers/auth_providers.dart';
@@ -26,6 +27,7 @@ class GoogleAccountCard extends ConsumerStatefulWidget {
     this.showMeet = false,
     this.idTokenProvider,
     this.calendarCodeProvider,
+    this.calendarCodeProviderFresh,
   });
 
   final AuthSession session;
@@ -39,6 +41,12 @@ class GoogleAccountCard extends ConsumerStatefulWidget {
   /// Sumber authorization code Calendar (default
   /// [GoogleAuthService.signInWithCalendarScope]).
   final Future<String?> Function()? calendarCodeProvider;
+
+  /// Sumber authorization code Calendar untuk percobaan ULANG (memaksa
+  /// otorisasi baru). Default memakai
+  /// [GoogleAuthService.signInWithCalendarScope] dengan `freshAuthorization:
+  /// true`. Disuntikkan agar bisa diuji tanpa memanggil GoogleSignIn asli.
+  final Future<String?> Function()? calendarCodeProviderFresh;
 
   @override
   ConsumerState<GoogleAccountCard> createState() => _GoogleAccountCardState();
@@ -57,6 +65,11 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
   bool _serverConfigured = true;
   bool _calendarConnected = false;
 
+  /// true bila percobaan aktivasi Meet sebelumnya gagal. Selama true, percobaan
+  /// berikutnya WAJIB meminta otorisasi baru (freshAuthorization) agar Play
+  /// Services tidak mengembalikan otorisasi lama yang kodenya sudah terpakai.
+  bool _meetRetry = false;
+
   /// Alasan mesin dari `GET /v1/professionals/{id}/meet-status`:
   /// `ready`, `not_linked`, `no_calendar_scope`, `token_expired`, atau
   /// `server_not_configured`. Kosong bila endpoint tidak tersedia — UI lalu
@@ -68,6 +81,12 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
 
   Future<String?> Function() get _calendarCodeProvider =>
       widget.calendarCodeProvider ?? GoogleAuthService.signInWithCalendarScope;
+
+  /// Sumber authorization code untuk percobaan ULANG. Default memaksa
+  /// otorisasi baru lewat `freshAuthorization: true`.
+  Future<String?> Function() get _calendarCodeProviderFresh =>
+      widget.calendarCodeProviderFresh ??
+      () => GoogleAuthService.signInWithCalendarScope(freshAuthorization: true);
 
   @override
   void initState() {
@@ -182,7 +201,11 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
     if (token == null || token.isEmpty) return;
     setState(() => _busy = true);
     try {
-      final code = await _calendarCodeProvider();
+      // Percobaan ulang (setelah satu kegagalan) memaksa otorisasi baru agar
+      // Google tidak mengembalikan otorisasi lama yang kodenya sudah terpakai.
+      final code = _meetRetry
+          ? await _calendarCodeProviderFresh()
+          : await _calendarCodeProvider();
       if (code == null || code.isEmpty) return;
       if (!mounted) return;
       await ref.read(apiClientProvider).exchangeGoogleToken(
@@ -190,11 +213,15 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
             authorizationCode: code,
           );
       if (!mounted) return;
+      _meetRetry = false;
       await _loadMeetStatus();
       if (!mounted) return;
       _showSnack('Google Meet diaktifkan.');
     } on Object catch (error) {
       if (!mounted) return;
+      // Satu kegagalan sudah cukup: percobaan berikutnya harus meminta
+      // otorisasi baru, bukan mengulang kode yang mungkin sudah terpakai.
+      _meetRetry = true;
       // Pesan `access_denied` panjang dan berisi langkah perbaikan: tampilkan
       // utuh di dialog (bukan snackbar yang memotong) dengan aksi "Coba lagi".
       final message =
@@ -206,28 +233,56 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
   }
 
   /// Dialog kegagalan aktivasi Meet. Pesan ditampilkan APA ADANYA (tidak
-  /// dipotong `toString()`), dengan tombol "Coba lagi" yang mengulang alur
-  /// otorisasi Google Calendar.
+  /// dipotong `toString()`) — termasuk kode Google mentah bila ada — dengan
+  /// aksi "Coba lagi" (ulang alur otorisasi), "Cabut akses Google" (buka
+  /// halaman izin Google), dan "Tutup".
   Future<void> _showMeetErrorDialog(String message) async {
-    final retry = await showDialog<bool>(
+    final action = await showDialog<_MeetErrorAction>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Google Calendar gagal diaktifkan'),
         content: SingleChildScrollView(child: Text(message)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_MeetErrorAction.revoke),
+            child: const Text('Cabut akses Google'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_MeetErrorAction.close),
             child: const Text('Tutup'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_MeetErrorAction.retry),
             child: const Text('Coba lagi'),
           ),
         ],
       ),
     );
-    if (retry == true && mounted) {
-      await _enableMeet();
+    if (!mounted) return;
+    switch (action) {
+      case _MeetErrorAction.retry:
+        await _enableMeet();
+      case _MeetErrorAction.revoke:
+        await _openGooglePermissions();
+      case _MeetErrorAction.close:
+      case null:
+        break;
+    }
+  }
+
+  /// Membuka halaman izin Google agar pengguna bisa mencabut akses Malva lalu
+  /// menautkan ulang dengan bersih — menghindari `invalid_grant` berulang.
+  Future<void> _openGooglePermissions() async {
+    final uri = Uri.parse('https://myaccount.google.com/permissions');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } on Object {
+      // Abaikan: pengguna tetap bisa membuka tautan ini secara manual.
     }
   }
 
@@ -677,3 +732,6 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
     return '$day ${months[local.month - 1]} ${local.year}';
   }
 }
+
+/// Aksi yang dipilih pengguna pada dialog kegagalan aktivasi Google Meet.
+enum _MeetErrorAction { retry, revoke, close }

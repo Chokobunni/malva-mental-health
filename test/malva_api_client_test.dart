@@ -231,6 +231,60 @@ void main() {
     expect(link.professionalId, '1234567890123456');
     expect(link.professionalDisplayName, 'dr. Malva');
   });
+
+  test('exchangeGoogleToken tidak mengulang permintaan saat server membalas 401',
+      () async {
+    final paths = <String>[];
+    final api = MalvaApiClient(
+      baseUrl: 'http://backend.test',
+      httpClient: _FakeClient((request) async {
+        paths.add('${request.method} ${request.url.path}');
+        if (request.url.path == '/v1/auth/google-token-exchange') {
+          return http.Response(
+            jsonEncode({
+              'error': 'identitas Google gagal',
+              'code': 'google_identitas_gagal',
+            }),
+            401,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        // Jalur refresh (bila keliru terpanggil) membalas token baru.
+        return http.Response(
+          jsonEncode({
+            'user': {
+              'id': 'user_1',
+              'email': 'pro@malva.app',
+              'role': 'professional',
+              'display_name': 'dr. Pro',
+            },
+            'access_token': 'token_baru',
+            'refresh_token': 'refresh_baru',
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+    // Ada refresh token: tanpa retryOnAuth:false, klien akan me-refresh lalu
+    // mengirim ULANG body yang sama berisi kode sekali-pakai (dijamin gagal).
+    api.setRefreshToken('refresh_awal');
+
+    await expectLater(
+      api.exchangeGoogleToken(
+        accessToken: 'token_lama',
+        authorizationCode: 'kode_sekali_pakai',
+      ),
+      throwsA(isA<MalvaApiException>()),
+    );
+
+    // Hanya SATU permintaan ke endpoint exchange; tidak ada /v1/auth/refresh.
+    expect(
+      paths.where((p) => p == 'POST /v1/auth/google-token-exchange'),
+      hasLength(1),
+    );
+    expect(paths.where((p) => p == 'POST /v1/auth/refresh'), isEmpty);
+  });
 }
 
 class _FakeClient extends http.BaseClient {
