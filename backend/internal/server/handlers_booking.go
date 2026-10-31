@@ -955,6 +955,36 @@ func (s *Server) paymentWebhook(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
 			return
 		}
+		// Cocokkan nominal SEBELUM menandai lunas. Transaksi Snap dibuat dengan
+		// gross+serviceFee (lihat CreateTransaction(..., gross+serviceFee, ...)),
+		// jadi tagihan yang sah = payments.gross_amount + service_fee_amount.
+		// Tanpa pengecekan ini, settlement Rp1.000 untuk tagihan Rp102.000 tetap
+		// dianggap lunas dan mengaktifkan sesi penuh.
+		p0, gerr := s.store.GetPaymentByReference(r.Context(), evt.OrderID)
+		if gerr != nil {
+			// Termasuk order_id tak dikenal (ErrPaymentNotFound) maupun gangguan
+			// DB: perlakukan sebagai transien agar gateway mengirim ulang.
+			s.logger.Error("webhook baca payment gagal", "order_id", evt.OrderID, "error", gerr)
+			writeError(w, http.StatusInternalServerError, errors.New("gagal membaca data pembayaran"))
+			return
+		}
+		expectedAmount := p0.GrossAmount + p0.ServiceFeeAmount
+		receivedAmount := parseGrossAmount(evt.GrossAmount)
+		if receivedAmount != expectedAmount {
+			// Nominal tidak cocok: JANGAN tandai lunas, JANGAN buat sesi. Balas
+			// 200 (bukan 5xx) karena uang sudah masuk dan retry gateway tidak
+			// akan mengubah nominal — rekonsiliasi manual. Status event dibuat
+			// 'rejected' (satu-satunya nilai terminal yang diizinkan selain
+			// received/processed/ignored) agar terlihat di audit.
+			_ = s.store.UpdatePaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType, "rejected", "", "")
+			s.logger.Error("webhook gross_amount tidak cocok",
+				"order_id", evt.OrderID,
+				"tagihan", expectedAmount,
+				"diterima", receivedAmount,
+				"status_payment", p0.Status)
+			writeJSON(w, http.StatusOK, map[string]string{"status": "mismatch"})
+			return
+		}
 		p, perr := s.store.MarkPaymentPaid(r.Context(), evt.OrderID, evt.TransactionID)
 		if perr != nil {
 			// Baca status SEKALI, lalu klasifikasikan. MarkPaymentPaid hanya
@@ -965,9 +995,25 @@ func (s *Server) paymentWebhook(w http.ResponseWriter, r *http.Request) {
 			st, serr := s.store.PaymentStatusByReference(r.Context(), evt.OrderID)
 			switch {
 			case serr == nil && st == "paid":
-				// Notifikasi settlement ganda untuk payment yang sudah lunas
-				// bukan kegagalan: cukup tandai event selesai lalu balas 200.
-				_ = s.store.UpdatePaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType, "processed", "", "")
+				// Replay settlement SETELAH aktivasi gagal pada percobaan
+				// pertama (mis. 5xx karena Google gagal membuat link Meet):
+				// pembayaran sudah lunas tetapi sesi belum tentu ada. Panggil
+				// aktivasi (idempoten — dijaga GetCareSessionByBookingID) agar
+				// sesi benar-benar dibuat sebelum menandai event 'processed'.
+				// Bila aktivasi gagal, JANGAN tandai 'processed' dan balas 5xx
+				// agar gateway mengulang.
+				pPaid, gerr := s.store.GetPaymentByReference(r.Context(), evt.OrderID)
+				if gerr != nil {
+					s.logger.Error("webhook baca payment (paid) gagal", "order_id", evt.OrderID, "error", gerr)
+					writeError(w, http.StatusInternalServerError, errors.New("gagal membaca data pembayaran"))
+					return
+				}
+				if _, aerr := s.activatePaidBooking(r, pPaid); aerr != nil {
+					s.logger.Error("webhook aktivasi ulang (paid) gagal", "payment", pPaid.ID, "error", aerr)
+					writeError(w, http.StatusInternalServerError, errors.New("gagal mengaktifkan booking"))
+					return
+				}
+				_ = s.store.UpdatePaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType, "processed", pPaid.ID, pPaid.BookingID)
 				writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 				return
 			case serr == nil && st != "" && st != "pending":
