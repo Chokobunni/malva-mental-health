@@ -221,11 +221,11 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 	}
 	code := strings.TrimSpace(req.AuthorizationCode)
 	if code == "" {
-		writeUserError(w, http.StatusBadRequest, "authorization_code wajib diisi")
+		writeUserError(w, http.StatusBadRequest, "Kode otorisasi Google wajib diisi.")
 		return
 	}
 	if s.cfg.GoogleClientID == "" || s.cfg.GoogleClientSecret == "" {
-		writeUserError(w, http.StatusNotImplemented, "google OAuth client secret belum dikonfigurasi")
+		writeUserError(w, http.StatusNotImplemented, "Google Meet belum dikonfigurasi di server. Hubungi admin.")
 		return
 	}
 	identity, err := s.store.GetGoogleIdentity(r.Context(), claims.Subject)
@@ -234,7 +234,7 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 		return
 	}
 	if !identity.Linked {
-		writeUserError(w, http.StatusConflict, "bind Google before authorizing Calendar")
+		writeUserError(w, http.StatusConflict, "Hubungkan Gmail dulu sebelum mengaktifkan Google Meet.")
 		return
 	}
 	oauthCfg := &oauth2.Config{
@@ -272,22 +272,26 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 		fallbackSubject, ferr := googleSubjectFromUserinfo(r.Context(), tok.AccessToken, googleUserinfoEndpoint)
 		if ferr != nil {
 			// Kedua jalur identitas gagal: tolak.
-			writeUserError(w, http.StatusUnauthorized, "Google authorization did not return a valid identity token")
+			writeUserError(w, http.StatusUnauthorized,
+				"Google tidak mengembalikan identitas akun yang valid. Coba lagi.")
 			return
 		}
 		subject = fallbackSubject
 	}
 	if subject != identity.Subject {
-		writeUserError(w, http.StatusConflict, "authorize Calendar using the Google account already bound to Malva")
+		writeUserError(w, http.StatusConflict,
+			"Gunakan akun Google yang sudah terhubung ke Malva untuk mengaktifkan Google Meet.")
 		return
 	}
 	scope, _ := tok.Extra("scope").(string)
 	if !store.HasCalendarScope(scope) {
-		writeUserError(w, http.StatusForbidden, "Google Calendar consent is required")
+		writeUserError(w, http.StatusForbidden,
+			"Izin Google Calendar wajib diberikan agar Google Meet bisa dipakai.")
 		return
 	}
 	if err := s.store.UpsertGoogleToken(r.Context(), claims.Subject, tok.RefreshToken, tok.AccessToken, tok.Expiry, scope, subject); err != nil {
-		writeUserError(w, http.StatusInternalServerError, "could not save Calendar authorization")
+		writeUserError(w, http.StatusInternalServerError,
+			"Gagal menyimpan izin Google Calendar. Coba lagi.")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

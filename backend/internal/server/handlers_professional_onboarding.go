@@ -73,11 +73,11 @@ func (s *Server) completeProfessionalProfile(w http.ResponseWriter, r *http.Requ
 
 func (s *Server) createQuickMeet(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if claims.Role != "professional" {
-		writeUserError(w, http.StatusForbidden, "only professionals can create Meet links")
+		writeUserError(w, http.StatusForbidden, "Hanya profesional yang dapat membuat link Google Meet.")
 		return
 	}
 	if s.calendar == nil {
-		writeUserError(w, http.StatusNotImplemented, "Google Calendar is not configured")
+		writeUserError(w, http.StatusNotImplemented, "Google Meet belum diaktifkan di server. Hubungi admin.")
 		return
 	}
 	now := clock.Now()
@@ -86,10 +86,25 @@ func (s *Server) createQuickMeet(w http.ResponseWriter, r *http.Request, claims 
 	})
 	if err != nil {
 		if errors.Is(err, googlecal.ErrReauthNeeded) {
-			writeUserError(w, http.StatusUnauthorized, "authorize Google Calendar for the bound Google account")
+			writeUserError(w, http.StatusUnauthorized,
+				"Akses Google Calendar kedaluwarsa. Tautkan ulang akun Google di Pengaturan, lalu coba lagi.")
 			return
 		}
-		writeUserError(w, http.StatusInternalServerError, "could not create video call link")
+		writeUserError(w, http.StatusInternalServerError,
+			"Gagal membuat link video call. Coba lagi beberapa saat lagi.")
+		return
+	}
+	// Event tanpa entry point Meet tidak boleh dibiarkan menggantung di kalender
+	// profesional, dan klien TIDAK boleh menerima link kosong: UI akan
+	// menampilkan tombol "Gabung" yang membuka URL kosong. Perilaku ini
+	// disamakan dengan createScheduledMeet (jalur sesi terjadwal).
+	if strings.TrimSpace(meetURL) == "" {
+		if cerr := s.calendar.CancelMeetEvent(r.Context(), claims.Subject, eventID); cerr != nil && s.logger != nil {
+			s.logger.Warn("gagal membatalkan event Meet cepat tanpa link",
+				"error", cerr, "event_id", eventID)
+		}
+		writeUserError(w, http.StatusBadGateway,
+			"Google tidak mengembalikan link Meet untuk sesi ini. Coba lagi.")
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"meet_url": meetURL, "event_id": eventID})

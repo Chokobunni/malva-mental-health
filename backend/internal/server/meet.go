@@ -212,7 +212,7 @@ func (s *Server) ensureMeetLinkHandler(w http.ResponseWriter, r *http.Request, c
 	isPatient := claims.Role == "patient" && claims.Subject == cs.PatientID
 	isProf := claims.Role == "professional" && claims.Subject == cs.ProfessionalID
 	if !isPatient && !isProf {
-		writeError(w, http.StatusForbidden, errors.New("not authorized for this session"))
+		writeError(w, http.StatusForbidden, errors.New("Anda tidak berhak atas sesi ini."))
 		return
 	}
 	if cs.SessionType != "video" {
@@ -364,7 +364,7 @@ func (s *Server) googleStatusHandler(w http.ResponseWriter, r *http.Request, cla
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errors.New("could not load Calendar status"))
+		writeError(w, http.StatusInternalServerError, errors.New("Gagal memuat status Google Calendar."))
 		return
 	}
 	ready := s.calendar != nil && identity.Linked && info.GoogleSubject == identity.Subject && info.HasRefreshToken && store.HasCalendarScope(info.Scope)
