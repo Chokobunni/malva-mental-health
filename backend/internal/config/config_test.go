@@ -64,3 +64,49 @@ func TestOriginAllowedUsesExactConfiguredOrigins(t *testing.T) {
 		t.Fatal("unconfigured origin should not be allowed")
 	}
 }
+
+// TestLoadGoogleRefreshTokenTTLDays memastikan MALVA_GOOGLE_REFRESH_TOKEN_TTL_DAYS
+// diparse sebagai int, default 7, dan nilai tidak valid jatuh ke default.
+func TestLoadGoogleRefreshTokenTTLDays(t *testing.T) {
+	base := func(t *testing.T) {
+		t.Setenv("MALVA_DATABASE_URL", "postgres://malva:pass@127.0.0.1:5432/malva?sslmode=disable")
+		t.Setenv("MALVA_JWT_SECRET", "12345678901234567890123456789012")
+		t.Setenv("MALVA_PAYMENT_MODE", "")
+	}
+
+	t.Run("default 7 saat kosong", func(t *testing.T) {
+		base(t)
+		t.Setenv("MALVA_GOOGLE_REFRESH_TOKEN_TTL_DAYS", "")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+		if cfg.GoogleRefreshTokenTTLDays != 7 {
+			t.Fatalf("TTL default = %d, mau 7", cfg.GoogleRefreshTokenTTLDays)
+		}
+	})
+
+	t.Run("nilai valid dipakai", func(t *testing.T) {
+		base(t)
+		t.Setenv("MALVA_GOOGLE_REFRESH_TOKEN_TTL_DAYS", "14")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+		if cfg.GoogleRefreshTokenTTLDays != 14 {
+			t.Fatalf("TTL = %d, mau 14", cfg.GoogleRefreshTokenTTLDays)
+		}
+	})
+
+	t.Run("nilai tidak valid jatuh ke default", func(t *testing.T) {
+		base(t)
+		t.Setenv("MALVA_GOOGLE_REFRESH_TOKEN_TTL_DAYS", "tujuh")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+		if cfg.GoogleRefreshTokenTTLDays != 7 {
+			t.Fatalf("TTL = %d, mau 7 (fallback)", cfg.GoogleRefreshTokenTTLDays)
+		}
+	})
+}

@@ -88,6 +88,12 @@ const (
 	// meetReasonTokenExpired: token ada tetapi refresh token kosong/tercabut
 	// atau milik akun Google yang berbeda — perlu tautkan ulang.
 	meetReasonTokenExpired = "token_expired"
+	// meetReasonTokenExpiringSoon: semua syarat "siap" terpenuhi dan link Meet
+	// MASIH bisa dibuat, tetapi umur refresh token mendekati batas (mode
+	// Testing = 7 hari). Reason ini hanya untuk memberi tahu profesional agar
+	// menekan "Perbarui izin" sebelum benar-benar kedaluwarsa — bukan alasan
+	// memblokir pembuatan link.
+	meetReasonTokenExpiringSoon = "token_hampir_kedaluwarsa"
 	// meetReasonServerNotConfigured: server belum punya client secret Google
 	// (masalah deployment, bukan akun profesional).
 	meetReasonServerNotConfigured = "server_not_configured"
@@ -116,12 +122,38 @@ func (s *Server) meetStatusReason(ctx context.Context, professionalID string) st
 		return meetReasonNotLinked
 	}
 	if meetReady(true, identity, info) {
+		if s.refreshTokenExpiringSoon(info) {
+			return meetReasonTokenExpiringSoon
+		}
 		return meetReasonReady
 	}
 	if !info.HasRefreshToken || info.GoogleSubject != identity.Subject {
 		return meetReasonTokenExpired
 	}
 	return meetReasonNoCalendarScope
+}
+
+// googleRefreshTokenTTL adalah umur refresh token Google sebelum dianggap
+// mendekati kedaluwarsa, dari konfigurasi MALVA_GOOGLE_REFRESH_TOKEN_TTL_DAYS.
+// Nilai <= 0 berarti peringatan dinonaktifkan (return 0).
+func (s *Server) googleRefreshTokenTTL() time.Duration {
+	if s.cfg.GoogleRefreshTokenTTLDays <= 0 {
+		return 0
+	}
+	return time.Duration(s.cfg.GoogleRefreshTokenTTLDays) * 24 * time.Hour
+}
+
+// refreshTokenExpiringSoon melaporkan apakah umur grant refresh token sudah
+// mencapai ambang peringatan (TTL dikurangi 1 hari). Mengembalikan false bila
+// peringatan dinonaktifkan (TTL 0). Tidak mengubah meetReady: link Meet tetap
+// bisa dibuat selama token belum mati.
+func (s *Server) refreshTokenExpiringSoon(info store.GoogleTokenInfo) bool {
+	ttl := s.googleRefreshTokenTTL()
+	if ttl <= 0 {
+		return false
+	}
+	warnFrom := ttl - 24*time.Hour
+	return clock.Now().Sub(info.RefreshTokenIssuedAt) >= warnFrom
 }
 
 // meetStatusHandler menangani GET /v1/professionals/{professional_id}/meet-status.
@@ -149,10 +181,38 @@ func (s *Server) meetStatusHandler(w http.ResponseWriter, r *http.Request, claim
 		return
 	}
 	reason := s.meetStatusReason(r.Context(), professionalID)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"ready":  reason == meetReasonReady,
-		"reason": reason,
-	})
+	// `ready` menandakan link Meet BISA dibuat sekarang. `token_hampir_kedaluwarsa`
+	// tetap ready (link masih bisa dibuat) — reason-nya saja yang meminta
+	// profesional memperbarui izin lebih awal.
+	resp := map[string]any{
+		"ready":                         reason == meetReasonReady || reason == meetReasonTokenExpiringSoon,
+		"reason":                        reason,
+		"refresh_token_age_days":        0,
+		"refresh_token_expires_in_days": -1,
+	}
+	// Isi umur & sisa hari grant bila token tersedia. Nilai default di atas
+	// dipakai untuk keadaan tanpa token (mis. not_linked / server_not_configured)
+	// agar klien lama tetap aman.
+	if s.store != nil {
+		if info, ierr := s.store.GetGoogleTokenInfo(r.Context(), professionalID); ierr == nil {
+			age := clock.Now().Sub(info.RefreshTokenIssuedAt)
+			ageDays := int(age.Hours() / 24)
+			if ageDays < 0 {
+				ageDays = 0
+			}
+			resp["refresh_token_age_days"] = ageDays
+			if ttl := s.googleRefreshTokenTTL(); ttl > 0 {
+				remaining := ttl - age
+				if remaining < 0 {
+					remaining = 0
+				}
+				// Bulatkan ke atas: sisa 0,5 hari tetap ditampilkan "1 hari".
+				expiresDays := int((remaining + 24*time.Hour - 1) / (24 * time.Hour))
+				resp["refresh_token_expires_in_days"] = expiresDays
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // createScheduledMeet membuat event Meet untuk sesi video yang dijadwalkan
@@ -396,7 +456,10 @@ func (s *Server) prepareMeetEventFor(ctx context.Context, patientID, professiona
 // sesi yang ruang pertemuannya tidak mungkin dibuat. Definisi "siap" tidak
 // diduplikasi di sini: lihat meetStatusReason/meetReady.
 func (s *Server) googleCalendarReady(ctx context.Context, professionalID string) bool {
-	return s.meetStatusReason(ctx, professionalID) == meetReasonReady
+	// `token_hampir_kedaluwarsa` tetap dianggap siap: link Meet masih bisa
+	// dibuat selama refresh token belum mati. Peringatan hanya lewat UI.
+	reason := s.meetStatusReason(ctx, professionalID)
+	return reason == meetReasonReady || reason == meetReasonTokenExpiringSoon
 }
 
 // meetReady adalah satu-satunya definisi "Google Meet siap" untuk seorang
