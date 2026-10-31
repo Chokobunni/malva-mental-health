@@ -18,8 +18,8 @@ import 'package:malva_mental_health/src/widgets/google_account_card.dart';
 //
 // Membuktikan perilaku nyata yang dijanjikan produk:
 //  - Pasien TIDAK melihat bagian Google Meet, hanya ajakan menghubungkan Gmail.
-//  - Profesional melihat tombol "Aktifkan Google Meet" saat belum connected,
-//    dan tombol itu hilang/berubah saat connected.
+//  - Profesional melihat tombol "Hubungkan Google Calendar" saat Gmail tertaut
+//    tetapi izin Calendar belum ada, dan tombol itu hilang saat sudah aktif.
 //  - Konflik 409 `email_sudah_dipakai` dan `akun_sudah_taut_google_lain`
 //    menampilkan pesan Indonesia yang BERBEDA (bukan generik).
 //  - SettingsScreen menampilkan tile "Akun Google" untuk pasien DAN profesional.
@@ -129,14 +129,16 @@ void main() {
     expect(find.text('Hubungkan Gmail'), findsWidgets);
     // Tidak ada jejak Google Meet untuk pasien.
     expect(find.textContaining('Google Meet'), findsNothing);
-    expect(find.widgetWithText(FilledButton, 'Aktifkan Google Meet'),
+    expect(find.widgetWithText(FilledButton, 'Hubungkan Google Calendar'),
         findsNothing);
   });
 
   // ---------------------------------------------------------
-  // 2a. PROFESIONAL: tombol "Aktifkan Google Meet" muncul saat belum connected.
+  // 2a. PROFESIONAL: tombol "Hubungkan Google Calendar" muncul saat izin
+  //     Calendar belum ada (Gmail sudah tertaut).
   // ---------------------------------------------------------
-  testWidgets('profesional belum connected: tombol Aktifkan Google Meet tampil',
+  testWidgets(
+      'profesional belum connected: tombol Hubungkan Google Calendar tampil',
       (tester) async {
     final api = MalvaApiClient(
       baseUrl: 'http://backend.test',
@@ -155,7 +157,7 @@ void main() {
 
     await _pumpCard(tester, api, _proSession, showMeet: true);
 
-    expect(find.widgetWithText(FilledButton, 'Aktifkan Google Meet'),
+    expect(find.widgetWithText(FilledButton, 'Hubungkan Google Calendar'),
         findsOneWidget);
     expect(find.text('Google Meet aktif'), findsNothing);
   });
@@ -164,7 +166,7 @@ void main() {
   // 2b. PROFESIONAL: saat connected, tombol hilang dan status berubah.
   // ---------------------------------------------------------
   testWidgets(
-      'profesional connected: tombol Aktifkan hilang, status aktif tampil',
+      'profesional connected: tombol Hubungkan Calendar hilang, status aktif tampil',
       (tester) async {
     final api = MalvaApiClient(
       baseUrl: 'http://backend.test',
@@ -191,7 +193,7 @@ void main() {
     await _pumpCard(tester, api, _proSession, showMeet: true);
 
     expect(find.text('Google Meet aktif'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Aktifkan Google Meet'),
+    expect(find.widgetWithText(FilledButton, 'Hubungkan Google Calendar'),
         findsNothing);
   });
 

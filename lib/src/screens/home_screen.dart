@@ -809,7 +809,7 @@ class _JoinMeetingBannerState extends ConsumerState<_JoinMeetingBanner> {
                 children: [
                   Text(
                     s.meetingUrl.trim().isEmpty
-                        ? 'Siapkan Link Meet'
+                        ? 'Menunggu link video'
                         : (s.isBeforeJoinWindow
                             ? 'Video call • ${s.joinStateLabel}'
                             : 'Join Video Call'),
@@ -835,28 +835,18 @@ class _JoinMeetingBannerState extends ConsumerState<_JoinMeetingBanner> {
   }
 
   Future<void> _joinMeeting(BackendCareSession s) async {
-    final token = widget.session?.accessToken;
-    // Link belum ada: minta backend membuatkannya sekarang.
+    // Link belum ada: dibuat oleh profesional (kondisi akun Google-nya tidak
+    // bisa diperbaiki pasien). Pasien hanya diberi penjelasan, bukan error.
     if (s.meetingUrl.trim().isEmpty) {
-      if (token == null || token.isEmpty) return;
-      try {
-        final MalvaApiClient apiClient =
-            widget.apiClient ?? ref.read(apiClientProvider);
-        await apiClient.ensureMeetLink(
-          accessToken: token,
-          sessionId: s.id,
-        );
-        await _loadNextVideoSession();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Link Google Meet sudah siap.')),
-        );
-      } on Object catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(e))),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Link video belum tersedia. Profesional akan membuatnya sebelum '
+            'sesi dimulai.',
+          ),
+        ),
+      );
       return;
     }
     if (s.isBeforeJoinWindow) {

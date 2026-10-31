@@ -11,13 +11,20 @@ import 'friendly_error.dart';
 ///
 /// Menangani seluruh keadaan sesi video sehingga pemanggil tidak perlu
 /// menduplikasi logika:
-///   - link belum ada  -> tombol "Siapkan link Meet" (memanggil backend)
+///   - link belum ada, pemanggil boleh membuatnya -> tombol "Buat link Meet"
+///   - link belum ada, pemanggil TIDAK boleh membuatnya (pasien) ->
+///     keterangan "Menunggu link video"
 ///   - terlalu awal    -> tombol nonaktif + hitung mundur
 ///   - jendela terbuka -> tombol "Gabung video call" aktif
 ///   - sesi berakhir   -> tombol nonaktif
 ///
 /// Tidak ada penyedia fallback: bila link tidak bisa dibuat, pengguna melihat
 /// pesan kesalahan yang jelas dan dapat mencoba lagi.
+///
+/// Catatan aturan bisnis: sesi video BOLEH lahir tanpa link ("menunggu link")
+/// ketika akun Google profesional belum aktif. Pasien tidak boleh diberi
+/// tombol yang membuka URL kosong, dan tidak boleh disuruh memperbaiki akun
+/// Google milik profesional — karena itu [canCreateLink] = false untuk pasien.
 class MeetJoinButton extends ConsumerStatefulWidget {
   const MeetJoinButton({
     super.key,
@@ -25,6 +32,7 @@ class MeetJoinButton extends ConsumerStatefulWidget {
     required this.accessToken,
     required this.onSessionChanged,
     this.expanded = false,
+    this.canCreateLink = true,
   });
 
   final BackendCareSession session;
@@ -35,6 +43,11 @@ class MeetJoinButton extends ConsumerStatefulWidget {
 
   /// True = tombol melebar penuh (dipakai di kartu detail sesi).
   final bool expanded;
+
+  /// True = tampilkan tombol "Buat link Meet" saat link belum ada
+  /// (profesional). False = tampilkan keterangan "Menunggu link video"
+  /// (pasien) tanpa aksi yang pasti gagal.
+  final bool canCreateLink;
 
   @override
   ConsumerState<MeetJoinButton> createState() => _MeetJoinButtonState();
@@ -111,6 +124,35 @@ class _MeetJoinButtonState extends ConsumerState<MeetJoinButton> {
 
   Widget _buildAction(BuildContext context, BackendCareSession session) {
     if (!_hasLink) {
+      if (!widget.canCreateLink) {
+        // Pasien: link dibuat oleh profesional. Jangan tampilkan tombol yang
+        // pasti gagal atau membuka URL kosong.
+        return const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.hourglass_top_rounded,
+                    size: 18, color: MalvaColors.amber),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Menunggu link video',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 4),
+            Text(
+              'Link Google Meet dibuat oleh profesional dan akan tersedia '
+              'sebelum sesi dimulai.',
+              style: TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+          ],
+        );
+      }
       return FilledButton.icon(
         onPressed: _busy ? null : _createLink,
         icon: _busy
@@ -120,7 +162,7 @@ class _MeetJoinButtonState extends ConsumerState<MeetJoinButton> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : const Icon(Icons.video_call_rounded, size: 18),
-        label: Text(_busy ? 'Menyiapkan link...' : 'Siapkan link Meet'),
+        label: Text(_busy ? 'Menyiapkan link...' : 'Buat link Meet'),
         style: FilledButton.styleFrom(
           backgroundColor: MalvaColors.plum,
           foregroundColor: Colors.white,

@@ -412,15 +412,24 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
         _showRescheduleResult(result);
       } else {
         final parts = picked.split('|');
-        await apiClient.scheduleSession(
+        final result = await apiClient.scheduleSession(
           accessToken: token,
           packageId: _package.id,
           scheduledAt: parts[0],
           sessionType: parts.length > 1 ? parts[1] : 'chat',
         );
         if (!mounted) return;
+        // meet_pending = sesi video terjadwal tetapi link belum ada. Itu
+        // bukan kegagalan (lihat store.CreateCareSession); pasien diberi tahu
+        // bahwa link dibuat profesional sebelum sesi dimulai.
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sesi berhasil dijadwalkan.')),
+          SnackBar(
+            content: Text(result.meetPending
+                ? 'Sesi berhasil dijadwalkan. Link video dibuat profesional '
+                    'sebelum sesi dimulai.'
+                : 'Sesi berhasil dijadwalkan.'),
+            duration: Duration(seconds: result.meetPending ? 5 : 4),
+          ),
         );
       }
       await _load();
@@ -735,11 +744,33 @@ class _SessionSchedulerSheetState extends State<_SessionSchedulerSheet> {
   bool _loadingDays = true;
   String? _error;
 
+  /// Status Google Meet profesional (null = belum/tidak bisa diperiksa).
+  /// Dipakai untuk memberi catatan info — BUKAN penghalang — saat pasien
+  /// memilih sesi video: link dibuat menyusul bila profesional belum aktif.
+  bool? _meetReady;
+
   @override
   void initState() {
     super.initState();
     _type = widget.initialType == 'video' ? 'video' : 'chat';
     _loadDays();
+    _loadMeetStatus();
+  }
+
+  /// Ambil status Meet sekali saat sheet dibuka. Kegagalan tidak ditampilkan
+  /// sebagai error: informasi ini hanya pelengkap.
+  Future<void> _loadMeetStatus() async {
+    try {
+      final status = await widget.apiClient.professionalMeetStatus(
+        accessToken: widget.accessToken,
+        professionalId: widget.professionalId,
+      );
+      if (!mounted) return;
+      setState(() => _meetReady = status.ready);
+    } on Object {
+      if (!mounted) return;
+      setState(() => _meetReady = null);
+    }
   }
 
   Future<void> _loadDays() async {
@@ -822,6 +853,29 @@ class _SessionSchedulerSheetState extends State<_SessionSchedulerSheet> {
                 ),
               ],
             ),
+            // Catatan info (bukan error) bila Google Meet profesional belum
+            // aktif: sesi video tetap bisa dijadwalkan, link dibuat menyusul.
+            if (_type == 'video' && _meetReady == false) ...[
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.info_outline_rounded,
+                      size: 18, color: MalvaColors.amber),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Video tetap bisa dijadwalkan; link Meet dibuat setelah '
+                      'profesional mengaktifkan Google Calendar.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 12),
             if (_loadingDays)
               const Center(child: CircularProgressIndicator())
@@ -1232,12 +1286,15 @@ class _PackageSessionCard extends StatelessWidget {
           if (!past) ...[
             const SizedBox(height: 10),
             // Sesi video: tombol gabung Google Meet dengan jendela waktu.
-            // Bila link belum ada, tombol berubah menjadi "Siapkan link Meet".
+            // Bila link belum ada, pasien melihat "Menunggu link video" —
+            // link dibuat profesional (pasien tidak bisa memperbaiki akun
+            // Google orang lain).
             if (session.isVideo) ...[
               MeetJoinButton(
                 session: session,
                 accessToken: accessToken,
                 expanded: true,
+                canCreateLink: false,
                 onSessionChanged: (updated) => onSessionChanged?.call(updated),
               ),
               const SizedBox(height: 8),

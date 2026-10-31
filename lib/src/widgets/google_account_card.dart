@@ -57,6 +57,12 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
   bool _serverConfigured = true;
   bool _calendarConnected = false;
 
+  /// Alasan mesin dari `GET /v1/professionals/{id}/meet-status`:
+  /// `ready`, `not_linked`, `no_calendar_scope`, `token_expired`, atau
+  /// `server_not_configured`. Kosong bila endpoint tidak tersedia — UI lalu
+  /// jatuh ke `GET /v1/google/status`.
+  String _meetReason = '';
+
   Future<String?> Function() get _idTokenProvider =>
       widget.idTokenProvider ?? GoogleAuthService.signInIdToken;
 
@@ -107,13 +113,31 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
     final token = widget.session.accessToken;
     if (token == null || token.isEmpty) return;
     if (mounted) setState(() => _meetLoading = true);
+    // Sumber utama: status Meet milik profesional ini. `reason` memberi tahu
+    // APA yang kurang (belum tertaut / belum ada izin / token kedaluwarsa /
+    // server belum dikonfigurasi) sehingga pesan bisa spesifik.
+    var reason = '';
+    try {
+      final professionalId = widget.session.backendUserId ?? '';
+      if (professionalId.isNotEmpty) {
+        final status = await ref.read(apiClientProvider).professionalMeetStatus(
+            accessToken: token, professionalId: professionalId);
+        reason = status.reason;
+      }
+    } on Object {
+      // Endpoint status opsional: jatuh ke GET /v1/google/status di bawah.
+    }
     try {
       final status =
           await ref.read(apiClientProvider).googleStatus(accessToken: token);
       if (!mounted) return;
       setState(() {
-        _serverConfigured = status.serverConfigured;
-        _calendarConnected = status.connected;
+        _meetReason = reason;
+        _serverConfigured = reason.isEmpty
+            ? status.serverConfigured
+            : reason != 'server_not_configured';
+        _calendarConnected =
+            reason.isEmpty ? status.connected : reason == 'ready';
         _meetLoading = false;
       });
     } on Object {
@@ -171,9 +195,39 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
       _showSnack('Google Meet diaktifkan.');
     } on Object catch (error) {
       if (!mounted) return;
-      _showSnack(error is MalvaApiException ? error.message : error.toString());
+      // Pesan `access_denied` panjang dan berisi langkah perbaikan: tampilkan
+      // utuh di dialog (bukan snackbar yang memotong) dengan aksi "Coba lagi".
+      final message =
+          error is MalvaApiException ? error.message : error.toString();
+      await _showMeetErrorDialog(message);
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Dialog kegagalan aktivasi Meet. Pesan ditampilkan APA ADANYA (tidak
+  /// dipotong `toString()`), dengan tombol "Coba lagi" yang mengulang alur
+  /// otorisasi Google Calendar.
+  Future<void> _showMeetErrorDialog(String message) async {
+    final retry = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Google Calendar gagal diaktifkan'),
+        content: SingleChildScrollView(child: Text(message)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Tutup'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Coba lagi'),
+          ),
+        ],
+      ),
+    );
+    if (retry == true && mounted) {
+      await _enableMeet();
     }
   }
 
@@ -518,6 +572,11 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
     ];
   }
 
+  /// Isi bagian Google Meet. Tiga keadaan dibedakan tegas:
+  ///   (a) siap → "Google Meet aktif";
+  ///   (b) Gmail tertaut tetapi izin Calendar belum ada / kedaluwarsa →
+  ///       penjelasan sesuai `reason` + tombol "Hubungkan Google Calendar";
+  ///   (c) server belum dikonfigurasi → pesan admin, tanpa tombol.
   List<Widget> _meetContent(BuildContext context) {
     if (_meetLoading) {
       return const [
@@ -560,9 +619,25 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
         ),
       ];
     }
+    // (b) Gmail tertaut, izin Calendar belum ada atau perlu diperbarui.
+    final explanation = switch (_meetReason) {
+      'token_expired' =>
+        'Izin Google Calendar kedaluwarsa (token tidak lagi berlaku). '
+            'Hubungkan ulang agar link Meet bisa dibuat otomatis. '
+            'Sesi pasien tetap terjadwal; link dibuat setelah ini aktif.',
+      'no_calendar_scope' =>
+        'Gmail sudah tertaut, tetapi izin Google Calendar belum diberikan. '
+            'Hubungkan Google Calendar agar link Meet dibuat otomatis untuk '
+            'sesi video.',
+      'not_linked' =>
+        'Hubungkan Gmail di atas lebih dulu, lalu aktifkan Google Calendar.',
+      _ => 'Aktifkan Google Meet agar sesi video otomatis membuat tautan Meet. '
+          'Selama belum aktif, sesi video pasien tetap terjadwal dengan '
+          'status "menunggu link".',
+    };
     return [
       Text(
-        'Aktifkan Google Meet agar sesi video otomatis membuat tautan Meet.',
+        explanation,
         style: Theme.of(context)
             .textTheme
             .bodySmall
@@ -571,8 +646,11 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
       const SizedBox(height: 12),
       FilledButton.icon(
         onPressed: _busy ? null : _enableMeet,
-        icon: const Icon(Icons.videocam_rounded),
-        label: Text(_busy ? 'Memproses...' : 'Aktifkan Google Meet'),
+        icon: _busy
+            ? const SizedBox.square(
+                dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.videocam_rounded),
+        label: Text(_busy ? 'Memproses...' : 'Hubungkan Google Calendar'),
       ),
     ];
   }

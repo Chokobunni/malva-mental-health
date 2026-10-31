@@ -192,12 +192,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Google Meet aktif'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Aktifkan Google Meet'),
+    expect(find.widgetWithText(FilledButton, 'Hubungkan Google Calendar'),
         findsNothing);
   });
 
   testWidgets(
-      'profesional showMeet: status belum connected menampilkan tombol Aktifkan',
+      'profesional showMeet: izin Calendar belum ada menampilkan tombol Hubungkan Google Calendar',
       (tester) async {
     final api = MalvaApiClient(
       baseUrl: 'http://backend.test',
@@ -221,7 +221,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(FilledButton, 'Aktifkan Google Meet'),
+    expect(find.widgetWithText(FilledButton, 'Hubungkan Google Calendar'),
         findsOneWidget);
   });
 

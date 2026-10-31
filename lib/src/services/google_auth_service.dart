@@ -104,6 +104,20 @@ class GoogleAuthService {
   /// Login Google dengan scope Calendar Events untuk mendapatkan authorization code.
   /// Kode ini dikirim ke backend untuk ditukar dengan refresh token Google Calendar.
   /// Mengembalikan serverAuthCode, atau null bila pengguna membatalkan.
+  ///
+  /// Dua langkah dipisah dengan sengaja:
+  ///   1. `authenticate()` TANPA `scopeHint` → hanya ID token (login).
+  ///   2. `authorizationClient.authorizeServer([calendar.events])` →
+  ///      authorization code yang ditukar backend menjadi refresh token.
+  ///
+  /// Alasannya: permintaan scope sensitif lewat `authenticate(scopeHint: ...)`
+  /// membuat kegagalan otorisasi tercampur dengan kegagalan login, sehingga
+  /// pesan ke pengguna salah sasaran. Dengan pemisahan ini, `403 access_denied`
+  /// pada langkah 2 bisa dijelaskan dengan tepat: OAuth consent screen Google
+  /// Cloud belum menyetujui scope `calendar.events` untuk akun ini (project
+  /// masih "Testing" dan Gmail profesional belum terdaftar sebagai Test user,
+  /// atau aplikasinya belum diverifikasi). Panduan konsol:
+  /// `docs/GOOGLE_CALENDAR_SETUP.md`.
   static Future<String?> signInWithCalendarScope() async {
     _lastErrorCode = null;
     if (!GoogleConfig.isConfigured) {
@@ -116,10 +130,9 @@ class GoogleAuthService {
     await _ensureInitialized();
     late final GoogleSignInAccount account;
     try {
-      // Autentikasi dengan scopeHint calendar.events.
-      account = await GoogleSignIn.instance.authenticate(
-        scopeHint: const ['https://www.googleapis.com/auth/calendar.events'],
-      ).timeout(_authTimeout);
+      // Langkah 1: login saja (tanpa scopeHint).
+      account =
+          await GoogleSignIn.instance.authenticate().timeout(_authTimeout);
     } on TimeoutException {
       throw _fail(
         'timeout',
@@ -147,7 +160,7 @@ class GoogleAuthService {
         'Coba lagi atau hubungi admin.',
       );
     }
-    // Minta server authorization code untuk backend token exchange.
+    // Langkah 2: minta authorization code untuk Google Calendar.
     // Timeout juga di sini (langkah 2 bisa ikut menggantung bila dialog
     // otorisasi scope tidak bisa tampil — insiden 28 Okt 2026).
     try {
@@ -178,20 +191,66 @@ class GoogleAuthService {
       if (e.code == GoogleSignInExceptionCode.canceled) {
         return null;
       }
+      if (looksLikeAccessDenied(e.description) ||
+          looksLikeAccessDenied(e.code.name) ||
+          looksLikeAccessDenied(e.details?.toString())) {
+        throw _fail('access_denied', _accessDeniedMessage(e.description));
+      }
       throw _fail(e.code.name, _friendlySignInError(e.code));
     } on PlatformException catch (e) {
+      if (looksLikeAccessDenied(e.message) || looksLikeAccessDenied(e.code)) {
+        throw _fail('access_denied', _accessDeniedMessage(e.message));
+      }
       throw _fail(
         e.code,
         'Otorisasi Google Calendar gagal di perangkat (kode: ${e.code}'
         '${_detailSuffix(e.message)}). Coba lagi atau hubungi admin.',
       );
     } on Object catch (e) {
+      if (looksLikeAccessDenied(e.toString())) {
+        throw _fail('access_denied', _accessDeniedMessage(e.toString()));
+      }
       throw _fail(
         _objectCode(e),
         'Otorisasi Google Calendar gagal (kode: ${_objectCode(e)}). '
         'Coba lagi atau hubungi admin.',
       );
     }
+  }
+
+  /// `true` bila teks error berasal dari penolakan izin Google
+  /// (`403 access_denied`, "has not completed the Google verification
+  /// process", "can only be accessed by developer-approved testers").
+  ///
+  /// Dibuat publik agar bisa diuji langsung tanpa memanggil Google.
+  static bool looksLikeAccessDenied(String? text) {
+    final value = (text ?? '').toLowerCase().trim();
+    if (value.isEmpty) return false;
+    return value.contains('access_denied') ||
+        value.contains('accessdenied') ||
+        value.contains('access denied') ||
+        value.contains('403') ||
+        value.contains('verification process') ||
+        value.contains('developer-approved testers');
+  }
+
+  /// Pesan actionable untuk kegagalan `403 access_denied`.
+  ///
+  /// Menyebut langkah perbaikan yang PERSIS (Test users / Publish app) beserta
+  /// tautan konsol, karena ini bukan bug aplikasi melainkan konfigurasi OAuth
+  /// consent screen di Google Cloud Console.
+  static String accessDeniedMessage(String? detail) =>
+      _accessDeniedMessage(detail);
+
+  static String _accessDeniedMessage(String? detail) {
+    return 'Google menolak izin Google Calendar (403 access_denied'
+        '${_detailSuffix(detail)}). Aplikasi Malva belum diverifikasi Google '
+        'dan/atau Gmail ini belum terdaftar sebagai tester, sehingga izin '
+        '"calendar.events" ditolak. Minta admin menambahkan Gmail ini ke '
+        'daftar "Test users" OAuth consent screen — atau mem-publish '
+        'aplikasinya — di '
+        'https://console.cloud.google.com/apis/credentials/consent?project=malva-7084e '
+        'lalu coba lagi. Panduan: docs/GOOGLE_CALENDAR_SETUP.md.';
   }
 
   static Future<void> signOut() async {

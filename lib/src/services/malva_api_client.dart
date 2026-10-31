@@ -1561,7 +1561,13 @@ class MalvaApiClient {
         accessToken: accessToken);
   }
 
-  Future<BackendCareSession> scheduleSession({
+  /// Jadwalkan satu sesi dari paket.
+  ///
+  /// [meetPending] bernilai `true` bila sesi video berhasil dijadwalkan tetapi
+  /// link Google Meet belum ada. Itu BUKAN kegagalan: kondisi akun Google
+  /// milik profesional tidak boleh memblokir pasien, jadi link dibuat
+  /// menyusul. UI wajib menampilkan "Menunggu link video" untuk keadaan ini.
+  Future<({BackendCareSession session, bool meetPending})> scheduleSession({
     required String accessToken,
     required String packageId,
     required String scheduledAt,
@@ -1578,8 +1584,11 @@ class MalvaApiClient {
           'duration_minutes': durationMinutes,
           if (meetingUrl.isNotEmpty) 'meeting_url': meetingUrl,
         });
-    return BackendCareSession.fromJson(
-      _expectMap(payload['session'], 'Respons sesi tidak valid.'),
+    return (
+      session: BackendCareSession.fromJson(
+        _expectMap(payload['session'], 'Respons sesi tidak valid.'),
+      ),
+      meetPending: payload['meet_pending'] == true,
     );
   }
 
@@ -1695,6 +1704,28 @@ class MalvaApiClient {
       serverConfigured: payload['server_configured'] == true,
       connected: payload['connected'] == true,
       scope: payload['scope']?.toString() ?? '',
+    );
+  }
+
+  /// Status Google Meet seorang profesional (GET
+  /// `/v1/professionals/{id}/meet-status`).
+  ///
+  /// [reason] salah satu: `ready`, `not_linked`, `no_calendar_scope`,
+  /// `token_expired`, atau `server_not_configured`. Dipakai klien untuk
+  /// memberi tahu pasien bahwa sesi video tetap bisa dijadwalkan (link
+  /// menyusul) dan untuk mengarahkan profesional ke tindakan yang tepat.
+  Future<({bool ready, String reason})> professionalMeetStatus({
+    required String accessToken,
+    required String professionalId,
+  }) async {
+    final payload = await _send(
+      'GET',
+      '/v1/professionals/$professionalId/meet-status',
+      accessToken: accessToken,
+    );
+    return (
+      ready: payload['ready'] == true,
+      reason: payload['reason']?.toString() ?? '',
     );
   }
 

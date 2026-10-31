@@ -2639,26 +2639,27 @@ class _SyncStatusIndicator extends StatelessWidget {
 /// Tombol "Create Meeting" di dashboard profesional. Membuat Google Meet instan
 /// via backend API dan menampilkan link yang bisa dibagikan ke pasien untuk
 /// video call real-time.
-class _CreateMeetingButton extends StatefulWidget {
+class _CreateMeetingButton extends ConsumerStatefulWidget {
   const _CreateMeetingButton({this.session, this.apiClient});
 
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
   @override
-  State<_CreateMeetingButton> createState() => _CreateMeetingButtonState();
+  ConsumerState<_CreateMeetingButton> createState() =>
+      _CreateMeetingButtonState();
 }
 
-class _CreateMeetingButtonState extends State<_CreateMeetingButton> {
+class _CreateMeetingButtonState extends ConsumerState<_CreateMeetingButton> {
   String? _meetingUrl;
   bool _isLoading = false;
 
   /// Buat Google Meet via backend API (POST /v1/meet/quick).
   Future<void> _createMeeting() async {
     if (_isLoading) return;
-    final api = widget.apiClient;
+    final MalvaApiClient api = widget.apiClient ?? ref.read(apiClientProvider);
     final token = widget.session?.accessToken;
-    if (api == null || token == null || token.isEmpty) {
+    if (token == null || token.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Sesi tidak valid. Silakan login ulang.')),
@@ -2672,7 +2673,13 @@ class _CreateMeetingButtonState extends State<_CreateMeetingButton> {
       setState(() => _meetingUrl = result.meetUrl);
     } on MalvaApiException catch (e) {
       if (!mounted) return;
-      // Pesan error dari backend (mis. Google belum dihubungkan).
+      // `meet_belum_aktif` = Google Calendar profesional belum aktif. Beri
+      // jalan keluar langsung: tombol "Hubungkan" ke layar Akun Google.
+      if (e.code == 'meet_belum_aktif') {
+        _showMeetNotActiveSnack(e.message);
+        return;
+      }
+      // Pesan error lain dari backend (mis. Google belum dihubungkan).
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message)),
       );
@@ -2684,6 +2691,37 @@ class _CreateMeetingButtonState extends State<_CreateMeetingButton> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// SnackBar dengan aksi "Hubungkan" menuju layar Akun Google (bagian Meet).
+  /// Layar itu SUDAH ada (`GoogleAccountScreen(showMeet: true)`) — tidak perlu
+  /// layar baru.
+  void _showMeetNotActiveSnack(String message) {
+    final session = widget.session;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 8),
+        action: session == null
+            ? null
+            : SnackBarAction(
+                label: 'Hubungkan',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => GoogleAccountScreen(
+                        session: session,
+                        apiClient:
+                            widget.apiClient ?? ref.read(apiClientProvider),
+                        showMeet: true,
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ),
+    );
   }
 
   Future<void> _shareMeeting() async {

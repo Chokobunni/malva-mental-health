@@ -439,7 +439,8 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Link Google Meet belum tersedia. Buka detail sesi untuk menyiapkannya.',
+                'Link video belum tersedia. Profesional akan membuatnya '
+                'sebelum sesi dimulai.',
               ),
             ),
           );
@@ -725,16 +726,27 @@ class _SessionCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: FilledButton.icon(
-                    onPressed: onJoin,
-                    style: compactFilledButtonStyle,
-                    icon: Icon(
-                        session.isVideo
-                            ? Icons.videocam_rounded
-                            : Icons.chat_bubble_rounded,
-                        size: 16),
-                    label: const Text('Join'),
-                  ),
+                  // Sesi video tanpa link: tampilkan "Menunggu link video",
+                  // BUKAN tombol "Join" yang membuka URL kosong. Link dibuat
+                  // profesional (kondisi akun Google-nya tidak bisa
+                  // diperbaiki pasien).
+                  child: session.isVideo && session.meetingUrl.trim().isEmpty
+                      ? OutlinedButton.icon(
+                          onPressed: null,
+                          icon:
+                              const Icon(Icons.hourglass_top_rounded, size: 16),
+                          label: const Text('Menunggu link video'),
+                        )
+                      : FilledButton.icon(
+                          onPressed: onJoin,
+                          style: compactFilledButtonStyle,
+                          icon: Icon(
+                              session.isVideo
+                                  ? Icons.videocam_rounded
+                                  : Icons.chat_bubble_rounded,
+                              size: 16),
+                          label: Text(session.isVideo ? 'Gabung' : 'Join'),
+                        ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
