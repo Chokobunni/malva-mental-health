@@ -121,8 +121,13 @@ privasi Malva.
    | `not_linked` | Akun Malva belum menautkan Gmail | Hubungkan Gmail di kartu Akun Google |
    | `no_calendar_scope` | Gmail tertaut, izin `calendar.events` belum ada | Tekan "Hubungkan Google Calendar" |
    | `token_expired` | Refresh token kosong/ditolak Google (mis. batas 7 hari saat *Testing*) | Hubungkan ulang, lalu publish consent screen |
+   | `token_hampir_kedaluwarsa` | Izin **masih berlaku** (link Meet tetap bisa dibuat) tetapi umur refresh token mendekati batas 7 hari | Tekan "Perbarui izin sekarang" agar link Meet sesi berikutnya tidak gagal |
    | `server_not_configured` | Server belum punya `MALVA_GOOGLE_CLIENT_SECRET` | Hubungi admin/deployment |
    | `ready` | Siap membuat link Meet | — |
+
+   Respons kini juga menyertakan `refresh_token_age_days` (umur grant dalam
+   hari, `0` bila tak ada token) dan `refresh_token_expires_in_days` (sisa hari,
+   `-1` bila tidak diketahui). Keduanya opsional; klien lama tetap jalan.
 
 5. Uji akhir: profesional menekan **Create Meeting** di dashboard. Bila muncul
    link `https://meet.google.com/...`, integrasi sudah benar.
@@ -211,6 +216,67 @@ bila ada). UI Flutter memakai `code` untuk menampilkan pesan actionable.
 > `401`. `401` membuat klien mengira access token Malva kedaluwarsa, me-refresh,
 > lalu mengirim ulang code yang sama — dijamin `invalid_grant`. Karena itu
 > kegagalan identitas memakai `422`.
+
+---
+
+## 9. Mode Testing: umur refresh token 7 hari
+
+Pemilik produk memutuskan OAuth consent screen Google **tetap berstatus
+*Testing*** agar tidak perlu menempuh verifikasi Google (yang memerlukan
+penjelasan scope, video demo, dan privacy policy). Konsekuensinya harus
+dikelola, bukan dibiarkan.
+
+### a. Kenapa Testing tetap boleh
+
+- Tidak perlu proses verifikasi Google; cocok selama aplikasi belum butuh
+  pemakaian publik penuh.
+- Cukup untuk mengoperasikan Malva dengan sejumlah profesional terbatas yang
+  terdaftar sebagai **Test user**.
+
+### b. Batas 100 Test user
+
+- Consent screen mode *Testing* hanya mengizinkan maksimal **100 akun Google**
+  terdaftar sebagai **Test user** (OAuth consent screen → **Test users**).
+- Bila jumlah profesional aktif akan melampaui 100, aplikasi **harus**
+  di-*publish* (lihat bagian 2b) — saat itu refresh token tidak lagi dibatasi
+  7 hari.
+
+### c. Batas 7 hari + perpanjangan otomatis (mekanisme baru)
+
+Selama *Testing*, Google hanya menerbitkan refresh token berlaku **7 hari**
+sejak consent. Sebelumnya aplikasi tidak punya mekanisme apa pun: begitu hari
+ke-8, `googleCalendarReady` gagal, link Meet tidak bisa dibuat, dan profesional
+baru sadar saat menekan "Hubungkan Google Calendar". Sekarang batas itu
+**terkelola**:
+
+1. **Server mencatat tanggal grant** terpisah dari `updated_at`
+   (`google_oauth_tokens.refresh_token_issued_at`). Auto-refresh access token
+   jangka pendek **tidak** mereset tanggal ini — hanya penukaran authorization
+   code (consent baru) yang memperbaruinya.
+2. **`meet-status` memberi tahu lebih awal.** Saat umur grant mencapai
+   `TTL-1` hari, `reason` menjadi `token_hampir_kedaluwarsa` (link Meet **masih**
+   bisa dibuat), lengkap dengan `refresh_token_expires_in_days`.
+3. **Notifikasi proaktif H-1.** Sweeper 10 menit menjalankan
+   `RunGoogleTokenExpiryCheck`: profesional menerima notifikasi
+   *"Izin Google Calendar perlu diperbarui"* (maksimal sekali per hari per
+   grant). Teksnya mengarahkan ke **Pengaturan → Akun Google → Perbarui izin**.
+4. **Satu tombol perpanjangan.** Kartu Akun Google menampilkan tombol
+   **"Perbarui izin sekarang"** yang memaksa otorisasi Google **baru** (fresh
+   consent), sehingga refresh token diterbitkan ulang dan berlaku 7 hari lagi.
+
+### d. Mematikan peringatan saat nanti publish
+
+Setelah consent screen di-*publish* dan refresh token tidak lagi dibatasi 7
+hari, matikan peringatan agar tidak ada notifikasi palsu:
+
+```bash
+# backend/.env
+MALVA_GOOGLE_REFRESH_TOKEN_TTL_DAYS=0
+```
+
+`0` menonaktifkan pemeriksaan umur (tidak ada notifikasi, `meet-status` tidak
+pernah mengembalikan `token_hampir_kedaluwarsa`). Default adalah `7` selama
+mode *Testing*.
 
 ---
 
