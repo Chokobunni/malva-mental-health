@@ -16,6 +16,10 @@
 #      `timezone` bawaannya **Etc/UTC**, sehingga jadwal yang dibangun di zona
 #      itu bergeser 7 jam (mis. pengingat obat 10:00 berbunyi 17:00 WIB).
 #      Pakai `wibLocation` / `wibNow()` / `wibFromParts()`.
+#   5. Larangan `initializeTimeZones()` (dari `package:timezone/data/*`) di luar
+#      wib.dart — fungsi itu memanggil `setLocalLocation(_utc)` dan
+#      mengembalikan zona lokal ke UTC, membatalkan paksaan WIB. Pakai
+#      `initializeWib()`.
 #
 # Penjelasan pengecualian:
 #   - lib/src/time/wib.dart adalah SATU-SATUNYA berkas yang boleh membaca
@@ -80,7 +84,20 @@ if [ -n "$hits" ]; then
   fail=1
 fi
 
+# --- 5. Larangan initializeTimeZones() (kecuali wib.dart) --------------
+# initializeTimeZones() dari package:timezone/data/* memanggil
+# setLocalLocation(_utc), yaitu MENGHAPUS paksaan zona lokal ke WIB yang
+# dipasang initializeWib(). Bug 7 jam bisa kembali tanpa terdeteksi gate lain,
+# jadi pemanggilan langsungnya dilarang — pakai initializeWib().
+hits="$(grep -rn --include='*.dart' -E 'initializeTimeZones[[:space:]]*\(' lib 2>/dev/null \
+  | grep -v 'lib/src/time/wib.dart' | strip_comments || true)"
+if [ -n "$hits" ]; then
+  printf 'ERROR: initializeTimeZones() mereset zona lokal proses ke Etc/UTC (bug jadwal bergeser 7 jam). Pakai initializeWib() dari lib/src/time/wib.dart:\n' >&2
+  printf '%s\n' "$hits" >&2
+  fail=1
+fi
+
 if [ "$fail" -eq 0 ]; then
-  printf 'OK: Dart WIB-only dipatuhi (tanpa .toLocal/DateTime.now/.toUtc/tz.local).\n'
+  printf 'OK: Dart WIB-only dipatuhi (tanpa .toLocal/DateTime.now/.toUtc/tz.local/initializeTimeZones).\n'
 fi
 exit "$fail"

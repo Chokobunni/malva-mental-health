@@ -140,6 +140,58 @@ void main() {
       expect(utcWall.minute, scheduled.minute);
     });
 
+    test('rollover akhir bulan: 31 Oktober → 1 November (bukan error)', () {
+      // 31 Okt 2026 11:00 WIB — pengingat 10:00 sudah lewat, jadi "besok"
+      // dibangun dengan `day + 1` = 32. Normalisasi kalender WAJIB menghasilkan
+      // 1 November, bukan exception / tanggal tidak sah.
+      final now = wibFromParts(2026, 10, 31, 11, 0);
+
+      final scheduled = MedicationReminderService.nextReminderOccurrence(
+        const TimeOfDay(hour: 10, minute: 0),
+        now: now,
+      );
+
+      expect(scheduled.year, 2026);
+      expect(scheduled.month, 11, reason: '32 Okt harus normal jadi 1 Nov');
+      expect(scheduled.day, 1);
+      expect(scheduled.hour, 10);
+      expect(scheduled.minute, 0);
+      expect(scheduled.timeZoneOffset, const Duration(hours: 7));
+      expect(scheduled.toUtc(), DateTime.utc(2026, 11, 1, 3, 0));
+    });
+
+    test('rollover pergantian tahun: 31 Desember → 1 Januari tahun berikutnya',
+        () {
+      final now = wibFromParts(2026, 12, 31, 11, 0);
+
+      final scheduled = MedicationReminderService.nextReminderOccurrence(
+        const TimeOfDay(hour: 10, minute: 0),
+        now: now,
+      );
+
+      expect(scheduled.year, 2027, reason: 'tahun harus naik');
+      expect(scheduled.month, 1);
+      expect(scheduled.day, 1);
+      expect(scheduled.hour, 10);
+      expect(scheduled.timeZoneOffset, const Duration(hours: 7));
+      expect(scheduled.toUtc(), DateTime.utc(2027, 1, 1, 3, 0));
+    });
+
+    test('rollover 29 Februari tahun kabisat → 1 Maret', () {
+      final now = wibFromParts(2028, 2, 29, 23, 30);
+
+      final scheduled = MedicationReminderService.nextReminderOccurrence(
+        const TimeOfDay(hour: 10, minute: 0),
+        now: now,
+      );
+
+      expect(scheduled.year, 2028);
+      expect(scheduled.month, 3);
+      expect(scheduled.day, 1);
+      expect(scheduled.hour, 10);
+      expect(scheduled.toUtc(), DateTime.utc(2028, 3, 1, 3, 0));
+    });
+
     test('push notification: konversi instant UTC ke WIB memakai wibLocation',
         () {
       // Pola yang dipakai PushNotificationService.showLocalNotification.
