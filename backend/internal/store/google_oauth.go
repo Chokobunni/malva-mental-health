@@ -127,7 +127,7 @@ func (s *Store) ListGoogleTokenGrantAges(ctx context.Context) ([]GoogleTokenGran
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []GoogleTokenGrant
 	for rows.Next() {
 		var g GoogleTokenGrant
