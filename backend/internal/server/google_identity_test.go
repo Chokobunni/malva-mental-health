@@ -393,7 +393,7 @@ func TestGoogleStatusSeparatesIdentityAndCalendar(t *testing.T) {
 		{"https://www.googleapis.com/auth/calendar.events", "other", false},
 		{"https://www.googleapis.com/auth/calendar.events", subject, true},
 	} {
-		if err := st.UpsertGoogleToken(ctx, u.ID, "test-refresh", "test-access", time.Now().Add(time.Hour), tc.scope, tc.sub); err != nil {
+		if err := st.UpsertGoogleToken(ctx, u.ID, "test-refresh", "test-access", time.Now().Add(time.Hour), tc.scope, tc.sub, true); err != nil {
 			t.Fatal(err)
 		}
 		got := status()

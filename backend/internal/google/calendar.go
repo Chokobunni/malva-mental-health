@@ -101,7 +101,9 @@ func (c *CalendarService) getClient(ctx context.Context, professionalUserID stri
 		if refresh == "" {
 			refresh = stored.RefreshToken // refresh token tidak selalu dikembalikan
 		}
-		if uerr := c.store.UpsertGoogleToken(ctx, professionalUserID, refresh, newTok.AccessToken, newTok.Expiry, stored.Scope, stored.GoogleSubject); uerr != nil {
+		// Auto-refresh access token BUKAN grant baru: pertahankan tanggal grant
+		// lama agar umur refresh token tidak ter-reset (newGrant=false).
+		if uerr := c.store.UpsertGoogleToken(ctx, professionalUserID, refresh, newTok.AccessToken, newTok.Expiry, stored.Scope, stored.GoogleSubject, false); uerr != nil {
 			// Log saja, jangan gagalkan operasi kalender.
 			_ = uerr
 		}

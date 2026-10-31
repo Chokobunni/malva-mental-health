@@ -328,7 +328,9 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 			"Izin Google Calendar wajib diberikan agar Google Meet bisa dipakai.")
 		return
 	}
-	if err := s.store.UpsertGoogleToken(r.Context(), claims.Subject, tok.RefreshToken, tok.AccessToken, tok.Expiry, scope, subject); err != nil {
+	// Penukaran authorization code = grant BARU: perbarui tanggal grant agar
+	// umur refresh token (7 hari pada mode Testing) dihitung dari sini.
+	if err := s.store.UpsertGoogleToken(r.Context(), claims.Subject, tok.RefreshToken, tok.AccessToken, tok.Expiry, scope, subject, true); err != nil {
 		writeUserError(w, http.StatusInternalServerError,
 			"Gagal menyimpan izin Google Calendar. Coba lagi.")
 		return

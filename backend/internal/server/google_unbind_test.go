@@ -138,7 +138,7 @@ func TestUnbindGoogleDeletesOAuthTokens(t *testing.T) {
 	u := createIdentityTestUser(t, db, st, "professional", &store.ProfessionalCredential{Specialization: "Sp.KJ"})
 	bindTestGoogle(t, st, u.ID)
 	if err := st.UpsertGoogleToken(ctx, u.ID, "refresh", "access", time.Now().Add(time.Hour),
-		"https://www.googleapis.com/auth/calendar.events", "sub-"+u.ID); err != nil {
+		"https://www.googleapis.com/auth/calendar.events", "sub-"+u.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.GetGoogleToken(ctx, u.ID); err != nil {

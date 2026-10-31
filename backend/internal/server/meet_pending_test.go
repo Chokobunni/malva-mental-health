@@ -173,7 +173,7 @@ func linkReadyProfessional(t *testing.T, st *store.Store, userID string) {
 	}
 	if err := st.UpsertGoogleToken(context.Background(), userID, "refresh-token", "access-token",
 		time.Now().Add(time.Hour),
-		"https://www.googleapis.com/auth/calendar.events", subject); err != nil {
+		"https://www.googleapis.com/auth/calendar.events", subject, true); err != nil {
 		t.Fatalf("simpan token Google: %v", err)
 	}
 }
@@ -270,7 +270,7 @@ func TestMeetStatusReasonStates(t *testing.T) {
 
 	// 3. Token ada tetapi tanpa scope calendar.
 	if err := st.UpsertGoogleToken(ctx, linked.ID, "refresh", "access",
-		time.Now().Add(time.Hour), "openid email", subject); err != nil {
+		time.Now().Add(time.Hour), "openid email", subject, true); err != nil {
 		t.Fatalf("simpan token: %v", err)
 	}
 	if got := srv.meetStatusReason(ctx, linked.ID); got != meetReasonNoCalendarScope {
@@ -280,7 +280,7 @@ func TestMeetStatusReasonStates(t *testing.T) {
 	// 4. Refresh token hilang -> perlu tautkan ulang.
 	if err := st.UpsertGoogleToken(ctx, linked.ID, "", "access",
 		time.Now().Add(time.Hour),
-		"https://www.googleapis.com/auth/calendar.events", subject); err != nil {
+		"https://www.googleapis.com/auth/calendar.events", subject, true); err != nil {
 		t.Fatalf("simpan token tanpa refresh: %v", err)
 	}
 	if got := srv.meetStatusReason(ctx, linked.ID); got != meetReasonTokenExpired {
@@ -290,7 +290,7 @@ func TestMeetStatusReasonStates(t *testing.T) {
 	// 5. Lengkap -> ready.
 	if err := st.UpsertGoogleToken(ctx, linked.ID, "refresh", "access",
 		time.Now().Add(time.Hour),
-		"https://www.googleapis.com/auth/calendar.events", subject); err != nil {
+		"https://www.googleapis.com/auth/calendar.events", subject, true); err != nil {
 		t.Fatalf("simpan token lengkap: %v", err)
 	}
 	if got := srv.meetStatusReason(ctx, linked.ID); got != meetReasonReady {

@@ -89,7 +89,7 @@ func TestCreateBookingAllowsVideoWhenMeetReady(t *testing.T) {
 	}
 	if err := st.UpsertGoogleToken(ctx, prof.ID, "refresh-token", "access-token",
 		time.Now().Add(time.Hour),
-		"https://www.googleapis.com/auth/calendar.events", subject); err != nil {
+		"https://www.googleapis.com/auth/calendar.events", subject, true); err != nil {
 		t.Fatalf("simpan token: %v", err)
 	}
 
