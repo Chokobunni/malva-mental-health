@@ -21,6 +21,9 @@ type fakeMeetCalendar struct {
 	createOpts    []googlecal.MeetEventOptions
 	createEventID string
 	createMeetURL string
+	// createErr, bila diisi, membuat CreateMeetEvent gagal (dipakai menguji
+	// jalur degradasi "menunggu link" saat Google menolak).
+	createErr error
 	// UpdateMeetEvent
 	updateCalls []fakeUpdateCall
 	updateErr   error
@@ -45,6 +48,9 @@ func (f *fakeMeetCalendar) CreateMeetEvent(_ context.Context, professionalUserID
 	f.createCalls++
 	f.createForUser = professionalUserID
 	f.createOpts = append(f.createOpts, opts)
+	if f.createErr != nil {
+		return "", "", f.createErr
+	}
 	return f.createEventID, f.createMeetURL, nil
 }
 

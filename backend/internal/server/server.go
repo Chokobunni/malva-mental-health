@@ -302,6 +302,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/care-sessions/{session_id}/meet-link", s.requireAuth(s.ensureMeetLinkHandler))
 	// Status tautan Google Calendar profesional (tanpa membocorkan token).
 	mux.HandleFunc("GET /v1/google/status", s.requireAuth(s.googleStatusHandler))
+	// Status Google Meet seorang profesional (read-only): dipakai klien untuk
+	// memberi tahu pasien bahwa link video menyusul sebelum ia memilih sesi
+	// video. Pasien boleh memeriksa profesional mana pun.
+	mux.HandleFunc("GET /v1/professionals/{professional_id}/meet-status", s.requireAuth(s.meetStatusHandler))
 	// Quick video call (Google Meet ad-hoc) untuk profesional.
 	mux.HandleFunc("POST /v1/meet/quick", s.requireAuth(s.createQuickMeet))
 	// Refund/kredit paket (pro-cancel): eksekusi refund uang / catat kredit.

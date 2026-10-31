@@ -33,9 +33,107 @@ type meetCalendar interface {
 // Google Calendar gagal diperbarui padahal jadwal sesi sudah tersimpan.
 const meetUpdateWarning = "Jadwal tersimpan, tetapi event Google Calendar gagal diperbarui. Minta profesional menautkan ulang Google atau periksa kalender."
 
+// meetPendingWarning dikirim ke klien ketika sesi video berhasil dijadwalkan
+// atau dipindahkan tetapi link Meet belum ada. Bukan error: link dibuat
+// menyusul (otomatis oleh sweeper pengingat, atau manual oleh profesional).
+const meetPendingWarning = "Jadwal tersimpan, tetapi link Google Meet belum tersedia. Link akan dibuat sebelum sesi dimulai."
+
+// meetPendingCode adalah kode mesin untuk klien ketika Google Meet profesional
+// belum aktif (izin Calendar belum ada / kedaluwarsa). Klien memakainya untuk
+// menampilkan tombol "Hubungkan" ke layar Akun Google.
+const meetPendingCode = "meet_belum_aktif"
+
 // errMeetNoLink: event dibuat tetapi Google tidak mengembalikan entry point
 // Meet. Sesi video tidak boleh dibuat tanpa ruang pertemuan.
 var errMeetNoLink = errors.New("google tidak mengembalikan link Meet untuk event ini")
+
+// ============================================================
+// STATUS "GOOGLE MEET SIAP" — satu sumber kebenaran untuk klien.
+//
+// Alasan (reason) dikirim apa adanya ke aplikasi agar UI bisa membedakan
+// keadaan dan menampilkan tindakan yang tepat: pasien tidak boleh disuruh
+// "tautkan ulang" akun Google milik profesional, dan profesional tidak boleh
+// disuruh "hubungi admin" ketika yang kurang hanya izin Calendar di akunnya
+// sendiri.
+// ============================================================
+
+const (
+	// meetReasonReady: semua syarat terpenuhi, link Meet bisa dibuat sekarang.
+	meetReasonReady = "ready"
+	// meetReasonNotLinked: akun Malva profesional belum menautkan Gmail.
+	meetReasonNotLinked = "not_linked"
+	// meetReasonNoCalendarScope: Gmail tertaut, tetapi izin calendar.events
+	// belum pernah diberikan (atau baris token belum ada).
+	meetReasonNoCalendarScope = "no_calendar_scope"
+	// meetReasonTokenExpired: token ada tetapi refresh token kosong/tercabut
+	// atau milik akun Google yang berbeda — perlu tautkan ulang.
+	meetReasonTokenExpired = "token_expired"
+	// meetReasonServerNotConfigured: server belum punya client secret Google
+	// (masalah deployment, bukan akun profesional).
+	meetReasonServerNotConfigured = "server_not_configured"
+)
+
+// meetStatusReason mengklasifikasikan kesiapan Google Meet seorang profesional.
+// Dipakai endpoint GET /v1/professionals/{id}/meet-status dan oleh
+// googleCalendarReady, sehingga keduanya tidak pernah berbeda pendapat.
+func (s *Server) meetStatusReason(ctx context.Context, professionalID string) string {
+	if s.calendar == nil || s.store == nil {
+		return meetReasonServerNotConfigured
+	}
+	identity, err := s.store.GetGoogleIdentity(ctx, professionalID)
+	if err != nil || !identity.Linked {
+		return meetReasonNotLinked
+	}
+	info, err := s.store.GetGoogleTokenInfo(ctx, professionalID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Gmail tertaut tetapi belum pernah menukar authorization code
+			// Calendar: izinnya belum ada.
+			return meetReasonNoCalendarScope
+		}
+		// Gagal membaca token: perlakukan seperti belum tertaut agar UI
+		// menawarkan tindakan yang aman (hubungkan ulang), bukan "siap".
+		return meetReasonNotLinked
+	}
+	if meetReady(true, identity, info) {
+		return meetReasonReady
+	}
+	if !info.HasRefreshToken || info.GoogleSubject != identity.Subject {
+		return meetReasonTokenExpired
+	}
+	return meetReasonNoCalendarScope
+}
+
+// meetStatusHandler menangani GET /v1/professionals/{professional_id}/meet-status.
+//
+// Tujuan: klien bisa menampilkan status sebelum pasien memilih sesi video,
+// sehingga pasien tahu bahwa link akan menyusul (bukan menemui error saat
+// menekan "Jadwalkan").
+func (s *Server) meetStatusHandler(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	professionalID := strings.TrimSpace(r.PathValue("professional_id"))
+	if professionalID == "" {
+		writeError(w, http.StatusBadRequest, errors.New("professional_id is required"))
+		return
+	}
+	switch claims.Role {
+	case "patient":
+		// Pasien boleh memeriksa profesional mana pun (informasi status saja).
+	case "professional":
+		// Profesional hanya boleh memeriksa statusnya sendiri.
+		if claims.Subject != professionalID {
+			writeUserError(w, http.StatusForbidden, "Anda hanya bisa memeriksa status Google Meet akun sendiri.")
+			return
+		}
+	default:
+		writeUserError(w, http.StatusForbidden, "Peran ini tidak boleh memeriksa status Google Meet.")
+		return
+	}
+	reason := s.meetStatusReason(r.Context(), professionalID)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ready":  reason == meetReasonReady,
+		"reason": reason,
+	})
+}
 
 // createScheduledMeet membuat event Meet untuk sesi video yang dijadwalkan
 // tanpa link manual. Nilai (eventID, meetURL) yang dikembalikan adalah yang
@@ -58,6 +156,40 @@ func (s *Server) createScheduledMeet(ctx context.Context, cal meetCalendar, prof
 		return "", "", errMeetNoLink
 	}
 	return eventID, meetURL, nil
+}
+
+// prepareScheduledMeet mencoba membuat link Meet untuk sesi video yang AKAN
+// dijadwalkan (baris care_sessions belum ada).
+//
+// Kontrak: kondisi Google milik profesional tidak boleh memblokir pasien.
+// Nilai kembalian:
+//   - (meetURL, eventID, false, nil)  -> link siap, simpan apa adanya;
+//   - ("", "", true, nil)             -> sesi dibuat "menunggu link"
+//     (Google belum siap, izin kedaluwarsa, atau Google sedang gagal);
+//   - ("", "", false, ErrMeetUnavailable) -> server belum dikonfigurasi.
+//     Ini kesalahan deployment (admin), bukan kesalahan akun profesional,
+//     jadi tetap dilaporkan sebagai kegagalan keras.
+func (s *Server) prepareScheduledMeet(ctx context.Context, professionalID string, opts googlecal.MeetEventOptions) (string, string, bool, error) {
+	if s.calendar == nil {
+		return "", "", false, ErrMeetUnavailable
+	}
+	if !s.googleCalendarReady(ctx, professionalID) {
+		return "", "", true, nil
+	}
+	eventID, meetURL, err := s.createScheduledMeet(ctx, s.calendar, professionalID, opts)
+	if err == nil {
+		return meetURL, eventID, false, nil
+	}
+	if errors.Is(err, ErrMeetUnavailable) {
+		return "", "", false, err
+	}
+	// ErrReauthNeeded / errMeetNoLink / galat Google lain (5xx, jaringan):
+	// sesi tetap dijadwalkan, link menyusul.
+	if s.logger != nil {
+		s.logger.Warn("link Meet belum bisa dibuat; sesi dijadwalkan menunggu link",
+			"error", err, "professional", professionalID)
+	}
+	return "", "", true, nil
 }
 
 // updateMeetEventOnReschedule memindahkan event Meet ke jadwal baru sesi.
@@ -231,20 +363,10 @@ func (s *Server) createMeetEventFor(ctx context.Context, patientID, professional
 // yang sama, punya refresh token, dan memberi izin calendar.events.
 //
 // Dipakai sebelum booking sesi video dibuat, agar pasien tidak membayar untuk
-// sesi yang ruang pertemuannya tidak mungkin dibuat.
+// sesi yang ruang pertemuannya tidak mungkin dibuat. Definisi "siap" tidak
+// diduplikasi di sini: lihat meetStatusReason/meetReady.
 func (s *Server) googleCalendarReady(ctx context.Context, professionalID string) bool {
-	if s.calendar == nil || s.store == nil {
-		return false
-	}
-	identity, err := s.store.GetGoogleIdentity(ctx, professionalID)
-	if err != nil {
-		return false
-	}
-	info, err := s.store.GetGoogleTokenInfo(ctx, professionalID)
-	if err != nil {
-		return false
-	}
-	return meetReady(true, identity, info)
+	return s.meetStatusReason(ctx, professionalID) == meetReasonReady
 }
 
 // meetReady adalah satu-satunya definisi "Google Meet siap" untuk seorang
@@ -305,6 +427,27 @@ func (s *Server) ensureMeetLinkHandler(w http.ResponseWriter, r *http.Request, c
 	}
 	if isGoogleMeetURL(cs.MeetingURL) {
 		writeJSON(w, http.StatusOK, map[string]any{"session": cs, "created": false})
+		return
+	}
+	// Server tanpa konfigurasi Google: masalah deployment, bukan akun
+	// profesional — tetap 501 seperti sebelumnya.
+	if s.calendar == nil {
+		writeError(w, http.StatusNotImplemented, ErrMeetUnavailable)
+		return
+	}
+	// Google Meet profesional belum aktif (Gmail belum tertaut, izin
+	// calendar.events belum ada, atau token perlu ditautkan ulang). Pesannya
+	// berbeda untuk pasien & profesional: pasien tidak bisa memperbaiki akun
+	// Google orang lain, jadi jangan menyuruhnya "tautkan ulang".
+	if !s.googleCalendarReady(r.Context(), cs.ProfessionalID) {
+		message := "Profesional belum mengaktifkan Google Calendar, sehingga link video belum bisa dibuat. Link akan dibuat otomatis setelah profesional mengaktifkannya."
+		if isProf {
+			message = "Google Calendar Anda belum aktif. Buka Pengaturan → Akun Google → Hubungkan Google Calendar, lalu coba lagi."
+		}
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": message,
+			"code":  meetPendingCode,
+		})
 		return
 	}
 	updated, err := s.createMeetLink(r.Context(), cs)

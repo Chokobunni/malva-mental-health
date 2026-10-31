@@ -121,8 +121,12 @@ func (s *Server) createQuickMeet(w http.ResponseWriter, r *http.Request, claims 
 	})
 	if err != nil {
 		if errors.Is(err, googlecal.ErrReauthNeeded) {
-			writeUserError(w, http.StatusUnauthorized,
-				"Akses Google Calendar kedaluwarsa. Tautkan ulang akun Google di Pengaturan, lalu coba lagi.")
+			// Kode mesin dipakai klien untuk menampilkan tombol "Hubungkan"
+			// yang membuka layar Akun Google (Pengaturan → Google Calendar).
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "Google Calendar Anda belum aktif. Buka Pengaturan → Akun Google → Hubungkan Google Calendar, lalu coba lagi.",
+				"code":  meetPendingCode,
+			})
 			return
 		}
 		writeUserError(w, http.StatusInternalServerError,

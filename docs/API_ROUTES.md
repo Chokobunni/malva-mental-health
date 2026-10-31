@@ -5,7 +5,7 @@
 > Regenerasi: `cd backend && go run ./cmd/apidoc`
 > Verifikasi sinkron: `cd backend && go run ./cmd/apidoc -check`
 
-Total endpoint API: **126** (+1 penyajian berkas statis `GET /uploads/`).
+Total endpoint API: **127** (+1 penyajian berkas statis `GET /uploads/`).
 
 ## Ringkasan per Tag
 
@@ -46,6 +46,7 @@ Total endpoint API: **126** (+1 penyajian berkas statis `GET /uploads/`).
 | care-packages | 3 |
 | care-sessions | 6 |
 | google | 1 |
+| professionals | 1 |
 | meet | 1 |
 | care-refunds | 1 |
 | chat-permission | 1 |
@@ -266,8 +267,8 @@ Total endpoint API: **126** (+1 penyajian berkas statis `GET /uploads/`).
 | GET | `/v1/doctors/{user_id}` | getDoctorProfile | publik | 281 |
 | GET | `/v1/doctors/{user_id}/slots` | getDoctorAvailableSlots | publik | 282 |
 | GET | `/v1/doctors/{user_id}/availability` | getDoctorAvailability | publik | 283 |
-| GET | `/v1/doctors/{user_id}/reviews` | listDoctorReviews | publik | 320 |
-| POST | `/v1/doctors/{user_id}/reviews` | createDoctorReview | bearer | 321 |
+| GET | `/v1/doctors/{user_id}/reviews` | listDoctorReviews | publik | 324 |
+| POST | `/v1/doctors/{user_id}/reviews` | createDoctorReview | bearer | 325 |
 
 ## `pricing`
 
@@ -313,7 +314,7 @@ Total endpoint API: **126** (+1 penyajian berkas statis `GET /uploads/`).
 | PATCH | `/v1/care-sessions/{session_id}` | updateCareSession | bearer | 299 |
 | POST | `/v1/care-sessions/{session_id}/reschedule` | rescheduleCareSession | bearer | 300 |
 | POST | `/v1/care-sessions/{session_id}/meet-link` | ensureMeetLinkHandler | bearer | 302 |
-| POST | `/v1/care-sessions/{session_id}/refund` | refundCareSession | bearer | 308 |
+| POST | `/v1/care-sessions/{session_id}/refund` | refundCareSession | bearer | 312 |
 
 ## `google`
 
@@ -321,97 +322,103 @@ Total endpoint API: **126** (+1 penyajian berkas statis `GET /uploads/`).
 |---|---|---|---|---:|
 | GET | `/v1/google/status` | googleStatusHandler | bearer | 304 |
 
+## `professionals`
+
+| Method | Path | Handler | Auth | Baris |
+|---|---|---|---|---:|
+| GET | `/v1/professionals/{professional_id}/meet-status` | meetStatusHandler | bearer | 308 |
+
 ## `meet`
 
 | Method | Path | Handler | Auth | Baris |
 |---|---|---|---|---:|
-| POST | `/v1/meet/quick` | createQuickMeet | bearer | 306 |
+| POST | `/v1/meet/quick` | createQuickMeet | bearer | 310 |
 
 ## `care-refunds`
 
 | Method | Path | Handler | Auth | Baris |
 |---|---|---|---|---:|
-| GET | `/v1/care-refunds` | listCareRefunds | bearer | 309 |
+| GET | `/v1/care-refunds` | listCareRefunds | bearer | 313 |
 
 ## `chat-permission`
 
 | Method | Path | Handler | Auth | Baris |
 |---|---|---|---|---:|
-| GET | `/v1/chat-permission` | chatPermission | bearer | 310 |
+| GET | `/v1/chat-permission` | chatPermission | bearer | 314 |
 
 ## `professional`
 
 | Method | Path | Handler | Auth | Baris |
 |---|---|---|---|---:|
-| GET | `/v1/professional/time-off` | listTimeOff | bearer | 312 |
-| POST | `/v1/professional/time-off` | addTimeOff | bearer | 313 |
-| DELETE | `/v1/professional/time-off/{id}` | deleteTimeOff | bearer | 314 |
-| PUT | `/v1/professional/pricing` | updatePricing | bearer | 315 |
-| GET | `/v1/professional/schedules` | listMySchedules | bearer | 316 |
-| PUT | `/v1/professional/schedules` | updateMySchedules | bearer | 317 |
-| DELETE | `/v1/professional/schedules/{id}` | deleteMySchedule | bearer | 319 |
+| GET | `/v1/professional/time-off` | listTimeOff | bearer | 316 |
+| POST | `/v1/professional/time-off` | addTimeOff | bearer | 317 |
+| DELETE | `/v1/professional/time-off/{id}` | deleteTimeOff | bearer | 318 |
+| PUT | `/v1/professional/pricing` | updatePricing | bearer | 319 |
+| GET | `/v1/professional/schedules` | listMySchedules | bearer | 320 |
+| PUT | `/v1/professional/schedules` | updateMySchedules | bearer | 321 |
+| DELETE | `/v1/professional/schedules/{id}` | deleteMySchedule | bearer | 323 |
 
 ## `earnings`
 
 | Method | Path | Handler | Auth | Baris |
 |---|---|---|---|---:|
-| GET | `/v1/earnings` | earningsSummary | bearer | 322 |
-| POST | `/v1/earnings/payout` | requestPayoutAll | bearer | 324 |
-| POST | `/v1/earnings/{earning_id}/payout` | requestPayout | bearer | 325 |
+| GET | `/v1/earnings` | earningsSummary | bearer | 326 |
+| POST | `/v1/earnings/payout` | requestPayoutAll | bearer | 328 |
+| POST | `/v1/earnings/{earning_id}/payout` | requestPayout | bearer | 329 |
 
 ## `e-prescriptions`
 
 | Method | Path | Handler | Auth | Baris |
 |---|---|---|---|---:|
-| POST | `/v1/e-prescriptions` | createEPrescription | bearer | 326 |
-| GET | `/v1/e-prescriptions` | listEPrescriptions | bearer | 327 |
-| GET | `/v1/e-prescriptions/{id}` | getEPrescription | bearer | 328 |
-| GET | `/v1/e-prescriptions/verify` | verifyEPrescriptionQR | publik | 330 |
+| POST | `/v1/e-prescriptions` | createEPrescription | bearer | 330 |
+| GET | `/v1/e-prescriptions` | listEPrescriptions | bearer | 331 |
+| GET | `/v1/e-prescriptions/{id}` | getEPrescription | bearer | 332 |
+| GET | `/v1/e-prescriptions/verify` | verifyEPrescriptionQR | publik | 334 |
 
 ## `health-record`
 
 | Method | Path | Handler | Auth | Baris |
 |---|---|---|---|---:|
-| GET | `/v1/health-record` | getHealthRecord | bearer | 332 |
-| PUT | `/v1/health-record` | updateHealthRecord | bearer | 333 |
+| GET | `/v1/health-record` | getHealthRecord | bearer | 336 |
+| PUT | `/v1/health-record` | updateHealthRecord | bearer | 337 |
 
 ## `goals`
 
 | Method | Path | Handler | Auth | Baris |
 |---|---|---|---|---:|
-| GET | `/v1/goals` | listGoals | bearer | 335 |
-| POST | `/v1/goals` | createGoal | bearer | 336 |
-| PATCH | `/v1/goals/{goal_id}` | updateGoal | bearer | 337 |
-| DELETE | `/v1/goals/{goal_id}` | deleteGoal | bearer | 338 |
+| GET | `/v1/goals` | listGoals | bearer | 339 |
+| POST | `/v1/goals` | createGoal | bearer | 340 |
+| PATCH | `/v1/goals/{goal_id}` | updateGoal | bearer | 341 |
+| DELETE | `/v1/goals/{goal_id}` | deleteGoal | bearer | 342 |
 
 ## `habit-logs`
 
 | Method | Path | Handler | Auth | Baris |
 |---|---|---|---|---:|
-| GET | `/v1/habit-logs` | listHabitLogs | bearer | 339 |
-| POST | `/v1/habit-logs` | logHabit | bearer | 340 |
+| GET | `/v1/habit-logs` | listHabitLogs | bearer | 343 |
+| POST | `/v1/habit-logs` | logHabit | bearer | 344 |
 
 ## `therapy-submissions`
 
 | Method | Path | Handler | Auth | Baris |
 |---|---|---|---|---:|
-| GET | `/v1/therapy-submissions` | listTherapySubmissions | bearer | 342 |
-| POST | `/v1/therapy-submissions` | createTherapySubmission | bearer | 343 |
-| GET | `/v1/therapy-submissions/{submission_id}` | getTherapySubmission | bearer | 344 |
-| POST | `/v1/therapy-submissions/{submission_id}/share` | shareTherapySubmission | bearer | 345 |
-| DELETE | `/v1/therapy-submissions/{submission_id}` | deleteTherapySubmission | bearer | 346 |
+| GET | `/v1/therapy-submissions` | listTherapySubmissions | bearer | 346 |
+| POST | `/v1/therapy-submissions` | createTherapySubmission | bearer | 347 |
+| GET | `/v1/therapy-submissions/{submission_id}` | getTherapySubmission | bearer | 348 |
+| POST | `/v1/therapy-submissions/{submission_id}/share` | shareTherapySubmission | bearer | 349 |
+| DELETE | `/v1/therapy-submissions/{submission_id}` | deleteTherapySubmission | bearer | 350 |
 
 ## `admin`
 
 | Method | Path | Handler | Auth | Baris |
 |---|---|---|---|---:|
-| GET | `/v1/admin/users` | listAdminUsers | bearer (admin) | 348 |
-| PATCH | `/v1/admin/users/{user_id}` | updateAdminUser | bearer (admin) | 349 |
-| DELETE | `/v1/admin/users/{user_id}` | deleteAdminUser | bearer (admin) | 350 |
-| GET | `/v1/admin/credentials/pending` | listPendingCredentials | bearer (admin) | 351 |
-| POST | `/v1/admin/credentials/{id}/verify` | verifyCredential | bearer (admin) | 352 |
-| POST | `/v1/admin/doctors` | createAdminDoctor | bearer (admin) | 353 |
-| GET | `/v1/admin/doctors` | listAdminDoctors | bearer (admin) | 354 |
-| GET | `/v1/admin/doctors/{user_id}` | getAdminDoctor | bearer (admin) | 355 |
-| PUT | `/v1/admin/doctors/{user_id}` | updateAdminDoctor | bearer (admin) | 356 |
+| GET | `/v1/admin/users` | listAdminUsers | bearer (admin) | 352 |
+| PATCH | `/v1/admin/users/{user_id}` | updateAdminUser | bearer (admin) | 353 |
+| DELETE | `/v1/admin/users/{user_id}` | deleteAdminUser | bearer (admin) | 354 |
+| GET | `/v1/admin/credentials/pending` | listPendingCredentials | bearer (admin) | 355 |
+| POST | `/v1/admin/credentials/{id}/verify` | verifyCredential | bearer (admin) | 356 |
+| POST | `/v1/admin/doctors` | createAdminDoctor | bearer (admin) | 357 |
+| GET | `/v1/admin/doctors` | listAdminDoctors | bearer (admin) | 358 |
+| GET | `/v1/admin/doctors/{user_id}` | getAdminDoctor | bearer (admin) | 359 |
+| PUT | `/v1/admin/doctors/{user_id}` | updateAdminDoctor | bearer (admin) | 360 |
 

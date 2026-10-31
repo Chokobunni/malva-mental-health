@@ -9,7 +9,6 @@ import (
 
 	"malva/backend/internal/auth"
 	"malva/backend/internal/clock"
-	googlecal "malva/backend/internal/google"
 	"malva/backend/internal/store"
 )
 
@@ -254,11 +253,18 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 		return
 	}
 	// Link meeting untuk sesi video: selalu Google Meet, tanpa fallback.
-	// Bila pembuatan link gagal, sesi TIDAK dibuat agar pasien tidak menerima
-	// sesi video tanpa ruang pertemuan. Link manual pun wajib Google Meet
-	// agar tidak ada sesi video dengan ruang dari penyedia lain.
+	//
+	// Aturan bisnis (revisi): kondisi Google milik PROFESIONAL tidak boleh
+	// memblokir PASIEN. Bila link belum bisa dibuat — Google belum aktif,
+	// izin calendar.events kedaluwarsa, atau Google sedang gagal — sesi video
+	// tetap dijadwalkan dengan status "menunggu link" (meet_pending) dan link
+	// dibuat menyusul oleh sweeper pengingat atau manual oleh profesional.
+	// Sebelumnya handler ini membalas 401/502 sehingga pasien buntu tanpa
+	// cara memperbaiki keadaan. Hanya server yang belum dikonfigurasi Google
+	// (ErrMeetUnavailable) yang tetap dianggap kegagalan keras.
 	meetingURL := strings.TrimSpace(req.MeetingURL)
 	googleEventID := ""
+	meetPending := false
 	sessionType := strings.ToLower(strings.TrimSpace(req.SessionType))
 	if meetingURL != "" && !isGoogleMeetURL(meetingURL) {
 		writeError(w, http.StatusBadRequest, errors.New("link meeting harus berupa link Google Meet (meet.google.com). Kosongkan untuk membuat otomatis"))
@@ -274,29 +280,16 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 			ScheduledAt:      at,
 			DurationMinutes:  duration,
 		})
-		eventID, meetURL, cerr := s.createScheduledMeet(r.Context(), s.calendar, pkg.ProfessionalID, opts)
+		meetURL, eventID, pending, cerr := s.prepareScheduledMeet(r.Context(), pkg.ProfessionalID, opts)
 		if cerr != nil {
-			if errors.Is(cerr, ErrMeetUnavailable) {
-				writeError(w, http.StatusNotImplemented, ErrMeetUnavailable)
-				return
-			}
-			if errors.Is(cerr, googlecal.ErrReauthNeeded) {
-				writeError(w, http.StatusUnauthorized,
-					errors.New("akses Google Calendar profesional kedaluwarsa. Profesional perlu menautkan ulang akun Google"))
-				return
-			}
-			if errors.Is(cerr, errMeetNoLink) {
-				writeError(w, http.StatusBadGateway,
-					errors.New("google tidak mengembalikan link Meet untuk event ini. Coba lagi"))
-				return
-			}
-			s.logger.Warn("gagal membuat event Google Meet", "error", cerr, "professional", pkg.ProfessionalID)
-			writeError(w, http.StatusBadGateway,
-				errors.New("gagal membuat link Google Meet. Coba lagi beberapa saat lagi"))
+			// Satu-satunya kegagalan keras: integrasi Google belum dipasang
+			// di server (MALVA_GOOGLE_CLIENT_SECRET kosong).
+			writeError(w, http.StatusNotImplemented, cerr)
 			return
 		}
 		meetingURL = meetURL
 		googleEventID = eventID
+		meetPending = pending
 	}
 	cs, err := s.store.CreateCareSession(r.Context(), store.CareSession{
 		PackageID:       &pkg.ID,
@@ -308,6 +301,8 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 		Status:          "scheduled",
 		MeetingURL:      meetingURL,
 		GoogleEventID:   googleEventID,
+		// Izin eksplisit: sesi video boleh lahir tanpa link (lihat store).
+		AllowPendingMeet: meetPending,
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -316,14 +311,30 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 	s.notifyPatient(r, pkg.ProfessionalID, "session_scheduled",
 		"Sesi baru dijadwalkan", "Ada sesi baru yang dijadwalkan dengan pasien.",
 		map[string]string{"session_id": cs.ID, "patient_id": pkg.PatientID})
-	body := "Sesi dengan profesional dijadwalkan pada " + cs.ScheduledAt.In(wibLoc).Format("02 Jan 2006 15:04") + "."
-	if strings.TrimSpace(cs.MeetingURL) != "" {
-		body += " Link video call: " + cs.MeetingURL
+	when := cs.ScheduledAt.In(wibLoc).Format("02 Jan 2006 15:04")
+	if meetPending {
+		// Link belum ada: jangan menjanjikan link yang tidak ada, dan minta
+		// profesional membuatnya (hanya dia yang bisa).
+		s.notifyPatient(r, pkg.PatientID, "session_scheduled",
+			"Sesi berhasil dijadwalkan",
+			"Sesi dengan profesional dijadwalkan pada "+when+". Link video akan tersedia sebelum sesi dimulai.",
+			map[string]string{"session_id": cs.ID, "meet_pending": "true"})
+		s.notifyPatient(r, pkg.ProfessionalID, "session_meet_missing",
+			"Buat link Google Meet untuk sesi ini",
+			"Sesi video dengan pasien dijadwalkan pada "+when+" tetapi link Meet belum ada. Buka detail sesi lalu tekan \"Buat link Meet\".",
+			map[string]string{"session_id": cs.ID, "patient_id": pkg.PatientID, "meet_pending": "true"})
+	} else {
+		body := "Sesi dengan profesional dijadwalkan pada " + when + "."
+		if strings.TrimSpace(cs.MeetingURL) != "" {
+			body += " Link video call: " + cs.MeetingURL
+		}
+		s.notifyPatient(r, pkg.PatientID, "session_scheduled",
+			"Sesi berhasil dijadwalkan", body,
+			map[string]string{"session_id": cs.ID, "meeting_url": cs.MeetingURL})
 	}
-	s.notifyPatient(r, pkg.PatientID, "session_scheduled",
-		"Sesi berhasil dijadwalkan", body,
-		map[string]string{"session_id": cs.ID, "meeting_url": cs.MeetingURL})
-	writeJSON(w, http.StatusCreated, map[string]any{"session": cs})
+	// meet_pending memberi tahu klien bahwa link video menyusul, sehingga UI
+	// menampilkan "Menunggu link video" alih-alih tombol "Gabung" kosong.
+	writeJSON(w, http.StatusCreated, map[string]any{"session": cs, "meet_pending": meetPending})
 }
 
 func (s *Server) listCareSessions(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -529,21 +540,27 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 		writeError(w, http.StatusBadRequest, verr)
 		return
 	}
-	// Sesi video yang belum punya link (data lama, atau link penyedia lain)
-	// WAJIB dibuatkan ruang pertemuan SEBELUM jadwal dipindahkan. Bila dibuat
-	// setelahnya, kegagalan Google akan menyisakan sesi video tanpa tombol
-	// "Gabung" pada jam baru. Event langsung dibuat di jam BARU.
+	// Sesi video yang belum punya link (data lama, link penyedia lain, atau
+	// sesi yang lahir "menunggu link") dibuatkan ruang pertemuan di jam BARU —
+	// bukan jam lama — agar kalender profesional tidak sempat menampilkan slot
+	// yang salah.
+	//
+	// Best-effort: kegagalan Google TIDAK menggagalkan pemindahan jadwal.
+	// Pasien tidak boleh terblokir oleh kondisi akun Google profesional; link
+	// dibuat menyusul (sweeper pengingat atau manual oleh profesional).
+	// Kegagalan tetap TERLIHAT lewat warning di respons + notifikasi.
+	var warnings []string
 	if cs.SessionType == "video" && !isGoogleMeetURL(cs.MeetingURL) {
 		if _, cerr := s.createMeetLinkAt(r.Context(), cs, at); cerr != nil {
-			if errors.Is(cerr, googlecal.ErrReauthNeeded) {
-				writeError(w, http.StatusConflict,
-					errors.New("akses Google Calendar profesional kedaluwarsa. Profesional perlu menautkan ulang akun Google sebelum jadwal dipindahkan"))
-				return
+			if s.logger != nil {
+				s.logger.Warn("gagal menyiapkan link Meet saat reschedule; jadwal tetap dipindahkan",
+					"error", cerr, "session", sessionID)
 			}
-			s.logger.Warn("gagal menyiapkan link Meet saat reschedule", "error", cerr, "session", sessionID)
-			writeError(w, http.StatusBadGateway,
-				errors.New("gagal menyiapkan link Google Meet untuk jadwal baru. Coba lagi beberapa saat lagi"))
-			return
+			warnings = append(warnings, meetPendingWarning)
+			s.notifyUser(r.Context(), cs.ProfessionalID, "session_meet_missing",
+				"Buat link Google Meet untuk sesi ini",
+				"Jadwal sesi sudah dipindahkan, tetapi link Meet belum bisa dibuat. Buka detail sesi lalu tekan \"Buat link Meet\".",
+				map[string]string{"session_id": sessionID})
 		}
 	}
 	updated, err := s.store.RescheduleCareSession(r.Context(), sessionID, at)
@@ -555,8 +572,8 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 	// tersimpan di DB, jadi kegagalan Google TIDAK menggagalkan reschedule —
 	// tetapi kegagalan itu harus TERLIHAT: warning di respons sukses + notifikasi
 	// ke profesional (dulu hanya dicatat ke log sehingga senyap bagi pengguna).
-	warnings := s.updateMeetEventOnReschedule(r.Context(), s.calendar,
-		cs.ProfessionalID, cs.GoogleEventID, at, cs.DurationMinutes)
+	warnings = append(warnings, s.updateMeetEventOnReschedule(r.Context(), s.calendar,
+		cs.ProfessionalID, cs.GoogleEventID, at, cs.DurationMinutes)...)
 	if len(warnings) > 0 {
 		s.notifyUser(r.Context(), cs.ProfessionalID, "session_meet_update_failed",
 			"Event Google Calendar gagal diperbarui",

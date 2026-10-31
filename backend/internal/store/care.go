@@ -79,6 +79,11 @@ type CareSession struct {
 	AttendedMarkedAt  *time.Time `json:"attended_marked_at,omitempty"`
 	CreatedAt         time.Time  `json:"created_at"`
 	PhotoIntroURL     string     `json:"photo_intro_url,omitempty"`
+	// AllowPendingMeet adalah penanda HANYA-untuk-pemanggil (tidak pernah
+	// disimpan/dibaca dari database): izinkan sesi video dibuat tanpa link
+	// Meet, dengan status "menunggu link". Lihat komentar invarian di
+	// CreateCareSession untuk alasannya.
+	AllowPendingMeet bool `json:"-"`
 }
 
 // scanCarePackage membaca satu baris paket (kolom harus mengikuti urutan
@@ -418,7 +423,17 @@ func (s *Store) CreateCareSession(ctx context.Context, cs CareSession) (CareSess
 	// tanpa tombol "Gabung". Pemeriksaan di sini adalah satu-satunya pintu
 	// INSERT care_sessions, sehingga tidak ada jalur yang bisa melewatinya.
 	// Sesi berstatus chat tetap boleh tanpa link.
-	if cs.SessionType == "video" && strings.TrimSpace(cs.MeetingURL) == "" {
+	//
+	// PENGECUALIAN (revisi, keputusan pemilik produk): kondisi Google milik
+	// PROFESIONAL tidak boleh memblokir PASIEN. Bila akun Google profesional
+	// belum/tidak lagi memberi izin Calendar, pasien tetap bisa menjadwalkan
+	// sesi video; sesi itu lahir berstatus "menunggu link" dan link Meet
+	// dibuat menyusul (sweeper pengingat `ensureMeetLinkBestEffort` atau
+	// manual oleh profesional lewat POST /v1/care-sessions/{id}/meet-link).
+	// Pemanggil yang mengambil keputusan degradasi ini WAJIB mengisi
+	// AllowPendingMeet=true secara eksplisit; jalur lain (mis. aktivasi
+	// pembayaran) tetap tunduk pada invarian keras di atas.
+	if cs.SessionType == "video" && strings.TrimSpace(cs.MeetingURL) == "" && !cs.AllowPendingMeet {
 		return CareSession{}, errors.New("sesi video wajib memiliki link Google Meet")
 	}
 	start := cs.ScheduledAt

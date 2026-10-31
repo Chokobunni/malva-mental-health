@@ -2,6 +2,7 @@ package google
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -78,11 +79,18 @@ func (c *CalendarService) getClient(ctx context.Context, professionalUserID stri
 	ts := c.oauth2Config().TokenSource(ctx, tok)
 	newTok, err := ts.Token()
 	if err != nil {
-		// Refresh gagal (invalid_grant, token revoked, dll.)
-		errMsg := strings.ToLower(err.Error())
-		if strings.Contains(errMsg, "invalid_grant") ||
-			strings.Contains(errMsg, "token has been expired or revoked") ||
-			strings.Contains(errMsg, "unauthorized_client") {
+		if tokenUnusable(err) {
+			// Refresh token ditolak Google (dicabut, kedaluwarsa — termasuk
+			// kasus consent screen masih "Testing" yang membuat refresh token
+			// hanya berlaku 7 hari — atau unauthorized_client). Hapus baris
+			// token agar status berubah dari "aktif" (bohong) menjadi "perlu
+			// tautkan ulang", dan percobaan berikutnya gagal cepat tanpa
+			// memanggil Google lagi.
+			if derr := c.store.DeleteGoogleToken(ctx, professionalUserID); derr != nil {
+				// Kegagalan menghapus tidak mengubah hasil akhir: pemanggil
+				// tetap harus menautkan ulang.
+				_ = derr
+			}
 			return nil, ErrReauthNeeded
 		}
 		return nil, fmt.Errorf("gagal mendapatkan token Google: %w", err)
@@ -99,6 +107,24 @@ func (c *CalendarService) getClient(ctx context.Context, professionalUserID stri
 		}
 	}
 	return newTok, nil
+}
+
+// tokenUnusable melaporkan apakah kegagalan refresh token berarti token itu
+// tidak akan pernah berhasil lagi (harus ditautkan ulang), bukan kegagalan
+// sementara (jaringan/5xx Google).
+//
+// Google membalas `invalid_grant` untuk refresh token yang dicabut, kedaluwarsa,
+// atau — kasus paling sering di Malva — diterbitkan saat OAuth consent screen
+// masih berstatus "Testing" sehingga hanya berlaku 7 hari.
+func tokenUnusable(err error) bool {
+	var retrieveErr *oauth2.RetrieveError
+	if errors.As(err, &retrieveErr) && strings.Contains(strings.ToLower(retrieveErr.ErrorCode), "invalid_grant") {
+		return true
+	}
+	errMsg := strings.ToLower(err.Error())
+	return strings.Contains(errMsg, "invalid_grant") ||
+		strings.Contains(errMsg, "token has been expired or revoked") ||
+		strings.Contains(errMsg, "unauthorized_client")
 }
 
 // calendarSvc membuat Calendar API service untuk user tertentu.
