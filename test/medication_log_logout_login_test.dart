@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/providers/providers.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 
 // ============================================================
 // QA — T6: PERSISTENSI LOG MINUM OBAT (adherence & riwayat tidak reset)
@@ -71,8 +72,8 @@ Map<String, dynamic> _logJson(
       'medication_id': id,
       'medication_name': name,
       'status': status,
-      'taken_at': takenAt.toIso8601String(),
-      'created_at': takenAt.toIso8601String(),
+      'taken_at': wibIso(takenAt),
+      'created_at': wibIso(takenAt),
     };
 
 /// Klien API dengan respons per-path; `statusCode` 500 mensimulasikan error.
