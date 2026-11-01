@@ -3165,6 +3165,7 @@ class BackendHealthRecord {
     required this.diagnosisSummary,
     required this.hasDiagnosis,
     this.primaryProfessional = '',
+    this.updatedBy = '',
     this.updatedAt,
     this.medicationCount = 0,
     this.medications = const [],
@@ -3177,6 +3178,7 @@ class BackendHealthRecord {
       diagnosisSummary: json['diagnosis_summary']?.toString() ?? '',
       hasDiagnosis: json['has_diagnosis'] == true,
       primaryProfessional: json['primary_professional']?.toString() ?? '',
+      updatedBy: json['updated_by']?.toString() ?? '',
       updatedAt: parseWibStored(json['updated_at']?.toString()),
       medicationCount: (json['medication_count'] as num?)?.toInt() ?? 0,
       medications: medsList
@@ -3191,11 +3193,22 @@ class BackendHealthRecord {
   final String diagnosisSummary;
   final bool hasDiagnosis;
   final String primaryProfessional;
+
+  /// Nama penulis diagnosis terakhir, berasal dari `audit_logs.actor_id`
+  /// yang di-resolve ke `users.display_name` di sisi server.
+  final String updatedBy;
   final DateTime? updatedAt;
   final int medicationCount;
 
   /// Daftar obat aktif pasien (diisi server sejak perbaikan Bug #5b).
   final List<BackendHealthRecordMed> medications;
+
+  /// Nama penulis diagnosis terakhir. `updatedBy` berasal dari audit_logs
+  /// (kebenaran sebenarnya); `primaryProfessional` hanya fallback untuk data
+  /// lama yang belum punya jejak audit. JANGAN dibalik: primaryProfessional
+  /// adalah link aktif pertama, bukan penulis diagnosis.
+  String get authorName =>
+      updatedBy.isNotEmpty ? updatedBy : primaryProfessional;
 }
 
 /// Item obat dalam respons health record (Bug #5b).

@@ -289,7 +289,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                   else if (_healthRecord?.hasDiagnosis == true)
                     _DiagnosisCard(
                       diagnosis: _healthRecord!.diagnosisSummary,
-                      professional: _healthRecord!.primaryProfessional,
+                      professional: _healthRecord!.authorName,
                       updatedAt: _healthRecord!.updatedAt,
                     )
                   else
