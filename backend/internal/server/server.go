@@ -43,6 +43,8 @@ type Server struct {
 	sos *notify.FonnteSender
 	// calendar nil = Google Calendar/Meet belum dikonfigurasi (client secret kosong); tipe interface kecil agar bisa diuji fake (meet.go).
 	calendar meetCalendar
+	// Mencegah refresh terjadwal ganda pada proses yang sama.
+	googleRefreshMu sync.Mutex
 }
 
 type registerRequest struct {

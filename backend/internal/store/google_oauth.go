@@ -39,13 +39,14 @@ type GoogleOAuthToken struct {
 //     grant LAMA DIPERTAHANKAN: memperbarui access token tidak memperpanjang
 //     umur refresh token, sehingga umur izin tidak boleh ter-reset.
 //
-// updated_at selalu ditulis ulang pada tiap panggilan (untuk audit "kapan
-// terakhir disentuh"), karena itu umur refresh token dihitung dari
-// refresh_token_issued_at, bukan updated_at.
+// updated_at dan last_refreshed_at selalu ditulis atomik dengan token/expiry.
+// Umur refresh token tetap dihitung dari refresh_token_issued_at, bukan waktu
+// refresh access token. Job berkala memakai SaveGoogleTokenRefresh agar tidak
+// menimpa consent yang berubah saat request Google berjalan.
 func (s *Store) UpsertGoogleToken(ctx context.Context, userID, refreshToken, accessToken string, expiry time.Time, scope, subject string, newGrant bool) error {
 	now := clock.Now()
-	const q = `INSERT INTO google_oauth_tokens (user_id, refresh_token, access_token, token_expiry, scope, updated_at, google_subject, refresh_token_issued_at)
-		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8)
+	const q = `INSERT INTO google_oauth_tokens (user_id, refresh_token, access_token, token_expiry, scope, updated_at, google_subject, refresh_token_issued_at, last_refreshed_at)
+		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8, $6)
 		ON CONFLICT (user_id) DO UPDATE SET
 			refresh_token = EXCLUDED.refresh_token,
 			access_token  = EXCLUDED.access_token,
@@ -53,6 +54,7 @@ func (s *Store) UpsertGoogleToken(ctx context.Context, userID, refreshToken, acc
 			scope         = EXCLUDED.scope,
 			google_subject = EXCLUDED.google_subject,
 			updated_at    = EXCLUDED.updated_at,
+			last_refreshed_at = EXCLUDED.last_refreshed_at,
 			refresh_token_issued_at = CASE WHEN $9 THEN EXCLUDED.refresh_token_issued_at
 				ELSE google_oauth_tokens.refresh_token_issued_at END`
 	_, err := s.db.ExecContext(ctx, q, userID, refreshToken, accessToken, expiry, scope, now, subject, now, newGrant)
@@ -107,34 +109,49 @@ func (s *Store) GetGoogleTokenInfo(ctx context.Context, userID string) (GoogleTo
 	return info, nil
 }
 
-// GoogleTokenGrant merangkum kapan refresh token Google seorang user
-// diterbitkan. Dipakai sweeper umur token (RunGoogleTokenExpiryCheck).
-type GoogleTokenGrant struct {
-	UserID   string
-	IssuedAt time.Time
+// DeleteGoogleToken menghapus token OAuth Google milik user (mis. saat
+// unlink atau revokasi akses). Tidak error bila baris tidak ada.
+func (s *Store) DeleteGoogleToken(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM google_oauth_tokens WHERE user_id = $1`, userID)
+	return err
 }
 
-// ListGoogleTokenGrantAges mengembalikan tanggal grant refresh token untuk
-// SEMUA user yang masih punya refresh token (refresh_token tidak kosong).
-// Baris lama tanpa refresh_token_issued_at memakai updated_at sebagai
-// perkiraan (COALESCE), konsisten dengan GetGoogleTokenInfo.
-func (s *Store) ListGoogleTokenGrantAges(ctx context.Context) ([]GoogleTokenGrant, error) {
-	const q = `SELECT user_id, COALESCE(refresh_token_issued_at, updated_at)
-		FROM google_oauth_tokens
-		WHERE COALESCE(refresh_token, '') <> ''
-		ORDER BY COALESCE(refresh_token_issued_at, updated_at) ASC`
-	rows, err := s.db.QueryContext(ctx, q)
+// GoogleTokenRefreshCandidate merangkum satu token yang perlu di-refresh oleh
+// job auto-refresh (RunGoogleTokenRefresh): user, refresh token, dan metadata
+// yang diperlukan untuk memanggil endpoint token Google lalu menyimpannya
+// kembali lewat SaveGoogleTokenRefresh.
+type GoogleTokenRefreshCandidate struct {
+	UserID        string
+	RefreshToken  string
+	Scope         string
+	GoogleSubject string
+}
+
+// ListGoogleTokensDueForRefresh mengambil profesional aktif yang identitas
+// Google-nya masih cocok. Token jatuh tempo saat access token hampir habis
+// (expiryBefore), atau pemeliharaan tujuh hari terlewati (maintenanceBefore).
+// Refresh access token yang diperlukan tidak menunggu jadwal pemeliharaan.
+func (s *Store) ListGoogleTokensDueForRefresh(ctx context.Context, maintenanceBefore, expiryBefore time.Time) ([]GoogleTokenRefreshCandidate, error) {
+	const q = `SELECT t.user_id, t.refresh_token, COALESCE(t.scope, ''), t.google_subject
+		FROM google_oauth_tokens t
+		JOIN users u ON u.id = t.user_id
+		WHERE u.role = 'professional' AND u.disabled_at IS NULL
+		  AND u.sso_provider = 'google' AND u.sso_id = t.google_subject
+		  AND COALESCE(t.refresh_token, '') <> ''
+		  AND (t.last_refreshed_at IS NULL OR t.last_refreshed_at <= $1 OR t.token_expiry <= $2)
+		ORDER BY t.token_expiry ASC`
+	rows, err := s.db.QueryContext(ctx, q, maintenanceBefore, expiryBefore)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var out []GoogleTokenGrant
+	var out []GoogleTokenRefreshCandidate
 	for rows.Next() {
-		var g GoogleTokenGrant
-		if err := rows.Scan(&g.UserID, &g.IssuedAt); err != nil {
+		var c GoogleTokenRefreshCandidate
+		if err := rows.Scan(&c.UserID, &c.RefreshToken, &c.Scope, &c.GoogleSubject); err != nil {
 			return nil, err
 		}
-		out = append(out, g)
+		out = append(out, c)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -142,9 +159,29 @@ func (s *Store) ListGoogleTokenGrantAges(ctx context.Context) ([]GoogleTokenGran
 	return out, nil
 }
 
-// DeleteGoogleToken menghapus token OAuth Google milik user (mis. saat
-// unlink atau revokasi akses). Tidak error bila baris tidak ada.
-func (s *Store) DeleteGoogleToken(ctx context.Context, userID string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM google_oauth_tokens WHERE user_id = $1`, userID)
+// SaveGoogleTokenRefresh menyimpan hasil refresh dan waktunya secara atomik,
+// tanpa menghidupkan kembali token yang sudah dilepas atau menimpa consent baru.
+// Tanggal grant dipertahankan: refresh tidak menghapus batas Testing tujuh hari.
+func (s *Store) SaveGoogleTokenRefresh(ctx context.Context, userID, previousRefresh, refreshToken, accessToken string, expiry time.Time) (bool, error) {
+	result, err := s.db.ExecContext(ctx, `UPDATE google_oauth_tokens t
+		SET refresh_token = $3, access_token = $4, token_expiry = $5,
+		    last_refreshed_at = $6, updated_at = $6
+		WHERE t.user_id = $1 AND t.refresh_token = $2
+		  AND EXISTS (SELECT 1 FROM users u WHERE u.id = t.user_id
+		    AND u.role = 'professional' AND u.disabled_at IS NULL
+		    AND u.sso_provider = 'google' AND u.sso_id = t.google_subject)`,
+		userID, previousRefresh, refreshToken, accessToken, expiry, clock.Now())
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	return n == 1, err
+}
+
+// DeleteGoogleTokenIfUnchanged membuang token yang ditolak permanen hanya bila
+// belum diganti oleh consent baru selama request refresh berjalan.
+func (s *Store) DeleteGoogleTokenIfUnchanged(ctx context.Context, userID, refreshToken string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM google_oauth_tokens WHERE user_id = $1 AND refresh_token = $2`, userID, refreshToken)
 	return err
 }

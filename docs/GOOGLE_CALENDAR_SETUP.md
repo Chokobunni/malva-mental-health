@@ -314,36 +314,63 @@ Selama *Testing*, Google hanya menerbitkan refresh token berlaku **7 hari**
 sejak consent. Sebelumnya aplikasi tidak punya mekanisme apa pun: begitu hari
 ke-8, `googleCalendarReady` gagal, link Meet tidak bisa dibuat, dan profesional
 baru sadar saat menekan "Hubungkan Google Calendar". Sekarang batas itu
-**terkelola**:
+**dikelola**, dan sepenuhnya **senyap bagi pengguna**:
 
 1. **Server mencatat tanggal grant** terpisah dari `updated_at`
    (`google_oauth_tokens.refresh_token_issued_at`). Auto-refresh access token
    jangka pendek **tidak** mereset tanggal ini — hanya penukaran authorization
    code (consent baru) yang memperbaruinya.
 2. **`meet-status` memberi tahu lebih awal.** Saat umur grant mencapai
-   `TTL-1` hari, `reason` menjadi `token_hampir_kedaluwarsa` (link Meet **masih**
-   bisa dibuat), lengkap dengan `refresh_token_expires_in_days`.
-3. **Notifikasi proaktif H-1.** Sweeper 10 menit menjalankan
-   `RunGoogleTokenExpiryCheck`: profesional menerima notifikasi
-   *"Izin Google Calendar perlu diperbarui"* (maksimal sekali per hari per
-   grant). Teksnya mengarahkan ke **Pengaturan → Akun Google → Perbarui izin**.
+   `TTL-2` hari, `reason` menjadi `token_hampir_kedaluwarsa` (link Meet **masih**
+   bisa dibuat), lengkap dengan `refresh_token_expires_in_days`. Ini hanya
+   status di layar — **tidak ada** push, banner, atau dialog.
+3. **Refresh access token sebelum habis, pemeliharaan setiap 7 hari.** Sweeper
+   10 menit menjalankan `RunGoogleTokenRefresh` untuk profesional aktif dengan
+   identitas Google yang masih cocok. Access token (biasanya berlaku sekitar
+   satu jam) diperbarui bila sisa umurnya ≤15 menit. Jadwal pemeliharaan **7 hari**
+   menjadi batas cadangan bagi access token yang berumur lebih panjang, bukan
+   pengganti refresh sebelum expiry. `google_oauth_tokens.last_refreshed_at`
+   dicatat atomik bersama access token dan expiry; refresh token rotasi ikut
+   disimpan. Token `invalid_grant` dihapus agar tidak dicoba tanpa akhir.
+   **Tidak ada notifikasi** baru ke pengguna. Migrasi 030 menghapus notifikasi
+   `google_calendar_expiring` lama beserta antrean outbox; kegagalan hanya masuk
+   log operator tanpa token atau body respons Google.
 4. **Satu tombol perpanjangan.** Kartu Akun Google menampilkan tombol
    **"Perbarui izin sekarang"** yang memaksa otorisasi Google **baru** (fresh
    consent), sehingga refresh token diterbitkan ulang dan berlaku 7 hari lagi.
 
-### d. Mematikan peringatan saat nanti publish
+> **Jujur soal batas 7 hari.** Untuk OAuth External dengan scope Calendar,
+> status **Testing** membatasi refresh token sampai tujuh hari. **Tidak ada cara
+> programatik untuk memperpanjangnya**: refresh hanya menjaga *access token*
+> segar dan menangkap rotasi. Status **Production** menghapus batas khusus
+> Testing, bukan menjamin token abadi; token masih bisa dicabut atau berakhir
+> karena kebijakan Google lain. Publish app (langkah berikut), lalu consent
+> ulang bila token Testing lama sudah tidak berlaku.
+
+**Langkah persis mem-publish (menghapus batas 7 hari):**
+
+1. Buka <https://console.cloud.google.com/apis/credentials/consent?project=malva-7084e>
+   → pastikan project **malva-7084e** terpilih.
+2. Di halaman **OAuth consent screen**, tekan **PUBLISH APP** → **Confirm**.
+3. Status berubah dari *Testing* menjadi *In production*. Setelah itu refresh
+   token tidak lagi dibatasi 7 hari (pengguna masih melihat peringatan
+   "unverified" sampai verifikasi formal Google disetujui — lihat bagian 3).
+
+### d. Mematikan status "hampir kedaluwarsa" saat nanti publish
 
 Setelah consent screen di-*publish* dan refresh token tidak lagi dibatasi 7
-hari, matikan peringatan agar tidak ada notifikasi palsu:
+hari, matikan status peringatan agar tidak muncul `token_hampir_kedaluwarsa`
+palsu:
 
 ```bash
 # backend/.env
 MALVA_GOOGLE_REFRESH_TOKEN_TTL_DAYS=0
 ```
 
-`0` menonaktifkan pemeriksaan umur (tidak ada notifikasi, `meet-status` tidak
-pernah mengembalikan `token_hampir_kedaluwarsa`). Default adalah `7` selama
-mode *Testing*.
+`0` menonaktifkan pemeriksaan umur (`meet-status` tidak pernah mengembalikan
+`token_hampir_kedaluwarsa`). Default adalah `7` selama mode *Testing*. Job
+auto-refresh tetap berjalan terlepas dari nilai ini (ia hanya menjaga access
+token tetap segar).
 
 ---
 

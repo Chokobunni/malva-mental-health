@@ -86,7 +86,7 @@ func (c *CalendarService) getClient(ctx context.Context, professionalUserID stri
 			// token agar status berubah dari "aktif" (bohong) menjadi "perlu
 			// tautkan ulang", dan percobaan berikutnya gagal cepat tanpa
 			// memanggil Google lagi.
-			if derr := c.store.DeleteGoogleToken(ctx, professionalUserID); derr != nil {
+			if derr := c.store.DeleteGoogleTokenIfUnchanged(ctx, professionalUserID, stored.RefreshToken); derr != nil {
 				// Kegagalan menghapus tidak mengubah hasil akhir: pemanggil
 				// tetap harus menautkan ulang.
 				_ = derr
@@ -101,11 +101,15 @@ func (c *CalendarService) getClient(ctx context.Context, professionalUserID stri
 		if refresh == "" {
 			refresh = stored.RefreshToken // refresh token tidak selalu dikembalikan
 		}
-		// Auto-refresh access token BUKAN grant baru: pertahankan tanggal grant
-		// lama agar umur refresh token tidak ter-reset (newGrant=false).
-		if uerr := c.store.UpsertGoogleToken(ctx, professionalUserID, refresh, newTok.AccessToken, newTok.Expiry, stored.Scope, stored.GoogleSubject, false); uerr != nil {
-			// Log saja, jangan gagalkan operasi kalender.
-			_ = uerr
+		// Tanggal grant tetap; jangan hidupkan kembali token yang dilepas atau
+		// menimpa consent baru saat Google sedang menjawab request ini.
+		saved, uerr := c.store.SaveGoogleTokenRefresh(ctx, professionalUserID,
+			stored.RefreshToken, refresh, newTok.AccessToken, newTok.Expiry)
+		if uerr != nil {
+			return nil, fmt.Errorf("gagal menyimpan refresh token Google: %w", uerr)
+		}
+		if !saved {
+			return nil, ErrReauthNeeded
 		}
 	}
 	return newTok, nil

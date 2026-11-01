@@ -170,17 +170,50 @@ func (s *Server) googleRefreshTokenTTL() time.Duration {
 	return time.Duration(s.cfg.GoogleRefreshTokenTTLDays) * 24 * time.Hour
 }
 
-// refreshTokenExpiringSoon melaporkan apakah umur grant refresh token sudah
-// mencapai ambang peringatan (TTL dikurangi 1 hari). Mengembalikan false bila
-// peringatan dinonaktifkan (TTL 0). Tidak mengubah meetReady: link Meet tetap
-// bisa dibuat selama token belum mati.
-func (s *Server) refreshTokenExpiringSoon(info store.GoogleTokenInfo) bool {
-	ttl := s.googleRefreshTokenTTL()
+// googleTokenWarnLead adalah JENDELA PERINGATAN: berapa lama SEBELUM izin
+// benar-benar mati status mulai berubah menjadi `token_hampir_kedaluwarsa` di
+// endpoint meet-status. Ini HANYA memengaruhi status yang dilihat profesional
+// di aplikasi — TIDAK mengirim notifikasi/push/banner/dialog apa pun, sesuai
+// keputusan produk bahwa pengguna tidak boleh terganggu notifikasi sistem.
+//
+// Jendela dua hari mempertahankan klasifikasi status selama Testing. Link Meet
+// tetap dapat dibuat dan pasien tidak diblokir hanya karena umur grant.
+// Ambang hanya ditetapkan di sini, tidak diduplikasi di job latar belakang.
+const googleTokenWarnLead = 48 * time.Hour
+
+// googleTokenWarnFrom menghitung titik mulai peringatan untuk sebuah TTL.
+// Mengembalikan false bila peringatan dinonaktifkan (TTL <= 0). Jendela
+// peringatan tidak pernah melebihi setengah TTL, agar TTL pendek (mis. 1 hari)
+// tidak membuat status "hampir kedaluwarsa" menyala terus sejak awal dan
+// menghilangkan maknanya.
+func googleTokenWarnFrom(ttl time.Duration) (time.Duration, bool) {
 	if ttl <= 0 {
+		return 0, false
+	}
+	lead := googleTokenWarnLead
+	if half := ttl / 2; lead > half {
+		lead = half
+	}
+	return ttl - lead, true
+}
+
+// googleTokenExpiringSoon melaporkan apakah umur grant sudah mencapai titik
+// mulai peringatan. Hanya dipakai meetStatusReason lewat refreshTokenExpiringSoon;
+// tidak ada ambang terpisah atau notifikasi dari job latar belakang.
+func googleTokenExpiringSoon(issuedAt, now time.Time, ttl time.Duration) bool {
+	warnFrom, ok := googleTokenWarnFrom(ttl)
+	if !ok {
 		return false
 	}
-	warnFrom := ttl - 24*time.Hour
-	return clock.Now().Sub(info.RefreshTokenIssuedAt) >= warnFrom
+	return now.Sub(issuedAt) >= warnFrom
+}
+
+// refreshTokenExpiringSoon melaporkan apakah umur grant refresh token sudah
+// mencapai ambang peringatan. Mengembalikan false bila peringatan dinonaktifkan
+// (TTL 0). Tidak mengubah meetReady: link Meet tetap bisa dibuat selama token
+// belum mati.
+func (s *Server) refreshTokenExpiringSoon(info store.GoogleTokenInfo) bool {
+	return googleTokenExpiringSoon(info.RefreshTokenIssuedAt, clock.Now(), s.googleRefreshTokenTTL())
 }
 
 // meetStatusHandler menangani GET /v1/professionals/{professional_id}/meet-status.
