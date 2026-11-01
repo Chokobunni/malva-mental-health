@@ -217,6 +217,38 @@ bila ada). UI Flutter memakai `code` untuk menampilkan pesan actionable.
 > lalu mengirim ulang code yang sama — dijamin `invalid_grant`. Karena itu
 > kegagalan identitas memakai `422`.
 
+### Scope yang WAJIB diminta: `openid` + `email` + `calendar.events`
+
+Aplikasi Flutter **tidak** boleh hanya meminta `calendar.events`. Saat
+mengaktifkan Google Calendar, klien meminta tiga scope sekaligus
+(`GoogleAuthService.calendarAuthScopes`):
+
+```
+openid
+email
+https://www.googleapis.com/auth/calendar.events
+```
+
+Alasannya, setelah authorization code ditukar, server perlu memastikan
+**identitas** akun Google (untuk mencocokkan dengan akun Malva yang menautkan):
+
+1. **`openid` adalah syarat `id_token`.** Token endpoint Google hanya
+   mengembalikan `id_token` bila scope `openid` ikut diminta. Tanpa `openid`,
+   `id_token` selalu kosong sehingga server tidak bisa memvalidasi identitas
+   dari token itu.
+2. **Endpoint UserInfo menolak token tanpa `openid`/`email`/`profile`.**
+   Sebagai fallback, server memanggil `https://www.googleapis.com/oauth2/v3/userinfo`
+   memakai access token hasil penukaran. Endpoint ini **mensyaratkan** salah
+   satu dari scope `openid`, `email`, atau `profile`. Access token yang hanya
+   punya `calendar.events` akan ditolak `403`, sehingga fallback pun gagal.
+
+Akibatnya, bila `openid`/`email` tidak diminta, kedua jalur identitas mustahil
+berhasil dan `POST /v1/auth/google-token-exchange` membalas **`422
+google_identitas_gagal`** — meskipun penukaran kode dan pemberian izin Calendar
+sendiri sukses. Karena itu `openid` dan `email` **wajib** disertakan bersama
+`calendar.events`; jangan menghapusnya dari daftar scope klien (ada test regresi
+`test/google_auth_service_scopes_test.dart` yang menjaganya).
+
 ---
 
 ## 9. Mode Testing: umur refresh token 7 hari
