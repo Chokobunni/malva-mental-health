@@ -112,4 +112,6 @@ Database uji selalu kosong, jadi semua migrasi dijalankan dari awal (ledger tida
 
 ## Ringkasan migrasi saat ini
 
-`001_initial` → `027_backfill_patient_professional_links` (27 migrasi). Nomor berikutnya: **028**.
+`001_initial` → `030_google_token_last_refreshed` (30 migrasi). Nomor berikutnya: **031**.
+Migrasi 029 menghapus hanya identitas pasien contoh yang ditetapkan; 030 menambah
+`last_refreshed_at` serta membersihkan notifikasi sistem Google yang dihentikan.

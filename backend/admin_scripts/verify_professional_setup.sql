@@ -78,11 +78,11 @@ WHERE u.role = 'professional'
 GROUP BY 1 ORDER BY 2 DESC;
 
 \echo ''
-\echo '=== [7] Akun pasien demo (untuk alur booking & review) ==='
+\echo '=== [7] Akun seed profesional ==='
+-- Pasien contoh tidak lagi disemai; hanya profesional seed yang diperiksa.
 SELECT u.email, u.display_name, u.role::text AS role
 FROM users u
-WHERE u.email IN ('preview_pasien@malva.app')
-   OR u.email LIKE '%@malva.local'
+WHERE u.email LIKE '%@malva.local'
 ORDER BY u.email;
 
 \echo ''

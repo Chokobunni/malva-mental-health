@@ -1034,7 +1034,15 @@ Refresh token Google OAuth per profesional untuk Google Calendar + Meet.
 | `token_expiry` | timestamptz | NOT NULL, DEFAULT now() | Kedaluwarsa access token |
 | `scope` | text | NOT NULL, DEFAULT '' | Scope yang diberikan |
 | `google_subject` | varchar(255) | NULLABLE (021) | Subjek Google pemilik grant (validasi Calendar) |
+| `refresh_token_issued_at` | timestamptz | NULLABLE (024) | Tanggal grant; tidak berubah saat access token di-refresh |
+| `last_refreshed_at` | timestamptz | NULLABLE (030) | Refresh sukses; disimpan atomik bersama access token dan expiry |
 | `updated_at` | timestamptz | NOT NULL, DEFAULT now() | Pembaruan terakhir |
+
+Sweeper sepuluh menit menyegarkan access token yang habis ≤15 menit lagi, atau
+ketika pemeliharaan tujuh hari jatuh tempo. Hanya profesional aktif dengan
+identitas Google yang cocok diproses. `invalid_grant` menghapus token lama tanpa
+notifikasi. Migrasi 030 juga membersihkan notifikasi `google_calendar_expiring`
+beserta antrean outbox lama. Ini tidak memperpanjang batas refresh token Testing.
 
 ### 3.44 psychological_tests_catalog (migrasi 006)
 

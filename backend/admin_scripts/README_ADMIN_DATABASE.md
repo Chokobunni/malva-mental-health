@@ -82,7 +82,7 @@ SELECT
     is_default
 FROM emergency_contacts
 WHERE patient_id = (
-    SELECT id FROM users WHERE email = 'preview_pasien@malva.app'
+    SELECT id FROM users WHERE email = 'pasien@contoh.com'
 );
 ```
 

@@ -1,13 +1,16 @@
--- Migration 007: Seed direktori profesional demo + akun pasien demo.
+-- Migration 007: Seed direktori profesional demo.
 -- Idempoten: aman dijalankan ulang (ON CONFLICT / NOT EXISTS).
 -- Password profesional demo: Dokter12345 (bcrypt) — untuk 4 akun:
 --   1234567890123456@ / 8888777766665555@ / 7777666655554444@ /
 --   6666555544443333@ professional.malva.local
--- Password pasien demo preview_pasien@malva.app: Malva1234! (bcrypt).
+--
+-- Akun pasien contoh DIHAPUS SENGAJA. Jangan disemai kembali; migrasi 029
+-- membersihkan lingkungan lama tanpa menyentuh pasien sungguhan.
 
 -- ============================================================
 -- 1. USERS
 -- ============================================================
+-- Hanya akun profesional demo. (Baris pasien demo sengaja tidak ada.)
 INSERT INTO users (id, email, password_hash, role, display_name) VALUES
   ('a1111111-1111-4111-8111-111111111111',
    '1234567890123456@professional.malva.local',
@@ -24,11 +27,7 @@ INSERT INTO users (id, email, password_hash, role, display_name) VALUES
   ('a4444444-4444-4444-8444-444444444444',
    '6666555544443333@professional.malva.local',
    '$2a$10$zOAc6NHTGQmTiX37h.PL1epTDkYaKw1dOGMKqaPVwPNuXGB35mvSa',
-   'professional', 'Andi Wijaya, M.Psi'),
-  ('b0000000-0000-4000-8000-000000000000',
-   'preview_pasien@malva.app',
-   '$2a$10$6PpCIvXRAIk7e8X4zXyZpuE4Y1t.YcbnmSAmgJjDp2SuFR0pLDjkW',
-   'patient', 'Pasien Preview')
+   'professional', 'Andi Wijaya, M.Psi')
 ON CONFLICT (email) DO NOTHING;
 
 -- ============================================================
@@ -188,37 +187,7 @@ WHERE u.email LIKE '%@professional.malva.local'
   );
 
 -- ============================================================
--- 6. DOCTOR REVIEWS (dari akun pasien demo)
+-- 6. DOCTOR REVIEWS
 -- ============================================================
-INSERT INTO doctor_reviews
-  (professional_id, patient_id, helpfulness_percent, review_text, helpful)
-SELECT
-  doc.id,
-  pat.id,
-  v.score,
-  v.text,
-  v.score >= 80
-FROM (SELECT id, email FROM users WHERE email LIKE '%@professional.malva.local') AS doc
-CROSS JOIN (SELECT id FROM users WHERE email = 'preview_pasien@malva.app') AS pat
-CROSS JOIN (VALUES
-  (95, 'Sangat terbantu. Penjelasannya jelas dan menenangkan.'),
-  (90, 'Sesi berjalan nyaman, saya merasa didengarkan.'),
-  (85, 'Diberi langkah praktis yang bisa langsung dicoba.'),
-  (75, 'Bagus, hanya jadwalnya cukup cepat penuh.')
-) AS v(score, text)
-WHERE NOT EXISTS (
-  SELECT 1 FROM doctor_reviews r
-  WHERE r.professional_id = doc.id AND r.patient_id = pat.id
-);
-
--- Samakan counter cache dengan jumlah review demo.
-UPDATE professional_credentials pc
-SET review_count = sub.cnt,
-    helpfulness_count = sub.helpful_cnt
-FROM (
-  SELECT professional_id, COUNT(*) AS cnt,
-         COUNT(*) FILTER (WHERE helpful) AS helpful_cnt
-  FROM doctor_reviews
-  GROUP BY professional_id
-) AS sub
-WHERE pc.user_id = sub.professional_id;
+-- Review dari pasien contoh sengaja tidak disemai. Review pasien sungguhan
+-- tetap masuk melalui aplikasi.

@@ -158,6 +158,18 @@ Malva **tidak memakai GORM/AutoMigrate**. Skema dikelola lewat file SQL bernomor
 6. **Otomatis ter-apply**: CI (`.github/workflows/backend-ci.yml`) dan `backend/deploy/scripts/apply_migrations.sh` memindai `migrations/*.sql`. Tidak perlu langkah manual tambahan selain menambah file.
 7. Semua kolom waktu memakai `timestamptz`.
 
+## Token Google dan pasien contoh
+
+- Akun pasien contoh yang dihapus pada migrasi 029 tidak boleh disemai kembali.
+- Token Google dikelola senyap: tanpa notifikasi izin kedaluwarsa, push, banner,
+  atau dialog baru. Migrasi 030 membersihkan notification/outbox lama.
+- Sweeper sepuluh menit me-refresh access token yang tersisa ≤15 menit, dengan
+  pemeliharaan cadangan tujuh hari. `last_refreshed_at` atomik dengan token/expiry;
+  rotasi refresh token disimpan, umur grant tidak direset.
+- Batas refresh token tujuh hari mode Testing tidak dapat diperpanjang otomatis.
+  Operator harus OAuth consent screen → Publish app; Production bukan jaminan
+  token abadi. Log hanya kode galat aman, bukan token/body Google.
+
 ## Konvensi Logging
 
 - Gunakan `log/slog` melalui helper terpusat `internal/logging` (dibuat di Batch B).

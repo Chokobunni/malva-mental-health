@@ -160,7 +160,9 @@ func TestMigration028NoOpTanpaLink(t *testing.T) {
 	}
 
 	// Profesional "hantu" tanpa link apa pun: tidak ada yang bisa diubah.
-	const phantom = "m28phantom-prof"
+	// patient_professional_links.professional_id bertipe uuid, jadi nilai hantu
+	// wajib berupa UUID valid yang dijamin tidak punya baris (bukan string biasa).
+	const phantom = "00000000-0000-0000-0000-0000000000ff"
 	var before int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM patient_professional_links
 		WHERE professional_id = $1`, phantom).Scan(&before); err != nil {

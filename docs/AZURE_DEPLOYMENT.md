@@ -69,7 +69,7 @@ Indonesia Central = Jakarta).
 1. `pg_dump --data-only --column-inserts --on-conflict-do-nothing` dari lokal.
 2. **Petakan ID**: user yang sama (berdasarkan email) punya ID berbeda antara
    seed lokal dan seed Azure. Ganti ID lokal → ID Azure di file dump sebelum
-   import (contoh pemetaan: `preview_pasien@malva.app`, 2 akun profesional seed).
+   import (contoh pemetaan: email akun pasien sungguhan, 2 akun profesional seed).
 3. Import users dulu, lalu tabel lain (agar FK terpenuhi).
 4. Selalu pakai `--column-inserts` bila urutan kolom kedua DB berbeda.
 

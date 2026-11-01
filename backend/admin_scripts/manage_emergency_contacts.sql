@@ -38,7 +38,7 @@ SELECT
     ec.created_at
 FROM emergency_contacts ec
 WHERE ec.patient_id = (
-    SELECT id FROM users WHERE email = 'preview_pasien@malva.app'
+    SELECT id FROM users WHERE email = 'pasien@contoh.com'
 )
 ORDER BY ec.is_default DESC, ec.created_at ASC;
 
@@ -53,11 +53,11 @@ GROUP BY u.id, u.email, u.display_name
 ORDER BY contact_count DESC;
 
 -- 4. TAMBAH kontak darurat baru (ganti nilai sesuai kebutuhan)
---    Contoh: pasien preview_pasien@malva.app
+--    Contoh: pasien@contoh.com
 INSERT INTO emergency_contacts
     (patient_id, contact_name, contact_phone, relationship, is_default)
 VALUES
-    ((SELECT id FROM users WHERE email = 'preview_pasien@malva.app'),
+    ((SELECT id FROM users WHERE email = 'pasien@contoh.com'),
      'Ibu Sari', '081234567890', 'Ibu', false);
 
 -- 5. EDIT kontak (ganti nama/telepon/relasi berdasarkan id)
@@ -69,7 +69,7 @@ WHERE id = 'GANTI_DENGAN_UUID_KONTAK';
 
 -- 6. JADIKAN kontak utama (hanya satu default per pasien)
 UPDATE emergency_contacts SET is_default = false
-WHERE patient_id = (SELECT id FROM users WHERE email = 'preview_pasien@malva.app');
+WHERE patient_id = (SELECT id FROM users WHERE email = 'pasien@contoh.com');
 
 UPDATE emergency_contacts SET is_default = true
 WHERE id = 'GANTI_DENGAN_UUID_KONTAK';
@@ -80,4 +80,4 @@ WHERE id = 'GANTI_DENGAN_UUID_KONTAK';
 
 -- 8. HAPUS SEMUA kontak satu pasien (hati-hati!)
 DELETE FROM emergency_contacts
-WHERE patient_id = (SELECT id FROM users WHERE email = 'preview_pasien@malva.app');
+WHERE patient_id = (SELECT id FROM users WHERE email = 'pasien@contoh.com');
