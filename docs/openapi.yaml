@@ -33,6 +33,7 @@ tags:
   - name: emergency-contacts
   - name: crisis-alerts
   - name: crisis-incidents
+  - name: crisis-incident-log
   - name: sos-blast-status
   - name: credentials
   - name: upload
@@ -1545,6 +1546,28 @@ paths:
           required: true
           schema:
             type: string
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/OK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  "/v1/crisis-incident-log":
+    get:
+      tags:
+        - crisis-incident-log
+      summary: listCrisisIncidentLog
       security:
         - bearerAuth: []
       responses:

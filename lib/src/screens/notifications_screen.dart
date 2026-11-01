@@ -191,6 +191,10 @@ class _NotificationCard extends StatelessWidget {
   final BackendNotification item;
   final VoidCallback onTap;
 
+  // Jumlah pembaruan yang digabung menjadi digest harian (W1). Notifikasi
+  // biasa tidak punya digest_count → dianggap 1 (tanpa badge).
+  int get _digestCount => int.tryParse(item.data['digest_count'] ?? '') ?? 1;
+
   @override
   Widget build(BuildContext context) {
     final (icon, color) = switch (item.type) {
@@ -260,7 +264,28 @@ class _NotificationCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (!item.isRead)
+                    if (_digestCount > 1) ...[
+                      const SizedBox(width: 8),
+                      // Badge jumlah pembaruan yang digabung (digest harian).
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          '$_digestCount pembaruan',
+                          style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (!item.isRead) ...[
+                      const SizedBox(width: 8),
                       Container(
                         width: 10,
                         height: 10,
@@ -269,6 +294,7 @@ class _NotificationCard extends StatelessWidget {
                           color: MalvaColors.danger,
                         ),
                       ),
+                    ],
                   ],
                 ),
                 if (item.body.isNotEmpty) ...[

@@ -10,6 +10,12 @@ import '../../widgets/malva_components.dart';
 
 // ============================================================
 // CRISIS INCIDENT LOG (professional)
+//
+// Feed kronologis READ-ONLY: gabungan insiden SOS (crisis_incidents) dan flag
+// krisis screening (screening_sessions.crisis_flag) untuk SEMUA pasien yang
+// terhubung. Satu permintaan (GET /v1/crisis-incident-log), bukan N per pasien.
+// Tidak ada form review wajib. Profesional boleh (opsional) menandai insiden
+// SOS sebagai sudah ditangani tanpa harus menulis catatan.
 // ============================================================
 
 class CrisisIncidentLogScreen extends ConsumerStatefulWidget {
@@ -25,21 +31,16 @@ class CrisisIncidentLogScreen extends ConsumerStatefulWidget {
 
 class _CrisisIncidentLogScreenState
     extends ConsumerState<CrisisIncidentLogScreen> {
-  List<_IncidentRow> _rows = const [];
+  List<BackendCrisisLogItem> _items = const [];
+  int _total = 0;
+  int _unresolved = 0;
   bool _isLoading = true;
   String? _error;
-  final _notesController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _load();
-  }
-
-  @override
-  void dispose() {
-    _notesController.dispose();
-    super.dispose();
   }
 
   Future<void> _load() async {
@@ -60,43 +61,19 @@ class _CrisisIncidentLogScreenState
       _error = null;
     });
     try {
-      final links = await apiClient.listPatientProfessionalLinks(
-        accessToken: accessToken,
-      );
-      final rows = <_IncidentRow>[];
-      await Future.wait(links.map((link) async {
-        try {
-          final incidents = await apiClient.listCrisisIncidents(
-            accessToken: accessToken,
-            patientId: link.patientId,
-          );
-          for (final inc in incidents) {
-            rows.add(_IncidentRow(
-              incident: inc,
-              patientName: link.patientDisplayName.isEmpty
-                  ? 'Pasien'
-                  : link.patientDisplayName,
-            ));
-          }
-        } on Object catch (_) {
-          // Satu pasien gagal tidak menggagalkan semuanya.
-        }
-      }));
-      rows.sort((a, b) {
-        final ca = a.incident.createdAt;
-        final cb = b.incident.createdAt;
-        if (ca == null || cb == null) return 0;
-        return cb.compareTo(ca);
-      });
+      final log =
+          await apiClient.getCrisisIncidentLog(accessToken: accessToken);
       if (!mounted) return;
       setState(() {
-        _rows = rows;
+        _items = log.items;
+        _total = log.total;
+        _unresolved = log.unresolved;
         _isLoading = false;
       });
     } on MalvaApiException catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.message;
+        _error = friendlyServerMessage(e.message);
         _isLoading = false;
       });
     } on Object catch (e) {
@@ -128,6 +105,7 @@ class _CrisisIncidentLogScreenState
                 child: Column(
                   children: [
                     Text(_error!,
+                        textAlign: TextAlign.center,
                         style: const TextStyle(
                             color: MalvaColors.danger,
                             fontWeight: FontWeight.w700)),
@@ -140,51 +118,54 @@ class _CrisisIncidentLogScreenState
                   ],
                 ),
               )
-            else if (_rows.isEmpty)
+            else if (_items.isEmpty)
               const EmptyState(
                 icon: Icons.shield_outlined,
-                title: 'Tidak ada incident',
+                title: 'Belum ada incident tercatat',
                 subtitle:
-                    'Incident krisis (SOS / screening) akan tercatat di sini dengan jejak resolusi.',
+                    'Insiden krisis (SOS / screening) dari pasien terhubung akan tampil di sini.',
               )
-            else
-              for (final row in _rows) ...[
-                _IncidentCard(
-                  row: row,
-                  onResolve: () => _openResolve(context, row),
+            else ...[
+              if (_total > 0)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '$_total incident • $_unresolved belum ditangani',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800, fontSize: 12.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              for (final item in _items) ...[
+                _CrisisLogCard(
+                  item: item,
+                  onResolve: item.isSos && !item.isResolved
+                      ? () => _resolveSos(context, item)
+                      : null,
                 ),
                 const SizedBox(height: 12),
               ],
+            ],
           ],
         ),
       ),
     );
   }
 
-  Future<void> _openResolve(BuildContext context, _IncidentRow row) async {
-    if (row.incident.status != 'active') return;
-    _notesController.clear();
+  /// Tandai insiden SOS sudah ditangani TANPA catatan (opsional, tidak wajib).
+  Future<void> _resolveSos(
+      BuildContext context, BackendCrisisLogItem item) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Tandai Crisis Resolved?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-                'Pasien: ${row.patientName}\nTrigger: ${row.incident.triggeredBy}'),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _notesController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Resolution notes (wajib)',
-                hintText: 'cth: Pasien sudah tenang, kontak keluarga...',
-              ),
-            ),
-          ],
-        ),
+        title: const Text('Tandai sudah ditangani?'),
+        content: Text('Insiden SOS pasien ${item.patientName} akan ditandai '
+            'sudah ditangani. Catatan tidak wajib diisi.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -195,37 +176,35 @@ class _CrisisIncidentLogScreenState
             style: compactFilledButtonStyle.copyWith(
               backgroundColor: const WidgetStatePropertyAll(MalvaColors.mint),
             ),
-            child: const Text('Mark Crisis Resolved'),
+            child: const Text('Tandai sudah ditangani'),
           ),
         ],
       ),
     );
     if (confirmed != true || !context.mounted) return;
-    final notes = _notesController.text.trim();
-    if (notes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Resolution notes wajib diisi.')),
-      );
-      return;
-    }
+    final apiClient = widget.apiClient;
+    final accessToken = widget.session?.accessToken;
+    if (apiClient == null || accessToken == null || accessToken.isEmpty) return;
     try {
-      await widget.apiClient!.resolveCrisisIncident(
-        accessToken: widget.session!.accessToken!,
-        incidentId: row.incident.id,
-        resolutionNotes: notes,
+      await apiClient.resolveCrisisIncident(
+        accessToken: accessToken,
+        incidentId: item.id,
+        resolutionNotes: '',
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Incident ditandai resolved. GPS otomatis dihapus.'),
+          content: Text('Incident ditandai sudah ditangani.'),
           backgroundColor: MalvaColors.mint,
         ),
       );
-      _load();
+      await _load();
     } on MalvaApiException catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: MalvaColors.danger),
+        SnackBar(
+            content: Text(friendlyServerMessage(e.message)),
+            backgroundColor: MalvaColors.danger),
       );
     } on Object catch (e) {
       if (!context.mounted) return;
@@ -236,22 +215,17 @@ class _CrisisIncidentLogScreenState
   }
 }
 
-class _IncidentRow {
-  const _IncidentRow({required this.incident, required this.patientName});
+class _CrisisLogCard extends StatelessWidget {
+  const _CrisisLogCard({required this.item, this.onResolve});
 
-  final BackendCrisisIncident incident;
-  final String patientName;
-}
-
-class _IncidentCard extends StatelessWidget {
-  const _IncidentCard({required this.row, required this.onResolve});
-
-  final _IncidentRow row;
-  final VoidCallback onResolve;
+  final BackendCrisisLogItem item;
+  final VoidCallback? onResolve;
 
   @override
   Widget build(BuildContext context) {
-    final active = row.incident.status == 'active';
+    // PIl sumber: SOS (merah) vs Screening (amber).
+    final isSos = item.isSos;
+    final pillColor = isSos ? MalvaColors.danger : MalvaColors.amber;
     return SoftCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -259,41 +233,63 @@ class _IncidentCard extends StatelessWidget {
           Row(
             children: [
               CircleAvatar(
-                backgroundColor: active
-                    ? MalvaColors.danger.withValues(alpha: 0.12)
-                    : MalvaColors.mint.withValues(alpha: 0.12),
-                child: Icon(Icons.person_rounded,
-                    color: active ? MalvaColors.danger : MalvaColors.mint),
+                backgroundColor: pillColor.withValues(alpha: 0.12),
+                child: Icon(
+                  isSos ? Icons.sos_rounded : Icons.fact_check_rounded,
+                  color: pillColor,
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(row.patientName,
+                    Text(item.patientName,
                         style: const TextStyle(fontWeight: FontWeight.w900)),
                     Text(
-                      formatIncidentDate(row.incident.createdAt),
+                      formatIncidentDate(item.createdAt),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
               StatusPill(
-                label: active ? 'ACTIVE' : 'RESOLVED',
-                color: active ? MalvaColors.danger : MalvaColors.mint,
-                icon: active
+                label: isSos ? 'SOS' : 'Screening',
+                color: pillColor,
+                icon: isSos
                     ? Icons.warning_amber_rounded
-                    : Icons.check_circle_rounded,
+                    : Icons.fact_check_rounded,
               ),
             ],
           ),
           const SizedBox(height: 10),
           Text(
-            'Safety Protocol triggered${row.incident.triggeredBy.isEmpty ? '' : ' • ${row.incident.triggeredBy}'}${row.incident.phq9Q9Score != null ? '\nPHQ-9 Q9 score ${row.incident.phq9Q9Score}' : ''}',
-            style: const TextStyle(fontWeight: FontWeight.w700),
+            item.title.isEmpty
+                ? (isSos ? 'SOS darurat' : 'Screening krisis')
+                : item.title,
+            style: const TextStyle(fontWeight: FontWeight.w800),
           ),
-          if (row.incident.resolutionNotes.isNotEmpty) ...[
+          if (item.detail.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(item.detail,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.black54)),
+          ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              StatusPill(
+                label: item.isResolved ? 'Sudah ditangani' : 'Belum ditangani',
+                color: item.isResolved ? MalvaColors.mint : MalvaColors.danger,
+                icon: item.isResolved
+                    ? Icons.check_circle_rounded
+                    : Icons.warning_amber_rounded,
+              ),
+            ],
+          ),
+          if (item.resolutionNotes.isNotEmpty) ...[
             const SizedBox(height: 8),
             Container(
               width: double.infinity,
@@ -302,19 +298,17 @@ class _IncidentCard extends StatelessWidget {
                 color: Colors.black.withValues(alpha: 0.04),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Text('Resolution notes\n${row.incident.resolutionNotes}'),
+              child: Text('Catatan penanganan\n${item.resolutionNotes}'),
             ),
           ],
-          if (active) ...[
+          if (onResolve != null) ...[
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
-              child: FilledButton.icon(
+              child: OutlinedButton.icon(
                 onPressed: onResolve,
-                style:
-                    FilledButton.styleFrom(backgroundColor: MalvaColors.mint),
                 icon: const Icon(Icons.check_rounded),
-                label: const Text('Mark Crisis Resolved'),
+                label: const Text('Tandai sudah ditangani'),
               ),
             ),
           ],
@@ -328,8 +322,6 @@ class _IncidentCard extends StatelessWidget {
 ///
 /// `created_at` insiden berasal dari server (UTC), jadi WAJIB `toWib()`
 /// lebih dulu — kalau tidak, insiden dini hari tercatat di tanggal kemarin.
-/// Tanggal sengaja TANPA padding (jam tetap `HH:mm`) seperti format yang
-/// sudah dirilis.
 String formatIncidentDate(DateTime? date) {
   if (date == null) return '';
   return formatWibDateTimeShort(date);

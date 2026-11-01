@@ -47,7 +47,6 @@ class ProfessionalDashboardScreen extends ConsumerStatefulWidget {
 
 class _ProfessionalDashboardScreenState
     extends ConsumerState<ProfessionalDashboardScreen> {
-  final Set<String> _reviewedScreeningIds = {};
   final Map<String, List<BackendProfessionalNote>> _professionalNotes = {};
 
   /// Pasien yang menolak/tidak membagikan data screening (403 access_denied
@@ -59,6 +58,8 @@ class _ProfessionalDashboardScreenState
   List<BackendPatientProfessionalLink> _links = const [];
   Map<String, List<BackendScreeningSession>> _screeningsByPatient = const {};
   List<_AuditEntry> _serverAuditEntries = const [];
+  List<BackendCareSession> _upcomingSessions = const [];
+  int _crisisLogCount = 0;
   String? _selectedPatientId;
   String _searchQuery = '';
   int _tabIndex = 0;
@@ -114,14 +115,6 @@ class _ProfessionalDashboardScreenState
   Widget build(BuildContext context) {
     final patients = _patientsForDashboard();
     final selected = _selectedPatient(patients);
-    // Dihitung SETELAH dedup agar konsisten dengan daftar yang benar-benar
-    // dirender. Satu screening krisis yang belum direview muncul di kedua
-    // antrean; tanpa dedup tombol "Lihat semua prioritas" bisa muncul
-    // padahal tidak ada item tambahan yang bisa dilihat.
-    final priorityCount = _dedupByScreening([
-      ..._crisisQueue(patients),
-      ..._reviewQueue(patients),
-    ]).length;
     return Scaffold(
       body: Column(
         children: [
@@ -178,47 +171,62 @@ class _ProfessionalDashboardScreenState
           ),
           Expanded(
             child: _tabIndex == 1
-                ? ProScheduleScreen(
-                    session: widget.session,
-                    apiClient: widget.apiClient,
+                ? Column(
+                    children: [
+                      // Aksi "buat meeting" dipindah ke tab Jadwal agar tetap
+                      // tersedia setelah tombolnya dilepas dari Dashboard.
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 14, 18, 4),
+                        child: _CreateMeetingButton(
+                          session: widget.session,
+                          apiClient: widget.apiClient,
+                        ),
+                      ),
+                      Expanded(
+                        child: ProScheduleScreen(
+                          session: widget.session,
+                          apiClient: widget.apiClient,
+                        ),
+                      ),
+                    ],
                   )
                 : RefreshIndicator(
                     onRefresh: _loadOnlineProfessionalData,
                     child: ListView(
                       padding: const EdgeInsets.all(18),
                       children: [
-                        // ---- TAB 0: DASHBOARD ----
+                        // Banner error ringkas (hanya bila pemuatan gagal).
+                        // Bukan "section" konten — sekadar pemberitahuan status
+                        // agar kegagalan server tidak senyap, dengan pesan
+                        // Indonesia yang ramah.
+                        if (_tabIndex == 0 && _onlineError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: SoftCard(
+                              bordered: true,
+                              color: MalvaColors.danger.withValues(alpha: 0.08),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.cloud_off_rounded,
+                                      color: MalvaColors.danger),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: Text(_onlineError!)),
+                                  TextButton(
+                                    onPressed: _loadOnlineProfessionalData,
+                                    child: const Text('Coba lagi'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        // ---- TAB 0 §1: Video call mendatang ----
                         if (_tabIndex == 0)
-                          _DashboardStatusStrip(
+                          const SectionLabel('Video call mendatang',
+                              icon: Icons.videocam_rounded),
+                        if (_tabIndex == 0)
+                          _UpcomingVideoCallSection(
+                            sessions: _upcomingVideoSessions,
                             isLoading: _isLoadingOnlineData,
-                            error: _onlineError,
-                            hasBackendSession:
-                                widget.session?.accessToken?.isNotEmpty == true,
-                            onRetry: _loadOnlineProfessionalData,
-                            syncStatus: _syncStatus,
-                            lastSyncTime: _lastSyncTime,
-                          ),
-                        if (_tabIndex == 0)
-                          const SectionLabel('Ringkasan',
-                              icon: Icons.insights_rounded),
-                        // ---- QUICK ACTION: Create Meeting ----
-                        if (_tabIndex == 0) ...[
-                          _CreateMeetingButton(
-                            session: widget.session,
-                            apiClient: widget.apiClient,
-                          ),
-                          const SizedBox(height: 14),
-                        ],
-                        if (_tabIndex == 0)
-                          _PriorityMetrics(
-                            patientCount: patients.length,
-                            crisisCount: _crisisQueue(patients).length,
-                            reviewCount: _reviewQueue(patients).length,
-                            onPatientsTap: _showActivePatientsSheet,
-                            onCrisisTap: () =>
-                                _showPriorityListSheet(crisisOnly: true),
-                            onReviewTap: () =>
-                                _showPriorityListSheet(crisisOnly: false),
                           ),
                         if (_tabIndex == 0) const SizedBox(height: 22),
                         // ---- TAB 2: PASIEN ----
@@ -232,33 +240,6 @@ class _ProfessionalDashboardScreenState
                                 setState(() => _searchQuery = value),
                           ),
                         if (_tabIndex == 2) const SizedBox(height: 14),
-                        if (_tabIndex == 0)
-                          SectionLabel(
-                            'Prioritas pasien',
-                            icon: Icons.priority_high_rounded,
-                            action: TextButton.icon(
-                              onPressed: _loadOnlineProfessionalData,
-                              icon: const Icon(Icons.refresh_rounded),
-                              label: const Text('Refresh'),
-                            ),
-                          ),
-                        if (_tabIndex == 0)
-                          _PriorityQueue(
-                            crisisQueue: _crisisQueue(patients),
-                            reviewQueue: _reviewQueue(patients),
-                            reviewedIds: _reviewedScreeningIds,
-                            onReview: _openScreeningReview,
-                            onOpenDetail: _showPriorityDetail,
-                          ),
-                        if (_tabIndex == 0 && priorityCount > 3)
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton(
-                              onPressed: () => _showPriorityListSheet(
-                                  crisisOnly: false, showAll: true),
-                              child: const Text('Lihat semua prioritas'),
-                            ),
-                          ),
                         // ---- TAB 0: Daftar pasien ringkas di dashboard ----
                         if (_tabIndex == 0 && patients.isNotEmpty) ...[
                           const SizedBox(height: 22),
@@ -361,6 +342,71 @@ class _ProfessionalDashboardScreenState
                               ),
                             ),
                         ],
+                        // ---- TAB 0 §3: Crisis Incident Log (satu pintu) ----
+                        if (_tabIndex == 0) ...[
+                          const SizedBox(height: 22),
+                          const SectionLabel('Crisis Incident Log',
+                              icon: Icons.shield_rounded),
+                          SoftCard(
+                            bordered: true,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CrisisIncidentLogScreen(
+                                  session: widget.session,
+                                  apiClient: widget.apiClient,
+                                ),
+                              ),
+                            ).then((_) => _loadOnlineProfessionalData()),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 14),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: (_crisisLogCount > 0
+                                          ? MalvaColors.danger
+                                          : MalvaColors.mint)
+                                      .withValues(alpha: 0.12),
+                                  child: Icon(Icons.shield_rounded,
+                                      color: _crisisLogCount > 0
+                                          ? MalvaColors.danger
+                                          : MalvaColors.mint),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text('Riwayat insiden krisis',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w900)),
+                                      Text(
+                                        _crisisLogCount > 0
+                                            ? '$_crisisLogCount belum ditangani'
+                                            : 'Semua sudah ditangani',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurfaceVariant),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (_crisisLogCount > 0)
+                                  StatusPill(
+                                    label: '$_crisisLogCount',
+                                    color: MalvaColors.danger,
+                                  )
+                                else
+                                  const Icon(Icons.chevron_right_rounded),
+                              ],
+                            ),
+                          ),
+                        ],
                         if (_tabIndex == 2)
                           // Teks label dipertahankan persis "Pasien terhubung"
                           // (dipakai test widget). Jumlah pasien dipindah ke
@@ -446,6 +492,22 @@ class _ProfessionalDashboardScreenState
     );
   }
 
+  /// Sesi video terjadwal mendatang (status scheduled), urut terdekat dulu.
+  List<BackendCareSession> get _upcomingVideoSessions {
+    final list = _upcomingSessions
+        .where((s) => s.sessionType == 'video' && s.status == 'scheduled')
+        .toList();
+    list.sort((a, b) {
+      final at = parseWibStored(a.scheduledAt);
+      final bt = parseWibStored(b.scheduledAt);
+      if (at == null && bt == null) return 0;
+      if (at == null) return 1;
+      if (bt == null) return -1;
+      return at.compareTo(bt);
+    });
+    return list;
+  }
+
   Future<void> _loadOnlineProfessionalData() async {
     final apiClient = widget.apiClient;
     final accessToken = widget.session?.accessToken;
@@ -470,7 +532,6 @@ class _ProfessionalDashboardScreenState
       final links = await apiClient.listPatientProfessionalLinks(
           accessToken: accessToken);
       final screeningsByPatient = <String, List<BackendScreeningSession>>{};
-      final reviewedScreeningIds = <String>{};
       final serverAuditEntries = <_AuditEntry>[];
       final notesByPatient = <String, List<BackendProfessionalNote>>{};
       // Pasien yang 403 (tidak membagikan screening). Dikumpulkan di sini
@@ -504,11 +565,6 @@ class _ProfessionalDashboardScreenState
 
         final results = await Future.wait<Object?>([
           loadScreenings(),
-          safely(() => apiClient.listScreeningReviews(
-                accessToken: accessToken,
-                patientId: patientId,
-                limit: 50,
-              )),
           safely(() => apiClient.listProfessionalNotes(
                 accessToken: accessToken,
                 patientId: patientId,
@@ -532,20 +588,12 @@ class _ProfessionalDashboardScreenState
         screeningsByPatient[patientId] =
             results[0] as List<BackendScreeningSession>;
 
-        final reviews = results[1] as List<BackendScreeningReview>? ??
-            const <BackendScreeningReview>[];
-        for (final review in reviews) {
-          if (review.status.toLowerCase() != 'pending') {
-            reviewedScreeningIds.add(review.screeningSessionId);
-          }
-        }
-
-        final notes = results[2] as List<BackendProfessionalNote>? ??
+        final notes = results[1] as List<BackendProfessionalNote>? ??
             const <BackendProfessionalNote>[];
         notesByPatient[patientId] = notes;
 
         final auditLogs =
-            results[3] as List<BackendAuditLog>? ?? const <BackendAuditLog>[];
+            results[2] as List<BackendAuditLog>? ?? const <BackendAuditLog>[];
         serverAuditEntries.addAll(
           auditLogs.map(
             (entry) => _AuditEntry(
@@ -556,6 +604,11 @@ class _ProfessionalDashboardScreenState
           ),
         );
       }
+      // Sesi video mendatang + ringkasan Crisis Incident Log (satu permintaan).
+      final upcomingSessions = await safely(() => apiClient.listCareSessions(
+          accessToken: accessToken, scope: 'upcoming'));
+      final crisisLog = await safely(() =>
+          apiClient.getCrisisIncidentLog(accessToken: accessToken, limit: 1));
       if (!mounted) return;
       setState(() {
         _links = links;
@@ -564,7 +617,8 @@ class _ProfessionalDashboardScreenState
         _professionalNotes
           ..clear()
           ..addAll(notesByPatient);
-        _reviewedScreeningIds.addAll(reviewedScreeningIds);
+        _upcomingSessions = upcomingSessions ?? const <BackendCareSession>[];
+        _crisisLogCount = crisisLog?.unresolved ?? 0;
         _screeningNotShared
           ..clear()
           ..addAll(screeningNotShared);
@@ -632,732 +686,6 @@ class _ProfessionalDashboardScreenState
       }
     }
     return patients.first;
-  }
-
-  List<_PriorityItem> _crisisQueue(List<_ProfessionalPatient> patients) {
-    final items = <_PriorityItem>[];
-    final seen = <String>{};
-    for (final patient in patients) {
-      for (final screening in patient.screenings) {
-        if (!screening.crisisFlag) continue;
-        // Lewati screening yang sudah direview agar tidak menumpuk selamanya
-        // di dashboard (dulu: baris crisis lama tetap tampil setelah direview).
-        if (_reviewedScreeningIds.contains(screening.id)) continue;
-        // Satu item per (pasien, screening) — jangan pernah render dua kali.
-        if (!seen.add(screening.id)) continue;
-        items.add(
-          _PriorityItem(
-            patient: patient,
-            screening: screening,
-            title: 'Crisis alert',
-            body:
-                '${patient.displayName} memiliki crisis flag pada screening ${formatScreeningDate(screening.createdAt)}.',
-            color: MalvaColors.danger,
-          ),
-        );
-      }
-    }
-    // Urutkan terbaru dulu agar alert paling baru tampil paling atas.
-    items.sort((a, b) {
-      final at = a.screening.createdAt;
-      final bt = b.screening.createdAt;
-      if (at == null && bt == null) return 0;
-      if (at == null) return 1;
-      if (bt == null) return -1;
-      return bt.compareTo(at);
-    });
-    return items;
-  }
-
-  List<_PriorityItem> _reviewQueue(List<_ProfessionalPatient> patients) {
-    final items = <_PriorityItem>[];
-    final seen = <String>{};
-    for (final patient in patients) {
-      for (final screening in patient.screenings.take(3)) {
-        if (_reviewedScreeningIds.contains(screening.id)) continue;
-        // Dedupe: satu item per screening walau data pasien terduplikasi.
-        if (!seen.add(screening.id)) continue;
-        items.add(
-          _PriorityItem(
-            patient: patient,
-            screening: screening,
-            title: 'Screening belum direview',
-            body:
-                '${patient.displayName}: PHQ-9 ${screening.phq9Score}, GAD-7 ${screening.gad7Score}, level ${screening.overallLevelLabel}.',
-            color: screening.overallColor,
-          ),
-        );
-      }
-    }
-    // Urutkan terbaru dulu.
-    items.sort((a, b) {
-      final at = a.screening.createdAt;
-      final bt = b.screening.createdAt;
-      if (at == null && bt == null) return 0;
-      if (at == null) return 1;
-      if (bt == null) return -1;
-      return bt.compareTo(at);
-    });
-    return items;
-  }
-
-  // ----------------------------------------------------------
-  // BOTTOM SHEETS — metrik & detail prioritas
-  // ----------------------------------------------------------
-
-  void _showActivePatientsSheet() {
-    final list = _patientsForDashboard()
-        .where((patient) => patient.status == 'active')
-        .toList(growable: false);
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-      ),
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 12,
-            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 44,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: Theme.of(sheetContext).colorScheme.outlineVariant,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Pasien aktif (${list.length})',
-                style: Theme.of(sheetContext)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Ketuk pasien untuk membuka detailnya di tab Pasien.',
-                style: TextStyle(
-                    color: Theme.of(sheetContext).colorScheme.onSurfaceVariant),
-              ),
-              const SizedBox(height: 12),
-              if (list.isEmpty)
-                const EmptyState(
-                  icon: Icons.people_outline_rounded,
-                  title: 'Belum ada pasien aktif',
-                  subtitle: 'Pasien terhubung akan tercatat di sini.',
-                )
-              else
-                Flexible(
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: list.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (_, index) {
-                      final patient = list[index];
-                      return SoftCard(
-                        bordered: true,
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          setState(() {
-                            _selectedPatientId = patient.patientId;
-                            // Tab Pasien ada di indeks 2 (0=Dashboard,
-                            // 1=Jadwal, 2=Pasien, 3=Lainnya). Sebelumnya
-                            // bernilai 1 sehingga menekan pasien justru
-                            // membuka layar Jadwal.
-                            _tabIndex = 2;
-                          });
-                        },
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              backgroundColor: patient.hasCrisis
-                                  ? MalvaColors.danger
-                                  : MalvaColors.seed.withValues(alpha: 0.12),
-                              child: Text(
-                                patient.displayName.isEmpty
-                                    ? '?'
-                                    : patient.displayName.characters.first
-                                        .toUpperCase(),
-                                style: TextStyle(
-                                  color: patient.hasCrisis
-                                      ? Colors.white
-                                      : MalvaColors.seed,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    patient.displayName,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w900),
-                                  ),
-                                  Text(
-                                    '${patient.sourceLabel} • ${_riskLabel(patient.latestLevel)}',
-                                    style: Theme.of(sheetContext)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                            color: Theme.of(sheetContext)
-                                                .colorScheme
-                                                .onSurfaceVariant),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(Icons.chevron_right_rounded),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  /// Buang item ganda berdasarkan id screening, pertahankan kemunculan
-  /// pertama. Dipakai jalur [showAll]: screening krisis yang belum direview
-  /// muncul di `_crisisQueue` DAN `_reviewQueue` sehingga tanpa ini item yang
-  /// sama dirender dua kali.
-  List<_PriorityItem> _dedupByScreening(List<_PriorityItem> items) {
-    final seen = <String>{};
-    final result = <_PriorityItem>[];
-    for (final item in items) {
-      if (seen.add(item.screening.id)) {
-        result.add(item);
-      }
-    }
-    return result;
-  }
-
-  /// Bottom-sheet antrean prioritas.
-  ///
-  /// [crisisOnly] true → hanya antrean crisis; false → hanya antrean review.
-  /// [showAll] true → gabungan antrean crisis + review (dipakai tombol
-  /// "Lihat semua prioritas"). Tidak mengubah perilaku pemanggil lama.
-  void _showPriorityListSheet({
-    required bool crisisOnly,
-    bool showAll = false,
-  }) {
-    final patients = _patientsForDashboard();
-    final items = showAll
-        ? _dedupByScreening([
-            ..._crisisQueue(patients),
-            ..._reviewQueue(patients),
-          ])
-        : crisisOnly
-            ? _crisisQueue(patients)
-            : _reviewQueue(patients);
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-      ),
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 12,
-            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 44,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: Theme.of(sheetContext).colorScheme.outlineVariant,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                showAll
-                    ? 'Semua prioritas (${items.length})'
-                    : crisisOnly
-                        ? 'Crisis alert (${items.length})'
-                        : 'Perlu review (${items.length})',
-                style: Theme.of(sheetContext)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                showAll
-                    ? 'Gabungan antrean crisis & review klinis.'
-                    : crisisOnly
-                        ? 'Pasien dengan crisis flag — prioritaskan penilaian keselamatan.'
-                        : 'Screening terbaru yang menunggu review klinis.',
-                style: TextStyle(
-                    color: Theme.of(sheetContext).colorScheme.onSurfaceVariant),
-              ),
-              const SizedBox(height: 12),
-              if (items.isEmpty)
-                EmptyState(
-                  icon: showAll
-                      ? Icons.inbox_rounded
-                      : crisisOnly
-                          ? Icons.check_circle_outline_rounded
-                          : Icons.inbox_rounded,
-                  title: showAll
-                      ? 'Tidak ada prioritas'
-                      : crisisOnly
-                          ? 'Tidak ada crisis aktif'
-                          : 'Semua sudah direview',
-                  subtitle: showAll
-                      ? 'Antrean crisis & review sedang kosong.'
-                      : crisisOnly
-                          ? 'Flag krisis baru akan muncul di sini.'
-                          : 'Screening baru akan muncul di sini.',
-                )
-              else
-                Flexible(
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: items.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (_, index) {
-                      final item = items[index];
-                      return SoftCard(
-                        bordered: true,
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          _showPriorityDetail(item);
-                        },
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              backgroundColor:
-                                  item.color.withValues(alpha: 0.16),
-                              child: Icon(
-                                (showAll
-                                        ? item.screening.crisisFlag
-                                        : crisisOnly)
-                                    ? Icons.priority_high_rounded
-                                    : Icons.fact_check_rounded,
-                                color: item.color,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.patient.displayName,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w900),
-                                  ),
-                                  Text(
-                                    '${item.title} • ${formatScreeningDate(item.screening.createdAt)}',
-                                    style: Theme.of(sheetContext)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                            color: Theme.of(sheetContext)
-                                                .colorScheme
-                                                .onSurfaceVariant),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(Icons.chevron_right_rounded),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showPriorityDetail(_PriorityItem item) {
-    final screening = item.screening;
-    final isCrisis = screening.crisisFlag;
-    final phqMax = screening.phq9MaxScore <= 0 ? 27 : screening.phq9MaxScore;
-    final gadMax = screening.gad7MaxScore <= 0 ? 21 : screening.gad7MaxScore;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-      ),
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 12,
-            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 44,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: Theme.of(sheetContext).colorScheme.outlineVariant,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 26,
-                      backgroundColor: item.color.withValues(alpha: 0.16),
-                      child: Icon(
-                        isCrisis
-                            ? Icons.priority_high_rounded
-                            : Icons.fact_check_rounded,
-                        color: item.color,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.title,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w900, fontSize: 17),
-                          ),
-                          Text(
-                            '${item.patient.displayName} • ${formatScreeningDate(screening.createdAt)}',
-                            style: Theme.of(sheetContext)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                    color: Theme.of(sheetContext)
-                                        .colorScheme
-                                        .onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
-                    StatusPill(
-                      label: isCrisis
-                          ? 'Krisis'
-                          : _riskLabel(screening.overallLevel),
-                      color: item.color,
-                    ),
-                  ],
-                ),
-                if (isCrisis) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: MalvaColors.danger.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: MalvaColors.danger.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: const Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.warning_amber_rounded,
-                            color: MalvaColors.danger),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Crisis flag aktif. Prioritaskan penilaian keselamatan dan follow-up sesuai SOP klinis.',
-                            style: TextStyle(
-                              color: MalvaColors.danger,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                SoftCard(
-                  bordered: true,
-                  color: isCrisis
-                      ? MalvaColors.danger.withValues(alpha: 0.06)
-                      : MalvaColors.seed.withValues(alpha: 0.04),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'PHQ-9: ${screening.phq9Score}/$phqMax',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                          ),
-                          Text(
-                            _riskLabel(screening.phq9Level),
-                            style: TextStyle(
-                              color: _riskColor(screening.phq9Level),
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      ProgressStrip(
-                        value: screening.phq9Score / phqMax,
-                        color: _riskColor(screening.phq9Level),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'GAD-7: ${screening.gad7Score}/$gadMax',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                          ),
-                          Text(
-                            _riskLabel(screening.gad7Level),
-                            style: TextStyle(
-                              color: _riskColor(screening.gad7Level),
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      ProgressStrip(
-                        value: screening.gad7Score / gadMax,
-                        color: _riskColor(screening.gad7Level),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Overall: ${_riskLabel(screening.overallLevel)}',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Catatan: hasil screening adalah alat bantu, bukan diagnosis final.',
-                        style: TextStyle(
-                            color: Theme.of(sheetContext)
-                                .colorScheme
-                                .onSurfaceVariant,
-                            fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(item.body),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () {
-                    Navigator.pop(sheetContext);
-                    _openScreeningReview(item.patient, screening);
-                  },
-                  icon: const Icon(Icons.fact_check_rounded),
-                  label: const Text('Review screening'),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(sheetContext);
-                    unawaited(
-                        _reviewScreening(screening.id).catchError((_) {}));
-                  },
-                  icon: const Icon(Icons.check_rounded),
-                  label: const Text('Tandai direview'),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _openScreeningReview(
-    _ProfessionalPatient patient,
-    _ScreeningView screening,
-  ) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: Icon(
-          screening.crisisFlag
-              ? Icons.warning_amber_rounded
-              : Icons.fact_check_rounded,
-          color: screening.crisisFlag ? MalvaColors.danger : MalvaColors.seed,
-        ),
-        title: Text('Review screening ${patient.displayName}'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Tanggal: ${formatScreeningDate(screening.createdAt)}'),
-              const SizedBox(height: 8),
-              Text(
-                'PHQ-9: ${screening.phq9Score}/${screening.phq9MaxScore} (${screening.phq9LevelLabel})',
-              ),
-              Text(
-                'GAD-7: ${screening.gad7Score}/${screening.gad7MaxScore} (${screening.gad7LevelLabel})',
-              ),
-              const SizedBox(height: 8),
-              Text('Overall: ${screening.overallLevelLabel}'),
-              const SizedBox(height: 8),
-              // === Certainty Factor (FC + CF) ===
-              Text(
-                'CF PHQ-9: ${(screening.phq9CF * 100).toStringAsFixed(0)}% — '
-                'CF GAD-7: ${(screening.gad7CF * 100).toStringAsFixed(0)}%',
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-              if (screening.ruleTrace.isNotEmpty)
-                Text(
-                  'Rule: ${screening.ruleTrace}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant),
-                ),
-              if (screening.crisisFlag) ...[
-                const SizedBox(height: 8),
-                const Text(
-                  'Crisis flag aktif. Prioritaskan penilaian keselamatan dan follow-up sesuai SOP klinis.',
-                  style: TextStyle(
-                    color: MalvaColors.danger,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              const Text(
-                'Catatan: hasil screening adalah alat bantu, bukan diagnosis final.',
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Tutup'),
-          ),
-          FilledButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              unawaited(_reviewScreening(screening.id).catchError((_) {}));
-            },
-            icon: const Icon(Icons.check_rounded),
-            label: const Text('Tandai direview'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _reviewScreening(String screeningId) async {
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) return;
-
-    final noteController = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.verified_rounded, color: MalvaColors.mint),
-        title: const Text('Tandai sebagai direview?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Tambahkan catatan profesional (opsional):'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: noteController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'Catatan review...',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: compactFilledButtonStyle,
-            child: const Text('Ya, Tandai'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    try {
-      await apiClient.reviewScreening(
-        accessToken: accessToken,
-        screeningId: screeningId,
-        status: 'reviewed',
-        note: noteController.text.trim(),
-      );
-      if (!mounted) return;
-      // Tandai lokal agar baris langsung hilang dari antrean & metrik turun,
-      // tanpa perlu keluar dari layar. Refresh berikutnya menyelaraskan dgn server.
-      setState(() => _reviewedScreeningIds.add(screeningId));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Screening ditandai sebagai direview.'),
-          backgroundColor: MalvaColors.mint,
-        ),
-      );
-    } on MalvaApiException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Gagal: ${friendlyServerMessage(e.message)}'),
-            backgroundColor: MalvaColors.danger),
-      );
-    }
   }
 
   void _exportData() async {
@@ -1494,300 +822,6 @@ class _ProfessionalDashboardScreenState
   }
 }
 
-/// Strip status ringkas untuk tab Dashboard: menggabungkan [_StatusBanner]
-/// (error / belum login + tombol "Coba lagi") dan [_SyncStatusBar] (status
-/// sinkronisasi) menjadi SATU baris agar tidak menumpuk dua blok status.
-///
-/// Prioritas tampil: error / belum login > status sync. Indikator dot
-/// [_SyncStatusIndicator] di header tetap dipertahankan sebagai representasi
-/// sync yang ringkas.
-class _DashboardStatusStrip extends StatelessWidget {
-  const _DashboardStatusStrip({
-    required this.isLoading,
-    required this.error,
-    required this.hasBackendSession,
-    required this.onRetry,
-    required this.syncStatus,
-    required this.lastSyncTime,
-  });
-
-  final bool isLoading;
-  final String? error;
-  final bool hasBackendSession;
-  final Future<void> Function() onRetry;
-  final SyncStatus syncStatus;
-  final DateTime? lastSyncTime;
-
-  @override
-  Widget build(BuildContext context) {
-    // Error atau belum login → banner (membawa pesan + tombol "Coba lagi").
-    if (error != null || !hasBackendSession) {
-      return _StatusBanner(
-        isLoading: isLoading,
-        error: error,
-        hasBackendSession: hasBackendSession,
-        onRetry: onRetry,
-      );
-    }
-    // Sehat → satu baris status sync ringkas.
-    return _SyncStatusBar(
-      syncStatus: syncStatus,
-      lastSyncTime: lastSyncTime,
-      hasBackendSession: hasBackendSession,
-    );
-  }
-}
-
-class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({
-    required this.isLoading,
-    required this.error,
-    required this.hasBackendSession,
-    required this.onRetry,
-  });
-
-  final bool isLoading;
-  final String? error;
-  final bool hasBackendSession;
-  final Future<void> Function() onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    if (isLoading) {
-      return const Padding(
-        padding: EdgeInsets.only(bottom: 14),
-        child: LinearProgressIndicator(),
-      );
-    }
-    if (error != null) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 14),
-        child: SoftCard(
-          bordered: true,
-          color: MalvaColors.danger.withValues(alpha: 0.08),
-          child: Row(
-            children: [
-              const Icon(Icons.cloud_off_rounded, color: MalvaColors.danger),
-              const SizedBox(width: 10),
-              Expanded(child: Text(friendlyErrorMessage(error!))),
-              TextButton(onPressed: onRetry, child: const Text('Coba lagi')),
-            ],
-          ),
-        ),
-      );
-    }
-    if (!hasBackendSession) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 14),
-        child: SoftCard(
-          bordered: true,
-          color: MalvaColors.danger.withValues(alpha: 0.08),
-          child: const Text(
-            'Belum login ke server. Login sebagai profesional untuk melihat data real.',
-          ),
-        ),
-      );
-    }
-    return const SizedBox.shrink();
-  }
-}
-
-class _SyncStatusBar extends StatelessWidget {
-  const _SyncStatusBar({
-    required this.syncStatus,
-    required this.lastSyncTime,
-    required this.hasBackendSession,
-  });
-
-  final SyncStatus syncStatus;
-  final DateTime? lastSyncTime;
-  final bool hasBackendSession;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!hasBackendSession) return const SizedBox.shrink();
-
-    final color = switch (syncStatus) {
-      SyncStatus.syncing => MalvaColors.mint,
-      SyncStatus.error => MalvaColors.danger,
-      SyncStatus.idle => _stalenessColor,
-    };
-
-    final icon = switch (syncStatus) {
-      SyncStatus.syncing => Icons.sync_rounded,
-      SyncStatus.error => Icons.error_outline_rounded,
-      SyncStatus.idle => Icons.check_circle_outline_rounded,
-    };
-
-    final text = switch (syncStatus) {
-      SyncStatus.syncing => 'Menyinkronkan...',
-      SyncStatus.error => 'Sync gagal',
-      SyncStatus.idle => lastSyncTime != null
-          ? 'Terakhir sync: ${_formatTimeAgo(lastSyncTime!)}'
-          : 'Belum pernah sync',
-    };
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: SoftCard(
-        bordered: true,
-        accent: color,
-        tone: color.withValues(alpha: 0.08),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                text,
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            if (syncStatus == SyncStatus.syncing)
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Color get _stalenessColor {
-    if (lastSyncTime == null) return Colors.grey;
-    final diff = wibNow().difference(lastSyncTime!);
-    if (diff.inMinutes < 5) return MalvaColors.mint;
-    if (diff.inMinutes < 30) return MalvaColors.amber;
-    return MalvaColors.danger;
-  }
-
-  String _formatTimeAgo(DateTime time) {
-    final diff = wibNow().difference(time);
-    if (diff.inSeconds < 60) return '${diff.inSeconds}s lalu';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m lalu';
-    if (diff.inHours < 24) return '${diff.inHours}j lalu';
-    return '${diff.inDays}h lalu';
-  }
-}
-
-class _PriorityMetrics extends StatelessWidget {
-  const _PriorityMetrics({
-    required this.patientCount,
-    required this.crisisCount,
-    required this.reviewCount,
-    required this.onPatientsTap,
-    required this.onCrisisTap,
-    required this.onReviewTap,
-  });
-
-  final int patientCount;
-  final int crisisCount;
-  final int reviewCount;
-  final VoidCallback onPatientsTap;
-  final VoidCallback onCrisisTap;
-  final VoidCallback onReviewTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: _MetricCard(
-            icon: Icons.people_alt_rounded,
-            value: '$patientCount',
-            label: 'Pasien aktif',
-            color: MalvaColors.seed,
-            onTap: onPatientsTap,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _MetricCard(
-            icon: Icons.warning_amber_rounded,
-            value: '$crisisCount',
-            label: 'Crisis alert',
-            color: crisisCount == 0 ? MalvaColors.mint : MalvaColors.danger,
-            onTap: onCrisisTap,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _MetricCard(
-            icon: Icons.rate_review_rounded,
-            value: '$reviewCount',
-            label: 'Perlu review',
-            color: reviewCount == 0 ? MalvaColors.mint : MalvaColors.orchid,
-            onTap: onReviewTap,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Kartu metrik vertikal: ikon di atas, angka, lalu label 2 baris max.
-/// Tidak pernah memaksa teks satu kolom huruf-per-huruf.
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.icon,
-    required this.value,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String value;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SoftCard(
-      bordered: true,
-      onTap: onTap,
-      accent: color,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: color.withValues(alpha: 0.12),
-            child: Icon(icon, color: color),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _PatientSearch extends StatelessWidget {
   const _PatientSearch({
     required this.query,
@@ -1806,57 +840,6 @@ class _PatientSearch extends StatelessWidget {
         hintText: 'Cari nama, patient id, atau level risiko',
         prefixIcon: Icon(Icons.search_rounded),
       ),
-    );
-  }
-}
-
-class _PriorityQueue extends StatelessWidget {
-  const _PriorityQueue({
-    required this.crisisQueue,
-    required this.reviewQueue,
-    required this.reviewedIds,
-    required this.onReview,
-    required this.onOpenDetail,
-  });
-
-  final List<_PriorityItem> crisisQueue;
-  final List<_PriorityItem> reviewQueue;
-  final Set<String> reviewedIds;
-  final void Function(_ProfessionalPatient patient, _ScreeningView screening)
-      onReview;
-  final void Function(_PriorityItem item) onOpenDetail;
-
-  @override
-  Widget build(BuildContext context) {
-    // Buang duplikat: satu screening krisis yang belum direview muncul di
-    // `crisisQueue` DAN `reviewQueue`, sehingga tanpa ini baris yang sama
-    // tampil dua kali. Samakan dengan perilaku sheet "Semua prioritas".
-    final seen = <String>{};
-    final queue = [
-      for (final item in [...crisisQueue, ...reviewQueue])
-        if (seen.add(item.screening.id)) item,
-    ].take(3).toList();
-    if (queue.isEmpty) {
-      return const EmptyState(
-        icon: Icons.inbox_rounded,
-        title: 'Tidak ada prioritas urgent',
-        subtitle:
-            'Crisis flag dan screening yang belum direview akan muncul di sini.',
-      );
-    }
-
-    return Column(
-      children: [
-        for (final item in queue) ...[
-          _PriorityCard(
-            item: item,
-            reviewed: reviewedIds.contains(item.screening.id),
-            onReview: () => onReview(item.patient, item.screening),
-            onTap: () => onOpenDetail(item),
-          ),
-          const SizedBox(height: 10),
-        ],
-      ],
     );
   }
 }
@@ -2358,135 +1341,6 @@ class _ProfessionalPortalSectionState
   }
 }
 
-/// Kartu prioritas vertikal: header (avatar + judul + pill),
-/// ringkasan, lalu skor + aksi. Ketuk untuk detail lengkap.
-class _PriorityCard extends StatelessWidget {
-  const _PriorityCard({
-    required this.item,
-    required this.reviewed,
-    required this.onReview,
-    required this.onTap,
-  });
-
-  final _PriorityItem item;
-  final bool reviewed;
-  final VoidCallback onReview;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final screening = item.screening;
-    final isCrisis = screening.crisisFlag;
-    return SoftCard(
-      bordered: true,
-      onTap: onTap,
-      accent: item.color,
-      tone: item.color.withValues(alpha: 0.08),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: item.color.withValues(alpha: 0.16),
-                child: Icon(
-                  reviewed
-                      ? Icons.check_rounded
-                      : isCrisis
-                          ? Icons.priority_high_rounded
-                          : Icons.fact_check_rounded,
-                  color: item.color,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item.title,
-                        style: const TextStyle(fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${item.patient.displayName} • ${formatScreeningDate(screening.createdAt)}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              StatusPill(
-                label: isCrisis ? 'Krisis' : _riskLabel(screening.overallLevel),
-                color: item.color,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            item.body,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    _ScoreChip(
-                      label: 'PHQ-9',
-                      value: '${screening.phq9Score}/${screening.phq9MaxScore}',
-                    ),
-                    _ScoreChip(
-                      label: 'GAD-7',
-                      value: '${screening.gad7Score}/${screening.gad7MaxScore}',
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: onReview,
-                style: compactFilledButtonStyle,
-                child: Text(reviewed ? 'Lihat' : 'Review'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ScoreChip extends StatelessWidget {
-  const _ScoreChip({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: MalvaColors.seed.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        '$label $value',
-        style: const TextStyle(
-          color: MalvaColors.seed,
-          fontWeight: FontWeight.w800,
-          fontSize: 12,
-        ),
-      ),
-    );
-  }
-}
-
 class _ProfessionalPatient {
   const _ProfessionalPatient({
     required this.patientId,
@@ -2574,22 +1428,6 @@ class _ScreeningView {
   Color get overallColor => _riskColor(overallLevel);
   Color get phq9Color => _riskColor(phq9Level);
   Color get gad7Color => _riskColor(gad7Level);
-}
-
-class _PriorityItem {
-  const _PriorityItem({
-    required this.patient,
-    required this.screening,
-    required this.title,
-    required this.body,
-    required this.color,
-  });
-
-  final _ProfessionalPatient patient;
-  final _ScreeningView screening;
-  final String title;
-  final String body;
-  final Color color;
 }
 
 class _AuditEntry {
@@ -2918,5 +1756,108 @@ class _CreateMeetingButtonState extends ConsumerState<_CreateMeetingButton> {
         ],
       ),
     );
+  }
+}
+
+/// Section "Video call mendatang" untuk tab Dashboard: daftar sesi video
+/// terjadwal (nama pasien, waktu, aksi gabung/salin tautan) atau empty state
+/// ringkas bila tidak ada.
+class _UpcomingVideoCallSection extends StatelessWidget {
+  const _UpcomingVideoCallSection({
+    required this.sessions,
+    required this.isLoading,
+  });
+
+  final List<BackendCareSession> sessions;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (sessions.isEmpty) {
+      return const SoftCard(
+        bordered: true,
+        child: Row(
+          children: [
+            Icon(Icons.videocam_off_rounded, color: Colors.black38),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Belum ada video call terjadwal.',
+                style: TextStyle(
+                    color: Colors.black54, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Column(
+      children: [
+        for (final s in sessions.take(5)) ...[
+          SoftCard(
+            bordered: true,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                InitialAvatar(
+                  name: s.patientName.isEmpty ? 'Pasien' : s.patientName,
+                  radius: 18,
+                  color: MalvaColors.seed,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        s.patientName.isEmpty ? 'Pasien' : s.patientName,
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      Text(
+                        _whenLabel(s.scheduledAt),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (s.meetingUrl.isNotEmpty)
+                  FilledButton.icon(
+                    onPressed: () => _join(context, s.meetingUrl),
+                    icon: const Icon(Icons.videocam_rounded, size: 18),
+                    label: const Text('Gabung'),
+                    style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact),
+                  )
+                else
+                  const Text('Link menyusul',
+                      style: TextStyle(fontSize: 11, color: Colors.black45)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+
+  String _whenLabel(String? raw) {
+    final dt = parseWibStored(raw);
+    if (dt == null) return '';
+    return formatWibDateTimeShort(dt);
+  }
+
+  Future<void> _join(BuildContext context, String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }

@@ -15,6 +15,7 @@ import '../../widgets/malva_components.dart';
 //   - Medication
 //   - Goals & Habits
 //   - Health Record
+//   - Therapy History (worksheet CBT/DBT)
 //   - Timeline
 // Izin disimpan ke /v1/privacy/consents (backend) bila online.
 // Bila offline: disimpan lokal dan disinkronkan saat terhubung.
@@ -59,6 +60,7 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
   bool _medications = false;
   bool _goals = false;
   bool _healthRecord = false;
+  bool _therapyHistory = false;
   bool _timeline = false;
   bool _isSaving = false;
   String? _error;
@@ -158,6 +160,14 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
               onChanged: (v) => setState(() => _healthRecord = v),
             ),
             _ConsentToggle(
+              icon: Icons.psychology_alt_rounded,
+              color: MalvaColors.plum,
+              title: 'Therapy History',
+              subtitle: 'Worksheet CBT/DBT & catatan terapi',
+              value: _therapyHistory,
+              onChanged: (v) => setState(() => _therapyHistory = v),
+            ),
+            _ConsentToggle(
               icon: Icons.timeline_rounded,
               color: MalvaColors.plum,
               title: 'Timeline',
@@ -230,6 +240,7 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
             shareTimeline: _timeline,
             shareHealthRecord: _healthRecord,
             shareGoals: _goals,
+            shareTherapyRecords: _therapyHistory,
           );
       await _saveLocalPreferences();
       if (!mounted) return;
@@ -262,6 +273,7 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
       healthRecord: _healthRecord,
       moodCheckin: _moodDiary,
       medicationCheckin: _medications,
+      therapyRecords: _therapyHistory,
     );
   }
 }

@@ -223,6 +223,127 @@ func (s *Store) ListActiveCrisisIncidentsForProfessional(ctx context.Context, pr
 	return out, rows.Err()
 }
 
+// CrisisLogItem adalah satu entri pada feed Crisis Incident Log yang
+// menggabungkan insiden SOS dan flag krisis screening menjadi SATU bentuk JSON.
+type CrisisLogItem struct {
+	ID              string     `json:"id"`
+	Source          string     `json:"source"` // "sos" | "screening"
+	PatientID       string     `json:"patient_id"`
+	PatientName     string     `json:"patient_name"`
+	Title           string     `json:"title"`
+	Detail          string     `json:"detail"`
+	Severity        string     `json:"severity"`
+	CreatedAt       time.Time  `json:"created_at"`
+	ResolvedAt      *time.Time `json:"resolved_at,omitempty"`
+	ResolutionNotes string     `json:"resolution_notes"`
+}
+
+// CrisisLogCounts adalah ringkasan feed: total entri dan yang belum ditangani.
+type CrisisLogCounts struct {
+	Total      int `json:"total"`
+	Unresolved int `json:"unresolved"`
+}
+
+// CrisisIncidentLog adalah payload feed Crisis Incident Log.
+type CrisisIncidentLog struct {
+	Items  []CrisisLogItem `json:"items"`
+	Counts CrisisLogCounts `json:"counts"`
+}
+
+// ListCrisisIncidentLog menyusun feed kronologis read-only untuk SEMUA pasien
+// yang terhubung aktif dengan profesional pemanggil: insiden SOS dari
+// crisis_incidents + flag krisis dari screening_sessions. Satu query untuk
+// seluruh himpunan pasien (tidak 403 per pasien). Terbaru di atas, dibatasi
+// `limit` (default 50, maks 200).
+func (s *Store) ListCrisisIncidentLog(ctx context.Context, professionalID string, limit int) (CrisisIncidentLog, error) {
+	limit = normalizeLimit(limit, 50, 200)
+	out := CrisisIncidentLog{Items: make([]CrisisLogItem, 0)}
+
+	const q = `
+		SELECT id, source, patient_id, patient_name, title, detail, severity,
+		       created_at, resolved_at, resolution_notes
+		FROM (
+			SELECT i.id::text AS id, 'sos' AS source, i.patient_id::text AS patient_id,
+			       u.display_name AS patient_name,
+			       'SOS darurat' AS title,
+			       COALESCE(NULLIF(i.triggered_by, ''), 'sos_button') AS detail,
+			       'crisis' AS severity,
+			       i.created_at,
+			       i.resolved_at,
+			       COALESCE(i.resolution_notes, '') AS resolution_notes
+			FROM crisis_incidents i
+			JOIN users u ON u.id = i.patient_id
+			WHERE i.patient_id IN (
+				SELECT patient_id FROM patient_professional_links
+				WHERE professional_id = $1 AND status = 'active'
+			)
+			UNION ALL
+			SELECT s.id::text, 'screening', s.patient_id::text,
+			       u.display_name,
+			       'Screening krisis',
+			       COALESCE((
+			           SELECT string_agg(r.type::text || ' ' || r.score::text || ' (' || r.level::text || ')', ', ')
+			           FROM screening_results r WHERE r.session_id = s.id
+			       ), ''),
+			       'crisis',
+			       s.created_at,
+			       NULL::timestamptz,
+			       ''
+			FROM screening_sessions s
+			JOIN users u ON u.id = s.patient_id
+			WHERE s.crisis_flag = true
+			  AND s.patient_id IN (
+				SELECT patient_id FROM patient_professional_links
+				WHERE professional_id = $1 AND status = 'active'
+			  )
+		) t
+		ORDER BY created_at DESC
+		LIMIT $2`
+
+	rows, err := s.db.QueryContext(ctx, q, professionalID, limit)
+	if err != nil {
+		return CrisisIncidentLog{}, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var it CrisisLogItem
+		if err := rows.Scan(&it.ID, &it.Source, &it.PatientID, &it.PatientName,
+			&it.Title, &it.Detail, &it.Severity, &it.CreatedAt, &it.ResolvedAt,
+			&it.ResolutionNotes); err != nil {
+			return CrisisIncidentLog{}, err
+		}
+		out.Items = append(out.Items, it)
+	}
+	if err := rows.Err(); err != nil {
+		return CrisisIncidentLog{}, err
+	}
+
+	const countsQ = `
+		SELECT COUNT(*),
+		       COUNT(*) FILTER (WHERE resolved_at IS NULL)
+		FROM (
+			SELECT i.resolved_at
+			FROM crisis_incidents i
+			WHERE i.patient_id IN (
+				SELECT patient_id FROM patient_professional_links
+				WHERE professional_id = $1 AND status = 'active'
+			)
+			UNION ALL
+			SELECT NULL::timestamptz
+			FROM screening_sessions s
+			WHERE s.crisis_flag = true
+			  AND s.patient_id IN (
+				SELECT patient_id FROM patient_professional_links
+				WHERE professional_id = $1 AND status = 'active'
+			  )
+		) c`
+	if err := s.db.QueryRowContext(ctx, countsQ, professionalID).
+		Scan(&out.Counts.Total, &out.Counts.Unresolved); err != nil {
+		return CrisisIncidentLog{}, err
+	}
+	return out, nil
+}
+
 func (s *Store) GetCrisisIncident(ctx context.Context, incidentID string) (CrisisIncident, error) {
 	const q = `SELECT id, patient_id, triggered_by, phq9_q9_score, latitude, longitude, status,
 		COALESCE(resolution_notes, ''), COALESCE(resolved_by::text, ''), doctor_notified_at, created_at, resolved_at

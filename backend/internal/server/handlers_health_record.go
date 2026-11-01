@@ -84,6 +84,6 @@ func (s *Server) updateHealthRecord(w http.ResponseWriter, r *http.Request, clai
 	s.notifyPatient(r, patientID, "health_record_updated",
 		"Health Record diperbarui",
 		"Profesional memperbarui diagnosis di Health Record kamu.",
-		map[string]string{"patient_id": patientID})
+		map[string]string{"patient_id": patientID, "professional_id": claims.Subject})
 	writeJSON(w, http.StatusOK, map[string]any{"health_record": record})
 }

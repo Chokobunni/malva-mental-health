@@ -759,6 +759,30 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, claims au
 	gross := bookingPrice
 	net := gross - platformFee
 
+	// IDEMPOTENSI "Lanjut Bayar": bila booking ini sudah punya payment pending
+	// yang masih bisa dipakai ulang (ada Snap token, dibuat < 24 jam), kembalikan
+	// payment itu alih-alih membuat payment + transaksi Snap BARU setiap ketukan.
+	// Tanpa ini, tiap tap meninggalkan satu payment pending + satu transaksi
+	// Midtrans yatim. Klien menerima 2xx apa pun, jadi 200 aman di sini.
+	if existing, rerr := s.store.GetReusablePendingPayment(r.Context(), req.BookingID); rerr == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"payment": existing,
+			"breakdown": map[string]interface{}{
+				"consultation":  bookingPrice,
+				"service_fee":   serviceFee,
+				"total":         gross + serviceFee,
+				"platform_fee":  platformFee,
+				"net_to_doctor": net,
+			},
+		})
+		return
+	} else if !errors.Is(rerr, sql.ErrNoRows) {
+		// Galat DB nyata (bukan "tidak ada"): catat, tapi jangan blokir
+		// pembayaran — lanjut membuat payment baru seperti biasa.
+		s.logger.Warn("cek payment pending yang bisa dipakai ulang gagal",
+			"booking_id", req.BookingID, "error", rerr)
+	}
+
 	p, err := s.store.CreatePayment(r.Context(), store.Payment{
 		BookingID:         req.BookingID,
 		PaymentMethod:     req.PaymentMethod,

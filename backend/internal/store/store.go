@@ -105,6 +105,12 @@ type Notification struct {
 	CreatedAt time.Time         `json:"created_at"`
 	SentAt    *time.Time        `json:"sent_at,omitempty"`
 	ReadAt    *time.Time        `json:"read_at,omitempty"`
+
+	// SuppressPush, bila true, membuat CreateNotification TIDAK membuat baris
+	// notification_outbox — notifikasi tetap tersimpan & tampil in-app, tetapi
+	// tidak memicu push FCM. Default false = perilaku lama (selalu push), agar
+	// pemanggil yang tidak mengisi field ini tidak berubah perilakunya.
+	SuppressPush bool `json:"-"`
 }
 
 type OutboxJob struct {
@@ -611,11 +617,21 @@ func (s *Store) ListProfessionalsForPatient(ctx context.Context, patientID strin
 // UUID dari booking. Tujuannya: profesional yang sudah dibayar pasiennya tidak
 // kehilangan akses ke data pasien hanya karena baris link belum termaterialisasi.
 //
-// Idempoten: ON CONFLICT (patient_id, professional_id) DO NOTHING — HANYA
-// membuat baris bila belum ada sama sekali. Status link yang sudah ada TIDAK
-// ditimpa, dan link yang sengaja diputus (status lain) TIDAK dihidupkan kembali.
-// Ini sejalan dengan migrasi 027 dan instruksi "jangan menimpa status". Aman
-// dipanggil berulang (mis. webhook ganda).
+// Idempoten terhadap webhook ganda: ON CONFLICT (patient_id, professional_id)
+// DO UPDATE SET status='active' HANYA bila status saat ini 'inactive'.
+//
+// Kenapa 'inactive' DIHIDUPKAN kembali (sedangkan status lain tidak):
+//   - 'inactive' kini adalah status TURUNAN yang hanya dihasilkan migrasi 028
+//     (menonaktifkan link yang buktinya cuma no_show). Pembayaran berikutnya
+//     adalah BUKTI BARU yang otoritatif bahwa hubungan berjalan, jadi link
+//     wajib dihidupkan lagi — tanpa ini pasien yang baru membayar permanen tak
+//     terlihat oleh profesional.
+//   - Status lain (mis. bila kelak ada fitur putus hubungan eksplisit) TIDAK
+//     pernah dihidupkan otomatis oleh klausa WHERE ini, sehingga invarian
+//     "link yang sengaja diputus tidak dihidupkan kembali" tetap terjaga untuk
+//     status selain 'inactive'.
+//
+// Aman dipanggil berulang (mis. webhook ganda): baris 'active' tidak berubah.
 func (s *Store) EnsurePatientProfessionalLink(ctx context.Context, patientID, professionalID string) error {
 	patientID = strings.TrimSpace(patientID)
 	professionalID = strings.TrimSpace(professionalID)
@@ -625,7 +641,9 @@ func (s *Store) EnsurePatientProfessionalLink(ctx context.Context, patientID, pr
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO patient_professional_links (patient_id, professional_id, status)
 		VALUES ($1, $2, 'active')
-		ON CONFLICT (patient_id, professional_id) DO NOTHING
+		ON CONFLICT (patient_id, professional_id) DO UPDATE
+		SET status = 'active'
+		WHERE patient_professional_links.status = 'inactive'
 	`, patientID, professionalID)
 	return err
 }
@@ -1992,18 +2010,125 @@ func (s *Store) CreateNotification(ctx context.Context, input Notification) (Not
 	}
 	notification.Data = input.Data
 
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO notification_outbox (notification_id, provider)
-		VALUES ($1, 'fcm')
-	`, notification.ID)
-	if err != nil {
-		return Notification{}, err
+	// Push hanya bila tidak ditekan. Digest / jenis low-priority menyetel
+	// SuppressPush agar pasien tidak menerima ledakan push duplikat; notifikasi
+	// tetap ada in-app.
+	if !input.SuppressPush {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO notification_outbox (notification_id, provider)
+			VALUES ($1, 'fcm')
+		`, notification.ID)
+		if err != nil {
+			return Notification{}, err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		return Notification{}, err
 	}
 	return notification, nil
+}
+
+// GetUserRole mengembalikan peran (role::text) seorang pengguna. Dipakai untuk
+// menerapkan kebijakan push per-role di lapisan server tanpa memuat seluruh
+// baris user.
+func (s *Store) GetUserRole(ctx context.Context, userID string) (string, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return "", errors.New("user_id is required")
+	}
+	var role string
+	err := s.db.QueryRowContext(ctx, `SELECT role::text FROM users WHERE id = $1`, userID).Scan(&role)
+	return role, err
+}
+
+// UpsertDailyDigest menggabungkan notifikasi berprioritas rendah menjadi SATU
+// baris digest per (user, jenis, profesional, hari WIB), sehingga pasien tidak
+// dibanjiri notifikasi duplikat. Bila baris hari ini sudah ada, penghitung di
+// data->>'digest_count' dinaikkan, body disusun ulang lewat formatBody(count),
+// dan created_at dimajukan agar baris naik ke atas. TIDAK pernah membuat baris
+// notification_outbox (digest = in-app saja, tanpa push).
+//
+// Aman terhadap webhook bersamaan: satu pernyataan INSERT ... ON CONFLICT
+// memakai indeks unik (migrasi 028) pada
+// (user_id, type, (data->>'professional_id'), (data->>'digest_day')).
+//
+// formatBody dipanggil HANYA saat terjadi konflik (count > 1) untuk menyusun
+// teks body baru yang mencerminkan jumlah; pada penyisipan pertama, input.Body
+// dipakai apa adanya (sudah berisi versi count = 1).
+func (s *Store) UpsertDailyDigest(ctx context.Context, input Notification, formatBody func(count int) string) (Notification, error) {
+	if input.UserID == "" || input.Type == "" || input.Title == "" || input.Body == "" {
+		return Notification{}, errors.New("user_id, type, title, and body are required")
+	}
+	if formatBody == nil {
+		formatBody = func(int) string { return input.Body }
+	}
+	if input.Data == nil {
+		input.Data = map[string]string{}
+	}
+	if _, ok := input.Data["professional_id"]; !ok {
+		input.Data["professional_id"] = ""
+	}
+	input.Data["digest_day"] = clock.Now().Format("2006-01-02")
+	input.Data["digest_count"] = "1"
+	data, err := json.Marshal(input.Data)
+	if err != nil {
+		return Notification{}, err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Notification{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var out Notification
+	var rawData string
+	var count int
+	err = tx.QueryRowContext(ctx, `
+		INSERT INTO notifications (user_id, type, title, body, data)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (user_id, type, (data->>'professional_id'), (data->>'digest_day'))
+		DO UPDATE SET
+			data = notifications.data || jsonb_build_object(
+				'digest_count',
+				((COALESCE((notifications.data->>'digest_count')::int, 1) + 1)::text)
+			),
+			created_at = now()
+		RETURNING id, user_id, type, title, body, data::text, status,
+		          created_at, sent_at, read_at, (data->>'digest_count')::int
+	`, input.UserID, input.Type, input.Title, input.Body, data).
+		Scan(&out.ID, &out.UserID, &out.Type, &out.Title, &out.Body, &rawData,
+			&out.Status, &out.CreatedAt, &out.SentAt, &out.ReadAt, &count)
+	if err != nil {
+		return Notification{}, err
+	}
+	// Konflik (count > 1): body masih versi lama, susun ulang dengan hitungan
+	// baru agar terbaca natural ("3 pembaruan ... dari ...").
+	if count > 1 {
+		if newBody := formatBody(count); newBody != "" {
+			err = tx.QueryRowContext(ctx, `
+				UPDATE notifications SET body = $2 WHERE id = $1
+				RETURNING id, user_id, type, title, body, data::text, status,
+				          created_at, sent_at, read_at
+			`, out.ID, newBody).
+				Scan(&out.ID, &out.UserID, &out.Type, &out.Title, &out.Body, &rawData,
+					&out.Status, &out.CreatedAt, &out.SentAt, &out.ReadAt)
+			if err != nil {
+				return Notification{}, err
+			}
+		}
+	}
+	if err := json.Unmarshal([]byte(rawData), &out.Data); err != nil {
+		return Notification{}, err
+	}
+	if out.Data == nil {
+		out.Data = map[string]string{}
+	}
+	if err := tx.Commit(); err != nil {
+		return Notification{}, err
+	}
+	return out, nil
 }
 
 func (s *Store) ListNotifications(ctx context.Context, userID string, limit int) ([]Notification, error) {

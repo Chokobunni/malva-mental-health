@@ -1,4 +1,11 @@
 -- 027_backfill_patient_professional_links.sql
+-- CATATAN (2026-11): status 'no_show' di sumber #2 (care_sessions) KEMUDIAN
+-- ditemukan sebagai sinyal hubungan yang TIDAK CUKUP — 3 dari 6 link aktif
+-- produksi hanya bersandar pada satu sesi no_show. Aturan ini DIGANTIKAN oleh
+-- migrasi 028 yang menonaktifkan link dengan bukti hanya no_show. Logika SQL di
+-- bawah SENGAJA TIDAK DIUBAH: migrasi 027 sudah berjalan di produksi dan tidak
+-- boleh mengubah perilaku. Lihat 028_digest_and_deactivate_noshow_links.sql.
+--
 -- Bug 4: materialisasi relasi pasien–profesional untuk data lama.
 --
 -- Latar belakang:

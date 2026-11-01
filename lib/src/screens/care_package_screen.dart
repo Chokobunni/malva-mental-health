@@ -570,23 +570,30 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
     if (token == null || token.isEmpty) return;
 
     // Cek apakah sudah ada booking pending untuk paket ini.
+    //
+    // PENTING: bookings.package_id TIDAK diisi untuk paket (kolom itu FK
+    // warisan ke service_packages — lihat handlers_booking.go). Mencocokkan
+    // lewat packageId karena itu SELALU gagal, lalu kode lama membuat booking
+    // KEDUA yang ditolak server (gejala: "Terjadi kendala"). Cocokkan lewat
+    // profesional + tipe layanan + status pending; bila ada beberapa, ambil
+    // yang paling baru berdasarkan tanggal booking.
     BackendBooking? existingBooking;
     try {
       final bookings = await apiClient.listBookings(accessToken: token);
-      for (final b in bookings) {
-        if (b.serviceType == 'package_session' &&
-            b.status == 'pending' &&
-            b.packageId == _package.id) {
-          existingBooking = b;
-          break;
-        }
-      }
+      existingBooking =
+          pickPendingPackageBooking(bookings, _package.professionalId);
     } on Object catch (_) {
       // Gagal ambil daftar booking — lanjut buat baru.
     }
 
     if (existingBooking != null) {
-      // Booking pending sudah ada — langsung ke layar pembayaran.
+      // Booking pending sudah ada — langsung ke layar pembayaran, jangan buat
+      // booking kedua. Saat pasien menekan "Bayar", layar pembayaran memanggil
+      // createPayment; server kini MENGEMBALIKAN payment pending yang masih
+      // berlaku (Snap token ada, < 24 jam) untuk booking yang sama alih-alih
+      // membuat payment + transaksi Snap baru — jadi aman ditekan berulang.
+      // Gateway redirect / polling status ditangani di layar pembayaran.
+      // Pasien TIDAK dipaksa memilih slot lagi.
       if (!mounted) return;
       Navigator.push(
         context,
@@ -636,6 +643,15 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
             apiClient: widget.apiClient,
           ),
         ),
+      );
+    } on MalvaApiException catch (e) {
+      // Tampilkan pesan server yang sebenarnya (mis. 409 meet_belum_aktif atau
+      // slot bentrok) alih-alih "Terjadi kendala" generik.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(friendlyServerMessage(e.message)),
+            backgroundColor: MalvaColors.danger),
       );
     } on Object catch (e) {
       if (!mounted) return;
@@ -1353,4 +1369,25 @@ class _PackageSessionCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Memilih booking pending paket yang SUDAH ADA untuk [professionalId].
+///
+/// Dicocokkan lewat profesional + tipe layanan ('package_session') + status
+/// 'pending'. SENGAJA tidak memakai `packageId`: kolom `bookings.package_id`
+/// tidak diisi untuk paket (FK warisan ke service_packages), sehingga
+/// pencocokan lewat packageId selalu gagal. Bila ada beberapa kandidat, ambil
+/// yang tanggal booking-nya paling baru.
+BackendBooking? pickPendingPackageBooking(
+  List<BackendBooking> bookings,
+  String professionalId,
+) {
+  final candidates = bookings
+      .where((b) =>
+          b.serviceType == 'package_session' &&
+          b.status == 'pending' &&
+          b.professionalId == professionalId)
+      .toList()
+    ..sort((a, b) => b.bookingDate.compareTo(a.bookingDate));
+  return candidates.isEmpty ? null : candidates.first;
 }

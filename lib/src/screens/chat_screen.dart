@@ -14,6 +14,7 @@ import '../widgets/malva_components.dart';
 import '../widgets/mini_summary.dart';
 import '../widgets/professional_avatar.dart';
 import '../time/wib.dart';
+import 'booking/doctor_profile_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({
@@ -130,6 +131,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool get _canSendText => _access.canSendText;
 
   bool get _canShare => _isPatient && _access.canShare;
+
+  /// Percakapan "mati": tidak sedang dalam sesi, tidak punya paket aktif, tidak
+  /// ada sesi berikutnya, dan tidak bisa berbagi data. Untuk pasien, ini berarti
+  /// belum ada hubungan aktif dengan profesional — jangan tampilkan composer
+  /// nonaktif dengan kalimat kriptik; tampilkan ajakan menjadwalkan sesi.
+  bool get _isDeadConversation =>
+      _accessLoaded &&
+      !_access.inSession &&
+      !_access.hasActivePackage &&
+      _access.nextSessionAt == null &&
+      !_access.canShare;
 
   /// Muat riwayat chat dari server (GET /v1/messages) agar percakapan
   /// sebelumnya tidak hilang saat layar dibuka ulang.
@@ -987,7 +999,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
       body: Column(
         children: [
-          if (_accessLoaded && !_access.inSession)
+          if (_accessLoaded &&
+              !_access.inSession &&
+              !(_isDeadConversation && _isPatient))
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -1050,18 +1064,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     },
                   ),
           ),
-          _ChatInput(
-            controller: _inputController,
-            enabled: _canSendText,
-            onChanged: _onInputChanged,
-            onSend: _send,
-            onShareTap: _canShare ? () => _showShareSheet(context) : null,
-            disabledHint: _accessLoaded
-                ? (_access.reason.isEmpty
-                    ? 'Chat aktif saat sesi berjalan'
-                    : _access.reason)
-                : null,
-          ),
+          if (_accessLoaded && _isDeadConversation && _isPatient)
+            _BookSessionCta(
+              doctorName: widget.otherUserName,
+              onBook: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DoctorProfileScreen(
+                    doctorUserId: widget.otherUserId,
+                    doctorName: widget.otherUserName,
+                  ),
+                ),
+              ),
+            )
+          else
+            _ChatInput(
+              controller: _inputController,
+              enabled: _canSendText,
+              onChanged: _onInputChanged,
+              onSend: _send,
+              onShareTap: _canShare ? () => _showShareSheet(context) : null,
+              disabledHint: _accessLoaded
+                  ? (_access.reason.isEmpty
+                      ? 'Chat aktif saat sesi berjalan'
+                      : _access.reason)
+                  : null,
+            ),
         ],
       ),
     );
@@ -1580,6 +1608,55 @@ class _ChatInput extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// CTA untuk percakapan yang belum punya sesi aktif: ajak pasien menjadwalkan
+/// sesi dengan profesional ini, alih-alih menampilkan composer nonaktif dengan
+/// kalimat kriptik.
+class _BookSessionCta extends StatelessWidget {
+  const _BookSessionCta({required this.doctorName, required this.onBook});
+
+  final String doctorName;
+  final VoidCallback onBook;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: MalvaColors.seed.withValues(alpha: 0.06),
+        border: Border(
+          top: BorderSide(color: MalvaColors.seed.withValues(alpha: 0.15)),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Belum ada sesi terjadwal dengan $doctorName.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Jadwalkan sesi untuk mulai berkonsultasi dan mengobrol di sini.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: Colors.black54),
+          ),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: onBook,
+            icon: const Icon(Icons.event_available_rounded),
+            label: const Text('Jadwalkan Sesi'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(44),
+            ),
+          ),
+        ],
       ),
     );
   }

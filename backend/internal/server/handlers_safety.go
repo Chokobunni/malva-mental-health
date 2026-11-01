@@ -386,17 +386,32 @@ func (s *Server) listCrisisIncidents(w http.ResponseWriter, r *http.Request, cla
 	writeJSON(w, http.StatusOK, map[string]interface{}{"incidents": incidents})
 }
 
+// listCrisisIncidentLog — feed kronologis read-only untuk profesional: gabungan
+// insiden SOS + flag krisis screening dari SEMUA pasien yang terhubung aktif.
+// Satu permintaan untuk seluruh himpunan (bukan N per pasien).
+func (s *Server) listCrisisIncidentLog(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "professional" {
+		writeError(w, http.StatusForbidden, errors.New("hanya profesional yang dapat mengakses crisis incident log"))
+		return
+	}
+	limit := parseQueryInt(r, "limit", 50, 200)
+	feed, err := s.store.ListCrisisIncidentLog(r.Context(), claims.Subject, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, feed)
+}
+
 func (s *Server) resolveCrisisIncident(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	var req resolveCrisisRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
-	if strings.TrimSpace(req.ResolutionNotes) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "resolution_notes is required"})
-		return
-	}
-
+	// resolution_notes OPSIONAL. Profesional tidak boleh dipaksa menulis
+	// feedback per-item; resolusi tanpa catatan diperbolehkan. Catatan yang
+	// dikirim tetap disimpan apa adanya.
 	incidentID := r.PathValue("id")
 	if claims.Role == "professional" {
 		incident, err := s.store.GetCrisisIncident(r.Context(), incidentID)

@@ -268,6 +268,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/crisis-alerts", s.requireAuth(s.handleCrisisAlertV2))
 	mux.HandleFunc("GET /v1/crisis-incidents", s.requireAuth(s.listCrisisIncidents))
 	mux.HandleFunc("POST /v1/crisis-incidents/{id}/resolve", s.requireAuth(s.resolveCrisisIncident))
+	mux.HandleFunc("GET /v1/crisis-incident-log", s.requireAuth(s.listCrisisIncidentLog))
 	mux.HandleFunc("GET /v1/sos-blast-status", s.requireAuth(s.listBlastStatus))
 	// Professional credentials + doctor discovery
 	mux.HandleFunc("POST /v1/credentials", s.requireAuth(s.uploadCredentials))
@@ -823,9 +824,9 @@ func (s *Server) createScreening(w http.ResponseWriter, r *http.Request, claims 
 		Type: "screening.created",
 		Data: session,
 	})
-	if session.CrisisFlag {
-		s.notifyProfessionalsForCrisis(r, session)
-	}
+	// Catatan: tidak lagi membuat notifikasi "screening_crisis" per profesional.
+	// Flag krisis screening kini tampil di Crisis Incident Log (read-only); sinyal
+	// realtime SOS "crisis_alert" tetap disiarkan dari handleCrisisAlertV2.
 	writeJSON(w, http.StatusCreated, map[string]any{"screening": session})
 }
 
@@ -873,8 +874,9 @@ func (s *Server) reviewScreening(w http.ResponseWriter, r *http.Request, claims 
 		return
 	}
 	s.notifyPatient(r, review.PatientID, "screening_reviewed", "Screening sudah direview", "Profesional Anda sudah mereview screening terbaru.", map[string]string{
-		"screening_id": review.ScreeningSessionID,
-		"review_id":    review.ID,
+		"screening_id":    review.ScreeningSessionID,
+		"review_id":       review.ID,
+		"professional_id": claims.Subject,
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"review": review})
 }
@@ -923,6 +925,8 @@ func (s *Server) linkPatientToProfessional(w http.ResponseWriter, r *http.Reques
 		Data: map[string]string{
 			"patient_id": claims.Subject,
 		},
+		// Profesional: hanya sesi & chat yang push. Link pasien = in-app saja.
+		SuppressPush: !pushAllowed("professional", "patient_linked"),
 	})
 	if err != nil {
 		s.logger.Warn("create link notification failed", "error", err)
@@ -970,7 +974,7 @@ func (s *Server) createProfessionalNote(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	if note.Visibility == "shared_with_patient" {
-		s.notifyPatient(r, note.PatientID, "professional_note_shared", "Ada catatan profesional", "Profesional Anda membagikan catatan baru di Malva.", map[string]string{"note_id": note.ID})
+		s.notifyPatient(r, note.PatientID, "professional_note_shared", "Ada catatan profesional", "Profesional Anda membagikan catatan baru di Malva.", map[string]string{"note_id": note.ID, "professional_id": claims.Subject})
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"note": note})
 }
@@ -1882,58 +1886,76 @@ func (s *Server) consentAllows(r *http.Request, patientID, professionalID, scope
 	}
 }
 
-func (s *Server) notifyProfessionalsForCrisis(r *http.Request, session store.ScreeningSession) {
-	professionalIDs, err := s.store.ListProfessionalsForPatient(r.Context(), session.PatientID)
-	if err != nil {
-		s.logger.Warn("list professionals for crisis notification failed", "error", err)
-		return
-	}
-	for _, professionalID := range professionalIDs {
-		notification, err := s.store.CreateNotification(r.Context(), store.Notification{
-			UserID: professionalID,
-			Type:   "screening_crisis",
-			Title:  "Ada hasil screening prioritas",
-			Body:   "Buka Malva untuk meninjau pembaruan pasien.",
-			Data: map[string]string{
-				"screening_id": session.ID,
-				"patient_id":   session.PatientID,
-			},
-		})
-		if err != nil {
-			s.logger.Warn("create crisis notification failed", "error", err)
-			continue
-		}
-		s.hub.Publish(professionalID, realtime.Event{
-			Type: "notification.created",
-			Data: notification,
-		})
-	}
-}
-
 func (s *Server) notifyPatient(r *http.Request, patientID, kind, title, body string, data map[string]string) {
 	s.notifyUser(r.Context(), patientID, kind, title, body, data)
 }
 
 // notifyUser mengirim notifikasi tanpa membutuhkan *http.Request, sehingga
 // bisa dipakai background job (mis. pengingat sesi).
-func (s *Server) notifyUser(ctx context.Context, patientID, kind, title, body string, data map[string]string) {
+//
+// Menerapkan kebijakan push per-role (notification_policy.go): pasien hanya
+// di-push untuk peristiwa penting, dan jenis low-priority digabung menjadi satu
+// baris digest harian; profesional hanya di-push untuk sesi & chat.
+func (s *Server) notifyUser(ctx context.Context, userID, kind, title, body string, data map[string]string) {
 	if data == nil {
 		data = map[string]string{}
 	}
 	data["kind"] = kind
+
+	// Tentukan role penerima untuk menerapkan kebijakan push. Bila gagal,
+	// jangan telan notifikasi: tetap buat in-app tanpa push (role kosong ->
+	// pushAllowed false).
+	role, roleErr := s.store.GetUserRole(ctx, userID)
+	if roleErr != nil {
+		s.logger.Warn("gagal menentukan role penerima notifikasi", "error", roleErr, "kind", kind)
+		role = ""
+	}
+
+	// Pasien + jenis low-priority -> gabung menjadi satu baris digest harian.
+	if role == "patient" && isDigestKind(kind) {
+		professionalID := data["professional_id"]
+		professionalName := "Profesional Anda"
+		if professionalID != "" {
+			if u, err := s.store.GetUserByID(ctx, professionalID); err == nil && strings.TrimSpace(u.DisplayName) != "" {
+				professionalName = strings.TrimSpace(u.DisplayName)
+			}
+		}
+		digest, err := s.store.UpsertDailyDigest(ctx, store.Notification{
+			UserID: userID,
+			Type:   kind,
+			Title:  title,
+			Body:   digestBody(kind, 1, professionalName),
+			Data:   data,
+		}, func(count int) string {
+			return digestBody(kind, count, professionalName)
+		})
+		if err != nil {
+			s.logger.Warn("gagal membuat digest notifikasi pasien", "error", err, "kind", kind)
+			return
+		}
+		if s.hub != nil {
+			s.hub.Publish(userID, realtime.Event{
+				Type: "notification.created",
+				Data: digest,
+			})
+		}
+		return
+	}
+
 	notification, err := s.store.CreateNotification(ctx, store.Notification{
-		UserID: patientID,
-		Type:   kind,
-		Title:  title,
-		Body:   body,
-		Data:   data,
+		UserID:       userID,
+		Type:         kind,
+		Title:        title,
+		Body:         body,
+		Data:         data,
+		SuppressPush: !pushAllowed(role, kind),
 	})
 	if err != nil {
 		s.logger.Warn("create patient notification failed", "error", err, "kind", kind)
 		return
 	}
 	if s.hub != nil {
-		s.hub.Publish(patientID, realtime.Event{
+		s.hub.Publish(userID, realtime.Event{
 			Type: "notification.created",
 			Data: notification,
 		})

@@ -867,6 +867,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     required bool healthRecord,
     required bool moodCheckin,
     required bool medicationCheckin,
+    bool therapyRecords = false,
   }) async {
     final data = jsonEncode({
       'diary': diary,
@@ -874,6 +875,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       'health_record': healthRecord,
       'mood_checkin': moodCheckin,
       'medication_checkin': medicationCheckin,
+      'therapy_records': therapyRecords,
       'granted_at': wibIso(wibNow()),
     });
     await _secureStorage.write(key: _continuousConsentKey, value: data);

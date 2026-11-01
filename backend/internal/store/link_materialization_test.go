@@ -35,11 +35,13 @@ func openLinkTestStore(t *testing.T) (*Store, *sql.DB) {
 	return New(db), db
 }
 
-// TestEnsurePatientProfessionalLinkIdempoten mengunci perbaikan Bug 4:
-// materialisasi relasi pasien–profesional harus idempoten dan TIDAK menimpa
-// status baris yang sudah ada (link yang sengaja diputus tidak dihidupkan
-// kembali), sehingga profesional yang dibayar pasiennya tidak kehilangan akses
-// walau webhook pembayaran dikirim berulang — tanpa membalik keputusan pasien.
+// TestEnsurePatientProfessionalLinkIdempoten mengunci perilaku materialisasi
+// relasi pasien–profesional: idempoten terhadap webhook ganda, DAN menghidupkan
+// kembali link berstatus 'inactive' (status TURUNAN dari migrasi 028) karena
+// pembayaran berikutnya adalah bukti baru bahwa hubungan berjalan — tanpa ini
+// pasien yang baru membayar akan permanen tak terlihat oleh profesional.
+// Status selain 'inactive' (mis. putus eksplisit di masa depan) TIDAK dihidupkan
+// otomatis.
 func TestEnsurePatientProfessionalLinkIdempoten(t *testing.T) {
 	s, db := openLinkTestStore(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -74,9 +76,19 @@ func TestEnsurePatientProfessionalLinkIdempoten(t *testing.T) {
 		t.Fatal("profesional seharusnya terhubung ke pasien setelah materialisasi")
 	}
 
-	// Non-aktifkan lalu materialisasi ulang: status yang ada TIDAK boleh ditimpa
-	// (link yang sengaja diputus tidak dihidupkan kembali). Ini mengunci
-	// keputusan ON CONFLICT DO NOTHING sesuai instruksi team-lead + migrasi 027.
+	statusOf := func() string {
+		var status string
+		if err := db.QueryRowContext(ctx, `SELECT status FROM patient_professional_links
+			WHERE patient_id = $1 AND professional_id = $2`,
+			patientID, profID).Scan(&status); err != nil {
+			t.Fatalf("baca status: %v", err)
+		}
+		return status
+	}
+
+	// 'inactive' (status TURUNAN dari migrasi 028) HARUS dihidupkan kembali oleh
+	// pembayaran berikutnya. Fix: ON CONFLICT DO UPDATE SET status='active'
+	// WHERE patient_professional_links.status='inactive'.
 	if _, err := db.ExecContext(ctx, `UPDATE patient_professional_links
 		SET status = 'inactive' WHERE patient_id = $1 AND professional_id = $2`,
 		patientID, profID); err != nil {
@@ -85,13 +97,22 @@ func TestEnsurePatientProfessionalLinkIdempoten(t *testing.T) {
 	if err := s.EnsurePatientProfessionalLink(ctx, patientID, profID); err != nil {
 		t.Fatalf("materialisasi ulang: %v", err)
 	}
-	var status string
-	if err := db.QueryRowContext(ctx, `SELECT status FROM patient_professional_links
-		WHERE patient_id = $1 AND professional_id = $2`,
-		patientID, profID).Scan(&status); err != nil {
-		t.Fatalf("baca status: %v", err)
+	if got := statusOf(); got != "active" {
+		t.Fatalf("link 'inactive' harus dihidupkan kembali oleh pembayaran: dapat %q, mau %q", got, "active")
 	}
-	if status != "inactive" {
-		t.Fatalf("status link yang ada tidak boleh ditimpa: dapat %q, mau %q", status, "inactive")
+
+	// Status SELAIN 'inactive' (mis. putus eksplisit di masa depan) TIDAK boleh
+	// dihidupkan otomatis — invarian "link yang sengaja diputus tidak dihidupkan
+	// kembali" tetap berlaku untuk status selain 'inactive'.
+	if _, err := db.ExecContext(ctx, `UPDATE patient_professional_links
+		SET status = 'blocked' WHERE patient_id = $1 AND professional_id = $2`,
+		patientID, profID); err != nil {
+		t.Fatalf("set status blocked: %v", err)
+	}
+	if err := s.EnsurePatientProfessionalLink(ctx, patientID, profID); err != nil {
+		t.Fatalf("materialisasi ulang (blocked): %v", err)
+	}
+	if got := statusOf(); got != "blocked" {
+		t.Fatalf("status selain 'inactive' tidak boleh ditimpa: dapat %q, mau %q", got, "blocked")
 	}
 }

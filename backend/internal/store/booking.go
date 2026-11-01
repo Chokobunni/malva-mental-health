@@ -236,6 +236,40 @@ func (s *Store) CreatePayment(ctx context.Context, p Payment) (Payment, error) {
 	return p, nil
 }
 
+// GetReusablePendingPayment mengembalikan payment pending TERBARU untuk sebuah
+// booking yang masih bisa dipakai ulang (memiliki Snap token dan dibuat dalam
+// 24 jam terakhir — sama dengan masa berlaku transaksi default Midtrans).
+// Dipakai createPayment untuk IDEMPOTENSI "Lanjut Bayar": mencegah pembuatan
+// payment + transaksi Snap BARU setiap kali pasien menekan tombol.
+// Mengembalikan sql.ErrNoRows bila tidak ada yang bisa dipakai ulang.
+func (s *Store) GetReusablePendingPayment(ctx context.Context, bookingID string) (Payment, error) {
+	bookingID = strings.TrimSpace(bookingID)
+	if bookingID == "" {
+		return Payment{}, sql.ErrNoRows
+	}
+	const q = `SELECT id, booking_id, payment_method, gross_amount, service_fee_amount,
+	                  platform_fee_amount, net_amount, reference, COALESCE(external_id, ''),
+	                  status, COALESCE(gateway, ''), COALESCE(snap_token, ''), COALESCE(redirect_url, ''),
+	                  paid_at, expires_at, created_at
+	           FROM payments
+	           WHERE booking_id = $1
+	             AND status = 'pending'
+	             AND snap_token IS NOT NULL AND snap_token <> ''
+	             AND created_at > now() - interval '24 hours'
+	           ORDER BY created_at DESC
+	           LIMIT 1`
+	var p Payment
+	err := s.db.QueryRowContext(ctx, q, bookingID).Scan(
+		&p.ID, &p.BookingID, &p.PaymentMethod, &p.GrossAmount, &p.ServiceFeeAmount,
+		&p.PlatformFeeAmount, &p.NetAmount, &p.Reference, &p.ExternalID,
+		&p.Status, &p.Gateway, &p.SnapToken, &p.RedirectURL,
+		&p.PaidAt, &p.ExpiresAt, &p.CreatedAt)
+	if err != nil {
+		return Payment{}, err
+	}
+	return p, nil
+}
+
 func (s *Store) MarkPaymentPaid(ctx context.Context, reference, externalID string) (Payment, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

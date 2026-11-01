@@ -2218,6 +2218,27 @@ class MalvaApiClient {
         _expectMap(payload['incident'], 'Respons resolusi tidak valid.'));
   }
 
+  /// Feed kronologis read-only Crisis Incident Log (gabungan SOS + flag krisis
+  /// screening untuk SEMUA pasien terhubung) dalam SATU permintaan.
+  Future<BackendCrisisIncidentLog> getCrisisIncidentLog({
+    required String accessToken,
+    int limit = 50,
+  }) async {
+    // WAJIB _sendUri + queryParameters: _send memakai baseUri.replace(path:),
+    // yang meng-escape '?' menjadi %3F sehingga '/v1/crisis-incident-log?limit='
+    // menjadi path ter-encode (server membalas HTML landing, bukan JSON).
+    // Pola sama seperti deleteMedication / listCareSessions.
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/crisis-incident-log',
+        queryParameters: {'limit': '$limit'},
+      ),
+      accessToken: accessToken,
+    );
+    return BackendCrisisIncidentLog.fromJson(payload);
+  }
+
   Future<BackendSOSBlastStatus> getBlastStatus({
     required String accessToken,
     required String incidentId,
@@ -4877,4 +4898,82 @@ class MalvaApiException implements Exception {
 
   @override
   String toString() => message;
+}
+
+// ============================================================
+// CRISIS INCIDENT LOG — feed kronologis read-only (SOS + screening).
+// ============================================================
+
+class BackendCrisisLogItem {
+  const BackendCrisisLogItem({
+    required this.id,
+    required this.source,
+    required this.patientId,
+    required this.patientName,
+    required this.title,
+    required this.detail,
+    required this.severity,
+    required this.createdAt,
+    this.resolvedAt,
+    this.resolutionNotes = '',
+  });
+
+  factory BackendCrisisLogItem.fromJson(Map<String, dynamic> json) {
+    return BackendCrisisLogItem(
+      id: json['id']?.toString() ?? '',
+      source: json['source']?.toString() ?? 'sos',
+      patientId: json['patient_id']?.toString() ?? '',
+      patientName: json['patient_name']?.toString() ?? 'Pasien',
+      title: json['title']?.toString() ?? '',
+      detail: json['detail']?.toString() ?? '',
+      severity: json['severity']?.toString() ?? 'crisis',
+      createdAt: parseWibStored(json['created_at']?.toString()),
+      resolvedAt: parseWibStored(json['resolved_at']?.toString()),
+      resolutionNotes: json['resolution_notes']?.toString() ?? '',
+    );
+  }
+
+  final String id;
+  final String source; // 'sos' | 'screening'
+  final String patientId;
+  final String patientName;
+  final String title;
+  final String detail;
+  final String severity;
+  final DateTime? createdAt;
+  final DateTime? resolvedAt;
+  final String resolutionNotes;
+
+  bool get isResolved => resolvedAt != null;
+  bool get isSos => source == 'sos';
+}
+
+class BackendCrisisIncidentLog {
+  const BackendCrisisIncidentLog({
+    required this.items,
+    required this.total,
+    required this.unresolved,
+  });
+
+  factory BackendCrisisIncidentLog.fromJson(Map<String, dynamic> json) {
+    final rawItems = json['items'];
+    final items = rawItems is List
+        ? rawItems
+            .whereType<Map<String, dynamic>>()
+            .map(BackendCrisisLogItem.fromJson)
+            .toList(growable: false)
+        : const <BackendCrisisLogItem>[];
+    final rawCounts = json['counts'];
+    final counts = rawCounts is Map ? rawCounts : const <String, dynamic>{};
+    return BackendCrisisIncidentLog(
+      items: items,
+      total: (counts['total'] as num?)?.toInt() ?? items.length,
+      unresolved: (counts['unresolved'] as num?)?.toInt() ??
+          items.where((i) => !i.isResolved).length,
+    );
+  }
+
+  final List<BackendCrisisLogItem> items;
+  final int total;
+  final int unresolved;
 }
