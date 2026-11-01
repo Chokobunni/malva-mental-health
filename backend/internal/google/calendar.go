@@ -199,11 +199,38 @@ func (c *CalendarService) CreateMeetEvent(ctx context.Context, professionalUserI
 	if err != nil {
 		return "", "", fmt.Errorf("gagal membuat event Meet: %w", err)
 	}
-	meetURL := ""
-	if created.ConferenceData != nil && len(created.ConferenceData.EntryPoints) > 0 {
-		meetURL = created.ConferenceData.EntryPoints[0].Uri
+	var entryPoints []*calendar.EntryPoint
+	if created.ConferenceData != nil {
+		entryPoints = created.ConferenceData.EntryPoints
 	}
+	meetURL := pickMeetURL(entryPoints)
 	return created.Id, meetURL, nil
+}
+
+// pickMeetURL memilih URI entry point konferensi bertipe video.
+//
+// Google Calendar mengembalikan beberapa entry point untuk satu conferenceData:
+// selain "video" (tautan Meet sesungguhnya) ada juga "phone" (nomor dial-in)
+// dan "more" (tautan informasi). Memakai indeks 0 secara membabi buta bisa
+// menyimpan nomor telepon atau tautan informasi sebagai tautan Meet, sehingga
+// pasien menerima tautan yang salah. Karena itu tipe "video" dicari lebih dulu;
+// indeks 0 hanya dipakai sebagai fallback bila Google tidak menandai tipe
+// apa pun (perilaku lama dipertahankan agar event tetap punya tautan).
+func pickMeetURL(entryPoints []*calendar.EntryPoint) string {
+	for _, ep := range entryPoints {
+		if ep == nil || ep.Uri == "" {
+			continue
+		}
+		if ep.EntryPointType == "video" {
+			return ep.Uri
+		}
+	}
+	for _, ep := range entryPoints {
+		if ep != nil && ep.Uri != "" {
+			return ep.Uri
+		}
+	}
+	return ""
 }
 
 // UpdateMeetEvent mengubah waktu mulai/selesai event yang sudah ada.

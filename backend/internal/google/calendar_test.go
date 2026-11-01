@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"malva/backend/internal/clock"
+
+	calendar "google.golang.org/api/calendar/v3"
 )
 
 // TestBuildMeetEventUsesJakartaTimezone memastikan payload event Calendar
@@ -93,5 +95,60 @@ func TestBuildMeetEventWithoutAttendees(t *testing.T) {
 	}, "malva-request-4")
 	if len(event.Attendees) != 0 {
 		t.Errorf("Attendees harus kosong, dapat %+v", event.Attendees)
+	}
+}
+
+// TestPickMeetURLMemilihEntryPointVideo memastikan tautan Meet diambil dari
+// entry point bertipe "video", BUKAN sekadar entry point pertama. Google
+// mengembalikan entry point "phone"/"more" lebih dulu untuk sebagian akun;
+// memakai indeks 0 membuat pasien menerima nomor telepon sebagai tautan Meet.
+func TestPickMeetURLMemilihEntryPointVideo(t *testing.T) {
+	cases := []struct {
+		nama  string
+		input []*calendar.EntryPoint
+		mau   string
+	}{
+		{
+			nama: "video di urutan kedua, phone lebih dulu",
+			input: []*calendar.EntryPoint{
+				{EntryPointType: "phone", Uri: "tel:+62-21-0000"},
+				{EntryPointType: "video", Uri: "https://meet.google.com/abc-defg-hij"},
+			},
+			mau: "https://meet.google.com/abc-defg-hij",
+		},
+		{
+			nama: "video di urutan pertama",
+			input: []*calendar.EntryPoint{
+				{EntryPointType: "video", Uri: "https://meet.google.com/aaa-bbbb-ccc"},
+				{EntryPointType: "phone", Uri: "tel:+62-21-1111"},
+			},
+			mau: "https://meet.google.com/aaa-bbbb-ccc",
+		},
+		{
+			nama: "tanpa video, fallback ke entry point ber-URI pertama",
+			input: []*calendar.EntryPoint{
+				{EntryPointType: "", Uri: ""},
+				{EntryPointType: "more", Uri: "https://calendar.google.com/event"},
+			},
+			mau: "https://calendar.google.com/event",
+		},
+		{
+			nama:  "daftar kosong",
+			input: nil,
+			mau:   "",
+		},
+		{
+			nama: "hanya URI kosong",
+			input: []*calendar.EntryPoint{
+				{EntryPointType: "video", Uri: ""},
+			},
+			mau: "",
+		},
+	}
+
+	for _, tc := range cases {
+		if got := pickMeetURL(tc.input); got != tc.mau {
+			t.Errorf("%s: pickMeetURL = %q, mau %q", tc.nama, got, tc.mau)
+		}
 	}
 }
