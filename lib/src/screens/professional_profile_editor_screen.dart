@@ -1,10 +1,10 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../models.dart';
+import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
@@ -106,10 +106,9 @@ class _ProfessionalProfileEditorScreenState
   bool _isUploadingVideo = false;
 
   // Berkas lokal yang baru dipilih (untuk pratinjau sebelum/sesudah upload).
-  File? _localPhotoFile;
-  File? _localVideoFile;
-
-  final _imagePicker = ImagePicker();
+  // Disimpan sebagai byte, bukan File — di web tidak ada berkas nyata.
+  Uint8List? _localPhotoBytes;
+  bool _hasLocalVideo = false;
 
   MalvaApiClient get _api => widget.apiClient ?? ref.read(apiClientProvider);
   String? get _token => widget.session?.accessToken;
@@ -246,8 +245,11 @@ class _ProfessionalProfileEditorScreenState
       return;
     }
     try {
-      final picked = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+      final picker = ref.read(filePickerProvider);
+      // Kompresi dikembalikan persis seperti versi lama: 1024×1024, kualitas 85
+      // agar foto kamera 12 MP tidak melewati batas unggah backend.
+      final picked = await picker.pick(
+        'image',
         maxWidth: 1024,
         maxHeight: 1024,
         imageQuality: 85,
@@ -266,19 +268,21 @@ class _ProfessionalProfileEditorScreenState
       setState(() {
         _isUploadingPhoto = true;
         _error = null;
-        _localPhotoFile = File(picked.path);
+        _localPhotoBytes = picked.bytes;
       });
 
       final url = await _api.uploadFile(
         accessToken: token,
-        filePath: picked.path,
+        fileName: picked.name,
+        bytes: picked.bytes,
+        mimeType: picked.mimeType,
       );
 
       if (!mounted) return;
       setState(() {
         _photoUrlController.text = url;
         _isUploadingPhoto = false;
-        _localPhotoFile = null; // bersihkan setelah berhasil
+        _localPhotoBytes = null; // bersihkan setelah berhasil
       });
       // Simpan langsung agar foto baru tampil realtime di sisi pasien
       // (server menyiarkan event professional.profile.updated).
@@ -306,7 +310,8 @@ class _ProfessionalProfileEditorScreenState
       return;
     }
     try {
-      final picked = await _imagePicker.pickVideo(source: ImageSource.gallery);
+      final picker = ref.read(filePickerProvider);
+      final picked = await picker.pick('video');
       if (picked == null) return;
 
       // Validasi ekstensi sisi klien.
@@ -320,19 +325,21 @@ class _ProfessionalProfileEditorScreenState
       setState(() {
         _isUploadingVideo = true;
         _error = null;
-        _localVideoFile = File(picked.path);
+        _hasLocalVideo = true;
       });
 
       final url = await _api.uploadFile(
         accessToken: token,
-        filePath: picked.path,
+        fileName: picked.name,
+        bytes: picked.bytes,
+        mimeType: picked.mimeType,
       );
 
       if (!mounted) return;
       setState(() {
         _videoUrlController.text = url;
         _isUploadingVideo = false;
-        _localVideoFile = null;
+        _hasLocalVideo = false;
       });
       // Simpan langsung agar video intro baru tampil realtime di sisi pasien.
       await _save();
@@ -362,7 +369,7 @@ class _ProfessionalProfileEditorScreenState
     setState(() {
       _photoUrlController.text =
           'https://api.dicebear.com/9.x/notionists/svg?seed=$userId';
-      _localPhotoFile = null; // reset berkas lokal karena pakai URL eksternal
+      _localPhotoBytes = null; // reset berkas lokal karena pakai URL eksternal
     });
   }
 
@@ -638,7 +645,7 @@ class _ProfessionalProfileEditorScreenState
                             ],
                           ),
                           // Pratinjau thumbnail video lokal
-                          if (_localVideoFile != null) ...[
+                          if (_hasLocalVideo) ...[
                             const SizedBox(height: 8),
                             Center(
                               child: Container(
@@ -706,10 +713,10 @@ class _ProfessionalProfileEditorScreenState
     }
 
     // Berkas lokal yang baru dipilih (sebelum/sesudah upload).
-    if (_localPhotoFile != null) {
+    if (_localPhotoBytes != null) {
       return ClipOval(
-        child: Image.file(
-          _localPhotoFile!,
+        child: Image.memory(
+          _localPhotoBytes!,
           width: 100,
           height: 100,
           fit: BoxFit.cover,

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -286,6 +287,49 @@ void main() {
     );
     expect(paths.where((p) => p == 'POST /v1/auth/refresh'), isEmpty);
   });
+
+  test('uploadFile mengirim BYTE multipart (bukan path) dengan Content-Type',
+      () async {
+    http.BaseRequest? captured;
+    final api = MalvaApiClient(
+      baseUrl: 'http://backend.test',
+      httpClient: _CapturingClient((request) async {
+        captured = request;
+        return http.Response(
+          jsonEncode({'url': '/uploads/u/foto.png'}),
+          201,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+
+    final bytes =
+        Uint8List.fromList(<int>[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A]);
+    final url = await api.uploadFile(
+      accessToken: 'token_123',
+      fileName: 'foto.png',
+      bytes: bytes,
+      mimeType: 'image/png',
+    );
+
+    expect(url, 'http://backend.test/uploads/u/foto.png');
+    expect(captured, isA<http.MultipartRequest>());
+    final mp = captured as http.MultipartRequest;
+    expect(mp.method, 'POST');
+    expect(mp.url.path, '/v1/upload');
+    expect(mp.headers['Authorization'], 'Bearer token_123');
+    expect(mp.files, hasLength(1));
+    final file = mp.files.single;
+    expect(file.field, 'file');
+    expect(file.filename, 'foto.png');
+    expect(file.contentType.mimeType, 'image/png');
+
+    // Body multipart harus memuat byte mentah berkas — bukti ini byte, bukan
+    // path (fromPath akan membaca berkas dari disk, mustahil di web).
+    final body = await mp.finalize().toBytes();
+    expect(_containsSubsequence(body, bytes), isTrue,
+        reason: 'byte berkas harus ada di body multipart');
+  });
 }
 
 class _FakeClient extends http.BaseClient {
@@ -308,4 +352,40 @@ class _FakeClient extends http.BaseClient {
       request: replay,
     );
   }
+}
+
+/// Menangkap request ASLI (termasuk [http.MultipartRequest]) tanpa
+/// memfinalisasinya, supaya test bisa memeriksa body multipart apa adanya.
+class _CapturingClient extends http.BaseClient {
+  _CapturingClient(this.onSend);
+
+  final Future<http.Response> Function(http.BaseRequest request) onSend;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final response = await onSend(request);
+    return http.StreamedResponse(
+      Stream.value(response.bodyBytes),
+      response.statusCode,
+      headers: response.headers,
+      reasonPhrase: response.reasonPhrase,
+      request: request,
+    );
+  }
+}
+
+/// Apakah [needle] muncul berurutan di dalam [haystack].
+bool _containsSubsequence(List<int> haystack, List<int> needle) {
+  if (needle.isEmpty) return true;
+  for (var i = 0; i + needle.length <= haystack.length; i++) {
+    var matches = true;
+    for (var j = 0; j < needle.length; j++) {
+      if (haystack[i + j] != needle[j]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return true;
+  }
+  return false;
 }

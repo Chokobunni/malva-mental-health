@@ -1,7 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
+import '../platform/contracts/ports.dart';
+import '../platform/platform_factory.dart';
 import '../time/wib.dart';
 
 /// Jam acuan bersama: waktu perangkat + offset terhadap server.
@@ -14,7 +16,7 @@ import '../time/wib.dart';
 /// Bila jam perangkat meleset berjam-jam, dosis pukul 23:50 bisa tersimpan
 /// sebagai "besok" (atau sebaliknya) sehingga kepatuhan "hari ini" salah.
 ///
-/// Catatan platform: file ini SENGAJA tidak memakai `dart:io` (`HttpDate`)
+/// Catatan platform: file ini SENGAJA tidak memakai I/O native (`HttpDate`)
 /// karena aplikasi juga di-build untuk web (`flutter build web`). Parsing
 /// RFC1123 dilakukan manual di [_parseRfc1123Utc].
 class ServerClock {
@@ -31,7 +33,11 @@ class ServerClock {
   /// jam perangkat yang salah — offset seperti itu justru merusak data.
   static const Duration _maxPlausibleOffset = Duration(hours: 24);
 
-  static const FlutterSecureStorage _storage = FlutterSecureStorage();
+  static SecureStore _store = createSecureStore();
+
+  /// Ganti penyimpanan (dipakai test). Produksi memakai impl platform default.
+  @visibleForTesting
+  static void setStore(SecureStore store) => _store = store;
 
   static Duration _offset = Duration.zero;
   static bool _isSynced = false;
@@ -86,13 +92,13 @@ class ServerClock {
   /// Tidak pernah melempar: storage bisa tidak tersedia (test/web/izin).
   static Future<void> persist() async {
     try {
-      await _storage.write(
-        key: offsetStorageKey,
-        value: _offset.inMilliseconds.toString(),
+      await _store.write(
+        offsetStorageKey,
+        _offset.inMilliseconds.toString(),
       );
-      await _storage.write(
-        key: savedAtStorageKey,
-        value: wibIso(wibNow()),
+      await _store.write(
+        savedAtStorageKey,
+        wibIso(wibNow()),
       );
     } on Object {
       // Storage tidak tersedia: offset tetap berlaku untuk sesi berjalan.
@@ -107,7 +113,7 @@ class ServerClock {
     if (_hasLoadedPersisted) return;
     _hasLoadedPersisted = true;
     try {
-      final rawOffset = await _storage.read(key: offsetStorageKey);
+      final rawOffset = await _store.read(offsetStorageKey);
       if (rawOffset == null || rawOffset.trim().isEmpty) return;
       final milliseconds = int.tryParse(rawOffset.trim());
       if (milliseconds == null) return;
@@ -128,7 +134,7 @@ class ServerClock {
   }
 
   // ============================================================
-  // PARSING RFC1123 (manual, tanpa dart:io)
+  // PARSING RFC1123 (manual, tanpa I/O native)
   // ============================================================
 
   static const List<String> _monthNames = <String>[

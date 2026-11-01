@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../assessment_engine.dart';
 import '../models.dart';
+import '../platform/contracts/ports.dart';
+import '../platform/platform_factory.dart';
+import '../platform/platform_providers.dart';
 import '../services/assessment_database_service.dart';
 import '../services/malva_api_client.dart';
 import '../services/server_clock.dart';
@@ -18,7 +20,6 @@ const _continuousConsentKey = 'malva_continuous_support_consent';
 /// Prefix cache lokal log minum obat per akun (`..._<backendUserId>`).
 /// Selaras dengan isolasi per-akun yang dipakai sesi & consent di atas.
 const _medicationLogsKeyPrefix = 'malva_medication_logs_';
-const _secureStorage = FlutterSecureStorage();
 
 /// Hasil penyimpanan screening.
 ///
@@ -187,9 +188,14 @@ class MalvaStoreState {
 class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   final MalvaApiClient? _apiClient;
   final AssessmentDatabaseService _assessmentDb;
+  final SecureStore _secureStore;
 
-  MalvaStoreNotifier(this._apiClient, AssessmentDatabaseService? assessmentDb)
-      : _assessmentDb = assessmentDb ?? AssessmentDatabaseService(),
+  MalvaStoreNotifier(
+    this._apiClient,
+    AssessmentDatabaseService? assessmentDb, {
+    SecureStore? secureStore,
+  })  : _assessmentDb = assessmentDb ?? AssessmentDatabaseService(),
+        _secureStore = secureStore ?? createSecureStore(),
         super(_seededState());
 
   static MalvaStoreState _seededState() {
@@ -754,12 +760,12 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       'refreshToken': session.refreshToken,
       'backendSynced': session.backendSynced,
     });
-    await _secureStorage.write(key: _sessionKey, value: data);
+    await _secureStore.write(_sessionKey, data);
   }
 
   Future<AuthSession?> restoreSession() async {
     try {
-      final data = await _secureStorage.read(key: _sessionKey);
+      final data = await _secureStore.read(_sessionKey);
       if (data == null || data.isEmpty) return null;
       final map = jsonDecode(data) as Map<String, dynamic>;
       final role = switch (map['role']) {
@@ -782,7 +788,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   }
 
   Future<void> clearSession() async {
-    await _secureStorage.delete(key: _sessionKey);
+    await _secureStore.delete(_sessionKey);
   }
 
   // ============================================================
@@ -878,13 +884,13 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       'therapy_records': therapyRecords,
       'granted_at': wibIso(wibNow()),
     });
-    await _secureStorage.write(key: _continuousConsentKey, value: data);
+    await _secureStore.write(_continuousConsentKey, data);
   }
 
   /// Baca izin Continuous Support yang tersimpan lokal (null bila belum ada).
   Future<Map<String, dynamic>?> readContinuousSupportConsent() async {
     try {
-      final raw = await _secureStorage.read(key: _continuousConsentKey);
+      final raw = await _secureStore.read(_continuousConsentKey);
       if (raw == null || raw.isEmpty) return null;
       return jsonDecode(raw) as Map<String, dynamic>;
     } on Object {
@@ -1003,9 +1009,9 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
                 'status': log.status,
               })
           .toList());
-      await _secureStorage.write(
-        key: '$_medicationLogsKeyPrefix$accountId',
-        value: data,
+      await _secureStore.write(
+        '$_medicationLogsKeyPrefix$accountId',
+        data,
       );
     } on Object {
       // Storage tidak tersedia (test/offline): abaikan.
@@ -1021,8 +1027,8 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     final accountId = state.patient.id;
     if (accountId.isEmpty) return;
     try {
-      final raw = await _secureStorage.read(
-        key: '$_medicationLogsKeyPrefix$accountId',
+      final raw = await _secureStore.read(
+        '$_medicationLogsKeyPrefix$accountId',
       );
       if (raw == null || raw.isEmpty) return;
       final decoded = jsonDecode(raw);
@@ -1339,6 +1345,7 @@ final malvaStoreProvider =
   return MalvaStoreNotifier(
     ref.watch(apiClientProvider),
     ref.watch(assessmentDatabaseProvider),
+    secureStore: ref.watch(secureStoreProvider),
   );
 });
 

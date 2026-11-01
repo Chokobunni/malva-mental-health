@@ -1,23 +1,23 @@
 import 'dart:convert';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
 import '../assessment_engine.dart';
 import '../models.dart';
+import '../platform/contracts/ports.dart';
+import '../platform/platform_factory.dart';
 import '../time/wib.dart';
 
 /// Penyimpanan lokal riwayat asesmen (PHQ-9 / GAD-7) per akun.
 ///
-/// Data disimpan sebagai JSON pada [FlutterSecureStorage] dengan kunci
+/// Data disimpan sebagai JSON pada [SecureStore] (port platform) dengan kunci
 /// `malva_assessments_<accountId>` agar antar akun tidak bocor (selaras
 /// dengan pola `offline_sync_service`). Bila platform channel tidak
 /// tersedia (unit test / storage terkunci), semua operasi gagal diam-diam
 /// dan mengembalikan kondisi kosong.
 class AssessmentDatabaseService {
-  AssessmentDatabaseService({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+  AssessmentDatabaseService({SecureStore? store})
+      : _store = store ?? createSecureStore();
 
-  final FlutterSecureStorage _storage;
+  final SecureStore _store;
 
   static const _keyPrefix = 'malva_assessments_';
 
@@ -31,7 +31,7 @@ class AssessmentDatabaseService {
     if (accountId.isEmpty) return;
     try {
       final data = jsonEncode(results.map(_resultToJson).toList());
-      await _storage.write(key: _keyFor(accountId), value: data);
+      await _store.write(_keyFor(accountId), data);
     } on Object {
       // Storage tidak tersedia (test/offline): abaikan.
     }
@@ -41,7 +41,7 @@ class AssessmentDatabaseService {
   Future<List<AssessmentResult>> loadAll(String accountId) async {
     if (accountId.isEmpty) return const [];
     try {
-      final raw = await _storage.read(key: _keyFor(accountId));
+      final raw = await _store.read(_keyFor(accountId));
       if (raw == null || raw.isEmpty) return const [];
       final decoded = jsonDecode(raw);
       if (decoded is! List) return const [];
@@ -59,7 +59,7 @@ class AssessmentDatabaseService {
   Future<void> clear(String accountId) async {
     if (accountId.isEmpty) return;
     try {
-      await _storage.delete(key: _keyFor(accountId));
+      await _store.delete(_keyFor(accountId));
     } on Object {
       // Storage tidak tersedia: abaikan.
     }

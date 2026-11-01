@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../platform/platform_providers.dart';
 import '../../services/offline_sync_service.dart';
 import '../auth_providers.dart';
 
@@ -23,6 +24,7 @@ final offlineSyncServiceProvider = Provider<OfflineSyncService>((ref) {
         container.read(authStateProvider).session?.accessToken,
     activeUserIdReader: () =>
         container.read(authStateProvider).session?.backendUserId,
+    secureStore: ref.watch(secureStoreProvider),
   );
   ref.onDispose(service.dispose);
   return service;

@@ -2,10 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../assessment_engine.dart';
 import '../models.dart';
+import '../platform/contracts/ports.dart';
+import '../platform/platform_factory.dart';
 import 'malva_api_client.dart';
 import 'server_clock.dart';
 import '../time/wib.dart';
@@ -104,8 +105,10 @@ class OfflineSyncService {
     required this.apiClient,
     String? Function()? accessTokenReader,
     String? Function()? activeUserIdReader,
+    SecureStore? secureStore,
   })  : _readAccessToken = accessTokenReader,
-        _readActiveUserId = activeUserIdReader;
+        _readActiveUserId = activeUserIdReader,
+        _secureStore = secureStore ?? createSecureStore();
 
   final MalvaApiClient apiClient;
 
@@ -117,7 +120,7 @@ class OfflineSyncService {
   final String? Function()? _readActiveUserId;
 
   final _queueController = StreamController<List<SyncItem>>.broadcast();
-  final _secureStorage = const FlutterSecureStorage();
+  final SecureStore _secureStore;
   static const _queueKey = 'malva_sync_queue';
 
   List<SyncItem> _queue = [];
@@ -445,12 +448,12 @@ class OfflineSyncService {
 
   Future<void> _saveQueue() async {
     final data = jsonEncode(_queue.map((i) => i.toJson()).toList());
-    await _secureStorage.write(key: _queueKey, value: data);
+    await _secureStore.write(_queueKey, data);
   }
 
   Future<void> _loadQueue() async {
     try {
-      final data = await _secureStorage.read(key: _queueKey);
+      final data = await _secureStore.read(_queueKey);
       if (data == null || data.isEmpty) return;
       final list = jsonDecode(data) as List;
       _queue = list

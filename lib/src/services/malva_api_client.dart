@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../assessment_engine.dart';
 import '../models.dart';
+import '../platform/api_base_url.dart';
 import 'server_clock.dart';
 import '../time/wib.dart';
 
@@ -22,8 +23,9 @@ class MalvaApiClient {
 
   static String get defaultBaseUrl {
     if (_dartDefineBaseUrl.isNotEmpty) return _dartDefineBaseUrl;
-    if (kIsWeb) return 'http://localhost:8080';
-    return 'http://10.0.2.2:8080';
+    // Nilai bawaan dev dipilih compiler lewat lapisan platform
+    // (api_base_url.dart): web -> localhost, VM/emulator -> 10.0.2.2.
+    return kDefaultApiBaseUrl;
   }
 
   final http.Client _httpClient;
@@ -2306,14 +2308,25 @@ class MalvaApiClient {
   /// Mengunggah berkas media (foto/video) ke server via POST /v1/upload.
   /// Mengembalikan URL relatif yang bisa dipakai sebagai photo_intro_url atau
   /// video_intro_url saat menyimpan kredensial profesional.
+  ///
+  /// Memakai [http.MultipartFile.fromBytes] — BUKAN `fromPath` — karena di web
+  /// `XFile.path` adalah blob URL yang tidak bisa dibaca I/O native. Byte adalah
+  /// satu-satunya sumber kebenaran di kedua target.
   Future<String> uploadFile({
     required String accessToken,
-    required String filePath,
+    required String fileName,
+    required Uint8List bytes,
+    required String mimeType,
   }) async {
     final uri = baseUri.replace(path: '/v1/upload');
     final request = http.MultipartRequest('POST', uri)
       ..headers['Authorization'] = 'Bearer $accessToken'
-      ..files.add(await http.MultipartFile.fromPath('file', filePath));
+      ..files.add(http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: fileName,
+        contentType: http.MediaType.parse(mimeType),
+      ));
 
     late final http.StreamedResponse streamed;
     try {
