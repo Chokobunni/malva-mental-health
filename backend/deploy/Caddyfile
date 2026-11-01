@@ -21,6 +21,10 @@ malva.web.id {
 		# memberi hash pada nama berkas, cache immutable membuat deploy baru
 		# tidak pernah sampai ke pengguna.
 		header /index.html Cache-Control "no-cache"
+		# `handle_path` membuang prefiks /app sehingga permintaan ke /app/
+		# menjadi "/" — tanpa baris ini HTML entrypoint tidak pernah kena
+		# no-cache dan deploy baru bisa tertahan di cache pengguna.
+		header / Cache-Control "no-cache"
 		header /flutter_service_worker.js Cache-Control "no-cache"
 		header /main.dart.js Cache-Control "no-cache"
 		header /version.json Cache-Control "no-cache"

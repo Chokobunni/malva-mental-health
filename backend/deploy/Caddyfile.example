@@ -16,6 +16,7 @@ malva.example.com {
 		root * /var/www/malva-app
 		try_files {path} /index.html
 		header /index.html Cache-Control "no-cache"
+		header / Cache-Control "no-cache"
 		header /flutter_service_worker.js Cache-Control "no-cache"
 		header /main.dart.js Cache-Control "no-cache"
 		header /version.json Cache-Control "no-cache"
