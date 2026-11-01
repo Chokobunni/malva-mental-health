@@ -485,6 +485,115 @@ void main() {
     expect(freshCalls, 1);
     expect(normalCalls, 0);
   });
+
+  testWidgets(
+      'aktivasi Meet gagal access_denied: dialog menyebut Gmail tertaut + '
+      'instruksi Test users', (tester) async {
+    final api = MalvaApiClient(
+      baseUrl: 'http://backend.test',
+      httpClient: _FakeClient((request) async {
+        switch ('${request.method} ${request.url.path}') {
+          case 'GET /v1/auth/google-identity':
+            return _json({
+              'linked': true,
+              'email': 'dr.hafid@gmail.com',
+              'linked_at': '2026-10-05T10:00:00.000Z',
+            });
+          case 'GET /v1/google/status':
+            return _json(
+                {'server_configured': true, 'connected': false, 'scope': ''});
+          case 'POST /v1/auth/google-token-exchange':
+            // Google menolak karena Gmail belum terdaftar sebagai Test user.
+            return _json({
+              'error':
+                  'Error 403: access_denied — the developer has not added you '
+                      'as a Test user for this app.',
+            }, status: 422);
+          default:
+            return _json(const {});
+        }
+      }),
+    );
+
+    await tester.pumpWidget(_wrap(
+      api,
+      _proSession,
+      GoogleAccountCard(
+        session: _proSession,
+        showMeet: true,
+        calendarCodeProvider: () async => 'code-normal',
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Aktifkan Meet -> gagal 403 access_denied -> dialog muncul.
+    await tester
+        .tap(find.widgetWithText(FilledButton, 'Hubungkan Google Calendar'));
+    // Dialog tampil saat _busy masih true (spinner berputar di tombol di balik
+    // dialog), jadi pumpAndSettle tak akan pernah settle. Pakai pump berdurasi.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Dialog kegagalan tampil dan menyebut Gmail tertaut + instruksi tepat.
+    // Email muncul di kartu DAN di dialog -> pakai findsWidgets.
+    expect(find.text('Google Calendar gagal diaktifkan'), findsOneWidget);
+    expect(find.textContaining('dr.hafid@gmail.com'), findsWidgets);
+    expect(find.textContaining('Test users'), findsWidgets);
+    expect(find.textContaining('malva-7084e'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'aktivasi Meet gagal NON access_denied: dialog TIDAK menambah baris Gmail',
+      (tester) async {
+    final api = MalvaApiClient(
+      baseUrl: 'http://backend.test',
+      httpClient: _FakeClient((request) async {
+        switch ('${request.method} ${request.url.path}') {
+          case 'GET /v1/auth/google-identity':
+            return _json({
+              'linked': true,
+              'email': 'dr.hafid@gmail.com',
+              'linked_at': '2026-10-05T10:00:00.000Z',
+            });
+          case 'GET /v1/google/status':
+            return _json(
+                {'server_configured': true, 'connected': false, 'scope': ''});
+          case 'POST /v1/auth/google-token-exchange':
+            // Kegagalan umum (bukan access_denied).
+            return _json({
+              'error': 'Gagal menukar kode otorisasi Google. Coba lagi nanti.',
+            }, status: 500);
+          default:
+            return _json(const {});
+        }
+      }),
+    );
+
+    await tester.pumpWidget(_wrap(
+      api,
+      _proSession,
+      GoogleAccountCard(
+        session: _proSession,
+        showMeet: true,
+        calendarCodeProvider: () async => 'code-normal',
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester
+        .tap(find.widgetWithText(FilledButton, 'Hubungkan Google Calendar'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Google Calendar gagal diaktifkan'), findsOneWidget);
+    // Pesan lain TIDAK diubah: tidak ada instruksi Test users/Gmail.
+    expect(find.textContaining('Test users'), findsNothing);
+    expect(find.textContaining('malva-7084e'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 /// Klien HTTP palsu (pola repo, lihat `test/health_record_sync_test.dart`).

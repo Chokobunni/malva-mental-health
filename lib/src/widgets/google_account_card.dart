@@ -249,12 +249,17 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
   /// dipotong `toString()`) — termasuk kode Google mentah bila ada — dengan
   /// aksi "Coba lagi" (ulang alur otorisasi), "Cabut akses Google" (buka
   /// halaman izin Google), dan "Tutup".
+  ///
+  /// Untuk kegagalan `access_denied`/`Test users`, pesan diperkaya dengan
+  /// Gmail tertaut + instruksi tepat menambahkan akun sebagai Test user OAuth
+  /// consent screen (penyebab paling umum 403 saat aplikasi masih mode Testing).
   Future<void> _showMeetErrorDialog(String message) async {
+    final displayMessage = _augmentMeetErrorMessage(message);
     final action = await showDialog<_MeetErrorAction>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Google Calendar gagal diaktifkan'),
-        content: SingleChildScrollView(child: Text(message)),
+        content: SingleChildScrollView(child: Text(displayMessage)),
         actions: [
           TextButton(
             onPressed: () =>
@@ -284,6 +289,24 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
       case null:
         break;
     }
+  }
+
+  /// Menambahkan baris bantuan khusus untuk kegagalan `access_denied` /
+  /// `Test users` (Google menolak karena Gmail belum terdaftar sebagai Test
+  /// user pada OAuth consent screen). Pesan untuk kegagalan LAIN tidak diubah.
+  String _augmentMeetErrorMessage(String message) {
+    final lower = message.toLowerCase();
+    final isAccessDenied = lower.contains('access_denied') ||
+        lower.contains('test users') ||
+        lower.contains('test user');
+    if (!isAccessDenied) return message;
+
+    final email = _identity?.email ?? '';
+    final gmail = email.isEmpty ? 'Gmail tertaut Anda' : email;
+    return '$message\n\n'
+        'Gmail yang tertaut: $gmail\n'
+        'Minta admin menambahkan $gmail ke OAuth consent screen → Audience → '
+        'Test users (project malva-7084e), lalu tekan Coba lagi.';
   }
 
   /// Membuka halaman izin Google agar pengguna bisa mencabut akses Malva lalu
