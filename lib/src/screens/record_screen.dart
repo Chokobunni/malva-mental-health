@@ -735,8 +735,8 @@ class _DiagnosisCard extends StatelessWidget {
             const SizedBox(height: 8),
             const Text(
               'Oleh: Tim profesional Malva',
-              style: TextStyle(
-                  color: Colors.white70, fontWeight: FontWeight.w700),
+              style:
+                  TextStyle(color: Colors.white70, fontWeight: FontWeight.w700),
             ),
           ],
           if (updated != null) ...[

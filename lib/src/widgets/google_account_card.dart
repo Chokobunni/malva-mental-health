@@ -324,16 +324,14 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () =>
-                          Navigator.of(sheetContext).pop(false),
+                      onPressed: () => Navigator.of(sheetContext).pop(false),
                       child: const Text('Batal'),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: () =>
-                          Navigator.of(sheetContext).pop(true),
+                      onPressed: () => Navigator.of(sheetContext).pop(true),
                       icon: const Icon(Icons.open_in_browser_rounded),
                       label: const Text('Lanjutkan ke Google'),
                     ),

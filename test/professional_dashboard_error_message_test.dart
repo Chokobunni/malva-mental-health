@@ -42,7 +42,8 @@ void main() {
 
     test('Health Record yang sudah Indonesia dipertahankan', () {
       const msg = 'pasien belum membagikan Health Record';
-      expect(friendlyServerMessage(msg), 'Pasien belum membagikan Health Record.');
+      expect(
+          friendlyServerMessage(msg), 'Pasien belum membagikan Health Record.');
     });
 
     test('users are not linked → Indonesia', () {
@@ -95,8 +96,8 @@ void main() {
 
   group('friendlyErrorMessage — MalvaApiException diterjemahkan', () {
     test('MalvaApiException berisi pesan Inggris → Indonesia', () {
-      const err = MalvaApiException(
-          'patient has not shared screening data', statusCode: 403);
+      const err = MalvaApiException('patient has not shared screening data',
+          statusCode: 403);
       expect(
         friendlyErrorMessage(err),
         'Pasien belum membagikan data skrining.',
@@ -117,7 +118,8 @@ void main() {
     });
 
     test('kalimat Indonesia tidak dikenali sebagai teknis', () {
-      expect(looksLikeTechnicalEnglish('pasien belum membagikan data'), isFalse);
+      expect(
+          looksLikeTechnicalEnglish('pasien belum membagikan data'), isFalse);
       expect(looksLikeTechnicalEnglish('sesi login kamu berakhir'), isFalse);
     });
   });

@@ -69,7 +69,8 @@ Future<void> _pumpDashboard(WidgetTester tester, MalvaApiClient api) async {
 }
 
 void main() {
-  testWidgets('error server Inggris → banner Indonesia, bukan teks Inggris mentah',
+  testWidgets(
+      'error server Inggris → banner Indonesia, bukan teks Inggris mentah',
       (tester) async {
     await _pumpDashboard(tester, _apiFailingWith('internal server error'));
 
@@ -83,7 +84,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('error consent Inggris di tingkat-atas juga dipetakan ke Indonesia',
+  testWidgets(
+      'error consent Inggris di tingkat-atas juga dipetakan ke Indonesia',
       (tester) async {
     await _pumpDashboard(
         tester, _apiFailingWith('patient has not shared screening data'));
