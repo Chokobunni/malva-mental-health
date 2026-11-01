@@ -1,7 +1,6 @@
 package security
 
 import (
-	"html"
 	"regexp"
 	"strings"
 )
@@ -13,6 +12,14 @@ var (
 	dataRe        = regexp.MustCompile(`(?i)data:[^,]*;base64`)
 	sqlInjectRe   = regexp.MustCompile(`(?i)(\b(union|select|insert|update|delete|drop|alter|create|exec|execute)\b\s)|(\b(or|and)\b\s+\d+\s*=\s*\d+)|(-{2})|(/\*)|(\*/)|(\bwaitfor\b\s+delay)`)
 	pathTraversRe = regexp.MustCompile(`(\.\./|\.\.\\)`)
+
+	// controlCharsRe mencocokkan karakter kontrol ASCII (\x00–\x1F) beserta
+	// \x7F (DEL), KECUALI tab (\t) dan newline (\n) yang sah untuk teks
+	// multiline (mis. diagnosis, summary worksheet).
+	controlCharsRe = regexp.MustCompile(`[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]`)
+	// multiSpaceRe merapikan deretan spasi/tab BERLEBIH (2+) menjadi satu spasi.
+	// Spasi tunggal dipertahankan agar teks normal tidak berubah.
+	multiSpaceRe = regexp.MustCompile(`[ \t]{2,}`)
 )
 
 func SanitizeHTML(input string) string {
@@ -23,8 +30,17 @@ func SanitizeHTML(input string) string {
 	return input
 }
 
+// SanitizeText membersihkan teks yang akan DISIMPAN: membuang karakter
+// kontrol (kecuali \n dan \t), merapikan spasi berlebih, lalu TrimSpace.
+//
+// PENTING: fungsi ini TIDAK melakukan HTML-escaping. Escaping (mis. `&` -> `&amp;`)
+// adalah tanggung jawab lapisan RENDER, bukan penyimpanan. Klien Flutter tidak
+// merender HTML, sehingga escaping saat menyimpan hanya mengorupsi data
+// (mis. diagnosis berisi `&amp;` tampil mentah di UI). Lihat migrasi
+// 025_unescape_sanitized_text.sql untuk pembersihan data lama.
 func SanitizeText(input string) string {
-	input = html.EscapeString(input)
+	input = controlCharsRe.ReplaceAllString(input, "")
+	input = multiSpaceRe.ReplaceAllString(input, " ")
 	input = strings.TrimSpace(input)
 	return input
 }
