@@ -83,11 +83,15 @@ jobs:
       - name: Build web (/app, release)
         run: |
           set -euo pipefail
+          # FLUTTER_WEB_CANVASKIT_URL: CanvasKit dimuat dari CDN Google secara
+          # default. Kita sudah ikut mengunggah canvaskit/ ke origin sendiri,
+          # jadi arahkan ke situ agar tidak bergantung pada gstatic.
           flutter build web --release \
             --target=lib/main_web.dart \
             --base-href=/app/ \
             --dart-define=MALVA_API_BASE_URL=${{ vars.MALVA_API_BASE_URL || 'https://api.malva.web.id' }} \
-            --dart-define=MALVA_GOOGLE_CLIENT_ID=${{ vars.MALVA_GOOGLE_CLIENT_ID }}
+            --dart-define=MALVA_GOOGLE_CLIENT_ID=${{ vars.MALVA_GOOGLE_CLIENT_ID }} \
+            --dart-define=FLUTTER_WEB_CANVASKIT_URL=${{ vars.APP_URL || 'https://malva.web.id/app/' }}canvaskit/
 
       - name: Setup SSH
         env:
