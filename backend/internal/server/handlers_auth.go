@@ -303,8 +303,12 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 		adaIDToken = true
 		if payload, v := idtoken.Validate(r.Context(), exchangedIDToken, s.cfg.GoogleClientID); v == nil && validGoogleIdentityPayload(payload) {
 			subject = payload.Subject
-		} else {
+		} else if v != nil {
 			verr = v
+		} else {
+			// Validate lolos tetapi klaim wajib kosong (sub/issuer): simpan
+			// alasannya agar log tidak kehilangan konteks.
+			verr = errors.New("klaim id_token tidak memenuhi syarat (sub/issuer kosong)")
 		}
 	}
 	if strings.TrimSpace(subject) == "" {
