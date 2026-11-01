@@ -319,7 +319,14 @@ class GoogleAuthService {
     if (_initialized) return;
     try {
       await GoogleSignIn.instance
-          .initialize(serverClientId: GoogleConfig.serverClientId)
+          .initialize(
+            // Web memakai `clientId` (Web OAuth Client ID); Android/iOS memakai
+            // `serverClientId`. Keduanya dari env yang SAMA
+            // (MALVA_GOOGLE_CLIENT_ID) agar `aud` ID token cocok dengan
+            // validasi `handlers_auth.go`.
+            clientId: GoogleConfig.serverClientId,
+            serverClientId: GoogleConfig.serverClientId,
+          )
           .timeout(_authTimeout);
     } on TimeoutException {
       throw _fail(

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models.dart';
+import '../../platform/platform_providers.dart';
 import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/dial_fallback.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 
@@ -259,6 +261,12 @@ class _ContactCard extends StatelessWidget {
   }
 
   Future<void> _launch(String url, BuildContext context) async {
+    if (!ProviderScope.containerOf(context, listen: false)
+        .read(capabilitiesProvider)
+        .canDialTel) {
+      await showDialFallbackSheet(context, rawTarget: url);
+      return;
+    }
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);

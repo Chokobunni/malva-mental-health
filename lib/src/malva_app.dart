@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'models.dart';
+import 'platform/contracts/ports.dart';
+import 'platform/platform_providers.dart';
 import 'providers/providers.dart';
 import 'screens/assessment_screen.dart';
 import 'screens/initial_screening_consent_screen.dart';
@@ -35,21 +37,32 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
   late final PushNotificationService _pushNotifications;
   late final DashboardSyncService _dashboardSyncService;
   late final MedicationReminderService _medicationReminderService;
+
+  /// Kemampuan platform (satu-satunya cara UI bertanya "bisakah ini?").
+  /// Di mobile semua true → perilaku identik; di web mematikan fitur yang
+  /// belum aman (pengingat OS & push) agar tidak "lolos kompilasi, gagal
+  /// runtime". Penyambungan ke tile/tombol dilakukan di T03.
+  late final PlatformCapabilities _capabilities;
   bool _isTakingInitialScreening = false;
   bool _showSplash = true;
 
   @override
   void initState() {
     super.initState();
+    _capabilities = ref.read(capabilitiesProvider);
     final apiClient = ref.read(apiClientProvider);
     _pushNotifications = PushNotificationService(
       apiClient: apiClient,
       navigatorKey: navigatorKey,
     );
     _dashboardSyncService = DashboardSyncService();
-    _medicationReminderService =
-        widget.medicationReminderService ?? MedicationReminderService();
-    unawaited(_medicationReminderService.initialize().catchError((_) {}));
+    _medicationReminderService = widget.medicationReminderService ??
+        MedicationReminderService(
+          enabled: _capabilities.canScheduleOsReminders,
+        );
+    if (_capabilities.canScheduleOsReminders) {
+      unawaited(_medicationReminderService.initialize().catchError((_) {}));
+    }
 
     // Initialize offline sync service
     unawaited(ref.read(offlineSyncServiceProvider).initialize());
@@ -69,7 +82,9 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
       setState(() => _showSplash = false);
     });
 
-    unawaited(_pushNotifications.initialize().catchError((_) {}));
+    if (_capabilities.canRegisterPush) {
+      unawaited(_pushNotifications.initialize().catchError((_) {}));
+    }
   }
 
   @override
@@ -79,6 +94,7 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
   }
 
   void _scheduleAllMedicationReminders() {
+    if (!_capabilities.canScheduleOsReminders) return;
     final meds = ref.read(malvaStoreProvider).medications;
     // scheduleAll menjadwalkan SEMUA jam pengingat tiap obat (bukan hanya
     // jam pertama) dan membatalkan id lama agar tidak dobel.

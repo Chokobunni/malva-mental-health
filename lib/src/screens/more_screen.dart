@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../platform/platform_providers.dart';
 import '../providers/data/export_provider.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
@@ -277,6 +278,31 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
 class _ExportSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Di web (canExportFiles == false) ekspor belum tersedia. Tampilkan
+    // CATATAN jujur — bukan 5 tombol yang melempar error saat diklik.
+    final canExport = ref.watch(capabilitiesProvider).canExportFiles;
+    if (!canExport) {
+      return SoftCard(
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline_rounded, color: MalvaColors.amber),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Ekspor data (CSV/JSON) tersedia di aplikasi Android Malva. '
+                'Di versi web, data Anda tetap tersimpan di server dan dapat '
+                'dilihat dari aplikasi.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.black54),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final exportService = ref.watch(exportServiceProvider);
 
     return SoftCard(

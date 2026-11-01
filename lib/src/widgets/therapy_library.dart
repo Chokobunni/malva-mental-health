@@ -1,12 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../ai/assessment_interpretation.dart';
 import '../ai/assessment_scoring.dart';
+import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
@@ -1438,18 +1435,14 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
       ..writeln('Catatan: dokumen ini alat bantu latihan, '
           'bukan pengganti diagnosis profesional.');
     final text = buffer.toString();
-    final tmp = await getTemporaryDirectory();
-    final file = File(
-        '${tmp.path}/malva-worksheet-${module.id.isEmpty ? 'terapi' : module.id}-'
-        '${wibNow().millisecondsSinceEpoch}.txt');
-    await file.writeAsString(text);
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(file.path)],
-        subject: 'Worksheet ${module.title} — Malva',
-        text: 'Worksheet terapi saya (${module.title}).',
-      ),
-    );
+    await ref.read(fileExporterProvider).saveText(
+          filename: 'malva-worksheet-'
+              '${module.id.isEmpty ? 'terapi' : module.id}-'
+              '${wibNow().millisecondsSinceEpoch}.txt',
+          content: text,
+          mimeType: 'text/plain',
+          subject: 'Worksheet ${module.title} — Malva',
+        );
   }
 
   void _toast(String message) {
@@ -1465,6 +1458,9 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
   Widget build(BuildContext context) {
     final color = module.color ?? MalvaColors.seed;
     final summary = _liveSummary();
+    // Di web (canExportFiles == false) tombol unduh diganti catatan jujur —
+    // bukan tombol yang melempar UnsupportedError saat diklik.
+    final canExport = ref.watch(capabilitiesProvider).canExportFiles;
     return Scaffold(
       appBar: AppBar(
         title: Text(module.category ?? 'Terapi'),
@@ -1694,14 +1690,39 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
               label: const Text('Simpan & Kirim ke Profesional'),
             ),
             const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _isSaving ? null : _download,
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
+            if (canExport)
+              OutlinedButton.icon(
+                onPressed: _isSaving ? null : _download,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                icon: const Icon(Icons.download_rounded),
+                label: const Text('Download Worksheet'),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: MalvaColors.amber.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        color: MalvaColors.amber, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Unduh worksheet tersedia di aplikasi Android Malva.',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: Colors.black54),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              icon: const Icon(Icons.download_rounded),
-              label: const Text('Download Worksheet'),
-            ),
           ],
           const SizedBox(height: 16),
           Text(

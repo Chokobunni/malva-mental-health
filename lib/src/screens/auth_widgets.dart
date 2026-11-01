@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../platform/platform_providers.dart';
 import '../services/google_auth_service.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
@@ -369,18 +371,58 @@ class RememberForgotRow extends StatelessWidget {
 }
 
 /// Tombol Google SSO (stub jujur sampai kredensial tersedia).
-class GoogleSignInButton extends StatelessWidget {
+class GoogleSignInButton extends ConsumerWidget {
   const GoogleSignInButton({
     super.key,
     required this.isLogin,
     required this.onPressed,
+    this.onIdToken,
+    this.onError,
   });
 
   final bool isLogin;
+
+  /// Mobile: alur imperatif lama (authenticate()).
   final VoidCallback? onPressed;
 
+  /// Web: ID token dari tombol resmi Google (renderButton).
+  final ValueChanged<String>? onIdToken;
+
+  /// Web: error dari alur tombol Google.
+  final ValueChanged<Object>? onError;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final port = ref.watch(googleSignInProvider);
+
+    final Widget action;
+    if (port.usesButtonWidget) {
+      // Web: tombol resmi Google. renderButton menangani klik + kredensial.
+      final built = port.buildButton(
+        onIdToken: onIdToken ?? (_) {},
+        onError: onError ?? (_) {},
+      );
+      action = SizedBox(
+        height: 50,
+        child: built ?? const SizedBox.shrink(),
+      );
+    } else {
+      action = OutlinedButton.icon(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(50),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
+        label: Text(
+          isLogin ? 'Continue with Google' : 'Sign up with Google',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -396,20 +438,7 @@ class GoogleSignInButton extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
-        OutlinedButton.icon(
-          onPressed: onPressed,
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size.fromHeight(50),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-          icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
-          label: Text(
-            isLogin ? 'Continue with Google' : 'Sign up with Google',
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-        ),
+        action,
       ],
     );
   }

@@ -1,18 +1,24 @@
 import 'dart:convert';
-import 'dart:io';
-
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../assessment_engine.dart';
 import '../models.dart';
+import '../platform/contracts/ports.dart';
 import '../time/wib.dart';
 
 // ============================================================
 // EXPORT SERVICE
 // ============================================================
+//
+// Pembentuk CSV/JSON tetap murni (tanpa I/O). Penyimpanan/pembagian berkas
+// didelegasikan ke [FileExporter] (port platform): mobile memakai temp file +
+// share sheet, web memakai unduhan browser. Berkas ini TIDAK menyentuh
+// I/O native/`path_provider`/`share_plus` sehingga aman dikompilasi ke web.
+// ============================================================
 
 class ExportService {
+  ExportService(this._exporter);
+
+  final FileExporter _exporter;
   // ----------------------------------------------------------
   // CSV EXPORTS
   // ----------------------------------------------------------
@@ -151,26 +157,18 @@ class ExportService {
   // ----------------------------------------------------------
 
   Future<void> shareCsv(String csv, String filename) async {
-    final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/$filename');
-    await file.writeAsString(csv);
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(file.path)],
-        subject: filename,
-      ),
+    await _exporter.saveText(
+      filename: filename,
+      content: csv,
+      mimeType: 'text/csv',
     );
   }
 
   Future<void> shareJson(String json, String filename) async {
-    final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/$filename');
-    await file.writeAsString(json);
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(file.path)],
-        subject: filename,
-      ),
+    await _exporter.saveText(
+      filename: filename,
+      content: json,
+      mimeType: 'application/json',
     );
   }
 }

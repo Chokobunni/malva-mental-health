@@ -18,7 +18,12 @@ import '../time/wib.dart';
 /// 4. Jadwal yang disimpan OS hilang setelah perangkat reboot bila manifes
 ///    tidak mendaftarkan `ScheduledNotificationBootReceiver`.
 class MedicationReminderService {
-  MedicationReminderService();
+  /// [enabled] = false mematikan SEMUA operasi (dipakai di web, di mana tidak
+  /// ada penjadwal notifikasi OS). Dengan begitu `zonedSchedule` tidak pernah
+  /// dipanggil di web tanpa perlu menyentuh setiap pemanggil.
+  MedicationReminderService({bool enabled = true}) : _enabled = enabled;
+
+  final bool _enabled;
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -39,6 +44,7 @@ class MedicationReminderService {
   /// Aman dipanggil berulang (mis. setiap cold start): permintaan izin yang
   /// sudah pernah dijawab tidak memunculkan dialog lagi.
   Future<void> initialize() async {
+    if (!_enabled) return;
     // WAJIB lewat initializeWib(): ia menginisialisasi database zona SEKALIGUS
     // memaksa zona lokal proses ke Asia/Jakarta. Memanggil
     // `tzdata.initializeTimeZones()` langsung akan mengembalikan zona lokal ke
@@ -114,6 +120,7 @@ class MedicationReminderService {
   /// Dipakai layar Medication untuk menampilkan "aktif / tidak aktif" dan
   /// menawarkan tombol aktifkan. Aman dipanggil berkali-kali.
   Future<bool> ensurePermissions() async {
+    if (!_enabled) return false;
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     if (android != null) {
@@ -210,6 +217,7 @@ class MedicationReminderService {
   /// Sebelumnya hanya `med.reminders.first` yang dijadwalkan, sehingga obat
   /// dengan dua jam minum hanya mengingatkan sekali sehari.
   Future<void> scheduleMedicationReminder(Medication med) async {
+    if (!_enabled) return;
     // Bersihkan id lama lebih dulu agar jadwal tidak dobel setelah edit.
     await cancelReminder(med.id);
     if (med.reminders.isEmpty) return;
@@ -250,6 +258,7 @@ class MedicationReminderService {
 
   /// Jadwalkan pengingat untuk sekumpulan obat (dipakai saat login/restore).
   Future<void> scheduleAll(Iterable<Medication> medications) async {
+    if (!_enabled) return;
     for (final med in medications) {
       try {
         await scheduleMedicationReminder(med);
@@ -262,6 +271,7 @@ class MedicationReminderService {
   /// Tampilkan notifikasi uji coba agar pasien bisa memverifikasi sendiri
   /// bahwa izin + kanal notifikasi berfungsi.
   Future<void> showTestNotification() async {
+    if (!_enabled) return;
     await _createChannel();
     await _plugin.show(
       id: testNotificationId,
@@ -324,6 +334,7 @@ class MedicationReminderService {
   ///    pengguna yang upgrade tetap menerima notifikasi lama dan pengingat
   ///    berbunyi ganda pada jam pertama.
   Future<void> cancelReminder(String medicationId) async {
+    if (!_enabled) return;
     for (var index = 0; index < 10; index++) {
       await _plugin.cancel(id: _notificationId(medicationId, index));
     }
@@ -341,6 +352,7 @@ class MedicationReminderService {
   /// berikutnya. Sengaja memakai cancel(id) per obat, BUKAN cancelAll(), agar
   /// notifikasi lain (mis. pesan chat) tidak ikut terhapus.
   Future<void> cancelRemindersFor(Iterable<String> medicationIds) async {
+    if (!_enabled) return;
     for (final id in medicationIds) {
       await cancelReminder(id);
     }

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
-import '../services/google_auth_service.dart';
 import '../theme.dart';
 import '../widgets/password_field.dart';
 import 'auth_widgets.dart';
@@ -95,9 +95,28 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
     if (_isSubmitting) return;
     try {
       setState(() => _isSubmitting = true);
-      final idToken = await GoogleAuthService.signInIdToken();
+      final idToken = await ref.read(googleSignInProvider).signInIdToken();
       if (idToken == null) return; // Pengguna membatalkan, diam saja.
       if (!mounted) return;
+      final session = await ref
+          .read(malvaStoreProvider.notifier)
+          .loginPatientWithGoogle(idToken: idToken);
+      if (!mounted) return;
+      widget.onAuthenticated(session);
+    } catch (error) {
+      if (!mounted) return;
+      showAuthFailure(context, error);
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  /// Menyelesaikan login Google dengan ID token — dipakai jalur WEB, di mana
+  /// token datang dari tombol resmi Google (renderButton) lewat callback.
+  Future<void> _completeGoogleLogin(String idToken) async {
+    if (_isSubmitting) return;
+    try {
+      setState(() => _isSubmitting = true);
       final session = await ref
           .read(malvaStoreProvider.notifier)
           .loginPatientWithGoogle(idToken: idToken);
@@ -322,6 +341,8 @@ class _PatientLoginScreenState extends ConsumerState<PatientLoginScreen> {
                 GoogleSignInButton(
                   isLogin: _isLogin,
                   onPressed: _isSubmitting ? null : _signInWithGoogle,
+                  onIdToken: _completeGoogleLogin,
+                  onError: (e) => showAuthFailure(context, e),
                 ),
                 if (_isLogin) ...[
                   const SizedBox(height: 8),

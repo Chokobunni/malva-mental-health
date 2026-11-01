@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../platform/platform_providers.dart';
 import '../../services/export_service.dart';
 import '../malva_store_provider.dart';
 
@@ -8,7 +9,7 @@ import '../malva_store_provider.dart';
 // ============================================================
 
 final exportServiceProvider = Provider<ExportService>((ref) {
-  return ExportService();
+  return ExportService(ref.watch(fileExporterProvider));
 });
 
 // ----------------------------------------------------------

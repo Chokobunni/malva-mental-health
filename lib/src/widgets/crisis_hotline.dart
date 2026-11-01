@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../platform/platform_providers.dart';
 import '../providers/data/crisis_provider.dart';
 import '../theme.dart';
+import 'dial_fallback.dart';
 import 'malva_components.dart';
 
 // ============================================================
@@ -130,7 +132,15 @@ class CrisisHotlineBanner extends ConsumerWidget {
     );
 
     if (confirmed == true && context.mounted) {
-      await ref.read(crisisProvider.notifier).callExtension();
+      if (!ref.read(capabilitiesProvider).canDialTel) {
+        await showDialFallbackSheet(
+          context,
+          rawTarget: '$crisisHotlineNumber$crisisHotlineExtension',
+          displayName: crisisHotlineName,
+        );
+      } else {
+        await ref.read(crisisProvider.notifier).callExtension();
+      }
     }
   }
 }
@@ -148,7 +158,7 @@ class CrisisFab extends ConsumerWidget {
     if (!hasCrisis) return const SizedBox.shrink();
 
     return FloatingActionButton.extended(
-      onPressed: () => _callHotline(ref),
+      onPressed: () => _callHotline(context, ref),
       backgroundColor: const Color(0xFFB00020),
       foregroundColor: Colors.white,
       icon: const Icon(Icons.phone_rounded),
@@ -159,7 +169,12 @@ class CrisisFab extends ConsumerWidget {
     );
   }
 
-  Future<void> _callHotline(WidgetRef ref) async {
+  Future<void> _callHotline(BuildContext context, WidgetRef ref) async {
+    if (!ref.read(capabilitiesProvider).canDialTel) {
+      await showDialFallbackSheet(context,
+          rawTarget: '1198', displayName: crisisHotlineName);
+      return;
+    }
     final uri = Uri(scheme: 'tel', path: '1198');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);

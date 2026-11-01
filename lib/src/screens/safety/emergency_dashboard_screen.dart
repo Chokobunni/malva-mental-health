@@ -8,8 +8,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../providers/providers.dart';
 import '../../models.dart';
+import '../../platform/platform_providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/dial_fallback.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 import 'emergency_contacts_screen.dart';
@@ -202,6 +204,12 @@ class _EmergencyDashboardScreenState
   }
 
   Future<void> _callHotline(BuildContext context) async {
+    // Web tidak punya penangan `tel:` andal → tampilkan sheet fallback.
+    if (!ref.read(capabilitiesProvider).canDialTel) {
+      await showDialFallbackSheet(context,
+          rawTarget: '119', displayName: 'Hotline 119 ext 8');
+      return;
+    }
     final uri = Uri(scheme: 'tel', path: '119');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
@@ -723,6 +731,12 @@ class _EmergencyContactRow extends StatelessWidget {
   }
 
   Future<void> _call(String url, BuildContext context) async {
+    if (!ProviderScope.containerOf(context, listen: false)
+        .read(capabilitiesProvider)
+        .canDialTel) {
+      await showDialFallbackSheet(context, rawTarget: url);
+      return;
+    }
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);

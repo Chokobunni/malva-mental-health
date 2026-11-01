@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/medication_reminder_service.dart';
@@ -331,14 +332,53 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
         ],
       ),
     );
-    if (widget.embedded) return content;
+    // Di web tidak ada penjadwal notifikasi OS. Tampilkan banner jujur bahwa
+    // pengingat hanya berjalan di aplikasi Android — bukan tombol mati.
+    final withBanner = ref.watch(capabilitiesProvider).canScheduleOsReminders
+        ? content
+        : Column(
+            children: [
+              _webReminderBanner(context),
+              Expanded(child: content),
+            ],
+          );
+    if (widget.embedded) return withBanner;
     return Scaffold(
       floatingActionButton: FloatingActionButton(
         heroTag: 'medication_add_fab',
         onPressed: () => _openMedicationForm(context),
         child: const Icon(Icons.add_rounded),
       ),
-      body: content,
+      body: withBanner,
+    );
+  }
+
+  /// Banner "pengingat hanya di aplikasi Android" (tampil di web).
+  Widget _webReminderBanner(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: MalvaColors.amber.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.alarm_off_rounded, color: MalvaColors.amber),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Pengingat obat hanya berjalan di aplikasi Android Malva. '
+              'Di versi web, jadwal obat tetap tersimpan namun tanpa alarm.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.black87),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

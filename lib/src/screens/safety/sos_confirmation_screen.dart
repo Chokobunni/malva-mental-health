@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../providers/providers.dart';
+import '../../platform/platform_providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
+import '../../widgets/dial_fallback.dart';
 import '../../widgets/malva_components.dart';
 import 'guided_grounding_screen.dart';
 
@@ -267,6 +269,11 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
   }
 
   Future<void> _callHotline(BuildContext context) async {
+    if (!ref.read(capabilitiesProvider).canDialTel) {
+      await showDialFallbackSheet(context,
+          rawTarget: '1198', displayName: 'Hotline 119 ext 8');
+      return;
+    }
     final uri = Uri(scheme: 'tel', path: '1198');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
