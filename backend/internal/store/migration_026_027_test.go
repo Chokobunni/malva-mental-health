@@ -173,3 +173,69 @@ func TestMigration027BackfillLinks(t *testing.T) {
 		t.Fatalf("pasangan 2 setelah run 2: status = %q, mau tetap inactive", s)
 	}
 }
+
+// TestMigration027ExcludesPendingPayment mengunci pengetatan 027: status
+// 'pending_payment' (pasien BELUM bayar) TIDAK boleh menjadi bukti hubungan.
+// Bila pending_payment dimasukkan lagi ke 027, test ini GAGAL karena link
+// tercipta dari niat bayar yang tidak pernah selesai (pelonggaran otorisasi).
+func TestMigration027ExcludesPendingPayment(t *testing.T) {
+	db, ctx := openMigrationTestDB(t)
+
+	// Pasangan "niat bayar": hanya punya sesi & paket berstatus pending_payment.
+	pPending := insertTestUser(t, db, ctx, "patient", "Pasien Niat Bayar", "m27pend")
+	rPending := insertTestUser(t, db, ctx, "professional", "Prof Niat Bayar", "m27rpend")
+	// Pasangan "sesi terjadwal": punya sesi scheduled (sudah dibayar) -> link dibuat.
+	pSched := insertTestUser(t, db, ctx, "patient", "Pasien Terjadwal", "m27sched")
+	rSched := insertTestUser(t, db, ctx, "professional", "Prof Terjadwal", "m27rsched")
+	t.Cleanup(func() { cleanupTestUsers(t, db, pPending, rPending, pSched, rSched) })
+
+	// Sesi pending_payment (belum dibayar) untuk pasangan niat-bayar.
+	if _, err := db.ExecContext(ctx, `INSERT INTO care_sessions
+		(patient_id, professional_id, session_type, scheduled_at, duration_minutes, status)
+		VALUES ($1,$2,'video',$3,30,'pending_payment')`,
+		pPending, rPending, time.Now().Add(2*time.Hour)); err != nil {
+		t.Fatalf("insert care_session pending_payment: %v", err)
+	}
+	// Paket pending_payment (belum dibayar) untuk pasangan yang sama.
+	if _, err := db.ExecContext(ctx, `INSERT INTO care_packages
+		(patient_id, professional_id, status, expires_at)
+		VALUES ($1,$2,'pending_payment',$3)`,
+		pPending, rPending, time.Now().Add(42*24*time.Hour)); err != nil {
+		t.Fatalf("insert care_package pending_payment: %v", err)
+	}
+
+	// Sesi scheduled (sudah dibayar) untuk pasangan terjadwal.
+	if _, err := db.ExecContext(ctx, `INSERT INTO care_sessions
+		(patient_id, professional_id, session_type, scheduled_at, duration_minutes, status)
+		VALUES ($1,$2,'chat',$3,30,'scheduled')`,
+		pSched, rSched, time.Now().Add(3*time.Hour)); err != nil {
+		t.Fatalf("insert care_session scheduled: %v", err)
+	}
+
+	content, err := os.ReadFile(migrationFilePath(t, "027_backfill_patient_professional_links.sql"))
+	if err != nil {
+		t.Fatalf("baca migrasi 027: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, string(content)); err != nil {
+		t.Fatalf("jalankan 027: %v", err)
+	}
+
+	countLinks := func(pid, rid string) int {
+		var c int
+		if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM patient_professional_links
+			WHERE patient_id=$1 AND professional_id=$2`, pid, rid).Scan(&c); err != nil {
+			t.Fatalf("hitung link: %v", err)
+		}
+		return c
+	}
+
+	// pending_payment TIDAK boleh menghasilkan link.
+	if c := countLinks(pPending, rPending); c != 0 {
+		t.Fatalf("pending_payment menghasilkan %d link, mau 0 (pelonggaran otorisasi!)", c)
+	}
+	// scheduled (sudah dibayar) HARUS menghasilkan link aktif.
+	if c := countLinks(pSched, rSched); c != 1 {
+		t.Fatalf("sesi scheduled menghasilkan %d link, mau 1", c)
+	}
+}
+
