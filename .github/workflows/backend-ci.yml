@@ -69,7 +69,12 @@ jobs:
           done
       - name: Run tests
         working-directory: backend
-        run: go test -v -race -coverprofile=coverage.out ./...
+        # `-p 1` WAJIB: jalankan paket secara serial. Paket `internal/server`
+        # dan `internal/store` sama-sama menjalankan DDL / `DELETE users` pada
+        # SATU database `public` yang sama. Tanpa `-p 1`, `go test ./...`
+        # paralel bisa gagal `deadlock detected (SQLSTATE 40P01)` ~20% meski
+        # kode benar. Jangan hapus flag ini tanpa memisahkan database per paket.
+        run: go test -p 1 -v -race -coverprofile=coverage.out ./...
       - name: Check conventions (format & clock.Now)
         working-directory: backend
         run: bash scripts/check_conventions.sh
