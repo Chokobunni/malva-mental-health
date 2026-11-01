@@ -289,29 +289,47 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 		return
 	}
 	// Token endpoint Google hanya mengembalikan id_token bila scope `openid`
-	// ikut diminta. Aplikasi Flutter meminta calendar.events saja, sehingga
-	// id_token sering kosong — dulu alur ini gagal keras 401 dan tombol
-	// "Aktifkan Google Meet" selalu gagal di perangkat nyata. Fallback: ambil
-	// `sub` dari Google UserInfo memakai access token yang baru ditukar.
+	// ikut diminta. Aplikasi Flutter kini meminta calendarAuthScopes
+	// (openid + email + calendar.events), sehingga id_token terbit. Bila
+	// id_token tetap kosong/tidak valid, fallback: ambil `sub` dari Google
+	// UserInfo memakai access token yang baru ditukar — endpoint UserInfo
+	// MENOLAK token yang tidak punya salah satu scope openid/email/profile,
+	// sehingga tanpa `openid` fallback ini pasti gagal (403 -> 422).
+	scope, _ := tok.Extra("scope").(string)
 	subject := ""
+	adaIDToken := false
+	var verr, ferr error
 	if exchangedIDToken, _ := tok.Extra("id_token").(string); strings.TrimSpace(exchangedIDToken) != "" {
-		if payload, verr := idtoken.Validate(r.Context(), exchangedIDToken, s.cfg.GoogleClientID); verr == nil && validGoogleIdentityPayload(payload) {
+		adaIDToken = true
+		if payload, v := idtoken.Validate(r.Context(), exchangedIDToken, s.cfg.GoogleClientID); v == nil && validGoogleIdentityPayload(payload) {
 			subject = payload.Subject
+		} else {
+			verr = v
 		}
 	}
 	if strings.TrimSpace(subject) == "" {
-		fallbackSubject, ferr := googleSubjectFromUserinfo(r.Context(), tok.AccessToken, googleUserinfoEndpoint)
-		if ferr != nil {
+		fallbackSubject, f := googleSubjectFromUserinfo(r.Context(), tok.AccessToken, googleUserinfoEndpoint)
+		if f != nil {
+			ferr = f
 			// Kode Google SUDAH terpakai di titik ini (pertukaran token sukses).
 			// Membalas 401 akan membuat klien mengira access token Malva
 			// kedaluwarsa, me-refresh token, lalu MENGIRIM ULANG kode yang sama
 			// — dijamin invalid_grant karena kode otorisasi Google sekali pakai.
 			// Karena itu 422 (kegagalan semantik, bukan autentikasi) dengan kode
-			// mesin yang jelas.
+			// mesin yang jelas. Log SEKALI dengan seluruh konteks diagnosis
+			// supaya penyebab (id_token vs userinfo, scope yang diberikan)
+			// terlihat dari log server tanpa menebak.
+			s.logger.Error("google identitas tidak bisa dipastikan setelah penukaran kode",
+				"user", claims.Subject,
+				"ada_id_token", adaIDToken,
+				"id_token_error", verr,
+				"userinfo_error", ferr,
+				"scope_diberikan", scope)
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
 				"error": "Google tidak mengembalikan identitas akun yang valid setelah kode ditukar. " +
 					"Tekan \"Hubungkan Google Calendar\" lagi — kode lama sudah terpakai dan tidak bisa dipakai ulang.",
-				"code": "google_identitas_gagal",
+				"code":         "google_identitas_gagal",
+				"google_scope": scope,
 			})
 			return
 		}
@@ -322,7 +340,6 @@ func (s *Server) exchangeGoogleToken(w http.ResponseWriter, r *http.Request, cla
 			"Gunakan akun Google yang sudah terhubung ke Malva untuk mengaktifkan Google Meet.")
 		return
 	}
-	scope, _ := tok.Extra("scope").(string)
 	if !store.HasCalendarScope(scope) {
 		writeUserError(w, http.StatusForbidden,
 			"Izin Google Calendar wajib diberikan agar Google Meet bisa dipakai.")

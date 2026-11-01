@@ -139,4 +139,10 @@ func TestExchangeGoogleTokenUserinfoFailureReturns422(t *testing.T) {
 	if body["code"] != "google_identitas_gagal" {
 		t.Fatalf("code = %q, mau google_identitas_gagal", body["code"])
 	}
+	// Respons 422 kini menyertakan "google_scope" (boleh kosong bila token
+	// endpoint tidak mengembalikan scope) agar penyebab bisa didiagnosis dari
+	// layar pengguna. Kuncinya HARUS ada walau nilainya kosong.
+	if _, ok := body["google_scope"]; !ok {
+		t.Fatalf("respons 422 tidak memuat field google_scope: %v", body)
+	}
 }
