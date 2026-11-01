@@ -481,6 +481,11 @@ void main() {
         .tap(find.widgetWithText(FilledButton, 'Perbarui izin sekarang'));
     await tester.pumpAndSettle();
 
+    // Sheet pra-pemeriksaan muncul sebelum membuka browser OAuth; lanjutkan.
+    expect(find.text('Lanjutkan ke Google'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Lanjutkan ke Google'));
+    await tester.pumpAndSettle();
+
     // Perpanjangan WAJIB memakai otorisasi baru (fresh consent), bukan lama.
     expect(freshCalls, 1);
     expect(normalCalls, 0);
@@ -526,9 +531,11 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // Aktifkan Meet -> gagal 403 access_denied -> dialog muncul.
+    // Aktifkan Meet -> sheet pra-pemeriksaan -> lanjut ke Google -> gagal 403.
     await tester
         .tap(find.widgetWithText(FilledButton, 'Hubungkan Google Calendar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Lanjutkan ke Google'));
     // Dialog tampil saat _busy masih true (spinner berputar di tombol di balik
     // dialog), jadi pumpAndSettle tak akan pernah settle. Pakai pump berdurasi.
     await tester.pump();
@@ -584,6 +591,9 @@ void main() {
 
     await tester
         .tap(find.widgetWithText(FilledButton, 'Hubungkan Google Calendar'));
+    await tester.pumpAndSettle();
+    // Sheet pra-pemeriksaan: lanjutkan ke browser.
+    await tester.tap(find.widgetWithText(FilledButton, 'Lanjutkan ke Google'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));

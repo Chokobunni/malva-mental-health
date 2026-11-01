@@ -78,6 +78,92 @@ class _MeetJoinButtonState extends ConsumerState<MeetJoinButton> {
     }
   }
 
+  /// Fallback manual: profesional menempelkan link Google Meet sendiri ketika
+  /// pembuatan otomatis tidak bisa (mis. diblokir access_denied). Validasi
+  /// klien disamakan dengan server: wajib https + host meet.google.com.
+  Future<void> _pasteMeetLink() async {
+    if (_busy) return;
+    final controller = TextEditingController();
+    final input = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tempel link Meet'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Buat link Google Meet sendiri (mis. dari Google Calendar), lalu '
+              'tempel di sini. Pasien akan melihat link ini di detail sesi.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'Link Google Meet',
+                hintText: 'https://meet.google.com/abc-defg-hij',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    final url = (input ?? '').trim();
+    if (url.isEmpty || !mounted) return;
+    final validationError = _validateMeetUrl(url);
+    if (validationError != null) {
+      setState(() => _error = validationError);
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final updated = await ref.read(apiClientProvider).setManualMeetLink(
+            accessToken: widget.accessToken,
+            sessionId: widget.session.id,
+            meetUrl: url,
+          );
+      widget.onSessionChanged(updated);
+    } on Object catch (e) {
+      if (mounted) setState(() => _error = friendlyErrorMessage(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Validasi klien link Meet manual. Mengembalikan pesan error Indonesia bila
+  /// tidak valid, atau null bila lolos. Sama ketat dengan normalizeManualMeetURL
+  /// di server (wajib https, host meet.google.com).
+  String? _validateMeetUrl(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.length > 500) return 'Link terlalu panjang.';
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null) return 'Link tidak valid.';
+    if (uri.scheme != 'https') return 'Link harus diawali https://';
+    if (uri.host.toLowerCase() != 'meet.google.com') {
+      return 'Link harus berupa link Google Meet (meet.google.com).';
+    }
+    if (uri.path.isEmpty || uri.path == '/') {
+      return 'Link Google Meet tidak lengkap.';
+    }
+    return null;
+  }
+
   Future<void> _join() async {
     final url = widget.session.meetingUrl.trim();
     if (url.isEmpty) return;
@@ -153,20 +239,34 @@ class _MeetJoinButtonState extends ConsumerState<MeetJoinButton> {
           ],
         );
       }
-      return FilledButton.icon(
-        onPressed: _busy ? null : _createLink,
-        icon: _busy
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.video_call_rounded, size: 18),
-        label: Text(_busy ? 'Menyiapkan link...' : 'Buat link Meet'),
-        style: FilledButton.styleFrom(
-          backgroundColor: MalvaColors.plum,
-          foregroundColor: Colors.white,
-        ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FilledButton.icon(
+            onPressed: _busy ? null : _createLink,
+            icon: _busy
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.video_call_rounded, size: 18),
+            label: Text(_busy ? 'Menyiapkan link...' : 'Buat link Meet'),
+            style: FilledButton.styleFrom(
+              backgroundColor: MalvaColors.plum,
+              foregroundColor: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Fallback manual: tetap bisa menyelenggarakan sesi video walau
+          // pembuatan otomatis diblokir (mis. access_denied Google).
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _pasteMeetLink,
+            icon: const Icon(Icons.content_paste_rounded, size: 18),
+            label: const Text('Tempel link Meet'),
+          ),
+        ],
       );
     }
     if (session.isAfterJoinWindow) {

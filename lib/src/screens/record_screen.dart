@@ -727,6 +727,17 @@ class _DiagnosisCard extends StatelessWidget {
               style: const TextStyle(
                   color: Colors.white70, fontWeight: FontWeight.w700),
             ),
+          ] else ...[
+            // Atribusi dari audit_logs kosong (mis. akun penulis sudah
+            // dihapus, atau belum ada jejak audit). Jangan menebak nama
+            // orang; tampilkan label netral agar pasien tetap tahu
+            // diagnosis ini ditulis tenaga profesional Malva.
+            const SizedBox(height: 8),
+            const Text(
+              'Oleh: Tim profesional Malva',
+              style: TextStyle(
+                  color: Colors.white70, fontWeight: FontWeight.w700),
+            ),
           ],
           if (updated != null) ...[
             const SizedBox(height: 2),

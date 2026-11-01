@@ -280,6 +280,61 @@ void main() {
       expect(result.meetPending, isTrue);
       expect(result.session.meetingUrl, isEmpty);
     });
+
+    test('professionalMeetStatus membaca google_email & hint', () async {
+      final api = MalvaApiClient(
+        baseUrl: 'http://backend.test',
+        httpClient: _FakeClient((request) async {
+          return _json({
+            'ready': false,
+            'reason': 'no_calendar_scope',
+            'google_email': 'andiwijayapsikolog@gmail.com',
+            'hint': 'Tekan Hubungkan Google Calendar.',
+          });
+        }),
+      );
+
+      final status = await api.professionalMeetStatus(
+        accessToken: 'token_test',
+        professionalId: 'user_pro_1',
+      );
+      expect(status.googleEmail, 'andiwijayapsikolog@gmail.com');
+      expect(status.hint, 'Tekan Hubungkan Google Calendar.');
+    });
+
+    test('setManualMeetLink mengirim PUT meet_url dan membaca sesi', () async {
+      String? method;
+      String? body;
+      final api = MalvaApiClient(
+        baseUrl: 'http://backend.test',
+        httpClient: _FakeClient((request) async {
+          method = request.method;
+          body = request.body;
+          return _json({
+            'session': {
+              'id': 'sess_1',
+              'patient_id': 'user_pasien_1',
+              'professional_id': 'user_pro_1',
+              'session_type': 'video',
+              'scheduled_at': '2099-01-01T10:00:00+07:00',
+              'duration_minutes': 30,
+              'status': 'scheduled',
+              'meeting_url': 'https://meet.google.com/abc-defg-hij',
+            },
+            'manual': true,
+          });
+        }),
+      );
+
+      final session = await api.setManualMeetLink(
+        accessToken: 'token_test',
+        sessionId: 'sess_1',
+        meetUrl: 'https://meet.google.com/abc-defg-hij',
+      );
+      expect(method, 'PUT');
+      expect(body, contains('meet.google.com/abc-defg-hij'));
+      expect(session.meetingUrl, 'https://meet.google.com/abc-defg-hij');
+    });
   });
 }
 

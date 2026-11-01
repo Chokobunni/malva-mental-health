@@ -12,6 +12,7 @@ import '../services/dashboard_sync_service.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/friendly_error.dart';
 import '../widgets/professional_avatar.dart';
 import 'booking/credential_screens.dart';
 import 'google_account_screen.dart';
@@ -80,7 +81,7 @@ class _ProfessionalDashboardScreenState
         _syncStatus = event.status;
         _lastSyncTime = event.lastSyncTime;
         if (event.status == SyncStatus.error && event.errorMessage != null) {
-          _onlineError = event.errorMessage;
+          _onlineError = friendlyServerMessage(event.errorMessage!);
         }
       });
     });
@@ -325,7 +326,7 @@ class _ProfessionalDashboardScreenState
                                             padding:
                                                 const EdgeInsets.only(top: 2),
                                             child: Text(
-                                              'Screening belum dibagikan',
+                                              'Pasien belum membagikan data skrining',
                                               style: Theme.of(context)
                                                   .textTheme
                                                   .bodySmall
@@ -574,13 +575,15 @@ class _ProfessionalDashboardScreenState
     } on MalvaApiException catch (error) {
       if (!mounted) return;
       setState(() {
-        _onlineError = error.message;
+        _onlineError = friendlyServerMessage(error.message);
         _isLoadingOnlineData = false;
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _onlineError = 'Data profesional belum dapat dimuat: $error';
+        // friendlyErrorMessage menerjemahkan error mentah ke teks Indonesia
+        // yang ramah (tidak pernah menampilkan kalimat Inggris teknis).
+        _onlineError = friendlyErrorMessage(error);
         _isLoadingOnlineData = false;
       });
     }
@@ -1351,7 +1354,7 @@ class _ProfessionalDashboardScreenState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Gagal: ${e.message}'),
+            content: Text('Gagal: ${friendlyServerMessage(e.message)}'),
             backgroundColor: MalvaColors.danger),
       );
     }
@@ -1566,7 +1569,7 @@ class _StatusBanner extends StatelessWidget {
             children: [
               const Icon(Icons.cloud_off_rounded, color: MalvaColors.danger),
               const SizedBox(width: 10),
-              Expanded(child: Text(error!)),
+              Expanded(child: Text(friendlyErrorMessage(error!))),
               TextButton(onPressed: onRetry, child: const Text('Coba lagi')),
             ],
           ),
@@ -1910,7 +1913,7 @@ class _ConnectedPatientList extends StatelessWidget {
                       ),
                       if (patient.screeningNotShared)
                         Text(
-                          'Screening belum dibagikan',
+                          'Pasien belum membagikan data skrining',
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: Colors.grey,

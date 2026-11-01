@@ -1698,6 +1698,28 @@ class MalvaApiClient {
     );
   }
 
+  /// PUT /v1/care-sessions/{id}/meet-link — fallback manual profesional.
+  ///
+  /// Dipakai ketika Google Calendar tidak bisa dipakai (mis. Gmail belum
+  /// terdaftar sebagai Test user sehingga Google memblokir access_denied).
+  /// Profesional membuat link Google Meet manual lalu menempelkannya; server
+  /// memvalidasi ketat (wajib https + host meet.google.com).
+  Future<BackendCareSession> setManualMeetLink({
+    required String accessToken,
+    required String sessionId,
+    required String meetUrl,
+  }) async {
+    final payload = await _send(
+      'PUT',
+      '/v1/care-sessions/$sessionId/meet-link',
+      accessToken: accessToken,
+      body: {'meet_url': meetUrl},
+    );
+    return BackendCareSession.fromJson(
+      _expectMap(payload['session'], 'Respons sesi tidak valid.'),
+    );
+  }
+
   /// Status tautan Google Calendar profesional.
   /// GET /v1/google/status
   Future<({bool serverConfigured, bool connected, String scope})> googleStatus(
@@ -1726,12 +1748,19 @@ class MalvaApiClient {
   /// [refreshTokenAgeDays] umur grant izin Google dalam hari (0 bila tidak
   /// ada token). [refreshTokenExpiresInDays] sisa hari sebelum izin dianggap
   /// kedaluwarsa (-1 bila tidak diketahui / peringatan nonaktif).
+  ///
+  /// [googleEmail] email akun Google tertaut (bila ada) — dipakai UI untuk
+  /// memberi tahu Gmail MANA yang harus didaftarkan sebagai Test user saat
+  /// Google memblokir access_denied. [hint] saran tindakan berbahasa Indonesia
+  /// dari server untuk reason yang butuh perbaikan akun.
   Future<
       ({
         bool ready,
         String reason,
         int refreshTokenAgeDays,
         int refreshTokenExpiresInDays,
+        String googleEmail,
+        String hint,
       })> professionalMeetStatus({
     required String accessToken,
     required String professionalId,
@@ -1748,6 +1777,8 @@ class MalvaApiClient {
           (payload['refresh_token_age_days'] as num?)?.toInt() ?? 0,
       refreshTokenExpiresInDays:
           (payload['refresh_token_expires_in_days'] as num?)?.toInt() ?? -1,
+      googleEmail: payload['google_email']?.toString() ?? '',
+      hint: payload['hint']?.toString() ?? '',
     );
   }
 
@@ -3203,12 +3234,16 @@ class BackendHealthRecord {
   /// Daftar obat aktif pasien (diisi server sejak perbaikan Bug #5b).
   final List<BackendHealthRecordMed> medications;
 
-  /// Nama penulis diagnosis terakhir. `updatedBy` berasal dari audit_logs
-  /// (kebenaran sebenarnya); `primaryProfessional` hanya fallback untuk data
-  /// lama yang belum punya jejak audit. JANGAN dibalik: primaryProfessional
-  /// adalah link aktif pertama, bukan penulis diagnosis.
-  String get authorName =>
-      updatedBy.isNotEmpty ? updatedBy : primaryProfessional;
+  /// Nama penulis diagnosis terakhir.
+  ///
+  /// Atribusi HANYA boleh berasal dari `updatedBy` (audit_logs.actor_id).
+  /// `primaryProfessional` adalah profesional yang PALING DULU terhubung,
+  /// bukan berarti penulis diagnosis. Menggunakan-nya sebagai fallback
+  /// menciptakan atribusi palsu: profesional baru yang belum punya jejak
+  /// audit akan salah dikreditkan ke profesional yang lebih dulu bergabung.
+  /// Bila `updatedBy` kosong, kembalikan string kosong agar UI tidak
+  /// menampilkan baris "Oleh:" yang menyesatkan.
+  String get authorName => updatedBy;
 }
 
 /// Item obat dalam respons health record (Bug #5b).

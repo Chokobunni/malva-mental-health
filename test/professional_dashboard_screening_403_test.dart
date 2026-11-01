@@ -26,7 +26,7 @@ import 'package:malva_mental_health/src/widgets/malva_components.dart';
 // dan semua kartu 0.
 //
 // Setelah perbaikan: tidak ada banner global, "Pasien aktif" = 2, dan
-// pasien B mendapat penanda kecil "Screening belum dibagikan".
+// pasien B mendapat penanda kecil "Pasien belum membagikan data skrining".
 // ============================================================
 
 const _session = AuthSession(
@@ -182,7 +182,7 @@ void main() {
     // 3. Penanda per-pasien + kedua pasien muncul di tab Pasien.
     await tester.tap(find.text('Pasien'));
     await tester.pumpAndSettle();
-    expect(find.text('Screening belum dibagikan'), findsOneWidget);
+    expect(find.text('Pasien belum membagikan data skrining'), findsOneWidget);
     expect(find.text('Ami'), findsOneWidget);
     expect(find.text('Dhiva'), findsOneWidget);
 

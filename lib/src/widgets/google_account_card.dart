@@ -76,6 +76,13 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
   /// endpoint tidak tersedia — UI lalu jatuh ke `GET /v1/google/status`.
   String _meetReason = '';
 
+  /// Email akun Google tertaut (dari server) — dipakai untuk memberi tahu Gmail
+  /// mana yang harus didaftarkan sebagai Test user saat Google memblokir.
+  String _meetGoogleEmail = '';
+
+  /// Saran tindakan berbahasa Indonesia dari server untuk `_meetReason`.
+  String _meetHint = '';
+
   /// Umur grant izin Google (hari) — 0 bila tidak ada token.
   int _refreshTokenAgeDays = 0;
 
@@ -145,6 +152,8 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
     var reason = '';
     var ageDays = 0;
     var expiresInDays = -1;
+    var googleEmail = '';
+    var hint = '';
     try {
       final professionalId = widget.session.backendUserId ?? '';
       if (professionalId.isNotEmpty) {
@@ -153,6 +162,8 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
         reason = status.reason;
         ageDays = status.refreshTokenAgeDays;
         expiresInDays = status.refreshTokenExpiresInDays;
+        googleEmail = status.googleEmail;
+        hint = status.hint;
       }
     } on Object {
       // Endpoint status opsional: jatuh ke GET /v1/google/status di bawah.
@@ -165,6 +176,8 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
         _meetReason = reason;
         _refreshTokenAgeDays = ageDays;
         _refreshTokenExpiresInDays = expiresInDays;
+        _meetGoogleEmail = googleEmail;
+        _meetHint = hint;
         _serverConfigured = reason.isEmpty
             ? status.serverConfigured
             : reason != 'server_not_configured';
@@ -212,6 +225,11 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
     if (_busy) return;
     final token = widget.session.accessToken;
     if (token == null || token.isEmpty) return;
+    // Pra-pemeriksaan: beri tahu Gmail yang akan dipakai dan konsekuensinya
+    // bila Gmail belum terdaftar sebagai Test user (penyebab paling umum
+    // access_denied). Ini membuat kegagalan tidak terasa seperti bug aplikasi.
+    final proceed = await _showMeetPrecheckSheet();
+    if (proceed != true || !mounted) return;
     setState(() => _busy = true);
     try {
       // Percobaan ulang (setelah satu kegagalan) memaksa otorisasi baru agar
@@ -219,7 +237,15 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
       final code = _meetRetry
           ? await _calendarCodeProviderFresh()
           : await _calendarCodeProvider();
-      if (code == null || code.isEmpty) return;
+      if (code == null || code.isEmpty) {
+        // Pengguna kembali dari browser TANPA token. Bisa jadi ia menutup
+        // dialog (bukan error), ATAU Google memblokir (access_denied) sebelum
+        // callback. Bedakan dengan memeriksa ulang status Meet: bila masih
+        // belum tertaut setelah jeda singkat, tampilkan dialog access_denied
+        // yang actionable dengan Gmail yang bisa disalin.
+        await _handleReturnWithoutToken();
+        return;
+      }
       if (!mounted) return;
       await ref.read(apiClientProvider).exchangeGoogleToken(
             accessToken: token,
@@ -242,6 +268,167 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
       await _showMeetErrorDialog(message);
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Sheet pra-pemeriksaan sebelum membuka browser OAuth. Menjelaskan Gmail
+  /// yang akan dipakai dan konsekuensinya bila belum terdaftar sebagai Test
+  /// user. Mengembalikan true bila pengguna memilih "Lanjutkan ke Google".
+  Future<bool?> _showMeetPrecheckSheet() {
+    final email = _meetGoogleEmail.isNotEmpty
+        ? _meetGoogleEmail
+        : (_identity?.email ?? '');
+    final gmail = email.isEmpty ? 'Gmail yang tertaut di akun ini' : email;
+    return showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Sebelum menghubungkan Google Calendar',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Gmail yang akan dipakai:',
+                style: Theme.of(sheetContext)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.black54),
+              ),
+              const SizedBox(height: 4),
+              SelectableText(
+                gmail,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Pastikan Gmail di atas dipakai saat memilih akun Google di '
+                'browser. Bila aplikasi Malva masih dalam mode Testing, Gmail '
+                'ini HARUS terdaftar sebagai Test user. Jika belum, Google akan '
+                'menolak dengan pesan "Access blocked" (access_denied) dan '
+                'layanan tetap berjalan lewat link Meet manual.',
+                style: Theme.of(sheetContext)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.black54),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () =>
+                          Navigator.of(sheetContext).pop(false),
+                      child: const Text('Batal'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () =>
+                          Navigator.of(sheetContext).pop(true),
+                      icon: const Icon(Icons.open_in_browser_rounded),
+                      label: const Text('Lanjutkan ke Google'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Dipanggil ketika pengguna kembali dari browser TANPA token. Periksa ulang
+  /// status Meet; bila masih `not_linked` setelah jeda singkat, tampilkan
+  /// dialog access_denied dengan Gmail yang bisa disalin. Bila sudah tertaut
+  /// (mis. proses lain berhasil), cukup segarkan status.
+  Future<void> _handleReturnWithoutToken() async {
+    // Beri waktu server mencatat token bila callback sempat terjadi.
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+    await _loadMeetStatus();
+    if (!mounted) return;
+    if (_calendarConnected) {
+      _showSnack('Google Meet diaktifkan.');
+      return;
+    }
+    // Masih belum tertaut: kemungkinan besar Google memblokir (access_denied).
+    await _showAccessDeniedDialog();
+  }
+
+  /// Dialog khusus access_denied: Gmail yang bisa disalin (SelectableText) +
+  /// langkah perbaikan konkret. Berbeda dari _showMeetErrorDialog yang memuat
+  /// pesan mentah server; dialog ini menjelaskan sebab paling mungkin dan cara
+  /// menambah Test user / Publish app.
+  Future<void> _showAccessDeniedDialog() async {
+    final email = _meetGoogleEmail.isNotEmpty
+        ? _meetGoogleEmail
+        : (_identity?.email ?? '');
+    final gmail = email.isEmpty ? 'Gmail yang tertaut di akun ini' : email;
+    final action = await showDialog<_MeetErrorAction>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Google menolak akses'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Kemungkinan besar Gmail ini belum terdaftar sebagai Test user '
+                'pada OAuth consent screen, sehingga Google memblokir sebelum '
+                'kembali ke aplikasi. Sesi video tetap bisa berjalan lewat link '
+                'Meet manual.',
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Gmail yang perlu didaftarkan:',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              SelectableText(
+                gmail,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 14),
+              const Text('Langkah perbaikan (dilakukan admin):'),
+              const SizedBox(height: 4),
+              const Text(
+                '1. Buka Google Cloud Console → APIs & Services → OAuth consent '
+                'screen (project malva-7084e).\n'
+                '2. Buka tab Audience → Test users → Add users.\n'
+                '3. Tambahkan Gmail di atas, lalu Simpan.\n'
+                '4. Atau Publish app agar semua Gmail bisa memakai.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_MeetErrorAction.close),
+            child: const Text('Tutup'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_MeetErrorAction.retry),
+            child: const Text('Coba lagi'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (action == _MeetErrorAction.retry) {
+      await _enableMeet();
     }
   }
 
@@ -301,7 +488,9 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
         lower.contains('test user');
     if (!isAccessDenied) return message;
 
-    final email = _identity?.email ?? '';
+    final email = _meetGoogleEmail.isNotEmpty
+        ? _meetGoogleEmail
+        : (_identity?.email ?? '');
     final gmail = email.isEmpty ? 'Gmail tertaut Anda' : email;
     return '$message\n\n'
         'Gmail yang tertaut: $gmail\n'
@@ -721,10 +910,14 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
         'Izin Google Calendar kedaluwarsa (token tidak lagi berlaku). '
             'Hubungkan ulang agar link Meet bisa dibuat otomatis. '
             'Sesi pasien tetap terjadwal; link dibuat setelah ini aktif.',
-      'no_calendar_scope' =>
-        'Gmail sudah tertaut, tetapi izin Google Calendar belum diberikan. '
-            'Hubungkan Google Calendar agar link Meet dibuat otomatis untuk '
-            'sesi video.',
+      'no_calendar_scope' => _meetGoogleEmail.isEmpty
+          ? 'Gmail sudah tertaut, tetapi izin Google Calendar belum diberikan. '
+              'Hubungkan Google Calendar agar link Meet dibuat otomatis untuk '
+              'sesi video.'
+          : 'Akun Google $_meetGoogleEmail belum memberi izin Kalender ke '
+              'Malva. Bila Google menampilkan "Access blocked", minta admin '
+              'menambahkan $_meetGoogleEmail sebagai Test user di OAuth consent '
+              'screen (project malva-7084e).',
       'not_linked' =>
         'Hubungkan Gmail di atas lebih dulu, lalu aktifkan Google Calendar.',
       _ => 'Aktifkan Google Meet agar sesi video otomatis membuat tautan Meet. '
@@ -747,6 +940,50 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
             .bodySmall
             ?.copyWith(color: Colors.black54),
       ),
+      // Gmail yang perlu didaftarkan/diberi izin — bisa disalin (SelectableText)
+      // agar profesional bisa meneruskannya ke admin tanpa salah ketik.
+      if (_meetGoogleEmail.isNotEmpty &&
+          (_meetReason == 'no_calendar_scope' ||
+              _meetReason == 'token_expired')) ...[
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.alternate_email_rounded,
+                size: 16, color: Colors.black45),
+            const SizedBox(width: 6),
+            Expanded(
+              child: SelectableText(
+                _meetGoogleEmail,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+      ],
+      if (_meetHint.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.lightbulb_outline_rounded,
+                size: 16, color: MalvaColors.amber),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                _meetHint,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: MalvaColors.amber,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ),
+          ],
+        ),
+      ],
       const SizedBox(height: 12),
       FilledButton.icon(
         onPressed: onPressed,
