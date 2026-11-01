@@ -11,8 +11,8 @@ import 'package:malva_mental_health/src/services/google_auth_service.dart';
 // sehingga identitas akun tidak bisa dipastikan dan backend membalas
 // 422 `google_identitas_gagal`.
 //
-// Test ini menjaga agar `openid` (dan `email`) TIDAK terhapus lagi dari
-// daftar scope — bila terhapus, bug 422 akan kembali.
+// Test ini menjaga agar `openid`, `email`, dan `profile` TIDAK terhapus lagi
+// dari daftar scope — bila terhapus, bug 422 akan kembali.
 // ============================================================
 
 void main() {
@@ -26,8 +26,17 @@ void main() {
       );
     });
 
-    test('memuat email (verifikasi identitas akun)', () {
+    test('memuat email (klaim email akun)', () {
       expect(GoogleAuthService.calendarAuthScopes, contains('email'));
+    });
+
+    test('memuat profile (syarat endpoint UserInfo OpenID Connect)', () {
+      expect(
+        GoogleAuthService.calendarAuthScopes,
+        contains('profile'),
+        reason: 'dokumentasi UserInfo Google mensyaratkan openid+profile; '
+            'tanpa profile endpoint identitas bisa menolak token -> 422',
+      );
     });
 
     test('memuat scope calendar.events (izin buat event + link Meet)', () {

@@ -57,15 +57,18 @@ class GoogleAuthService {
 
   /// Scope yang diminta saat mengaktifkan Google Calendar.
   ///
-  /// `openid` WAJIB: tanpa itu token endpoint tidak mengembalikan `id_token`
-  /// dan endpoint UserInfo menolak access token (mensyaratkan salah satu dari
-  /// openid/email/profile), sehingga identitas akun tidak bisa dipastikan dan
-  /// backend membalas 422 `google_identitas_gagal`. `email` ikut diminta agar
-  /// identitas akun bisa diverifikasi; `calendar.events` memberi izin membuat
-  /// event + link Meet.
+  /// `openid` WAJIB: tanpa itu token endpoint tidak mengembalikan `id_token`.
+  /// `profile` + `email` menyertakan klaim identitas dasar; dokumentasi
+  /// OpenID Connect Google menyatakan endpoint UserInfo mensyaratkan
+  /// `openid profile` (email opsional untuk klaim email) — tanpa keduanya
+  /// UserInfo menolak access token, sehingga identitas akun tidak bisa
+  /// dipastikan dan backend membalas 422 `google_identitas_gagal`. `profile`
+  /// dan `email` adalah scope non-sensitif (tidak menambah verifikasi).
+  /// `calendar.events` memberi izin membuat event + link Meet.
   static const calendarAuthScopes = <String>[
     'openid',
     'email',
+    'profile',
     'https://www.googleapis.com/auth/calendar.events',
   ];
 

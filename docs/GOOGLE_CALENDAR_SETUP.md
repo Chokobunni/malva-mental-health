@@ -217,15 +217,16 @@ bila ada). UI Flutter memakai `code` untuk menampilkan pesan actionable.
 > lalu mengirim ulang code yang sama — dijamin `invalid_grant`. Karena itu
 > kegagalan identitas memakai `422`.
 
-### Scope yang WAJIB diminta: `openid` + `email` + `calendar.events`
+### Scope yang WAJIB diminta: `openid` + `email` + `profile` + `calendar.events`
 
 Aplikasi Flutter **tidak** boleh hanya meminta `calendar.events`. Saat
-mengaktifkan Google Calendar, klien meminta tiga scope sekaligus
+mengaktifkan Google Calendar, klien meminta empat scope sekaligus
 (`GoogleAuthService.calendarAuthScopes`):
 
 ```
 openid
 email
+profile
 https://www.googleapis.com/auth/calendar.events
 ```
 
@@ -236,18 +237,21 @@ Alasannya, setelah authorization code ditukar, server perlu memastikan
    mengembalikan `id_token` bila scope `openid` ikut diminta. Tanpa `openid`,
    `id_token` selalu kosong sehingga server tidak bisa memvalidasi identitas
    dari token itu.
-2. **Endpoint UserInfo menolak token tanpa `openid`/`email`/`profile`.**
-   Sebagai fallback, server memanggil `https://www.googleapis.com/oauth2/v3/userinfo`
-   memakai access token hasil penukaran. Endpoint ini **mensyaratkan** salah
-   satu dari scope `openid`, `email`, atau `profile`. Access token yang hanya
-   punya `calendar.events` akan ditolak `403`, sehingga fallback pun gagal.
+2. **Endpoint UserInfo mensyaratkan `openid profile`.** Sebagai fallback,
+   server memanggil `https://www.googleapis.com/oauth2/v3/userinfo` memakai
+   access token hasil penukaran. Dokumentasi OpenID Connect Google menyatakan
+   endpoint ini mensyaratkan `openid` + `profile` (klaim `email` opsional lewat
+   scope `email`). Access token yang hanya punya `calendar.events` akan
+   ditolak `403`, sehingga fallback pun gagal. `profile` dan `email` adalah
+   scope **non-sensitif** — tidak menambah proses verifikasi Google.
 
-Akibatnya, bila `openid`/`email` tidak diminta, kedua jalur identitas mustahil
-berhasil dan `POST /v1/auth/google-token-exchange` membalas **`422
+Akibatnya, bila `openid`/`profile` tidak diminta, kedua jalur identitas
+mustahil berhasil dan `POST /v1/auth/google-token-exchange` membalas **`422
 google_identitas_gagal`** — meskipun penukaran kode dan pemberian izin Calendar
-sendiri sukses. Karena itu `openid` dan `email` **wajib** disertakan bersama
-`calendar.events`; jangan menghapusnya dari daftar scope klien (ada test regresi
-`test/google_auth_service_scopes_test.dart` yang menjaganya).
+sendiri sukses. Karena itu `openid`, `email`, dan `profile` **wajib**
+disertakan bersama `calendar.events`; jangan menghapusnya dari daftar scope
+klien (ada test regresi `test/google_auth_service_scopes_test.dart` yang
+menjaganya).
 
 ---
 
