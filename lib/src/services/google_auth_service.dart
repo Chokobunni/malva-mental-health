@@ -47,6 +47,28 @@ class GoogleAuthService {
   /// cukup singkat agar kegagalan sistem langsung terlihat.
   static const Duration _authTimeout = Duration(seconds: 60);
 
+  /// Batas tunggu dialog **otorisasi** Google Calendar (layar consent yang
+  /// menampilkan daftar izin). Jauh lebih panjang dari [_authTimeout] karena
+  /// pengguna wajar membaca daftar izin lebih dari 60 detik. Future yang
+  /// dibatalkan terlalu cepat membuat hasil consent terbuang dan percobaan
+  /// berikutnya bisa bertabrakan dengan pending intent lama (plugin
+  /// google_sign_in_android menyimpan satu `pendingAuthorizationCallback`).
+  static const Duration _consentTimeout = Duration(minutes: 5);
+
+  /// Scope yang diminta saat mengaktifkan Google Calendar.
+  ///
+  /// `openid` WAJIB: tanpa itu token endpoint tidak mengembalikan `id_token`
+  /// dan endpoint UserInfo menolak access token (mensyaratkan salah satu dari
+  /// openid/email/profile), sehingga identitas akun tidak bisa dipastikan dan
+  /// backend membalas 422 `google_identitas_gagal`. `email` ikut diminta agar
+  /// identitas akun bisa diverifikasi; `calendar.events` memberi izin membuat
+  /// event + link Meet.
+  static const calendarAuthScopes = <String>[
+    'openid',
+    'email',
+    'https://www.googleapis.com/auth/calendar.events',
+  ];
+
   static Future<String?> signInIdToken() async {
     _lastErrorCode = null;
     if (!GoogleConfig.isConfigured) {
@@ -107,7 +129,7 @@ class GoogleAuthService {
   ///
   /// Dua langkah dipisah dengan sengaja:
   ///   1. `authenticate()` TANPA `scopeHint` → hanya ID token (login).
-  ///   2. `authorizationClient.authorizeServer([calendar.events])` →
+  ///   2. `authorizationClient.authorizeServer(calendarAuthScopes)` →
   ///      authorization code yang ditukar backend menjadi refresh token.
   ///
   /// Alasannya: permintaan scope sensitif lewat `authenticate(scopeHint: ...)`
@@ -168,12 +190,15 @@ class GoogleAuthService {
       );
     }
     // Langkah 2: minta authorization code untuk Google Calendar.
-    // Timeout juga di sini (langkah 2 bisa ikut menggantung bila dialog
-    // otorisasi scope tidak bisa tampil — insiden 28 Okt 2026).
+    // Timeout di sini memakai [_consentTimeout] (5 menit), BUKAN [_authTimeout]:
+    // layar consent Google wajar dibaca pengguna lebih dari 60 detik, dan
+    // membatalkan Future terlalu cepat membuang hasil consent.
     try {
-      final serverAuth = await account.authorizationClient.authorizeServer(
-        const ['https://www.googleapis.com/auth/calendar.events'],
-      ).timeout(_authTimeout);
+      final serverAuth = await account.authorizationClient
+          .authorizeServer(
+            calendarAuthScopes,
+          )
+          .timeout(_consentTimeout);
       if (serverAuth == null || serverAuth.serverAuthCode.isEmpty) {
         throw _fail(
           'server_auth_code_kosong',
@@ -189,10 +214,11 @@ class GoogleAuthService {
     } on TimeoutException {
       throw _fail(
         'authorize_timeout',
-        'Dialog otorisasi Google Calendar tidak muncul dalam 60 detik '
-            '(kode: authorize_timeout). Kemungkinan sidik jari aplikasi '
-            '(SHA-1) belum didaftarkan di Google Cloud, atau Google Play '
-            'Services perlu diperbarui. Hubungi admin bila berlanjut.',
+        'Dialog otorisasi Google Calendar tidak muncul dalam 5 menit '
+            '(kode: authorize_timeout). Bila dialog sempat tertutup, tekan '
+            '"Coba lagi" untuk membuka ulang. Bila berulang, kemungkinan '
+            'sidik jari aplikasi (SHA-1) belum didaftarkan di Google Cloud '
+            'atau Google Play Services perlu diperbarui — hubungi admin.',
       );
     } on GoogleSignInException catch (e) {
       if (e.code == GoogleSignInExceptionCode.canceled) {
