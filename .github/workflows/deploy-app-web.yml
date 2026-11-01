@@ -1,0 +1,149 @@
+name: Deploy Web App (/app)
+
+# Build Flutter web (lib/main_web.dart) dan sinkronkan ke web root terpisah
+# /var/www/malva-app, disajikan Caddy di https://malva.web.id/app/.
+#
+# KENAPA PATH /app, BUKAN SUBDOMAIN: fase 1 belum punya A record untuk
+# app.malva.web.id (DNS belum ada), sehingga subdomain tak bisa terbitkan
+# sertifikat. Origin tetap https://malva.web.id → CORS produksi sudah
+# mengizinkannya (MALVA_ALLOWED_ORIGINS).
+#
+# PENTING: --base-href=/app/ WAJIB. Tanpa itu semua aset 404.
+# PENTING: tanpa MALVA_GOOGLE_CLIENT_ID, tombol "Continue with Google" gagal.
+#
+# Konfigurasi yang dibutuhkan (lihat docs/CI_CD.md):
+#   vars.DEPLOY_HOST, vars.DEPLOY_USER, vars.DEPLOY_PORT (opsional)
+#   secrets.DEPLOY_SSH_KEY
+#   vars.MALVA_GOOGLE_CLIENT_ID
+#   vars.MALVA_API_BASE_URL (opsional, default https://api.malva.web.id)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'web/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/deploy-app-web.yml'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-app-web
+  cancel-in-progress: false
+
+env:
+  DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+  APP_WEB_ROOT: ${{ vars.APP_WEB_ROOT || '/var/www/malva-app' }}
+  APP_WEB_ROOT_PREV: ${{ vars.APP_WEB_ROOT || '/var/www/malva-app' }}.prev
+  APP_URL: ${{ vars.APP_URL || 'https://malva.web.id/app/' }}
+  FLUTTER_VERSION: '3.44.8'
+
+jobs:
+  deploy:
+    name: Build & sync Flutter web app
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deploy config
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          MALVA_GOOGLE_CLIENT_ID: ${{ vars.MALVA_GOOGLE_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          missing=""
+          [ -n "${DEPLOY_HOST:-}" ] || missing="$missing vars.DEPLOY_HOST"
+          [ -n "${DEPLOY_USER:-}" ] || missing="$missing vars.DEPLOY_USER"
+          [ -n "${DEPLOY_SSH_KEY:-}" ] || missing="$missing secrets.DEPLOY_SSH_KEY"
+          [ -n "${MALVA_GOOGLE_CLIENT_ID:-}" ] || missing="$missing vars.MALVA_GOOGLE_CLIENT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::Konfigurasi deploy belum lengkap:$missing"
+            echo "Buka docs/CI_CD.md untuk cara mengisi variables & secrets."
+            exit 1
+          fi
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Build web (/app, release)
+        run: |
+          set -euo pipefail
+          flutter build web --release \
+            --target=lib/main_web.dart \
+            --base-href=/app/ \
+            --dart-define=MALVA_API_BASE_URL=${{ vars.MALVA_API_BASE_URL || 'https://api.malva.web.id' }} \
+            --dart-define=MALVA_GOOGLE_CLIENT_ID=${{ vars.MALVA_GOOGLE_CLIENT_ID }}
+
+      - name: Setup SSH
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Snapshot previous build (rollback)
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          # Salin build yang sedang aktif ke <root>.prev SEBELUM menimpa,
+          # sehingga rollback = satu rsync balik dari .prev.
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "sudo mkdir -p '$APP_WEB_ROOT' '$APP_WEB_ROOT_PREV' && \
+             sudo rsync -a --delete '$APP_WEB_ROOT/' '$APP_WEB_ROOT_PREV/'"
+
+      - name: Sync app build
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            --chown=caddy:caddy \
+            --rsync-path="sudo rsync" \
+            -e "ssh -i ~/.ssh/deploy_key -p $DEPLOY_PORT" \
+            build/web/ "$DEPLOY_USER@$DEPLOY_HOST:$APP_WEB_ROOT/"
+
+      - name: Health check (/app/)
+        run: |
+          set -euo pipefail
+          body=$(mktemp)
+          ok=0
+          for i in $(seq 1 10); do
+            # Simpan body ke file dulu: `curl | grep -q` menutup pipe lebih awal
+            # sehingga curl keluar 23 dan pipefail menganggapnya gagal.
+            if curl -fsS --max-time 10 "$APP_URL" -o "$body" 2>/dev/null \
+              && grep -qi '<title>Malva</title>' "$body"; then
+              ok=1
+              break
+            fi
+            echo "Percobaan $i/10 belum sehat, tunggu 3 detik..."
+            sleep 3
+          done
+          rm -f "$body"
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::Aplikasi web /app/ tidak merespons / judul tidak ditemukan di $APP_URL"
+            exit 1
+          fi
+          echo "OK: $APP_URL sehat."

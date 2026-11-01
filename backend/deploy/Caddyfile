@@ -6,6 +6,30 @@
 malva.web.id {
 	root * /var/www/malva
 	encode zstd gzip
+
+	# Aplikasi Flutter web disajikan di /app/ (fase 1; DNS subdomain belum ada).
+	# handle_path men-de-strip prefix /app sebelum try_files, jadi SPA jatuh ke
+	# /index.html di root terpisah /var/www/malva-app (landing di /var/www/malva
+	# TIDAK tersentuh).
+	# /app tanpa slash diarahkan ke /app/ agar --base-href=/app/ bekerja.
+	redir /app /app/ 308
+
+	handle_path /app/* {
+		root * /var/www/malva-app
+		try_files {path} /index.html
+		# index + SW + entrypoint TIDAK boleh immutable: Flutter web tidak
+		# memberi hash pada nama berkas, cache immutable membuat deploy baru
+		# tidak pernah sampai ke pengguna.
+		header /index.html Cache-Control "no-cache"
+		header /flutter_service_worker.js Cache-Control "no-cache"
+		header /main.dart.js Cache-Control "no-cache"
+		header /version.json Cache-Control "no-cache"
+		@immutable path /canvaskit/* /assets/* /icons/*
+		header @immutable Cache-Control "public, max-age=604800"
+		header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://accounts.google.com https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.malva.web.id wss://api.malva.web.id; frame-src https://accounts.google.com; font-src 'self' data:"
+		file_server
+	}
+
 	file_server
 }
 
@@ -17,3 +41,22 @@ api.malva.web.id {
 	encode zstd gzip
 	reverse_proxy 127.0.0.1:8080
 }
+
+# ── Varian subdomain (aktifkan bila A record app.malva.web.id sudah ada) ──
+# Tanpa A record, Caddy tidak bisa menerbitkan sertifikat; itulah sebabnya
+# fase 1 memakai path /app. Saat DNS tersedia, aktifkan blok ini dan arahkan
+# workflow deploy-app-web.yml ke APP_URL=https://app.malva.web.id/ (base-href
+# kembali ke /). Build fase 1 (base-href=/app/) tidak cocok untuk subdomain.
+# app.malva.web.id {
+# 	root * /var/www/malva-app
+# 	encode zstd gzip
+# 	try_files {path} /index.html
+# 	header /index.html Cache-Control "no-cache"
+# 	header /flutter_service_worker.js Cache-Control "no-cache"
+# 	header /main.dart.js Cache-Control "no-cache"
+# 	header /version.json Cache-Control "no-cache"
+# 	@immutable path /canvaskit/* /assets/* /icons/*
+# 	header @immutable Cache-Control "public, max-age=604800"
+# 	header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://accounts.google.com https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.malva.web.id wss://api.malva.web.id; frame-src https://accounts.google.com; font-src 'self' data:"
+# 	file_server
+# }

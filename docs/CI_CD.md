@@ -9,6 +9,7 @@ yang perlu dilakukan agar `push` ke `main` langsung men-deploy tanpa SSH manual.
 |---|---|---|
 | `.github/workflows/deploy-backend.yml` | push `backend/**` (kecuali `backend/deploy/landing/**`) | Build binary Go linux/amd64 → upload ke VM → `systemctl restart malva-api` → health check `/healthz` |
 | `.github/workflows/deploy-web.yml` | push `backend/deploy/landing/**` | `rsync` landing site ke `/var/www/malva` → health check website |
+| `.github/workflows/deploy-app-web.yml` | push `lib/**`, `web/**`, `pubspec.*` | Build Flutter web (`lib/main_web.dart`, `--base-href=/app/`) → snapshot `.prev` → `rsync` ke `/var/www/malva-app` → health check `/app/` |
 | `.github/workflows/build-apk.yml` | push `lib/**`, `android/**`, `assets/**`, `pubspec.*` | Build APK release + `--dart-define` wajib → verifikasi define tertanam → upload artifact → (opsional) upload ke `/downloads/malva-latest.apk` |
 | `.github/workflows/deploy.yml` | manual (`workflow_dispatch`) | Orkestrator: deploy `all` / `backend` / `web` / `apk` |
 | `.github/workflows/backend-ci.yml` | push/PR `backend/**` | Lint, unit test (Postgres service), build, docker, security scan |
@@ -40,6 +41,8 @@ tabel di bawah. Di halaman **Secrets**, klik **New repository secret**.
 | `MALVA_GOOGLE_CLIENT_ID` | `910496426601-....apps.googleusercontent.com` | ✅ untuk APK | apk |
 | `WEB_ROOT` | `/var/www/malva` | opsional (default) | web |
 | `SITE_URL` | `https://malva.web.id` | opsional (default) | web, apk |
+| `APP_WEB_ROOT` | `/var/www/malva-app` | opsional (default) | deploy-app-web |
+| `APP_URL` | `https://malva.web.id/app/` | opsional (default) | deploy-app-web |
 
 `MALVA_GOOGLE_CLIENT_ID` adalah **Web Client ID** (bukan rahasia) — nilai yang
 sama dengan `--dart-define` di `scripts/build_release_apk.ps1`.
@@ -116,11 +119,41 @@ sudo visudo -c
 ```bash
 sudo mkdir -p /var/www/malva/downloads
 sudo chown -R caddy:caddy /var/www/malva
+
+# Aplikasi Flutter web (/app) punya web root TERPISAH — jangan dicampur
+# dengan landing di /var/www/malva (yang di-rsync --delete oleh deploy-web).
+sudo mkdir -p /var/www/malva-app /var/www/malva-app.prev
+sudo chown -R caddy:caddy /var/www/malva-app /var/www/malva-app.prev
 ```
 
 Service `malva-api` sudah ada di `/etc/systemd/system/malva-api.service` dan
 binary-nya di `/usr/local/bin/malva-api` (lihat
 `backend/deploy/systemd/malva-api.service`).
+
+### 5.5 Aplikasi Flutter web di `/app` (fase 1, tanpa DNS subdomain)
+
+Aplikasi web (`lib/main_web.dart`) disajikan di **`https://malva.web.id/app/`**,
+bukan subdomain, karena `app.malva.web.id` belum punya A record (tanpa DNS,
+Caddy tak bisa menerbitkan sertifikat). Konsekuensi & langkah:
+
+- **`--base-href=/app/` WAJIB** di build (sudah di workflow `deploy-app-web.yml`).
+  Tanpa itu semua aset 404.
+- **Web root terpisah** `/var/www/malva-app` (bukan `/var/www/malva`). Landing
+  di `/var/www/malva` di-`rsync --delete` oleh `deploy-web.yml` — jangan
+  dicampur.
+- **CORS**: origin tetap `https://malva.web.id`, sudah ada di
+  `MALVA_ALLOWED_ORIGINS` (`backend/deploy/env.production.example`) — verifikasi
+  ulang saat deploy, jangan diasumsikan.
+- **Rollback satu perintah**: workflow menyalin build aktif ke
+  `/var/www/malva-app.prev` SEBELUM menimpa. Untuk kembali:
+  `sudo rsync -a --delete /var/www/malva-app.prev/ /var/www/malva-app/`.
+- **CSP**: blok `/app` di `backend/deploy/Caddyfile` mengizinkan
+  `accounts.google.com` (Google Identity Services). Bila tombol Google gagal
+  karena CSP saat uji E2E, tambahkan `https://www.gstatic.com
+  https://apis.google.com` ke `script-src`.
+- Saat A record `app.malva.web.id` tersedia: aktifkan blok subdomain (komentar)
+  di `Caddyfile`, ubah build kembali ke `--base-href=/`, dan set
+  `APP_URL=https://app.malva.web.id/`.
 
 ## 6. Setup Android signing
 
