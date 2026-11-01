@@ -112,4 +112,4 @@ Database uji selalu kosong, jadi semua migrasi dijalankan dari awal (ledger tida
 
 ## Ringkasan migrasi saat ini
 
-`001_initial` → `022_merge_care_packages` (22 migrasi). Nomor berikutnya: **023**.
+`001_initial` → `027_backfill_patient_professional_links` (27 migrasi). Nomor berikutnya: **028**.

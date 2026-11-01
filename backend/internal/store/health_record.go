@@ -63,32 +63,43 @@ func (s *Store) GetHealthRecord(ctx context.Context, patientID string) (HealthRe
 	rec.HasDiagnosis = rec.DiagnosisSummary != ""
 
 	// Metadata audit terakhir untuk diagnosis (dari audit_logs).
+	// PERBAIKAN BUG ATRIBUSI: penulis diagnosis HANYA diambil dari
+	// audit_logs.actor_id yang mencatat action diagnosis_updated. Jangan
+	// pernah mengisi UpdatedBy dari patient_professional_links — link
+	// aktif pertama (primary_professional) bukan berarti penulis diagnosis.
+	// Filter `actor_id IS NOT NULL` agar baris audit tanpa aktor tidak
+	// menghasilkan atribusi palsu.
 	var updatedAt sql.NullTime
-	var updatedBy sql.NullString
+	var actorID sql.NullString
 	_ = s.db.QueryRowContext(ctx, `
 		SELECT al.created_at, al.actor_id::text
 		FROM audit_logs al
-		WHERE al.patient_id = $1 AND al.action = 'health_record.diagnosis_updated'
+		WHERE al.patient_id = $1
+		  AND al.action = 'health_record.diagnosis_updated'
+		  AND al.actor_id IS NOT NULL
 		ORDER BY al.created_at DESC
 		LIMIT 1
-	`, patientID).Scan(&updatedAt, &updatedBy)
+	`, patientID).Scan(&updatedAt, &actorID)
 	if updatedAt.Valid {
 		t := updatedAt.Time
 		rec.UpdatedAt = &t
 	}
-	if updatedBy.Valid && updatedBy.String != "" {
-		rec.UpdatedBy = &updatedBy.String
-	}
-	if rec.UpdatedBy != nil {
-		var name string
+	// Resolve nama aktor ke users.display_name. Bila nama tidak ditemukan
+	// (mis. akun aktor sudah dihapus), biarkan UpdatedBy kosong — lebih baik
+	// tidak menampilkan "Oleh:" daripada meminjam nama profesional lain.
+	if actorID.Valid && strings.TrimSpace(actorID.String) != "" {
+		var name sql.NullString
 		if err := s.db.QueryRowContext(ctx, `
 			SELECT display_name FROM users WHERE id = $1
-		`, *rec.UpdatedBy).Scan(&name); err == nil && name != "" {
-			rec.UpdatedBy = &name
+		`, actorID.String).Scan(&name); err == nil && name.Valid && strings.TrimSpace(name.String) != "" {
+			resolved := name.String
+			rec.UpdatedBy = &resolved
 		}
 	}
 
-	// Nama profesional utama (link aktif pertama), bila ada.
+	// Nama profesional utama (link aktif pertama), bila ada. Ini field
+	// terpisah untuk keperluan lain; JANGAN dipakai sebagai atribusi
+	// penulis diagnosis.
 	var professionalName sql.NullString
 	_ = s.db.QueryRowContext(ctx, `
 		SELECT u.display_name

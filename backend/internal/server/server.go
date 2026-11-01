@@ -307,6 +307,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/care-sessions/{session_id}/reschedule", s.requireAuth(s.rescheduleCareSession))
 	// Link Google Meet: buat / ambil ulang untuk sesi video (pasien & profesional).
 	mux.HandleFunc("POST /v1/care-sessions/{session_id}/meet-link", s.requireAuth(s.ensureMeetLinkHandler))
+	// Fallback manual: profesional pemilik sesi menempelkan link Meet sendiri
+	// ketika Google Calendar tidak bisa dipakai (mis. diblokir access_denied).
+	mux.HandleFunc("PUT /v1/care-sessions/{session_id}/meet-link", s.requireAuth(s.setManualMeetLinkHandler))
 	// Status tautan Google Calendar profesional (tanpa membocorkan token).
 	mux.HandleFunc("GET /v1/google/status", s.requireAuth(s.googleStatusHandler))
 	// Status Google Meet seorang profesional (read-only): dipakai klien untuk
@@ -833,7 +836,7 @@ func (s *Server) listScreenings(w http.ResponseWriter, r *http.Request, claims a
 		return
 	}
 	if claims.Role == "professional" && !s.consentAllows(r, patientID, claims.Subject, "screenings") {
-		writeError(w, http.StatusForbidden, errors.New("patient has not shared screening data"))
+		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data skrining"))
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -1082,7 +1085,7 @@ func (s *Server) listMoodCheckins(w http.ResponseWriter, r *http.Request, claims
 		return
 	}
 	if claims.Role == "professional" && !s.consentAllows(r, patientID, claims.Subject, "mood_diary") {
-		writeError(w, http.StatusForbidden, errors.New("patient has not shared mood/diary data"))
+		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data mood/diary"))
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -1133,7 +1136,7 @@ func (s *Server) listDiaryEntries(w http.ResponseWriter, r *http.Request, claims
 		return
 	}
 	if claims.Role == "professional" && !s.consentAllows(r, patientID, claims.Subject, "mood_diary") {
-		writeError(w, http.StatusForbidden, errors.New("patient has not shared mood/diary data"))
+		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data mood/diary"))
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -1230,7 +1233,7 @@ func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims
 			return
 		}
 		if !s.consentAllows(r, resolved, claims.Subject, "medications") {
-			writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data Medication"))
+			writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data obat"))
 			return
 		}
 		patientID = resolved
@@ -1294,7 +1297,7 @@ func (s *Server) resolveMedicationPatient(w http.ResponseWriter, r *http.Request
 			return "", false
 		}
 		if !s.consentAllows(r, resolved, claims.Subject, "medications") {
-			writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data Medication"))
+			writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data obat"))
 			return "", false
 		}
 		return resolved, true
@@ -1392,7 +1395,7 @@ func (s *Server) listMedications(w http.ResponseWriter, r *http.Request, claims 
 		return
 	}
 	if claims.Role == "professional" && !s.consentAllows(r, patientID, claims.Subject, "medications") {
-		writeError(w, http.StatusForbidden, errors.New("patient has not shared medication data"))
+		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data obat"))
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -1447,7 +1450,7 @@ func (s *Server) listMedicationLogs(w http.ResponseWriter, r *http.Request, clai
 		return
 	}
 	if claims.Role == "professional" && !s.consentAllows(r, patientID, claims.Subject, "medications") {
-		writeError(w, http.StatusForbidden, errors.New("patient has not shared medication data"))
+		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data obat"))
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -1466,7 +1469,7 @@ func (s *Server) timeline(w http.ResponseWriter, r *http.Request, claims auth.Cl
 		return
 	}
 	if claims.Role == "professional" && !s.consentAllows(r, patientID, claims.Subject, "timeline") {
-		writeError(w, http.StatusForbidden, errors.New("patient has not shared timeline data"))
+		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data timeline"))
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))

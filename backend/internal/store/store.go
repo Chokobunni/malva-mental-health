@@ -602,6 +602,34 @@ func (s *Store) ListProfessionalsForPatient(ctx context.Context, patientID strin
 	return ids, rows.Err()
 }
 
+// EnsurePatientProfessionalLink memastikan baris relasi pasien–profesional
+// aktif ada, memakai UUID LANGSUNG tanpa bergantung pada professional_profiles.
+//
+// Berbeda dari LinkPatientToProfessional yang menerima kode profesional dan
+// melakukan JOIN ke professional_profiles (bisa gagal bila profil profesional
+// belum lengkap), fungsi ini dipakai jalur pembayaran yang SUDAH tahu kedua
+// UUID dari booking. Tujuannya: profesional yang sudah dibayar pasiennya tidak
+// kehilangan akses ke data pasien hanya karena baris link belum termaterialisasi.
+//
+// Idempoten: ON CONFLICT (patient_id, professional_id) DO NOTHING — HANYA
+// membuat baris bila belum ada sama sekali. Status link yang sudah ada TIDAK
+// ditimpa, dan link yang sengaja diputus (status lain) TIDAK dihidupkan kembali.
+// Ini sejalan dengan migrasi 027 dan instruksi "jangan menimpa status". Aman
+// dipanggil berulang (mis. webhook ganda).
+func (s *Store) EnsurePatientProfessionalLink(ctx context.Context, patientID, professionalID string) error {
+	patientID = strings.TrimSpace(patientID)
+	professionalID = strings.TrimSpace(professionalID)
+	if patientID == "" || professionalID == "" {
+		return errors.New("patient_id and professional_id are required")
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO patient_professional_links (patient_id, professional_id, status)
+		VALUES ($1, $2, 'active')
+		ON CONFLICT (patient_id, professional_id) DO NOTHING
+	`, patientID, professionalID)
+	return err
+}
+
 func (s *Store) LinkPatientToProfessional(ctx context.Context, patientID, professionalCode string) (PatientProfessionalLink, error) {
 	patientID = strings.TrimSpace(patientID)
 	professionalCode = strings.TrimSpace(professionalCode)

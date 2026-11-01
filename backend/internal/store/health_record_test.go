@@ -112,3 +112,40 @@ func TestGetHealthRecordUpdatedByAdalahPenulisDiagnosis(t *testing.T) {
 		t.Fatalf("updated_by: dapat %q, mau %q", got, "dr. Hafid Algistian")
 	}
 }
+
+// TestGetHealthRecordTanpaAuditTidakMeminjamNamaProfesional mengunci
+// invariant: bila belum ada jejak audit diagnosis, `updated_by` HARUS kosong
+// meskipun ada profesional aktif terhubung. Backend tidak boleh memakai
+// primary_professional sebagai atribusi (fabrikasi penulis).
+func TestGetHealthRecordTanpaAuditTidakMeminjamNamaProfesional(t *testing.T) {
+	s, db := openHealthRecordTestStore(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	patientID := insertTestUser(t, db, ctx, "patient", "Ami", "patient")
+	andiID := insertTestUser(t, db, ctx, "professional", "Andi Wijaya, M.Psi", "andi")
+	t.Cleanup(func() { cleanupTestUsers(t, db, patientID, andiID) })
+
+	if _, err := db.ExecContext(ctx, `INSERT INTO patient_profiles (user_id, diagnosis_summary)
+		VALUES ($1, $2)`, patientID, "F41.1"); err != nil {
+		t.Fatalf("insert patient_profile: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO patient_professional_links
+		(patient_id, professional_id, status, created_at) VALUES ($1,$2,'active',$3)`,
+		patientID, andiID, clock.Now()); err != nil {
+		t.Fatalf("insert link andi: %v", err)
+	}
+	// Sengaja TANPA audit log diagnosis.
+
+	rec, err := s.GetHealthRecord(ctx, patientID)
+	if err != nil {
+		t.Fatalf("GetHealthRecord: %v", err)
+	}
+	if rec.PrimaryProfessional != "Andi Wijaya, M.Psi" {
+		t.Errorf("primary_professional: dapat %q, mau %q",
+			rec.PrimaryProfessional, "Andi Wijaya, M.Psi")
+	}
+	if rec.UpdatedBy != nil {
+		t.Fatalf("updated_by harus kosong tanpa jejak audit, dapat %q", *rec.UpdatedBy)
+	}
+}

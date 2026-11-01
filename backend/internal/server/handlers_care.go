@@ -70,7 +70,7 @@ func (s *Server) listGoals(w http.ResponseWriter, r *http.Request, claims auth.C
 		return
 	}
 	if claims.Role == "professional" && !s.consentAllows(r, patientID, claims.Subject, "goals") {
-		writeError(w, http.StatusForbidden, errors.New("patient has not shared goals data"))
+		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data tujuan"))
 		return
 	}
 	includeInactive := r.URL.Query().Get("include_inactive") == "true"
@@ -184,7 +184,7 @@ func (s *Server) listHabitLogs(w http.ResponseWriter, r *http.Request, claims au
 		return
 	}
 	if claims.Role == "professional" && !s.consentAllows(r, patientID, claims.Subject, "goals") {
-		writeError(w, http.StatusForbidden, errors.New("patient has not shared goals data"))
+		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data tujuan"))
 		return
 	}
 	logs, err := s.store.ListHabitLogs(r.Context(), patientID,

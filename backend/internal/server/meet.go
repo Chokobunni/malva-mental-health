@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -99,6 +100,24 @@ const (
 	meetReasonServerNotConfigured = "server_not_configured"
 )
 
+// meetStatusHint mengembalikan saran tindakan berbahasa Indonesia untuk
+// `reason` yang menandakan akun profesional belum siap membuat link Meet.
+// Kosong untuk reason yang sudah siap (ready / token_hampir_kedaluwarsa) dan
+// untuk masalah deployment (server_not_configured) yang bukan urusan
+// profesional. Hint TIDAK membocorkan token — hanya langkah perbaikan.
+func meetStatusHint(reason string) string {
+	switch reason {
+	case meetReasonNotLinked:
+		return "Hubungkan Gmail Anda dulu di Pengaturan → Akun Google. Jika Gmail muncul sebagai Test user, mintalah admin menambahkannya ke OAuth consent screen."
+	case meetReasonNoCalendarScope:
+		return "Gmail sudah tertaut, tetapi izin Google Calendar belum diberikan. Tekan \"Hubungkan Google Calendar\" dan setujui akses kalender."
+	case meetReasonTokenExpired:
+		return "Izin Google Calendar sudah tidak berlaku. Tautkan ulang akun Google di Pengaturan → Akun Google agar link Meet bisa dibuat lagi."
+	default:
+		return ""
+	}
+}
+
 // meetStatusReason mengklasifikasikan kesiapan Google Meet seorang profesional.
 // Dipakai endpoint GET /v1/professionals/{id}/meet-status dan oleh
 // googleCalendarReady, sehingga keduanya tidak pernah berbeda pendapat.
@@ -189,6 +208,25 @@ func (s *Server) meetStatusHandler(w http.ResponseWriter, r *http.Request, claim
 		"reason":                        reason,
 		"refresh_token_age_days":        0,
 		"refresh_token_expires_in_days": -1,
+	}
+	// `google_email` = email akun Google yang tertaut (bila ada). Berguna bagi
+	// UI untuk memberi tahu profesional Gmail MANA yang harus didaftarkan
+	// sebagai Test user ketika Google memblokir access_denied. Tidak pernah
+	// membocorkan token — hanya alamat email yang memang milik profesional ini.
+	// Hanya profesional pemilik yang melihat email; pasien cukup melihat status.
+	if s.store != nil {
+		if identity, ierr := s.store.GetGoogleIdentity(r.Context(), professionalID); ierr == nil &&
+			identity.Linked && claims.Role == "professional" {
+			resp["google_email"] = identity.Email
+		}
+	}
+	// `hint` = saran tindakan berbahasa Indonesia untuk reason yang butuh
+	// perbaikan akun. Hanya disertakan untuk profesional pemilik akun, karena
+	// pasien tidak bisa memperbaiki akun Google orang lain.
+	if claims.Role == "professional" {
+		if hint := meetStatusHint(reason); hint != "" {
+			resp["hint"] = hint
+		}
 	}
 	// Isi umur & sisa hari grant bila token tersedia. Nilai default di atas
 	// dipakai untuk keadaan tanpa token (mis. not_linked / server_not_configured)
@@ -491,6 +529,102 @@ func (s *Server) ensureMeetLinkBestEffort(ctx context.Context, cs store.CareSess
 		return cs
 	}
 	return updated
+}
+
+// meetManualURLRequest adalah body untuk PUT /v1/care-sessions/{session_id}/meet-link.
+type meetManualURLRequest struct {
+	MeetURL string `json:"meet_url"`
+}
+
+// setManualMeetLinkHandler menangani PUT /v1/care-sessions/{session_id}/meet-link.
+//
+// Ini adalah JALUR FALLBACK agar profesional tetap bisa menyelenggarakan sesi
+// video ketika Google Calendar tidak bisa dipakai (mis. Gmail belum terdaftar
+// sebagai Test user pada OAuth consent screen sehingga Google memblokir
+// access_denied SEBELUM callback). Profesional membuat link Google Meet secara
+// manual (mis. dari Google Calendar pribadinya) lalu menempelkannya di sini.
+//
+// Batasan & otorisasi:
+//   - HANYA profesional pemilik sesi yang boleh menempelkan link manual. Pasien
+//     tidak boleh mengubah tujuan link video.
+//   - Sesi harus bertipe video dan berstatus scheduled.
+//   - URL divalidasi ketat: wajib https, host meet.google.com, panjang wajar.
+//     Provider lain (zoom.us dsb.) belum didukung repo ini — lihat
+//     isGoogleMeetURL — jadi ditolak 400.
+//   - Fallback ini TIDAK melemahkan gerbang booking berbayar: createBooking
+//     tetap menolak 409 meet_belum_aktif sebelum bayar. Manual link hanya untuk
+//     sesi yang sudah ada.
+func (s *Server) setManualMeetLinkHandler(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	sessionID := r.PathValue("session_id")
+	cs, err := s.store.GetCareSession(r.Context(), sessionID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, errors.New("sesi tidak ditemukan"))
+		return
+	}
+	// Hanya profesional pemilik sesi yang boleh menempelkan link manual.
+	if claims.Role != "professional" || claims.Subject != cs.ProfessionalID {
+		writeUserError(w, http.StatusForbidden, "Hanya profesional pemilik sesi yang boleh menempelkan link video.")
+		return
+	}
+	if cs.SessionType != "video" {
+		writeError(w, http.StatusBadRequest, errors.New("sesi ini bukan sesi video"))
+		return
+	}
+	if cs.Status != "scheduled" {
+		writeError(w, http.StatusBadRequest, errors.New("link hanya bisa diatur untuk sesi berstatus scheduled"))
+		return
+	}
+	var req meetManualURLRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	meetURL, verr := normalizeManualMeetURL(req.MeetURL)
+	if verr != nil {
+		writeUserError(w, http.StatusBadRequest, verr.Error())
+		return
+	}
+	// Simpan lewat store yang ada; pertahankan ringkasan & catatan privat
+	// (UpdateCareSessionDetail menulis ketiganya, jadi kirim nilai saat ini).
+	updated, err := s.store.UpdateCareSessionDetail(
+		r.Context(), sessionID, meetURL, cs.SummaryForPatient, cs.PrivateNote)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errors.New("gagal menyimpan link video. Coba lagi."))
+		return
+	}
+	// Beri tahu pasien bahwa link video sudah tersedia.
+	s.notifyPatient(r, cs.PatientID, "session_meet_ready", "Link video call siap",
+		"Profesional menambahkan link video untuk sesimu. Buka detail sesi untuk bergabung.",
+		map[string]string{"session_id": cs.ID})
+	writeJSON(w, http.StatusOK, map[string]any{"session": updated, "manual": true})
+}
+
+// normalizeManualMeetURL memvalidasi & merapikan URL Meet yang ditempel
+// profesional. Aturan ketat: wajib https, host tepat meet.google.com, panjang
+// wajar. Mengembalikan pesan error berbahasa Indonesia bila tidak valid.
+func normalizeManualMeetURL(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", errors.New("Link video tidak boleh kosong.")
+	}
+	if len(trimmed) > 500 {
+		return "", errors.New("Link video terlalu panjang.")
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil {
+		return "", errors.New("Link video tidak valid.")
+	}
+	if u.Scheme != "https" {
+		return "", errors.New("Link video harus diawali https://")
+	}
+	host := strings.ToLower(strings.TrimSpace(u.Hostname()))
+	if host != "meet.google.com" {
+		return "", errors.New("Link video harus berupa link Google Meet (meet.google.com).")
+	}
+	if strings.TrimSpace(u.Path) == "" || u.Path == "/" {
+		return "", errors.New("Link Google Meet tidak lengkap. Salin tautan lengkap dari Google Meet.")
+	}
+	return u.String(), nil
 }
 
 // ensureMeetLinkHandler menangani POST /v1/care-sessions/{session_id}/meet-link.

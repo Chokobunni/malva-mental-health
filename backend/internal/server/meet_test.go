@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strings"
 	"testing"
 
 	"malva/backend/internal/store"
@@ -23,6 +24,43 @@ func TestIsGoogleMeetURL(t *testing.T) {
 	for _, c := range cases {
 		if got := isGoogleMeetURL(c.in); got != c.want {
 			t.Errorf("isGoogleMeetURL(%q) = %v, mau %v", c.in, got, c.want)
+		}
+	}
+}
+
+// TestNormalizeManualMeetURL mengunci validasi ketat link Meet manual
+// (fallback ketika Google Calendar tidak bisa dipakai). Wajib https, host
+// tepat meet.google.com, path tidak kosong.
+func TestNormalizeManualMeetURL(t *testing.T) {
+	valid := []struct{ in, want string }{
+		{"https://meet.google.com/abc-defg-hij", "https://meet.google.com/abc-defg-hij"},
+		{"  https://meet.google.com/xyz-1234-abc  ", "https://meet.google.com/xyz-1234-abc"},
+		{"https://meet.google.com/lookup/abc?authuser=1", "https://meet.google.com/lookup/abc?authuser=1"},
+	}
+	for _, c := range valid {
+		got, err := normalizeManualMeetURL(c.in)
+		if err != nil {
+			t.Errorf("normalizeManualMeetURL(%q) error tak terduga: %v", c.in, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("normalizeManualMeetURL(%q) = %q, mau %q", c.in, got, c.want)
+		}
+	}
+
+	invalid := []string{
+		"",
+		"http://meet.google.com/abc",         // bukan https
+		"https://zoom.us/j/123",              // host salah
+		"https://evil-meet.google.com/abc",   // host bukan tepat meet.google.com
+		"https://meet.google.com.evil.com/x", // subdomain menyamar
+		"https://meet.google.com/",           // path kosong
+		"ftp://meet.google.com/abc",          // skema salah
+		"https://meet.google.com/" + strings.Repeat("a", 600), // terlalu panjang
+	}
+	for _, c := range invalid {
+		if _, err := normalizeManualMeetURL(c); err == nil {
+			t.Errorf("normalizeManualMeetURL(%q) seharusnya menolak, tapi lolos", c)
 		}
 	}
 }

@@ -268,6 +268,19 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 	if booking.Status != "paid" {
 		return "", nil
 	}
+	// Materialisasi relasi pasien–profesional SEGERA setelah booking lunas.
+	//
+	// Ini jalur tunggal yang mencakup SEMUA cabang di bawah (paket, quick,
+	// legacy tanpa jam, slot sudah lewat/terisi) sehingga profesional yang
+	// sudah dibayar pasiennya TIDAK kehilangan akses ke data pasien meski
+	// sesi pertama gagal dibuat. Idempoten (ON CONFLICT), jadi aman untuk
+	// webhook yang dikirim ulang. Kegagalan hanya dicatat: relasi bukan alasan
+	// menggagalkan aktivasi yang sudah dibayar (webhook akan diulang).
+	if linkErr := s.store.EnsurePatientProfessionalLink(ctx, booking.PatientID, booking.ProfessionalID); linkErr != nil {
+		s.logger.Warn("gagal materialisasi relasi pasien-profesional pasca-bayar",
+			"error", linkErr, "booking", booking.ID,
+			"patient", booking.PatientID, "professional", booking.ProfessionalID)
+	}
 	// Idempotensi aktivasi: webhook gateway bisa dikirim ulang setelah balasan
 	// 5xx (mis. Google sedang gagal saat membuat link Meet). Bila booking ini
 	// sudah punya sesi, jangan buat sesi kedua — unique index slot akan

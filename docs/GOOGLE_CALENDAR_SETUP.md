@@ -38,6 +38,33 @@ Akibat berantai bila dibiarkan:
 3. **Pasien tetap bisa menjadwalkan sesi video** (sejak perbaikan BUG 2):
    sesi lahir berstatus *menunggu link* dan link dibuat menyusul setelah
    profesional menyelesaikan langkah di dokumen ini.
+4. **Profesional tetap bisa menyelenggarakan sesi video lewat fallback manual**
+   (`PUT /v1/care-sessions/{id}/meet-link`, lihat bagian 10) — sesi tidak
+   pernah buntu hanya karena Google diblokir.
+
+---
+
+## 1a. Kalau profesional diblokir `access_denied` (ringkas)
+
+Google memblokir **sebelum** callback ke backend, jadi tidak ada kode aplikasi
+yang bisa mencegah halaman "Access blocked" muncul. Yang bisa dilakukan:
+
+1. **Daftarkan Gmail profesional sebagai Test user** (uji cepat):
+   Google Cloud Console → **APIs & Services** → **OAuth consent screen** →
+   tab **Audience** → **Test users** → **+ Add users** → masukkan Gmail
+   profesional (mis. `andiwijayapsikolog@gmail.com`) → **Save**.
+2. **ATAU Publish app** (produksi): OAuth consent screen → **Publish app**.
+   Setelah *In production*, semua Gmail boleh memakai (dengan peringatan
+   "unverified" sampai verifikasi formal disetujui Google).
+3. Dari aplikasi, profesional menekan **Coba lagi** pada dialog
+   "Google menolak akses" (Gmail-nya bisa disalin langsung dari dialog).
+
+> **Catatan 7 hari:** selama consent screen masih **Testing**, refresh token
+> Google hanya berlaku **7 hari**. Publish app agar tidak perlu menautkan ulang
+> tiap minggu (lihat bagian 2b dan 9).
+
+Bila console belum bisa diubah, profesional **tidak buntu**: gunakan
+**"Tempel link Meet"** pada kartu sesi video (bagian 10).
 
 ---
 
@@ -128,6 +155,10 @@ privasi Malva.
    Respons kini juga menyertakan `refresh_token_age_days` (umur grant dalam
    hari, `0` bila tak ada token) dan `refresh_token_expires_in_days` (sisa hari,
    `-1` bila tidak diketahui). Keduanya opsional; klien lama tetap jalan.
+   Untuk profesional pemilik akun, respons juga memuat `google_email` (email
+   akun Google tertaut — tanpa token) dan `hint` (saran tindakan berbahasa
+   Indonesia) pada `reason` yang butuh perbaikan akun (`not_linked`,
+   `no_calendar_scope`, `token_expired`).
 
 5. Uji akhir: profesional menekan **Create Meeting** di dashboard. Bila muncul
    link `https://meet.google.com/...`, integrasi sudah benar.
@@ -313,6 +344,39 @@ MALVA_GOOGLE_REFRESH_TOKEN_TTL_DAYS=0
 `0` menonaktifkan pemeriksaan umur (tidak ada notifikasi, `meet-status` tidak
 pernah mengembalikan `token_hampir_kedaluwarsa`). Default adalah `7` selama
 mode *Testing*.
+
+---
+
+## 10. Fallback manual — "Tempel link Meet"
+
+Ketika Google Calendar tidak bisa dipakai sama sekali (mis. Gmail belum
+terdaftar sebagai Test user dan console belum bisa diubah), profesional **tetap
+bisa menyelenggarakan sesi video** dengan menempelkan link Google Meet yang ia
+buat sendiri.
+
+**Endpoint:** `PUT /v1/care-sessions/{session_id}/meet-link`
+
+```bash
+curl -X PUT "$MALVA_API_BASE/v1/care-sessions/<session_id>/meet-link" \
+  -H "Authorization: Bearer <access_token_profesional>" \
+  -H "Content-Type: application/json" \
+  -d '{"meet_url":"https://meet.google.com/abc-defg-hij"}'
+```
+
+Aturan (ditegakkan server, 400 bila dilanggar):
+
+- **Hanya profesional pemilik sesi** yang boleh menempelkan link manual.
+- Sesi harus **video** dan berstatus **scheduled**.
+- URL wajib **`https`**, host tepat **`meet.google.com`**, panjang ≤ 500
+  karakter, path tidak kosong. Provider lain (zoom.us dsb.) belum didukung dan
+  ditolak.
+- Fallback ini **tidak** melemahkan gerbang booking berbayar: `createBooking`
+  tetap menolak `409 meet_belum_aktif` sebelum bayar. Manual link hanya untuk
+  sesi yang **sudah ada**.
+
+Di aplikasi: kartu sesi video berstatus "menunggu link" menampilkan tombol
+**"Buat link Meet"** (otomatis) dan **"Tempel link Meet"** (manual). Setelah
+disimpan, link langsung tampil ke pasien di detail sesi.
 
 ---
 
