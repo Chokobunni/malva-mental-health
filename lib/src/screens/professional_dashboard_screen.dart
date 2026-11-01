@@ -49,6 +49,12 @@ class _ProfessionalDashboardScreenState
   final Set<String> _reviewedScreeningIds = {};
   final Map<String, List<BackendProfessionalNote>> _professionalNotes = {};
 
+  /// Pasien yang menolak/tidak membagikan data screening (403 access_denied
+  /// per-pasien). Dipakai untuk menampilkan penanda kecil di kartu pasien,
+  /// BUKAN banner global — satu pasien tanpa consent tidak boleh mematikan
+  /// seluruh dashboard.
+  final Set<String> _screeningNotShared = {};
+
   List<BackendPatientProfessionalLink> _links = const [];
   Map<String, List<BackendScreeningSession>> _screeningsByPatient = const {};
   List<_AuditEntry> _serverAuditEntries = const [];
@@ -314,6 +320,22 @@ class _ProfessionalDashboardScreenState
                                                       .colorScheme
                                                       .onSurfaceVariant),
                                         ),
+                                        if (patient.screeningNotShared)
+                                          Padding(
+                                            padding:
+                                                const EdgeInsets.only(top: 2),
+                                            child: Text(
+                                              'Screening belum dibagikan',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall
+                                                  ?.copyWith(
+                                                    color: Colors.grey,
+                                                    fontWeight:
+                                                        FontWeight.w600,
+                                                  ),
+                                            ),
+                                          ),
                                       ],
                                     ),
                                   ),
@@ -451,16 +473,37 @@ class _ProfessionalDashboardScreenState
       final reviewedScreeningIds = <String>{};
       final serverAuditEntries = <_AuditEntry>[];
       final notesByPatient = <String, List<BackendProfessionalNote>>{};
+      // Pasien yang 403 (tidak membagikan screening). Dikumpulkan di sini
+      // agar tidak tercampur dengan error jaringan/500.
+      final screeningNotShared = <String>{};
 
       final patientFutures = links.map((link) async {
         final patientId = link.patientId;
 
-        final results = await Future.wait([
-          apiClient.listScreenings(
-            accessToken: accessToken,
-            patientId: patientId,
-            limit: 20,
-          ),
+        // `listScreenings` WAJIB dibungkus try/catch: satu pasien tanpa consent
+        // membalas 403 dan tidak boleh membatalkan Future.wait sehingga
+        // dashboard lain (link, statistik) tetap tampil. Hanya 403 yang
+        // dicatat sebagai "screening belum dibagikan"; error lain diabaikan
+        // sebagai daftar kosong tanpa menandai pasien.
+        Future<List<BackendScreeningSession>> loadScreenings() async {
+          try {
+            return await apiClient.listScreenings(
+              accessToken: accessToken,
+              patientId: patientId,
+              limit: 20,
+            );
+          } on MalvaApiException catch (error) {
+            if (error.statusCode == 403) {
+              screeningNotShared.add(patientId);
+            }
+            return const <BackendScreeningSession>[];
+          } on Object {
+            return const <BackendScreeningSession>[];
+          }
+        }
+
+        final results = await Future.wait<Object?>([
+          loadScreenings(),
           safely(() => apiClient.listScreeningReviews(
                 accessToken: accessToken,
                 patientId: patientId,
@@ -522,6 +565,9 @@ class _ProfessionalDashboardScreenState
           ..clear()
           ..addAll(notesByPatient);
         _reviewedScreeningIds.addAll(reviewedScreeningIds);
+        _screeningNotShared
+          ..clear()
+          ..addAll(screeningNotShared);
         _selectedPatientId ??= links.isEmpty ? null : links.first.patientId;
         _isLoadingOnlineData = false;
         _lastSyncTime = wibNow();
@@ -553,6 +599,7 @@ class _ProfessionalDashboardScreenState
           sourceLabel: 'Backend',
           status: link.status,
           linkedAt: null,
+          screeningNotShared: _screeningNotShared.contains(link.patientId),
           screenings: (_screeningsByPatient[link.patientId] ??
                   const <BackendScreeningSession>[])
               .map(_ScreeningView.fromBackend)
@@ -1862,6 +1909,14 @@ class _ConnectedPatientList extends StatelessWidget {
                             color:
                                 Theme.of(context).colorScheme.onSurfaceVariant),
                       ),
+                      if (patient.screeningNotShared)
+                        Text(
+                          'Screening belum dibagikan',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.grey,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
                     ],
                   ),
                 ),
@@ -2437,6 +2492,7 @@ class _ProfessionalPatient {
     required this.status,
     required this.linkedAt,
     required this.screenings,
+    this.screeningNotShared = false,
   });
 
   final String patientId;
@@ -2445,6 +2501,10 @@ class _ProfessionalPatient {
   final String status;
   final DateTime? linkedAt;
   final List<_ScreeningView> screenings;
+
+  /// True bila pasien ini membalas 403 (screening belum dibagikan). Dipakai
+  /// untuk menampilkan penanda kecil per-pasien, bukan banner global.
+  final bool screeningNotShared;
 
   _ScreeningView? get latestScreening =>
       screenings.isEmpty ? null : screenings.first;
