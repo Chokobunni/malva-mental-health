@@ -331,8 +331,7 @@ class _ProfessionalDashboardScreenState
                                                   .bodySmall
                                                   ?.copyWith(
                                                     color: Colors.grey,
-                                                    fontWeight:
-                                                        FontWeight.w600,
+                                                    fontWeight: FontWeight.w600,
                                                   ),
                                             ),
                                           ),
@@ -1912,10 +1911,11 @@ class _ConnectedPatientList extends StatelessWidget {
                       if (patient.screeningNotShared)
                         Text(
                           'Screening belum dibagikan',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                         ),
                     ],
                   ),
