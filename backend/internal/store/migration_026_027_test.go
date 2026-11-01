@@ -238,4 +238,3 @@ func TestMigration027ExcludesPendingPayment(t *testing.T) {
 		t.Fatalf("sesi scheduled menghasilkan %d link, mau 1", c)
 	}
 }
-
