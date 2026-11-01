@@ -148,7 +148,7 @@ privasi Malva.
    | `not_linked` | Akun Malva belum menautkan Gmail | Hubungkan Gmail di kartu Akun Google |
    | `no_calendar_scope` | Gmail tertaut, izin `calendar.events` belum ada | Tekan "Hubungkan Google Calendar" |
    | `token_expired` | Refresh token kosong/ditolak Google (mis. batas 7 hari saat *Testing*) | Hubungkan ulang, lalu publish consent screen |
-   | `token_hampir_kedaluwarsa` | Izin **masih berlaku** (link Meet tetap bisa dibuat) tetapi umur refresh token mendekati batas 7 hari | Tekan "Perbarui izin sekarang" agar link Meet sesi berikutnya tidak gagal |
+   | `token_hampir_kedaluwarsa` | Izin **masih berlaku** (link Meet tetap bisa dibuat) tetapi umur refresh token mendekati batas 7 hari | Tidak ada — UI tetap menampilkan "Google Meet aktif"; token di-refresh senyap oleh server. Reason ini tetap dikirim API, tetapi tidak pernah ditampilkan sebagai peringatan. |
    | `server_not_configured` | Server belum punya `MALVA_GOOGLE_CLIENT_SECRET` | Hubungi admin/deployment |
    | `ready` | Siap membuat link Meet | — |
 
@@ -320,10 +320,11 @@ baru sadar saat menekan "Hubungkan Google Calendar". Sekarang batas itu
    (`google_oauth_tokens.refresh_token_issued_at`). Auto-refresh access token
    jangka pendek **tidak** mereset tanggal ini — hanya penukaran authorization
    code (consent baru) yang memperbaruinya.
-2. **`meet-status` memberi tahu lebih awal.** Saat umur grant mencapai
+2. **`meet-status` menandai lebih awal (internal).** Saat umur grant mencapai
    `TTL-2` hari, `reason` menjadi `token_hampir_kedaluwarsa` (link Meet **masih**
-   bisa dibuat), lengkap dengan `refresh_token_expires_in_days`. Ini hanya
-   status di layar — **tidak ada** push, banner, atau dialog.
+   bisa dibuat), lengkap dengan `refresh_token_expires_in_days`. UI memperlakukan
+   reason ini sama seperti `ready` — kartu menampilkan "Google Meet aktif" tanpa
+   teks peringatan, push, banner, atau dialog. Penanda ini hanya dipakai server.
 3. **Refresh access token sebelum habis, pemeliharaan setiap 7 hari.** Sweeper
    10 menit menjalankan `RunGoogleTokenRefresh` untuk profesional aktif dengan
    identitas Google yang masih cocok. Access token (biasanya berlaku sekitar
@@ -335,9 +336,11 @@ baru sadar saat menekan "Hubungkan Google Calendar". Sekarang batas itu
    **Tidak ada notifikasi** baru ke pengguna. Migrasi 030 menghapus notifikasi
    `google_calendar_expiring` lama beserta antrean outbox; kegagalan hanya masuk
    log operator tanpa token atau body respons Google.
-4. **Satu tombol perpanjangan.** Kartu Akun Google menampilkan tombol
-   **"Perbarui izin sekarang"** yang memaksa otorisasi Google **baru** (fresh
-   consent), sehingga refresh token diterbitkan ulang dan berlaku 7 hari lagi.
+4. **Tanpa tombol perpanjangan.** Kartu Akun Google **tidak** menampilkan
+   tombol perpanjangan apa pun. Selama izin masih berlaku, kartu hanya
+   menampilkan "Google Meet aktif" dan perpanjangan ditangani server secara
+   senyap. Hanya bila Google benar-benar menolak refresh (`token_expired`) UI
+   menampilkan arahan **Hubungkan Google Calendar** untuk consent ulang.
 
 > **Jujur soal batas 7 hari.** Untuk OAuth External dengan scope Calendar,
 > status **Testing** membatasi refresh token sampai tujuh hari. **Tidak ada cara
@@ -356,11 +359,12 @@ baru sadar saat menekan "Hubungkan Google Calendar". Sekarang batas itu
    token tidak lagi dibatasi 7 hari (pengguna masih melihat peringatan
    "unverified" sampai verifikasi formal Google disetujui — lihat bagian 3).
 
-### d. Mematikan status "hampir kedaluwarsa" saat nanti publish
+### d. Mematikan reason "hampir kedaluwarsa" saat nanti publish
 
 Setelah consent screen di-*publish* dan refresh token tidak lagi dibatasi 7
-hari, matikan status peringatan agar tidak muncul `token_hampir_kedaluwarsa`
-palsu:
+hari, matikan reason ini agar `meet-status` tidak lagi mengembalikan
+`token_hampir_kedaluwarsa` palsu (tidak berdampak ke tampilan karena UI tidak
+pernah menampilkannya sebagai peringatan):
 
 ```bash
 # backend/.env

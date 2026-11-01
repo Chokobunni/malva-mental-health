@@ -414,10 +414,8 @@ void main() {
         find.widgetWithText(FilledButton, 'Hubungkan Gmail'), findsOneWidget);
   });
   testWidgets(
-      'profesional showMeet: reason token_hampir_kedaluwarsa menampilkan tombol Perbarui izin sekarang',
-      (tester) async {
-    var freshCalls = 0;
-    var normalCalls = 0;
+      'profesional showMeet: reason token_hampir_kedaluwarsa tetap tampil '
+      'Google Meet aktif TANPA peringatan', (tester) async {
     final api = MalvaApiClient(
       baseUrl: 'http://backend.test',
       httpClient: _FakeClient((request) async {
@@ -429,6 +427,9 @@ void main() {
               'linked_at': '2026-10-05T10:00:00.000Z',
             });
           case 'GET /v1/professionals/user_pro_1/meet-status':
+            // Server tetap `ready: true` meski umur token mendekati batas:
+            // link Meet MASIH bisa dibuat. UI tidak boleh menyuruh pengguna
+            // memperbarui izin.
             return _json({
               'ready': true,
               'reason': 'token_hampir_kedaluwarsa',
@@ -441,8 +442,6 @@ void main() {
               'connected': true,
               'scope': 'https://www.googleapis.com/auth/calendar.events',
             });
-          case 'POST /v1/auth/google-token-exchange':
-            return _json({'status': 'ok'});
           default:
             return _json(const {});
         }
@@ -452,43 +451,66 @@ void main() {
     await tester.pumpWidget(_wrap(
       api,
       _proSession,
-      GoogleAccountCard(
-        session: _proSession,
-        showMeet: true,
-        calendarCodeProvider: () async {
-          normalCalls++;
-          return 'code-normal';
-        },
-        calendarCodeProviderFresh: () async {
-          freshCalls++;
-          return 'code-fresh';
-        },
-      ),
+      const GoogleAccountCard(session: _proSession, showMeet: true),
     ));
     await tester.pumpAndSettle();
 
-    // Teks peringatan mode Testing tampil, lengkap dengan sisa hari.
-    expect(find.textContaining('mode Testing'), findsOneWidget);
-    expect(find.textContaining('dalam 1 hari'), findsOneWidget);
-    // Tombol perpanjangan khusus tampil.
+    // Kondisi dianggap AKTIF: kartu menampilkan status normal.
+    expect(find.text('Google Meet aktif'), findsOneWidget);
+    // Tidak ada teks peringatan "akan berakhir" / "Perbarui izin".
+    expect(find.textContaining('akan berakhir'), findsNothing);
+    expect(find.textContaining('Perbarui izin'), findsNothing);
+    // Tidak ada tombol perpanjangan maupun hubungkan ulang untuk kondisi ini.
     expect(find.widgetWithText(FilledButton, 'Perbarui izin sekarang'),
-        findsOneWidget);
-    // Tombol lama "Hubungkan Google Calendar" tidak muncul di keadaan ini.
+        findsNothing);
     expect(find.widgetWithText(FilledButton, 'Hubungkan Google Calendar'),
         findsNothing);
+  });
 
-    await tester
-        .tap(find.widgetWithText(FilledButton, 'Perbarui izin sekarang'));
+  testWidgets(
+      'profesional showMeet: reason token_expired tetap menampilkan arahan '
+      'hubungkan ulang (regresi)', (tester) async {
+    final api = MalvaApiClient(
+      baseUrl: 'http://backend.test',
+      httpClient: _FakeClient((request) async {
+        switch ('${request.method} ${request.url.path}') {
+          case 'GET /v1/auth/google-identity':
+            return _json({
+              'linked': true,
+              'email': 'dr.hafid@gmail.com',
+              'linked_at': '2026-10-05T10:00:00.000Z',
+            });
+          case 'GET /v1/professionals/user_pro_1/meet-status':
+            return _json({
+              'ready': false,
+              'reason': 'token_expired',
+              'google_email': 'dr.hafid@gmail.com',
+            });
+          case 'GET /v1/google/status':
+            return _json({
+              'server_configured': true,
+              'connected': false,
+              'scope': '',
+            });
+          default:
+            return _json(const {});
+        }
+      }),
+    );
+
+    await tester.pumpWidget(_wrap(
+      api,
+      _proSession,
+      const GoogleAccountCard(session: _proSession, showMeet: true),
+    ));
     await tester.pumpAndSettle();
 
-    // Sheet pra-pemeriksaan muncul sebelum membuka browser OAuth; lanjutkan.
-    expect(find.text('Lanjutkan ke Google'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Lanjutkan ke Google'));
-    await tester.pumpAndSettle();
-
-    // Perpanjangan WAJIB memakai otorisasi baru (fresh consent), bukan lama.
-    expect(freshCalls, 1);
-    expect(normalCalls, 0);
+    // Kegagalan nyata: bukan kondisi aktif, arahan hubungkan ulang tetap ada.
+    expect(find.text('Google Meet aktif'), findsNothing);
+    expect(find.textContaining('kedaluwarsa'), findsOneWidget);
+    expect(find.textContaining('Hubungkan ulang'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Hubungkan Google Calendar'),
+        findsOneWidget);
   });
 
   testWidgets(

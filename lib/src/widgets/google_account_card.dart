@@ -83,13 +83,6 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
   /// Saran tindakan berbahasa Indonesia dari server untuk `_meetReason`.
   String _meetHint = '';
 
-  /// Umur grant izin Google (hari) — 0 bila tidak ada token.
-  int _refreshTokenAgeDays = 0;
-
-  /// Sisa hari sebelum izin Google dianggap kedaluwarsa — -1 bila tidak
-  /// diketahui / peringatan perpanjangan dinonaktifkan server.
-  int _refreshTokenExpiresInDays = -1;
-
   Future<String?> Function() get _idTokenProvider =>
       widget.idTokenProvider ?? GoogleAuthService.signInIdToken;
 
@@ -150,8 +143,6 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
     // APA yang kurang (belum tertaut / belum ada izin / token kedaluwarsa /
     // server belum dikonfigurasi) sehingga pesan bisa spesifik.
     var reason = '';
-    var ageDays = 0;
-    var expiresInDays = -1;
     var googleEmail = '';
     var hint = '';
     try {
@@ -160,8 +151,6 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
         final status = await ref.read(apiClientProvider).professionalMeetStatus(
             accessToken: token, professionalId: professionalId);
         reason = status.reason;
-        ageDays = status.refreshTokenAgeDays;
-        expiresInDays = status.refreshTokenExpiresInDays;
         googleEmail = status.googleEmail;
         hint = status.hint;
       }
@@ -174,15 +163,18 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
       if (!mounted) return;
       setState(() {
         _meetReason = reason;
-        _refreshTokenAgeDays = ageDays;
-        _refreshTokenExpiresInDays = expiresInDays;
         _meetGoogleEmail = googleEmail;
         _meetHint = hint;
         _serverConfigured = reason.isEmpty
             ? status.serverConfigured
             : reason != 'server_not_configured';
-        _calendarConnected =
-            reason.isEmpty ? status.connected : reason == 'ready';
+        // `token_hampir_kedaluwarsa` berarti izin MASIH berlaku (server tetap
+        // `ready` dan link Meet masih bisa dibuat), jadi diperlakukan sama
+        // dengan `ready`: kartu menampilkan "Google Meet aktif" tanpa
+        // peringatan. Hanya `token_expired` yang butuh hubungkan ulang.
+        _calendarConnected = reason.isEmpty
+            ? status.connected
+            : (reason == 'ready' || reason == 'token_hampir_kedaluwarsa');
         _meetLoading = false;
       });
     } on Object {
@@ -897,13 +889,10 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
         ),
       ];
     }
-    // (b) Gmail tertaut, izin Calendar belum ada atau perlu diperbarui.
-    final expiring = _meetReason == 'token_hampir_kedaluwarsa';
+    // (b) Gmail tertaut, izin Calendar belum ada atau benar-benar kedaluwarsa.
+    // Catatan: `token_hampir_kedaluwarsa` TIDAK sampai ke sini karena sudah
+    // dianggap terhubung di `_calendarConnected` (izin masih berlaku).
     final explanation = switch (_meetReason) {
-      'token_hampir_kedaluwarsa' =>
-        'Izin Google Calendar akan berakhir ${_expiringPhrase()} karena '
-            'aplikasi masih dalam mode Testing. Perbarui sekarang agar link '
-            'Meet sesi video tetap dibuat otomatis.',
       'token_expired' =>
         'Izin Google Calendar kedaluwarsa (token tidak lagi berlaku). '
             'Hubungkan ulang agar link Meet bisa dibuat otomatis. '
@@ -922,14 +911,8 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
           'Selama belum aktif, sesi video pasien tetap terjadwal dengan '
           'status "menunggu link".',
     };
-    // Perpanjangan = consent BARU: paksa fresh authorization (lewat
-    // _renewPermission -> _meetRetry) agar Google benar-benar menerbitkan
-    // refresh token baru, bukan memakai otorisasi lama yang masih tersimpan.
-    final onPressed =
-        _busy ? null : (expiring ? _renewPermission : _enableMeet);
-    final buttonLabel = _busy
-        ? 'Memproses...'
-        : (expiring ? 'Perbarui izin sekarang' : 'Hubungkan Google Calendar');
+    final onPressed = _busy ? null : _enableMeet;
+    final buttonLabel = _busy ? 'Memproses...' : 'Hubungkan Google Calendar';
     return [
       Text(
         explanation,
@@ -988,31 +971,10 @@ class _GoogleAccountCardState extends ConsumerState<GoogleAccountCard> {
         icon: _busy
             ? const SizedBox.square(
                 dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
-            : Icon(expiring ? Icons.refresh_rounded : Icons.videocam_rounded),
+            : const Icon(Icons.videocam_rounded),
         label: Text(buttonLabel),
       ),
     ];
-  }
-
-  /// Frasa sisa waktu izin untuk teks "akan berakhir ...". Memakai sisa hari
-  /// dari server bila tersedia; bila tidak, jatuh ke umur grant.
-  String _expiringPhrase() {
-    final days = _refreshTokenExpiresInDays;
-    if (days >= 0) {
-      return 'dalam $days hari';
-    }
-    if (_refreshTokenAgeDays > 0) {
-      return 'dalam waktu dekat (sudah $_refreshTokenAgeDays hari)';
-    }
-    return 'dalam waktu dekat';
-  }
-
-  /// Perpanjang izin Google Calendar. Menandai `_meetRetry = true` supaya
-  /// [_enableMeet] memakai otorisasi BARU (fresh consent), lalu menjalankan
-  /// alur aktivasi Meet yang sudah ada.
-  Future<void> _renewPermission() async {
-    _meetRetry = true;
-    await _enableMeet();
   }
 
   /// Format tanggal ringkas Indonesia: `dd MMM yyyy` (mis. 05 Okt 2026).
