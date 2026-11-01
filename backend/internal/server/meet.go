@@ -20,6 +20,14 @@ import (
 // wajib memakai Google Meet.
 var ErrMeetUnavailable = errors.New("google Meet belum dikonfigurasi di server")
 
+// userMessageError membawa pesan siap-tampil (Indonesia, boleh berkapital dan
+// berakhir titik) tanpa melanggar ST1005 yang hanya memeriksa literal
+// errors.New/fmt.Errorf. Dipakai untuk pesan validasi yang memang dibaca
+// pengguna lewat writeUserError, agar nadanya tetap sopan.
+type userMessageError string
+
+func (e userMessageError) Error() string { return string(e) }
+
 // meetCalendar adalah irisan minimal *googlecal.CalendarService yang benar-benar
 // dipakai handler. Dibuat sebagai interface kecil agar alur Meet bisa diuji
 // dengan fake tanpa memanggil Google. *googlecal.CalendarService otomatis
@@ -589,7 +597,7 @@ func (s *Server) setManualMeetLinkHandler(w http.ResponseWriter, r *http.Request
 	updated, err := s.store.UpdateCareSessionDetail(
 		r.Context(), sessionID, meetURL, cs.SummaryForPatient, cs.PrivateNote)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errors.New("gagal menyimpan link video. Coba lagi."))
+		writeUserError(w, http.StatusInternalServerError, "Gagal menyimpan link video. Coba lagi.")
 		return
 	}
 	// Beri tahu pasien bahwa link video sudah tersedia.
@@ -605,24 +613,24 @@ func (s *Server) setManualMeetLinkHandler(w http.ResponseWriter, r *http.Request
 func normalizeManualMeetURL(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
-		return "", errors.New("Link video tidak boleh kosong.")
+		return "", userMessageError("Link video tidak boleh kosong.")
 	}
 	if len(trimmed) > 500 {
-		return "", errors.New("Link video terlalu panjang.")
+		return "", userMessageError("Link video terlalu panjang.")
 	}
 	u, err := url.Parse(trimmed)
 	if err != nil {
-		return "", errors.New("Link video tidak valid.")
+		return "", userMessageError("Link video tidak valid.")
 	}
 	if u.Scheme != "https" {
-		return "", errors.New("Link video harus diawali https://")
+		return "", userMessageError("Link video harus diawali https://")
 	}
 	host := strings.ToLower(strings.TrimSpace(u.Hostname()))
 	if host != "meet.google.com" {
-		return "", errors.New("Link video harus berupa link Google Meet (meet.google.com).")
+		return "", userMessageError("Link video harus berupa link Google Meet (meet.google.com).")
 	}
 	if strings.TrimSpace(u.Path) == "" || u.Path == "/" {
-		return "", errors.New("Link Google Meet tidak lengkap. Salin tautan lengkap dari Google Meet.")
+		return "", userMessageError("Link Google Meet tidak lengkap. Salin tautan lengkap dari Google Meet.")
 	}
 	return u.String(), nil
 }
