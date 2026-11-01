@@ -413,7 +413,8 @@ func (s *Server) resolveCrisisIncident(w http.ResponseWriter, r *http.Request, c
 	// feedback per-item; resolusi tanpa catatan diperbolehkan. Catatan yang
 	// dikirim tetap disimpan apa adanya.
 	incidentID := r.PathValue("id")
-	if claims.Role == "professional" {
+	switch claims.Role {
+	case "professional":
 		incident, err := s.store.GetCrisisIncident(r.Context(), incidentID)
 		if err != nil {
 			writeError(w, http.StatusNotFound, err)
@@ -424,6 +425,25 @@ func (s *Server) resolveCrisisIncident(w http.ResponseWriter, r *http.Request, c
 			writeError(w, http.StatusForbidden, errors.New("professional is not linked to this patient"))
 			return
 		}
+	case "patient":
+		incident, err := s.store.GetCrisisIncident(r.Context(), incidentID)
+		if err != nil {
+			writeError(w, http.StatusNotFound, err)
+			return
+		}
+		// IDOR guard: pasien hanya boleh menandai selesai insiden miliknya
+		// sendiri. Tanpa pemeriksaan ini, pasien mana pun bisa memanggil
+		// endpoint ini untuk insiden pasien LAIN dan mematikan alarm SOS-nya.
+		// Pasien tetap boleh menyelesaikan insidennya sendiri (alur "saya aman").
+		if incident.PatientID != claims.Subject {
+			writeError(w, http.StatusForbidden, errors.New("patient can only resolve their own crisis incident"))
+			return
+		}
+	default:
+		// Role lain (mis. admin) tidak berwenang menyelesaikan insiden lewat
+		// jalur pasien/profesional ini.
+		writeError(w, http.StatusForbidden, errors.New("only the patient or a linked professional can resolve a crisis incident"))
+		return
 	}
 	resolved, err := s.store.ResolveCrisisIncident(r.Context(), incidentID, claims.Subject, req.ResolutionNotes)
 	if err != nil {

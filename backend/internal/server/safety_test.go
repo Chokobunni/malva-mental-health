@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -218,5 +219,111 @@ func TestEmergencyContactRejectsEmptyName(t *testing.T) {
 	}
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for empty name, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// insertSafetyUser membuat user uji dengan role tertentu dan mengembalikan id.
+func insertSafetyUser(t *testing.T, db *sql.DB, role, tag, suffix string) string {
+	t.Helper()
+	var id string
+	if err := db.QueryRowContext(context.Background(),
+		`INSERT INTO users (email,password_hash,role,display_name)
+		 VALUES ($1,'test',$2::user_role,$3) RETURNING id`,
+		"safety-"+tag+"-"+suffix+"@example.test", role, "Safety "+tag).Scan(&id); err != nil {
+		t.Fatalf("buat user %s: %v", tag, err)
+	}
+	return id
+}
+
+// insertSafetyIncident membuat satu insiden krisis aktif milik patientID.
+func insertSafetyIncident(t *testing.T, db *sql.DB, patientID string) string {
+	t.Helper()
+	var id string
+	if err := db.QueryRowContext(context.Background(),
+		`INSERT INTO crisis_incidents (patient_id,triggered_by) VALUES ($1,'manual') RETURNING id`,
+		patientID).Scan(&id); err != nil {
+		t.Fatalf("buat insiden: %v", err)
+	}
+	return id
+}
+
+// TestResolveCrisisIncidentAuthorization mengunci IDOR: pasien hanya boleh
+// menyelesaikan insiden MILIKNYA sendiri; profesional hanya insiden pasien yang
+// terhubung; role lain ditolak. Status insiden pasien lain TIDAK boleh berubah.
+// Butuh Postgres (di-skip bila MALVA_TEST_DATABASE_URL kosong).
+func TestResolveCrisisIncidentAuthorization(t *testing.T) {
+	db, st := openOnboardingTestStore(t)
+	cfg := config.Config{AllowedOrigins: []string{"https://api.malva.id"}}
+	logger := slog.New(slog.NewTextHandler(testWriter{}, nil))
+	mgr := auth.NewManager("12345678901234567890123456789012")
+	handler := New(cfg, mgr, st, nil, logger).Routes()
+	ctx := context.Background()
+
+	suffix := fmt.Sprint(time.Now().UnixNano())
+	patA := insertSafetyUser(t, db, "patient", "A", suffix)
+	patB := insertSafetyUser(t, db, "patient", "B", suffix)
+	proLinked := insertSafetyUser(t, db, "professional", "Linked", suffix)
+	proUnlinked := insertSafetyUser(t, db, "professional", "Unlinked", suffix)
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO patient_professional_links (patient_id,professional_id,status) VALUES ($1,$2,'active')`,
+		patB, proLinked); err != nil {
+		t.Fatalf("siapkan link: %v", err)
+	}
+	incA := insertSafetyIncident(t, db, patA) // milik pasien A
+	incB := insertSafetyIncident(t, db, patB) // milik pasien B
+
+	// Bersihkan insiden DULU (resolved_by FK NO ACTION), lalu link, lalu user.
+	t.Cleanup(func() {
+		_, _ = db.Exec(`DELETE FROM crisis_incidents WHERE id = ANY($1::uuid[])`, pqUUIDArray(incA, incB))
+		_, _ = db.Exec(`DELETE FROM patient_professional_links WHERE patient_id = ANY($1::uuid[]) OR professional_id = ANY($1::uuid[])`,
+			pqUUIDArray(patA, patB, proLinked, proUnlinked))
+		cleanupTestUsers(t, db, patA, patB, proLinked, proUnlinked)
+	})
+
+	statusOf := func(id string) string {
+		var s string
+		if err := db.QueryRowContext(ctx, `SELECT status FROM crisis_incidents WHERE id=$1`, id).Scan(&s); err != nil {
+			t.Fatalf("baca status: %v", err)
+		}
+		return s
+	}
+	resolve := func(token, incidentID string) *httptest.ResponseRecorder {
+		return doAuthed(t, handler, "POST", "/v1/crisis-incidents/"+incidentID+"/resolve", token, `{}`)
+	}
+
+	tokPatA, _ := mgr.Issue(patA, "patient")
+	tokProLinked, _ := mgr.Issue(proLinked, "professional")
+	tokProUnlinked, _ := mgr.Issue(proUnlinked, "professional")
+
+	// 1. Pasien A resolve insiden pasien B -> 403, status B tetap active.
+	if rec := resolve(tokPatA, incB); rec.Code != http.StatusForbidden {
+		t.Fatalf("pasien A resolve insiden B: mau 403, dapat %d (%s)", rec.Code, rec.Body.String())
+	}
+	if s := statusOf(incB); s != "active" {
+		t.Fatalf("insiden B berubah jadi %q oleh pasien lain (harus tetap active)", s)
+	}
+
+	// 2. Profesional TIDAK terhubung resolve insiden B -> 403, tetap active.
+	if rec := resolve(tokProUnlinked, incB); rec.Code != http.StatusForbidden {
+		t.Fatalf("profesional tak terhubung: mau 403, dapat %d (%s)", rec.Code, rec.Body.String())
+	}
+	if s := statusOf(incB); s != "active" {
+		t.Fatalf("insiden B berubah oleh profesional tak terhubung (harus tetap active)")
+	}
+
+	// 3. Profesional terhubung resolve insiden B -> 200, jadi resolved.
+	if rec := resolve(tokProLinked, incB); rec.Code != http.StatusOK {
+		t.Fatalf("profesional terhubung: mau 200, dapat %d (%s)", rec.Code, rec.Body.String())
+	}
+	if s := statusOf(incB); s != "resolved" {
+		t.Fatalf("insiden B tidak jadi resolved oleh profesional terhubung: %q", s)
+	}
+
+	// 4. Pasien A resolve insidennya sendiri -> 200, jadi resolved.
+	if rec := resolve(tokPatA, incA); rec.Code != http.StatusOK {
+		t.Fatalf("pasien A resolve insiden sendiri: mau 200, dapat %d (%s)", rec.Code, rec.Body.String())
+	}
+	if s := statusOf(incA); s != "resolved" {
+		t.Fatalf("insiden A tidak jadi resolved oleh pemiliknya: %q", s)
 	}
 }
