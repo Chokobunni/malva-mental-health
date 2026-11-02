@@ -1065,7 +1065,12 @@ func (s *Store) ChatAccessFor(ctx context.Context, patientID, professionalID, se
 		return ChatAccess{}, err
 	}
 	if err == nil {
-		if inSessionWindow(now, start, duration) && status == "scheduled" {
+		// Chat teks aktif selama jendela sesi untuk status `scheduled` MAUPUN
+		// `completed`: profesional yang menandai sesi selesai lebih awal (Meet
+		// berakhir sebelum durasi) tetap bisa chat sampai jendela waktu habis,
+		// dan pasien tetap bisa mengirim selama jam sesi. Status batal/no_show/
+		// kedaluwarsa tidak pernah masuk kueri ini sehingga tetap diblokir.
+		if inSessionWindow(now, start, duration) {
 			out.InSession = true
 		}
 		if start.After(now) {
@@ -1084,13 +1089,27 @@ func (s *Store) ChatAccessFor(ctx context.Context, patientID, professionalID, se
 			"Chat teks aktif saat sesi berjalan; profesional membahasnya saat sesi."
 		return out, nil
 	}
-	if out.NextSession != nil {
-		out.Reason = "Chat teks aktif saat sesi berjalan. Sesi berikutnya: " +
-			out.NextSession.In(locationWIB).Format("02 Jan 2006 15:04")
-	} else {
-		out.Reason = "Belum ada sesi terjadwal dengan profesional ini."
-	}
+	out.Reason = chatAccessReason(senderRole, out.NextSession)
 	return out, nil
+}
+
+// chatAccessReason menyusun teks alasan (role-aware) saat chat teks tidak
+// aktif. Murni (tanpa DB) agar bisa diuji. `next` = waktu sesi berikutnya bila
+// ada. Profesional tidak pernah melihat istilah "Di luar sesi" atau "kamu bisa
+// mengirim data" — itu copy sisi pasien.
+func chatAccessReason(role string, next *time.Time) string {
+	if role == "professional" {
+		if next != nil {
+			return "Chat teks aktif saat sesi berjalan. Sesi berikutnya dengan pasien ini: " +
+				next.In(locationWIB).Format("02 Jan 2006 15:04") + "."
+		}
+		return "Belum ada sesi terjadwal dengan pasien ini."
+	}
+	if next != nil {
+		return "Chat teks aktif saat sesi berjalan. Sesi berikutnya: " +
+			next.In(locationWIB).Format("02 Jan 2006 15:04") + "."
+	}
+	return "Belum ada sesi terjadwal dengan profesional ini."
 }
 
 // PairRelation true bila dua user pernah punya relasi (link / sesi / paket).

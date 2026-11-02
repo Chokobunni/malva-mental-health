@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
+import '../services/meeting_launcher.dart';
 import '../theme.dart';
 import '../time/wib.dart';
 import '../widgets/friendly_error.dart';
@@ -603,17 +603,33 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
         }
         return;
       }
-      final uri = Uri.tryParse(s.meetingUrl.trim());
-      if (uri != null && await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        return;
+      final url = s.meetingUrl.trim();
+      final result = await openMeetLink(url);
+      if (!mounted) return;
+      switch (result) {
+        case MeetLaunchResult.openedExternal:
+        case MeetLaunchResult.openedInApp:
+          return;
+        case MeetLaunchResult.invalid:
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Link Google Meet tidak valid.')),
+          );
+          return;
+        case MeetLaunchResult.failed:
+          // Aplikasi Meet tidak terbuka: salin tautan agar pengguna bisa
+          // menempelnya manual di browser.
+          await copyMeetLink(url);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Link Google Meet disalin. Tempel di browser bila aplikasi '
+                'Meet tidak terbuka.',
+              ),
+            ),
+          );
+          return;
       }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tidak dapat membuka Google Meet.')),
-        );
-      }
-      return;
     }
     _openChat(s);
   }

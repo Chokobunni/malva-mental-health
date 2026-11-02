@@ -24,6 +24,11 @@ type Message struct {
 	Title string
 	Body  string
 	Data  map[string]string
+	// CollapseKey menyatukan notifikasi untuk peristiwa yang sama sehingga
+	// perangkat menampilkan SATU baris, bukan menumpuk N baris saat pengguna
+	// punya beberapa token aktif. Diteruskan ke FCM Android.CollapseKey dan
+	// header APNs `apns-collapse-id`.
+	CollapseKey string
 }
 
 type Provider interface {
@@ -105,19 +110,37 @@ type fcmProvider struct {
 }
 
 func (p *fcmProvider) Send(ctx context.Context, message Message) error {
+	android := &messaging.AndroidConfig{
+		Priority: "high",
+		Notification: &messaging.AndroidNotification{
+			ChannelID: "malva_updates",
+		},
+	}
+	// CollapseKey: bila kosong biarkan default (tanpa collapse). Saat diisi,
+	// FCM menimpa notifikasi lama dengan collapse_key sama di perangkat yang
+	// sama, sehingga pesan yang sama tidak menumpuk.
+	if message.CollapseKey != "" {
+		android.CollapseKey = message.CollapseKey
+	}
+
+	// APNs tidak punya field CollapseID terstruktur di SDK Go; collapse ID
+	// dikirim lewat header `apns-collapse-id` (didokumentasikan Apple).
+	var apns *messaging.APNSConfig
+	if message.CollapseKey != "" {
+		apns = &messaging.APNSConfig{
+			Headers: map[string]string{"apns-collapse-id": message.CollapseKey},
+		}
+	}
+
 	_, err := p.client.Send(ctx, &messaging.Message{
 		Token: message.Token,
 		Notification: &messaging.Notification{
 			Title: message.Title,
 			Body:  message.Body,
 		},
-		Data: message.Data,
-		Android: &messaging.AndroidConfig{
-			Priority: "high",
-			Notification: &messaging.AndroidNotification{
-				ChannelID: "malva_updates",
-			},
-		},
+		Data:    message.Data,
+		Android: android,
+		APNS:    apns,
 	})
 	return err
 }

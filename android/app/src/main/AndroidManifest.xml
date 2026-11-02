@@ -67,5 +67,17 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Android 11+ package visibility: tanpa ini canLaunchUrl(https://...)
+             mengembalikan false sehingga tombol "Gabung" Google Meet gagal
+             membuka browser/aplikasi Meet. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <!-- Tombol telepon (mis. hubungi faskes) membutuhkan deklarasi DIAL/tel. -->
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
+        </intent>
     </queries>
 </manifest>

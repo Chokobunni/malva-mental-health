@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
+
+	firebase_messaging "firebase.google.com/go/v4/messaging"
 
 	"malva/backend/internal/realtime"
 	"malva/backend/internal/store"
@@ -70,15 +73,28 @@ func (w *OutboxWorker) sendJob(ctx context.Context, job store.OutboxJob) error {
 		return nil
 	}
 
+	collapseKey := collapseKeyFor(job.Data)
 	var sendErr error
 	for _, token := range tokens {
 		message := Message{
-			Token: token,
-			Title: job.Title,
-			Body:  job.Body,
-			Data:  job.Data,
+			Token:       token,
+			Title:       job.Title,
+			Body:        job.Body,
+			Data:        job.Data,
+			CollapseKey: collapseKey,
 		}
 		if err := w.provider.Send(ctx, message); err != nil {
+			// Token tak terdaftar/tidak valid (mis. uninstall/reinstall):
+			// nonaktifkan token itu lalu lanjut ke token lain — jangan
+			// gagalkan seluruh job karena satu token basi.
+			if isDeadTokenError(err) {
+				if derr := w.store.DisableDeviceToken(ctx, token); derr != nil {
+					w.logger.Warn("notification outbox disable dead token failed", "job_id", job.ID, "error", derr)
+				} else {
+					w.logger.Info("notification outbox disabled dead token", "job_id", job.ID, "token", redactToken(token))
+				}
+				continue
+			}
 			sendErr = errors.Join(sendErr, err)
 		}
 	}
@@ -94,6 +110,39 @@ func (w *OutboxWorker) sendJob(ctx context.Context, job store.OutboxJob) error {
 		Data: map[string]string{"notification_id": job.NotificationID},
 	})
 	return nil
+}
+
+// collapseKeyFor menyusun kunci kolaps notifikasi dari jenis peristiwa dan
+// (bila ada) ID sesi. Peristiwa yang sama pada sesi yang sama memakai kunci
+// yang sama sehingga menimpa notifikasi sebelumnya, bukan menumpuk. Tanpa
+// session_id, cukup pakai kind.
+func collapseKeyFor(data map[string]string) string {
+	kind := strings.TrimSpace(data["kind"])
+	sessionID := strings.TrimSpace(data["session_id"])
+	if kind == "" {
+		return ""
+	}
+	if sessionID == "" {
+		return kind
+	}
+	return kind + ":" + sessionID
+}
+
+// isDeadTokenError melaporkan apakah galat FCM menandakan token yang sudah
+// tidak terdaftar/tidak valid (perangkat uninstall, token diputar). Deteksi
+// utama memakai helper SDK; fallback ke pencocokan teks galat bila tipe galat
+// SDK berubah antarversi.
+func isDeadTokenError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if firebase_messaging.IsUnregistered(err) || firebase_messaging.IsInvalidArgument(err) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "registration-token-not-registered") ||
+		strings.Contains(msg, "invalid-argument") ||
+		strings.Contains(msg, "not-registered")
 }
 
 func (w *OutboxWorker) markFailed(ctx context.Context, job store.OutboxJob, err error) {

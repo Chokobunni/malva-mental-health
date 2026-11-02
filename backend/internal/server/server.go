@@ -1917,6 +1917,17 @@ func (s *Server) notifyUser(ctx context.Context, userID, kind, title, body strin
 	}
 	data["kind"] = kind
 
+	// Penjaga entity-level: notifikasi sesi (jadwal/pengingat/link siap) hanya
+	// dibuat sekali per sesi per pengguna. Retry atau jalur ganda tidak boleh
+	// membuat baris/push kedua untuk peristiwa yang sama.
+	if sessionNotificationDeduped(kind) {
+		if sessionID := strings.TrimSpace(data["session_id"]); sessionID != "" {
+			if exists, err := s.store.NotificationExistsForSession(ctx, userID, kind, sessionID); err == nil && exists {
+				return
+			}
+		}
+	}
+
 	// Tentukan role penerima untuk menerapkan kebijakan push. Bila gagal,
 	// jangan telan notifikasi: tetap buat in-app tanpa push (role kosong ->
 	// pushAllowed false).

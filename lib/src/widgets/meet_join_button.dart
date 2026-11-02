@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/auth_providers.dart';
 import '../services/malva_api_client.dart';
+import '../services/meeting_launcher.dart';
 import '../theme.dart';
 import 'friendly_error.dart';
 
@@ -167,14 +167,31 @@ class _MeetJoinButtonState extends ConsumerState<MeetJoinButton> {
   Future<void> _join() async {
     final url = widget.session.meetingUrl.trim();
     if (url.isEmpty) return;
-    final uri = Uri.tryParse(url);
-    if (uri == null) {
-      setState(() => _error = 'Link video call tidak valid.');
-      return;
-    }
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok && mounted) {
-      setState(() => _error = 'Tidak dapat membuka Google Meet.');
+    final result = await openMeetLink(url);
+    if (!mounted) return;
+    switch (result) {
+      case MeetLaunchResult.openedExternal:
+      case MeetLaunchResult.openedInApp:
+        setState(() => _error = null);
+        return;
+      case MeetLaunchResult.invalid:
+        setState(() => _error = 'Link video call tidak valid.');
+        return;
+      case MeetLaunchResult.failed:
+        // Aplikasi Meet tidak terbuka: salin tautan agar pengguna bisa
+        // menempelnya manual di browser.
+        await copyMeetLink(url);
+        if (!mounted) return;
+        setState(() => _error = null);
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Link Google Meet disalin. Tempel di browser bila aplikasi '
+              'Meet tidak terbuka.',
+            ),
+          ),
+        );
+        return;
     }
   }
 

@@ -150,3 +150,35 @@ func TestDigestBodyFormat(t *testing.T) {
 		}
 	}
 }
+
+// TestSessionNotificationDeduped — hanya jadwal/pengingat/link-siap yang
+// dibuat sekali per sesi. Pembatalan/reschedule & jenis lain TIDAK deduped
+// (perubahan status tetap harus memberi tahu pengguna).
+func TestSessionNotificationDeduped(t *testing.T) {
+	deduped := []string{
+		"session_scheduled",
+		"session_reminder",
+		"session_meet_ready",
+	}
+	for _, kind := range deduped {
+		if !sessionNotificationDeduped(kind) {
+			t.Errorf("kind %q seharusnya deduped (sekali per sesi)", kind)
+		}
+	}
+	notDeduped := []string{
+		"session_rescheduled",
+		"session_cancelled_patient",
+		"session_cancelled_professional",
+		"session_meet_missing",
+		"session_meet_update_failed",
+		"session_needs_reschedule",
+		"crisis_alert",
+		"screening_reviewed",
+		"",
+	}
+	for _, kind := range notDeduped {
+		if sessionNotificationDeduped(kind) {
+			t.Errorf("kind %q TIDAK boleh deduped", kind)
+		}
+	}
+}

@@ -1020,10 +1020,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               color: MalvaColors.mint.withValues(alpha: 0.15),
-              child: const Text(
-                'Sesi berjalan — kamu & profesional bisa chat di sini.',
+              child: Text(
+                _isPatient
+                    ? 'Sesi berjalan — kamu & profesional bisa chat di sini.'
+                    : 'Sesi berjalan — kamu & pasien bisa chat di sini.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: MalvaColors.mint),
@@ -1085,9 +1087,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               onSend: _send,
               onShareTap: _canShare ? () => _showShareSheet(context) : null,
               disabledHint: _accessLoaded
-                  ? (_access.reason.isEmpty
-                      ? 'Chat aktif saat sesi berjalan'
-                      : _access.reason)
+                  ? (_access.reason.isEmpty ? null : _access.reason)
                   : null,
             ),
         ],

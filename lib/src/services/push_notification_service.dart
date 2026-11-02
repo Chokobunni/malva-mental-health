@@ -177,13 +177,31 @@ class PushNotificationService {
     const iosDetails = DarwinNotificationDetails();
 
     _localNotifications.show(
-      id: notification.hashCode,
+      id: _notificationIdFor(data),
       title: notification.title,
       body: notification.body,
       notificationDetails:
           NotificationDetails(android: androidDetails, iOS: iosDetails),
       payload: jsonEncode(data),
     );
+  }
+
+  /// ID notifikasi deterministik dari data peristiwa.
+  ///
+  /// Dulu memakai `notification.hashCode` (unik per pengiriman), sehingga
+  /// peristiwa yang sama yang tiba dua kali menumpuk menjadi dua baris di
+  /// shade. Dengan ID stabil per (kind, session_id, notification_id,
+  /// patient_id), pengiriman ulang peristiwa yang sama MENIMPA notifikasi
+  /// sebelumnya — satu baris per peristiwa.
+  int _notificationIdFor(Map<String, dynamic> data) {
+    final parts = <String>[
+      (data['kind'] ?? data['type'] ?? '').toString(),
+      (data['session_id'] ?? '').toString(),
+      (data['notification_id'] ?? '').toString(),
+      (data['patient_id'] ?? '').toString(),
+    ];
+    final stableKey = parts.join('|');
+    return stableKey.hashCode & 0x7fffffff;
   }
 
   // ──────────────────────────────────────────────────────────────

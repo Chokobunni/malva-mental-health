@@ -89,6 +89,21 @@ func isDigestKind(kind string) bool {
 	return patientDigestKinds[kind]
 }
 
+// sessionNotificationDeduped menandai jenis notifikasi sesi yang harus dibuat
+// HANYA SEKALI per sesi per pengguna. Jenis ini (jadwal, pengingat, link siap)
+// sering dipicu ulang oleh retry/duplikasi jalur (mis. sweeper + handler),
+// sehingga tanpa penjaga entity-level baris notifikasi menumpuk dan pengguna
+// melihat pesan yang sama berkali-kali. Pembatalan/reschedule TIDAK termasuk:
+// peristiwa itu memang perlu memberi tahu perubahan status.
+func sessionNotificationDeduped(kind string) bool {
+	switch kind {
+	case "session_scheduled", "session_reminder", "session_meet_ready":
+		return true
+	default:
+		return false
+	}
+}
+
 // digestBody menyusun teks body digest yang terbaca natural dalam Bahasa
 // Indonesia untuk `count` pembaruan dari profesional bernama `professionalName`.
 // Bila nama tidak diketahui, pemanggil mengoper "Profesional Anda".

@@ -2216,10 +2216,15 @@ func (s *Store) MarkAllNotificationsRead(ctx context.Context, userID string) (in
 }
 
 func (s *Store) EnabledDeviceTokens(ctx context.Context, userID string) ([]string, error) {
+	// DISTINCT: satu pengguna bisa punya beberapa baris token yang sama
+	// (reinstall/perangkat lama) — kirim sekali per token agar tidak ada
+	// notifikasi ganda. Token basi (>180 hari tak terlihat) dilewati.
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT token
+		SELECT DISTINCT token
 		FROM device_tokens
 		WHERE user_id = $1 AND enabled
+		  AND (last_seen_at IS NULL OR last_seen_at > now() - interval '180 days')
+		ORDER BY token
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -2234,6 +2239,34 @@ func (s *Store) EnabledDeviceTokens(ctx context.Context, userID string) ([]strin
 		tokens = append(tokens, token)
 	}
 	return tokens, rows.Err()
+}
+
+// DisableDeviceToken menonaktifkan satu token perangkat yang sudah tidak
+// valid (mis. FCM melaporkan unregistered). Idempoten.
+func (s *Store) DisableDeviceToken(ctx context.Context, token string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE device_tokens
+		SET enabled = false
+		WHERE token = $1
+	`, token)
+	return err
+}
+
+// NotificationExistsForSession melaporkan apakah notifikasi jenis `kind`
+// untuk sesi `sessionID` sudah pernah dibuat untuk `userID`. Dipakai untuk
+// menahan notifikasi sesi agar hanya dibuat sekali per sesi per pengguna.
+func (s *Store) NotificationExistsForSession(ctx context.Context, userID, kind, sessionID string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM notifications
+			WHERE user_id = $1 AND type = $2 AND data->>'session_id' = $3
+		)
+	`, userID, kind, sessionID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
 }
 
 func (s *Store) AcquireOutboxJobs(ctx context.Context, limit int) ([]OutboxJob, error) {
