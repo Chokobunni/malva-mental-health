@@ -7,7 +7,11 @@ import '../models.dart';
 import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
 import '../theme.dart';
-import 'screens/web_admin_home_screen.dart';
+import 'screens/admin/web_admin_doctors_screen.dart';
+import 'screens/admin/web_admin_overview_screen.dart';
+import 'screens/admin/web_admin_payments_screen.dart';
+import 'screens/admin/web_admin_pricing_screen.dart';
+import 'screens/admin/web_admin_users_screen.dart';
 import 'screens/web_home_screen.dart';
 import 'screens/web_login_screen.dart';
 import 'screens/web_professional_home_screen.dart';
@@ -199,10 +203,18 @@ class _MalvaWebAppState extends ConsumerState<MalvaWebApp> {
           onBackToHome: () => navigate(WebRoutes.homeForRole(session.role)),
         );
       case WebRoutes.admin:
-        return WebAdminHomeScreen(
+        return WebAdminOverviewScreen(
           displayName: session.displayName,
           onNavigate: navigate,
         );
+      case WebRoutes.adminPayments:
+        return const WebAdminPaymentsScreen();
+      case WebRoutes.adminPricing:
+        return const WebAdminPricingScreen();
+      case WebRoutes.adminUsers:
+        return const WebAdminUsersScreen();
+      case WebRoutes.adminDoctors:
+        return const WebAdminDoctorsScreen();
       default:
         return WebComingSoonPage(
           title: WebRoutes.titleFor(path),
@@ -229,16 +241,6 @@ class _MalvaWebAppState extends ConsumerState<MalvaWebApp> {
         WebRoutes.settings =>
           'Pengaturan akun web akan tersedia pada fase berikutnya. Untuk '
               'keluar dari akun, gunakan tombol Keluar di kanan atas.',
-        WebRoutes.adminPayments =>
-          'Verifikasi pembayaran dan riwayat transaksi akan tersedia pada fase '
-              'berikutnya.',
-        WebRoutes.adminPricing =>
-          'Pengaturan harga sesi dan paket perawatan akan tersedia pada fase '
-              'berikutnya.',
-        WebRoutes.adminUsers =>
-          'Manajemen akun pengguna akan tersedia pada fase berikutnya.',
-        WebRoutes.adminDoctors =>
-          'Verifikasi kredensial dokter akan tersedia pada fase berikutnya.',
         _ => 'Halaman ini sedang disiapkan dan akan tersedia pada fase '
             'berikutnya.',
       };

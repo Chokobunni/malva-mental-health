@@ -332,9 +332,18 @@ class MalvaApiClient {
 
   Future<List<AdminUser>> listAdminUsers({
     required String accessToken,
+    String query = '',
+    String role = '',
+    String status = '',
+    int limit = 200,
   }) async {
-    final payload =
-        await _send('GET', '/v1/admin/users', accessToken: accessToken);
+    final uri = _adminUri('/v1/admin/users', <String, String>{
+      'q': query,
+      'role': role,
+      'status': status,
+      'limit': limit > 0 ? '$limit' : '',
+    });
+    final payload = await _sendUri('GET', uri, accessToken: accessToken);
     return (payload['users'] as List?)
             ?.map((e) =>
                 AdminUser.fromJson(_expectMap(e, 'Data pengguna tidak valid.')))
@@ -463,6 +472,179 @@ class MalvaApiClient {
     required String userId,
   }) async {
     return _send('GET', '/v1/admin/doctors/$userId', accessToken: accessToken);
+  }
+
+  // ============================================================
+  // ADMIN KONSOL WEB — ringkasan, pembayaran, harga, refund, akun
+  // ============================================================
+  //
+  // Semua metode di bawah hanya dipakai dashboard admin Flutter web. Sengaja
+  // ditempatkan di kelas yang sama (bukan HTTP client terpisah) agar refresh
+  // token, base URL, dan pemetaan error tetap SATU jalur dengan mobile.
+
+  /// Menyusun URI dengan query string opsional (parameter kosong dibuang).
+  ///
+  /// `_send` memakai `baseUri.replace(path: ...)` yang akan meng-encode tanda
+  /// `?` bila disisipkan ke path, jadi query harus dibangun di sini.
+  Uri _adminUri(String path, [Map<String, String> params = const {}]) {
+    final query = <String, String>{};
+    params.forEach((String key, String value) {
+      final trimmed = value.trim();
+      if (trimmed.isNotEmpty) query[key] = trimmed;
+    });
+    return baseUri.replace(
+      path: path,
+      queryParameters: query.isEmpty ? null : query,
+    );
+  }
+
+  /// GET /v1/admin/overview — metrik beranda konsol admin.
+  Future<AdminOverview> adminOverview({required String accessToken}) async {
+    final payload =
+        await _send('GET', '/v1/admin/overview', accessToken: accessToken);
+    return AdminOverview.fromJson(
+      _expectMap(payload['overview'], 'Ringkasan admin tidak valid.'),
+    );
+  }
+
+  /// GET /v1/admin/payments — riwayat transaksi dengan filter & paginasi.
+  Future<AdminPaymentPage> listAdminPayments({
+    required String accessToken,
+    String query = '',
+    String status = '',
+    String from = '',
+    String to = '',
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final uri = _adminUri('/v1/admin/payments', <String, String>{
+      'q': query,
+      'status': status,
+      'from': from,
+      'to': to,
+      'limit': '$limit',
+      'offset': '$offset',
+    });
+    final payload = await _sendUri('GET', uri, accessToken: accessToken);
+    return AdminPaymentPage.fromJson(payload);
+  }
+
+  /// GET /v1/admin/payments/{payment_id} — detail + event gateway + refund.
+  Future<AdminPaymentDetail> getAdminPayment({
+    required String accessToken,
+    required String paymentId,
+  }) async {
+    final payload = await _send('GET', '/v1/admin/payments/$paymentId',
+        accessToken: accessToken);
+    return AdminPaymentDetail.fromJson(payload);
+  }
+
+  /// POST /v1/admin/payments/{payment_id}/override — verifikasi/refund manual.
+  ///
+  /// [status] hanya `paid`, `failed`, `refunded`, atau `pending`. [reason]
+  /// wajib 3–500 karakter (divalidasi server).
+  Future<AdminPaymentOverrideResult> overrideAdminPayment({
+    required String accessToken,
+    required String paymentId,
+    required String status,
+    required String reason,
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/admin/payments/$paymentId/override',
+      accessToken: accessToken,
+      body: <String, Object?>{
+        'status': status,
+        'reason': reason.trim(),
+      },
+    );
+    return AdminPaymentOverrideResult.fromJson(payload);
+  }
+
+  /// GET /v1/admin/pricing — harga semua profesional.
+  Future<List<AdminPricingItem>> listAdminPricing({
+    required String accessToken,
+  }) async {
+    final payload =
+        await _send('GET', '/v1/admin/pricing', accessToken: accessToken);
+    return (payload['items'] as List?)
+            ?.map((e) => AdminPricingItem.fromJson(
+                _expectMap(e, 'Data harga tidak valid.')))
+            .toList() ??
+        const <AdminPricingItem>[];
+  }
+
+  /// PUT /v1/admin/pricing/{professional_id} — ubah harga layanan.
+  ///
+  /// Nilai `null` berarti "jangan diubah" (server memakai pointer opsional).
+  Future<AdminPricingItem> updateAdminPricing({
+    required String accessToken,
+    required String professionalId,
+    int? quickChatPrice,
+    int? quickVideoPrice,
+    int? packagePrice,
+  }) async {
+    final payload = await _send(
+      'PUT',
+      '/v1/admin/pricing/$professionalId',
+      accessToken: accessToken,
+      body: <String, Object?>{
+        if (quickChatPrice != null) 'quick_chat_price': quickChatPrice,
+        if (quickVideoPrice != null) 'quick_video_price': quickVideoPrice,
+        if (packagePrice != null) 'package_price': packagePrice,
+      },
+    );
+    return AdminPricingItem.fromJson(
+      _expectMap(payload['pricing'], 'Respons harga tidak valid.'),
+    );
+  }
+
+  /// GET /v1/admin/refunds — ledger refund lintas transaksi.
+  Future<AdminRefundPage> listAdminRefunds({
+    required String accessToken,
+    String status = '',
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final uri = _adminUri('/v1/admin/refunds', <String, String>{
+      'status': status,
+      'limit': '$limit',
+      'offset': '$offset',
+    });
+    final payload = await _sendUri('GET', uri, accessToken: accessToken);
+    return AdminRefundPage.fromJson(payload);
+  }
+
+  /// POST /v1/admin/users/{user_id}/reset-password.
+  ///
+  /// Password baru wajib lolos kebijakan server; semua sesi pengguna ikut
+  /// dicabut oleh server setelah password diganti.
+  Future<void> resetAdminUserPassword({
+    required String accessToken,
+    required String userId,
+    required String newPassword,
+  }) async {
+    await _send(
+      'POST',
+      '/v1/admin/users/$userId/reset-password',
+      accessToken: accessToken,
+      body: <String, Object?>{'new_password': newPassword},
+    );
+  }
+
+  /// POST /v1/admin/users/{user_id}/revoke-sessions — cabut semua sesi.
+  ///
+  /// Mengembalikan jumlah sesi yang dicabut.
+  Future<int> revokeAdminUserSessions({
+    required String accessToken,
+    required String userId,
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/admin/users/$userId/revoke-sessions',
+      accessToken: accessToken,
+    );
+    return (payload['revoked'] as num?)?.toInt() ?? 0;
   }
 
   Future<BackendAuthResult> refreshSession({
@@ -3715,9 +3897,385 @@ class AdminUser {
   bool get isGoogleLinked => (ssoProvider ?? '').isNotEmpty;
 }
 
+// ============================================================
+// MODEL KONSOL ADMIN WEB
+// ============================================================
+//
+// Bentuk field mengikuti store Go (backend/internal/store/admin_console.go).
+// `fromJson` sengaja toleran: field hilang/null tidak boleh membuat dashboard
+// admin crash — nilai default dipakai.
+
+/// Ringkasan beranda konsol admin (`GET /v1/admin/overview`).
+class AdminOverview {
+  const AdminOverview({
+    required this.usersTotal,
+    required this.usersPatients,
+    required this.usersProfessionals,
+    required this.usersDisabled,
+    required this.paidCount,
+    required this.pendingCount,
+    required this.monthRevenue,
+    required this.sessionsToday,
+    required this.credentialsPending,
+  });
+
+  factory AdminOverview.fromJson(Map<String, dynamic> json) {
+    final users = json['users'] is Map
+        ? (json['users'] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final payments = json['payments'] is Map
+        ? (json['payments'] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final sessions = json['sessions'] is Map
+        ? (json['sessions'] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final credentials = json['credentials'] is Map
+        ? (json['credentials'] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
+    int asInt(Object? value) => (value as num?)?.toInt() ?? 0;
+    return AdminOverview(
+      usersTotal: asInt(users['total']),
+      usersPatients: asInt(users['patients']),
+      usersProfessionals: asInt(users['professionals']),
+      usersDisabled: asInt(users['disabled']),
+      paidCount: asInt(payments['paid_count']),
+      pendingCount: asInt(payments['pending_count']),
+      monthRevenue: asInt(payments['month_revenue']),
+      sessionsToday: asInt(sessions['upcoming_today']),
+      credentialsPending: asInt(credentials['pending']),
+    );
+  }
+
+  final int usersTotal;
+  final int usersPatients;
+  final int usersProfessionals;
+  final int usersDisabled;
+  final int paidCount;
+  final int pendingCount;
+
+  /// Pendapatan bulan berjalan (WIB), dalam rupiah utuh.
+  final int monthRevenue;
+  final int sessionsToday;
+  final int credentialsPending;
+}
+
+/// Satu baris transaksi untuk tabel pembayaran admin.
+class AdminPaymentItem {
+  const AdminPaymentItem({
+    required this.id,
+    required this.reference,
+    required this.status,
+    required this.paymentMethod,
+    required this.grossAmount,
+    required this.serviceFeeAmount,
+    required this.platformFeeAmount,
+    required this.netAmount,
+    this.createdAt,
+    this.paidAt,
+    this.bookingId = '',
+    this.bookingStatus = '',
+    this.sessionType = '',
+    this.bookingDate = '',
+    this.slotTime = '',
+    this.patientId = '',
+    this.patientName = '',
+    this.patientEmail = '',
+    this.professionalId = '',
+    this.professionalName = '',
+  });
+
+  factory AdminPaymentItem.fromJson(Map<String, dynamic> json) {
+    int asInt(Object? value) => (value as num?)?.toInt() ?? 0;
+    DateTime? asDate(Object? value) =>
+        value == null ? null : DateTime.tryParse(value.toString());
+    return AdminPaymentItem(
+      id: json['id']?.toString() ?? '',
+      reference: json['reference']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      paymentMethod: json['payment_method']?.toString() ?? '',
+      grossAmount: asInt(json['gross_amount']),
+      serviceFeeAmount: asInt(json['service_fee_amount']),
+      platformFeeAmount: asInt(json['platform_fee_amount']),
+      netAmount: asInt(json['net_amount']),
+      createdAt: asDate(json['created_at']),
+      paidAt: asDate(json['paid_at']),
+      bookingId: json['booking_id']?.toString() ?? '',
+      bookingStatus: json['booking_status']?.toString() ?? '',
+      sessionType: json['session_type']?.toString() ?? '',
+      bookingDate: json['booking_date']?.toString() ?? '',
+      slotTime: json['slot_time']?.toString() ?? '',
+      patientId: json['patient_id']?.toString() ?? '',
+      patientName: json['patient_name']?.toString() ?? '',
+      patientEmail: json['patient_email']?.toString() ?? '',
+      professionalId: json['professional_id']?.toString() ?? '',
+      professionalName: json['professional_name']?.toString() ?? '',
+    );
+  }
+
+  final String id;
+  final String reference;
+  final String status;
+  final String paymentMethod;
+  final int grossAmount;
+  final int serviceFeeAmount;
+  final int platformFeeAmount;
+  final int netAmount;
+  final DateTime? createdAt;
+  final DateTime? paidAt;
+  final String bookingId;
+  final String bookingStatus;
+  final String sessionType;
+  final String bookingDate;
+  final String slotTime;
+  final String patientId;
+  final String patientName;
+  final String patientEmail;
+  final String professionalId;
+  final String professionalName;
+}
+
+/// Agregat status untuk filter pembayaran yang sama.
+class AdminPaymentSummary {
+  const AdminPaymentSummary({
+    required this.pending,
+    required this.paid,
+    required this.failed,
+    required this.refunded,
+    required this.grossPaid,
+  });
+
+  factory AdminPaymentSummary.fromJson(Map<String, dynamic> json) {
+    int asInt(Object? value) => (value as num?)?.toInt() ?? 0;
+    return AdminPaymentSummary(
+      pending: asInt(json['pending']),
+      paid: asInt(json['paid']),
+      failed: asInt(json['failed']),
+      refunded: asInt(json['refunded']),
+      grossPaid: asInt(json['gross_paid']),
+    );
+  }
+
+  final int pending;
+  final int paid;
+  final int failed;
+  final int refunded;
+  final int grossPaid;
+}
+
+/// Hasil `GET /v1/admin/payments` (baris + total + ringkasan status).
+class AdminPaymentPage {
+  const AdminPaymentPage({
+    required this.items,
+    required this.total,
+    required this.summary,
+  });
+
+  factory AdminPaymentPage.fromJson(Map<String, dynamic> json) {
+    final items = (json['payments'] as List?)
+            ?.whereType<Map>()
+            .map((e) => AdminPaymentItem.fromJson(e.cast<String, dynamic>()))
+            .toList(growable: false) ??
+        const <AdminPaymentItem>[];
+    final summary = json['summary'] is Map
+        ? AdminPaymentSummary.fromJson(
+            (json['summary'] as Map).cast<String, dynamic>())
+        : const AdminPaymentSummary(
+            pending: 0,
+            paid: 0,
+            failed: 0,
+            refunded: 0,
+            grossPaid: 0,
+          );
+    return AdminPaymentPage(
+      items: items,
+      total: (json['total'] as num?)?.toInt() ?? items.length,
+      summary: summary,
+    );
+  }
+
+  final List<AdminPaymentItem> items;
+  final int total;
+  final AdminPaymentSummary summary;
+}
+
+/// Satu event webhook gateway pada detail pembayaran.
+class AdminPaymentEvent {
+  const AdminPaymentEvent({
+    required this.gateway,
+    required this.externalId,
+    required this.eventType,
+    required this.status,
+    this.createdAt,
+  });
+
+  factory AdminPaymentEvent.fromJson(Map<String, dynamic> json) {
+    return AdminPaymentEvent(
+      gateway: json['gateway']?.toString() ?? '',
+      externalId: json['external_id']?.toString() ?? '',
+      eventType: json['event_type']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      createdAt: json['created_at'] == null
+          ? null
+          : DateTime.tryParse(json['created_at'].toString()),
+    );
+  }
+
+  final String gateway;
+  final String externalId;
+  final String eventType;
+  final String status;
+  final DateTime? createdAt;
+}
+
+/// Satu baris ledger refund.
+class AdminRefundItem {
+  const AdminRefundItem({
+    required this.id,
+    required this.amount,
+    required this.kind,
+    required this.status,
+    required this.reason,
+    this.createdAt,
+  });
+
+  factory AdminRefundItem.fromJson(Map<String, dynamic> json) {
+    return AdminRefundItem(
+      id: json['id']?.toString() ?? '',
+      amount: (json['amount'] as num?)?.toInt() ?? 0,
+      kind: json['kind']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      reason: json['reason']?.toString() ?? '',
+      createdAt: json['created_at'] == null
+          ? null
+          : DateTime.tryParse(json['created_at'].toString()),
+    );
+  }
+
+  final String id;
+  final int amount;
+  final String kind;
+  final String status;
+  final String reason;
+  final DateTime? createdAt;
+}
+
+/// Detail pembayaran: transaksi + booking terkait + event + refund.
+class AdminPaymentDetail {
+  const AdminPaymentDetail({
+    required this.payment,
+    required this.events,
+    required this.refunds,
+    this.booking,
+  });
+
+  factory AdminPaymentDetail.fromJson(Map<String, dynamic> json) {
+    final bookingRaw = json['booking'];
+    return AdminPaymentDetail(
+      payment: AdminPaymentItem.fromJson(
+        (json['payment'] as Map?)?.cast<String, dynamic>() ??
+            const <String, dynamic>{},
+      ),
+      booking: bookingRaw is Map ? bookingRaw.cast<String, dynamic>() : null,
+      events: (json['events'] as List?)
+              ?.whereType<Map>()
+              .map((e) => AdminPaymentEvent.fromJson(e.cast<String, dynamic>()))
+              .toList(growable: false) ??
+          const <AdminPaymentEvent>[],
+      refunds: (json['refunds'] as List?)
+              ?.whereType<Map>()
+              .map((e) => AdminRefundItem.fromJson(e.cast<String, dynamic>()))
+              .toList(growable: false) ??
+          const <AdminRefundItem>[],
+    );
+  }
+
+  final AdminPaymentItem payment;
+  final Map<String, dynamic>? booking;
+  final List<AdminPaymentEvent> events;
+  final List<AdminRefundItem> refunds;
+}
+
+/// Hasil override pembayaran (`changed:false` = status sudah sama).
+class AdminPaymentOverrideResult {
+  const AdminPaymentOverrideResult({
+    required this.payment,
+    required this.changed,
+  });
+
+  factory AdminPaymentOverrideResult.fromJson(Map<String, dynamic> json) {
+    return AdminPaymentOverrideResult(
+      payment: AdminPaymentItem.fromJson(
+        (json['payment'] as Map?)?.cast<String, dynamic>() ??
+            const <String, dynamic>{},
+      ),
+      changed: json['changed'] == true,
+    );
+  }
+
+  final AdminPaymentItem payment;
+  final bool changed;
+}
+
+/// Satu baris harga layanan profesional (`GET /v1/admin/pricing`).
+class AdminPricingItem {
+  const AdminPricingItem({
+    required this.professionalId,
+    required this.name,
+    required this.email,
+    required this.specialization,
+    required this.quickChatPrice,
+    required this.quickVideoPrice,
+    required this.packagePrice,
+    this.updatedAt,
+  });
+
+  factory AdminPricingItem.fromJson(Map<String, dynamic> json) {
+    return AdminPricingItem(
+      professionalId: json['professional_id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      specialization: json['specialization']?.toString() ?? '',
+      quickChatPrice: (json['quick_chat_price'] as num?)?.toInt() ?? 0,
+      quickVideoPrice: (json['quick_video_price'] as num?)?.toInt() ?? 0,
+      packagePrice: (json['package_price'] as num?)?.toInt() ?? 0,
+      updatedAt: json['updated_at'] == null
+          ? null
+          : DateTime.tryParse(json['updated_at'].toString()),
+    );
+  }
+
+  final String professionalId;
+  final String name;
+  final String email;
+  final String specialization;
+  final int quickChatPrice;
+  final int quickVideoPrice;
+  final int packagePrice;
+  final DateTime? updatedAt;
+}
+
+/// Hasil `GET /v1/admin/refunds`.
+class AdminRefundPage {
+  const AdminRefundPage({required this.items, required this.total});
+
+  factory AdminRefundPage.fromJson(Map<String, dynamic> json) {
+    final items = (json['refunds'] as List?)
+            ?.whereType<Map>()
+            .map((e) => AdminRefundItem.fromJson(e.cast<String, dynamic>()))
+            .toList(growable: false) ??
+        const <AdminRefundItem>[];
+    return AdminRefundPage(
+      items: items,
+      total: (json['total'] as num?)?.toInt() ?? items.length,
+    );
+  }
+
+  final List<AdminRefundItem> items;
+  final int total;
+}
+
 class BackendDoctorSearchResult {
-  const BackendDoctorSearchResult({
-    required this.userId,
+  const BackendDoctorSearchResult({    required this.userId,
     required this.displayName,
     required this.specialization,
     required this.legacyCount,

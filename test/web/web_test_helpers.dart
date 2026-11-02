@@ -5,7 +5,9 @@ import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/platform/contracts/ports.dart';
 import 'package:malva_mental_health/src/platform/platform_providers.dart';
 import 'package:malva_mental_health/src/providers/providers.dart';
+import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/web/web_app.dart';
+import 'package:malva_mental_health/src/web/web_theme.dart';
 
 /// [BrowserHistory] palsu untuk widget test.
 ///
@@ -127,5 +129,41 @@ Future<void> tapWebSubmit(WidgetTester tester) async {
   await tester.ensureVisible(submit);
   await tester.pumpAndSettle();
   await tester.tap(submit);
+  await tester.pumpAndSettle();
+}
+
+/// Memasang satu layar dashboard admin beserta dependency-nya.
+///
+/// Dipakai test layar admin: sesi admin disuntik langsung (tanpa alur login)
+/// dan [MalvaApiClient] diganti fake agar tidak ada HTTP nyata.
+Future<void> pumpAdminScreen(
+  WidgetTester tester,
+  Widget screen, {
+  MalvaApiClient? api,
+  AuthSession? session,
+  Size size = const Size(1440, 1000),
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: <Override>[
+        secureStoreProvider.overrideWithValue(InMemorySecureStore()),
+        authStateProvider.overrideWith(
+          (ref) => AuthNotifier()..setSession(session ?? kAdminSession),
+        ),
+        if (api != null) apiClientProvider.overrideWithValue(api),
+      ],
+      child: MaterialApp(
+        theme: buildMalvaWebTheme(),
+        home: Scaffold(
+          body: SingleChildScrollView(child: screen),
+        ),
+      ),
+    ),
+  );
   await tester.pumpAndSettle();
 }

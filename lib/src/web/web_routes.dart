@@ -1,7 +1,4 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
 import '../models.dart';
 import '../platform/contracts/ports.dart';
@@ -146,11 +143,11 @@ abstract final class WebRoutes {
 
 /// Pengendali rute web: satu sumber kebenaran untuk halaman yang sedang tampil.
 ///
-/// Memakai [BrowserHistory] (port) agar kode UI tidak menyentuh API browser,
-/// dan [SystemNavigator.routeInformationUpdated] agar address bar benar-benar
-/// berubah walau implementasi port web masih kerangka (T04). Di mobile/desktop
-/// pemanggilan [SystemNavigator] adalah no-op, jadi kelas ini aman dipakai di
-/// widget test yang berjalan di VM.
+/// Memakai [BrowserHistory] (port) sebagai satu-satunya jalur ke riwayat
+/// browser: implementasi web menulis langsung ke History API (`pushState` /
+/// `replaceState`) dan mendengarkan `popstate` untuk tombol back/forward.
+/// Di mobile/desktop maupun `flutter test`, port-nya no-op sehingga kelas ini
+/// aman dipakai tanpa menyentuh API browser.
 class WebRouteController extends ValueNotifier<String> {
   WebRouteController(this._history)
       : _basePath = WebRoutes.detectBasePath(_history.currentPath),
@@ -181,12 +178,6 @@ class WebRouteController extends ValueNotifier<String> {
     } else {
       _history.push(browserPath);
     }
-    unawaited(
-      SystemNavigator.routeInformationUpdated(
-        uri: Uri.parse(browserPath),
-        replace: replace,
-      ),
-    );
   }
 
   /// Sinkronisasi saat pengguna menekan tombol back/forward browser.

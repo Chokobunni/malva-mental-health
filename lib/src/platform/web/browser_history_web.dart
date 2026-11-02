@@ -1,34 +1,54 @@
+import 'dart:js_interop';
+
+import 'package:web/web.dart' as web;
+
 import '../contracts/ports.dart';
 
-/// [BrowserHistory] web — kerangka T01.
+/// [BrowserHistory] untuk target web.
 ///
-/// `currentPath` dibaca dari `Uri.base.path` (murni Dart, tanpa js_interop),
-/// yang di browser mengembalikan path halaman saat ini. `push`/`replace` masih
-/// no-op; sinkronisasi `history.pushState` + listener `popstate` (atau
-/// `SystemNavigator.routeInformationUpdated`) diimplementasikan di T04 bersama
-/// `route_table.dart`. Saat ini `initialRoute` tetap `/` → perilaku web fase 1
-/// belum berubah, hanya kerangkanya yang tersedia.
+/// Berkas ini HANYA dikompilasi saat `flutter build web --target=lib/main_web.dart`
+/// (dipilih lewat conditional import di `platform_factory.dart`), sehingga
+/// pemakaian `package:web` di sini tidak pernah ikut ke build mobile maupun ke
+/// `flutter test` (yang memakai implementasi `io/`).
+///
+/// Kenapa bukan `SystemNavigator.routeInformationUpdated`: API itu mengikuti
+/// strategi URL Flutter (bawaan: hash, `#/beranda`). Dashboard admin butuh URL
+/// path yang bersih (`/app/admin/pembayaran`) agar bisa di-bookmark dan dimuat
+/// ulang, jadi kita menulis langsung ke History API browser.
 class WebBrowserHistory implements BrowserHistory {
   WebBrowserHistory();
 
+  /// Listener `popstate` aktif. Disimpan agar bisa dilepas saat handler
+  /// diganti (mis. widget di-dispose lalu dipasang ulang) — tanpa ini listener
+  /// lama menumpuk dan memanggil callback yang sudah mati.
+  JSFunction? _popListener;
+
   @override
   String get currentPath {
-    final path = Uri.base.path;
+    final path = web.window.location.pathname;
     return path.isEmpty ? '/' : path;
   }
 
   @override
   void push(String path) {
-    // T04: window.history.pushState
+    web.window.history.pushState(null, '', path);
   }
 
   @override
   void replace(String path) {
-    // T04: window.history.replaceState
+    web.window.history.replaceState(null, '', path);
   }
 
   @override
   void attachPopHandler(void Function() onPop) {
-    // T04: pasang listener `popstate`.
+    final previous = _popListener;
+    if (previous != null) {
+      web.window.removeEventListener('popstate', previous);
+    }
+    // Tombol back/forward browser memicu `popstate`; URL sudah berubah saat
+    // event tiba, jadi handler cukup membaca ulang `currentPath`.
+    final listener = ((web.Event event) => onPop()).toJS;
+    _popListener = listener;
+    web.window.addEventListener('popstate', listener);
   }
 }

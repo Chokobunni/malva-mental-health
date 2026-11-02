@@ -29,6 +29,10 @@ dependencies:
   google_sign_in: ^7.2.0
   image_picker: ^1.0.0
   flutter_svg: ^2.3.0
+  # Hanya dipakai lib/src/platform/web/browser_history_web.dart (web-only,
+  # dipilih lewat conditional import). Sudah ada di lock sebagai dependensi
+  # transitif Flutter web; dideklarasikan eksplisit agar impornya sah.
+  web: ^1.1.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
