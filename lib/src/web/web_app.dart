@@ -13,6 +13,10 @@ import 'screens/admin/web_admin_payments_screen.dart';
 import 'screens/admin/web_admin_pricing_screen.dart';
 import 'screens/admin/web_admin_users_screen.dart';
 import 'screens/assessment/web_assessment_screen.dart';
+import 'screens/professional/web_patients_screen.dart';
+import 'screens/professional/web_professional_catalog_screen.dart';
+import 'screens/professional/web_professional_schedule_screen.dart';
+import 'screens/schedule/web_my_care_screen.dart';
 import 'screens/therapy/web_therapy_hub_screen.dart';
 import 'screens/web_home_screen.dart';
 import 'screens/web_login_screen.dart';
@@ -198,12 +202,13 @@ class _MalvaWebAppState extends ConsumerState<MalvaWebApp> {
             onNavigate: navigate,
           );
         }
-        return WebComingSoonPage(
-          title: 'Cari Profesional',
-          description: 'Katalog psikiater & psikolog terverifikasi beserta '
-              'booking sesi akan tersedia pada fase berikutnya.',
-          onBackToHome: () => navigate(WebRoutes.homeForRole(session.role)),
-        );
+        return WebProfessionalCatalogScreen(onNavigate: navigate);
+      case WebRoutes.schedule:
+        return session.role == UserRole.professional
+            ? const WebProfessionalScheduleScreen()
+            : const WebMyCareScreen();
+      case WebRoutes.patients:
+        return const WebPatientsScreen();
       case WebRoutes.assessment:
         return const WebAssessmentScreen();
       case WebRoutes.therapy:
@@ -233,12 +238,6 @@ class _MalvaWebAppState extends ConsumerState<MalvaWebApp> {
   /// Penjelasan spesifik per halaman placeholder agar pengguna tahu apa yang
   /// akan datang (bukan pesan generik yang sama di semua tempat).
   String _placeholderDescription(String path) => switch (path) {
-        WebRoutes.schedule =>
-          'Daftar jadwal sesi, tautan Google Meet, dan riwayat konsultasi akan '
-              'tersedia pada fase berikutnya.',
-        WebRoutes.patients =>
-          'Daftar pasien yang terhubung dengan Anda akan tersedia pada fase '
-              'berikutnya.',
         WebRoutes.settings =>
           'Pengaturan akun web akan tersedia pada fase berikutnya. Untuk '
               'keluar dari akun, gunakan tombol Keluar di kanan atas.',

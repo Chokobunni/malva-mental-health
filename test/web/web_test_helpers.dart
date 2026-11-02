@@ -94,6 +94,7 @@ Future<void> pumpWebApp(
   FakeBrowserHistory? history,
   AuthSession? session,
   SecureStore? secureStore,
+  MalvaApiClient? api,
   Size size = const Size(1280, 900),
 }) async {
   tester.view.physicalSize = size;
@@ -107,6 +108,7 @@ Future<void> pumpWebApp(
         secureStoreProvider.overrideWithValue(
           secureStore ?? InMemorySecureStore(),
         ),
+        if (api != null) apiClientProvider.overrideWithValue(api),
         if (history != null) browserHistoryProvider.overrideWithValue(history),
         if (session != null)
           authStateProvider.overrideWith(

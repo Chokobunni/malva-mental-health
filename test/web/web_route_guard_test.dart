@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:malva_mental_health/src/web/web_routes.dart';
 
+import 'web_admin_fakes.dart';
 import 'web_test_helpers.dart';
 
 void main() {
@@ -91,11 +92,30 @@ void main() {
       final history = FakeBrowserHistory('/beranda');
       await pumpWebApp(tester, history: history, session: kPatientSession);
 
+      // "Pengaturan" masih placeholder; "Terapi"/"Jadwal"/"Asesmen" sudah nyata.
+      await tester.tap(find.text('Pengaturan'));
+      await tester.pumpAndSettle();
+
+      expect(history.currentPath, WebRoutes.settings);
+      expect(find.text('Segera hadir'), findsOneWidget);
+    });
+
+    testWidgets('menu Jadwal kini membuka MyCare (bukan placeholder)',
+        (WidgetTester tester) async {
+      final history = FakeBrowserHistory('/beranda');
+      await pumpWebApp(
+        tester,
+        history: history,
+        session: kPatientSession,
+        api: FakeAdminApi(),
+      );
+
       await tester.tap(find.text('Jadwal'));
       await tester.pumpAndSettle();
 
       expect(history.currentPath, WebRoutes.schedule);
-      expect(find.text('Segera hadir'), findsOneWidget);
+      expect(find.text('Jadwal & Paket'), findsOneWidget);
+      expect(find.text('Segera hadir'), findsNothing);
     });
 
     testWidgets('tombol Keluar tersedia di topbar',

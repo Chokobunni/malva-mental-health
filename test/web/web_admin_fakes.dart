@@ -39,6 +39,30 @@ class FakeAdminApi extends MalvaApiClient {
   int shares = 0;
   String lastShareProfessionalId = '';
 
+  /// Data katalog/booking/MyCare untuk test #4b.
+  BackendDoctorProfile? doctorProfile;
+  BackendProfessionalPricing professionalPricing =
+      const BackendProfessionalPricing(
+    quickChatPrice: 150000,
+    quickVideoPrice: 250000,
+    packagePrice: 800000,
+  );
+  List<BackendDoctorSlot> slots = const <BackendDoctorSlot>[
+    BackendDoctorSlot(time: '09:00', available: true),
+    BackendDoctorSlot(time: '10:00', available: true),
+    BackendDoctorSlot(time: '11:00', available: false),
+  ];
+  List<BackendCarePackage> carePackages = const <BackendCarePackage>[];
+  List<BackendCareSession> careSessions = const <BackendCareSession>[];
+
+  /// Status pembayaran yang dilaporkan `getPaymentStatus`.
+  String paymentStatusValue = 'pending';
+  int bookingCreates = 0;
+  int paymentCreates = 0;
+  int rescheduleCalls = 0;
+  int cancelSessionCalls = 0;
+  int cancelPackageCalls = 0;
+
   /// Bila diisi, semua panggilan melempar error ini (uji tampilan error).
   Object? failWith;
 
@@ -361,5 +385,236 @@ class FakeAdminApi extends MalvaApiClient {
       summary: '',
       sharedWithProfessionalId: professionalId,
     );
+  }
+
+  // ── Katalog profesional, booking, pembayaran ──
+  @override
+  Future<List<BackendDoctorSearchResult>> searchDoctors({
+    String? accessToken,
+    double? patientLat,
+    double? patientLng,
+    String specialization = '',
+    int? maxPrice,
+    double? maxKm,
+    bool? isBpjsSupported,
+    String sortBy = 'name_asc',
+    int limit = 50,
+  }) async {
+    _maybeFail();
+    return doctors;
+  }
+
+  @override
+  Future<BackendDoctorProfile> getDoctorProfile({
+    String? accessToken,
+    required String userId,
+  }) async {
+    _maybeFail();
+    return doctorProfile ??
+        BackendDoctorProfile(
+          credential: const BackendProfessionalCredential(
+            id: 'cred-1',
+            userId: 'pro-1',
+            specialization: 'Sp.KJ',
+            verificationStatus: 'VERIFIED',
+            strNumber: '1234567890123456',
+            sipNumber: '6543210987654321',
+            sippNumber: '',
+            bio: 'Psikiater dengan pengalaman 10 tahun.',
+          ),
+          pricing: professionalPricing,
+        );
+  }
+
+  @override
+  Future<BackendProfessionalPricing> getPricing({
+    required String accessToken,
+    String? professionalId,
+  }) async {
+    _maybeFail();
+    return professionalPricing;
+  }
+
+  @override
+  Future<BackendDoctorReviews> listDoctorReviews({
+    String? accessToken,
+    required String userId,
+  }) async {
+    _maybeFail();
+    return const BackendDoctorReviews();
+  }
+
+  @override
+  Future<List<BackendDoctorSlot>> getDoctorAvailableSlots({
+    String? accessToken,
+    required String userId,
+    required String date,
+  }) async {
+    _maybeFail();
+    return slots;
+  }
+
+  @override
+  Future<BackendBooking> createBooking({
+    required String accessToken,
+    String patientId = '',
+    required String professionalId,
+    String? packageId,
+    String serviceType = 'quick_consult',
+    String sessionType = 'chat',
+    required String bookingDate,
+    String? slotTime,
+    int durationMinutes = 30,
+    required int price,
+  }) async {
+    _maybeFail();
+    bookingCreates++;
+    return BackendBooking(
+      id: 'bk-test',
+      patientId: patientId,
+      professionalId: professionalId,
+      serviceType: serviceType,
+      bookingDate: bookingDate,
+      status: 'pending',
+      price: price,
+    );
+  }
+
+  @override
+  Future<BackendBooking> createPackageSessionBooking({
+    required String accessToken,
+    required String packageId,
+    required String bookingDate,
+    required String slotTime,
+    String sessionType = 'chat',
+  }) async {
+    _maybeFail();
+    bookingCreates++;
+    return BackendBooking(
+      id: 'bk-package',
+      patientId: 'patient-1',
+      professionalId: 'pro-1',
+      serviceType: 'package_session',
+      bookingDate: bookingDate,
+      status: 'pending',
+      price: 0,
+      packageId: packageId,
+    );
+  }
+
+  @override
+  Future<BackendCarePackage> createCarePackage({
+    required String accessToken,
+    required String professionalId,
+  }) async {
+    _maybeFail();
+    return BackendCarePackage(
+      id: 'pkg-test',
+      patientId: 'patient-1',
+      professionalId: professionalId,
+      status: 'pending_payment',
+    );
+  }
+
+  @override
+  Future<BackendPaymentResponse> createPayment({
+    required String accessToken,
+    required String bookingId,
+    String paymentMethod = 'gopay',
+  }) async {
+    _maybeFail();
+    paymentCreates++;
+    return BackendPaymentResponse(
+      payment: BackendPayment(
+        id: 'pay-test',
+        bookingId: bookingId,
+        reference: 'REF-TEST',
+        status: 'pending',
+      ),
+      breakdown: const <String, dynamic>{},
+    );
+  }
+
+  @override
+  Future<BackendPaymentStatus> getPaymentStatus({
+    required String accessToken,
+    required String reference,
+  }) async {
+    _maybeFail();
+    return BackendPaymentStatus(
+      payment: BackendPayment(
+        id: 'pay-test',
+        bookingId: 'bk-test',
+        reference: reference,
+        status: paymentStatusValue,
+      ),
+      sessionId: '',
+    );
+  }
+
+  @override
+  Future<List<BackendCarePackage>> listCarePackages({
+    required String accessToken,
+    String? patientId,
+  }) async {
+    _maybeFail();
+    return carePackages;
+  }
+
+  @override
+  Future<List<BackendCareSession>> listCareSessions({
+    required String accessToken,
+    String scope = 'all',
+    String? patientId,
+  }) async {
+    _maybeFail();
+    return careSessions;
+  }
+
+  @override
+  Future<BackendCareSession> updateCareSession({
+    required String accessToken,
+    required String sessionId,
+    String? status,
+    String? cancelReason,
+    String? meetingUrl,
+    String? summaryForPatient,
+    String? privateNote,
+  }) async {
+    _maybeFail();
+    cancelSessionCalls++;
+    return const BackendCareSession(
+      id: 'session-1',
+      patientId: 'patient-1',
+      professionalId: 'pro-1',
+      status: 'cancelled_by_patient',
+    );
+  }
+
+  @override
+  Future<BackendRescheduleResult> rescheduleCareSession({
+    required String accessToken,
+    required String sessionId,
+    required String scheduledAt,
+  }) async {
+    _maybeFail();
+    rescheduleCalls++;
+    return const BackendRescheduleResult(
+      session: BackendCareSession(
+        id: 'session-1',
+        patientId: 'patient-1',
+        professionalId: 'pro-1',
+        status: 'scheduled',
+      ),
+    );
+  }
+
+  @override
+  Future<void> cancelPendingCarePackage({
+    required String accessToken,
+    required String packageId,
+  }) async {
+    _maybeFail();
+    cancelPackageCalls++;
   }
 }
