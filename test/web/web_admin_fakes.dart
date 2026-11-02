@@ -1,8 +1,10 @@
+import 'package:malva_mental_health/src/assessment_engine.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 
-/// [MalvaApiClient] palsu untuk test dashboard admin web.
+/// [MalvaApiClient] palsu untuk test layar web (admin & asesmen).
 ///
-/// Hanya metode admin yang dipakai layar yang di-override; sisanya memakai
+/// Hanya metode yang dipakai layar yang di-override; sisanya memakai
 /// implementasi asli (tidak pernah dipanggil karena test tidak melakukan HTTP).
 class FakeAdminApi extends MalvaApiClient {
   FakeAdminApi({
@@ -13,6 +15,9 @@ class FakeAdminApi extends MalvaApiClient {
     this.users = const <AdminUser>[],
     this.pendingCredentials = const <BackendProfessionalCredential>[],
     this.doctors = const <BackendDoctorSearchResult>[],
+    this.screenings = const <BackendScreeningSession>[],
+    this.therapySubmissions = const <BackendTherapySubmission>[],
+    this.links = const <BackendPatientProfessionalLink>[],
   }) : super(baseUrl: 'http://test.local');
 
   AdminPaymentPage? page;
@@ -22,6 +27,17 @@ class FakeAdminApi extends MalvaApiClient {
   List<AdminUser> users;
   List<BackendProfessionalCredential> pendingCredentials;
   List<BackendDoctorSearchResult> doctors;
+
+  /// Riwayat asesmen yang dikembalikan server palsu.
+  List<BackendScreeningSession> screenings;
+  List<BackendTherapySubmission> therapySubmissions;
+  List<BackendPatientProfessionalLink> links;
+
+  /// Jumlah panggilan tulis (untuk memastikan UI tidak mengirim saat belum sah).
+  int screeningSubmits = 0;
+  int therapyCreates = 0;
+  int shares = 0;
+  String lastShareProfessionalId = '';
 
   /// Bila diisi, semua panggilan melempar error ini (uji tampilan error).
   Object? failWith;
@@ -260,5 +276,90 @@ class FakeAdminApi extends MalvaApiClient {
   }) async {
     _maybeFail();
     return doctors;
+  }
+
+  // ── Asesmen (screening + therapy submission) ──
+  @override
+  Future<BackendScreeningResult> submitScreening({
+    required String accessToken,
+    required ScreeningBundle bundle,
+    List<int>? phq9Answers,
+    List<int>? gad7Answers,
+    String? patientId,
+  }) async {
+    _maybeFail();
+    screeningSubmits++;
+    return BackendScreeningResult(
+      id: 'scr-test',
+      overallLevel: 'minimal',
+      crisisFlag: false,
+      createdAt: wibNow(),
+    );
+  }
+
+  @override
+  Future<List<BackendScreeningSession>> listScreenings({
+    required String accessToken,
+    required String patientId,
+    int limit = 20,
+  }) async {
+    _maybeFail();
+    return screenings;
+  }
+
+  @override
+  Future<List<BackendTherapySubmission>> listTherapySubmissions({
+    required String accessToken,
+    String? patientId,
+  }) async {
+    _maybeFail();
+    return therapySubmissions;
+  }
+
+  @override
+  Future<BackendTherapySubmission> createTherapySubmission({
+    required String accessToken,
+    required String moduleId,
+    required String title,
+    required Map<String, dynamic> answers,
+    String summary = '',
+  }) async {
+    _maybeFail();
+    therapyCreates++;
+    return BackendTherapySubmission(
+      id: 'sub-test',
+      moduleId: moduleId,
+      title: title,
+      answers: answers,
+      summary: summary,
+      createdAt: '2026-11-02T09:00:00+07:00',
+    );
+  }
+
+  @override
+  Future<List<BackendPatientProfessionalLink>> listPatientProfessionalLinks({
+    required String accessToken,
+  }) async {
+    _maybeFail();
+    return links;
+  }
+
+  @override
+  Future<BackendTherapySubmission> shareTherapySubmission({
+    required String accessToken,
+    required String submissionId,
+    required String professionalId,
+  }) async {
+    _maybeFail();
+    shares++;
+    lastShareProfessionalId = professionalId;
+    return BackendTherapySubmission(
+      id: submissionId,
+      moduleId: 'dass21',
+      title: 'test',
+      answers: const <String, dynamic>{},
+      summary: '',
+      sharedWithProfessionalId: professionalId,
+    );
   }
 }

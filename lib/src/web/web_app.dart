@@ -12,6 +12,7 @@ import 'screens/admin/web_admin_overview_screen.dart';
 import 'screens/admin/web_admin_payments_screen.dart';
 import 'screens/admin/web_admin_pricing_screen.dart';
 import 'screens/admin/web_admin_users_screen.dart';
+import 'screens/assessment/web_assessment_screen.dart';
 import 'screens/web_home_screen.dart';
 import 'screens/web_login_screen.dart';
 import 'screens/web_professional_home_screen.dart';
@@ -202,6 +203,8 @@ class _MalvaWebAppState extends ConsumerState<MalvaWebApp> {
               'booking sesi akan tersedia pada fase berikutnya.',
           onBackToHome: () => navigate(WebRoutes.homeForRole(session.role)),
         );
+      case WebRoutes.assessment:
+        return const WebAssessmentScreen();
       case WebRoutes.admin:
         return WebAdminOverviewScreen(
           displayName: session.displayName,
@@ -227,9 +230,6 @@ class _MalvaWebAppState extends ConsumerState<MalvaWebApp> {
   /// Penjelasan spesifik per halaman placeholder agar pengguna tahu apa yang
   /// akan datang (bukan pesan generik yang sama di semua tempat).
   String _placeholderDescription(String path) => switch (path) {
-        WebRoutes.assessment =>
-          'Asesmen mandiri (PHQ-9, GAD-7, WHO-5, DASS-21) dengan skoring '
-              'otomatis akan tersedia pada fase berikutnya.',
         WebRoutes.therapy =>
           'Modul terapi psikologis terpandu akan tersedia pada fase berikutnya.',
         WebRoutes.schedule =>
