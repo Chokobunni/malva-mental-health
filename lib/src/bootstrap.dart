@@ -45,13 +45,14 @@ class _LoggingObserver extends ProviderObserver {
   }
 }
 
-/// Urutan inisialisasi bersama untuk SEMUA entrypoint (`main.dart` mobile dan
-/// `main_web.dart` web): binding → WIB → Firebase → ProviderScope → MalvaApp.
+/// Inisialisasi runtime bersama untuk SEMUA entrypoint: binding → WIB →
+/// Firebase.
 ///
-/// Perilaku mobile TIDAK berubah dari `2fcfde4`: urutan init identik. Yang
-/// khusus platform (mis. `SystemChrome.setPreferredOrientations`) tetap
-/// dipanggil hanya di entrypoint masing-masing.
-Future<void> runMalvaBootstrap() async {
+/// Dipisahkan dari [runMalvaBootstrap] agar entrypoint web
+/// (`lib/src/web/web_bootstrap.dart`) memakai urutan yang sama tanpa
+/// menduplikasi tiga langkah tersebut. Fungsi ini TIDAK memasang aplikasi
+/// (`runApp`) sehingga entrypoint tetap bebas memilih UI-nya sendiri.
+Future<void> initializeMalvaRuntime() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Semua waktu aplikasi memakai WIB — siapkan zona sebelum UI berjalan.
@@ -60,6 +61,16 @@ Future<void> runMalvaBootstrap() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+}
+
+/// Urutan inisialisasi bersama untuk entrypoint MOBILE (`main.dart`):
+/// runtime bersama → ProviderScope → MalvaApp.
+///
+/// Perilaku mobile TIDAK berubah dari `2fcfde4`: urutan init identik. Yang
+/// khusus platform (mis. `SystemChrome.setPreferredOrientations`) tetap
+/// dipanggil hanya di entrypoint masing-masing.
+Future<void> runMalvaBootstrap() async {
+  await initializeMalvaRuntime();
 
   runApp(
     ProviderScope(
