@@ -13,6 +13,7 @@ import '../../web_format.dart';
 import '../../web_theme.dart';
 import '../../widgets/web_admin_widgets.dart';
 import '../../widgets/web_page_header.dart';
+import '../../widgets/web_share_professional_dialog.dart';
 import 'web_assessment_history_view.dart';
 import 'web_assessment_result_view.dart';
 import 'web_assessment_runner.dart';
@@ -222,9 +223,10 @@ class _WebAssessmentScreenState extends ConsumerState<WebAssessmentScreen> {
                 'Profesional.');
         return;
       }
-      final selected = await showDialog<BackendPatientProfessionalLink>(
-        context: context,
-        builder: (BuildContext dialogContext) => _ShareDialog(links: links),
+      final selected = await showWebShareProfessionalDialog(
+        context,
+        links: links,
+        description: 'Pilih profesional yang boleh melihat hasil asesmen ini.',
       );
       if (selected == null || !mounted) return;
       await api.shareTherapySubmission(
@@ -240,14 +242,9 @@ class _WebAssessmentScreenState extends ConsumerState<WebAssessmentScreen> {
       unawaited(_loadHistory());
     } catch (error) {
       if (!mounted) return;
-      // 403 = belum ada paket sesi aktif (server menolak berbagi). Beri pesan
-      // yang bisa ditindaklanjuti, bukan error mentah.
-      final isForbidden = error is MalvaApiException &&
-          (error.statusCode == 403 || error.statusCode == 402);
-      setState(() => _shareNote = isForbidden
-          ? 'Butuh paket sesi aktif untuk membagikan hasil ke profesional. '
-              'Aktifkan paket lalu coba lagi.'
-          : friendlyErrorMessage(error));
+      // 403/402 = belum ada paket sesi aktif; helper memberi pesan yang bisa
+      // ditindaklanjuti (bukan error mentah).
+      setState(() => _shareNote = webShareErrorMessage(error));
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
@@ -624,83 +621,4 @@ class _InstrumentCard extends StatelessWidget {
         WebAssessmentInstrument.dass21 => MalvaColors.orchid,
         WebAssessmentInstrument.who5 => MalvaColors.mint,
       };
-}
-
-/// Dialog memilih profesional tujuan berbagi hasil.
-class _ShareDialog extends StatefulWidget {
-  const _ShareDialog({required this.links});
-
-  final List<BackendPatientProfessionalLink> links;
-
-  @override
-  State<_ShareDialog> createState() => _ShareDialogState();
-}
-
-class _ShareDialogState extends State<_ShareDialog> {
-  late BackendPatientProfessionalLink _selected = widget.links.first;
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Bagikan hasil',
-          style: TextStyle(fontWeight: FontWeight.w800)),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const Text(
-              'Pilih profesional yang boleh melihat hasil asesmen ini.',
-              style: TextStyle(fontSize: 12.5, height: 1.5),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              key: const Key('web-share-professional'),
-              initialValue: _selected.professionalUserId.isNotEmpty
-                  ? _selected.professionalUserId
-                  : _selected.professionalId,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Profesional'),
-              items: widget.links
-                  .map(
-                    (BackendPatientProfessionalLink link) =>
-                        DropdownMenuItem<String>(
-                      value: link.professionalUserId.isNotEmpty
-                          ? link.professionalUserId
-                          : link.professionalId,
-                      child: Text(link.professionalDisplayName),
-                    ),
-                  )
-                  .toList(growable: false),
-              onChanged: (String? value) {
-                if (value == null) return;
-                setState(() {
-                  _selected = widget.links.firstWhere(
-                    (BackendPatientProfessionalLink link) =>
-                        (link.professionalUserId.isNotEmpty
-                            ? link.professionalUserId
-                            : link.professionalId) ==
-                        value,
-                    orElse: () => widget.links.first,
-                  );
-                });
-              },
-            ),
-          ],
-        ),
-      ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Batal'),
-        ),
-        FilledButton(
-          key: const Key('web-share-confirm'),
-          onPressed: () => Navigator.of(context).pop(_selected),
-          child: const Text('Bagikan'),
-        ),
-      ],
-    );
-  }
 }

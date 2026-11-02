@@ -13,6 +13,7 @@ import 'screens/admin/web_admin_payments_screen.dart';
 import 'screens/admin/web_admin_pricing_screen.dart';
 import 'screens/admin/web_admin_users_screen.dart';
 import 'screens/assessment/web_assessment_screen.dart';
+import 'screens/therapy/web_therapy_hub_screen.dart';
 import 'screens/web_home_screen.dart';
 import 'screens/web_login_screen.dart';
 import 'screens/web_professional_home_screen.dart';
@@ -205,6 +206,8 @@ class _MalvaWebAppState extends ConsumerState<MalvaWebApp> {
         );
       case WebRoutes.assessment:
         return const WebAssessmentScreen();
+      case WebRoutes.therapy:
+        return WebTherapyHubScreen(onNavigate: navigate);
       case WebRoutes.admin:
         return WebAdminOverviewScreen(
           displayName: session.displayName,
@@ -230,8 +233,6 @@ class _MalvaWebAppState extends ConsumerState<MalvaWebApp> {
   /// Penjelasan spesifik per halaman placeholder agar pengguna tahu apa yang
   /// akan datang (bukan pesan generik yang sama di semua tempat).
   String _placeholderDescription(String path) => switch (path) {
-        WebRoutes.therapy =>
-          'Modul terapi psikologis terpandu akan tersedia pada fase berikutnya.',
         WebRoutes.schedule =>
           'Daftar jadwal sesi, tautan Google Meet, dan riwayat konsultasi akan '
               'tersedia pada fase berikutnya.',
