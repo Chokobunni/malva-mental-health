@@ -8,18 +8,23 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
+import '../services/care_session_time.dart';
 import '../services/dashboard_sync_service.dart';
 import '../services/malva_api_client.dart';
+import '../services/meeting_launcher.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/professional_avatar.dart';
 import 'booking/credential_screens.dart';
+import 'chat_screen.dart';
 import 'google_account_screen.dart';
 import 'notifications_screen.dart';
 import 'portal/crisis_incident_log_screen.dart';
 import 'portal/e_prescription_screen.dart';
 import 'portal/earnings_screen.dart';
+import 'portal/professional_assessment_history_screen.dart';
+import 'portal/shared_patient_data_screen.dart';
 import 'pro_patient_detail_screen.dart';
 import 'pro_pricing_screen.dart';
 import 'professional_profile_editor_screen.dart';
@@ -59,6 +64,7 @@ class _ProfessionalDashboardScreenState
   Map<String, List<BackendScreeningSession>> _screeningsByPatient = const {};
   List<_AuditEntry> _serverAuditEntries = const [];
   List<BackendCareSession> _upcomingSessions = const [];
+  List<BackendCareSession> _todaySessions = const [];
   int _crisisLogCount = 0;
   String? _selectedPatientId;
   String _searchQuery = '';
@@ -219,6 +225,16 @@ class _ProfessionalDashboardScreenState
                               ),
                             ),
                           ),
+                        // ---- TAB 0 §0: Sesi berjalan (video & chat) ----
+                        if (_tabIndex == 0)
+                          const SectionLabel('Sesi berjalan',
+                              icon: Icons.play_circle_rounded),
+                        if (_tabIndex == 0)
+                          _OngoingSessionsSection(
+                            sessions: _ongoingSessions,
+                            isLoading: _isLoadingOnlineData,
+                          ),
+                        if (_tabIndex == 0) const SizedBox(height: 22),
                         // ---- TAB 0 §1: Video call mendatang ----
                         if (_tabIndex == 0)
                           const SectionLabel('Video call mendatang',
@@ -407,6 +423,51 @@ class _ProfessionalDashboardScreenState
                             ),
                           ),
                         ],
+                        // ---- TAB 0 §4: Riwayat Asesmen (satu pintu) ----
+                        if (_tabIndex == 0) ...[
+                          const SizedBox(height: 22),
+                          const SectionLabel('Riwayat Asesmen',
+                              icon: Icons.fact_check_rounded),
+                          _PortalDoorCard(
+                            icon: Icons.fact_check_rounded,
+                            color: MalvaColors.seed,
+                            title: 'Riwayat asesmen pasien',
+                            subtitle: '$_totalScreenings asesmen dari '
+                                '$_connectedPatientCount pasien terhubung',
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    ProfessionalAssessmentHistoryScreen(
+                                  session: widget.session,
+                                  apiClient: widget.apiClient,
+                                ),
+                              ),
+                            ).then((_) => _loadOnlineProfessionalData()),
+                          ),
+                        ],
+                        // ---- TAB 0 §5: Data Pasien Dibagikan (satu pintu) ----
+                        if (_tabIndex == 0) ...[
+                          const SizedBox(height: 22),
+                          const SectionLabel('Data Pasien Dibagikan',
+                              icon: Icons.folder_shared_rounded),
+                          _PortalDoorCard(
+                            icon: Icons.folder_shared_rounded,
+                            color: MalvaColors.mint,
+                            title: 'Data pasien dibagikan',
+                            subtitle: 'Mood, diary, obat, health record, goals, '
+                                'terapi • $_connectedPatientCount pasien',
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => SharedPatientDataScreen(
+                                  session: widget.session,
+                                  apiClient: widget.apiClient,
+                                ),
+                              ),
+                            ).then((_) => _loadOnlineProfessionalData()),
+                          ),
+                        ],
                         if (_tabIndex == 2)
                           // Teks label dipertahankan persis "Pasien terhubung"
                           // (dipakai test widget). Jumlah pasien dipindah ke
@@ -508,6 +569,35 @@ class _ProfessionalDashboardScreenState
     return list;
   }
 
+  /// Sesi yang jendela waktunya sedang berjalan sekarang (video maupun chat),
+  /// urut berdasarkan waktu mulai. Memakai helper murni [isCareSessionOngoing]
+  /// agar aturan jendela identik dengan unit test.
+  List<BackendCareSession> get _ongoingSessions {
+    final now = wibNow();
+    final list = _todaySessions.where((s) {
+      final at = parseWibStored(s.scheduledAt);
+      if (at == null) return false;
+      return isCareSessionOngoing(now, at, s.durationMinutes);
+    }).toList();
+    list.sort((a, b) {
+      final at = parseWibStored(a.scheduledAt);
+      final bt = parseWibStored(b.scheduledAt);
+      if (at == null && bt == null) return 0;
+      if (at == null) return 1;
+      if (bt == null) return -1;
+      return at.compareTo(bt);
+    });
+    return list;
+  }
+
+  /// Total asesmen (screening) dari seluruh pasien terhubung — untuk subtitle
+  /// kartu "Riwayat Asesmen".
+  int get _totalScreenings =>
+      _screeningsByPatient.values.fold<int>(0, (sum, list) => sum + list.length);
+
+  /// Jumlah pasien terhubung (link aktif).
+  int get _connectedPatientCount => _links.length;
+
   Future<void> _loadOnlineProfessionalData() async {
     final apiClient = widget.apiClient;
     final accessToken = widget.session?.accessToken;
@@ -604,9 +694,14 @@ class _ProfessionalDashboardScreenState
           ),
         );
       }
-      // Sesi video mendatang + ringkasan Crisis Incident Log (satu permintaan).
+      // Sesi video mendatang + sesi hari ini (untuk "Sesi berjalan") +
+      // ringkasan Crisis Incident Log (satu permintaan masing-masing).
       final upcomingSessions = await safely(() => apiClient.listCareSessions(
           accessToken: accessToken, scope: 'upcoming'));
+      // `scope=today` mengembalikan sesi terjadwal hari ini dari server;
+      // kita saring lagi di klien lewat jendela waktu murni (isCareSessionOngoing).
+      final todaySessions = await safely(() => apiClient.listCareSessions(
+          accessToken: accessToken, scope: 'today'));
       final crisisLog = await safely(() =>
           apiClient.getCrisisIncidentLog(accessToken: accessToken, limit: 1));
       if (!mounted) return;
@@ -618,6 +713,7 @@ class _ProfessionalDashboardScreenState
           ..clear()
           ..addAll(notesByPatient);
         _upcomingSessions = upcomingSessions ?? const <BackendCareSession>[];
+        _todaySessions = todaySessions ?? const <BackendCareSession>[];
         _crisisLogCount = crisisLog?.unresolved ?? 0;
         _screeningNotShared
           ..clear()
@@ -1859,5 +1955,235 @@ class _UpcomingVideoCallSection extends StatelessWidget {
     final uri = Uri.tryParse(url);
     if (uri == null) return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+}
+
+/// Tombol Outlined ringkas untuk dipakai di dalam `Row` (theme global memakai
+/// minimumSize tak-hingga sehingga tanpa style ini tombol melahap seluruh lebar).
+final ButtonStyle _compactOutlinedButtonStyle = OutlinedButton.styleFrom(
+  minimumSize: Size.zero,
+  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+);
+
+/// Kartu "satu pintu" generik untuk dashboard profesional: satu tombol besar
+/// yang membuka layar lain. Meniru pola visual kartu Crisis Incident Log
+/// (ikon berwarna + judul + subjudul + chevron).
+class _PortalDoorCard extends StatelessWidget {
+  const _PortalDoorCard({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      bordered: true,
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: color.withValues(alpha: 0.12),
+            child: Icon(icon, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(fontWeight: FontWeight.w900)),
+                Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right_rounded),
+        ],
+      ),
+    );
+  }
+}
+
+/// Section "Sesi berjalan" untuk tab Dashboard: sesi (video/chat) yang jendela
+/// waktunya sedang aktif sekarang. Bila tidak ada, tampil empty state ringkas.
+class _OngoingSessionsSection extends StatelessWidget {
+  const _OngoingSessionsSection({
+    required this.sessions,
+    required this.isLoading,
+  });
+
+  final List<BackendCareSession> sessions;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (sessions.isEmpty) {
+      return const SoftCard(
+        bordered: true,
+        child: Row(
+          children: [
+            Icon(Icons.play_circle_outline_rounded, color: Colors.black38),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Tidak ada sesi berjalan saat ini.',
+                style: TextStyle(
+                    color: Colors.black54, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Column(
+      children: [
+        for (final s in sessions) ...[
+          _OngoingSessionCard(session: s),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _OngoingSessionCard extends StatelessWidget {
+  const _OngoingSessionCard({required this.session});
+
+  final BackendCareSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    final isVideo = session.sessionType == 'video';
+    final patientName =
+        session.patientName.isEmpty ? 'Pasien' : session.patientName;
+    final timeRange = _timeRangeLabel(session);
+    final badgeColor = isVideo ? MalvaColors.seed : MalvaColors.mint;
+    return SoftCard(
+      bordered: true,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              InitialAvatar(
+                name: patientName,
+                radius: 18,
+                color: MalvaColors.seed,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(patientName,
+                        style: const TextStyle(fontWeight: FontWeight.w900)),
+                    Text(
+                      timeRange,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              StatusPill(
+                label: isVideo ? 'Video' : 'Chat',
+                color: badgeColor,
+                icon: isVideo
+                    ? Icons.videocam_rounded
+                    : Icons.chat_bubble_rounded,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const StatusPill(
+                label: 'Berlangsung',
+                color: MalvaColors.mint,
+                icon: Icons.sensors_rounded,
+              ),
+              const Spacer(),
+              if (isVideo) ...[
+                if (session.meetingUrl.trim().isNotEmpty)
+                  FilledButton.icon(
+                    onPressed: () => _joinVideo(context),
+                    icon: const Icon(Icons.videocam_rounded, size: 18),
+                    label: const Text('Gabung'),
+                    style: compactFilledButtonStyle,
+                  ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _openChat(context, patientName),
+                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                  label: const Text('Chat'),
+                  style: _compactOutlinedButtonStyle,
+                ),
+              ] else
+                FilledButton.icon(
+                  onPressed: () => _openChat(context, patientName),
+                  icon: const Icon(Icons.chat_bubble_rounded, size: 18),
+                  label: const Text('Buka chat'),
+                  style: compactFilledButtonStyle,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Label rentang waktu `HH:mm–HH:mm WIB` dari jadwal + durasi sesi.
+  String _timeRangeLabel(BackendCareSession s) {
+    final start = parseWibStored(s.scheduledAt);
+    if (start == null) return '';
+    final end = start.add(Duration(minutes: s.durationMinutes));
+    return '${formatWibBubbleTime(start)}–${formatWibBubbleTime(end)} WIB';
+  }
+
+  Future<void> _joinVideo(BuildContext context) async {
+    final result = await openMeetLink(session.meetingUrl);
+    if (result == MeetLaunchResult.failed) {
+      await copyMeetLink(session.meetingUrl);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tautan Meet disalin. Tempel di aplikasi Meet untuk '
+              'bergabung.'),
+        ),
+      );
+    }
+  }
+
+  void _openChat(BuildContext context, String patientName) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          otherUserName: patientName,
+          otherUserId: session.patientId,
+        ),
+      ),
+    );
   }
 }
