@@ -746,6 +746,8 @@ echo "OK: isolasi platform bersih."
 
 **Kondisi akhir setelah T03 (terverifikasi):** `dart:io` di kode bersama = **0**, allowlist `dart:io` kosong. Masih tersisa **9 pengecualian `--strict`** yang semuanya berupa impor plugin di luar lapisan platform (`geolocator`, `file_picker`, `share_plus`, `google_sign_in`, `flutter_local_notifications`, `firebase_messaging`). Semuanya berjalan di web, tetapi belum terisolasi penuh — utang teknis yang diketahui, kandidat perapian setelah T05, **bukan** penghalang rilis.
 
+**Skrip ini dijalankan di CI sejak sekarang:** `flutter-ci.yml` job `analyze` memanggil `bash scripts/check_platform_isolation.sh` **tanpa `--strict`** tepat setelah gate WIB. Tanpa `--strict` ia `exit 0` dengan pengecualian yang sudah tercatat, dan hanya gagal bila muncul pelanggaran **baru** — sehingga penambahan pengecualian tidak bisa lolos diam-diam. Angka `9 hit` di atas adalah hasil `bash scripts/check_platform_isolation.sh` pada `HEAD` (hanya memindai `lib/`); menghitungnya dengan `grep` manual atas `lib` **dan** `test` akan menghasilkan angka berbeda karena skrip tidak pernah memindai `test/`.
+
 ### 6.3 Gate runtime: smoke test yang benar-benar merender
 
 Build hijau tidak cukup. Dua lapis:

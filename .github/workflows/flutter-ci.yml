@@ -41,6 +41,11 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed .
       # Gate WIB-only: larang .toLocal()/DateTime.now()/.toUtc() di luar wib.dart.
       - run: bash scripts/check_wib_dart.sh
+      # Gate isolasi platform: `dart:io`/`kIsWeb`/plugin native tidak boleh
+      # menyentuh kode bersama. WAJIB ada di CI — `flutter build web` TIDAK
+      # menangkap `dart:io` (lolos kompilasi, gagal saat runtime), jadi build
+      # hijau bukan bukti web sehat.
+      - run: bash scripts/check_platform_isolation.sh
 
   test:
     name: Unit Tests
@@ -118,7 +123,7 @@ jobs:
           channel: 'stable'
           cache: true
       - run: flutter pub get
-      - run: flutter build web --release
+      - run: flutter build web --release --target=lib/main_web.dart
       - uses: actions/upload-artifact@v4
         with:
           name: web-build

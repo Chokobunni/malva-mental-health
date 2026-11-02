@@ -278,8 +278,10 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
 class _ExportSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Di web (canExportFiles == false) ekspor belum tersedia. Tampilkan
-    // CATATAN jujur — bukan 5 tombol yang melempar error saat diklik.
+    // canExportFiles bernilai false hanya di platform tanpa pengekspor
+    // (saat ini: tidak ada — web memakai Blob + <a download>, mobile memakai
+    // share sheet). Jaga tetap ada sebagai jaring bila target baru ditambah:
+    // tampilkan CATATAN jujur, bukan tombol yang melempar error saat diklik.
     final canExport = ref.watch(capabilitiesProvider).canExportFiles;
     if (!canExport) {
       return SoftCard(
