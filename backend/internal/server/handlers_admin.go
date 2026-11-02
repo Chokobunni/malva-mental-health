@@ -22,8 +22,17 @@ func (s *Server) requireAdmin(next authedHandler) http.HandlerFunc {
 	})
 }
 
+// listAdminUsers mengembalikan daftar pengguna untuk panel admin, dengan
+// filter opsional q (nama/email), role, status, dan limit. Bentuk respons
+// tetap {"users":[...]} agar klien lama tidak rusak.
 func (s *Server) listAdminUsers(w http.ResponseWriter, r *http.Request, _ auth.Claims) {
-	users, err := s.store.ListUsers(r.Context(), 200)
+	q := r.URL.Query()
+	users, err := s.store.ListAdminUsersFiltered(r.Context(), store.AdminUserFilter{
+		Query:  trimMax(q.Get("q"), 100),
+		Role:   strings.TrimSpace(q.Get("role")),
+		Status: strings.TrimSpace(q.Get("status")),
+		Limit:  queryInt(q.Get("limit"), 200, 1, 500),
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -79,6 +88,21 @@ func (s *Server) updateAdminUser(w http.ResponseWriter, r *http.Request, claims 
 		}
 		writeError(w, http.StatusBadRequest, err)
 		return
+	}
+	// Ban harus benar-benar mengeluarkan pengguna: cabut semua sesi aktif saat
+	// akun dinonaktifkan (atau saat diaktifkan kembali, tidak ada sesi tersisa
+	// yang bocor). Diaudit agar terlihat di riwayat admin.
+	if req.Disabled != nil {
+		revoked, rerr := s.store.RevokeAllSessionsForUser(r.Context(), userID)
+		if rerr != nil && s.logger != nil {
+			s.logger.Warn("gagal mencabut sesi setelah ubah status akun", "user", userID, "error", rerr)
+		}
+		action := "admin.user.enabled"
+		if *req.Disabled {
+			action = "admin.user.disabled"
+		}
+		s.auditAdminAction(r, claims.Subject, action, "users", userID,
+			map[string]any{"disabled": *req.Disabled, "revoked_sessions": revoked})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"user": updated})
 }

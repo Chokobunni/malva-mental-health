@@ -5,7 +5,7 @@
 > Regenerasi: `cd backend && go run ./cmd/apidoc`
 > Verifikasi sinkron: `cd backend && go run ./cmd/apidoc -check`
 
-Total endpoint API: **131** (+1 penyajian berkas statis `GET /uploads/`).
+Total endpoint API: **140** (+1 penyajian berkas statis `GET /uploads/`).
 
 ## Ringkasan per Tag
 
@@ -59,7 +59,7 @@ Total endpoint API: **131** (+1 penyajian berkas statis `GET /uploads/`).
 | goals | 4 |
 | habit-logs | 2 |
 | therapy-submissions | 5 |
-| admin | 9 |
+| admin | 18 |
 
 ## `system`
 
@@ -437,4 +437,13 @@ Total endpoint API: **131** (+1 penyajian berkas statis `GET /uploads/`).
 | GET | `/v1/admin/doctors` | listAdminDoctors | bearer (admin) | 371 |
 | GET | `/v1/admin/doctors/{user_id}` | getAdminDoctor | bearer (admin) | 372 |
 | PUT | `/v1/admin/doctors/{user_id}` | updateAdminDoctor | bearer (admin) | 373 |
+| GET | `/v1/admin/overview` | adminOverview | bearer (admin) | 378 |
+| GET | `/v1/admin/payments` | listAdminPayments | bearer (admin) | 379 |
+| GET | `/v1/admin/payments/{payment_id}` | getAdminPayment | bearer (admin) | 380 |
+| POST | `/v1/admin/payments/{payment_id}/override` | overrideAdminPayment | bearer (admin) | 381 |
+| GET | `/v1/admin/pricing` | listAdminPricing | bearer (admin) | 382 |
+| PUT | `/v1/admin/pricing/{professional_id}` | updateAdminPricing | bearer (admin) | 383 |
+| GET | `/v1/admin/refunds` | listAdminRefunds | bearer (admin) | 384 |
+| POST | `/v1/admin/users/{user_id}/reset-password` | resetAdminUserPassword | bearer (admin) | 385 |
+| POST | `/v1/admin/users/{user_id}/revoke-sessions` | revokeAdminUserSessions | bearer (admin) | 386 |
 

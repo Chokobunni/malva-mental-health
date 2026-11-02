@@ -556,6 +556,19 @@ var requestBodies = map[string][]bodyField{
 		{"transaction_id", "string", "", false},
 		{"payment_type", "string", "", false},
 	},
+	// Konsol admin (dashboard Flutter web).
+	"POST /v1/admin/payments/{payment_id}/override": {
+		{"status", "string", "", true},
+		{"reason", "string", "", true},
+	},
+	"PUT /v1/admin/pricing/{professional_id}": {
+		{"quick_chat_price", "integer", "", false},
+		{"quick_video_price", "integer", "", false},
+		{"package_price", "integer", "", false},
+	},
+	"POST /v1/admin/users/{user_id}/reset-password": {
+		{"new_password", "string", "", true},
+	},
 }
 
 // writeRequestBody menulis blok requestBody untuk endpoint yang ada di overlay.

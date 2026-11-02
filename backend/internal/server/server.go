@@ -371,6 +371,19 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/admin/doctors", s.requireAdmin(s.listAdminDoctors))
 	mux.HandleFunc("GET /v1/admin/doctors/{user_id}", s.requireAdmin(s.getAdminDoctor))
 	mux.HandleFunc("PUT /v1/admin/doctors/{user_id}", s.requireAdmin(s.updateAdminDoctor))
+	// Konsol admin (dashboard Flutter web): ringkasan beranda, verifikasi/override
+	// pembayaran saat webhook Midtrans telat/galat, riwayat & refund transaksi,
+	// pengaturan harga/paket tanpa rilis aplikasi, serta pengelolaan akun
+	// (ban/unban, reset password, cabut sesi). Semua khusus role admin.
+	mux.HandleFunc("GET /v1/admin/overview", s.requireAdmin(s.adminOverview))
+	mux.HandleFunc("GET /v1/admin/payments", s.requireAdmin(s.listAdminPayments))
+	mux.HandleFunc("GET /v1/admin/payments/{payment_id}", s.requireAdmin(s.getAdminPayment))
+	mux.HandleFunc("POST /v1/admin/payments/{payment_id}/override", s.requireAdmin(s.overrideAdminPayment))
+	mux.HandleFunc("GET /v1/admin/pricing", s.requireAdmin(s.listAdminPricing))
+	mux.HandleFunc("PUT /v1/admin/pricing/{professional_id}", s.requireAdmin(s.updateAdminPricing))
+	mux.HandleFunc("GET /v1/admin/refunds", s.requireAdmin(s.listAdminRefunds))
+	mux.HandleFunc("POST /v1/admin/users/{user_id}/reset-password", s.requireAdmin(s.resetAdminUserPassword))
+	mux.HandleFunc("POST /v1/admin/users/{user_id}/revoke-sessions", s.requireAdmin(s.revokeAdminUserSessions))
 	return s.requestID(s.recover(s.securityHeaders(s.inputSanitize(s.cors(mux)))))
 }
 
