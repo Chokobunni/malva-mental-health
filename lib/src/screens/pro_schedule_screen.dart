@@ -307,7 +307,12 @@ class _ProSessionCard extends ConsumerWidget {
               label: const Text('Buka detail pasien'),
             ),
           ],
-          if (!past && live) ...[
+          // Aksi gabung/chat tampil selama sesi "live" (scheduled ATAU
+          // completed yang masih di dalam jendela waktu) — TERMASUK saat kartu
+          // berada di daftar "Riwayat sesi" (past: true). Tanpa ini, sesi yang
+          // sudah ditandai "Hadir" (completed) tetap kehilangan tombol Join/Chat
+          // setelah reload — persis bug yang dilaporkan pengguna.
+          if (live) ...[
             const SizedBox(height: 10),
             // Penanda sesi yang sudah ditandai hadir tetapi jendela waktunya
             // masih terbuka (chat/Meet tetap boleh dipakai sampai jendela

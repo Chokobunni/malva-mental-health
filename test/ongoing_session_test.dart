@@ -6,8 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:malva_mental_health/src/models.dart';
-import 'package:malva_mental_health/src/providers/auth_providers.dart';
+import 'package:malva_mental_health/src/providers/providers.dart';
 import 'package:malva_mental_health/src/screens/my_care_screen.dart';
+import 'package:malva_mental_health/src/screens/pro_schedule_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
@@ -29,6 +30,14 @@ const _patientSession = AuthSession(
   identifier: 'pasien@malva.app',
   displayName: 'Pasien',
   backendUserId: 'user_pasien_1',
+  accessToken: 'token_test',
+);
+
+const _proSession = AuthSession(
+  role: UserRole.professional,
+  identifier: 'prof@malva.app',
+  displayName: 'dr. Profesional',
+  backendUserId: 'user_pro_1',
   accessToken: 'token_test',
 );
 
@@ -96,6 +105,30 @@ Future<void> _openTab(WidgetTester tester, String tab) async {
   await tester.pumpAndSettle();
 }
 
+/// Klien palsu untuk layar Jadwal profesional. Sesi `past` dikembalikan lewat
+/// scope `past` (yang di layar masuk ke daftar "Riwayat sesi", `past: true`).
+MalvaApiClient _proScheduleApi(List<Map<String, dynamic>> past) {
+  return MalvaApiClient(
+    baseUrl: 'http://backend.test',
+    httpClient: _FakeClient((request) async {
+      final path = request.url.path;
+      final scope = request.url.queryParameters['scope'] ?? '';
+      switch (path) {
+        case '/v1/care-sessions':
+          if (scope == 'past') return _json({'sessions': past});
+          return _json({'sessions': <dynamic>[]});
+        case '/v1/professional/schedules':
+          return _json({'schedules': <dynamic>[]});
+        case '/v1/pricing':
+          return _json({'pricing': <String, dynamic>{}});
+        case '/v1/professional/time-off':
+          return _json({'time_off': <dynamic>[]});
+      }
+      return _json({'error': 'unexpected $path'}, status: 404);
+    }),
+  );
+}
+
 void main() {
   setUpAll(initializeWib);
 
@@ -157,6 +190,60 @@ void main() {
     expect(find.text('dr. Lewat'), findsOneWidget);
     expect(find.text('Join'), findsNothing,
         reason: 'jendela sudah tutup; tombol Join tidak boleh muncul');
+  });
+
+  // ------------------------------------------------------------------
+  // REGRESI: sesi completed yang tampil di daftar "Riwayat sesi" (past: true)
+  // tetap harus menampilkan aksi "Join / Chat" selama masih di jendela waktu.
+  //
+  // Sebelum perbaikan, kartu memakai `if (!past && live)` sehingga sesi yang
+  // sudah ditandai "Hadir" (completed) — yang setelah reload masuk daftar past
+  // — kehilangan tombol Join/Chat. Test ini gagal sebelum `if (live)`.
+  // ------------------------------------------------------------------
+  testWidgets('kartu Jadwal profesional: sesi past yang masih berjalan tetap '
+      'menampilkan "Join / Chat"', (tester) async {
+    final now = wibNow();
+    final pastSession = _sessionJson(
+      id: 's_past_live',
+      status: 'completed',
+      professionalName: 'dr. Hadir',
+      // 5 menit lalu, durasi 30 -> masih di jendela (s/d +55m).
+      scheduledAt: _isoWib(now.subtract(const Duration(minutes: 5))),
+    );
+    final api = _proScheduleApi([pastSession]);
+
+    final container = ProviderContainer(
+      overrides: [apiClientProvider.overrideWithValue(api)],
+    );
+    addTearDown(container.dispose);
+    container.read(malvaStoreProvider.notifier).applySession(_proSession);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildMalvaTheme(),
+          home: Scaffold(
+            body: ProScheduleScreen(session: _proSession, apiClient: api),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Aksi ada di section "Riwayat sesi" (bawah lipatan) — gulir dulu.
+    await tester.scrollUntilVisible(
+      find.text('Join / Chat'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.text('Join / Chat'), findsOneWidget,
+        reason: 'sesi past (completed) yang masih di jendela harus tetap '
+            'punya tombol Join / Chat');
+    // Hadir/Tidak hadir TIDAK ditawarkan ulang untuk sesi completed.
+    expect(find.text('Hadir'), findsNothing);
+    expect(find.text('Tidak hadir'), findsNothing);
   });
 }
 
