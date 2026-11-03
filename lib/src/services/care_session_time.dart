@@ -11,9 +11,10 @@ library;
 /// `BackendCareSession.joinOpensBefore`.
 const Duration careSessionJoinOpensBefore = Duration(minutes: 10);
 
-/// Jendela ditutup 30 menit setelah sesi berakhir — konsisten dengan
-/// `BackendCareSession.joinClosesAfterEnd`, memberi kelonggaran bila sesi molor.
-const Duration careSessionJoinClosesAfterEnd = Duration(minutes: 30);
+/// Jendela ditutup TEPAT saat durasi sesi berakhir — tanpa kelonggaran tambahan.
+/// Chat/Meet harus tertutup begitu waktu sesi habis. Konsisten dengan
+/// `BackendCareSession.joinClosesAfterEnd` dan backend `inSessionWindow`.
+const Duration careSessionJoinClosesAfterEnd = Duration.zero;
 
 /// `true` bila [now] berada di dalam jendela "sesi berjalan" untuk sesi yang
 /// dijadwalkan pada [scheduledAt] dengan durasi [durationMinutes].
@@ -22,7 +23,7 @@ const Duration careSessionJoinClosesAfterEnd = Duration(minutes: 30);
 /// tepat pada detik pembukaan/penutupan):
 ///
 /// ```
-/// scheduledAt - 10 menit  <=  now  <=  scheduledAt + durationMinutes + 30 menit
+/// scheduledAt - 10 menit  <=  now  <=  scheduledAt + durationMinutes
 /// ```
 ///
 /// [durationMinutes] negatif diperlakukan sebagai 0 agar input tak wajar tidak

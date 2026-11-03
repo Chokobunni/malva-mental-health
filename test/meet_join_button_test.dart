@@ -9,8 +9,7 @@ import 'package:malva_mental_health/src/time/wib.dart';
 // `lib/src/services/malva_api_client.dart`):
 //   - pintu masuk ruang tunggu dibuka `joinOpensBefore` (10 menit) sebelum
 //     jadwal,
-//   - ditutup `joinClosesAfterEnd` (30 menit) setelah sesi berakhir
-//     (durasi + 30 menit),
+//   - ditutup TEPAT saat durasi sesi berakhir (`joinClosesAfterEnd` = 0),
 //   - perbandingan memakai `wibNow()`, jadi TIDAK boleh bergantung zona
 //     perangkat pengguna.
 //
@@ -101,7 +100,7 @@ void main() {
       durationMinutes: 30,
     );
 
-    // Berakhir 3 jam lalu; toleransi 30 menit -> jendela tutup 2 jam lalu.
+    // Berakhir 3 jam lalu; jendela tutup tepat saat durasi habis (2j30m lalu).
     expect(session.canJoinNow, isFalse);
     expect(session.isAfterJoinWindow, isTrue);
     expect(session.isBeforeJoinWindow, isFalse);

@@ -4668,9 +4668,9 @@ class BackendCareSession {
   /// Pintu masuk ruang tunggu dibuka 10 menit sebelum jadwal.
   static const Duration joinOpensBefore = Duration(minutes: 10);
 
-  /// Jendela bergabung ditutup 30 menit setelah sesi berakhir, memberi
-  /// kelonggaran bila sesi molor.
-  static const Duration joinClosesAfterEnd = Duration(minutes: 30);
+  /// Jendela bergabung ditutup TEPAT saat durasi sesi berakhir (tanpa
+  /// kelonggaran tambahan) — chat/Meet tertutup begitu waktu sesi habis.
+  static const Duration joinClosesAfterEnd = Duration.zero;
 
   DateTime? get _joinOpensAt => scheduledDateTime?.subtract(joinOpensBefore);
 

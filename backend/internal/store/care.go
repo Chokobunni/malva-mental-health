@@ -579,11 +579,11 @@ func (s *Store) ListCareSessions(ctx context.Context, userID, role, scope, patie
 		// Sesi yang sedang berjalan: status scheduled ATAU completed (profesional
 		// sudah menekan "Hadir" sehingga sesi jadi completed, tetapi jendela waktu
 		// chat/Meet masih terbuka). Jendela sama dengan inSessionWindow:
-		// mulai 10 menit sebelum jadwal s/d durasi + 30 menit.
+		// mulai 10 menit sebelum jadwal s/d TEPAT durasi sesi berakhir.
 		where = append(where,
 			"cs.status IN ('scheduled','completed')",
 			"cs.scheduled_at - interval '10 minutes' <= now()",
-			"cs.scheduled_at + ((cs.duration_minutes + 30) || ' minutes')::interval >= now()")
+			"cs.scheduled_at + (cs.duration_minutes || ' minutes')::interval >= now()")
 	case "today":
 		where = append(where, `(cs.scheduled_at AT TIME ZONE 'Asia/Jakarta')::date = (now() AT TIME ZONE 'Asia/Jakarta')::date
 			AND cs.status = 'scheduled'`)
@@ -1061,14 +1061,15 @@ type ChatAccess struct {
 	ActivePackage bool       `json:"has_active_package"`
 }
 
-// sessionWindow sesi dianggap "berjalan" dari 10 menit sebelum mulai
-// sampai durasi + 30 menit setelah mulai (toleransi keterlambatan).
+// sessionWindow sesi dianggap "berjalan" dari 10 menit sebelum mulai sampai
+// TEPAT durasi sesi berakhir (start + duration_minutes) — tanpa kelonggaran
+// tambahan, karena chat/Meet harus tertutup begitu waktu sesi habis.
 func inSessionWindow(now, start time.Time, durationMinutes int) bool {
 	if durationMinutes <= 0 {
 		durationMinutes = 30
 	}
 	return !now.Before(start.Add(-10*time.Minute)) &&
-		!now.After(start.Add(time.Duration(durationMinutes+30)*time.Minute))
+		!now.After(start.Add(time.Duration(durationMinutes)*time.Minute))
 }
 
 func (s *Store) ChatAccessFor(ctx context.Context, patientID, professionalID, senderRole string) (ChatAccess, error) {

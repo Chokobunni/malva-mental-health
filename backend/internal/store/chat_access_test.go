@@ -63,7 +63,7 @@ func TestChatAccessReason(t *testing.T) {
 
 func TestInSessionWindow(t *testing.T) {
 	start := time.Date(2026, 7, 10, 14, 0, 0, 0, locationWIB)
-	const duration = 30 // menit -> jendela: start-10m s/d start+60m
+	const duration = 30 // menit -> jendela: start-10m s/d start+30m (tepat durasi)
 
 	cases := []struct {
 		name string
@@ -74,8 +74,9 @@ func TestInSessionWindow(t *testing.T) {
 		{"1 detik sebelum batas bawah", start.Add(-10*time.Minute - time.Second), false},
 		{"tepat saat mulai", start, true},
 		{"di tengah sesi", start.Add(15 * time.Minute), true},
-		{"tepat batas atas (durasi+30 menit)", start.Add(time.Duration(duration+30) * time.Minute), true},
-		{"1 detik setelah batas atas", start.Add(time.Duration(duration+30)*time.Minute + time.Second), false},
+		{"tepat batas atas (durasi sesi berakhir)", start.Add(time.Duration(duration) * time.Minute), true},
+		{"1 detik setelah durasi habis", start.Add(time.Duration(duration)*time.Minute + time.Second), false},
+		{"1 menit setelah durasi habis", start.Add(time.Duration(duration+1) * time.Minute), false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
