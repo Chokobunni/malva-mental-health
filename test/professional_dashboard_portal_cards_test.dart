@@ -111,7 +111,9 @@ MalvaApiClient _api() {
         case '/v1/audit-logs':
           return _json({'audit_logs': <dynamic>[]});
         case '/v1/care-sessions':
-          if (scope == 'today') {
+          // Dashboard memakai scope "ongoing" untuk section "Sesi berjalan"
+          // (mencakup scheduled/completed yang masih di dalam jendela waktu).
+          if (scope == 'ongoing') {
             return _json({
               'sessions': [_careSession('patient_ami', 'Ami')],
             });

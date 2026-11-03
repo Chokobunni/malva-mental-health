@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
+import '../services/care_session_time.dart';
 import '../services/malva_api_client.dart';
 import '../services/meeting_launcher.dart';
 import '../theme.dart';
@@ -830,6 +831,12 @@ class _SessionCard extends StatelessWidget {
       'cancelled_by_patient' => 'Dibatalkan',
       _ => session.status,
     };
+    // "Sesi berjalan": scheduled, ATAU completed yang masih di dalam jendela
+    // waktu (profesional sudah menekan "Hadir" tetapi jendela chat/Meet belum
+    // tutup). Tombol Gabung/Chat tetap tampil sampai jendela habis.
+    final live = session.isScheduled ||
+        (at != null &&
+            isCareSessionOngoing(wibNow(), at, session.durationMinutes));
     return SoftCard(
       bordered: true,
       child: Column(
@@ -884,7 +891,7 @@ class _SessionCard extends StatelessWidget {
                   ?.copyWith(fontWeight: FontWeight.w600),
             ),
           ],
-          if (session.isScheduled) ...[
+          if (live) ...[
             const SizedBox(height: 10),
             Row(
               children: [

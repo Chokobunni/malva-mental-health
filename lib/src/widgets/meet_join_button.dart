@@ -199,7 +199,13 @@ class _MeetJoinButtonState extends ConsumerState<MeetJoinButton> {
   Widget build(BuildContext context) {
     final session = widget.session;
     if (!session.isVideo) return const SizedBox.shrink();
-    if (!session.isScheduled) return const SizedBox.shrink();
+    // Sesi `completed` yang masih di dalam jendela waktu (profesional menekan
+    // "Hadir" / Meet berakhir lebih awal) tetap boleh bergabung lagi sampai
+    // jendela tutup — selama link Meet sudah ada. Tanpa link, jangan tawarkan
+    // membuat link baru untuk sesi yang sudah selesai.
+    final live = session.isScheduled ||
+        (session.status == 'completed' && session.canJoinNow && _hasLink);
+    if (!live) return const SizedBox.shrink();
 
     final children = <Widget>[
       if (_error != null) ...[

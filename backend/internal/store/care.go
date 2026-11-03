@@ -549,7 +549,7 @@ func (s *Store) GetCareSessionByBookingID(ctx context.Context, bookingID string)
 	return scanCareSession(s.db.QueryRowContext(ctx, q, bookingID))
 }
 
-// ListCareSessions scope: upcoming | today | past | all, untuk pasien / profesional.
+// ListCareSessions scope: upcoming | ongoing | today | past | all, untuk pasien / profesional.
 func (s *Store) ListCareSessions(ctx context.Context, userID, role, scope, patientID string, limit int) ([]CareSession, error) {
 	limit = normalizeLimit(limit, 50, 200)
 	var where []string
@@ -575,6 +575,15 @@ func (s *Store) ListCareSessions(ctx context.Context, userID, role, scope, patie
 	switch strings.ToLower(strings.TrimSpace(scope)) {
 	case "upcoming":
 		where = append(where, "cs.status = 'scheduled' AND cs.scheduled_at >= now()")
+	case "ongoing":
+		// Sesi yang sedang berjalan: status scheduled ATAU completed (profesional
+		// sudah menekan "Hadir" sehingga sesi jadi completed, tetapi jendela waktu
+		// chat/Meet masih terbuka). Jendela sama dengan inSessionWindow:
+		// mulai 10 menit sebelum jadwal s/d durasi + 30 menit.
+		where = append(where,
+			"cs.status IN ('scheduled','completed')",
+			"cs.scheduled_at - interval '10 minutes' <= now()",
+			"cs.scheduled_at + ((cs.duration_minutes + 30) || ' minutes')::interval >= now()")
 	case "today":
 		where = append(where, `(cs.scheduled_at AT TIME ZONE 'Asia/Jakarta')::date = (now() AT TIME ZONE 'Asia/Jakarta')::date
 			AND cs.status = 'scheduled'`)
@@ -582,7 +591,7 @@ func (s *Store) ListCareSessions(ctx context.Context, userID, role, scope, patie
 		where = append(where, "cs.status IN ('completed','no_show','cancelled_by_professional','cancelled_by_patient')")
 	case "", "all":
 	default:
-		return nil, errors.New("scope harus upcoming, today, past, atau all")
+		return nil, errors.New("scope harus upcoming, ongoing, today, past, atau all")
 	}
 	q := `SELECT ` + careSessionColumns + `
 		FROM care_sessions cs

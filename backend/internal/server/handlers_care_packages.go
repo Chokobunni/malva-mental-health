@@ -338,6 +338,9 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 }
 
 func (s *Server) listCareSessions(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	// scope: upcoming | ongoing | today | past | all (diteruskan apa adanya ke
+	// store; store yang memvalidasi). "ongoing" = sesi scheduled/completed yang
+	// masih di dalam jendela waktu chat/Meet.
 	scope := r.URL.Query().Get("scope")
 	if scope == "" {
 		scope = "all"

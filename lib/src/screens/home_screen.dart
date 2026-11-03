@@ -12,6 +12,7 @@ import '../theme.dart';
 import '../widgets/crisis_hotline.dart';
 import '../widgets/daily_checkin_flow.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/meet_join_button.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/professional_avatar.dart';
 import '../widgets/sync_status.dart';
@@ -68,6 +69,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isInitialLoading = true;
   BackendCareSession? _upcomingSession;
 
+  /// Sesi yang SEDANG BERJALAN (scheduled ATAU completed yang masih di dalam
+  /// jendela waktu) — ditampilkan di section "Sesi berjalan" agar pasien bisa
+  /// gabung/chat walau profesional sudah menekan "Hadir".
+  List<BackendCareSession> _ongoingSessions = const [];
+
   @override
   void initState() {
     super.initState();
@@ -101,28 +107,50 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _loadUpcomingSession() async {
     final apiClient = widget.apiClient;
     if (apiClient == null) {
-      if (mounted) setState(() => _upcomingSession = null);
+      if (mounted) {
+        setState(() {
+          _upcomingSession = null;
+          _ongoingSessions = const [];
+        });
+      }
       return;
     }
     final rawToken = widget.session?.accessToken;
     final accessToken =
         (rawToken == null || rawToken.isEmpty) ? null : rawToken;
     if (accessToken == null) {
-      if (mounted) setState(() => _upcomingSession = null);
+      if (mounted) {
+        setState(() {
+          _upcomingSession = null;
+          _ongoingSessions = const [];
+        });
+      }
       return;
     }
     try {
-      final sessions = await apiClient.listCareSessions(
-        accessToken: accessToken,
-        scope: 'upcoming',
-      );
+      // Muat sesi mendatang DAN sesi yang sedang berjalan (paralel). Sesi
+      // berjalan memakai scope `ongoing` yang mencakup scheduled/completed
+      // selama jendela waktu belum tutup.
+      final results = await Future.wait([
+        apiClient.listCareSessions(accessToken: accessToken, scope: 'upcoming'),
+        apiClient.listCareSessions(accessToken: accessToken, scope: 'ongoing'),
+      ]);
       if (!mounted) return;
-      sessions
-          .sort((a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
-      setState(
-          () => _upcomingSession = sessions.isEmpty ? null : sessions.first);
+      final upcoming = results[0]
+        ..sort((a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
+      final ongoing = results[1]
+        ..sort((a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
+      setState(() {
+        _upcomingSession = upcoming.isEmpty ? null : upcoming.first;
+        _ongoingSessions = ongoing;
+      });
     } on Object {
-      if (mounted) setState(() => _upcomingSession = null);
+      if (mounted) {
+        setState(() {
+          _upcomingSession = null;
+          _ongoingSessions = const [];
+        });
+      }
     }
   }
 
@@ -231,6 +259,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ),
                   const SizedBox(height: 22),
+
+                  // === 3b. SESI BERJALAN ===
+                  // Sesi yang sedang berlangsung (scheduled atau completed yang
+                  // masih di jendela waktu): tombol Gabung (video) + Chat tetap
+                  // tersedia sampai jendela habis.
+                  if (_ongoingSessions.isNotEmpty) ...[
+                    const SectionLabel('Sesi berjalan', center: true),
+                    for (final s in _ongoingSessions)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _OngoingSessionCard(
+                          session: s,
+                          accessToken: widget.session?.accessToken ?? '',
+                          onChat: () => _joinSession(context, s),
+                          onChanged: _loadUpcomingSession,
+                        ),
+                      ),
+                    const SizedBox(height: 10),
+                  ],
 
                   // === 4. PROFESSIONAL CARE ===
                   const SectionLabel('Professional Care', center: true),
@@ -711,6 +758,92 @@ class _NotificationBellState extends State<_NotificationBell> {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Kartu "Sesi berjalan" di home pasien. Menampilkan nama profesional, jam
+/// WIB, tipe sesi, tombol Gabung (video, via [MeetJoinButton]) dan Chat.
+/// Ditampilkan selama sesi berada di jendela waktu — termasuk setelah
+/// profesional menekan "Hadir" (status completed) selama jendela belum tutup.
+class _OngoingSessionCard extends StatelessWidget {
+  const _OngoingSessionCard({
+    required this.session,
+    required this.accessToken,
+    required this.onChat,
+    required this.onChanged,
+  });
+
+  final BackendCareSession session;
+  final String accessToken;
+  final VoidCallback onChat;
+  final Future<void> Function() onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final at = session.scheduledDateTime;
+    final dateLabel = at == null
+        ? '-'
+        : '${at.day}/${at.month}/${at.year} '
+            '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
+    return SoftCard(
+      bordered: true,
+      accent: MalvaColors.mint,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ProfessionalAvatar(
+                displayName: session.professionalName.isEmpty
+                    ? 'Profesional'
+                    : session.professionalName,
+                radius: 22,
+                photoUrl:
+                    session.photoIntroUrl.isNotEmpty ? session.photoIntroUrl : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      session.professionalName.isEmpty
+                          ? 'Sesi ${session.isVideo ? 'Video' : 'Chat'}'
+                          : session.professionalName,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    Text(
+                      '${session.isVideo ? 'Video' : 'Chat'} • $dateLabel',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const StatusPill(label: 'Berjalan', color: MalvaColors.mint),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (session.isVideo) ...[
+            MeetJoinButton(
+              session: session,
+              accessToken: accessToken,
+              expanded: true,
+              onSessionChanged: (_) => onChanged(),
+            ),
+            const SizedBox(height: 8),
+          ],
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onChat,
+              style: compactFilledButtonStyle,
+              icon: const Icon(Icons.chat_bubble_rounded, size: 16),
+              label: const Text('Chat'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -694,14 +694,17 @@ class _ProfessionalDashboardScreenState
           ),
         );
       }
-      // Sesi video mendatang + sesi hari ini (untuk "Sesi berjalan") +
-      // ringkasan Crisis Incident Log (satu permintaan masing-masing).
+      // Sesi video mendatang + sesi yang SEDANG BERJALAN (untuk "Sesi
+      // berjalan") + ringkasan Crisis Incident Log (satu permintaan
+      // masing-masing).
       final upcomingSessions = await safely(() => apiClient.listCareSessions(
           accessToken: accessToken, scope: 'upcoming'));
-      // `scope=today` mengembalikan sesi terjadwal hari ini dari server;
-      // kita saring lagi di klien lewat jendela waktu murni (isCareSessionOngoing).
+      // `scope=ongoing` mengembalikan sesi scheduled ATAU completed yang masih
+      // di dalam jendela waktu (profesional sudah menekan "Hadir" -> completed,
+      // tetapi sesi tetap "berjalan" sampai jendela habis). Tetap disaring lagi
+      // di klien lewat jendela waktu murni (isCareSessionOngoing).
       final todaySessions = await safely(() => apiClient.listCareSessions(
-          accessToken: accessToken, scope: 'today'));
+          accessToken: accessToken, scope: 'ongoing'));
       final crisisLog = await safely(() =>
           apiClient.getCrisisIncidentLog(accessToken: accessToken, limit: 1));
       if (!mounted) return;
