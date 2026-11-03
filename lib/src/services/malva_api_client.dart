@@ -4598,6 +4598,7 @@ class BackendCareSession {
     this.rescheduleCount = 0,
     this.cancelledBy = '',
     this.photoIntroUrl = '',
+    this.attendedMarkedAt,
   });
 
   factory BackendCareSession.fromJson(Map<String, dynamic> json) {
@@ -4620,6 +4621,7 @@ class BackendCareSession {
       rescheduleCount: (json['reschedule_count'] as num?)?.toInt() ?? 0,
       cancelledBy: json['cancelled_by']?.toString() ?? '',
       photoIntroUrl: json['photo_intro_url']?.toString() ?? '',
+      attendedMarkedAt: parseWibStored(json['attended_marked_at']?.toString()),
     );
   }
 
@@ -4646,11 +4648,19 @@ class BackendCareSession {
   /// URL foto profil profesional (dari professional_credentials).
   final String photoIntroUrl;
 
+  /// Waktu kehadiran dicatat (kolom `attended_marked_at`). Non-null berarti
+  /// profesional sudah menandai "Hadir" — sesi tetap berjalan sampai durasinya
+  /// habis (status belum tentu `completed`).
+  final DateTime? attendedMarkedAt;
+
   DateTime? get scheduledDateTime =>
       scheduledAt == null ? null : parseWibStored(scheduledAt!);
 
   bool get isScheduled => status == 'scheduled';
   bool get isVideo => sessionType == 'video';
+
+  /// True bila profesional sudah menandai kehadiran ("Hadir").
+  bool get isAttended => attendedMarkedAt != null;
 
   bool get cancelledByProfessional => status == 'cancelled_by_professional';
   bool get cancelledByPatient => status == 'cancelled_by_patient';

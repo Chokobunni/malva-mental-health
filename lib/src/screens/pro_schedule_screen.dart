@@ -314,9 +314,17 @@ class _ProSessionCard extends ConsumerWidget {
           // setelah reload — persis bug yang dilaporkan pengguna.
           if (live) ...[
             const SizedBox(height: 10),
-            // Penanda sesi yang sudah ditandai hadir tetapi jendela waktunya
-            // masih terbuka (chat/Meet tetap boleh dipakai sampai jendela
-            // habis).
+            // Kehadiran sudah ditandai ("Hadir"): tampilkan pill, sesi tetap
+            // berjalan sampai waktu habis.
+            if (session.isAttended) ...[
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: StatusPill(label: 'Hadir', color: MalvaColors.mint),
+              ),
+              const SizedBox(height: 10),
+            ],
+            // Penanda sesi yang sudah selesai tetapi jendela waktunya masih
+            // terbuka (chat/Meet tetap boleh dipakai sampai jendela habis).
             if (session.status == 'completed') ...[
               const Align(
                 alignment: Alignment.centerLeft,
@@ -351,11 +359,11 @@ class _ProSessionCard extends ConsumerWidget {
                   icon: const Icon(Icons.chat_bubble_rounded, size: 16),
                   label: const Text('Join / Chat'),
                 ),
-                // Hadir/Tidak hadir hanya untuk sesi yang belum ditandai
-                // (scheduled); jangan tawarkan ulang setelah completed.
-                if (session.isScheduled) ...[
+                // Hadir/Tidak hadir hanya untuk sesi scheduled yang kehadirannya
+                // BELUM ditandai; jangan tawarkan ulang setelah attended/completed.
+                if (session.isScheduled && !session.isAttended) ...[
                   OutlinedButton.icon(
-                    onPressed: () => _mark(context, ref, 'completed'),
+                    onPressed: () => _mark(context, ref, 'attended'),
                     icon: const Icon(Icons.check_rounded, size: 16),
                     label: const Text('Hadir'),
                   ),
@@ -450,9 +458,12 @@ class _ProSessionCard extends ConsumerWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(status == 'completed'
-                ? 'Sesi ditandai selesai.'
-                : 'Pasien ditandai tidak hadir (sesi hangus).')),
+            content: Text(switch (status) {
+          'attended' =>
+            'Kehadiran dicatat. Sesi tetap berjalan sampai waktu habis.',
+          'completed' => 'Sesi ditandai selesai.',
+          _ => 'Pasien ditandai tidak hadir (sesi hangus).',
+        })),
       );
       await onChanged();
     } on Object catch (e) {

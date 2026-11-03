@@ -407,6 +407,22 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 	}
 
 	switch {
+	case isProf && status == "attended":
+		// "Hadir" hanya menandai kehadiran — sesi TIDAK diselesaikan dan
+		// earnings TIDAK diakui di sini. Sesi tetap berjalan sampai durasinya
+		// habis lalu diselesaikan otomatis oleh sweeper. Guard waktu sama
+		// dengan penandaan kehadiran manual (mulai 10 menit sebelum sesi).
+		if time.Now().Before(cs.ScheduledAt.Add(-10 * time.Minute)) {
+			writeError(w, http.StatusBadRequest, errors.New("kehadiran baru bisa ditandai sejak 10 menit sebelum sesi"))
+			return
+		}
+		updated, err := s.store.UpdateCareSessionStatus(r.Context(), sessionID, "attended", "", claims.Subject)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"session": updated})
+		return
 	case isProf && (status == "completed" || status == "no_show"):
 		if time.Now().Before(cs.ScheduledAt.Add(-10 * time.Minute)) {
 			writeError(w, http.StatusBadRequest, errors.New("kehadiran baru bisa ditandai sejak 10 menit sebelum sesi"))

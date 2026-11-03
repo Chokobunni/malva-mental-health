@@ -620,6 +620,25 @@ func (s *Store) ListCareSessions(ctx context.Context, userID, role, scope, patie
 // kolom cancelled_by diisi dengan actorID untuk audit (AC-2.3).
 func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, cancelReason, actorID string) (CareSession, error) {
 	status = strings.ToLower(strings.TrimSpace(status))
+
+	// "attended" hanya MENANDAI kehadiran: status sesi TIDAK berubah dan
+	// pendapatan TIDAK diakui di sini. Sesi tetap berjalan sampai durasinya
+	// habis, lalu diselesaikan otomatis oleh sweeper (completeAttendedSessions)
+	// yang mencatat earnings. Jalur khusus ini berada SEBELUM update generik
+	// agar tidak masuk peta `allowed` di bawah.
+	if status == "attended" {
+		res, err := s.db.ExecContext(ctx, `UPDATE care_sessions
+			SET attended_marked_at = COALESCE(attended_marked_at, now()), updated_at = now()
+			WHERE id = $1`, sessionID)
+		if err != nil {
+			return CareSession{}, err
+		}
+		if aff, _ := res.RowsAffected(); aff == 0 {
+			return CareSession{}, errors.New("care session not found")
+		}
+		return s.GetCareSession(ctx, sessionID)
+	}
+
 	allowed := map[string]bool{
 		"scheduled": true, "completed": true, "no_show": true,
 		"cancelled_by_professional": true, "cancelled_by_patient": true,
@@ -630,7 +649,9 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 	}
 	setAttended := ""
 	if status == "completed" || status == "no_show" {
-		setAttended = ", attended_marked_at = now()"
+		// COALESCE: jangan timpa waktu hadir asli yang sudah dicatat lewat
+		// "attended" sebelum sesi diselesaikan.
+		setAttended = ", attended_marked_at = COALESCE(attended_marked_at, now())"
 	}
 	setCancelledBy := ""
 	args := []any{status, strings.TrimSpace(cancelReason), sessionID}
@@ -1149,11 +1170,59 @@ func (s *Store) careTablesReady(ctx context.Context) bool {
 	return n == 4
 }
 
+// completeAttendedSessions menyelesaikan sesi yang sudah ditandai hadir
+// ("attended") dan sudah melewati durasinya. Per sesi, status diubah ke
+// "completed" lewat UpdateCareSessionStatus agar earnings tercatat dalam
+// transaksi yang sama (idempoten). Mengembalikan jumlah sesi yang berhasil
+// diselesaikan; berhenti dan mengembalikan error pada kegagalan pertama agar
+// terlihat di log sweeper.
+func (s *Store) completeAttendedSessions(ctx context.Context) (int64, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM care_sessions
+		WHERE status = 'scheduled' AND attended_marked_at IS NOT NULL
+		  AND scheduled_at + ((duration_minutes) || ' minutes')::interval <= now()
+		ORDER BY scheduled_at ASC LIMIT 200`)
+	if err != nil {
+		return 0, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, err
+	}
+	_ = rows.Close()
+
+	var done int64
+	for _, id := range ids {
+		if _, err := s.UpdateCareSessionStatus(ctx, id, "completed", "", ""); err != nil {
+			return done, err
+		}
+		done++
+	}
+	return done, nil
+}
+
 // Sweeper: kedaluwarsakan paket, hanguskan pending_payment, auto-complete sesi lama.
 func (s *Store) SweepCareState(ctx context.Context) (expiredPackages int64, expiredSessions int64, completedSessions int64, err error) {
 	if !s.careTablesReady(ctx) {
 		return 0, 0, 0, nil
 	}
+	// Selesaikan dulu sesi yang sudah ditandai hadir dan sudah melewati
+	// durasinya. Ini mencatat earnings (lewat UpdateCareSessionStatus) sehingga
+	// sesi yang hadir tetap dibayar walau profesional tidak menekan "Selesai".
+	autoCompleted, autoErr := s.completeAttendedSessions(ctx)
+	if autoErr != nil {
+		err = autoErr
+		return
+	}
+	completedSessions = autoCompleted
 	if res, e := s.db.ExecContext(ctx, `UPDATE care_packages
 		SET status = 'expired', updated_at = now()
 		WHERE status = 'active' AND expires_at <= now()`); e == nil {
@@ -1170,16 +1239,17 @@ func (s *Store) SweepCareState(ctx context.Context) (expiredPackages int64, expi
 		err = e
 		return
 	}
-	// Sesi terjadwal yang lewat >24 jam tanpa konfirmasi profesional
-	// ditandai no_show (kuota tetap terpakai sesuai aturan no-show/hangus
-	// yang disetujui pasien saat membeli paket), BUKAN completed —
-	// completed hanya boleh dari konfirmasi profesional agar riwayat,
-	// ulasan, dan statistik tidak dipalsukan sweeper.
+	// Sesi terjadwal yang lewat >24 jam tanpa konfirmasi profesional ditandai
+	// no_show (kuota tetap terpakai sesuai aturan no-show/hangus yang disetujui
+	// pasien saat membeli paket), BUKAN completed — sesi yang benar-benar
+	// berlangsung sudah diselesaikan lewat jalur "attended" di atas, dan
+	// completed manual tetap hanya dari profesional.
 	if res, e := s.db.ExecContext(ctx, `UPDATE care_sessions
 		SET status = 'no_show', attended_marked_at = COALESCE(attended_marked_at, now()), updated_at = now()
 		WHERE status = 'scheduled'
 		  AND scheduled_at <= now() - interval '24 hours'`); e == nil {
-		completedSessions, _ = res.RowsAffected()
+		n, _ := res.RowsAffected()
+		completedSessions += n
 	} else {
 		err = e
 		return
