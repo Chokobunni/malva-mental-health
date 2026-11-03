@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -9,66 +10,139 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../models.dart';
 import '../time/wib.dart';
+import 'local_notification_router.dart';
 import 'malva_api_client.dart';
 
 @pragma('vm:entry-point')
 Future<void> _onBackgroundMessage(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  // Isolat background punya instance Firebase sendiri; initialize hanya boleh
+  // dipanggil bila belum ada agar tidak melempar "duplicate-app".
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp();
+  }
+}
+
+/// Kanal notifikasi Android yang dipakai Malva.
+///
+/// `malva_updates` WAJIB ada karena backend mengirim push dengan
+/// `channel_id = "malva_updates"` (`backend/internal/notify/provider.go`).
+/// Tanpa kanal ini push background jatuh ke kanal fallback yang tidak
+/// terkelola (importance/nama default, tidak bisa diatur pengguna).
+abstract final class MalvaNotificationChannels {
+  static const String updates = 'malva_updates';
+  static const String medication = 'medication_reminders';
+  static const String crisis = 'crisis_alerts';
+  static const String followUps = 'follow_ups';
+
+  /// Nama kanal yang tampil di pengaturan Android. Nama pengingat obat HARUS
+  /// sama dengan yang dibuat `MedicationReminderService` — sebelumnya kedua
+  /// service memakai nama berbeda ("Medication Reminders" vs "Pengingat Obat")
+  /// sehingga nama kanal bergantung urutan inisialisasi.
+  static String name(String channel) => switch (channel) {
+        updates => 'Pembaruan Malva',
+        medication => 'Pengingat Obat',
+        crisis => 'Crisis Alerts',
+        _ => 'Follow-ups',
+      };
 }
 
 class PushNotificationService {
   PushNotificationService({
     required this.apiClient,
     required this.navigatorKey,
+    this.activeChatPeer,
   });
 
   final MalvaApiClient apiClient;
   final GlobalKey<NavigatorState> navigatorKey;
 
+  /// Peer chat yang SEDANG dibuka (null bila tidak ada). Dipakai menekan
+  /// notifikasi chat untuk percakapan yang sedang dilihat pengguna.
+  final String? Function()? activeChatPeer;
+
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
+  /// True hanya setelah inisialisasi benar-benar selesai.
   bool _initialized = false;
 
+  /// Future inisialisasi yang sedang berjalan. Bila gagal, di-reset ke null
+  /// agar percobaan berikutnya (mis. setelah jaringan pulih) bisa mencoba lagi
+  /// — sebelumnya `_initialized = true` di awal membuat kegagalan pertama
+  /// mengunci service selamanya.
+  Future<void>? _initFuture;
+
+  /// User yang token-nya sudah terdaftar pada proses ini.
+  String? _registeredUserId;
+
+  /// Listener refresh token yang aktif (dibatalkan sebelum mendaftar ulang).
+  StreamSubscription<String>? _tokenRefreshSub;
+
+  /// Izin notifikasi hanya diminta sekali per proses agar tidak memunculkan
+  /// dialog berulang setiap login.
+  bool _permissionRequested = false;
+
+  /// True bila inisialisasi sudah selesai (dipakai test/diagnostik).
+  bool get isInitialized => _initialized;
+
   /// Initialize the service: local notifications, channels, handlers.
-  Future<void> initialize() async {
-    if (_initialized) return;
-    _initialized = true;
+  ///
+  /// Idempoten: pemanggilan berulang memakai future yang sama, dan kegagalan
+  /// TIDAK mengunci service (future di-reset sehingga bisa dicoba lagi).
+  Future<void> initialize() {
+    if (_initialized) return Future<void>.value();
+    return _initFuture ??= _initializeOnce();
+  }
 
-    // Inisialisasi database zona + paksa zona lokal proses ke WIB sekaligus.
-    // Jangan panggil `tzdata.initializeTimeZones()` langsung: itu mengembalikan
-    // zona lokal ke Etc/UTC sehingga jadwal notifikasi bergeser 7 jam.
-    initializeWib();
+  Future<void> _initializeOnce() async {
+    try {
+      // Inisialisasi database zona + paksa zona lokal proses ke WIB sekaligus.
+      // Jangan panggil `tzdata.initializeTimeZones()` langsung: itu
+      // mengembalikan zona lokal ke Etc/UTC sehingga jadwal notifikasi
+      // bergeser 7 jam.
+      initializeWib();
 
-    // ── Local notifications setup ──
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
-    );
-    const initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-    await _localNotifications.initialize(
-      settings: initSettings,
-      onDidReceiveNotificationResponse: _onNotificationTapped,
-    );
+      const androidSettings =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosSettings = DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      );
+      const initSettings = InitializationSettings(
+        android: androidSettings,
+        iOS: iosSettings,
+      );
 
-    // ── Android notification channels ──
-    await _createAndroidChannels();
+      // Handler tap TUNGGAL untuk push maupun pengingat obat (lihat
+      // LocalNotificationRouter). Tanpa ini kedua service saling menimpa.
+      await _localNotifications.initialize(
+        settings: initSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) =>
+            LocalNotificationRouter.handlePayload(response.payload),
+      );
 
-    // ── FCM handlers ──
-    FirebaseMessaging.onBackgroundMessage(_onBackgroundMessage);
-    FirebaseMessaging.onMessage.listen(_onForegroundMessage);
-    FirebaseMessaging.onMessageOpenedApp.listen(_onMessageOpenedApp);
+      LocalNotificationRouter.onPushPayload = _handleNotificationNavigation;
+      LocalNotificationRouter.openMedicationScreen =
+          () => navigatorKey.currentState?.pushNamed('/medication');
 
-    // ── Check for cold-start notification tap ──
-    final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
-    if (initialMessage != null) {
-      _handleNotificationNavigation(initialMessage.data);
+      await _createAndroidChannels();
+
+      FirebaseMessaging.onBackgroundMessage(_onBackgroundMessage);
+      FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+      FirebaseMessaging.onMessageOpenedApp.listen(_onMessageOpenedApp);
+
+      final initialMessage =
+          await FirebaseMessaging.instance.getInitialMessage();
+      if (initialMessage != null) {
+        _handleNotificationNavigation(initialMessage.data);
+      }
+
+      _initialized = true;
+    } on Object {
+      // Biarkan pemanggil berikutnya mencoba lagi.
+      _initFuture = null;
+      rethrow;
     }
   }
 
@@ -85,7 +159,7 @@ class PushNotificationService {
 
     await androidPlugin.createNotificationChannel(
       const AndroidNotificationChannel(
-        'crisis_alerts',
+        MalvaNotificationChannels.crisis,
         'Crisis Alerts',
         description:
             'Urgent crisis notifications requiring immediate attention',
@@ -97,7 +171,7 @@ class PushNotificationService {
 
     await androidPlugin.createNotificationChannel(
       const AndroidNotificationChannel(
-        'follow_ups',
+        MalvaNotificationChannels.followUps,
         'Follow-ups',
         description: 'Follow-up notifications from your care team',
         importance: Importance.defaultImportance,
@@ -106,9 +180,19 @@ class PushNotificationService {
 
     await androidPlugin.createNotificationChannel(
       const AndroidNotificationChannel(
-        'medication_reminders',
-        'Medication Reminders',
-        description: 'Reminders to take your medication',
+        MalvaNotificationChannels.medication,
+        'Pengingat Obat',
+        description: 'Pengingat jadwal minum obat dari Malva',
+        importance: Importance.defaultImportance,
+      ),
+    );
+
+    // Kanal yang dipakai backend untuk push chat & pembaruan lain.
+    await androidPlugin.createNotificationChannel(
+      const AndroidNotificationChannel(
+        MalvaNotificationChannels.updates,
+        'Pembaruan Malva',
+        description: 'Pesan chat dan pembaruan dari Malva',
         importance: Importance.defaultImportance,
       ),
     );
@@ -118,26 +202,58 @@ class PushNotificationService {
   // Token management
   // ──────────────────────────────────────────────────────────────
 
+  /// Daftarkan token FCM perangkat untuk sesi ini.
+  ///
+  /// Pengaman yang dipasang (akar notifikasi berulang/ganda):
+  /// 1. User yang sama tidak didaftarkan dua kali dalam satu proses — dulu
+  ///    `_restorePersistedSession` dan listener auth sama-sama memanggilnya.
+  /// 2. Listener `onTokenRefresh` lama DIBATALKAN sebelum memasang yang baru,
+  ///    sehingga listener tidak menumpuk setiap login.
+  /// 3. `Firebase.initializeApp()` hanya dipanggil bila belum ada aplikasi
+  ///    (bootstrap sudah menginisialisasi; memanggil ulang bisa melempar dan
+  ///    seluruh registrasi token ikut gagal).
+  /// 4. Izin notifikasi diminta sekali per proses.
   Future<void> registerDeviceToken(AuthSession session) async {
     final accessToken = session.accessToken;
     if (accessToken == null || accessToken.isEmpty) return;
 
-    try {
-      await Firebase.initializeApp();
-      final messaging = FirebaseMessaging.instance;
-      await messaging.requestPermission();
+    final userId = session.backendUserId ?? session.identifier;
+    if (userId.isEmpty) return;
+    if (_registeredUserId == userId) return;
 
-      // Listen for token refreshes
-      messaging.onTokenRefresh.listen((newToken) {
-        _sendTokenToBackend(accessToken, newToken);
-      });
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp();
+      }
+      final messaging = FirebaseMessaging.instance;
+      if (!_permissionRequested) {
+        _permissionRequested = true;
+        await messaging.requestPermission();
+      }
+
+      // Batalkan listener lama sebelum memasang yang baru.
+      await _tokenRefreshSub?.cancel();
+      _tokenRefreshSub = messaging.onTokenRefresh.listen(
+        (String newToken) => _sendTokenToBackend(accessToken, newToken),
+      );
 
       final token = await messaging.getToken();
       if (token == null || token.isEmpty) return;
       await _sendTokenToBackend(accessToken, token);
+      _registeredUserId = userId;
     } on Object catch (error) {
       if (kDebugMode) debugPrint('FCM token registration failed: $error');
     }
+  }
+
+  /// Lupakan pendaftaran pada proses ini (dipakai saat logout).
+  ///
+  /// Tanpa ini, login ulang dengan akun yang sama akan dilewati oleh pengaman
+  /// "user sudah terdaftar" walau token server baru saja dicabut.
+  void resetRegistration() {
+    _registeredUserId = null;
+    unawaited(_tokenRefreshSub?.cancel());
+    _tokenRefreshSub = null;
   }
 
   Future<void> _sendTokenToBackend(String accessToken, String token) async {
@@ -159,27 +275,48 @@ class PushNotificationService {
   // ──────────────────────────────────────────────────────────────
 
   void _onForegroundMessage(RemoteMessage message) {
-    final notification = message.notification;
-    if (notification == null) return;
-
     final data = message.data;
-    final channel = _channelForType(data['type']);
+    final kind = _kindOf(data);
 
+    // Chat untuk percakapan yang sedang dibuka tidak perlu notifikasi.
+    if (!shouldShowChatNotification(data, activeChatPeer?.call())) return;
+
+    final notification = message.notification;
+    String title;
+    String body;
+    if (notification != null) {
+      title = notification.title ?? 'Malva';
+      body = notification.body ?? '';
+    } else if (kind == 'chat_message') {
+      // Push data-only dari backend: bangun isi notifikasi dari payload.
+      title = (data['sender_name'] ?? '').toString().trim();
+      if (title.isEmpty) title = 'Pesan baru';
+      final text = (data['text'] ?? '').toString().trim();
+      body = text.length > 120 ? '${text.substring(0, 120)}…' : text;
+      if (body.isEmpty) body = 'Anda menerima pesan baru.';
+    } else {
+      // Data-only di luar chat tidak ditampilkan: tidak ada jenis notifikasi
+      // lain yang diizinkan selain chat, pengingat goals, dan pengingat obat.
+      return;
+    }
+
+    final channel = _channelForType(kind);
     final androidDetails = AndroidNotificationDetails(
       channel,
-      _channelName(channel),
-      importance: channel == 'crisis_alerts'
+      MalvaNotificationChannels.name(channel),
+      importance: channel == MalvaNotificationChannels.crisis
           ? Importance.max
           : Importance.defaultImportance,
-      priority:
-          channel == 'crisis_alerts' ? Priority.high : Priority.defaultPriority,
+      priority: channel == MalvaNotificationChannels.crisis
+          ? Priority.high
+          : Priority.defaultPriority,
     );
     const iosDetails = DarwinNotificationDetails();
 
     _localNotifications.show(
-      id: _notificationIdFor(data),
-      title: notification.title,
-      body: notification.body,
+      id: notificationIdFor(data),
+      title: title,
+      body: body,
       notificationDetails:
           NotificationDetails(android: androidDetails, iOS: iosDetails),
       payload: jsonEncode(data),
@@ -188,39 +325,56 @@ class PushNotificationService {
 
   /// ID notifikasi deterministik dari data peristiwa.
   ///
-  /// Dulu memakai `notification.hashCode` (unik per pengiriman), sehingga
-  /// peristiwa yang sama yang tiba dua kali menumpuk menjadi dua baris di
-  /// shade. Dengan ID stabil per (kind, session_id, notification_id,
-  /// patient_id), pengiriman ulang peristiwa yang sama MENIMPA notifikasi
-  /// sebelumnya — satu baris per peristiwa.
-  int _notificationIdFor(Map<String, dynamic> data) {
+  /// Memakai FNV-1a 31-bit (pola sama dengan
+  /// `MedicationReminderService._stableHash`), BUKAN `String.hashCode`:
+  /// hashCode Dart tidak dijamin sama antar-proses (seed acak), sehingga
+  /// setelah aplikasi dibuka ulang id yang dihitung berbeda dan peristiwa yang
+  /// sama tampil sebagai DUA baris di shade. Dengan id stabil, pengiriman
+  /// ulang peristiwa yang sama MENIMPA notifikasi sebelumnya.
+  static int notificationIdFor(Map<String, dynamic> data) {
     final parts = <String>[
       (data['kind'] ?? data['type'] ?? '').toString(),
       (data['session_id'] ?? '').toString(),
       (data['notification_id'] ?? '').toString(),
       (data['patient_id'] ?? '').toString(),
     ];
-    final stableKey = parts.join('|');
-    return stableKey.hashCode & 0x7fffffff;
+    return _stableHash(parts.join('|'));
+  }
+
+  /// Hash FNV-1a 31-bit (deterministik lintas platform & lintas run).
+  static int _stableHash(String value) {
+    var hash = 0x811c9dc5;
+    for (final unit in value.codeUnits) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0x7fffffff;
+    }
+    // 0 tidak dipakai: sebagian platform memperlakukan id 0 secara khusus.
+    return hash == 0 ? 1 : hash;
+  }
+
+  static String _kindOf(Map<String, dynamic> data) =>
+      (data['kind'] ?? data['type'] ?? '').toString();
+
+  /// True bila notifikasi chat perlu ditampilkan.
+  ///
+  /// Ditampilkan bila bukan chat, atau bila pengirimnya BUKAN percakapan yang
+  /// sedang dibuka. [activePeer] null/kosong = tidak ada chat terbuka.
+  @visibleForTesting
+  static bool shouldShowChatNotification(
+    Map<String, dynamic> data,
+    String? activePeer,
+  ) {
+    if (_kindOf(data) != 'chat_message') return true;
+    final sender = (data['sender_id'] ?? '').toString();
+    if (sender.isEmpty) return true;
+    final peer = (activePeer ?? '').trim();
+    if (peer.isEmpty) return true;
+    return sender != peer;
   }
 
   // ──────────────────────────────────────────────────────────────
   // Notification tap handler
   // ──────────────────────────────────────────────────────────────
-
-  void _onNotificationTapped(NotificationResponse response) {
-    if (response.payload == null) return;
-    try {
-      final data = Map<String, dynamic>.from(
-        jsonDecode(response.payload!) as Map,
-      );
-      _handleNotificationNavigation(data);
-    } on Object catch (error) {
-      if (kDebugMode) {
-        debugPrint('Error parsing notification payload: $error');
-      }
-    }
-  }
 
   void _onMessageOpenedApp(RemoteMessage message) {
     _handleNotificationNavigation(message.data);
@@ -231,9 +385,22 @@ class PushNotificationService {
   // ──────────────────────────────────────────────────────────────
 
   void _handleNotificationNavigation(Map<String, dynamic> data) {
-    final type = data['type'] as String?;
-    final route = _routeForType(type, data);
+    final type = (data['type'] ?? data['kind'])?.toString();
+    final route = routeForType(type, data);
     if (route == null) return;
+
+    // Chat: butuh argumen peer agar layar chat langsung terbuka pada lawan
+    // bicara yang benar (sebelumnya tap chat dead-end karena rute tidak ada).
+    if (route == '/chat') {
+      navigatorKey.currentState?.pushNamed(
+        '/chat',
+        arguments: <String, String>{
+          'peer_id': (data['sender_id'] ?? '').toString(),
+          'name': (data['sender_name'] ?? 'Pesan').toString(),
+        },
+      );
+      return;
+    }
 
     // Beranda: tap notifikasi TIDAK boleh menumpuk shell beranda baru di atas
     // beranda yang sedang tampil (tap berulang = tumpukan bertambah, tombol
@@ -248,12 +415,16 @@ class PushNotificationService {
     navigatorKey.currentState?.pushNamed(route);
   }
 
-  String? _routeForType(String? type, Map<String, dynamic> data) {
+  /// Pemetaan tipe notifikasi → rute. Murni agar bisa diuji.
+  @visibleForTesting
+  static String? routeForType(String? type, Map<String, dynamic> data) {
     return switch (type) {
       'crisis_alert' => '/crisis-alert',
       'follow_up' => '/home',
       'medication_reminder' => '/medication',
       'screening_result' => '/assessment/result',
+      // Chat: buka layar percakapan dengan pengirim sebagai lawan bicara.
+      'chat_message' => '/chat',
       // Notifikasi sesi video (link Meet belum ada / sudah siap): satu-satunya
       // aksi yang diminta adalah membuka detail sesi, dan aplikasi belum punya
       // rute detail sesi. Rute paling aman yang sudah ada adalah beranda
@@ -270,19 +441,12 @@ class PushNotificationService {
   // Helpers
   // ──────────────────────────────────────────────────────────────
 
-  String _channelForType(String? type) {
+  static String _channelForType(String? type) {
     return switch (type) {
-      'crisis_alert' => 'crisis_alerts',
-      'medication_reminder' => 'medication_reminders',
-      _ => 'follow_ups',
-    };
-  }
-
-  String _channelName(String channel) {
-    return switch (channel) {
-      'crisis_alerts' => 'Crisis Alerts',
-      'medication_reminders' => 'Medication Reminders',
-      _ => 'Follow-ups',
+      'crisis_alert' => MalvaNotificationChannels.crisis,
+      'medication_reminder' => MalvaNotificationChannels.medication,
+      'chat_message' => MalvaNotificationChannels.updates,
+      _ => MalvaNotificationChannels.followUps,
     };
   }
 
@@ -295,14 +459,14 @@ class PushNotificationService {
     String? payload,
     DateTime? scheduledTime,
   }) async {
-    final resolvedChannel = channel ?? 'follow_ups';
+    final resolvedChannel = channel ?? MalvaNotificationChannels.followUps;
     final androidDetails = AndroidNotificationDetails(
       resolvedChannel,
-      _channelName(resolvedChannel),
-      importance: resolvedChannel == 'crisis_alerts'
+      MalvaNotificationChannels.name(resolvedChannel),
+      importance: resolvedChannel == MalvaNotificationChannels.crisis
           ? Importance.max
           : Importance.defaultImportance,
-      priority: resolvedChannel == 'crisis_alerts'
+      priority: resolvedChannel == MalvaNotificationChannels.crisis
           ? Priority.high
           : Priority.defaultPriority,
     );
@@ -327,11 +491,12 @@ class PushNotificationService {
       );
     } else {
       await _localNotifications.show(
-          id: id,
-          title: title,
-          body: body,
-          notificationDetails: details,
-          payload: payload);
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: details,
+        payload: payload,
+      );
     }
   }
 }

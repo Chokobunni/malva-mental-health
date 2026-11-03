@@ -40,6 +40,16 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- FCM: push background memakai kanal yang dikelola aplikasi
+             (`malva_updates` dibuat di PushNotificationService). Tanpa
+             meta-data ini push background jatuh ke kanal fallback yang tidak
+             bisa diatur pengguna. Ikon juga dipatok agar konsisten. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="malva_updates" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
         <!-- flutter_local_notifications: penerima jadwal & pemulihan setelah
              reboot. Tanpa receiver boot, semua pengingat obat hilang begitu
              perangkat dimatikan/dinyalakan ulang. -->

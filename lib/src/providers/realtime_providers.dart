@@ -13,3 +13,10 @@ final professionalProfileRevisionProvider = StateProvider<int>((ref) => 0);
 /// Berguna untuk memuat ulang hanya data profesional terkait. Bernilai string
 /// kosong bila belum ada event.
 final professionalProfileUpdatedIdProvider = StateProvider<String>((ref) => '');
+
+/// Peer chat yang SEDANG dibuka di layar (null bila tidak ada).
+///
+/// Dipakai `PushNotificationService` untuk menekan notifikasi chat pada
+/// percakapan yang sedang dilihat pengguna — menerima notifikasi untuk pesan
+/// yang sudah tampil di layar hanya membuat shade penuh tanpa manfaat.
+final activeChatPeerProvider = StateProvider<String?>((ref) => null);

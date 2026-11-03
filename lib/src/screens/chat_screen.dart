@@ -70,6 +70,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    // Tandai percakapan ini sebagai aktif agar notifikasi chat untuk peer yang
+    // sama ditekan (pesannya sudah tampil di layar).
+    ref.read(activeChatPeerProvider.notifier).state = widget.otherUserId;
     _photoUrl = widget.otherUserPhotoUrl;
     _initChat();
     _loadHistory();
@@ -248,6 +251,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    // Lepas penanda hanya bila masih menunjuk peer ini (bisa saja layar lain
+    // sudah membuka percakapan berbeda).
+    if (ref.read(activeChatPeerProvider) == widget.otherUserId) {
+      ref.read(activeChatPeerProvider.notifier).state = null;
+    }
     _inputController.dispose();
     _scrollController.dispose();
     _stateSub?.cancel();

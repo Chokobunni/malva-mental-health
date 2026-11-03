@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
+import '../services/goal_reminder_service.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
@@ -24,10 +26,128 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
   bool _isLoading = true;
   String? _error;
 
+  /// Pengingat goals harian (notifikasi lokal, bukan push).
+  late final GoalReminderService _goalReminder = GoalReminderService(
+    enabled: ref.read(capabilitiesProvider).canScheduleOsReminders,
+  );
+  GoalReminderSettings _reminderSettings = const GoalReminderSettings();
+
   @override
   void initState() {
     super.initState();
     _loadFromServer();
+    unawaited(_loadReminderSettings());
+  }
+
+  Future<void> _loadReminderSettings() async {
+    final settings = await _goalReminder.loadSettings();
+    if (!mounted) return;
+    setState(() => _reminderSettings = settings);
+  }
+
+  /// Simpan preferensi lalu sinkronkan jadwal notifikasi.
+  Future<void> _updateReminderSettings({
+    bool? enabled,
+    int? hour,
+    int? minute,
+    required bool hasActiveGoals,
+  }) async {
+    final next = _reminderSettings.copyWith(
+      enabled: enabled,
+      hour: hour,
+      minute: minute,
+    );
+    await _goalReminder.saveSettings(next);
+    if (!mounted) return;
+    setState(() => _reminderSettings = next);
+    await _goalReminder.sync(
+      hasActiveGoals: hasActiveGoals,
+      enabled: next.enabled,
+      hour: next.hour,
+      minute: next.minute,
+    );
+  }
+
+  Future<void> _pickReminderTime(bool hasActiveGoals) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour: _reminderSettings.hour,
+        minute: _reminderSettings.minute,
+      ),
+      helpText: 'Jam pengingat goals (WIB)',
+    );
+    if (picked == null || !mounted) return;
+    await _updateReminderSettings(
+      hour: picked.hour,
+      minute: picked.minute,
+      hasActiveGoals: hasActiveGoals,
+    );
+  }
+
+  /// Baris ringkas pengingat harian pada kartu Daily Progress.
+  ///
+  /// Hanya tampil bila pasien punya minimal satu goal aktif — mengingatkan
+  /// goals saat tidak ada goals hanya jadi gangguan.
+  Widget _buildGoalReminderRow(bool hasActiveGoals) {
+    if (!hasActiveGoals) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SizedBox(height: 6),
+        Row(
+          children: <Widget>[
+            const Expanded(
+              child: Text(
+                'Pengingat harian',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            Switch(
+              key: const Key('goal-reminder-switch'),
+              value: _reminderSettings.enabled,
+              activeThumbColor: Colors.white,
+              activeTrackColor: Colors.white38,
+              onChanged: (bool value) => unawaited(
+                _updateReminderSettings(
+                  enabled: value,
+                  hasActiveGoals: hasActiveGoals,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            OutlinedButton.icon(
+              key: const Key('goal-reminder-time'),
+              onPressed: _reminderSettings.enabled
+                  ? () => unawaited(_pickReminderTime(hasActiveGoals))
+                  : null,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white54),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                minimumSize: const Size(0, 34),
+              ),
+              icon: const Icon(Icons.schedule_rounded, size: 15),
+              label: Text(
+                _reminderSettings.label,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const Text(
+          'Notifikasi lokal di perangkat, tidak memakai kuota push.',
+          style: TextStyle(color: Colors.white70, fontSize: 11),
+        ),
+      ],
+    );
   }
 
   /// Goals tersimpan di server sehingga tidak hilang saat aplikasi ditutup.
@@ -70,6 +190,12 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
     final store = ref.read(malvaStoreProvider.notifier);
     final useServer = _hasServer;
     final localGoals = storeState.goals;
+    // Pengingat harian hanya relevan bila ada goal aktif.
+    // Goal lokal tidak punya penanda aktif/nonaktif: daftar lokal hanya berisi
+    // goal yang dipakai, jadi cukup tidak kosong.
+    final hasActiveGoal = useServer
+        ? _serverGoals.any((goal) => goal.isActive)
+        : localGoals.isNotEmpty;
     return Scaffold(
       floatingActionButton: FloatingActionButton(
         heroTag: 'goals_add_fab',
@@ -123,6 +249,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
                             100,
                         color: Colors.white,
                       ),
+                      _buildGoalReminderRow(hasActiveGoal),
                     ],
                   ),
                 ),

@@ -5,6 +5,7 @@ import 'io/browser_history_io.dart';
 import 'io/dialer_io.dart';
 import 'io/file_exporter_io.dart';
 import 'io/file_picker_io.dart';
+import 'io/goal_reminder_scheduler_io.dart';
 import 'io/google_sign_in_io.dart';
 import 'io/push_registrar_io.dart';
 import 'io/reminder_scheduler_io.dart';
@@ -18,6 +19,9 @@ FilePickerPort createFilePicker() => ImagePickerAdapter();
 
 ReminderScheduler createReminderScheduler() =>
     LocalNotificationReminderScheduler();
+
+GoalReminderScheduler createGoalReminderScheduler() =>
+    LocalNotificationGoalReminderScheduler();
 
 /// [apiClient] bertipe `dynamic` agar lapisan platform tidak perlu mengimpor
 /// `MalvaApiClient` (menjaga arah dependensi platform → app tetap satu arah).

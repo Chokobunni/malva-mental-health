@@ -8,6 +8,7 @@ import 'platform/contracts/ports.dart';
 import 'platform/platform_providers.dart';
 import 'providers/providers.dart';
 import 'screens/assessment_screen.dart';
+import 'screens/chat_screen.dart';
 import 'screens/initial_screening_consent_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/patient_shell.dart';
@@ -17,6 +18,7 @@ import 'screens/safety/emergency_dashboard_screen.dart';
 import 'screens/safety/guided_grounding_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/dashboard_sync_service.dart';
+import 'services/goal_reminder_service.dart';
 import 'services/google_auth_service.dart';
 import 'services/medication_reminder_service.dart';
 import 'services/push_notification_service.dart';
@@ -37,6 +39,7 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
   late final PushNotificationService _pushNotifications;
   late final DashboardSyncService _dashboardSyncService;
   late final MedicationReminderService _medicationReminderService;
+  late final GoalReminderService _goalReminderService;
 
   /// Kemampuan platform (satu-satunya cara UI bertanya "bisakah ini?").
   /// Di mobile semua true → perilaku identik; di web mematikan fitur yang
@@ -54,14 +57,20 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     _pushNotifications = PushNotificationService(
       apiClient: apiClient,
       navigatorKey: navigatorKey,
+      // Dipakai menekan notifikasi chat untuk percakapan yang sedang dibuka.
+      activeChatPeer: () => ref.read(activeChatPeerProvider),
     );
     _dashboardSyncService = DashboardSyncService();
     _medicationReminderService = widget.medicationReminderService ??
         MedicationReminderService(
           enabled: _capabilities.canScheduleOsReminders,
         );
+    _goalReminderService = GoalReminderService(
+      enabled: _capabilities.canScheduleOsReminders,
+    );
     if (_capabilities.canScheduleOsReminders) {
       unawaited(_medicationReminderService.initialize().catchError((_) {}));
+      unawaited(_goalReminderService.initialize().catchError((_) {}));
     }
 
     // Initialize offline sync service
@@ -101,6 +110,33 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     unawaited(_medicationReminderService.scheduleAll(meds));
   }
 
+  /// Sinkronkan pengingat goals harian dengan kondisi akun.
+  ///
+  /// Preferensi (aktif/jam) dibaca dari SecureStore; jumlah goal aktif dari
+  /// server. Semua kegagalan (jaringan/izin) diabaikan: pengingat tidak boleh
+  /// mengganggu boot aplikasi.
+  Future<void> _syncGoalReminder(AuthSession session) async {
+    if (!_capabilities.canScheduleOsReminders) return;
+    final token = session.accessToken;
+    if (token == null || token.isEmpty) return;
+    try {
+      final settings = await _goalReminderService.loadSettings();
+      final goals = await ref.read(apiClientProvider).listGoals(
+            accessToken: token,
+            includeInactive: true,
+          );
+      final hasActiveGoals = goals.any((goal) => goal.isActive);
+      await _goalReminderService.sync(
+        hasActiveGoals: hasActiveGoals,
+        enabled: settings.enabled,
+        hour: settings.hour,
+        minute: settings.minute,
+      );
+    } on Object {
+      // Offline / izin ditolak: pengingat lama tetap dipakai.
+    }
+  }
+
   /// Restore sesi dari secure storage saat aplikasi dibuka kembali.
   /// Sesi dipakai langsung; refresh token ditukar di belakang agar tetap valid.
   Future<void> _restorePersistedSession() async {
@@ -114,6 +150,7 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
       // Fresh start: data akun tersimpan tidak boleh tercampur akun lain.
       store.applySession(stored);
       _scheduleAllMedicationReminders();
+      unawaited(_syncGoalReminder(stored));
       unawaited(_pushNotifications.registerDeviceToken(stored));
       final refreshToken = stored.refreshToken;
       if (refreshToken != null && refreshToken.isNotEmpty) {
@@ -154,6 +191,7 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     // Muat kontak darurat untuk akun yang baru login.
     unawaited(ref.read(safetyProvider.notifier).load());
     _scheduleAllMedicationReminders();
+    unawaited(_syncGoalReminder(session));
 
     // Sync any pending offline data
     unawaited(ref.read(offlineSyncServiceProvider).syncNow(
@@ -170,6 +208,11 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     final meds = ref.read(malvaStoreProvider).medications;
     unawaited(_medicationReminderService
         .cancelRemindersFor(meds.map((m) => m.id).toList(growable: false)));
+    // Pengingat goals juga dijadwalkan OS: batalkan agar tidak berbunyi untuk
+    // akun yang sudah keluar.
+    unawaited(_goalReminderService.cancel());
+    // Izinkan pendaftaran token lagi pada login berikutnya.
+    _pushNotifications.resetRegistration();
     final session = ref.read(authStateProvider).session;
     // logoutSession menghapus sesi lokal lebih dulu (agar logout tetap
     // "menempel" walau jaringan menggantung), lalu mencabut refresh token
@@ -228,6 +271,7 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
         ref.read(apiClientProvider).setRefreshToken(session.refreshToken);
         unawaited(_pushNotifications.registerDeviceToken(session));
         _scheduleAllMedicationReminders();
+        unawaited(_syncGoalReminder(session));
       } else if (!next.isAuthenticated && previous?.session != null) {
         _dashboardSyncService.stopSync();
       }
@@ -322,6 +366,27 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
           builder: (_) => authState.session == null
               ? LoginScreen(onAuthenticated: _handleAuthenticated)
               : const GuidedGroundingScreen(),
+          settings: settings,
+        ),
+      '/chat' => MaterialPageRoute(
+          builder: (_) {
+            final session = authState.session;
+            if (session == null) {
+              return LoginScreen(onAuthenticated: _handleAuthenticated);
+            }
+            final args = settings.arguments;
+            final map = args is Map ? args : const <String, String>{};
+            final peerId = (map['peer_id'] ?? '').toString().trim();
+            final name = (map['name'] ?? '').toString().trim();
+            if (peerId.isEmpty) {
+              // Tanpa peer yang jelas, buka beranda peran — bukan layar kosong.
+              return _buildRoleHome(authState);
+            }
+            return ChatScreen(
+              otherUserName: name.isEmpty ? 'Pesan' : name,
+              otherUserId: peerId,
+            );
+          },
           settings: settings,
         ),
       '/medication' => MaterialPageRoute(

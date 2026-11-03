@@ -4275,7 +4275,8 @@ class AdminRefundPage {
 }
 
 class BackendDoctorSearchResult {
-  const BackendDoctorSearchResult({    required this.userId,
+  const BackendDoctorSearchResult({
+    required this.userId,
     required this.displayName,
     required this.specialization,
     required this.legacyCount,

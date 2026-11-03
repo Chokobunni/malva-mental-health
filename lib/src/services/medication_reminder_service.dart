@@ -6,6 +6,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../models.dart';
 import '../time/wib.dart';
+import 'local_notification_router.dart';
 
 /// Layanan pengingat minum obat berbasis notifikasi lokal.
 ///
@@ -65,10 +66,17 @@ class MedicationReminderService {
       iOS: iosSettings,
     );
 
+    // Handler tap TUNGGAL (LocalNotificationRouter) dipakai bersama
+    // PushNotificationService: tanpa ini handler yang terdaftar terakhir
+    // menimpa yang lain sehingga tap pengingat obat bisa tidak melakukan apa
+    // pun. Router meneruskan payload id obat ke [onNotificationTap].
     await _plugin.initialize(
       settings: initSettings,
-      onDidReceiveNotificationResponse: _onNotificationResponse,
+      onDidReceiveNotificationResponse: (NotificationResponse response) =>
+          LocalNotificationRouter.handlePayload(response.payload),
     );
+    LocalNotificationRouter.onMedicationPayload =
+        (String medicationId) => onNotificationTap?.call(medicationId);
 
     await _createChannel();
     await _requestPermissions();
@@ -158,13 +166,6 @@ class MedicationReminderService {
     }
     // Platform lain (desktop/web) tidak dipakai untuk pengingat obat.
     return true;
-  }
-
-  void _onNotificationResponse(NotificationResponse response) {
-    final payload = response.payload;
-    if (payload != null && payload.isNotEmpty) {
-      onNotificationTap?.call(payload);
-    }
   }
 
   /// Id notifikasi stabil untuk satu obat + satu jam pengingat.
