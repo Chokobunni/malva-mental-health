@@ -336,6 +336,96 @@ void main() {
     });
   });
 
+  group('Payload backend memakai kunci kind (bukan type)', () {
+    test('kind saja tetap terpetakan ke /chat', () {
+      // Bentuk nyata dari backend: hanya `kind`, tanpa `type`.
+      const data = <String, dynamic>{
+        'kind': 'chat_message',
+        'sender_id': 'pro-1',
+        'sender_name': 'Dr. Ayu',
+        'session_id': 'session-1',
+        'patient_id': 'patient-1',
+      };
+
+      final kind = PushNotificationService.eventKindOf(data);
+      expect(kind, 'chat_message');
+      expect(PushNotificationService.routeForType(kind, data), '/chat');
+    });
+
+    test('kind saja tetap ditekan saat peer itu sedang dibuka', () {
+      const data = <String, dynamic>{
+        'kind': 'chat_message',
+        'sender_id': 'pro-1',
+        'sender_name': 'Dr. Ayu',
+      };
+
+      expect(
+        PushNotificationService.shouldShowChatNotification(data, 'pro-1'),
+        isFalse,
+      );
+      expect(
+        PushNotificationService.shouldShowChatNotification(data, 'pro-2'),
+        isTrue,
+      );
+    });
+
+    test('kind lain tetap dipetakan sesuai jenisnya', () {
+      expect(
+        PushNotificationService.routeForType(
+          PushNotificationService.eventKindOf(<String, dynamic>{
+            'kind': 'medication_reminder',
+          }),
+          const <String, dynamic>{},
+        ),
+        '/medication',
+      );
+      expect(
+        PushNotificationService.eventKindOf(<String, dynamic>{
+          'kind': 'crisis_alert',
+        }),
+        'crisis_alert',
+      );
+    });
+
+    test('type tetap diutamakan untuk payload lama, lalu fallback ke kind', () {
+      expect(
+        PushNotificationService.eventKindOf(<String, dynamic>{
+          'type': 'follow_up',
+          'kind': 'chat_message',
+        }),
+        'follow_up',
+      );
+      expect(
+        PushNotificationService.eventKindOf(const <String, dynamic>{}),
+        '',
+      );
+    });
+
+    test('ID notifikasi kind-only stabil dan berbeda antar peristiwa', () {
+      const first = <String, dynamic>{
+        'kind': 'chat_message',
+        'sender_id': 'pro-1',
+        'notification_id': 'n-1',
+      };
+      const second = <String, dynamic>{
+        'kind': 'chat_message',
+        'sender_id': 'pro-1',
+        'notification_id': 'n-2',
+      };
+
+      expect(
+        PushNotificationService.notificationIdFor(first),
+        PushNotificationService.notificationIdFor(
+          Map<String, dynamic>.from(first),
+        ),
+      );
+      expect(
+        PushNotificationService.notificationIdFor(first),
+        isNot(PushNotificationService.notificationIdFor(second)),
+      );
+    });
+  });
+
   group('LocalNotificationRouter', () {
     tearDown(LocalNotificationRouter.reset);
 

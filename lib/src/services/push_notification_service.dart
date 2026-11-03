@@ -276,7 +276,7 @@ class PushNotificationService {
 
   void _onForegroundMessage(RemoteMessage message) {
     final data = message.data;
-    final kind = _kindOf(data);
+    final kind = eventKindOf(data);
 
     // Chat untuk percakapan yang sedang dibuka tidak perlu notifikasi.
     if (!shouldShowChatNotification(data, activeChatPeer?.call())) return;
@@ -333,7 +333,7 @@ class PushNotificationService {
   /// ulang peristiwa yang sama MENIMPA notifikasi sebelumnya.
   static int notificationIdFor(Map<String, dynamic> data) {
     final parts = <String>[
-      (data['kind'] ?? data['type'] ?? '').toString(),
+      eventKindOf(data),
       (data['session_id'] ?? '').toString(),
       (data['notification_id'] ?? '').toString(),
       (data['patient_id'] ?? '').toString(),
@@ -352,8 +352,16 @@ class PushNotificationService {
     return hash == 0 ? 1 : hash;
   }
 
-  static String _kindOf(Map<String, dynamic> data) =>
-      (data['kind'] ?? data['type'] ?? '').toString();
+  /// Jenis peristiwa dari payload.
+  ///
+  /// Backend mengirim kunci `kind` (bukan `type`) — lihat
+  /// `backend/internal/server/server.go` saat membangun data FCM. Kunci `type`
+  /// tetap dibaca lebih dulu demi kompatibilitas payload lama/notifikasi lokal
+  /// yang sudah tersimpan, lalu fallback ke `kind`. Tanpa fallback ini seluruh
+  /// routing & pemilihan kanal menerima null dan tap notifikasi tidak pernah
+  /// bernavigasi.
+  static String eventKindOf(Map<String, dynamic> data) =>
+      (data['type'] ?? data['kind'] ?? '').toString();
 
   /// True bila notifikasi chat perlu ditampilkan.
   ///
@@ -364,7 +372,7 @@ class PushNotificationService {
     Map<String, dynamic> data,
     String? activePeer,
   ) {
-    if (_kindOf(data) != 'chat_message') return true;
+    if (eventKindOf(data) != 'chat_message') return true;
     final sender = (data['sender_id'] ?? '').toString();
     if (sender.isEmpty) return true;
     final peer = (activePeer ?? '').trim();
@@ -385,8 +393,8 @@ class PushNotificationService {
   // ──────────────────────────────────────────────────────────────
 
   void _handleNotificationNavigation(Map<String, dynamic> data) {
-    final type = (data['type'] ?? data['kind'])?.toString();
-    final route = routeForType(type, data);
+    final kind = eventKindOf(data);
+    final route = routeForType(kind.isEmpty ? null : kind, data);
     if (route == null) return;
 
     // Chat: butuh argumen peer agar layar chat langsung terbuka pada lawan
