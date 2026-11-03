@@ -75,6 +75,7 @@ func (w *OutboxWorker) sendJob(ctx context.Context, job store.OutboxJob) error {
 
 	collapseKey := collapseKeyFor(job.Data)
 	var sendErr error
+	delivered := false
 	for _, token := range tokens {
 		message := Message{
 			Token:       token,
@@ -96,12 +97,22 @@ func (w *OutboxWorker) sendJob(ctx context.Context, job store.OutboxJob) error {
 				continue
 			}
 			sendErr = errors.Join(sendErr, err)
+		} else {
+			delivered = true
 		}
 	}
-	if sendErr != nil {
+	// Bila minimal satu token sukses, job dianggap terkirim. JANGAN retry ke
+	// SEMUA token hanya karena satu token gagal — itu menyebabkan push ganda.
+	if delivered {
+		if sendErr != nil {
+			w.logger.Warn("notification outbox partial send failed", "job_id", job.ID, "error", sendErr)
+		}
+	} else if sendErr != nil {
 		w.markFailed(ctx, job, sendErr)
 		return sendErr
 	}
+	// delivered==true (minimal satu sukses) ATAU tidak ada error sama sekali
+	// (semua token basi/nonaktif) -> tandai delivered agar tidak di-retry.
 	if err := w.store.MarkOutboxDelivered(ctx, job.ID); err != nil {
 		return err
 	}

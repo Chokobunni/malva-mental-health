@@ -1059,6 +1059,9 @@ type ChatAccess struct {
 	Reason        string     `json:"reason,omitempty"`
 	NextSession   *time.Time `json:"next_session_at,omitempty"`
 	ActivePackage bool       `json:"has_active_package"`
+	// SessionID = id sesi yang membuat InSession true (kosong bila tidak ada
+	// sesi aktif). Dipakai untuk kunci/kolaps notifikasi chat push.
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // sessionWindow sesi dianggap "berjalan" dari 10 menit sebelum mulai sampai
@@ -1103,6 +1106,9 @@ func (s *Store) ChatAccessFor(ctx context.Context, patientID, professionalID, se
 		// kedaluwarsa tidak pernah masuk kueri ini sehingga tetap diblokir.
 		if inSessionWindow(now, start, duration) {
 			out.InSession = true
+			// Simpan id sesi aktif agar chat push bisa memakai session_id yang
+			// tepat (kunci kolaps notifikasi). Tidak mengubah jendela waktu.
+			out.SessionID = id
 		}
 		if start.After(now) {
 			out.NextSession = &start

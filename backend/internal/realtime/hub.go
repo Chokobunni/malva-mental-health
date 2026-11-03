@@ -26,7 +26,16 @@ type Hub struct {
 	store         *store.Store
 	mu            sync.RWMutex
 	clients       map[string]map[*client]struct{}
+	// chatPush dipanggil saat pesan chat teks tersimpan & dipublikasikan, agar
+	// lapisan server bisa mengirim push FCM (hanya saat sesi aktif & penerima
+	// offline). Nil = tidak ada push. Di-set via SetChatPush untuk menghindari
+	// import cycle (realtime tidak boleh mengimpor server).
+	chatPush ChatPushFunc
 }
+
+// ChatPushFunc adalah callback push chat tanpa import cycle. Dipanggil dari
+// jalur WebSocket setelah pesan tersimpan & dipublikasikan.
+type ChatPushFunc func(ctx context.Context, recipientID, senderID, senderName, text, patientID, professionalID, sessionID string, inSession bool)
 
 type Event struct {
 	Type string `json:"type"`
@@ -70,6 +79,21 @@ func NewHub(logger *slog.Logger, originAllowed func(string) bool, st *store.Stor
 		store:         st,
 		clients:       map[string]map[*client]struct{}{},
 	}
+}
+
+// SetChatPush mendaftarkan callback push chat (dipanggil dari lapisan server
+// agar tidak terjadi import cycle).
+func (h *Hub) SetChatPush(fn ChatPushFunc) {
+	h.chatPush = fn
+}
+
+// IsOnline melaporkan apakah user punya minimal satu koneksi WebSocket aktif.
+// Dipakai untuk menahan push FCM ke pengguna yang sedang online (real-time
+// sudah cukup).
+func (h *Hub) IsOnline(userID string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.clients[userID]) > 0
 }
 
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request, userID, role string) {
@@ -326,6 +350,15 @@ func (c *client) handleChatMessage(raw json.RawMessage) {
 	}
 	c.hub.Publish(c.userID, outEvent)
 	c.hub.Publish(msg.RecipientID, outEvent)
+
+	// Push FCM ke penerima — hanya pesan teks percakapan (kartu share tidak
+	// memicu push). inSession & sessionID diambil dari ChatAccess yang sudah
+	// dihitung di atas. notifyChatPush (lapisan server) menahan push bila sesi
+	// tidak aktif, penerima sedang online, atau dalam cooldown.
+	if !isShare && c.hub.chatPush != nil {
+		c.hub.chatPush(ctx, msg.RecipientID, c.userID, senderName, saved.Text,
+			patientID, professionalID, access.SessionID, access.InSession)
+	}
 }
 
 func (c *client) handleTypingIndicator(raw json.RawMessage) {

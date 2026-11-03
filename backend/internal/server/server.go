@@ -202,6 +202,11 @@ func New(cfg config.Config, authManager auth.Manager, st *store.Store, hub *real
 	} else {
 		logger.Warn("MALVA_GOOGLE_CLIENT_SECRET belum diisi; sesi video tidak bisa dibuat (Google Meet satu-satunya penyedia)")
 	}
+	// Daftarkan callback push chat ke hub realtime (hindari import cycle).
+	// Jalur WebSocket akan memanggil ini setelah pesan chat teks tersimpan.
+	if hub != nil {
+		hub.SetChatPush(srv.notifyChatPush)
+	}
 	return srv
 }
 
@@ -1739,7 +1744,51 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 		s.hub.Publish(saved.SenderID, event)
 		s.hub.Publish(recipientID, event)
 	}
+	// Push FCM ke penerima — hanya pesan teks percakapan (kartu share tidak
+	// memicu push). notifyChatPush menahan bila sesi tidak aktif, penerima
+	// online, atau dalam cooldown.
+	if !isShare {
+		s.notifyChatPush(r.Context(), recipientID, claims.Subject, senderName, text,
+			patientID, professionalID, access.SessionID, access.InSession)
+	}
 	writeJSON(w, http.StatusCreated, map[string]any{"message": saved})
+}
+
+// notifyChatPush mengirim push FCM untuk pesan chat — HANYA saat sesi aktif,
+// penerima tidak sedang online, dan tidak dalam cooldown per percakapan.
+// Dipanggil dari jalur REST (sendMessage) dan WebSocket (via hub.SetChatPush).
+func (s *Server) notifyChatPush(ctx context.Context, recipientID, senderID, senderName, text, patientID, professionalID, sessionID string, inSession bool) {
+	// Push chat HANYA saat sesi aktif.
+	if !inSession {
+		return
+	}
+	body := strings.TrimSpace(text)
+	if body == "" {
+		// Tidak ada teks percakapan (mis. share kartu) -> tidak push.
+		return
+	}
+	// Jangan ganggu penerima yang sedang online (real-time sudah sampai).
+	if s.hub != nil && s.hub.IsOnline(recipientID) {
+		return
+	}
+	// Cooldown per percakapan: hindari ledakan push saat banyak pesan beruntun.
+	if exists, err := s.store.RecentChatNotification(ctx, recipientID, senderID, 2*time.Minute); err == nil && exists {
+		return
+	}
+	// Potong body ke maks 120 karakter (rune-aware).
+	if r := []rune(body); len(r) > 120 {
+		body = string(r[:120])
+	}
+	title := strings.TrimSpace(senderName)
+	if title == "" {
+		title = "Pesan baru"
+	}
+	s.notifyUser(ctx, recipientID, "chat_message", title, body, map[string]string{
+		"sender_id":       senderID,
+		"session_id":      sessionID,
+		"patient_id":      patientID,
+		"professional_id": professionalID,
+	})
 }
 
 // resolveChatPair menentukan pasangan chat utk peran pemanggil, menerima
@@ -1809,6 +1858,8 @@ func (s *Server) testNotification(w http.ResponseWriter, r *http.Request, claims
 		Data: map[string]string{
 			"kind": "test",
 		},
+		// Endpoint uji TIDAK boleh memicu FCM (hindari push uji yang mengganggu).
+		SuppressPush: true,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"time"
 
 	"malva/backend/internal/config"
 
@@ -110,8 +111,13 @@ type fcmProvider struct {
 }
 
 func (p *fcmProvider) Send(ctx context.Context, message Message) error {
+	ttl := time.Hour
 	android := &messaging.AndroidConfig{
 		Priority: "high",
+		// TTL 1 jam: push basi (mis. perangkat baru kembali online berjam-jam
+		// kemudian) tidak dikirim. Chat/notifikasi yang sudah tak relevan
+		// dibuang FCM alih-alih menumpuk.
+		TTL: &ttl,
 		Notification: &messaging.AndroidNotification{
 			ChannelID: "malva_updates",
 		},

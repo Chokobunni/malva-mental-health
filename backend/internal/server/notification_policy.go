@@ -7,54 +7,29 @@ import "fmt"
 // yang menerapkan kebijakan di sini — jangan menyebar `if kind == ...` ke
 // handler.
 //
-// Latar belakang: pasien menerima ledakan push duplikat dan profesional
-// menerima push untuk hal-hal yang tidak butuh intervensi mendesak. Kebijakan:
-//   * Pasien  — hanya peristiwa SESI, PEMBAYARAN, OBAT, KRISIS yang push.
-//     Jenis low-priority (review screening, health record, catatan, terapi,
-//     kredensial) digabung menjadi digest harian (in-app saja).
-//   * Profesional — hanya SESI & CHAT yang push. Sisanya in-app saja.
+// Kebijakan push yang ditetapkan pemilik produk (final):
+//   * PASIEN  — HANYA push untuk CHAT saat sesi aktif (`chat_message`).
+//     Pengingat minum obat dan pengingat goals harian adalah notifikasi LOKAL
+//     di perangkat (dijadwalkan Flutter), jadi backend TIDAK BOLEH mengirimnya
+//     lewat FCM. Jenis sesi/pembayaran/krisis kini in-app saja (tanpa push).
+//   * PROFESIONAL — HANYA push untuk CHAT (`chat_message`). Sisanya in-app.
 //
 // Default (kind tak dikenal) = TIDAK push (in-app saja). Ini konsisten dengan
 // prinsip "kurangi kebisingan": jenis baru harus didaftarkan eksplisit bila
 // memang layak push.
 
 // patientPushKinds adalah jenis notifikasi yang boleh memicu push untuk pasien.
+//
+// HANYA chat. Pengingat obat & goals = notifikasi lokal perangkat (Flutter),
+// TIDAK BOLEH pernah dikirim lewat FCM dari backend. Jenis sesi/pembayaran/
+// krisis sengaja tidak didaftarkan (in-app saja).
 var patientPushKinds = map[string]bool{
-	// Sesi & video call.
-	"session_meet_ready":             true,
-	"session_scheduled":              true,
-	"session_rescheduled":            true,
-	"session_cancelled_patient":      true,
-	"session_cancelled_professional": true,
-	"session_reminder":               true,
-	"session_meet_missing":           true,
-	"session_meet_update_failed":     true,
-	"session_needs_reschedule":       true,
-	// Paket & pembayaran.
-	"package_activated":            true,
-	"payment_needs_reconciliation": true,
-	// Obat.
-	"medication_prescribed": true,
-	"prescription_created":  true,
-	"medication_reminder":   true,
-	// Krisis / SOS.
-	"crisis_alert": true,
+	"chat_message": true,
 }
 
 // professionalPushKinds adalah jenis notifikasi yang boleh memicu push untuk
-// profesional: HANYA sesi & chat.
+// profesional: HANYA chat.
 var professionalPushKinds = map[string]bool{
-	"session_scheduled":              true,
-	"session_rescheduled":            true,
-	"session_cancelled_patient":      true,
-	"session_cancelled_professional": true,
-	"session_reminder":               true,
-	"session_meet_missing":           true,
-	"session_meet_update_failed":     true,
-	"session_meet_ready":             true,
-	"session_needs_reschedule":       true,
-	// Pesan chat (bila/ketika notifikasi chat dibuat; WS chat_message tetap
-	// realtime terpisah).
 	"chat_message": true,
 }
 
@@ -97,7 +72,11 @@ func isDigestKind(kind string) bool {
 // peristiwa itu memang perlu memberi tahu perubahan status.
 func sessionNotificationDeduped(kind string) bool {
 	switch kind {
-	case "session_scheduled", "session_reminder", "session_meet_ready":
+	case "session_scheduled", "session_reminder", "session_meet_ready",
+		// `session_meet_missing` & `session_meet_update_failed` dipancarkan
+		// ULANG setiap tick sweeper 10 menit; tanpa dedupe baris notifikasi
+		// menumpuk. Cukup sekali per sesi.
+		"session_meet_missing", "session_meet_update_failed":
 		return true
 	default:
 		return false

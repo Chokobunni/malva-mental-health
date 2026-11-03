@@ -785,7 +785,22 @@ func (s *Store) UpsertDeviceToken(ctx context.Context, userID, platform, token s
 	if platform == "" || token == "" {
 		return errors.New("platform and token are required")
 	}
-	_, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	// Satu token aktif per user+platform: nonaktifkan token lama platform yang
+	// sama (berbeda token). Tanpa ini, token usang (mis. reinstall) tetap
+	// enabled dan FCM fan-out menggandakan notifikasi ke perangkat yang sama.
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE device_tokens
+		SET enabled = false
+		WHERE user_id = $1 AND platform = $2 AND token <> $3
+	`, userID, platform, token); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO device_tokens (user_id, platform, token)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (token) DO UPDATE
@@ -793,8 +808,10 @@ func (s *Store) UpsertDeviceToken(ctx context.Context, userID, platform, token s
 		    platform = EXCLUDED.platform,
 		    enabled = true,
 		    last_seen_at = now()
-	`, userID, platform, token)
-	return err
+	`, userID, platform, token); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) CreateScreeningBundle(ctx context.Context, params CreateScreeningParams) (ScreeningSession, error) {
@@ -2263,6 +2280,29 @@ func (s *Store) NotificationExistsForSession(ctx context.Context, userID, kind, 
 			WHERE user_id = $1 AND type = $2 AND data->>'session_id' = $3
 		)
 	`, userID, kind, sessionID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+// RecentChatNotification melaporkan apakah ada notifikasi chat_message untuk
+// `userID` dari `senderID` dalam `within` terakhir. Dipakai sebagai cooldown
+// per percakapan agar pesan beruntun tidak memicu ledakan push.
+func (s *Store) RecentChatNotification(ctx context.Context, userID, senderID string, within time.Duration) (bool, error) {
+	seconds := int(within.Seconds())
+	if seconds < 0 {
+		seconds = 0
+	}
+	var exists bool
+	err := s.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM notifications
+			WHERE user_id = $1 AND type = 'chat_message'
+			  AND data->>'sender_id' = $2
+			  AND created_at > now() - make_interval(secs => $3)
+		)
+	`, userID, senderID, seconds).Scan(&exists)
 	if err != nil {
 		return false, err
 	}
