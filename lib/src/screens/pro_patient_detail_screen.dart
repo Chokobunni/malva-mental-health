@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../professional_role.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
@@ -55,6 +56,11 @@ class _ProPatientDetailScreenState
   String? _restricted;
   bool _isLoading = true;
   String? _error;
+
+  /// True bila profesional yang login adalah Psikiater (Sp.KJ) — satu-satunya
+  /// peran yang boleh meresepkan obat. Default false (tombol disembunyikan)
+  /// sampai kredensial termuat.
+  bool _isPsychiatrist = false;
 
   /// Bagian opsional yang gagal dimuat. Data klinis yang gagal dimuat tidak
   /// boleh tampil sama seperti "pasien memang tidak punya data", jadi bagian
@@ -176,6 +182,16 @@ class _ProPatientDetailScreenState
         // opsional
       }
       if (!mounted) return;
+      // Muat kredensial sendiri untuk menentukan apakah Psikiater (hanya
+      // Psikiater yang boleh meresepkan). Kegagalan memuat tidak menjatuhkan
+      // layar — perlakukan sebagai bukan psikiater (aman).
+      BackendProfessionalCredential? cred;
+      try {
+        cred = await _api.getMyCredentials(accessToken: token);
+      } on Object {
+        cred = null;
+      }
+      if (!mounted) return;
       setState(() {
         _packages = results[0] as List<BackendCarePackage>;
         _sessions = results[1] as List<BackendCareSession>;
@@ -189,6 +205,8 @@ class _ProPatientDetailScreenState
         _timeline = (results[9] as List<BackendTimelineEvent>?) ?? const [];
         _shares = shares;
         _healthRecord = record;
+        _isPsychiatrist =
+            cred != null && isPsychiatristSpecialization(cred.specialization);
         _failedSections = List.unmodifiable(failed);
         _isLoading = false;
       });
@@ -753,12 +771,21 @@ class _ProPatientDetailScreenState
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => _openPrescribeMedication(context),
-                            icon:
-                                const Icon(Icons.medication_rounded, size: 16),
-                            label: const Text('Resepkan obat'),
-                          ),
+                          // Resep hanya untuk Psikiater (Sp.KJ). Psikolog
+                          // melihat keterangan, bukan tombol yang pasti 403.
+                          child: _isPsychiatrist
+                              ? OutlinedButton.icon(
+                                  onPressed: () =>
+                                      _openPrescribeMedication(context),
+                                  icon: const Icon(Icons.medication_rounded,
+                                      size: 16),
+                                  label: const Text('Resepkan obat'),
+                                )
+                              : const Text(
+                                  'Hanya Psikiater (Sp.KJ) yang dapat '
+                                  'meresepkan obat.',
+                                  style: TextStyle(fontSize: 11.5),
+                                ),
                         ),
                       ],
                     ),

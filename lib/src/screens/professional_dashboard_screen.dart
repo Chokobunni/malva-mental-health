@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
+import '../professional_role.dart';
 import '../providers/providers.dart';
 import '../services/care_session_time.dart';
 import '../services/dashboard_sync_service.dart';
@@ -1282,7 +1283,7 @@ class _ProfessionalPortalSectionState
                           ? 'Memuat profil...'
                           : specialization.isEmpty
                               ? 'Belum ada spesialisasi'
-                              : specialization,
+                              : '${professionalRoleLabel(specialization)} ($specialization)',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color:
                                 Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1388,21 +1389,34 @@ class _ProfessionalPortalSectionState
         ),
         const SizedBox(height: 22),
         const SectionLabel('Klinis & kepatuhan'),
-        ActionTile(
-          icon: Icons.medication_liquid_rounded,
-          title: 'E-Prescription',
-          subtitle: 'Terbitkan resep dengan digital signature + QR',
-          color: MalvaColors.mint,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => EPrescriptionScreen(
-                session: session,
-                apiClient: apiClient,
+        // Resep obat hanya untuk Psikiater (Sp.KJ). Psikolog (M.Psi) tidak
+        // dapat meresepkan — jangan tampilkan tile yang pasti 403.
+        if (isPsychiatristSpecialization(specialization))
+          ActionTile(
+            icon: Icons.medication_liquid_rounded,
+            title: 'E-Prescription',
+            subtitle: 'Terbitkan resep dengan digital signature + QR',
+            color: MalvaColors.mint,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => EPrescriptionScreen(
+                  session: session,
+                  apiClient: apiClient,
+                ),
               ),
             ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              'Resep obat hanya untuk Psikiater (Sp.KJ).',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
           ),
-        ),
         const SizedBox(height: 10),
         ActionTile(
           icon: Icons.shield_rounded,

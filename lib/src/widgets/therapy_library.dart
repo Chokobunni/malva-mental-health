@@ -3439,10 +3439,17 @@ class TherapySubmissionView extends StatelessWidget {
           )
         : null;
 
-    // Detail yang dilipat: ringkasan + daftar jawaban per pertanyaan.
+    // Detail yang dilipat: kartu hasil (bila ada) + ringkasan + daftar jawaban
+    // per pertanyaan. Kartu hasil diletakkan di sini (bukan `body`) agar header
+    // saja yang terlihat saat kartu tertutup — sama seperti PHQ-9/GAD-7; skor
+    // muncul setelah kartu di-tap.
     final detail = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (resultCard != null) ...[
+          resultCard,
+          const SizedBox(height: 10),
+        ],
         if (resultCard == null && summary.isNotEmpty) ...[
           Text(summary, style: const TextStyle(fontStyle: FontStyle.italic)),
           const SizedBox(height: 10),
@@ -3482,7 +3489,6 @@ class TherapySubmissionView extends StatelessWidget {
 
     return CollapsibleCard(
       header: header,
-      body: resultCard,
       semanticLabel: 'Jawaban $title',
       child: detail,
     );

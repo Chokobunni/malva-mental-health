@@ -1246,6 +1246,18 @@ func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims
 		if !s.requireVerifiedProfessional(w, r, claims) {
 			return
 		}
+		// Hanya Psikiater (Sp.KJ) yang boleh meresepkan obat. Psikolog (M.Psi)
+		// tidak dapat memberikan obat — tolak di sini agar klien tidak menerima
+		// 403 yang membingungkan dari jalur lain.
+		cred, credErr := s.store.GetProfessionalCredential(r.Context(), claims.Subject)
+		if credErr != nil {
+			writeError(w, http.StatusForbidden, errors.New("kredensial profesional tidak ditemukan"))
+			return
+		}
+		if !isPsychiatristSpecialization(cred.Specialization) {
+			writeError(w, http.StatusForbidden, errors.New("Hanya Psikiater (Sp.KJ) yang dapat meresepkan obat. Psikolog (M.Psi) tidak dapat memberikan obat."))
+			return
+		}
 		resolved, err := s.authorizePatientAccess(r, claims, req.PatientID)
 		if err != nil {
 			writeError(w, http.StatusForbidden, err)

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models.dart';
+import '../../professional_role.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
@@ -36,6 +37,11 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
   bool _isLoading = true;
   String? _error;
 
+  /// True bila profesional yang login adalah Psikiater (Sp.KJ) — satu-satunya
+  /// peran yang boleh menerbitkan resep. Default false (terkunci) sampai
+  /// kredensial termuat.
+  bool _isPsychiatrist = false;
+
   @override
   void initState() {
     super.initState();
@@ -64,10 +70,21 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
         apiClient.listEPrescriptions(accessToken: accessToken),
         apiClient.listPatientProfessionalLinks(accessToken: accessToken),
       ]);
+      // Muat kredensial sendiri untuk menentukan apakah Psikiater. Kegagalan
+      // memuat kredensial tidak boleh menjatuhkan seluruh layar — perlakukan
+      // sebagai bukan psikiater (terkunci, aman; server tetap menegakkan).
+      BackendProfessionalCredential? cred;
+      try {
+        cred = await apiClient.getMyCredentials(accessToken: accessToken);
+      } on Object {
+        cred = null;
+      }
       if (!mounted) return;
       setState(() {
         _prescriptions = results[0] as List<BackendEPrescription>;
         _links = results[1] as List<BackendPatientProfessionalLink>;
+        _isPsychiatrist =
+            cred != null && isPsychiatristSpecialization(cred.specialization);
         _isLoading = false;
       });
     } on MalvaApiException catch (e) {
@@ -93,15 +110,17 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'erx_add_fab',
-        onPressed: () => _openCreate(context),
-        backgroundColor: MalvaColors.seed,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Resep Baru',
-            style: TextStyle(fontWeight: FontWeight.w800)),
-      ),
+      floatingActionButton: (!_isLoading && _isPsychiatrist)
+          ? FloatingActionButton.extended(
+              heroTag: 'erx_add_fab',
+              onPressed: () => _openCreate(context),
+              backgroundColor: MalvaColors.seed,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Resep Baru',
+                  style: TextStyle(fontWeight: FontWeight.w800)),
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -151,6 +170,8 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
                   ],
                 ),
               )
+            else if (!_isPsychiatrist)
+              const _LockedPrescriptionCard()
             else if (_prescriptions.isEmpty)
               const EmptyState(
                 icon: Icons.medication_liquid_outlined,
@@ -196,6 +217,39 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
           apiClient: widget.apiClient,
           prescriptionId: rx.id,
         ),
+      ),
+    );
+  }
+}
+
+/// Kartu terkunci untuk profesional non-Psikiater. Menjelaskan bahwa resep
+/// hanya untuk Psikiater (Sp.KJ) — menggantikan form/list agar tidak ada
+/// tombol yang pasti ditolak server.
+class _LockedPrescriptionCard extends StatelessWidget {
+  const _LockedPrescriptionCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      bordered: true,
+      child: Column(
+        children: [
+          const Icon(Icons.lock_outline_rounded,
+              size: 40, color: MalvaColors.amber),
+          const SizedBox(height: 12),
+          const Text(
+            'Hanya Psikiater (Sp.KJ) yang dapat meresepkan obat.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Psikolog (M.Psi) tidak dapat menerbitkan resep. Fitur ini khusus '
+            'untuk Psikiater.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ),
     );
   }
@@ -500,11 +554,21 @@ class _ItemEditorState extends State<_ItemEditor> {
 
   @override
   void dispose() {
+    // Jaring pengaman: pastikan draft terisi meski _sync belum terpanggil.
     widget.draft.name = _name.text;
     widget.draft.dosage = _dosage.text;
     _name.dispose();
     _dosage.dispose();
     super.dispose();
+  }
+
+  /// Sinkronkan teks field ke draft SEKARANG (bukan hanya saat dispose), lalu
+  /// beri tahu induk. Tanpa ini, validasi `_submit` membaca `draft.name` kosong
+  /// karena dispose baru dipanggil belakangan -> "Nama obat tidak boleh kosong".
+  void _sync() {
+    widget.draft.name = _name.text;
+    widget.draft.dosage = _dosage.text;
+    widget.onChanged();
   }
 
   @override
@@ -531,7 +595,7 @@ class _ItemEditorState extends State<_ItemEditor> {
           TextField(
             controller: _name,
             decoration: const InputDecoration(labelText: 'Nama obat'),
-            onChanged: (_) => widget.onChanged(),
+            onChanged: (_) => _sync(),
           ),
           const SizedBox(height: 8),
           Row(
@@ -540,7 +604,7 @@ class _ItemEditorState extends State<_ItemEditor> {
                 child: TextField(
                   controller: _dosage,
                   decoration: const InputDecoration(labelText: 'Dosis'),
-                  onChanged: (_) => widget.onChanged(),
+                  onChanged: (_) => _sync(),
                 ),
               ),
               const SizedBox(width: 8),

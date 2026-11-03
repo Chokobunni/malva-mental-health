@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models.dart';
+import '../../professional_role.dart';
 import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
@@ -175,9 +176,10 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             final ratingLabel = reviews.reviewCount > 0
                                 ? '${reviews.averageStars.toStringAsFixed(1)} (${reviews.reviewCount})'
                                 : 'Belum ada ulasan';
-                            final specLabel = cred.specialization == 'Sp.KJ'
-                                ? 'Psikiater (Sp.KJ)'
-                                : 'Psikolog Klinis (M.Psi)';
+                            final specLabel =
+                                cred.specialization.trim().isEmpty
+                                    ? professionalRoleLabel(cred.specialization)
+                                    : '${professionalRoleLabel(cred.specialization)} (${cred.specialization})';
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [

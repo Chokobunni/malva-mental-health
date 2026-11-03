@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models.dart';
+import '../../professional_role.dart';
 import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
@@ -329,9 +330,7 @@ class _DoctorCard extends StatelessWidget {
                     Text(
                       doctor.specialization.isEmpty
                           ? 'Profesional kesehatan jiwa'
-                          : (doctor.specialization == 'Sp.KJ'
-                              ? 'Psikiater'
-                              : 'Psikolog Klinis'),
+                          : professionalRoleLabel(doctor.specialization),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Colors.black54, fontWeight: FontWeight.w700),
                     ),
