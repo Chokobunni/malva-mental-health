@@ -211,9 +211,13 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     // Pengingat goals juga dijadwalkan OS: batalkan agar tidak berbunyi untuk
     // akun yang sudah keluar.
     unawaited(_goalReminderService.cancel());
-    // Izinkan pendaftaran token lagi pada login berikutnya.
-    _pushNotifications.resetRegistration();
+    // Baca sesi SEBELUM dihapus: token akses dibutuhkan untuk mencabut token
+    // FCM perangkat di server.
     final session = ref.read(authStateProvider).session;
+    // Cabut token FCM perangkat dari server (best-effort) lalu lupakan
+    // pendaftaran lokal — SEBELUM sesi dihapus. Tanpa ini perangkat yang sudah
+    // logout tetap menerima push akun lama (notifikasi tanpa aktivitas).
+    unawaited(_pushNotifications.unregisterDeviceToken(session?.accessToken));
     // logoutSession menghapus sesi lokal lebih dulu (agar logout tetap
     // "menempel" walau jaringan menggantung), lalu mencabut refresh token
     // di server sebagai best-effort — karenanya aman tidak ditunggu.

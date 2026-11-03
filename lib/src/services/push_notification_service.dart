@@ -51,7 +51,8 @@ class PushNotificationService {
     required this.apiClient,
     required this.navigatorKey,
     this.activeChatPeer,
-  });
+    Future<String?> Function()? fcmTokenProvider,
+  }) : _fcmTokenProvider = fcmTokenProvider;
 
   final MalvaApiClient apiClient;
   final GlobalKey<NavigatorState> navigatorKey;
@@ -59,6 +60,11 @@ class PushNotificationService {
   /// Peer chat yang SEDANG dibuka (null bila tidak ada). Dipakai menekan
   /// notifikasi chat untuk percakapan yang sedang dilihat pengguna.
   final String? Function()? activeChatPeer;
+
+  /// Sumber token FCM perangkat. Bisa diganti di test agar alur
+  /// [unregisterDeviceToken] dapat diuji tanpa Firebase nyata. Bila null,
+  /// dipakai `FirebaseMessaging.instance.getToken()`.
+  final Future<String?> Function()? _fcmTokenProvider;
 
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
@@ -84,6 +90,11 @@ class PushNotificationService {
 
   /// True bila inisialisasi sudah selesai (dipakai test/diagnostik).
   bool get isInitialized => _initialized;
+
+  /// User yang token-nya terdaftar pada proses ini (dipakai test untuk
+  /// memverifikasi `resetRegistration` setelah `unregisterDeviceToken`).
+  @visibleForTesting
+  String? get registeredUserId => _registeredUserId;
 
   /// Initialize the service: local notifications, channels, handlers.
   ///
@@ -254,6 +265,45 @@ class PushNotificationService {
     _registeredUserId = null;
     unawaited(_tokenRefreshSub?.cancel());
     _tokenRefreshSub = null;
+  }
+
+  /// Cabut token FCM perangkat dari server, lalu lupakan pendaftaran lokal.
+  ///
+  /// Dipanggil saat logout SEBELUM sesi dihapus (butuh [accessToken]). Tanpa
+  /// ini, perangkat yang sudah keluar tetap tercatat `enabled` di server dan
+  /// terus menerima push milik akun lama — muncul sebagai notifikasi tanpa
+  /// aktivitas yang sesuai di aplikasi.
+  ///
+  /// Best-effort: kegagalan jaringan/izin TIDAK boleh menghalangi logout, jadi
+  /// seluruh langkah dibungkus try/catch dan [resetRegistration] SELALU
+  /// dijalankan di akhir.
+  Future<void> unregisterDeviceToken(String? accessToken) async {
+    final token = accessToken;
+    try {
+      if (token != null && token.isNotEmpty) {
+        final fcmToken = await _currentFcmToken();
+        if (fcmToken != null && fcmToken.isNotEmpty) {
+          await apiClient.deleteDeviceToken(
+            accessToken: token,
+            token: fcmToken,
+          );
+        }
+      }
+    } on Object catch (error) {
+      if (kDebugMode) debugPrint('FCM token unregistration failed: $error');
+    } finally {
+      resetRegistration();
+    }
+  }
+
+  /// Ambil token FCM perangkat: lewat [fcmTokenProvider] bila disuntikkan
+  /// (test), atau `FirebaseMessaging.instance.getToken()` (produksi). Null bila
+  /// Firebase belum siap / tidak ada token.
+  Future<String?> _currentFcmToken() async {
+    final provider = _fcmTokenProvider;
+    if (provider != null) return provider();
+    if (Firebase.apps.isEmpty) return null;
+    return FirebaseMessaging.instance.getToken();
   }
 
   Future<void> _sendTokenToBackend(String accessToken, String token) async {

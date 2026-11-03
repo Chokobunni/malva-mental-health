@@ -717,6 +717,24 @@ class MalvaApiClient {
     );
   }
 
+  /// Cabut token FCM perangkat (DELETE /v1/device-tokens). Dipanggil saat
+  /// logout agar perangkat tidak lagi menerima push milik akun lama.
+  ///
+  /// Body dikirim lewat parameter [body] `_send`; `http` 1.6+ mendukung body
+  /// pada DELETE (lihat `_sendUri`). Server hanya menonaktifkan token milik
+  /// user pemanggil, jadi aman bila token sudah tidak ada (idempoten).
+  Future<void> deleteDeviceToken({
+    required String accessToken,
+    required String token,
+  }) async {
+    await _send(
+      'DELETE',
+      '/v1/device-tokens',
+      accessToken: accessToken,
+      body: {'token': token},
+    );
+  }
+
   Future<List<BackendScreeningSession>> listScreenings({
     required String accessToken,
     required String patientId,
@@ -2902,7 +2920,7 @@ class MalvaApiClient {
             .get(uri, headers: headers)
             .timeout(const Duration(seconds: 10)),
         'DELETE' => _httpClient
-            .delete(uri, headers: headers)
+            .delete(uri, headers: headers, body: encodedBody)
             .timeout(const Duration(seconds: 10)),
         _ => throw MalvaApiException('Metode API tidak didukung: $method'),
       };

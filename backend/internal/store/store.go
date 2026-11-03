@@ -814,6 +814,26 @@ func (s *Store) UpsertDeviceToken(ctx context.Context, userID, platform, token s
 	return tx.Commit()
 }
 
+// DisableDeviceTokenForUser menonaktifkan satu token FCM milik user tertentu.
+//
+// Dipakai saat logout: perangkat yang sudah keluar tidak boleh lagi menerima
+// push milik akun lama. Filter `user_id = $1` WAJIB ada agar token yang
+// kebetulan sekarang tercatat milik user lain (perangkat dipakai bergantian)
+// tidak ikut dinonaktifkan. Idempoten — 0 baris terpengaruh bukan error.
+func (s *Store) DisableDeviceTokenForUser(ctx context.Context, userID, token string) error {
+	userID = strings.TrimSpace(userID)
+	token = strings.TrimSpace(token)
+	if userID == "" || token == "" {
+		return errors.New("user id and token are required")
+	}
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE device_tokens
+		SET enabled = false
+		WHERE user_id = $1 AND token = $2
+	`, userID, token)
+	return err
+}
+
 func (s *Store) CreateScreeningBundle(ctx context.Context, params CreateScreeningParams) (ScreeningSession, error) {
 	source := strings.TrimSpace(params.Source)
 	if source == "" {

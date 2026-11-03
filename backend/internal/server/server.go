@@ -229,6 +229,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/me", s.requireAuth(s.me))
 	mux.HandleFunc("PATCH /v1/me", s.requireAuth(s.updateMe))
 	mux.HandleFunc("POST /v1/device-tokens", s.requireAuth(s.upsertDeviceToken))
+	// Cabut token FCM perangkat saat logout agar perangkat yang sudah keluar
+	// tidak lagi menerima push milik akun lama.
+	mux.HandleFunc("DELETE /v1/device-tokens", s.requireAuth(s.deleteDeviceToken))
 	mux.HandleFunc("POST /v1/screenings", s.requireAuth(s.createScreening))
 	mux.HandleFunc("GET /v1/screenings", s.requireAuth(s.listScreenings))
 	mux.HandleFunc("POST /v1/screenings/{screening_id}/review", s.requireAuth(s.reviewScreening))
@@ -809,6 +812,28 @@ func (s *Server) upsertDeviceToken(w http.ResponseWriter, r *http.Request, claim
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+}
+
+// deleteDeviceToken mencabut (menonaktifkan) token FCM perangkat milik user yang
+// sedang login. Dipanggil aplikasi saat logout agar perangkat tidak lagi
+// menerima push akun lama. Hanya token milik user pemanggil yang disentuh;
+// idempoten (token tak ada / sudah nonaktif tetap sukses).
+func (s *Server) deleteDeviceToken(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	var req deviceTokenRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	token := strings.TrimSpace(req.Token)
+	if token == "" {
+		writeError(w, http.StatusBadRequest, errors.New("token wajib diisi"))
+		return
+	}
+	if err := s.store.DisableDeviceTokenForUser(r.Context(), claims.Subject, token); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
 }
 
 func (s *Server) createScreening(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
