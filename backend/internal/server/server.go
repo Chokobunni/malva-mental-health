@@ -1785,6 +1785,7 @@ func (s *Server) notifyChatPush(ctx context.Context, recipientID, senderID, send
 	}
 	s.notifyUser(ctx, recipientID, "chat_message", title, body, map[string]string{
 		"sender_id":       senderID,
+		"sender_name":     title,
 		"session_id":      sessionID,
 		"patient_id":      patientID,
 		"professional_id": professionalID,
