@@ -331,3 +331,10 @@ Malva adalah aplikasi mental health yang menghubungkan pasien dengan profesional
 - Sesi berjalan dan Video call mendatang tampil di home pasien, dengan avatar, keadaan kosong/error terpisah dan retry. Pasien tidak diberi aksi membuat link Meet milik profesional.
 - Lanjut bayar paket legacy mengikat booking yang dipilih secara eksplisit dan tidak mengambil booking paket lain. Access token yang di-refresh dipakai untuk retry dan dipersistensikan.
 - FCM data-only dan validator background menolak event di luar scope; upgrade/start/ganti akun membersihkan notifikasi yang sudah tampil tanpa menghapus jadwal goals/obat yang sah.
+# Konsultasi dan attachment profesional — 2026-11-06
+
+- Jadwal kedua peran menampilkan Hadir/Tidak hadir untuk kehadiran sendiri. Tombol Sesi selesai profesional aktif setelah akhir jadwal, dengan perpindahan ke riwayat dan penolakan transisi terminal ulang.
+- Chat profesional memiliki lima alat: Goals & Habits pasien beserta penambahan goal; permintaan PHQ-9/GAD-7, DASS-21 atau WHO-5; Health Record diagnosis dan Medication khusus psikiater; gambar/PDF privat; rangkuman goals/homework dan insight.
+- Pasien membuka form assessment yang sudah ada dari kartu permintaan pada sesi berjalan; hasil tetap dikirim oleh pasien. Kartu rangkuman menampilkan snapshot goal tersimpan dan tautan Goals. Lampiran dapat dibuka/diunduh oleh kedua peserta setelah sesi selesai.
+- Composer chat menutup tepat pada session_ends_at, mempertahankan riwayat. Resume/reconnect menyegarkan izin dan data klinis; respons akun sebelumnya tidak boleh masuk akun berikutnya.
+- Pembayaran capture/accept atau settlement yang diverifikasi server selesai tanpa menunggu webhook; jumlah, order dan fraud tetap divalidasi. Retry menggunakan transaksi yang sama.

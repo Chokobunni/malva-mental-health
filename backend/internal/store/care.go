@@ -59,26 +59,30 @@ type CarePackage struct {
 }
 
 type CareSession struct {
-	ID                string     `json:"id"`
-	PackageID         *string    `json:"package_id,omitempty"`
-	BookingID         *string    `json:"booking_id,omitempty"`
-	PatientID         string     `json:"patient_id"`
-	ProfessionalID    string     `json:"professional_id"`
-	PatientName       string     `json:"patient_name,omitempty"`
-	ProfessionalName  string     `json:"professional_name,omitempty"`
-	SessionType       string     `json:"session_type"`
-	ScheduledAt       time.Time  `json:"scheduled_at"`
-	DurationMinutes   int        `json:"duration_minutes"`
-	Status            string     `json:"status"`
-	MeetingURL        string     `json:"meeting_url,omitempty"`
-	GoogleEventID     string     `json:"google_event_id,omitempty"`
-	SummaryForPatient string     `json:"summary_for_patient,omitempty"`
-	PrivateNote       string     `json:"private_note,omitempty"`
-	CancelReason      string     `json:"cancel_reason,omitempty"`
-	RescheduleCount   int        `json:"reschedule_count"`
-	AttendedMarkedAt  *time.Time `json:"attended_marked_at,omitempty"`
-	CreatedAt         time.Time  `json:"created_at"`
-	PhotoIntroURL     string     `json:"photo_intro_url,omitempty"`
+	ID                             string     `json:"id"`
+	PackageID                      *string    `json:"package_id,omitempty"`
+	BookingID                      *string    `json:"booking_id,omitempty"`
+	PatientID                      string     `json:"patient_id"`
+	ProfessionalID                 string     `json:"professional_id"`
+	PatientName                    string     `json:"patient_name,omitempty"`
+	ProfessionalName               string     `json:"professional_name,omitempty"`
+	SessionType                    string     `json:"session_type"`
+	ScheduledAt                    time.Time  `json:"scheduled_at"`
+	DurationMinutes                int        `json:"duration_minutes"`
+	Status                         string     `json:"status"`
+	MeetingURL                     string     `json:"meeting_url,omitempty"`
+	GoogleEventID                  string     `json:"google_event_id,omitempty"`
+	SummaryForPatient              string     `json:"summary_for_patient,omitempty"`
+	PrivateNote                    string     `json:"private_note,omitempty"`
+	CancelReason                   string     `json:"cancel_reason,omitempty"`
+	RescheduleCount                int        `json:"reschedule_count"`
+	AttendedMarkedAt               *time.Time `json:"attended_marked_at,omitempty"`
+	PatientAttendance              string     `json:"patient_attendance"`
+	ProfessionalAttendance         string     `json:"professional_attendance"`
+	PatientAttendanceMarkedAt      *time.Time `json:"patient_attendance_marked_at,omitempty"`
+	ProfessionalAttendanceMarkedAt *time.Time `json:"professional_attendance_marked_at,omitempty"`
+	CreatedAt                      time.Time  `json:"created_at"`
+	PhotoIntroURL                  string     `json:"photo_intro_url,omitempty"`
 	// AllowPendingMeet adalah penanda HANYA-untuk-pemanggil (tidak pernah
 	// disimpan/dibaca dari database): izinkan sesi video dibuat tanpa link
 	// Meet, dengan status "menunggu link". Lihat komentar invarian di
@@ -485,6 +489,8 @@ const careSessionColumns = `cs.id, cs.package_id, cs.booking_id, cs.patient_id, 
 	COALESCE(cs.summary_for_patient,''),
 	COALESCE(cs.private_note,''), COALESCE(cs.cancel_reason,''),
 	cs.reschedule_count, cs.attended_marked_at, cs.created_at,
+	cs.patient_attendance, cs.professional_attendance,
+	cs.patient_attendance_marked_at, cs.professional_attendance_marked_at,
 	COALESCE(pat.display_name, ''), COALESCE(pro.display_name, ''),
 	COALESCE((SELECT pc.photo_intro_url FROM professional_credentials pc WHERE pc.user_id = cs.professional_id), '')`
 
@@ -498,6 +504,8 @@ func scanCareSession(row interface {
 		&cs.MeetingURL, &cs.GoogleEventID,
 		&cs.SummaryForPatient, &cs.PrivateNote, &cs.CancelReason,
 		&cs.RescheduleCount, &cs.AttendedMarkedAt, &cs.CreatedAt,
+		&cs.PatientAttendance, &cs.ProfessionalAttendance,
+		&cs.PatientAttendanceMarkedAt, &cs.ProfessionalAttendanceMarkedAt,
 		&cs.PatientName, &cs.ProfessionalName, &cs.PhotoIntroURL)
 	if err != nil {
 		return CareSession{}, err
@@ -683,19 +691,16 @@ func (s *Store) ListCareSessions(ctx context.Context, userID, role, scope, patie
 	case "upcoming":
 		where = append(where, "cs.status = 'scheduled' AND cs.scheduled_at >= now()")
 	case "ongoing":
-		// Sesi yang sedang berjalan: status scheduled ATAU completed (profesional
-		// sudah menekan "Hadir" sehingga sesi jadi completed, tetapi jendela waktu
-		// chat/Meet masih terbuka). Jendela sama dengan inSessionWindow:
-		// mulai 10 menit sebelum jadwal s/d TEPAT durasi sesi berakhir.
+		// Hanya sesi scheduled dalam jendela [jadwal-10 menit, akhir sesi).
 		where = append(where,
-			"cs.status IN ('scheduled','completed')",
+			"cs.status = 'scheduled'",
 			"cs.scheduled_at - interval '10 minutes' <= now()",
-			"cs.scheduled_at + (cs.duration_minutes || ' minutes')::interval >= now()")
+			"cs.scheduled_at + (cs.duration_minutes || ' minutes')::interval > now()")
 	case "today":
 		where = append(where, `(cs.scheduled_at AT TIME ZONE 'Asia/Jakarta')::date = (now() AT TIME ZONE 'Asia/Jakarta')::date
 			AND cs.status = 'scheduled'`)
 	case "past":
-		where = append(where, "cs.status IN ('completed','no_show','cancelled_by_professional','cancelled_by_patient')")
+		where = append(where, "(cs.status IN ('completed','no_show','cancelled_by_professional','cancelled_by_patient','expired_unpaid') OR (cs.status='scheduled' AND cs.scheduled_at + (cs.duration_minutes || ' minutes')::interval <= now()))")
 	case "", "all":
 	default:
 		return nil, errors.New("scope harus upcoming, ongoing, today, past, atau all")
@@ -727,6 +732,29 @@ func (s *Store) ListCareSessions(ctx context.Context, userID, role, scope, patie
 // kolom cancelled_by diisi dengan actorID untuk audit (AC-2.3).
 func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, cancelReason, actorID string) (CareSession, error) {
 	status = strings.ToLower(strings.TrimSpace(status))
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return CareSession{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var current string
+	var start time.Time
+	var duration int
+	if err := tx.QueryRowContext(ctx, `SELECT status, scheduled_at, duration_minutes FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&current, &start, &duration); err != nil {
+		return CareSession{}, err
+	}
+	if current == status && current != "scheduled" {
+		if err := tx.Commit(); err != nil {
+			return CareSession{}, err
+		}
+		return s.GetCareSession(ctx, sessionID)
+	}
+	if current != "scheduled" {
+		return CareSession{}, ErrCareSessionTerminal
+	}
+	if status == "completed" && clock.Now().Before(start.Add(time.Duration(duration)*time.Minute)) {
+		return CareSession{}, errors.New("sesi baru bisa diselesaikan setelah durasi terjadwal berakhir")
+	}
 
 	// "attended" hanya MENANDAI kehadiran: status sesi TIDAK berubah dan
 	// pendapatan TIDAK diakui di sini. Sesi tetap berjalan sampai durasinya
@@ -734,7 +762,7 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 	// yang mencatat earnings. Jalur khusus ini berada SEBELUM update generik
 	// agar tidak masuk peta `allowed` di bawah.
 	if status == "attended" {
-		res, err := s.db.ExecContext(ctx, `UPDATE care_sessions
+		res, err := tx.ExecContext(ctx, `UPDATE care_sessions
 			SET attended_marked_at = COALESCE(attended_marked_at, now()), updated_at = now()
 			WHERE id = $1`, sessionID)
 		if err != nil {
@@ -742,6 +770,9 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 		}
 		if aff, _ := res.RowsAffected(); aff == 0 {
 			return CareSession{}, errors.New("care session not found")
+		}
+		if err := tx.Commit(); err != nil {
+			return CareSession{}, err
 		}
 		return s.GetCareSession(ctx, sessionID)
 	}
@@ -755,7 +786,7 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 		return CareSession{}, errors.New("status sesi tidak valid")
 	}
 	setAttended := ""
-	if status == "completed" || status == "no_show" {
+	if status == "completed" {
 		// COALESCE: jangan timpa waktu hadir asli yang sudah dicatat lewat
 		// "attended" sebelum sesi diselesaikan.
 		setAttended = ", attended_marked_at = COALESCE(attended_marked_at, now())"
@@ -775,12 +806,6 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 	// 'completed' tetapi pendapatan gagal dicatat, profesional kehilangan
 	// pendapatannya tanpa jejak. Dengan satu transaksi, keduanya berhasil
 	// bersama atau gagal bersama.
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return CareSession{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	res, err := tx.ExecContext(ctx, q, args...)
 	if err != nil {
 		return CareSession{}, err
@@ -811,6 +836,76 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 	return updated, nil
 }
 
+var ErrCareSessionTerminal = errors.New("sesi sudah berakhir atau dibatalkan")
+
+// MarkCareSessionAttendance records only the authenticated participant's choice.
+// Its row lock serializes attendance, terminal completion, cancellation and sweep.
+func (s *Store) MarkCareSessionAttendance(ctx context.Context, sessionID, role, actorID, attendance string) (CareSession, error) {
+	if (role != "patient" && role != "professional") || (attendance != "attended" && attendance != "absent") {
+		return CareSession{}, errors.New("kehadiran tidak valid")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return CareSession{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var patient, professional, status, previous string
+	var start time.Time
+	// role is selected from the allowlist above; it is never request SQL.
+	if err := tx.QueryRowContext(ctx, `SELECT patient_id,professional_id,status,scheduled_at,`+role+`_attendance FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&patient, &professional, &status, &start, &previous); err != nil {
+		return CareSession{}, err
+	}
+	if (role == "patient" && actorID != patient) || (role == "professional" && actorID != professional) {
+		return CareSession{}, errors.New("anda tidak berhak atas sesi ini")
+	}
+	if previous == attendance {
+		if err := tx.Commit(); err != nil {
+			return CareSession{}, err
+		}
+		return s.GetCareSession(ctx, sessionID)
+	}
+	if status != "scheduled" {
+		return CareSession{}, ErrCareSessionTerminal
+	}
+	if clock.Now().Before(start.Add(-10 * time.Minute)) {
+		return CareSession{}, errors.New("kehadiran baru bisa ditandai sejak 10 menit sebelum sesi")
+	}
+	if previous != "" {
+		return CareSession{}, errors.New("kehadiran sudah dikonfirmasi")
+	}
+	next := "scheduled"
+	cancelledBy := ""
+	if attendance == "absent" {
+		if role == "patient" {
+			next = "no_show"
+		} else {
+			next = "cancelled_by_professional"
+			cancelledBy = actorID
+		}
+	}
+	legacy := ""
+	if role == "professional" && attendance == "attended" {
+		legacy = ", attended_marked_at=COALESCE(attended_marked_at,now())"
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE care_sessions SET `+role+`_attendance=$2, `+role+`_attendance_marked_at=now(),status=$3,cancelled_by=COALESCE(NULLIF($4,'')::uuid,cancelled_by),updated_at=now()`+legacy+` WHERE id=$1`, sessionID, attendance, next, cancelledBy)
+	if err != nil {
+		return CareSession{}, err
+	}
+	if attendance == "absent" && role == "professional" {
+		// A completed package can contain a legacy scheduled final session.
+		// Returning that session's quota makes the unexpired package usable again.
+		if _, err := tx.ExecContext(ctx, `UPDATE care_packages SET status='active',updated_at=now()
+			WHERE id=(SELECT package_id FROM care_sessions WHERE id=$1) AND status='completed' AND expires_at>now()`, sessionID); err != nil {
+			return CareSession{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return CareSession{}, err
+	}
+	_ = s.AddAuditLog(ctx, actorID, patient, "care_session."+role+"_"+attendance, "care_session", sessionID, nil)
+	return s.GetCareSession(ctx, sessionID)
+}
+
 // RescheduleCareSession memindahkan sesi ke jadwal baru (tetap 1 sesi paket).
 func (s *Store) RescheduleCareSession(ctx context.Context, sessionID string, newTime time.Time) (CareSession, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -831,7 +926,7 @@ func (s *Store) RescheduleCareSession(ctx context.Context, sessionID string, new
 	if err != nil {
 		return CareSession{}, err
 	}
-	if current.Status != "scheduled" && current.Status != "cancelled_by_professional" {
+	if current.Status != "scheduled" {
 		return CareSession{}, errors.New("hanya sesi terjadwal yang bisa di-reschedule")
 	}
 	if newTime.Before(clock.Now().Add(-time.Minute)) {
@@ -867,7 +962,9 @@ func (s *Store) RescheduleCareSession(ctx context.Context, sessionID string, new
 	// pengingat menganggapnya sudah terkirim dan pasien tidak diingatkan.
 	if _, err := tx.ExecContext(ctx, `UPDATE care_sessions
 		SET scheduled_at = $1, status = 'scheduled', reschedule_count = reschedule_count + 1,
-		    reminder_sent_at = NULL, updated_at = now()
+		    reminder_sent_at = NULL, attended_marked_at=NULL,
+		    patient_attendance='',professional_attendance='',
+		    patient_attendance_marked_at=NULL,professional_attendance_marked_at=NULL,updated_at = now()
 		WHERE id = $2`, newTime, sessionID); err != nil {
 		return CareSession{}, err
 	}
@@ -968,11 +1065,23 @@ func (s *Store) ListSessionsForReminder(ctx context.Context, from, to time.Time)
 
 // UpdateCareSessionDetail meeting_url / ringkasan sesi / catatan privat.
 func (s *Store) UpdateCareSessionDetail(ctx context.Context, sessionID, meetingURL, summary, privateNote string) (CareSession, error) {
+	return s.PatchCareSessionDetail(ctx, sessionID, &meetingURL, &summary, &privateNote)
+}
+
+// Nil fields are omitted PATCH values; an explicit empty string clears a field.
+func (s *Store) PatchCareSessionDetail(ctx context.Context, sessionID string, meetingURL, summary, privateNote *string) (CareSession, error) {
+	trim := func(value *string) *string {
+		if value == nil {
+			return nil
+		}
+		text := strings.TrimSpace(*value)
+		return &text
+	}
 	const q = `UPDATE care_sessions
-		SET meeting_url = $1, summary_for_patient = $2, private_note = $3, updated_at = now()
+		SET meeting_url = COALESCE($1,meeting_url), summary_for_patient = COALESCE($2,summary_for_patient), private_note = COALESCE($3,private_note), updated_at = now()
 		WHERE id = $4`
 	res, err := s.db.ExecContext(ctx, q,
-		strings.TrimSpace(meetingURL), strings.TrimSpace(summary), strings.TrimSpace(privateNote), sessionID)
+		trim(meetingURL), trim(summary), trim(privateNote), sessionID)
 	if err != nil {
 		return CareSession{}, err
 	}
@@ -1168,7 +1277,8 @@ type ChatAccess struct {
 	ActivePackage bool       `json:"has_active_package"`
 	// SessionID = id sesi yang membuat InSession true (kosong bila tidak ada
 	// sesi aktif). Dipakai untuk kunci/kolaps notifikasi chat push.
-	SessionID string `json:"session_id,omitempty"`
+	SessionID     string     `json:"session_id,omitempty"`
+	SessionEndsAt *time.Time `json:"session_ends_at,omitempty"`
 }
 
 // sessionWindow sesi dianggap "berjalan" dari 10 menit sebelum mulai sampai
@@ -1179,7 +1289,7 @@ func inSessionWindow(now, start time.Time, durationMinutes int) bool {
 		durationMinutes = 30
 	}
 	return !now.Before(start.Add(-10*time.Minute)) &&
-		!now.After(start.Add(time.Duration(durationMinutes)*time.Minute))
+		now.Before(start.Add(time.Duration(durationMinutes)*time.Minute))
 }
 
 func (s *Store) ChatAccessFor(ctx context.Context, patientID, professionalID, senderRole string) (ChatAccess, error) {
@@ -1199,23 +1309,23 @@ func (s *Store) ChatAccessFor(ctx context.Context, patientID, professionalID, se
 	err = s.db.QueryRowContext(ctx, `SELECT id, scheduled_at, duration_minutes, status
 		FROM care_sessions
 		WHERE patient_id = $1 AND professional_id = $2
-		  AND status IN ('scheduled','completed')
-		ORDER BY ABS(EXTRACT(EPOCH FROM (scheduled_at - $3))) ASC
+		  AND status = 'scheduled'
+		  AND scheduled_at + (duration_minutes || ' minutes')::interval > $3
+		ORDER BY CASE WHEN scheduled_at - interval '10 minutes' <= $3 THEN 0 ELSE 1 END,
+		  scheduled_at ASC
 		LIMIT 1`, patientID, professionalID, now).Scan(&id, &start, &duration, &status)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return ChatAccess{}, err
 	}
 	if err == nil {
-		// Chat teks aktif selama jendela sesi untuk status `scheduled` MAUPUN
-		// `completed`: profesional yang menandai sesi selesai lebih awal (Meet
-		// berakhir sebelum durasi) tetap bisa chat sampai jendela waktu habis,
-		// dan pasien tetap bisa mengirim selama jam sesi. Status batal/no_show/
-		// kedaluwarsa tidak pernah masuk kueri ini sehingga tetap diblokir.
+		// Kueri hanya memilih sesi scheduled; status terminal menutup chat.
 		if inSessionWindow(now, start, duration) {
 			out.InSession = true
 			// Simpan id sesi aktif agar chat push bisa memakai session_id yang
 			// tepat (kunci kolaps notifikasi). Tidak mengubah jendela waktu.
 			out.SessionID = id
+			end := start.Add(time.Duration(duration) * time.Minute)
+			out.SessionEndsAt = &end
 		}
 		if start.After(now) {
 			out.NextSession = &start
@@ -1316,6 +1426,9 @@ func (s *Store) completeAttendedSessions(ctx context.Context) (int64, error) {
 	var done int64
 	for _, id := range ids {
 		if _, err := s.UpdateCareSessionStatus(ctx, id, "completed", "", ""); err != nil {
+			if errors.Is(err, ErrCareSessionTerminal) {
+				continue
+			}
 			return done, err
 		}
 		done++
@@ -1359,7 +1472,7 @@ func (s *Store) SweepCareState(ctx context.Context) (expiredPackages int64, expi
 	// berlangsung sudah diselesaikan lewat jalur "attended" di atas, dan
 	// completed manual tetap hanya dari profesional.
 	if res, e := s.db.ExecContext(ctx, `UPDATE care_sessions
-		SET status = 'no_show', attended_marked_at = COALESCE(attended_marked_at, now()), updated_at = now()
+		SET status = 'no_show', updated_at = now()
 		WHERE status = 'scheduled'
 		  AND scheduled_at <= now() - interval '24 hours'`); e == nil {
 		n, _ := res.RowsAffected()
@@ -1375,7 +1488,7 @@ func (s *Store) SweepCareState(ctx context.Context) (expiredPackages int64, expi
 		  AND (SELECT COUNT(*) FROM care_sessions cs
 		        WHERE cs.package_id = cp.id AND cs.status IN ('scheduled','completed','no_show')) >= cp.total_sessions
 		  AND NOT EXISTS (SELECT 1 FROM care_sessions cs2
-		        WHERE cs2.package_id = cp.id AND cs2.status = 'scheduled' AND cs2.scheduled_at >= now())`)
+		        WHERE cs2.package_id = cp.id AND cs2.status = 'scheduled')`)
 	return
 }
 

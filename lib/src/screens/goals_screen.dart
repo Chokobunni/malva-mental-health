@@ -25,6 +25,11 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
   List<BackendGoal> _serverGoals = const [];
   bool _isLoading = true;
   String? _error;
+  int _loadRequest = 0;
+  late final String _screenOwner;
+
+  String _ownerKey(AuthSession? session) =>
+      '${session?.role.name}:${session?.backendUserId ?? session?.identifier ?? ''}';
 
   /// Pengingat goals harian (notifikasi lokal, bukan push).
   late final GoalReminderService _goalReminder = GoalReminderService(
@@ -35,6 +40,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
   @override
   void initState() {
     super.initState();
+    _screenOwner = _ownerKey(ref.read(currentSessionProvider));
     _loadFromServer();
     unawaited(_loadReminderSettings());
   }
@@ -152,12 +158,17 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
 
   /// Goals tersimpan di server sehingga tidak hilang saat aplikasi ditutup.
   Future<void> _loadFromServer() async {
+    final request = ++_loadRequest;
+    bool isCurrent() =>
+        mounted &&
+        request == _loadRequest &&
+        _screenOwner == _ownerKey(ref.read(currentSessionProvider));
     final token = ref.read(currentSessionProvider)?.accessToken;
     if (token == null || token.isEmpty) {
-      if (mounted) setState(() => _isLoading = false);
+      if (isCurrent()) setState(() => _isLoading = false);
       return;
     }
-    if (mounted) {
+    if (isCurrent()) {
       setState(() {
         _isLoading = true;
         _error = null;
@@ -167,13 +178,13 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
       final goals = await ref
           .read(apiClientProvider)
           .listGoals(accessToken: token, includeInactive: true);
-      if (!mounted) return;
+      if (!isCurrent()) return;
       setState(() {
         _serverGoals = goals;
         _isLoading = false;
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!isCurrent()) return;
       setState(() {
         _isLoading = false;
         _error = friendlyErrorMessage(e);
@@ -186,6 +197,14 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currentSessionProvider);
+    if (_screenOwner != _ownerKey(ref.read(currentSessionProvider))) {
+      return const Scaffold(
+          body: Center(
+              child: Text('Sesi akun telah berubah. Buka kembali Goals.')));
+    }
+    ref.listen<int>(
+        clinicalDataRevisionProvider, (_, __) => unawaited(_loadFromServer()));
     final storeState = ref.watch(malvaStoreProvider);
     final store = ref.read(malvaStoreProvider.notifier);
     final useServer = _hasServer;

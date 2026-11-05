@@ -32,7 +32,7 @@ func TestProfessionalAttendanceContract(t *testing.T) {
 		srv.updateCareSession(rec, req, auth.Claims{Role: role, Subject: userID})
 		return rec
 	}
-	if rec := mark("patient", patient.ID); rec.Code != http.StatusBadRequest {
+	if rec := mark("patient", patient.ID); rec.Code != http.StatusOK {
 		t.Fatalf("patient attendance: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if rec := mark("professional", other.ID); rec.Code != http.StatusForbidden {

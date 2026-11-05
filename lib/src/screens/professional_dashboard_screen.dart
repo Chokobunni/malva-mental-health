@@ -10,6 +10,9 @@ import '../models.dart';
 import '../professional_role.dart';
 import '../providers/providers.dart';
 import '../services/care_session_time.dart';
+import '../services/care_session_refresh.dart';
+import '../services/server_clock.dart';
+import '../widgets/session_attendance_actions.dart';
 import '../services/dashboard_sync_service.dart';
 import '../services/malva_api_client.dart';
 import '../services/meeting_launcher.dart';
@@ -52,7 +55,9 @@ class ProfessionalDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfessionalDashboardScreenState
-    extends ConsumerState<ProfessionalDashboardScreen> {
+    extends ConsumerState<ProfessionalDashboardScreen>
+    with WidgetsBindingObserver {
+  late final CareSessionRefresh _sessionRefresh;
   final Map<String, List<BackendProfessionalNote>> _professionalNotes = {};
 
   /// Pasien yang menolak/tidak membagikan data screening (403 access_denied
@@ -81,6 +86,12 @@ class _ProfessionalDashboardScreenState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _sessionRefresh = CareSessionRefresh(() {
+      if (!mounted) return;
+      setState(() {});
+      unawaited(_loadOnlineProfessionalData());
+    }, poll: false);
     _syncService = widget.syncService ?? DashboardSyncService();
     _syncService.setOnRefresh(_loadOnlineProfessionalData);
     _syncSubscription = _syncService.stream.listen((event) {
@@ -99,6 +110,8 @@ class _ProfessionalDashboardScreenState
 
   @override
   void dispose() {
+    _sessionRefresh.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     _syncSubscription?.cancel();
     if (widget.syncService == null) {
       _syncService.dispose();
@@ -108,6 +121,14 @@ class _ProfessionalDashboardScreenState
 
   Future<void> _manualRefresh() async {
     await _syncService.refreshNow();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      setState(() {});
+      unawaited(_loadOnlineProfessionalData());
+    }
   }
 
   @override
@@ -232,6 +253,7 @@ class _ProfessionalDashboardScreenState
                               icon: Icons.play_circle_rounded),
                         if (_tabIndex == 0)
                           _OngoingSessionsSection(
+                            onChanged: _loadOnlineProfessionalData,
                             sessions: _ongoingSessions,
                             isLoading: _isLoadingOnlineData,
                           ),
@@ -558,7 +580,10 @@ class _ProfessionalDashboardScreenState
   /// Sesi video terjadwal mendatang (status scheduled), urut terdekat dulu.
   List<BackendCareSession> get _upcomingVideoSessions {
     final list = _upcomingSessions
-        .where((s) => s.sessionType == 'video' && s.status == 'scheduled')
+        .where((s) =>
+            s.sessionType == 'video' &&
+            s.status == 'scheduled' &&
+            !s.isAfterJoinWindow)
         .toList();
     list.sort((a, b) {
       final at = parseWibStored(a.scheduledAt);
@@ -575,11 +600,11 @@ class _ProfessionalDashboardScreenState
   /// urut berdasarkan waktu mulai. Memakai helper murni [isCareSessionOngoing]
   /// agar aturan jendela identik dengan unit test.
   List<BackendCareSession> get _ongoingSessions {
-    final now = wibNow();
+    final now = ServerClock.now();
     final list = _todaySessions.where((s) {
       final at = parseWibStored(s.scheduledAt);
       if (at == null) return false;
-      return isCareSessionOngoing(now, at, s.durationMinutes);
+      return s.isScheduled && isCareSessionOngoing(now, at, s.durationMinutes);
     }).toList();
     list.sort((a, b) {
       final at = parseWibStored(a.scheduledAt);
@@ -701,10 +726,8 @@ class _ProfessionalDashboardScreenState
       // masing-masing).
       final upcomingSessions = await safely(() => apiClient.listCareSessions(
           accessToken: accessToken, scope: 'upcoming'));
-      // `scope=ongoing` mengembalikan sesi scheduled ATAU completed yang masih
-      // di dalam jendela waktu (profesional sudah menekan "Hadir" -> completed,
-      // tetapi sesi tetap "berjalan" sampai jendela habis). Tetap disaring lagi
-      // di klien lewat jendela waktu murni (isCareSessionOngoing).
+      // `scope=ongoing` hanya mengembalikan sesi scheduled dalam jendela waktu.
+      // Klien memeriksa ulang batas waktu sebelum menampilkan aksi.
       final todaySessions = await safely(() => apiClient.listCareSessions(
           accessToken: accessToken, scope: 'ongoing'));
       final crisisLog = await safely(() =>
@@ -727,6 +750,7 @@ class _ProfessionalDashboardScreenState
         _isLoadingOnlineData = false;
         _lastSyncTime = wibNow();
       });
+      _sessionRefresh.update([..._upcomingSessions, ..._todaySessions]);
     } on MalvaApiException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -2052,10 +2076,12 @@ class _OngoingSessionsSection extends StatelessWidget {
   const _OngoingSessionsSection({
     required this.sessions,
     required this.isLoading,
+    required this.onChanged,
   });
 
   final List<BackendCareSession> sessions;
   final bool isLoading;
+  final Future<void> Function() onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -2086,7 +2112,7 @@ class _OngoingSessionsSection extends StatelessWidget {
     return Column(
       children: [
         for (final s in sessions) ...[
-          _OngoingSessionCard(session: s),
+          _OngoingSessionCard(session: s, onChanged: onChanged),
           const SizedBox(height: 8),
         ],
       ],
@@ -2095,9 +2121,10 @@ class _OngoingSessionsSection extends StatelessWidget {
 }
 
 class _OngoingSessionCard extends StatelessWidget {
-  const _OngoingSessionCard({required this.session});
+  const _OngoingSessionCard({required this.session, required this.onChanged});
 
   final BackendCareSession session;
+  final Future<void> Function() onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -2177,6 +2204,11 @@ class _OngoingSessionCard extends StatelessWidget {
                 ),
             ],
           ),
+          const SizedBox(height: 8),
+          SessionAttendanceActions(
+              session: session,
+              role: UserRole.professional,
+              onChanged: onChanged),
         ],
       ),
     );
@@ -2191,6 +2223,7 @@ class _OngoingSessionCard extends StatelessWidget {
   }
 
   Future<void> _joinVideo(BuildContext context) async {
+    if (!session.canJoinNow) return;
     final result = await openMeetLink(session.meetingUrl);
     if (result == MeetLaunchResult.failed) {
       await copyMeetLink(session.meetingUrl);
@@ -2205,6 +2238,7 @@ class _OngoingSessionCard extends StatelessWidget {
   }
 
   void _openChat(BuildContext context, String patientName) {
+    if (!session.canJoinNow) return;
     Navigator.push(
       context,
       MaterialPageRoute(

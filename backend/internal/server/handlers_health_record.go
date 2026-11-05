@@ -66,6 +66,9 @@ func (s *Server) updateHealthRecord(w http.ResponseWriter, r *http.Request, clai
 		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan Health Record"))
 		return
 	}
+	if _, ok := s.requireClinicalSession(w, r, claims, patientID); !ok {
+		return
+	}
 	diagnosis := security.SanitizeText(strings.TrimSpace(req.DiagnosisSummary))
 	if len(diagnosis) > 2000 {
 		writeError(w, http.StatusBadRequest, errors.New("diagnosis maksimal 2000 karakter"))
@@ -80,6 +83,7 @@ func (s *Server) updateHealthRecord(w http.ResponseWriter, r *http.Request, clai
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	s.publishClinicalChange(patientID, "health_record")
 	// Beri tahu pasien bahwa diagnosis diperbarui.
 	s.notifyPatient(r, patientID, "health_record_updated",
 		"Health Record diperbarui",

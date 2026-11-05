@@ -56,14 +56,15 @@ type wsEnvelope struct {
 }
 
 type chatMessageData struct {
-	ID          string          `json:"id"`
-	SenderID    string          `json:"sender_id"`
-	SenderName  string          `json:"sender_name"`
-	RecipientID string          `json:"recipient_id"`
-	Text        string          `json:"text"`
-	Kind        string          `json:"kind,omitempty"`
-	Metadata    json.RawMessage `json:"metadata,omitempty"`
-	Timestamp   string          `json:"timestamp"`
+	ClientMessageID string          `json:"client_message_id,omitempty"`
+	ID              string          `json:"id"`
+	SenderID        string          `json:"sender_id"`
+	SenderName      string          `json:"sender_name"`
+	RecipientID     string          `json:"recipient_id"`
+	Text            string          `json:"text"`
+	Kind            string          `json:"kind,omitempty"`
+	Metadata        json.RawMessage `json:"metadata,omitempty"`
+	Timestamp       string          `json:"timestamp"`
 }
 
 type typingIndicatorData struct {
@@ -292,6 +293,9 @@ func (c *client) handleChatMessage(raw json.RawMessage) {
 	// Kebijakan chat: teks hanya saat sesi berjalan; share data milik
 	// pasien butuh paket aktif; profesional tidak membalas di luar sesi.
 	kindLower := strings.ToLower(strings.TrimSpace(msg.Kind))
+	if c.role != "professional" && (kindLower == "attachment" || kindLower == "assessment_request" || kindLower == "session_summary") {
+		return
+	}
 	isShare := kindLower != "" && kindLower != "text"
 	access, aerr := c.hub.store.ChatAccessFor(ctx, patientID, professionalID, c.role)
 	if aerr != nil {
@@ -299,13 +303,25 @@ func (c *client) handleChatMessage(raw json.RawMessage) {
 		return
 	}
 	if isShare {
-		if c.role != "patient" || !access.CanShare {
+		if c.role == "professional" {
+			metadata, err := c.hub.store.ValidateProfessionalChatCard(ctx, patientID, professionalID, kindLower, msg.Metadata, access)
+			if err != nil {
+				return
+			}
+			msg.Metadata = metadata
+		} else if c.role != "patient" || !access.CanShare {
 			c.hub.logger.Warn("ws: share rejected", "sender", c.userID)
 			return
 		}
 	} else if !access.CanSendText {
 		c.hub.logger.Warn("ws: text rejected outside session", "sender", c.userID)
 		return
+	}
+	if msg.ClientMessageID != "" {
+		if !store.ValidClinicalClientID(msg.ClientMessageID) {
+			return
+		}
+		msg.ID = store.ClinicalRetryID("message", c.userID, msg.ClientMessageID)
 	}
 	timestamp := clock.Now()
 	if msg.Timestamp != "" {

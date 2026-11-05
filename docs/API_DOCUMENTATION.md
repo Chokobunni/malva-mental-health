@@ -1360,3 +1360,14 @@ tarik izin berbagi bila `professional_id` dikirim kosong.
 |---|---|---|
 | Auth (register, login, refresh, logout) | 20 requests | Per minute per IP |
 | All other endpoints | No limit | — |
+# Session and clinical chat contracts — 2026-11-06
+
+- PATCH /v1/care-sessions/{id}: status attended/absent marks the caller's own attendance; professional completed is allowed only after scheduled end. Responses add patient_attendance/professional_attendance (empty, attended, absent) and nullable *_attendance_marked_at. Legacy attended_marked_at remains available. Patient responses omit private_note. Omitted detail fields in PATCH are preserved.
+- GET /v1/chat-permission: access adds session_id and nullable session_ends_at with WIB offset. Scheduled end is exclusive; terminal sessions never grant live access.
+- POST /v1/messages and chat_message WebSocket events accept optional client_message_id UUID. Reuse the same UUID for one intent; a changed payload under the same UUID fails. Professional kinds: assessment_request metadata {session_id,module_id}, modules screening/dass21/who5; goals {session_id,goal_ids}; session_summary {session_id,goal_ids,insight}. Maximum 20 goal IDs, insight 2000 bytes. Server adds authoritative goals snapshots [{id,title,target_per_week}] to persisted homework cards. Clients cannot supply snapshots.
+- POST /v1/goals accepts patient_id for verified linked professionals during the active, consented session and optional Idempotency-Key header (at most 128 printable ASCII characters without spaces). POST /v1/medications accepts the same optional header, scoped to caller and patient: an unchanged normalized payload returns the same active record; changed medication details with the same key are rejected.
+- POST /v1/chat-attachments uses multipart recipient_id, file, optional client_message_id UUID. JPEG/PNG/WebP/PDF, 1 byte–10 MiB, content validated. Returns {message}, kind attachment, metadata {session_id,attachment_id,filename,mime,size,content_sha256}.
+- GET /v1/chat-attachments/{id} returns private authenticated bytes with safe download headers; only the persisted message participants can read, including after session end. No public URL or access token query is returned.
+- clinical_data_changed realtime event: {patient_id,resource}, resource medications/goals/health_record. Emitted after successful mutation. Refresh the patient data using current credentials; discard stale account responses. This event is not OS push.
+- Medication create/update/delete by professional requires verified psychiatrist, linked patient, consent and active session. Health-record diagnosis and goals use corresponding consent scopes. Existing patient self-management remains supported.
+- Payment GET status trusts configured authenticated HTTPS provider transport, binds response order to requested reference and enforces amount/fraud validation. Webhook signature remains required.

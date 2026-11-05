@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
-import '../services/care_session_time.dart';
+import '../services/care_session_refresh.dart';
+import '../widgets/session_attendance_actions.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
@@ -33,7 +36,9 @@ class ProScheduleScreen extends ConsumerStatefulWidget {
   ConsumerState<ProScheduleScreen> createState() => _ProScheduleScreenState();
 }
 
-class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
+class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
+    with WidgetsBindingObserver {
+  late final CareSessionRefresh _sessionRefresh;
   List<BackendCareSession> _today = const [];
   List<BackendCareSession> _upcoming = const [];
   List<BackendCareSession> _past = const [];
@@ -41,6 +46,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
   List<BackendTimeOff> _timeOff = const [];
   BackendProfessionalPricing _pricing = const BackendProfessionalPricing();
   bool _isLoading = true;
+  bool _loadInProgress = false;
   String? _error;
 
   MalvaApiClient get _api => widget.apiClient ?? ref.read(apiClientProvider);
@@ -52,10 +58,32 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _sessionRefresh = CareSessionRefresh(() {
+      if (!mounted) return;
+      setState(() {});
+      unawaited(_load(silent: true));
+    });
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _sessionRefresh.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      setState(() {});
+      unawaited(_load(silent: true));
+    }
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (_loadInProgress) return;
     final token = _token;
     if (token == null) {
       if (mounted) {
@@ -66,10 +94,13 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
       }
       return;
     }
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
+    _loadInProgress = true;
     try {
       final results = await Future.wait([
         _api.listCareSessions(accessToken: token, scope: 'today'),
@@ -81,7 +112,10 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
       ]);
       if (!mounted) return;
       setState(() {
-        _today = (results[0] as List<BackendCareSession>);
+        _error = null;
+        _today = (results[0] as List<BackendCareSession>)
+            .where((s) => !s.isAfterJoinWindow)
+            .toList();
         _upcoming = (results[1] as List<BackendCareSession>)
           ..sort(
               (a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
@@ -91,12 +125,15 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen> {
         _timeOff = (results[5] as List<BackendTimeOff>);
         _isLoading = false;
       });
+      _sessionRefresh.update([..._today, ..._upcoming, ..._past]);
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _error = friendlyErrorMessage(e);
         _isLoading = false;
       });
+    } finally {
+      _loadInProgress = false;
     }
   }
 
@@ -248,12 +285,8 @@ class _ProSessionCard extends ConsumerWidget {
       'cancelled_by_patient' => Theme.of(context).colorScheme.onSurfaceVariant,
       _ => Theme.of(context).colorScheme.onSurfaceVariant,
     };
-    // "Sesi berjalan": scheduled, ATAU completed yang masih di dalam jendela
-    // waktu (profesional sudah menekan "Hadir" tetapi sesi belum benar-benar
-    // usai). Aksi gabung/chat harus tetap tampil selama jendela terbuka.
-    final live = session.isScheduled ||
-        (at != null &&
-            isCareSessionOngoing(wibNow(), at, session.durationMinutes));
+    // Aksi sesi hanya tersedia selama sesi scheduled berada dalam jendela.
+    final live = session.canJoinNow;
     return SoftCard(
       bordered: true,
       accent: statusColor,
@@ -307,29 +340,15 @@ class _ProSessionCard extends ConsumerWidget {
               label: const Text('Buka detail pasien'),
             ),
           ],
-          // Aksi gabung/chat tampil selama sesi "live" (scheduled ATAU
-          // completed yang masih di dalam jendela waktu) — TERMASUK saat kartu
-          // berada di daftar "Riwayat sesi" (past: true). Tanpa ini, sesi yang
-          // sudah ditandai "Hadir" (completed) tetap kehilangan tombol Join/Chat
-          // setelah reload — persis bug yang dilaporkan pengguna.
+          // Konfirmasi hadir tidak menutup sesi; batas akhir tetap menutup akses.
           if (live) ...[
             const SizedBox(height: 10),
             // Kehadiran sudah ditandai ("Hadir"): tampilkan pill, sesi tetap
             // berjalan sampai waktu habis.
-            if (session.isAttended) ...[
+            if (session.professionalAttendance == 'attended') ...[
               const Align(
                 alignment: Alignment.centerLeft,
                 child: StatusPill(label: 'Hadir', color: MalvaColors.mint),
-              ),
-              const SizedBox(height: 10),
-            ],
-            // Penanda sesi yang sudah selesai tetapi jendela waktunya masih
-            // terbuka (chat/Meet tetap boleh dipakai sampai jendela habis).
-            if (session.status == 'completed') ...[
-              const Align(
-                alignment: Alignment.centerLeft,
-                child:
-                    StatusPill(label: 'Sesi selesai', color: MalvaColors.mint),
               ),
               const SizedBox(height: 10),
             ],
@@ -347,8 +366,7 @@ class _ProSessionCard extends ConsumerWidget {
               ),
               const SizedBox(height: 10),
             ],
-            // Lapis 2 — aksi primer: gabung/chat selalu tersedia selama sesi
-            // berjalan (termasuk completed yang masih di dalam jendela).
+            // Lapis 2 — aksi primer selama jendela sesi terbuka.
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -359,20 +377,6 @@ class _ProSessionCard extends ConsumerWidget {
                   icon: const Icon(Icons.chat_bubble_rounded, size: 16),
                   label: const Text('Join / Chat'),
                 ),
-                // Hadir/Tidak hadir hanya untuk sesi scheduled yang kehadirannya
-                // BELUM ditandai; jangan tawarkan ulang setelah attended/completed.
-                if (session.isScheduled && !session.isAttended) ...[
-                  OutlinedButton.icon(
-                    onPressed: () => _mark(context, ref, 'attended'),
-                    icon: const Icon(Icons.check_rounded, size: 16),
-                    label: const Text('Hadir'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => _mark(context, ref, 'no_show'),
-                    icon: const Icon(Icons.person_off_rounded, size: 16),
-                    label: const Text('Tidak hadir'),
-                  ),
-                ],
               ],
             ),
             // Lapis 3 — aksi sekunder (batal/pindah/detail) hanya relevan
@@ -414,12 +418,18 @@ class _ProSessionCard extends ConsumerWidget {
               ),
             ],
           ],
+          const SizedBox(height: 10),
+          SessionAttendanceActions(
+              session: session,
+              role: UserRole.professional,
+              onChanged: onChanged),
         ],
       ),
     );
   }
 
   void _openChat(BuildContext context) {
+    if (!session.canJoinNow) return;
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -445,37 +455,6 @@ class _ProSessionCard extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _mark(BuildContext context, WidgetRef ref, String status) async {
-    final api = ref.read(apiClientProvider);
-    final token = ref.read(currentSessionProvider)?.accessToken;
-    if (token == null || token.isEmpty) return;
-    try {
-      await api.updateCareSession(
-        accessToken: token,
-        sessionId: session.id,
-        status: status,
-      );
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(switch (status) {
-          'attended' =>
-            'Kehadiran dicatat. Sesi tetap berjalan sampai waktu habis.',
-          'completed' => 'Sesi ditandai selesai.',
-          _ => 'Pasien ditandai tidak hadir (sesi hangus).',
-        })),
-      );
-      await onChanged();
-    } on Object catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: MalvaColors.danger),
-      );
-    }
   }
 
   Future<void> _cancel(BuildContext context, WidgetRef ref) async {

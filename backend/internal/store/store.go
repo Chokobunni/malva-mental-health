@@ -1548,14 +1548,20 @@ func (s *Store) UpsertMedication(ctx context.Context, input Medication) (Medicat
 	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO medications (
 			patient_id, name, dosage, form, reminder_time, relation_to_meal,
-			current_stock, alert_below, source
+			current_stock, alert_below, source, id
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE(NULLIF($10,'')::uuid,gen_random_uuid()))
+		ON CONFLICT (id) DO UPDATE SET id=medications.id
+		WHERE medications.patient_id=EXCLUDED.patient_id AND medications.name=EXCLUDED.name
+		 AND medications.dosage=EXCLUDED.dosage AND medications.form=EXCLUDED.form
+		 AND medications.reminder_time=EXCLUDED.reminder_time AND medications.relation_to_meal=EXCLUDED.relation_to_meal
+		 AND medications.current_stock=EXCLUDED.current_stock AND medications.alert_below=EXCLUDED.alert_below
+		 AND medications.source=EXCLUDED.source AND medications.active
 		RETURNING id, patient_id, name, dosage, form, reminder_time, relation_to_meal,
 		          current_stock, alert_below, source, active, created_at, updated_at
 	`, input.PatientID, input.Name, input.Dosage, input.Form,
 		input.ReminderTime, input.RelationToMeal, input.CurrentStock,
-		input.AlertBelow, input.Source).
+		input.AlertBelow, input.Source, input.ID).
 		Scan(&saved.ID, &saved.PatientID, &saved.Name, &saved.Dosage,
 			&saved.Form, &saved.ReminderTime, &saved.RelationToMeal,
 			&saved.CurrentStock, &saved.AlertBelow, &saved.Source,
@@ -2386,7 +2392,7 @@ func (s *Store) OutboxPushAllowed(ctx context.Context, jobID string) (bool, erro
 			JOIN care_sessions cs ON cs.id::text = n.data->>'session_id'
 			WHERE o.id = $1 AND o.delivered_at IS NULL AND n.status = 'pending'
 			  AND n.type = 'chat_message' AND n.data->>'kind' = 'chat_message'
-			  AND cs.status IN ('scheduled','completed')
+			  AND cs.status = 'scheduled'
 			  AND now() >= cs.scheduled_at - interval '10 minutes'
 			  AND now() < cs.scheduled_at + make_interval(mins => cs.duration_minutes)
 			  AND n.data->>'patient_id' = cs.patient_id::text
@@ -2500,7 +2506,7 @@ var validChatKinds = map[string]bool{
 	// "worksheet": kartu worksheet terapi (ABCDE, grounding, dll.) yang
 	// dibagikan pasien. Tanpa entri ini kind dinormalisasi jadi "text"
 	// sehingga kartu ringkasan di chat tidak pernah muncul.
-	"worksheet": true,
+	"worksheet": true, "assessment_request": true, "session_summary": true, "attachment": true,
 }
 
 func normalizeChatKind(kind string) string {
@@ -2533,6 +2539,11 @@ func (s *Store) CreateChatMessage(ctx context.Context, msg ChatMessage) (ChatMes
 	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO chat_messages (id, patient_id, professional_id, sender_id, sender_name, text, kind, attachment_meta)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+		ON CONFLICT(id) DO UPDATE SET id=chat_messages.id
+		WHERE chat_messages.patient_id=EXCLUDED.patient_id AND chat_messages.professional_id=EXCLUDED.professional_id
+		 AND chat_messages.sender_id=EXCLUDED.sender_id AND chat_messages.text=EXCLUDED.text AND chat_messages.kind=EXCLUDED.kind
+		 AND (CASE WHEN chat_messages.sender_id=chat_messages.professional_id AND chat_messages.kind IN ('goals','session_summary') THEN chat_messages.attachment_meta - 'goals' ELSE chat_messages.attachment_meta END)
+		 IS NOT DISTINCT FROM (CASE WHEN EXCLUDED.sender_id=EXCLUDED.professional_id AND EXCLUDED.kind IN ('goals','session_summary') THEN EXCLUDED.attachment_meta - 'goals' ELSE EXCLUDED.attachment_meta END)
 		RETURNING id, patient_id, professional_id, sender_id, sender_name, text, kind,
 		          COALESCE(attachment_meta, '{}'::jsonb), created_at
 	`, msg.ID, msg.PatientID, msg.ProfessionalID, msg.SenderID, msg.SenderName, msg.Text,

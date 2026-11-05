@@ -128,3 +128,12 @@ Status `Aktif` berarti endpoint terdaftar di `Routes()` dan diimplementasikan di
 ### Koreksi mobile 0.1.3
 
 Home pasien: sesi berjalan dan video mendatang dengan foto profesional. Profesional: kartu video responsif, detail pasien terautentikasi dan Hadir tanpa penutupan dini. Pembayaran: binding legacy dan retry token terbarui. Push: data-only, validasi sesi aktif di background, cleanup shade/transport historis tanpa menghapus riwayat atau alarm yang valid.
+# Tambahan konsultasi 2026-11-06
+
+| Modul | Pasien | Profesional |
+|---|---|---|
+| Kehadiran sesi | Hadir/Tidak hadir sendiri; no-show memakai kuota | Hadir/Tidak hadir sendiri; absen mengembalikan kuota |
+| Penyelesaian | Riwayat sesudah akhir, chat ditutup tepat waktu | Sesi selesai hanya sesudah akhir jadwal |
+| Attachment chat | Isi assessment saat sesi; buka goals/rangkuman; unduh file privat | Goals/habits dan tambah goal; permintaan assessment; diagnosis; Medication psikiater; file/gambar; rangkuman homework/insight |
+| Sinkronisasi | Obat dari profesional masuk Medication Check-in lewat event in-app dan dipulihkan saat resume/reconnect | Perubahan memakai scope sesi aktif dan consent |
+| Pembayaran | Status Midtrans resmi mengaktifkan paket tepat sekali | Kebijakan earnings yang ada dipertahankan |

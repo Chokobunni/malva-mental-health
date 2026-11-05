@@ -285,6 +285,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/credentials/me", s.requireAuth(s.getMyCredentials))
 	// Unggah berkas media (foto/video profil profesional).
 	mux.HandleFunc("POST /v1/upload", s.requireAuth(s.uploadFile))
+	mux.HandleFunc("POST /v1/chat-attachments", s.requireAuth(s.uploadChatAttachment))
+	mux.HandleFunc("GET /v1/chat-attachments/{attachment_id}", s.requireAuth(s.getChatAttachment))
 	// Sajikan berkas unggahan secara statis.
 	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(s.cfg.UploadDir))))
 	// Katalog tes psikologi (read-only; kosong bila admin belum mengisi).
@@ -1298,6 +1300,9 @@ func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims
 			return
 		}
 		patientID = resolved
+		if _, ok := s.requireClinicalSession(w, r, claims, patientID); !ok {
+			return
+		}
 	} else if claims.Role != "patient" {
 		writeError(w, http.StatusForbidden, errors.New("only patients and professionals can create medications"))
 		return
@@ -1319,7 +1324,16 @@ func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims
 		writeError(w, http.StatusBadRequest, errors.New("medication stock values cannot be negative"))
 		return
 	}
+	medicationID := ""
+	if key := r.Header.Get("Idempotency-Key"); key != "" {
+		if len(key) > 128 || strings.IndexFunc(key, func(r rune) bool { return r < 33 || r > 126 }) >= 0 {
+			writeError(w, http.StatusBadRequest, errors.New("Idempotency-Key tidak valid"))
+			return
+		}
+		medicationID = store.ClinicalRetryID("medication", claims.Subject+":"+patientID, key)
+	}
 	item, err := s.store.UpsertMedication(r.Context(), store.Medication{
+		ID:             medicationID,
 		PatientID:      patientID,
 		Name:           req.Name,
 		Dosage:         req.Dosage,
@@ -1334,6 +1348,7 @@ func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	s.publishClinicalChange(patientID, "medications")
 	if claims.Role == "professional" {
 		s.notifyPatient(r, patientID, "medication_prescribed",
 			"Obat baru ditambahkan",
@@ -1352,6 +1367,11 @@ func (s *Server) resolveMedicationPatient(w http.ResponseWriter, r *http.Request
 		if !s.requireVerifiedProfessional(w, r, claims) {
 			return "", false
 		}
+		cred, err := s.store.GetProfessionalCredential(r.Context(), claims.Subject)
+		if err != nil || !isPsychiatristSpecialization(cred.Specialization) {
+			writeError(w, http.StatusForbidden, errors.New("hanya Psikiater yang dapat mengubah obat"))
+			return "", false
+		}
 		resolved, err := s.authorizePatientAccess(r, claims, requestedPatientID)
 		if err != nil {
 			writeError(w, http.StatusForbidden, err)
@@ -1359,6 +1379,9 @@ func (s *Server) resolveMedicationPatient(w http.ResponseWriter, r *http.Request
 		}
 		if !s.consentAllows(r, resolved, claims.Subject, "medications") {
 			writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data obat"))
+			return "", false
+		}
+		if _, ok := s.requireClinicalSession(w, r, claims, resolved); !ok {
 			return "", false
 		}
 		return resolved, true
@@ -1422,6 +1445,7 @@ func (s *Server) updateMedication(w http.ResponseWriter, r *http.Request, claims
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	s.publishClinicalChange(patientID, "medications")
 	writeJSON(w, http.StatusOK, map[string]any{"medication": item})
 }
 
@@ -1446,6 +1470,7 @@ func (s *Server) deleteMedication(w http.ResponseWriter, r *http.Request, claims
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	s.publishClinicalChange(patientID, "medications")
 	writeJSON(w, http.StatusOK, map[string]interface{}{"deleted": true})
 }
 
@@ -1662,10 +1687,11 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request, claims aut
 }
 
 type sendMessageRequest struct {
-	RecipientID string          `json:"recipient_id"`
-	Text        string          `json:"text"`
-	Kind        string          `json:"kind"`
-	Metadata    json.RawMessage `json:"metadata"`
+	ClientMessageID string          `json:"client_message_id"`
+	RecipientID     string          `json:"recipient_id"`
+	Text            string          `json:"text"`
+	Kind            string          `json:"kind"`
+	Metadata        json.RawMessage `json:"metadata"`
 }
 
 // sendMessage mengirim pesan (teks atau share terstruktur) lewat REST.
@@ -1696,6 +1722,10 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 		text = text[:5000]
 	}
 	kind := strings.ToLower(strings.TrimSpace(req.Kind))
+	if claims.Role != "professional" && (kind == "attachment" || kind == "assessment_request" || kind == "session_summary") {
+		writeError(w, http.StatusForbidden, errors.New("kartu ini hanya dapat dikirim profesional sesi"))
+		return
+	}
 	isShare := kind != "" && kind != "text"
 	patientID, professionalID, linked, err := s.store.AreUsersLinked(r.Context(), claims.Subject, recipientID)
 	if err != nil {
@@ -1719,11 +1749,14 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 		return
 	}
 	if isShare {
-		if claims.Role != "patient" {
-			writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa mengirim data ke profesional"))
-			return
-		}
-		if !access.CanShare {
+		if claims.Role == "professional" {
+			metadata, err := s.store.ValidateProfessionalChatCard(r.Context(), patientID, professionalID, kind, req.Metadata, access)
+			if err != nil {
+				writeError(w, http.StatusForbidden, err)
+				return
+			}
+			req.Metadata = metadata
+		} else if claims.Role != "patient" || !access.CanShare {
 			writeError(w, http.StatusForbidden, errors.New("berbagi data butuh paket sesi aktif. "+access.Reason))
 			return
 		}
@@ -1736,6 +1769,13 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 		senderName = user.DisplayName
 	}
 	messageID := generateChatMessageID()
+	if req.ClientMessageID != "" {
+		if !store.ValidClinicalClientID(req.ClientMessageID) {
+			writeError(w, http.StatusBadRequest, errors.New("client_message_id harus UUID"))
+			return
+		}
+		messageID = store.ClinicalRetryID("message", claims.Subject, req.ClientMessageID)
+	}
 	saved, err := s.store.CreateChatMessage(r.Context(), store.ChatMessage{
 		ID:             messageID,
 		PatientID:      patientID,

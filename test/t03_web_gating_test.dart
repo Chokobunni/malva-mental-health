@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,16 @@ import 'package:malva_mental_health/src/widgets/therapy_library.dart';
 
 class _RecordingExporter implements FileExporter {
   final calls = <Map<String?, String>>[];
+
+  @override
+  Future<void> saveBytes(
+      {required String filename,
+      required Uint8List bytes,
+      required String mimeType,
+      String? subject}) async {
+    calls.add(
+        {'filename': filename, 'mimeType': mimeType, 'subject': subject ?? ''});
+  }
 
   @override
   Future<void> saveText({

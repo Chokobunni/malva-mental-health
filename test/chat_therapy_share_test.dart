@@ -181,6 +181,16 @@ void main() {
     await tester.tap(find.text('Latihan ABCDE'));
     await tester.pumpAndSettle();
     expect(find.text('Situasi latihan'), findsOneWidget);
+    final container =
+        ProviderScope.containerOf(tester.element(find.byType(ChatScreen)));
+    container.read(authStateProvider.notifier).setSession(const AuthSession(
+        role: UserRole.professional,
+        identifier: 'another-pro',
+        backendUserId: 'another-pro',
+        displayName: 'Akun lain',
+        accessToken: 'other-token'));
+    await tester.pumpAndSettle();
+    expect(find.text('Situasi latihan'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 

@@ -40,7 +40,8 @@ class PatientShell extends ConsumerStatefulWidget {
   ConsumerState<PatientShell> createState() => _PatientShellState();
 }
 
-class _PatientShellState extends ConsumerState<PatientShell> {
+class _PatientShellState extends ConsumerState<PatientShell>
+    with WidgetsBindingObserver {
   int _index = 0;
   String _professionalUserId = '';
   String _professionalName = 'Profesional';
@@ -49,12 +50,14 @@ class _PatientShellState extends ConsumerState<PatientShell> {
   /// (foto/video intro) tanpa perlu refresh manual.
   RealtimeService? _realtime;
   StreamSubscription<RealtimeEvent>? _realtimeSub;
+  int _realtimeGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _fetchLinkedProfessional();
+    WidgetsBinding.instance.addObserver(this);
     _connectRealtime();
+    _fetchLinkedProfessional();
   }
 
   @override
@@ -69,6 +72,8 @@ class _PatientShellState extends ConsumerState<PatientShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _realtimeGeneration++;
     _realtimeSub?.cancel();
     _realtime?.dispose();
     super.dispose();
@@ -77,6 +82,7 @@ class _PatientShellState extends ConsumerState<PatientShell> {
   /// Menyambungkan klien realtime dan meneruskan event perubahan profil
   /// profesional ke provider revisi agar layar pasien memuat ulang data.
   void _connectRealtime() {
+    final generation = ++_realtimeGeneration;
     final apiClient = widget.apiClient;
     final token = widget.session?.accessToken;
     _realtimeSub?.cancel();
@@ -91,8 +97,18 @@ class _PatientShellState extends ConsumerState<PatientShell> {
     );
     _realtime = service;
     _realtimeSub = service.events.listen((event) {
-      if (!mounted) return;
+      if (!mounted || generation != _realtimeGeneration) return;
       switch (event.type) {
+        case 'realtime.connected':
+          _refreshClinicalData();
+        case 'clinical_data_changed':
+          final owner =
+              widget.session?.backendUserId ?? widget.session?.identifier;
+          if (event.stringValue('patient_id') == owner &&
+              const ['medications', 'goals', 'health_record']
+                  .contains(event.stringValue('resource'))) {
+            _refreshClinicalData();
+          }
         case 'professional.profile.updated':
           final updatedId = event.stringValue('professional_user_id');
           ref.read(professionalProfileUpdatedIdProvider.notifier).state =
@@ -107,7 +123,32 @@ class _PatientShellState extends ConsumerState<PatientShell> {
     service.connect();
   }
 
+  void _refreshClinicalData() {
+    final session = widget.session;
+    final api = widget.apiClient;
+    final token = session?.accessToken;
+    if (!mounted ||
+        session?.role != UserRole.patient ||
+        api == null ||
+        token == null ||
+        token.isEmpty) return;
+    // The store rejects responses belonging to an earlier account or an older
+    // hydration request. Its update also reschedules existing local reminders.
+    unawaited(
+        ref.read(malvaStoreProvider.notifier).loadMedications(api, token));
+    ref.read(clinicalDataRevisionProvider.notifier).state++;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshClinicalData();
+      _connectRealtime();
+    }
+  }
+
   Future<void> _fetchLinkedProfessional() async {
+    final generation = _realtimeGeneration;
     final apiClient = widget.apiClient;
     final accessToken = widget.session?.accessToken;
     if (apiClient == null || accessToken == null || accessToken.isEmpty) {
@@ -117,7 +158,7 @@ class _PatientShellState extends ConsumerState<PatientShell> {
       final links = await apiClient.listPatientProfessionalLinks(
         accessToken: accessToken,
       );
-      if (links.isNotEmpty && mounted) {
+      if (links.isNotEmpty && mounted && generation == _realtimeGeneration) {
         setState(() {
           _professionalUserId = links.first.professionalUserId;
           _professionalName = links.first.professionalDisplayName;

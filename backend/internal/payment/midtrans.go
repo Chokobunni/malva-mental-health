@@ -172,10 +172,11 @@ type midtransStatusResponse struct {
 // (`GET /v2/{order_id}/status`). Dipakai saat webhook belum tiba sehingga
 // polling klien tidak bergantung pada ketepatan waktu notifikasi.
 //
-// Keamanan: respons TIDAK dipercaya sebelum `signature_key`-nya cocok dengan
-// sha512(order_id + status_code + gross_amount + serverKey) — sama seperti
-// verifikasi webhook. Tanpa itu, siapa pun yang bisa memalsukan respons bisa
-// menandai pembayaran lunas.
+// Keamanan: GET langsung ke API HTTPS Midtrans memakai server-key Basic auth
+// adalah verifikasi otoritatif, berbeda dari webhook masuk yang wajib memiliki
+// signature valid. Respons GET tidak mensyaratkan verifikasi signature webhook.
+// Identitas order tetap harus persis sama dengan permintaan;
+// pemanggil juga memverifikasi gross_amount dan fraud_status sebelum aktivasi.
 //
 // "Transaksi belum ada" BUKAN kegagalan dan TIDAK membawa signature: Midtrans
 // membalas HTTP 200 dengan `status_code:"404"` di dalam body. Itu dikembalikan
@@ -241,11 +242,11 @@ func (g *MidtransGateway) FetchStatus(ctx context.Context, orderID string) (Gate
 		return GatewayStatus{Status: "pending", StatusCode: statusCode}, nil
 	}
 
-	// Verifikasi signature HANYA untuk respons yang benar-benar memuat
-	// transaksi. Tanpa ini, respons palsu bisa menandai pembayaran lunas.
-	expected := MidtransSignature(orderID, statusCode, out.GrossAmount, g.serverKey)
-	if !subtleConstantEqual(expected, strings.ToLower(strings.TrimSpace(out.SignatureKey))) {
-		return GatewayStatus{}, errors.New("signature respons status midtrans tidak valid")
+	// Respons berasal dari permintaan backend terautentikasi ke API Midtrans.
+	// Jangan terapkan aturan signature webhook di sini; tetap tolak transaksi
+	// lain, bahkan bila nominal atau signature kebetulan sama.
+	if out.OrderID != orderID {
+		return GatewayStatus{}, errors.New("order_id respons status midtrans tidak cocok")
 	}
 
 	// `transaction_status` kosong/tak dikenal juga diperlakukan pending.

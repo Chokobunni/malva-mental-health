@@ -74,7 +74,7 @@ func TestInSessionWindow(t *testing.T) {
 		{"1 detik sebelum batas bawah", start.Add(-10*time.Minute - time.Second), false},
 		{"tepat saat mulai", start, true},
 		{"di tengah sesi", start.Add(15 * time.Minute), true},
-		{"tepat batas atas (durasi sesi berakhir)", start.Add(time.Duration(duration) * time.Minute), true},
+		{"tepat batas atas (durasi sesi berakhir)", start.Add(time.Duration(duration) * time.Minute), false},
 		{"1 detik setelah durasi habis", start.Add(time.Duration(duration)*time.Minute + time.Second), false},
 		{"1 menit setelah durasi habis", start.Add(time.Duration(duration+1) * time.Minute), false},
 	}

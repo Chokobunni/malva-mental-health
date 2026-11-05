@@ -74,7 +74,8 @@ func TestOutboxRechecksDeliveryPolicy(t *testing.T) {
 	}{
 		{"active patient chat", "chat_message", "scheduled", "0 minutes", "patient", patient, professional, session, 1},
 		{"active professional chat", "chat_message", "scheduled", "0 minutes", "patient", professional, patient, session, 1},
-		{"completed within session window", "chat_message", "completed", "0 minutes", "patient", patient, professional, session, 1},
+		{"completed within session window", "chat_message", "completed", "0 minutes", "patient", patient, professional, session, 0},
+		{"at session end", "chat_message", "scheduled", "-30 minutes", "patient", patient, professional, session, 0},
 		{"legacy screening queue", "screening_reviewed", "scheduled", "0 minutes", "patient", patient, professional, session, 0},
 		{"legacy health queue", "health_record_updated", "scheduled", "0 minutes", "patient", patient, professional, session, 0},
 		{"expired session", "chat_message", "scheduled", "-60 minutes", "patient", patient, professional, session, 0},

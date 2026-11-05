@@ -35,11 +35,11 @@ type rescheduleSessionRequest struct {
 }
 
 type updateSessionRequest struct {
-	Status            string `json:"status"`
-	CancelReason      string `json:"cancel_reason"`
-	MeetingURL        string `json:"meeting_url"`
-	SummaryForPatient string `json:"summary_for_patient"`
-	PrivateNote       string `json:"private_note"`
+	Status            string  `json:"status"`
+	CancelReason      string  `json:"cancel_reason"`
+	MeetingURL        *string `json:"meeting_url"`
+	SummaryForPatient *string `json:"summary_for_patient"`
+	PrivateNote       *string `json:"private_note"`
 }
 
 type timeOffRequest struct {
@@ -342,7 +342,7 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 	}
 	// meet_pending memberi tahu klien bahwa link video menyusul, sehingga UI
 	// menampilkan "Menunggu link video" alih-alih tombol "Gabung" kosong.
-	writeJSON(w, http.StatusCreated, map[string]any{"session": cs, "meet_pending": meetPending})
+	writeJSON(w, http.StatusCreated, map[string]any{"session": careSessionForRole(cs, claims.Role), "meet_pending": meetPending})
 }
 
 func (s *Server) listCareSessions(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -365,7 +365,17 @@ func (s *Server) listCareSessions(w http.ResponseWriter, r *http.Request, claims
 	if sessions == nil {
 		sessions = []store.CareSession{}
 	}
+	for i := range sessions {
+		sessions[i] = careSessionForRole(sessions[i], claims.Role)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"sessions": sessions})
+}
+
+func careSessionForRole(session store.CareSession, role string) store.CareSession {
+	if role == "patient" {
+		session.PrivateNote = ""
+	}
+	return session
 }
 
 // updateCareSession: profesional (hadir/tidak, cancel, ringkasan) & pasien (cancel >=24 jam).
@@ -395,41 +405,44 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 			writeError(w, http.StatusForbidden, errors.New("only professionals can update session detail"))
 			return
 		}
-		if trimmed := strings.TrimSpace(req.MeetingURL); trimmed != "" && !isGoogleMeetURL(trimmed) {
+		if req.MeetingURL != nil && strings.TrimSpace(*req.MeetingURL) != "" && !isGoogleMeetURL(strings.TrimSpace(*req.MeetingURL)) {
 			writeError(w, http.StatusBadRequest, errors.New("link meeting harus berupa link Google Meet (meet.google.com). Kosongkan untuk membuat otomatis"))
 			return
 		}
-		updated, err := s.store.UpdateCareSessionDetail(r.Context(), sessionID, req.MeetingURL, req.SummaryForPatient, req.PrivateNote)
+		updated, err := s.store.PatchCareSessionDetail(r.Context(), sessionID, req.MeetingURL, req.SummaryForPatient, req.PrivateNote)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		if strings.TrimSpace(req.SummaryForPatient) != "" {
+		if req.SummaryForPatient != nil && strings.TrimSpace(*req.SummaryForPatient) != "" {
 			s.notifyPatient(r, cs.PatientID, "session_summary",
 				"Ringkasan sesi tersedia",
 				"Profesional membagikan ringkasan sesi terakhirmu.",
 				map[string]string{"session_id": sessionID})
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"session": updated})
+		writeJSON(w, http.StatusOK, map[string]any{"session": careSessionForRole(updated, claims.Role)})
 		return
 	}
 
 	switch {
-	case isProf && status == "attended":
+	case status == "attended" || status == "absent":
 		// "Hadir" hanya menandai kehadiran — sesi TIDAK diselesaikan dan
 		// earnings TIDAK diakui di sini. Sesi tetap berjalan sampai durasinya
 		// habis lalu diselesaikan otomatis oleh sweeper. Guard waktu sama
 		// dengan penandaan kehadiran manual (mulai 10 menit sebelum sesi).
-		if time.Now().Before(cs.ScheduledAt.Add(-10 * time.Minute)) {
-			writeError(w, http.StatusBadRequest, errors.New("kehadiran baru bisa ditandai sejak 10 menit sebelum sesi"))
-			return
-		}
-		updated, err := s.store.UpdateCareSessionStatus(r.Context(), sessionID, "attended", "", claims.Subject)
+		updated, err := s.store.MarkCareSessionAttendance(r.Context(), sessionID, claims.Role, claims.Subject, status)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"session": updated})
+		if status == "absent" && isProf {
+			if _, err := s.recordAutoCredit(r, updated); err != nil {
+				writeError(w, http.StatusInternalServerError, errors.New("kehadiran tersimpan; kredit belum tercatat, coba lagi"))
+				return
+			}
+			s.cancelMeetEventBestEffort(r.Context(), s.calendar, cs.ProfessionalID, cs.GoogleEventID)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"session": careSessionForRole(updated, claims.Role)})
 		return
 	case isProf && (status == "completed" || status == "no_show"):
 		if time.Now().Before(cs.ScheduledAt.Add(-10 * time.Minute)) {
@@ -447,7 +460,7 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 				"Kamu tercatat tidak hadir; 1 sesi paket hangus sesuai aturan.",
 				map[string]string{"session_id": sessionID})
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"session": updated})
+		writeJSON(w, http.StatusOK, map[string]any{"session": careSessionForRole(updated, claims.Role)})
 		return
 	case status == "cancelled_by_professional":
 		// Profesional boleh batal kapan saja sebelum sesi mulai;
@@ -480,7 +493,7 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 			"Sesi dibatalkan profesional",
 			"Profesional membatalkan sesi. Kredit sesimu kembali dan bisa dijadwalkan ulang atau diminta sebagai refund.",
 			map[string]string{"session_id": sessionID})
-		writeJSON(w, http.StatusOK, map[string]any{"session": updated, "refund": refund})
+		writeJSON(w, http.StatusOK, map[string]any{"session": careSessionForRole(updated, claims.Role), "refund": refund})
 		return
 	case status == "cancelled_by_patient":
 		if !isPatient {
@@ -506,7 +519,7 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 		s.notifyPatient(r, cs.ProfessionalID, "session_cancelled_patient",
 			"Pasien membatalkan sesi", "Seorang pasien membatalkan sesi terjadwal.",
 			map[string]string{"session_id": sessionID, "patient_id": cs.PatientID})
-		writeJSON(w, http.StatusOK, map[string]any{"session": updated})
+		writeJSON(w, http.StatusOK, map[string]any{"session": careSessionForRole(updated, claims.Role)})
 		return
 	default:
 		writeError(w, http.StatusBadRequest, errors.New("status tidak didukung untuk peran ini"))
@@ -621,7 +634,7 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 	}
 	s.notifyPatient(r, other, "session_rescheduled", title,
 		reschedBody, reschedPayload)
-	resp := map[string]any{"session": updated}
+	resp := map[string]any{"session": careSessionForRole(updated, claims.Role)}
 	if len(warnings) > 0 {
 		// Sinyal eksplisit ke klien: jadwal tersimpan, sinkronisasi Google gagal.
 		resp["warnings"] = warnings

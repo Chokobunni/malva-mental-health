@@ -134,6 +134,55 @@ func paymentStatusOf(t *testing.T, payload map[string]any) string {
 	return fmt.Sprint(raw["status"])
 }
 
+// Exercise the real HTTP gateway and persistence path, rather than a fake
+// StatusFetcher that bypasses provider response validation.
+func TestPaymentStatusReconcilesAuthenticatedCapture(t *testing.T) {
+	for _, tc := range []struct {
+		name, returnedOrder, amount, fraud, wantStatus string
+		wantSessions                                   int
+	}{
+		{name: "capture_without_webhook_signature", amount: "102000.00", fraud: "accept", wantStatus: "paid", wantSessions: 1},
+		{name: "wrong_order", returnedOrder: "TXN-OTHER", amount: "102000.00", fraud: "accept", wantStatus: "pending"},
+		{name: "wrong_amount", amount: "1.00", fraud: "accept", wantStatus: "pending"},
+		{name: "fraud_challenge", amount: "102000.00", fraud: "challenge", wantStatus: "pending"},
+		{name: "fraud_deny", amount: "102000.00", fraud: "deny", wantStatus: "pending"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var reference string
+			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				key, password, ok := r.BasicAuth()
+				if r.Method != http.MethodGet || r.URL.Path != "/v2/"+reference+"/status" || !ok || key != "sandbox-status-test-key" || password != "" {
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				order := reference
+				if tc.returnedOrder != "" {
+					order = tc.returnedOrder
+				}
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"order_id": order, "status_code": "200", "status_message": "Success, transaction found",
+					"transaction_status": "capture", "fraud_status": tc.fraud, "gross_amount": tc.amount,
+					"transaction_id": "captured-status-transaction", "payment_type": "credit_card", "currency": "IDR",
+				})
+			}))
+			defer provider.Close()
+			gateway := payment.NewMidtransGateway(payment.MidtransConfig{ServerKey: "sandbox-status-test-key", APIBase: provider.URL})
+			f := newReconcileFixture(t, gateway)
+			booking, pay := f.pendingPayment(t, 10*time.Second)
+			reference = pay.Reference
+			for attempt := 0; attempt < 2; attempt++ {
+				code, payload := f.statusResult(t, pay.Reference)
+				if code != http.StatusOK || paymentStatusOf(t, payload) != tc.wantStatus {
+					t.Fatalf("capture reconciliation: HTTP %d status=%s, want %s", code, paymentStatusOf(t, payload), tc.wantStatus)
+				}
+				if n := countSessionsForBooking(t, f.db, booking.ID); n != tc.wantSessions {
+					t.Fatalf("sessions=%d, want %d", n, tc.wantSessions)
+				}
+			}
+		})
+	}
+}
+
 // TestPaymentStatusReconcileMarksPaidFromGateway: webhook belum tiba, tetapi
 // gateway bilang settlement -> pembayaran jadi lunas, sesi lahir, dan
 // panggilan kedua tidak membuat sesi tambahan.

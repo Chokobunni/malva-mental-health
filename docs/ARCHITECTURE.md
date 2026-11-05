@@ -384,3 +384,12 @@ All migrations use `CREATE TABLE IF NOT EXISTS` and are idempotent.
 Backend produksi sebelumnya tertinggal dari source APK, sehingga kontrak booking paket dan `attended` tidak cocok. Deploy harus memakai source teruji yang sama dengan APK. Pada cutover, hentikan worker, retire antrean transport sampai cutoff WIB memakai `backend/deploy/scripts/retire_notification_backlog.sql`, lalu jalankan worker baru. Riwayat notifikasi tidak dihapus.
 
 FCM memakai payload data-only. Receiver Flutter menerima pesan, sedangkan service Android mencegah SDK merender payload notification legacy secara otomatis. Validator foreground/background memeriksa akun dan scope sesi ongoing menggunakan jam server. Native cleanup hanya menyentuh posted notifications/delegate; alarm goals/obat tetap ditangani scheduler yang sudah ada.
+# Session/clinical chat data flow (2026-11-06)
+
+Session rows serialize attendance and terminal transitions with FOR UPDATE. Additive migration 032 preserves the legacy marker and introduces independent participant attendance. The active query uses scheduled status and an exclusive end. Flutter uses ServerClock, exact expiry timers and bounded permission revalidation. Patient responses omit professional private notes; partial detail updates preserve omitted values.
+
+REST and WebSocket share store-level professional card validation. Authenticated private upload validates file bytes, atomically publishes immutable files in UploadDir + '-chat-private', then stores an attachment chat message. Only persisted message participants can read bytes; the directory is never served by the public uploads route. A crash before DB persistence can leave an inaccessible orphan file; retain it during uncertain writes to protect concurrent retries. Include this private directory in protected backups; any future orphan cleanup must cross-check persisted attachment IDs.
+
+Stable per-intent client UUIDs derive deterministic message IDs; goal creation uses a bounded idempotency header. Derived homework snapshots are preserved on replay. Clinical mutations broadcast clinical_data_changed to the authenticated patient connection; the existing PatientShell realtime client refreshes Medication Check-in and open clinical views, with reconnect/resume recovery. Existing local medication reminder scheduling follows store updates. No additional OS push kind is introduced.
+
+Midtrans authenticated HTTPS GET status validates exact order binding and existing amount/fraud rules; webhook ingestion retains its independent SHA512 signature verification.

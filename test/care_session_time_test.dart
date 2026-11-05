@@ -31,8 +31,8 @@ void main() {
       expect(ongoing(DateTime(2026, 10, 22, 9, 25)), isTrue);
     });
 
-    test('tepat saat durasi habis (09:50) -> true (batas inklusif)', () {
-      expect(ongoing(DateTime(2026, 10, 22, 9, 50)), isTrue);
+    test('tepat saat durasi habis (09:50) -> false', () {
+      expect(ongoing(DateTime(2026, 10, 22, 9, 50)), isFalse);
     });
 
     test('satu menit setelah durasi habis (09:51) -> false', () {
@@ -52,7 +52,7 @@ void main() {
     test('durasi 0: jendela 08:50 .. 09:00 (tutup tepat di jadwal)', () {
       expect(
         isCareSessionOngoing(DateTime(2026, 10, 22, 9, 0), scheduledAt, 0),
-        isTrue,
+        isFalse,
       );
       expect(
         isCareSessionOngoing(DateTime(2026, 10, 22, 9, 1), scheduledAt, 0),
@@ -63,7 +63,7 @@ void main() {
     test('durasi negatif diperlakukan sebagai 0', () {
       expect(
         isCareSessionOngoing(DateTime(2026, 10, 22, 9, 0), scheduledAt, -15),
-        isTrue,
+        isFalse,
       );
       expect(
         isCareSessionOngoing(DateTime(2026, 10, 22, 9, 1), scheduledAt, -15),

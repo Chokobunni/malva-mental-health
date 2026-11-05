@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/auth_providers.dart';
 import '../services/malva_api_client.dart';
+import '../services/care_session_refresh.dart';
 import '../services/meeting_launcher.dart';
 import '../theme.dart';
 import 'friendly_error.dart';
@@ -54,10 +55,34 @@ class MeetJoinButton extends ConsumerStatefulWidget {
 }
 
 class _MeetJoinButtonState extends ConsumerState<MeetJoinButton> {
+  late final CareSessionRefresh _sessionRefresh;
   bool _busy = false;
   String? _error;
 
   bool get _hasLink => widget.session.meetingUrl.trim().isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    _sessionRefresh = CareSessionRefresh(() {
+      if (!mounted) return;
+      setState(() {});
+      _sessionRefresh.update([widget.session]);
+    }, poll: false)
+      ..update([widget.session]);
+  }
+
+  @override
+  void didUpdateWidget(covariant MeetJoinButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _sessionRefresh.update([widget.session]);
+  }
+
+  @override
+  void dispose() {
+    _sessionRefresh.dispose();
+    super.dispose();
+  }
 
   Future<void> _createLink() async {
     if (_busy) return;
@@ -165,6 +190,7 @@ class _MeetJoinButtonState extends ConsumerState<MeetJoinButton> {
   }
 
   Future<void> _join() async {
+    if (!widget.session.canJoinNow) return;
     final url = widget.session.meetingUrl.trim();
     if (url.isEmpty) return;
     final result = await openMeetLink(url);
@@ -199,12 +225,8 @@ class _MeetJoinButtonState extends ConsumerState<MeetJoinButton> {
   Widget build(BuildContext context) {
     final session = widget.session;
     if (!session.isVideo) return const SizedBox.shrink();
-    // Sesi `completed` yang masih di dalam jendela waktu (profesional menekan
-    // "Hadir" / Meet berakhir lebih awal) tetap boleh bergabung lagi sampai
-    // jendela tutup — selama link Meet sudah ada. Tanpa link, jangan tawarkan
-    // membuat link baru untuk sesi yang sudah selesai.
-    final live = session.isScheduled ||
-        (session.status == 'completed' && session.canJoinNow && _hasLink);
+    // Sesi terminal dan sesi yang sudah melewati batas waktu tidak bisa gabung.
+    final live = session.isScheduled && !session.isAfterJoinWindow;
     if (!live) return const SizedBox.shrink();
 
     final children = <Widget>[

@@ -286,3 +286,8 @@ Katalog tes psikologi berbayar: Tes Kepribadian, 5 Bahasa Cinta, Happiness, Purp
 ## Koreksi rilis 0.1.3 (5 November 2026)
 
 Home pasien menyediakan sesi berjalan dan video call mendatang beserta foto profesional. Kehadiran profesional tidak menutup sesi sebelum waktunya. Detail pasien tetap memakai otorisasi profesional. Notifikasi historis pada shade/antrean transport dihentikan; riwayat dalam aplikasi dipertahankan. Scope notifikasi OS tetap pasien: chat sesi aktif, goals harian, jam obat; profesional: chat sesi aktif.
+# Koreksi konsultasi dan alat klinis — 6 November 2026
+
+Kehadiran dicatat masing-masing oleh pasien dan profesional. Ketidakhadiran pasien memakai kuota; ketidakhadiran profesional mengembalikan kuota. Profesional hanya menyelesaikan sesi setelah durasi jadwal berakhir; chat/Meet tertutup pada akhir, riwayat tetap terbaca. Transaksi sukses diverifikasi melalui status Midtrans dengan referensi dan nominal yang sama, mengaktifkan paket tepat sekali.
+
+Selama sesi aktif, profesional dapat mengelola goals/habits, meminta assessment yang tersedia, mengubah diagnosis dan obat sesuai kewenangan psikiater, mengirim file/gambar resep privat, serta mengirim rangkuman homework dan insight. Perubahan obat langsung disinkronkan ke Medication Check-in pasien melalui event in-app. Batas push tetap chat sesi aktif, dengan reminder lokal goals dan obat hanya bagi pasien.

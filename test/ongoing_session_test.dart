@@ -10,19 +10,16 @@ import 'package:malva_mental_health/src/providers/providers.dart';
 import 'package:malva_mental_health/src/screens/my_care_screen.dart';
 import 'package:malva_mental_health/src/screens/pro_schedule_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
+import 'package:malva_mental_health/src/services/server_clock.dart';
 import 'package:malva_mental_health/src/theme.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
 
 // ============================================================
-// SESI BERJALAN: tombol Gabung/Chat tetap ada setelah profesional "Hadir".
+// Hadir tidak menyelesaikan sesi: status tetap scheduled dan aksi tetap aktif
+// selama jendela waktu. Status completed selalu terminal, termasuk data legacy
+// yang sudah completed sebelum durasi terjadwal berakhir. Riwayat tetap terbaca.
 //
-// Akar masalah: kartu sesi hanya menampilkan aksi bila `session.isScheduled`.
-// Begitu profesional menekan "Hadir" (status completed) di dalam jendela waktu,
-// tombol Gabung/Chat hilang padahal sesi belum benar-benar usai. Perbaikan:
-// tampilkan aksi selama `isCareSessionOngoing` (scheduled ATAU completed di
-// dalam jendela waktu).
-//
-// Test ini gagal SEBELUM perbaikan (completed di jendela -> tanpa tombol Join).
+// Kehadiran tiap peserta dibaca dari field sendiri; completed bukan sinonim Hadir.
 // ============================================================
 
 const _patientSession = AuthSession(
@@ -59,11 +56,13 @@ Map<String, dynamic> _sessionJson({
       'id': id,
       'patient_id': 'user_pasien_1',
       'professional_id': 'user_pro_1',
+      'patient_name': 'Pasien sesi',
       'professional_name': professionalName,
       'session_type': 'chat',
       'scheduled_at': scheduledAt,
       'duration_minutes': 30,
       'status': status,
+      'summary_for_patient': 'Ringkasan tersimpan $id',
     };
 
 http.Response _json(Object body, {int status = 200}) => http.Response(
@@ -130,15 +129,19 @@ MalvaApiClient _proScheduleApi(List<Map<String, dynamic>> past) {
 }
 
 void main() {
-  setUpAll(initializeWib);
+  setUp(() {
+    initializeWib();
+    ServerClock.reset();
+  });
+  tearDown(ServerClock.reset);
 
-  testWidgets('sesi completed di dalam jendela tetap menampilkan tombol Join',
+  testWidgets('sesi completed menutup aksi walau masih di dalam jendela',
       (tester) async {
-    final now = wibNow();
+    final now = ServerClock.now();
     final api = MalvaApiClient(
       baseUrl: 'http://backend.test',
       httpClient: _careClient([
-        // Completed TEPAT SEKARANG -> masih di jendela (mulai -10m s/d +60m).
+        // Data legacy completed pada jadwal sekarang tetap terminal.
         _sessionJson(
           id: 's_in',
           status: 'completed',
@@ -162,53 +165,58 @@ void main() {
     expect(find.text('dr. Berjalan'), findsOneWidget);
     expect(find.text('dr. Lewat'), findsOneWidget);
 
-    // Hanya sesi yang masih di jendela yang menampilkan tombol Join/Chat.
-    expect(find.text('Join'), findsOneWidget,
-        reason: 'sesi completed yang masih di jendela harus tetap punya '
-            'tombol Join (chat tetap hidup sampai jendela habis)');
-    expect(find.text('Kirim'), findsOneWidget);
+    expect(find.text('Ringkasan: Ringkasan tersimpan s_in'), findsOneWidget);
+    expect(find.text('Ringkasan: Ringkasan tersimpan s_out'), findsOneWidget);
+    expect(find.text('Join'), findsNothing,
+        reason: 'completed menutup akses tanpa menunggu akhir jendela');
+    expect(find.text('Kirim'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, 'Hadir'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, 'Tidak hadir'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('sesi completed di luar jendela tidak menampilkan tombol',
+  testWidgets(
+      'kehadiran saya pada sesi scheduled tidak menutup Join atau Kirim',
       (tester) async {
-    final now = wibNow();
+    final now = ServerClock.now();
     final api = MalvaApiClient(
       baseUrl: 'http://backend.test',
       httpClient: _careClient([
         _sessionJson(
-          id: 's_out',
-          status: 'completed',
-          professionalName: 'dr. Lewat',
-          scheduledAt: _isoWib(now.subtract(const Duration(hours: 3))),
-        ),
+          id: 's_attended',
+          status: 'scheduled',
+          professionalName: 'dr. Berjalan',
+          scheduledAt: _isoWib(now.subtract(const Duration(minutes: 5))),
+        )..['patient_attendance'] = 'attended',
       ]),
     );
     await tester.pumpWidget(_wrap(api));
     await tester.pumpAndSettle();
-    await _openTab(tester, 'Riwayat');
+    await _openTab(tester, 'Jadwal');
 
-    expect(find.text('dr. Lewat'), findsOneWidget);
-    expect(find.text('Join'), findsNothing,
-        reason: 'jendela sudah tutup; tombol Join tidak boleh muncul');
+    expect(find.text('dr. Berjalan'), findsOneWidget);
+    expect(find.text('Kehadiran saya: Hadir'), findsOneWidget);
+    expect(find.text('Join'), findsOneWidget,
+        reason: 'konfirmasi hadir mempertahankan status scheduled');
+    expect(find.text('Kirim'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Hadir'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, 'Tidak hadir'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
   });
 
   // ------------------------------------------------------------------
-  // REGRESI: sesi completed yang tampil di daftar "Riwayat sesi" (past: true)
-  // tetap harus menampilkan aksi "Join / Chat" selama masih di jendela waktu.
-  //
-  // Sebelum perbaikan, kartu memakai `if (!past && live)` sehingga sesi yang
-  // sudah ditandai "Hadir" (completed) — yang setelah reload masuk daftar past
-  // — kehilangan tombol Join/Chat. Test ini gagal sebelum `if (live)`.
+  // Riwayat profesional mempertahankan kartu completed beserta ringkasannya,
+  // tetapi tidak membuka kembali aksi sesi, walau jadwalnya baru lima menit lalu.
   // ------------------------------------------------------------------
   testWidgets(
-      'kartu Jadwal profesional: sesi past yang masih berjalan tetap '
-      'menampilkan "Join / Chat"', (tester) async {
-    final now = wibNow();
+      'kartu Riwayat profesional completed tetap terbaca tanpa aksi sesi',
+      (tester) async {
+    final now = ServerClock.now();
     final pastSession = _sessionJson(
       id: 's_past_live',
       status: 'completed',
       professionalName: 'dr. Hadir',
-      // 5 menit lalu, durasi 30 -> masih di jendela (s/d +55m).
+      // Data legacy completed di dalam jendela tetap terminal.
       scheduledAt: _isoWib(now.subtract(const Duration(minutes: 5))),
     );
     final api = _proScheduleApi([pastSession]);
@@ -232,19 +240,23 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Aksi ada di section "Riwayat sesi" (bawah lipatan) — gulir dulu.
-    await tester.scrollUntilVisible(
-      find.text('Join / Chat'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
+    // Gulir ke kartu yang harus tetap ada, bukan tombol yang memang dilarang.
+    final card = find.byKey(const ValueKey('past-s_past_live'));
+    await tester.scrollUntilVisible(card, 300,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(card, findsOneWidget);
 
-    expect(find.text('Join / Chat'), findsOneWidget,
-        reason: 'sesi past (completed) yang masih di jendela harus tetap '
-            'punya tombol Join / Chat');
+    expect(find.text('Pasien sesi'), findsOneWidget);
+    expect(find.text('Ringkasan: Ringkasan tersimpan s_past_live'),
+        findsOneWidget);
+    expect(find.text('Join / Chat'), findsNothing,
+        reason: 'completed terminal walau waktu terjadwal belum habis');
     // Hadir/Tidak hadir TIDAK ditawarkan ulang untuk sesi completed.
     expect(find.text('Hadir'), findsNothing);
     expect(find.text('Tidak hadir'), findsNothing);
+    expect(find.text('Sesi selesai'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
   });
 }
 

@@ -3,7 +3,7 @@
 ///
 /// Dipisah ke berkas sendiri agar bisa diuji unit tanpa Flutter/HTTP, dan agar
 /// aturan jendela waktu punya SATU sumber kebenaran. Nilai `now` dan
-/// `scheduledAt` dioper oleh pemanggil — pemanggil wajib memakai `wibNow()` /
+/// `scheduledAt` dioper oleh pemanggil — pemanggil wajib memakai `ServerClock.now()` /
 /// `parseWibStored()` (WIB) untuk nilai bisnis, bukan `DateTime.now()`.
 library;
 
@@ -19,11 +19,10 @@ const Duration careSessionJoinClosesAfterEnd = Duration.zero;
 /// `true` bila [now] berada di dalam jendela "sesi berjalan" untuk sesi yang
 /// dijadwalkan pada [scheduledAt] dengan durasi [durationMinutes].
 ///
-/// Jendela (batas INKLUSIF di kedua ujung agar tombol "Gabung" tidak berkedip
-/// tepat pada detik pembukaan/penutupan):
+/// Batas pembukaan inklusif; batas penutupan eksklusif:
 ///
 /// ```
-/// scheduledAt - 10 menit  <=  now  <=  scheduledAt + durationMinutes
+/// scheduledAt - 10 menit  <=  now  <  scheduledAt + durationMinutes
 /// ```
 ///
 /// [durationMinutes] negatif diperlakukan sebagai 0 agar input tak wajar tidak
@@ -38,5 +37,5 @@ bool isCareSessionOngoing(
   final closesAt = scheduledAt
       .add(Duration(minutes: safeDuration))
       .add(careSessionJoinClosesAfterEnd);
-  return !now.isBefore(opensAt) && !now.isAfter(closesAt);
+  return !now.isBefore(opensAt) && now.isBefore(closesAt);
 }

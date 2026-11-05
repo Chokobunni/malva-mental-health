@@ -1,6 +1,7 @@
 // `hide PickedFile`: image_picker mengekspor PickedFile-nya sendiri yang
 // bertabrakan dengan PickedFile (port) di contracts/ports.dart.
 import 'package:image_picker/image_picker.dart' hide PickedFile;
+import 'package:file_picker/file_picker.dart' as fp;
 
 import '../contracts/ports.dart';
 
@@ -19,6 +20,25 @@ class ImagePickerAdapter implements FilePickerPort {
     int? maxHeight,
     int? imageQuality,
   }) async {
+    if (kind == 'file') {
+      final result = await fp.FilePicker.platform.pickFiles(
+        type: fp.FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+        withData: true,
+      );
+      final selected = result?.files.single;
+      if (selected == null || selected.bytes == null) return null;
+      final extension = selected.extension?.toLowerCase();
+      return PickedFile(
+          name: selected.name,
+          bytes: selected.bytes!,
+          mimeType: switch (extension) {
+            'pdf' => 'application/pdf',
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            _ => 'image/jpeg',
+          });
+    }
     final XFile? picked;
     if (kind == 'video') {
       // Video tidak dikompresi (sama seperti perilaku lama).

@@ -47,6 +47,11 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
   List<BackendScreeningSession> _screenings = const [];
   bool _isLoading = true;
   String? _loadError;
+  int _loadRequest = 0;
+  late final String _screenOwner;
+
+  String _ownerKey(AuthSession? session) =>
+      '${session?.role.name}:${session?.backendUserId ?? session?.identifier ?? ''}';
 
   /// True selama assessment & therapy record masih dimuat.
   ///
@@ -73,16 +78,22 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
   @override
   void initState() {
     super.initState();
+    _screenOwner = _ownerKey(ref.read(currentSessionProvider));
     _loadFromServer();
   }
 
   Future<void> _loadFromServer() async {
+    final request = ++_loadRequest;
+    bool isCurrent() =>
+        mounted &&
+        request == _loadRequest &&
+        _screenOwner == _ownerKey(ref.read(currentSessionProvider));
     final apiClient = widget.apiClient;
     final accessToken = widget.session?.accessToken;
     if (apiClient == null || accessToken == null || accessToken.isEmpty) {
       // Tanpa sesi tidak ada yang dimuat: matikan kedua indikator agar tidak
       // ada spinner yang berputar selamanya.
-      if (mounted) {
+      if (isCurrent()) {
         setState(() {
           _isLoading = false;
           _extrasLoading = false;
@@ -90,7 +101,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
       }
       return;
     }
-    if (mounted) {
+    if (isCurrent()) {
       setState(() {
         _isLoading = true;
         _extrasLoading = true;
@@ -106,7 +117,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
         apiClient.getHealthRecord(accessToken: accessToken),
         apiClient.listMedications(accessToken: accessToken),
       ]);
-      if (!mounted) return;
+      if (!isCurrent()) return;
       final record = results[0] as BackendHealthRecord;
       // Tampilkan SEMUA obat aktif apa pun sumbernya ('Pasien' maupun
       // 'Profesional'). Dulu obat yang ditambahkan pasien sendiri difilter
@@ -121,14 +132,14 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
           .read(malvaStoreProvider.notifier)
           .setPatientDiagnosis(record.diagnosisSummary);
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!isCurrent()) return;
       setState(() {
         _loadError = e is MalvaApiException ? e.message : null;
       });
     }
     // Data inti selesai (sukses maupun gagal) → layar langsung tampil, tidak
     // ikut menunggu dua request tambahan di bawah.
-    if (!mounted) return;
+    if (!isCurrent()) return;
     setState(() => _isLoading = false);
 
     // Sumber tambahan dimuat TERPISAH: satu endpoint gagal tidak boleh
@@ -136,10 +147,10 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
     try {
       final submissions =
           await apiClient.listTherapySubmissions(accessToken: accessToken);
-      if (!mounted) return;
+      if (!isCurrent()) return;
       setState(() => _therapySubmissions = submissions);
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!isCurrent()) return;
       setState(() => _therapyError = friendlyErrorMessage(e));
     }
 
@@ -153,15 +164,15 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
           patientId: patientId,
           limit: 50,
         );
-        if (!mounted) return;
+        if (!isCurrent()) return;
         setState(() => _screenings = screenings);
       } on Object catch (e) {
-        if (!mounted) return;
+        if (!isCurrent()) return;
         setState(() => _screeningError = friendlyErrorMessage(e));
       }
     }
 
-    if (mounted) setState(() => _extrasLoading = false);
+    if (isCurrent()) setState(() => _extrasLoading = false);
   }
 
   /// Gabungkan dokumen unggahan + assessment record + therapy record menjadi
@@ -251,6 +262,13 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currentSessionProvider);
+    if (_screenOwner != _ownerKey(ref.read(currentSessionProvider))) {
+      return const Scaffold(
+          body: Center(
+              child: Text('Sesi akun telah berubah. Buka kembali Record.')));
+    }
+    ref.listen<int>(clinicalDataRevisionProvider, (_, __) => _loadFromServer());
     final storeState = ref.watch(malvaStoreProvider);
     // Record = gabungan kronologis dokumen unggahan + assessment record +
     // therapy record agar riwayat klinis pasien terbaca dalam satu daftar.

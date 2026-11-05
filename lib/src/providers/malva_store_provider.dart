@@ -190,6 +190,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   final AssessmentDatabaseService _assessmentDb;
   final SecureStore _secureStore;
   int _accountGeneration = 0;
+  int _medicationRequestGeneration = 0;
   Future<void> _sessionStorageWork = Future<void>.value();
 
   MalvaStoreNotifier(
@@ -332,12 +333,14 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     if (token == null || token.isEmpty) return;
     final generation = _accountGeneration;
     if (!_isCurrentAccountRequest(generation, token)) return;
+    final requestGeneration = ++_medicationRequestGeneration;
     try {
       final meds = await api.listMedications(
         accessToken: token,
         limit: 50,
       );
-      if (!_isCurrentAccountGeneration(generation)) return;
+      if (!_isCurrentAccountGeneration(generation) ||
+          requestGeneration != _medicationRequestGeneration) return;
       // Konversi BackendMedication → Medication untuk store lokal.
       final medications = meds.map((m) {
         // Parse reminder_time menjadi MedicationReminder.
@@ -349,7 +352,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
             final minute = int.tryParse(parts[1]) ?? 0;
             reminders.add(MedicationReminder(
               time: TimeOfDay(hour: hour, minute: minute),
-              relationToMeal: '',
+              relationToMeal: m.relationToMeal,
             ));
           }
         }

@@ -81,6 +81,7 @@ func (s *Store) ListGoals(ctx context.Context, patientID string, includeInactive
 }
 
 type UpsertGoalParams struct {
+	ID            string
 	PatientID     string
 	Title         string
 	Category      string
@@ -107,10 +108,13 @@ func (s *Store) CreateGoal(ctx context.Context, p UpsertGoalParams) (Goal, error
 	}
 	var g Goal
 	err := s.db.QueryRowContext(ctx, `
-		INSERT INTO goals (patient_id, title, category, target_per_week)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO goals (patient_id, title, category, target_per_week,id)
+		VALUES ($1, $2, $3, $4,COALESCE(NULLIF($5,'')::uuid,gen_random_uuid()))
+		ON CONFLICT (id) DO UPDATE SET id=goals.id
+		WHERE goals.patient_id=EXCLUDED.patient_id AND goals.title=EXCLUDED.title
+		 AND goals.category=EXCLUDED.category AND goals.target_per_week=EXCLUDED.target_per_week
 		RETURNING id, patient_id, title, category, target_per_week, is_active, sort_order, created_at, updated_at
-	`, p.PatientID, p.Title, p.Category, p.TargetPerWeek).
+	`, p.PatientID, p.Title, p.Category, p.TargetPerWeek, p.ID).
 		Scan(&g.ID, &g.PatientID, &g.Title, &g.Category, &g.TargetPerWeek, &g.IsActive,
 			&g.SortOrder, &g.CreatedAt, &g.UpdatedAt)
 	return g, err

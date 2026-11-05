@@ -16,6 +16,12 @@ import '../widgets/mini_summary.dart';
 import '../widgets/professional_avatar.dart';
 import '../widgets/therapy_library.dart';
 import '../time/wib.dart';
+import '../services/server_clock.dart';
+import '../platform/platform_providers.dart';
+import 'chat/professional_chat_tools.dart';
+import 'chat/clinical_chat_card.dart';
+import 'assessment_screen.dart';
+import 'goals_screen.dart';
 import 'booking/doctor_profile_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -50,7 +56,8 @@ class ChatScreen extends ConsumerStatefulWidget {
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends ConsumerState<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen>
+    with WidgetsBindingObserver {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   final _messages = <ChatMessage>[];
@@ -61,6 +68,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _sharingData = false;
   BackendChatAccess _access = const BackendChatAccess();
   bool _accessLoaded = false;
+  Timer? _accessPoll;
+  Timer? _accessExpiry;
+  int _accessRequest = 0;
+  late final String _owner;
+  bool _accessLoading = false;
+  bool _liveExpired = false;
   StreamSubscription<ChatState>? _stateSub;
   StreamSubscription<ChatMessage>? _messageSub;
   StreamSubscription<bool>? _typingSub;
@@ -74,6 +87,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _owner = _ownerKey(ref.read(currentSessionProvider));
+    _startAccessPoll();
     // Tandai percakapan ini sebagai aktif agar notifikasi chat untuk peer yang
     // sama ditekan (pesannya sudah tampil di layar).
     _activePeer = ref.read(activeChatPeerProvider.notifier);
@@ -104,7 +120,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             userId: widget.otherUserId,
           );
       final photo = profile.credential.photoIntroUrl;
-      if (!mounted || photo.isEmpty) return;
+      if (!mounted || !_ownerMatches || photo.isEmpty) return;
       setState(() => _photoUrl = photo);
     } on Object {
       // Abaikan: foto hanya pelengkap tampilan.
@@ -114,10 +130,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Muat izin chat: teks hanya saat sesi berjalan; share data milik
   /// pasien butuh paket aktif; profesional membahas saat sesi.
   Future<void> _loadAccess() async {
+    if (_accessLoading || !_ownerMatches) return;
+    _accessLoading = true;
+    final request = ++_accessRequest;
     final session = ref.read(currentSessionProvider);
     final token = session?.accessToken;
     final myId = session?.backendUserId ?? session?.identifier;
-    if (token == null || token.isEmpty || myId == null || myId.isEmpty) return;
+    if (token == null || token.isEmpty || myId == null || myId.isEmpty) {
+      _accessLoading = false;
+      return;
+    }
     final isPatient = session?.role == UserRole.patient;
     try {
       final access = await ref.read(apiClientProvider).chatPermission(
@@ -125,22 +147,92 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             patientId: isPatient ? myId : widget.otherUserId,
             professionalId: isPatient ? widget.otherUserId : myId,
           );
-      if (!mounted) return;
+      if (!mounted || !_ownerMatches || request != _accessRequest) return;
       setState(() {
         _access = access;
         _accessLoaded = true;
+        _liveExpired = false;
       });
+      _accessExpiry?.cancel();
+      final end = access.sessionEndsAt;
+      if (access.inSession && end != null) {
+        final remaining = end.difference(ServerClock.now());
+        if (remaining <= Duration.zero) {
+          _expireAccess();
+        } else {
+          _accessExpiry = Timer(remaining, _expireAccess);
+        }
+      }
     } on Object {
-      // Izin gagal dimuat: server tetap menegakkan aturan saat kirim.
+      if (mounted && _ownerMatches && request == _accessRequest) {
+        setState(() {
+          _access = const BackendChatAccess(
+              reason: 'Izin sesi belum dapat diperiksa. Mencoba kembali.');
+          _accessLoaded = true;
+        });
+      }
+    } finally {
+      _accessLoading = false;
+    }
+  }
+
+  String _ownerKey(AuthSession? session) =>
+      '${session?.role.name}:${session?.backendUserId ?? session?.identifier ?? ''}';
+
+  bool get _ownerMatches =>
+      _owner == _ownerKey(ref.read(currentSessionProvider));
+
+  void _startAccessPoll() {
+    _accessPoll?.cancel();
+    _accessPoll =
+        Timer.periodic(const Duration(seconds: 5), (_) => _loadAccess());
+  }
+
+  void _expireAccess() {
+    if (!mounted || !_ownerMatches) return;
+    setState(() => _liveExpired = true);
+    _chatService?.stopTyping();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _startAccessPoll();
+      _expireAccess();
+      unawaited(_loadAccess());
+    } else {
+      _accessPoll?.cancel();
     }
   }
 
   bool get _isPatient =>
       ref.read(currentSessionProvider)?.role == UserRole.patient;
 
-  bool get _canSendText => _access.canSendText;
+  bool get _canSendText =>
+      _ownerMatches &&
+      !_liveExpired &&
+      _access.canSendText &&
+      (_access.sessionEndsAt == null ||
+          ServerClock.now().isBefore(_access.sessionEndsAt!));
 
-  bool get _canShare => _isPatient && _access.canShare;
+  bool get _liveSession =>
+      _ownerMatches &&
+      _access.inSession &&
+      !_liveExpired &&
+      (_access.sessionEndsAt == null ||
+          ServerClock.now().isBefore(_access.sessionEndsAt!));
+
+  bool get _canShare =>
+      _ownerMatches &&
+      _isPatient &&
+      _access.canShare &&
+      (_access.hasActivePackage || _liveSession);
+
+  bool get _canUseProfessionalTools =>
+      !_isPatient &&
+      _canSendText &&
+      _access.inSession &&
+      _access.sessionId.isNotEmpty;
 
   /// Percakapan "mati": tidak sedang dalam sesi, tidak punya paket aktif, tidak
   /// ada sesi berikutnya, dan tidak bisa berbagi data. Untuk pasien, ini berarti
@@ -148,7 +240,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// nonaktif dengan kalimat kriptik; tampilkan ajakan menjadwalkan sesi.
   bool get _isDeadConversation =>
       _accessLoaded &&
-      !_access.inSession &&
+      !_liveSession &&
       !_access.hasActivePackage &&
       _access.nextSessionAt == null &&
       !_access.canShare;
@@ -171,7 +263,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             patientId: patientId,
             professionalId: professionalId,
           );
-      if (!mounted) return false;
+      if (!mounted || !_ownerMatches) return false;
       // Server mengembalikan terbaru dulu; tampilkan lama -> baru.
       final ordered = history.reversed.toList(growable: false);
       setState(() {
@@ -235,11 +327,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
 
     _stateSub = _chatService!.stateStream.listen((state) {
-      if (mounted) setState(() => _chatState = state);
+      if (mounted && _ownerMatches) {
+        setState(() => _chatState = state);
+        if (state == ChatState.connected) unawaited(_loadAccess());
+      }
     });
 
     _messageSub = _chatService!.messageStream.listen((msg) {
-      if (!mounted) return;
+      if (!mounted || !_ownerMatches) return;
       // Hindari duplikat (mis. share dikirim via REST + echo WS).
       if (_messages.any((m) => m.id == msg.id)) return;
       setState(() => _messages.add(msg));
@@ -251,7 +346,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
 
     _presenceSub = _chatService!.presenceStream.listen((presence) {
-      if (mounted) {
+      if (mounted && _ownerMatches) {
         setState(() => _onlineUsers[presence.userId] = presence.isOnline);
       }
     });
@@ -261,6 +356,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _accessRequest++;
+    _accessPoll?.cancel();
+    _accessExpiry?.cancel();
     // Lepas penanda hanya bila masih menunjuk peer ini (bisa saja layar lain
     // sudah membuka percakapan berbeda).
     Future.microtask(() {
@@ -316,7 +415,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     Map<String, dynamic>? metadata,
   }) async {
     if (!_canShare) {
-      if (mounted) {
+      if (mounted && _ownerMatches) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
               content: Text(
@@ -351,7 +450,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             kind: kind,
             metadata: metadata,
           );
-      if (!mounted) return true;
+      if (!mounted || !_ownerMatches) return true;
       setState(() {
         if (!_messages.any((m) => m.id == sent.id)) {
           _messages.add(
@@ -371,7 +470,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       _scrollToBottom();
       return true;
     } on Object {
-      if (!mounted) return false;
+      if (!mounted || !_ownerMatches) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Gagal mengirim. Periksa koneksi ke server Malva.'),
@@ -383,10 +482,137 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _onInputChanged(String value) {
+    if (!_canSendText) return;
     if (value.trim().isNotEmpty) {
       _chatService?.startTyping();
     } else {
       _chatService?.stopTyping();
+    }
+  }
+
+  void _appendClinicalMessage(BackendChatMessage sent) {
+    if (!mounted || !_ownerMatches || _messages.any((m) => m.id == sent.id))
+      return;
+    final session = ref.read(currentSessionProvider);
+    setState(() => _messages.add(ChatMessage(
+        id: sent.id,
+        senderId: sent.senderId,
+        senderName: sent.senderName,
+        text: sent.text,
+        timestamp: sent.createdDateTime ?? ServerClock.now(),
+        isMine:
+            sent.senderId == (session?.backendUserId ?? session?.identifier),
+        kind: sent.kind,
+        metadata: sent.metadata)));
+    _scrollToBottom();
+  }
+
+  Future<void> _openProfessionalTools() async {
+    await _loadAccess();
+    if (!mounted || !_canUseProfessionalTools) return;
+    final session = ref.read(currentSessionProvider)!;
+    await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+            builder: (_) => ProfessionalChatTools(
+                  apiClient: ref.read(apiClientProvider),
+                  session: session,
+                  patientId: widget.otherUserId,
+                  sessionId: _access.sessionId,
+                  sessionEndsAt: _access.sessionEndsAt,
+                  onMessage: _appendClinicalMessage,
+                )));
+    if (mounted) unawaited(_loadAccess());
+  }
+
+  Future<void> _openClinicalCard(ChatMessage message) async {
+    if (!_ownerMatches) return;
+    final session = ref.read(currentSessionProvider);
+    final token = session?.accessToken;
+    if (session == null || token == null) return;
+    final api = ref.read(apiClientProvider);
+    final meta = message.metadata ?? const <String, dynamic>{};
+    if (message.kind == 'attachment') {
+      try {
+        final id = meta['attachment_id']?.toString() ?? '';
+        final bytes =
+            await api.fetchChatAttachment(accessToken: token, attachmentId: id);
+        if (!mounted || !_ownerMatches) return;
+        final mime = meta['mime']?.toString() ?? 'application/octet-stream';
+        final filename = meta['filename']?.toString() ?? 'lampiran';
+        if (mime.startsWith('image/')) {
+          await showDialog<void>(
+              context: context,
+              builder: (ctx) =>
+                  Dialog(child: Consumer(builder: (ctx, dialogRef, _) {
+                    dialogRef.watch(currentSessionProvider);
+                    if (!_ownerMatches)
+                      return const Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text('Sesi akun telah berubah.'));
+                    return Column(mainAxisSize: MainAxisSize.min, children: [
+                      Flexible(
+                          child: InteractiveViewer(
+                              child: Image.memory(bytes,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, __, ___) => const Text(
+                                      'Gambar belum dapat ditampilkan.')))),
+                      TextButton.icon(
+                          onPressed: () {
+                            if (_ownerMatches)
+                              ref.read(fileExporterProvider).saveBytes(
+                                  filename: filename,
+                                  bytes: bytes,
+                                  mimeType: mime);
+                          },
+                          icon: const Icon(Icons.download),
+                          label: const Text('Simpan / bagikan')),
+                      TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Tutup')),
+                    ]);
+                  })));
+        } else {
+          await ref
+              .read(fileExporterProvider)
+              .saveBytes(filename: filename, bytes: bytes, mimeType: mime);
+        }
+      } on Object catch (error) {
+        if (mounted && _ownerMatches)
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(friendlyErrorMessage(error))));
+      }
+      return;
+    }
+    if (!_isPatient) return;
+    if (message.kind == 'assessment_request') {
+      // Assessment requests are actionable while this consultation is active.
+      await _loadAccess();
+      if (!mounted ||
+          !_canSendText ||
+          meta['session_id'] != _access.sessionId) {
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Sesi permintaan assessment sudah berakhir.')));
+        return;
+      }
+      final module = meta['module_id']?.toString();
+      if (module == 'screening') {
+        await Navigator.push<void>(
+            context,
+            MaterialPageRoute(
+                builder: (_) =>
+                    AssessmentScreen(session: session, apiClient: api)));
+      } else if (module == 'dass21' || module == 'who5') {
+        await Navigator.push<void>(
+            context,
+            MaterialPageRoute(
+                builder: (_) => TherapyDetailScreen(
+                    module: module == 'dass21' ? dass21Module : who5Module)));
+      }
+    } else {
+      await Navigator.push<void>(
+          context, MaterialPageRoute(builder: (_) => const GoalsScreen()));
     }
   }
 
@@ -628,12 +854,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           .where(isTherapyRecordSubmission)
           .toList(growable: false);
     } on Object catch (error) {
-      if (mounted) {
+      if (mounted && _ownerMatches) {
         _toast('Gagal memuat therapy record: ${friendlyErrorMessage(error)}');
       }
       return;
     }
-    if (!mounted) return;
+    if (!mounted || !_ownerMatches) return;
     if (records.isEmpty) {
       _toast('Belum ada therapy record untuk dibagikan.');
       return;
@@ -657,10 +883,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       submissionId: chosen.metadata['submission_id'] as String,
       professionalId: widget.otherUserId,
     );
-    if (!mounted) return;
+    if (!mounted || !_ownerMatches) return;
     // Endpoint share menyimpan pesan chat; mengirim pesan lagi membuat duplikat.
     final refreshed = await _loadHistory();
-    if (!mounted) return;
+    if (!mounted || !_ownerMatches) return;
     final visible = refreshed &&
         _messages.any((message) =>
             message.kind == 'worksheet' &&
@@ -685,7 +911,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
-        builder: (_) => SafeArea(
+        builder: (_) => _ownedOverlay(SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: TherapySubmissionView(
@@ -696,7 +922,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               sharedAt: record.sharedAt,
             ),
           ),
-        ),
+        )),
       );
     } on Object catch (error) {
       if (mounted)
@@ -717,7 +943,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       api: api,
       patientId: patientId,
     );
-    if (!mounted) return;
+    if (!mounted || !_ownerMatches) return;
     if (candidates.isEmpty) {
       _toast('Belum ada assessment record untuk dibagikan.');
       return;
@@ -858,12 +1084,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// Bottom sheet pemilihan assessment record (dipanggil bila kandidat > 1).
   Future<_ShareCandidate?> _pickCandidate(List<_ShareCandidate> candidates,
       {String title = 'Pilih assessment record'}) {
+    if (!_ownerMatches) return Future.value(null);
     return showModalBottomSheet<_ShareCandidate>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
       ),
-      builder: (ctx) => SafeArea(
+      builder: (ctx) => _ownedOverlay(SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -915,9 +1142,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
+
+  Widget _ownedOverlay(Widget child) =>
+      Consumer(builder: (context, overlayRef, _) {
+        final current = overlayRef.watch(currentSessionProvider);
+        return _owner == _ownerKey(current)
+            ? child
+            : const Padding(
+                padding: EdgeInsets.all(24),
+                child: Text('Sesi akun telah berubah.'));
+      });
 
   /// Daftar obat: server dulu, fallback store lokal.
   Future<List<Map<String, dynamic>>> _collectMedications({
@@ -1054,6 +1291,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currentSessionProvider);
+    ref.listen<AuthSession?>(currentSessionProvider, (_, next) {
+      if (_ownerKey(next) == _owner) return;
+      _accessRequest++;
+      _accessPoll?.cancel();
+      _accessExpiry?.cancel();
+      _chatService?.dispose();
+      _chatService = null;
+      _messages.clear();
+      _inputController.clear();
+    });
+    if (!_ownerMatches)
+      return Scaffold(
+          appBar: AppBar(title: const Text('Percakapan')),
+          body: const Center(
+              child: Text(
+                  'Sesi akun telah berubah. Buka kembali percakapan dari akun aktif.')));
     final otherOnline = _onlineUsers.values.any((online) => online);
     return Scaffold(
       appBar: AppBar(
@@ -1131,22 +1385,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       body: Column(
         children: [
           if (_accessLoaded &&
-              !_access.inSession &&
+              !_liveSession &&
               !(_isDeadConversation && _isPatient))
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               color: MalvaColors.amber.withValues(alpha: 0.15),
               child: Text(
-                _access.reason.isEmpty
-                    ? 'Chat teks aktif saat sesi berjalan.'
-                    : _access.reason,
+                _liveExpired
+                    ? 'Sesi berakhir. Riwayat chat tetap tersedia.'
+                    : _access.reason.isEmpty
+                        ? 'Chat teks aktif saat sesi berjalan.'
+                        : _access.reason,
                 textAlign: TextAlign.center,
                 style:
                     const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
               ),
             ),
-          if (_accessLoaded && _access.inSession)
+          if (_accessLoaded && _liveSession)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1191,16 +1447,48 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           if (showTimestamp)
                             _TimestampLabel(date: msg.timestamp),
                           const SizedBox(height: 6),
-                          _ChatBubble(
-                            message: msg,
-                            onOpenRecord: msg.kind == 'worksheet' &&
-                                    (msg.metadata?['submission_id']
-                                                ?.toString() ??
-                                            '')
-                                        .isNotEmpty
-                                ? () => _openSharedTherapy(msg)
-                                : null,
-                          ),
+                          if (const [
+                                'assessment_request',
+                                'session_summary',
+                                'attachment'
+                              ].contains(msg.kind) ||
+                              (msg.kind == 'goals' &&
+                                  msg.metadata?['session_id'] != null &&
+                                  msg.senderId ==
+                                      (_isPatient
+                                          ? widget.otherUserId
+                                          : (ref
+                                                  .read(currentSessionProvider)
+                                                  ?.backendUserId ??
+                                              ref
+                                                  .read(currentSessionProvider)
+                                                  ?.identifier))))
+                            Align(
+                                alignment: msg.isMine
+                                    ? Alignment.centerRight
+                                    : Alignment.centerLeft,
+                                child: Container(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    constraints: BoxConstraints(
+                                        maxWidth:
+                                            MediaQuery.of(context).size.width *
+                                                .85),
+                                    child: ClinicalChatCard(
+                                        message: msg,
+                                        isPatient: _isPatient,
+                                        onAction: () =>
+                                            _openClinicalCard(msg))))
+                          else
+                            _ChatBubble(
+                              message: msg,
+                              onOpenRecord: msg.kind == 'worksheet' &&
+                                      (msg.metadata?['submission_id']
+                                                  ?.toString() ??
+                                              '')
+                                          .isNotEmpty
+                                  ? () => _openSharedTherapy(msg)
+                                  : null,
+                            ),
                         ],
                       );
                     },
@@ -1225,10 +1513,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               enabled: _canSendText,
               onChanged: _onInputChanged,
               onSend: _send,
-              onShareTap: _canShare ? () => _showShareSheet(context) : null,
-              disabledHint: _accessLoaded
-                  ? (_access.reason.isEmpty ? null : _access.reason)
-                  : null,
+              onShareTap: _canShare
+                  ? () => _showShareSheet(context)
+                  : _canUseProfessionalTools
+                      ? _openProfessionalTools
+                      : null,
+              disabledHint: _liveExpired
+                  ? 'Sesi berakhir. Riwayat chat tetap tersedia.'
+                  : _accessLoaded
+                      ? (_access.reason.isEmpty ? null : _access.reason)
+                      : null,
             ),
         ],
       ),

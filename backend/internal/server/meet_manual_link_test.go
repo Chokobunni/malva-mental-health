@@ -6,10 +6,12 @@ import (
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"malva/backend/internal/auth"
+	"malva/backend/internal/clock"
 )
 
 // ============================================================
@@ -23,6 +25,8 @@ import (
 // insertManualLinkSession menyisipkan care_session langsung (melewati aturan
 // "jadwal harus di masa depan" milik CreateCareSession) agar test bisa membuat
 // sesi non-video / non-scheduled. Didaftarkan cleanup via patient_id.
+var manualLinkSessionSequence atomic.Int64
+
 func insertManualLinkSession(t *testing.T, db *sql.DB, patientID, profID, sessionType, status, meetingURL string) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -34,7 +38,7 @@ func insertManualLinkSession(t *testing.T, db *sql.DB, patientID, profID, sessio
 			 status, meeting_url)
 		VALUES ($1,$2,$3,$4,30,$5,$6)
 		RETURNING id::text`,
-		patientID, profID, sessionType, time.Now().Add(2*time.Hour), status, meetingURL,
+		patientID, profID, sessionType, clock.Now().Add(2*time.Hour+time.Duration(manualLinkSessionSequence.Add(1))*time.Second), status, meetingURL,
 	).Scan(&id)
 	if err != nil {
 		t.Fatalf("insert care_session: %v", err)

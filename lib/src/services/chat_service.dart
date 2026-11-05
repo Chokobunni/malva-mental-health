@@ -79,6 +79,10 @@ class ChatService {
       switch (type) {
         case 'chat_message':
           if (eventData is Map<String, dynamic>) {
+            final sender = eventData['sender_id']?.toString();
+            final recipient = eventData['recipient_id']?.toString();
+            if (!((sender == recipientId && recipient == userId) ||
+                (sender == userId && recipient == recipientId))) break;
             final msg = ChatMessage.fromJson(
               eventData,
               currentUserId: userId,
@@ -89,7 +93,7 @@ class ChatService {
           if (eventData is Map<String, dynamic>) {
             final senderId = eventData['sender_id']?.toString() ?? '';
             final isTyping = eventData['typing'] == true;
-            if (senderId != userId) {
+            if (senderId == recipientId) {
               _typingController.add(isTyping);
             }
           }

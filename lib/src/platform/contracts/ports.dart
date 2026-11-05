@@ -32,7 +32,7 @@ class PickedFile {
 
 /// Memilih berkas dari perangkat. Batas ukuran divalidasi di pemanggil.
 abstract interface class FilePickerPort {
-  /// [kind]: image | video
+  /// [kind]: image | video | file (private chat: images/PDF).
   ///
   /// [maxWidth]/[maxHeight]/[imageQuality] hanya berlaku untuk gambar dan
   /// diteruskan apa adanya ke `ImagePicker.pickImage` (mobile) dan
@@ -50,6 +50,13 @@ abstract interface class FilePickerPort {
 /// io  : temp file + share_plus (lembar bagikan Android)
 /// web : Blob + <a download> (unduhan browser)
 abstract interface class FileExporter {
+  Future<void> saveBytes({
+    required String filename,
+    required Uint8List bytes,
+    required String mimeType,
+    String? subject,
+  });
+
   Future<void> saveText({
     required String filename,
     required String content,

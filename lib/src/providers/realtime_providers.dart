@@ -20,3 +20,6 @@ final professionalProfileUpdatedIdProvider = StateProvider<String>((ref) => '');
 /// percakapan yang sedang dilihat pengguna — menerima notifikasi untuk pesan
 /// yang sudah tampil di layar hanya membuat shade penuh tanpa manfaat.
 final activeChatPeerProvider = StateProvider<String?>((ref) => null);
+
+/// Invalidates open patient clinical views after an authenticated in-app event.
+final clinicalDataRevisionProvider = StateProvider<int>((ref) => 0);

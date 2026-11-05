@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../assessment_engine.dart';
 import '../models.dart';
 import '../platform/api_base_url.dart';
+import '../platform/contracts/ports.dart' show PickedFile;
 import 'server_clock.dart';
 import '../time/wib.dart';
 
@@ -1199,15 +1200,21 @@ class MalvaApiClient {
     required String title,
     String category = 'general',
     int targetPerWeek = 3,
+    String? patientId,
+    String? idempotencyKey,
   }) async {
     final payload = await _send(
       'POST',
       '/v1/goals',
       accessToken: accessToken,
+      extraHeaders: {
+        if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
+      },
       body: {
         'title': title.trim(),
         'category': category,
         'target_per_week': targetPerWeek,
+        if (patientId != null) 'patient_id': patientId,
       },
     );
     return BackendGoal.fromJson(
@@ -1427,6 +1434,7 @@ class MalvaApiClient {
     required String text,
     String kind = 'text',
     Map<String, dynamic>? metadata,
+    String? clientMessageId,
   }) async {
     final payload = await _send(
       'POST',
@@ -1437,11 +1445,96 @@ class MalvaApiClient {
         'text': text,
         'kind': kind,
         if (metadata != null) 'metadata': metadata,
+        if (clientMessageId != null) 'client_message_id': clientMessageId,
       },
     );
     return BackendChatMessage.fromJson(
       _expectMap(payload['message'], 'Respons pesan tidak valid.'),
     );
+  }
+
+  Future<BackendChatMessage> uploadChatAttachment({
+    required String accessToken,
+    required String recipientId,
+    required PickedFile file,
+    required String clientMessageId,
+  }) async {
+    if (file.size == 0 || file.size > 10 * 1024 * 1024) {
+      throw const MalvaApiException(
+          'Berkas harus berukuran 1 byte sampai 10 MB.');
+    }
+    final response = await _privateChatRequest(accessToken, (token) async {
+      final request = http.MultipartRequest(
+          'POST', baseUri.replace(path: '/v1/chat-attachments'))
+        ..headers['Authorization'] = 'Bearer $token'
+        ..fields['recipient_id'] = recipientId
+        ..fields['client_message_id'] = clientMessageId
+        ..files.add(http.MultipartFile.fromBytes('file', file.bytes,
+            filename: file.name));
+      return http.Response.fromStream(await _httpClient.send(request));
+    });
+    final payload = jsonDecode(response.body);
+    return BackendChatMessage.fromJson(
+        _expectMap(payload['message'], 'Respons lampiran tidak valid.'));
+  }
+
+  Future<Uint8List> fetchChatAttachment({
+    required String accessToken,
+    required String attachmentId,
+  }) async {
+    if (!RegExp(r'^[a-zA-Z0-9_-]{1,128}$').hasMatch(attachmentId)) {
+      throw const MalvaApiException('Lampiran tidak valid.');
+    }
+    final response = await _privateChatRequest(
+        accessToken,
+        (token) => _httpClient.get(
+              baseUri.replace(path: '/v1/chat-attachments/$attachmentId'),
+              headers: {'Authorization': 'Bearer $token'},
+            ));
+    if (response.bodyBytes.length > 10 * 1024 * 1024) {
+      throw const MalvaApiException('Lampiran melebihi 10 MB.');
+    }
+    return response.bodyBytes;
+  }
+
+  Future<http.Response> _privateChatRequest(String accessToken,
+      Future<http.Response> Function(String token) send) async {
+    final generation = _authGeneration;
+    var token = _refreshedAccessTokens[accessToken] ?? accessToken;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final http.Response response;
+      try {
+        response = await send(token).timeout(const Duration(seconds: 30));
+      } on Object {
+        throw const MalvaApiException(
+            'Lampiran belum dapat diakses. Periksa koneksi dan coba lagi.');
+      }
+      if (generation != _authGeneration) {
+        throw const MalvaApiException('Sesi telah berubah. Silakan coba lagi.');
+      }
+      if (response.statusCode == 401 &&
+          attempt == 0 &&
+          _currentRefreshToken != null) {
+        final refreshed = await _handleTokenRefresh();
+        if (generation != _authGeneration) {
+          throw const MalvaApiException(
+              'Sesi telah berubah. Silakan coba lagi.');
+        }
+        _refreshedAccessTokens[accessToken] = refreshed;
+        token = refreshed;
+        continue;
+      }
+      if (response.statusCode >= 200 && response.statusCode < 300)
+        return response;
+      String message = 'Lampiran belum dapat diakses. Silakan coba lagi.';
+      try {
+        final body = jsonDecode(response.body);
+        if (body is Map && body['error'] is String)
+          message = body['error'] as String;
+      } on Object {/* Proxy responses are never shown as raw HTML. */}
+      throw MalvaApiException(message, statusCode: response.statusCode);
+    }
+    throw const MalvaApiException('Sesi berakhir. Silakan login kembali.');
   }
 
   Future<BackendMedication> createMedication({
@@ -1455,11 +1548,15 @@ class MalvaApiClient {
     required int alertBelow,
     required String source,
     String? patientId,
+    String? idempotencyKey,
   }) async {
     final payload = await _send(
       'POST',
       '/v1/medications',
       accessToken: accessToken,
+      extraHeaders: {
+        if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
+      },
       body: {
         'name': name,
         'dosage': dosage,
@@ -3440,6 +3537,7 @@ class BackendMedication {
     required this.form,
     required this.reminderTime,
     this.source = '',
+    this.relationToMeal = '',
   });
 
   factory BackendMedication.fromJson(Map<String, dynamic> json) {
@@ -3452,6 +3550,7 @@ class BackendMedication {
       form: json['form']?.toString() ?? '',
       reminderTime: json['reminder_time']?.toString() ?? '',
       source: json['source']?.toString() ?? '',
+      relationToMeal: json['relation_to_meal']?.toString() ?? '',
     );
   }
 
@@ -3463,6 +3562,7 @@ class BackendMedication {
   final String form;
   final String reminderTime;
   final String source;
+  final String relationToMeal;
 
   bool get needsRefill => currentStock <= alertBelow;
 }
@@ -4665,6 +4765,10 @@ class BackendCareSession {
     this.cancelledBy = '',
     this.photoIntroUrl = '',
     this.attendedMarkedAt,
+    this.patientAttendance = '',
+    this.professionalAttendance = '',
+    this.patientAttendanceMarkedAt,
+    this.professionalAttendanceMarkedAt,
   });
 
   factory BackendCareSession.fromJson(Map<String, dynamic> json) {
@@ -4688,6 +4792,12 @@ class BackendCareSession {
       cancelledBy: json['cancelled_by']?.toString() ?? '',
       photoIntroUrl: json['photo_intro_url']?.toString() ?? '',
       attendedMarkedAt: parseWibStored(json['attended_marked_at']?.toString()),
+      patientAttendance: json['patient_attendance']?.toString() ?? '',
+      professionalAttendance: json['professional_attendance']?.toString() ?? '',
+      patientAttendanceMarkedAt:
+          parseWibStored(json['patient_attendance_marked_at']?.toString()),
+      professionalAttendanceMarkedAt:
+          parseWibStored(json['professional_attendance_marked_at']?.toString()),
     );
   }
 
@@ -4718,6 +4828,10 @@ class BackendCareSession {
   /// profesional sudah menandai "Hadir" — sesi tetap berjalan sampai durasinya
   /// habis (status belum tentu `completed`).
   final DateTime? attendedMarkedAt;
+  final String patientAttendance;
+  final String professionalAttendance;
+  final DateTime? patientAttendanceMarkedAt;
+  final DateTime? professionalAttendanceMarkedAt;
 
   DateTime? get scheduledDateTime =>
       scheduledAt == null ? null : parseWibStored(scheduledAt!);
@@ -4751,23 +4865,23 @@ class BackendCareSession {
   bool get canJoinNow {
     final opens = _joinOpensAt;
     final closes = _joinClosesAt;
-    if (opens == null || closes == null) return false;
-    final now = wibNow();
-    return !now.isBefore(opens) && !now.isAfter(closes);
+    if (!isScheduled || opens == null || closes == null) return false;
+    final now = ServerClock.now();
+    return !now.isBefore(opens) && now.isBefore(closes);
   }
 
   /// True bila sesi belum boleh dimasuki (masih terlalu awal).
   bool get isBeforeJoinWindow {
     final opens = _joinOpensAt;
     if (opens == null) return false;
-    return wibNow().isBefore(opens);
+    return ServerClock.now().isBefore(opens);
   }
 
   /// True bila jendela bergabung sudah lewat.
   bool get isAfterJoinWindow {
     final closes = _joinClosesAt;
     if (closes == null) return false;
-    return wibNow().isAfter(closes);
+    return !ServerClock.now().isBefore(closes);
   }
 
   /// Sisa waktu menuju pembukaan jendela bergabung (null bila sudah dibuka
@@ -4775,7 +4889,7 @@ class BackendCareSession {
   Duration? get timeUntilJoinOpens {
     final opens = _joinOpensAt;
     if (opens == null) return null;
-    final diff = opens.difference(wibNow());
+    final diff = opens.difference(ServerClock.now());
     return diff.isNegative ? null : diff;
   }
 
@@ -4918,6 +5032,8 @@ class BackendChatAccess {
     this.reason = '',
     this.nextSessionAt,
     this.hasActivePackage = false,
+    this.sessionId = '',
+    this.sessionEndsAt,
   });
 
   factory BackendChatAccess.fromJson(Map<String, dynamic> json) {
@@ -4928,6 +5044,8 @@ class BackendChatAccess {
       reason: json['reason']?.toString() ?? '',
       nextSessionAt: json['next_session_at']?.toString(),
       hasActivePackage: json['has_active_package'] == true,
+      sessionId: json['session_id']?.toString() ?? '',
+      sessionEndsAt: parseWibStored(json['session_ends_at']?.toString()),
     );
   }
 
@@ -4937,6 +5055,8 @@ class BackendChatAccess {
   final String reason;
   final String? nextSessionAt;
   final bool hasActivePackage;
+  final String sessionId;
+  final DateTime? sessionEndsAt;
 }
 
 class BackendDoctorReviewItem {

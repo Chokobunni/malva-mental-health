@@ -20,8 +20,17 @@ class BrowserFileExporter implements FileExporter {
     required String mimeType,
     String? subject,
   }) async {
-    // `subject` tidak relevan untuk unduhan browser (tidak ada share sheet).
     final bytes = Uint8List.fromList(utf8.encode(content));
+    await saveBytes(
+        filename: filename, bytes: bytes, mimeType: mimeType, subject: subject);
+  }
+
+  @override
+  Future<void> saveBytes(
+      {required String filename,
+      required Uint8List bytes,
+      required String mimeType,
+      String? subject}) async {
     final blob = web.Blob(
       <JSAny>[bytes.toJS].toJS,
       web.BlobPropertyBag(type: mimeType),

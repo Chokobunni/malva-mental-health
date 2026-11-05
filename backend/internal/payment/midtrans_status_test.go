@@ -2,6 +2,7 @@ package payment
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,7 +13,7 @@ import (
 // FetchStatus — CEK STATUS LANGSUNG KE API MIDTRANS
 //
 // Endpoint status berada di host BERBEDA dari Snap (`api.*`, bukan `app.*`)
-// dan responsnya TIDAK boleh dipercaya tanpa `signature_key` yang valid.
+// Respons berasal dari API terautentikasi; signature webhook bukan syarat GET.
 // ============================================================
 
 const statusTestKey = "SB-Mid-server-STATUSTESTKEY"
@@ -77,16 +78,55 @@ func TestFetchStatusSettlementWithValidSignature(t *testing.T) {
 	}
 }
 
-// TestFetchStatusRejectsInvalidSignature: respons tanpa signature valid TIDAK
-// boleh dipercaya (kalau tidak, siapa pun bisa menandai pembayaran lunas).
-func TestFetchStatusRejectsInvalidSignature(t *testing.T) {
-	srv := newStatusServer(t, "TXN-2", "200", "102000.00", "settlement", "accept",
-		strings.Repeat("a", 128))
-	defer srv.Close()
-	g := NewMidtransGateway(MidtransConfig{ServerKey: statusTestKey, APIBase: srv.URL})
+// Authenticated GET is the verification mechanism recommended by Midtrans.
+// A capture response need not carry a matching webhook signature.
+func TestFetchStatusAuthenticatedCaptureWithoutWebhookSignature(t *testing.T) {
+	for _, signature := range []string{"", strings.Repeat("a", 128)} {
+		t.Run(fmt.Sprintf("signature_present_%t", signature != ""), func(t *testing.T) {
+			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				key, password, ok := r.BasicAuth()
+				if r.Method != http.MethodGet || r.URL.Path != "/v2/TXN-CAPTURE/status" || !ok || key != statusTestKey || password != "" {
+					t.Error("status request must authenticate the requested order with server key")
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				body := map[string]string{
+					"order_id": "TXN-CAPTURE", "status_code": "200", "status_message": "Success, transaction found",
+					"gross_amount": "102000.00", "transaction_status": "capture", "fraud_status": "accept",
+					"transaction_id": "capture-transaction", "payment_type": "credit_card", "currency": "IDR",
+				}
+				if signature != "" {
+					body["signature_key"] = signature
+				}
+				_ = json.NewEncoder(w).Encode(body)
+			}))
+			defer srv.Close()
+			g := NewMidtransGateway(MidtransConfig{ServerKey: statusTestKey, APIBase: srv.URL})
+			g.http = srv.Client()
+			got, err := g.FetchStatus(t.Context(), "TXN-CAPTURE")
+			if err != nil || got.Status != "capture" || got.FraudStatus != "accept" || got.GrossAmount != "102000.00" || got.TransactionID != "capture-transaction" {
+				t.Fatalf("authenticated capture rejected: status=%+v err=%v", got, err)
+			}
+		})
+	}
+}
 
-	if _, err := g.FetchStatus(t.Context(), "TXN-2"); err == nil {
-		t.Fatal("signature tidak valid harus menghasilkan error, bukan status lunas")
+func TestFetchStatusRejectsWrongOrderID(t *testing.T) {
+	for _, returnedOrder := range []string{"TXN-OTHER", ""} {
+		t.Run(fmt.Sprintf("returned_order_%q", returnedOrder), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"order_id": returnedOrder, "status_code": "200", "gross_amount": "102000.00",
+					"transaction_status": "capture", "fraud_status": "accept",
+					"signature_key": MidtransSignature("TXN-REQUESTED", "200", "102000.00", statusTestKey),
+				})
+			}))
+			defer srv.Close()
+			g := NewMidtransGateway(MidtransConfig{ServerKey: statusTestKey, APIBase: srv.URL})
+			if _, err := g.FetchStatus(t.Context(), "TXN-REQUESTED"); err == nil {
+				t.Fatal("response for a different or missing order must not be accepted")
+			}
+		})
 	}
 }
 

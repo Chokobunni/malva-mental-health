@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
+import '../services/care_session_refresh.dart';
+import '../widgets/session_attendance_actions.dart';
 import '../services/medication_reminder_service.dart';
 import '../theme.dart';
 import '../widgets/crisis_hotline.dart';
@@ -64,7 +66,9 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
+  late final CareSessionRefresh _sessionRefresh;
   bool _isInitialLoading = true;
   List<BackendCareSession> _upcomingSessions = const [];
   bool _ongoingLoadFailed = false;
@@ -75,14 +79,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       widget.session ?? ref.read(currentSessionProvider);
   MalvaApiClient get _api => widget.apiClient ?? ref.read(apiClientProvider);
 
-  /// Sesi yang SEDANG BERJALAN (scheduled ATAU completed yang masih di dalam
-  /// jendela waktu) — ditampilkan di section "Sesi berjalan" agar pasien bisa
-  /// gabung/chat walau profesional sudah menekan "Hadir".
+  /// Sesi scheduled dalam jendela waktu; konfirmasi hadir tidak menutup akses.
   List<BackendCareSession> _ongoingSessions = const [];
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _sessionRefresh = CareSessionRefresh(() {
+      if (!mounted) return;
+      setState(() {});
+      unawaited(_loadUpcomingSession());
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_loadUpcomingSession());
       Future<void>.delayed(const Duration(milliseconds: 400)).then((_) {
@@ -96,6 +104,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.session?.accessToken != widget.session?.accessToken ||
         oldWidget.apiClient != widget.apiClient) {
+      unawaited(_loadUpcomingSession());
+    }
+  }
+
+  @override
+  void dispose() {
+    _sessionRefresh.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      setState(() {});
       unawaited(_loadUpcomingSession());
     }
   }
@@ -157,6 +180,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _upcomingLoadFailed = upcomingFailed;
       _ongoingLoadFailed = ongoingFailed;
     });
+    _sessionRefresh.update([...upcoming, ...ongoing]);
   }
 
   @override
@@ -175,11 +199,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
     final storeState = ref.watch(malvaStoreProvider);
     final auth = _session;
-    final ongoingIds = _ongoingSessions.map((s) => s.id).toSet();
-    final upcomingVideos =
-        _upcomingSessions.where((s) => s.isVideo && !ongoingIds.contains(s.id));
-    final upcomingChats = _upcomingSessions
-        .where((s) => !s.isVideo && !ongoingIds.contains(s.id));
+    final ongoingSessions =
+        _ongoingSessions.where((s) => s.canJoinNow).toList();
+    final ongoingIds = ongoingSessions.map((s) => s.id).toSet();
+    final upcomingVideos = _upcomingSessions.where((s) =>
+        s.isScheduled &&
+        !s.isAfterJoinWindow &&
+        s.isVideo &&
+        !ongoingIds.contains(s.id));
+    final upcomingChats = _upcomingSessions.where((s) =>
+        s.isScheduled &&
+        !s.isAfterJoinWindow &&
+        !s.isVideo &&
+        !ongoingIds.contains(s.id));
     // Nama sapaan diambil dari sesi login asli, fallback ke store.
     final displayName = (auth?.displayName.trim().isNotEmpty ?? false)
         ? auth!.displayName
@@ -224,11 +256,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       icon: Icons.play_circle_rounded),
                   if (_ongoingLoadFailed)
                     const Text('Sesi berjalan belum dapat dimuat.')
-                  else if (_ongoingSessions.isEmpty)
+                  else if (ongoingSessions.isEmpty)
                     const SoftCard(
                         child: Text('Tidak ada sesi berjalan saat ini.'))
                   else
-                    for (final s in _ongoingSessions)
+                    for (final s in ongoingSessions)
                       Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: _OngoingSessionCard(
@@ -378,6 +410,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _joinSession(BuildContext context, BackendCareSession session) {
+    if (!session.canJoinNow) return;
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -813,8 +846,7 @@ class _NotificationBellState extends State<_NotificationBell> {
 
 /// Kartu "Sesi berjalan" di home pasien. Menampilkan nama profesional, jam
 /// WIB, tipe sesi, tombol Gabung (video, via [MeetJoinButton]) dan Chat.
-/// Ditampilkan selama sesi berada di jendela waktu — termasuk setelah
-/// profesional menekan "Hadir" (status completed) selama jendela belum tutup.
+/// Ditampilkan selama sesi scheduled berada di dalam jendela waktu.
 class _OngoingSessionCard extends StatelessWidget {
   const _OngoingSessionCard({
     required this.session,
@@ -893,6 +925,12 @@ class _OngoingSessionCard extends StatelessWidget {
               label: const Text('Chat'),
             ),
           ),
+          const SizedBox(height: 10),
+          SessionAttendanceActions(
+              session: session,
+              role: UserRole.patient,
+              accessToken: accessToken,
+              onChanged: onChanged),
         ],
       ),
     );

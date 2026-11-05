@@ -302,6 +302,15 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Push FCM memakai data-only, divalidasi pada foreground/background terhadap akun dan sesi aktif. Android tidak boleh merender otomatis payload legacy di luar scope. Bersihkan shade historis saat upgrade/start/ganti akun tanpa membatalkan alarm goals/obat yang valid. Retire backlog transport dengan cutoff WIB setelah seluruh worker berhenti; pertahankan riwayat in-app.
 - Retry pembayaran setelah token kedaluwarsa memakai token hasil refresh; rotasi dipersistensikan pada akun yang sama. Refresh yang ditolak harus selesai dengan error, tidak menunggu dirinya sendiri atau mengubah akun berikutnya.
 
+## Kontrak sesi dan alat klinis chat (2026-11-06)
+
+- Hadir/Tidak hadir dicatat sendiri oleh setiap peran. Pasien absent menjadi no_show dan kuota terpakai; profesional absent membatalkan sesi dan mengembalikan kredit pasien tepat sekali. Penyelesaian profesional hanya setelah durasi jadwal berakhir. Status terminal tidak boleh dihidupkan kembali oleh retry/sweeper.
+- Akses chat/Meet hanya sesi scheduled, akhir eksklusif, memakai jam server. Chat permission menyertakan session_id/session_ends_at; klien menutup composer pada akhir, memeriksa ulang saat resume/reconnect, dan mempertahankan riwayat. Private note tidak masuk respons pasien.
+- Kartu profesional assessment_request/session_summary/goals harus diverifikasi pada REST dan WebSocket dengan sesi aktif, kredensial VERIFIED, tautan dan consent. Goal harus benar-benar milik pasien; snapshot judul berasal dari server. Obat tetap khusus psikiater.
+- Lampiran klinis hanya lewat /v1/chat-attachments; JPEG/PNG/WebP/PDF maksimal 10 MiB, isi divalidasi, tersimpan di sibling UploadDir + '-chat-private' di luar mount publik. Unduhan wajib memeriksa peserta pesan; jangan memakai /v1/upload untuk resep.
+- client_message_id UUID stabil per intent menduplikasi ulang pesan/lampiran secara aman; pembuatan goal/obat memakai Idempotency-Key. Payload yang berubah dengan kunci sama ditolak. clinical_data_changed hanya event in-app, memicu refresh data pasien, bukan jenis push baru.
+- Rujukan desain: [sesi dan chat klinis](../docs/superpowers/specs/2026-11-06-session-clinical-chat-design.md).
+
 ## Commit
 
 - Format **Conventional Commits**: `feat|fix|refactor|chore|docs|perf|seo|infra: <ringkas>`.

@@ -659,13 +659,17 @@ Status pemakan kuota: scheduled, completed, no_show.
 | `private_note` | text | DEFAULT '' | Catatan privat pro |
 | `cancel_reason` / `cancelled_by` | text / uuid | DEFAULT '' / NULL | Alasan & pelaku batal |
 | `reschedule_count` | integer | DEFAULT 0 | Jumlah reschedule |
-| `attended_marked_at` | timestamptz | NULLABLE | Kapan kehadiran ditandai |
+| `attended_marked_at` | timestamptz | NULLABLE | Marker legacy; tidak membuktikan kehadiran peserta tertentu. Konfirmasi hadir profesional baru juga mengisinya untuk sweeper |
+| `patient_attendance` / `professional_attendance` | text | NOT NULL DEFAULT '', CHECK ''/attended/absent (032) | Konfirmasi kehadiran mandiri masing-masing peserta; '' berarti belum diketahui. Tidak ada backfill dari marker legacy |
+| `patient_attendance_marked_at` / `professional_attendance_marked_at` | timestamptz | NULLABLE (032) | Waktu konfirmasi mandiri masing-masing peserta |
 | `google_event_id` | text | NOT NULL, DEFAULT '' (017) | Event Google Calendar terkait sesi video |
 | `reminder_sent_at` | timestamptz | NULLABLE (018) | Kapan pengingat sesi dikirim (idempoten sweeper) |
 | `meeting_link_created_at` | timestamptz | NULLABLE (018) | Kapan link Meet dibuat/di-generate ulang |
 
 **Index:** `care_sessions_slot_uidx` UNIQUE (professional_id, scheduled_at)
 WHERE status IN ('scheduled','pending_payment') — anti double-book.
+
+Kehadiran dan status terminal diserialkan dengan row lock sesi. Hadir tidak mencatat pendapatan; pasien tidak hadir menjadi `no_show` (kuota terpakai), profesional tidak hadir menjadi `cancelled_by_professional` (kuota kembali dan ledger kredit idempoten). `completed` baru boleh disimpan setelah jadwal+durasi, atomik dengan pengakuan pendapatan yang tetap satu baris per pembayaran. Reschedule sesi terjadwal membersihkan konfirmasi kehadiran jadwal sebelumnya; status terminal tidak dapat dibuka ulang. Kolom `private_note` hanya dikirim kepada profesional.
 
 ### 3.23 professional_pricing (migrasi 012)
 

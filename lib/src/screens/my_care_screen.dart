@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
-import '../services/care_session_time.dart';
+import '../services/care_session_refresh.dart';
+import '../services/server_clock.dart';
+import '../widgets/session_attendance_actions.dart';
 import '../services/malva_api_client.dart';
 import '../services/meeting_launcher.dart';
 import '../theme.dart';
@@ -45,6 +47,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
   List<BackendCareSession> _sessions = const [];
   List<BackendPatientProfessionalLink> _links = const [];
   bool _isLoading = true;
+  late final CareSessionRefresh _sessionRefresh;
   String? _error;
 
   static const _tabs = ['Paket', 'Jadwal', 'Riwayat', 'Professionals'];
@@ -53,18 +56,27 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _sessionRefresh = CareSessionRefresh(() {
+      if (!mounted) return;
+      setState(() {});
+      unawaited(_load(silent: true));
+    });
     _load();
   }
 
   @override
   void dispose() {
+    _sessionRefresh.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) unawaited(_load(silent: true));
+    if (state == AppLifecycleState.resumed) {
+      setState(() {});
+      unawaited(_load(silent: true));
+    }
   }
 
   /// Memuat paket, sesi, dan tautan profesional.
@@ -109,6 +121,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
         _links = results[2] as List<BackendPatientProfessionalLink>;
         _isLoading = false;
       });
+      _sessionRefresh.update(_sessions);
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
@@ -120,13 +133,15 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
     }
   }
 
-  List<BackendCareSession> get _upcoming =>
-      _sessions.where((s) => s.isScheduled).toList(growable: false)
-        ..sort((a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
+  List<BackendCareSession> get _upcoming => _sessions
+      .where((s) => s.isScheduled && !s.isAfterJoinWindow)
+      .toList(growable: false)
+    ..sort((a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
 
-  List<BackendCareSession> get _past =>
-      _sessions.where((s) => !s.isScheduled).toList(growable: false)
-        ..sort((a, b) => (b.scheduledAt ?? '').compareTo(a.scheduledAt ?? ''));
+  List<BackendCareSession> get _past => _sessions
+      .where((s) => !s.isScheduled || s.isAfterJoinWindow)
+      .toList(growable: false)
+    ..sort((a, b) => (b.scheduledAt ?? '').compareTo(a.scheduledAt ?? ''));
 
   // ============================================================
   // FILTER STATUS SESI
@@ -345,6 +360,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
         for (final s in filtered) ...[
           _SessionCard(
             session: s,
+            onChanged: _load,
             onOpenChat: () => _openChat(s),
             onJoin: () => _joinSession(s),
             onManage: () => _openPackageFor(s),
@@ -470,7 +486,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
   static bool _isUsablePackage(BackendCarePackage p) {
     if (!p.isActive) return false;
     final expires = p.expiresDateTime;
-    return expires == null || expires.isAfter(wibNow());
+    return expires == null || expires.isAfter(ServerClock.now());
   }
 
   List<_PackageDisplay> get _packageGroups {
@@ -850,12 +866,14 @@ String _rupiah(int value) => 'Rp ${value.toString().replaceAllMapped(
 class _SessionCard extends StatelessWidget {
   const _SessionCard({
     required this.session,
+    required this.onChanged,
     this.onOpenChat,
     this.onJoin,
     this.onManage,
   });
 
   final BackendCareSession session;
+  final Future<void> Function() onChanged;
   final VoidCallback? onOpenChat;
   final VoidCallback? onJoin;
   final VoidCallback? onManage;
@@ -882,12 +900,8 @@ class _SessionCard extends StatelessWidget {
       'cancelled_by_patient' => 'Dibatalkan',
       _ => session.status,
     };
-    // "Sesi berjalan": scheduled, ATAU completed yang masih di dalam jendela
-    // waktu (profesional sudah menekan "Hadir" tetapi jendela chat/Meet belum
-    // tutup). Tombol Gabung/Chat tetap tampil sampai jendela habis.
-    final live = session.isScheduled ||
-        (at != null &&
-            isCareSessionOngoing(wibNow(), at, session.durationMinutes));
+    // Aksi sesi hanya tersedia selama sesi scheduled berada dalam jendela.
+    final live = session.canJoinNow;
     return SoftCard(
       bordered: true,
       child: Column(
@@ -989,6 +1003,9 @@ class _SessionCard extends StatelessWidget {
               ],
             ),
           ],
+          const SizedBox(height: 10),
+          SessionAttendanceActions(
+              session: session, role: UserRole.patient, onChanged: onChanged),
         ],
       ),
     );

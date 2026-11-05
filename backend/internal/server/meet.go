@@ -694,7 +694,7 @@ func (s *Server) ensureMeetLinkHandler(w http.ResponseWriter, r *http.Request, c
 		return
 	}
 	if isGoogleMeetURL(cs.MeetingURL) {
-		writeJSON(w, http.StatusOK, map[string]any{"session": cs, "created": false})
+		writeJSON(w, http.StatusOK, map[string]any{"session": careSessionForRole(cs, claims.Role), "created": false})
 		return
 	}
 	// Server tanpa konfigurasi Google: masalah deployment, bukan akun
@@ -750,7 +750,7 @@ func (s *Server) ensureMeetLinkHandler(w http.ResponseWriter, r *http.Request, c
 			"Pasien membuka link Google Meet untuk sesi ini.",
 			map[string]string{"session_id": cs.ID, "patient_id": cs.PatientID})
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"session": updated, "created": true})
+	writeJSON(w, http.StatusCreated, map[string]any{"session": careSessionForRole(updated, claims.Role), "created": true})
 }
 
 // RunSessionReminders mengirim pengingat untuk sesi yang akan dimulai dalam

@@ -124,6 +124,7 @@ void main() {
       'duration_minutes': 30,
       'status': 'scheduled',
       'attended_marked_at': _isoWib(now.subtract(const Duration(minutes: 5))),
+      'professional_attendance': 'attended',
     };
     final api = _proScheduleApi([attendedSession]);
 
@@ -159,5 +160,6 @@ void main() {
             'tombol "Tidak hadir" tidak boleh ditawarkan lagi setelah hadir');
     expect(find.text('Join / Chat'), findsOneWidget,
         reason: 'sesi tetap berjalan setelah hadir; Join / Chat harus ada');
+    await tester.pumpWidget(const SizedBox());
   });
 }

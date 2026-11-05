@@ -93,8 +93,19 @@ func (s *Server) createGoal(w http.ResponseWriter, r *http.Request, claims auth.
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
-	if !isSelf && claims.Role != "admin" {
-		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa menambah goals"))
+	if claims.Role == "professional" {
+		if !s.requireVerifiedProfessional(w, r, claims) {
+			return
+		}
+		if !s.consentAllows(r, patientID, claims.Subject, "goals") {
+			writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data tujuan"))
+			return
+		}
+		if _, ok := s.requireClinicalSession(w, r, claims, patientID); !ok {
+			return
+		}
+	} else if !isSelf && claims.Role != "admin" {
+		writeError(w, http.StatusForbidden, errors.New("hanya pasien atau profesional sesi yang bisa menambah goals"))
 		return
 	}
 	title := security.SanitizeText(strings.TrimSpace(req.Title))
@@ -111,7 +122,16 @@ func (s *Server) createGoal(w http.ResponseWriter, r *http.Request, claims auth.
 	if req.TargetPerWeek != nil {
 		target = *req.TargetPerWeek
 	}
+	goalID := ""
+	if key := r.Header.Get("Idempotency-Key"); key != "" {
+		if len(key) > 128 || strings.IndexFunc(key, func(r rune) bool { return r < 33 || r > 126 }) >= 0 {
+			writeError(w, http.StatusBadRequest, errors.New("Idempotency-Key tidak valid"))
+			return
+		}
+		goalID = store.ClinicalRetryID("goal", claims.Subject+":"+patientID, key)
+	}
 	goal, err := s.store.CreateGoal(r.Context(), store.UpsertGoalParams{
+		ID:            goalID,
 		PatientID:     patientID,
 		Title:         title,
 		Category:      category,
@@ -121,6 +141,7 @@ func (s *Server) createGoal(w http.ResponseWriter, r *http.Request, claims auth.
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	s.publishClinicalChange(patientID, "goals")
 	writeJSON(w, http.StatusCreated, map[string]any{"goal": goal})
 }
 
@@ -151,6 +172,7 @@ func (s *Server) updateGoal(w http.ResponseWriter, r *http.Request, claims auth.
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	s.publishClinicalChange(patientID, "goals")
 	writeJSON(w, http.StatusOK, map[string]any{"goal": goal})
 }
 
@@ -174,6 +196,7 @@ func (s *Server) deleteGoal(w http.ResponseWriter, r *http.Request, claims auth.
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	s.publishClinicalChange(scopeID, "goals")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
