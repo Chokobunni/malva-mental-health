@@ -2,6 +2,26 @@
 
 Last reviewed: 2026-07-10
 
+> Catatan implementasi notifikasi (2026-11-05): backend aktual memakai Go dan
+> PostgreSQL; Firebase hanya gateway push. Bagian Firestore dan trusted trigger
+> di bawah adalah rancangan historis, bukan jalur notifikasi produksi saat ini.
+> Pasien/profesional hanya menerima push chat saat sesi aktif. Goals harian dan
+> jam obat hanya notifikasi lokal pasien dalam WIB; event lain tetap in-app.
+> Worker memeriksa ulang role/pasangan/sesi sebelum mengirim, menghentikan
+> retry terminal setelah lima percobaan, dan memakai TTL nol serta collapse
+> ID. Push hanya data; Android menonaktifkan auto-display SDK/delegasi agar
+> payload lama juga melewati validator akun dan sesi server saat background.
+> Flutter menolak push non-chat, menahan chat untuk akun lain, dan
+> menyinkronkan pengingat setelah hidrasi obat dengan penjaga pergantian akun.
+> Registrasi token diserialkan per perangkat; restore/hidrasi memakai generasi
+> akun agar respons lama tidak menimpa akun baru. Rotasi token tidak mengganti
+> pemilik hidrasi. Sinkronisasi memangkas alarm obat OS yang usang, termasuk
+> cold start tanpa sesi setelah proses sebelumnya terhenti.
+> Saat cutover, outbox transport sebelum cutoff dihentikan tanpa menghapus
+> riwayat in-app. Upgrade/start APK membersihkan alert OS yang sudah tampil
+> melalui NotificationManager, tanpa menyentuh alarm medicine/goals mendatang.
+> Lihat [pengujian FCM saat ini](FCM_TESTING.md).
+
 ## Prinsip
 
 - UI utama aplikasi harus dibangun dengan Flutter. File `web/index.html` hanya dipakai sebagai bootstrap wajib Flutter Web.

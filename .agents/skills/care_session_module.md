@@ -25,7 +25,17 @@ Paket care 4 sesi / 6 minggu (menggantikan Continuous Support 7 hari) dan penjad
 `scheduled` → `completed` | `no_show` | `cancelled_by_professional` | `cancelled_by_patient` | `expired_unpaid`.
 Status paket: `pending_payment` → `active` (saat booking dibayar) → `completed`/`expired`/`cancelled`.
 
+## Pembelian paket dan retry
+- Pembelian identik yang masih pending digunakan ulang per pasien/profesional; perubahan harga/jumlah/validitas saat pembelian pending ditolak sebagai konflik.
+- Payload booking paket memakai `package_id`; server memvalidasi pemilik dan menurunkan profesional dari paket. Hubungan pembayaran adalah `care_packages.booking_id` (unik). Jangan pakai `bookings.package_id`, karena FK tersebut milik `service_packages` legacy.
+- Booking paket terkunci pada slot/jenis sesi/harga yang sama saat retry; resume Flutter memakai booking terikat, dan tidak membuat booking baru saat pembacaan daftar gagal. Legacy hanya diadopsi bila kandidat tunggal dan harga sesuai.
+- Resume legacy wajib mengikat kandidat ke paket yang dipilih melalui POST booking sebelum membuka pembayaran, dengan slot/jenis/durasi booking lama. Kandidat yang sudah terikat ke paket lain tidak boleh dipinjam.
+- Aktivasi menggunakan paket yang terikat ke booking paid, termasuk replay paket yang sudah digabung. Jangan mengaktifkan pending terbaru berdasarkan pasangan pasien/profesional.
+- Pembatalan pending dilakukan server secara atomik untuk paket, booking terikat, dan payment pending; booking paid tidak dapat dibatalkan melalui jalur ini.
+- MyCare mempertahankan paket pending dan terminal dalam daftar dan menyediakan filter status; penggabungan tampilan paket aktif tidak menyembunyikan pembelian pending.
+
 ## Aturan mengikat (JANGAN dilanggar)
+- Aksi profesional **Hadir** mengirim `status=attended`: hanya mengisi `attended_marked_at`, status tetap `scheduled`, tidak mengakui pendapatan. Boleh sejak 10 menit sebelum sesi; replay idempoten. Sweeper menyelesaikan sesi setelah durasi habis. Pasien/profesional lain tidak boleh menandai kehadiran sesi tersebut.
 - **Pendapatan diakui HANYA saat sesi `completed`** — bukan saat bayar lunas. `no_show` **tidak** diakui. `recognizeEarningForSession` dipanggil dalam transaksi yang sama dengan perubahan status (`care.go`).
 - 1 sesi `completed` = 1 baris `earnings` (idempoten via unique `earnings_session_unique`).
 - **Pembatalan pasien < 24 jam** sebelum sesi → sesi **hangus**. Pasien boleh batal/reschedule hanya bila ≥ 24 jam.

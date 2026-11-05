@@ -88,3 +88,39 @@ func TestScoreRejectsOutOfRangeAnswer(t *testing.T) {
 		t.Fatal("expected error for out-of-range answer")
 	}
 }
+
+func TestScorePreservesStandardCutoffs(t *testing.T) {
+	for _, tc := range []struct {
+		kind  string
+		total int
+		want  string
+	}{
+		{"phq9", 0, "minimal"}, {"phq9", 4, "minimal"},
+		{"phq9", 5, "mild"}, {"phq9", 9, "mild"},
+		{"phq9", 10, "moderate"}, {"phq9", 14, "moderate"},
+		{"phq9", 15, "moderately_severe"}, {"phq9", 19, "moderately_severe"},
+		{"phq9", 20, "severe"}, {"phq9", 27, "severe"},
+		{"gad7", 0, "minimal"}, {"gad7", 4, "minimal"},
+		{"gad7", 5, "mild"}, {"gad7", 9, "mild"},
+		{"gad7", 10, "moderate"}, {"gad7", 14, "moderate"},
+		{"gad7", 15, "severe"}, {"gad7", 21, "severe"},
+	} {
+		count := 9
+		if tc.kind == "gad7" {
+			count = 7
+		}
+		answers := make([]int, count)
+		remaining := tc.total
+		for i := range answers {
+			answers[i] = min(3, remaining)
+			remaining -= answers[i]
+		}
+		res, err := Score(tc.kind, answers)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Score != tc.total || res.Level != tc.want {
+			t.Errorf("%s total %d: score/level=%d/%s, want %d/%s", tc.kind, tc.total, res.Score, res.Level, tc.total, tc.want)
+		}
+	}
+}

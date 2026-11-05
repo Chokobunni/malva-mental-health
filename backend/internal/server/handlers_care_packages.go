@@ -152,6 +152,10 @@ func (s *Server) createCarePackage(w http.ResponseWriter, r *http.Request, claim
 		ExpiresAt:      now.AddDate(0, 0, store.CarePackageValidityDays),
 	})
 	if err != nil {
+		if errors.Is(err, store.ErrPurchaseConflict) {
+			writeError(w, http.StatusConflict, err)
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -202,11 +206,15 @@ func (s *Server) cancelPendingCarePackage(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusForbidden, errors.New("not your package"))
 		return
 	}
-	if pkg.Status != "pending_payment" {
+	if pkg.Status != "pending_payment" && pkg.Status != "cancelled" {
 		writeError(w, http.StatusBadRequest, errors.New("hanya paket pending_payment yang bisa dibatalkan"))
 		return
 	}
-	if err := s.store.UpdateCarePackageStatus(r.Context(), packageID, "cancelled"); err != nil {
+	if err := s.store.CancelPendingCarePackage(r.Context(), packageID, claims.Subject); err != nil {
+		if errors.Is(err, store.ErrPurchaseConflict) {
+			writeError(w, http.StatusConflict, err)
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}

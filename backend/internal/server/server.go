@@ -1285,7 +1285,7 @@ func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims
 			return
 		}
 		if !isPsychiatristSpecialization(cred.Specialization) {
-			writeError(w, http.StatusForbidden, errors.New("Hanya Psikiater (Sp.KJ) yang dapat meresepkan obat. Psikolog (M.Psi) tidak dapat memberikan obat."))
+			writeError(w, http.StatusForbidden, errors.New("hanya Psikiater (Sp.KJ) yang dapat meresepkan obat. Psikolog (M.Psi) tidak dapat memberikan obat"))
 			return
 		}
 		resolved, err := s.authorizePatientAccess(r, claims, req.PatientID)

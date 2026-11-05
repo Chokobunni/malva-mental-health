@@ -302,7 +302,7 @@ class _ProSessionCard extends ConsumerWidget {
           if (session.summaryForPatient.isNotEmpty && past) ...[
             const SizedBox(height: 6),
             OutlinedButton.icon(
-              onPressed: () => _openPatientDetail(context),
+              onPressed: () => _openPatientDetail(context, ref),
               icon: const Icon(Icons.person_rounded, size: 16),
               label: const Text('Buka detail pasien'),
             ),
@@ -390,7 +390,7 @@ class _ProSessionCard extends ConsumerWidget {
                   runSpacing: 8,
                   children: [
                     OutlinedButton.icon(
-                      onPressed: () => _openPatientDetail(context),
+                      onPressed: () => _openPatientDetail(context, ref),
                       icon: const Icon(Icons.person_rounded, size: 16),
                       label: const Text('Detail pasien'),
                     ),
@@ -432,7 +432,7 @@ class _ProSessionCard extends ConsumerWidget {
     );
   }
 
-  void _openPatientDetail(BuildContext context) {
+  void _openPatientDetail(BuildContext context, WidgetRef ref) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -440,6 +440,8 @@ class _ProSessionCard extends ConsumerWidget {
           patientId: session.patientId,
           patientName:
               session.patientName.isEmpty ? 'Pasien' : session.patientName,
+          session: ref.read(currentSessionProvider),
+          apiClient: ref.read(apiClientProvider),
         ),
       ),
     );

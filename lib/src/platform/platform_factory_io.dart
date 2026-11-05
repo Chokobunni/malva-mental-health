@@ -1,6 +1,7 @@
 // Implementasi port untuk VM/desktop/mobile (Android/iOS/Windows).
 // Berkas ini TIDAK PERNAH dikompilasi ke bundle web.
 import 'contracts/ports.dart';
+import 'package:flutter/foundation.dart';
 import 'io/browser_history_io.dart';
 import 'io/dialer_io.dart';
 import 'io/file_exporter_io.dart';
@@ -41,7 +42,7 @@ GoogleClientConfig createGoogleClientConfig() => const GoogleClientConfig(
       serverClientId: String.fromEnvironment('MALVA_GOOGLE_CLIENT_ID'),
     );
 
-PlatformCapabilities createCapabilities() => const PlatformCapabilities(
+PlatformCapabilities createCapabilities() => PlatformCapabilities(
       canScheduleOsReminders: true,
       canRegisterPush: true,
       canExportFiles: true,
@@ -50,4 +51,6 @@ PlatformCapabilities createCapabilities() => const PlatformCapabilities(
       canGeolocate: true,
       canBindGoogleCalendar: true,
       isWebBuild: false,
+      canUseEmbeddedPaymentSandbox:
+          defaultTargetPlatform == TargetPlatform.android,
     );

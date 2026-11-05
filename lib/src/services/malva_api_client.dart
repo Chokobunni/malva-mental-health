@@ -30,25 +30,31 @@ class MalvaApiClient {
 
   final http.Client _httpClient;
   final Uri baseUri;
-  final void Function(String newAccessToken, String newRefreshToken)?
+  void Function(String newAccessToken, String newRefreshToken)?
       onTokenRefreshed;
 
   String? _currentRefreshToken;
+  int _authGeneration = 0;
+  final Map<String, String> _refreshedAccessTokens = {};
   bool _isRefreshing = false;
-  final List<Completer<void>> _pendingRefreshCallbacks = [];
+  final List<Completer<String>> _pendingRefreshCallbacks = [];
 
   void setRefreshToken(String? refreshToken) {
+    if (_currentRefreshToken == refreshToken) return;
+    _authGeneration++;
+    _refreshedAccessTokens.clear();
     _currentRefreshToken = refreshToken;
   }
 
-  Future<void> _handleTokenRefresh() async {
+  Future<String> _handleTokenRefresh() async {
     if (_isRefreshing) {
-      final completer = Completer<void>();
+      final completer = Completer<String>();
       _pendingRefreshCallbacks.add(completer);
       return completer.future;
     }
 
     _isRefreshing = true;
+    final generation = _authGeneration;
     try {
       final refreshToken = _currentRefreshToken;
       if (refreshToken == null || refreshToken.isEmpty) {
@@ -56,13 +62,17 @@ class MalvaApiClient {
       }
 
       final result = await refreshSession(refreshToken: refreshToken);
+      if (generation != _authGeneration) {
+        throw const MalvaApiException('Sesi telah berubah. Silakan coba lagi.');
+      }
       _currentRefreshToken = result.refreshToken;
       onTokenRefreshed?.call(result.accessToken, result.refreshToken);
 
       for (final completer in _pendingRefreshCallbacks) {
-        if (!completer.isCompleted) completer.complete();
+        if (!completer.isCompleted) completer.complete(result.accessToken);
       }
       _pendingRefreshCallbacks.clear();
+      return result.accessToken;
     } on Object catch (error) {
       for (final completer in _pendingRefreshCallbacks) {
         if (!completer.isCompleted) completer.completeError(error);
@@ -656,6 +666,7 @@ class MalvaApiClient {
       {
         'refresh_token': refreshToken,
       },
+      retryOnAuth: false,
     );
   }
 
@@ -1344,6 +1355,20 @@ class MalvaApiClient {
     );
   }
 
+  Future<BackendTherapySubmission> getTherapySubmission({
+    required String accessToken,
+    required String submissionId,
+  }) async {
+    final payload = await _send(
+      'GET',
+      '/v1/therapy-submissions/$submissionId',
+      accessToken: accessToken,
+    );
+    return BackendTherapySubmission.fromJson(
+      _expectMap(payload['submission'], 'Respons worksheet tidak valid.'),
+    );
+  }
+
   Future<BackendTherapySubmission> shareTherapySubmission({
     required String accessToken,
     required String submissionId,
@@ -1811,6 +1836,7 @@ class MalvaApiClient {
     required String bookingDate,
     required String slotTime,
     String sessionType = 'chat',
+    int durationMinutes = 30,
   }) async {
     final payload =
         await _send('POST', '/v1/bookings', accessToken: accessToken, body: {
@@ -1819,7 +1845,7 @@ class MalvaApiClient {
       'session_type': sessionType,
       'booking_date': bookingDate,
       'slot_time': slotTime,
-      'duration_minutes': 30,
+      'duration_minutes': durationMinutes,
       'price': 0,
     });
     return BackendBooking.fromJson(
@@ -2717,7 +2743,10 @@ class MalvaApiClient {
     required String accessToken,
     int limit = 20,
   }) async {
-    final payload = await _send('GET', '/v1/bookings?limit=$limit',
+    final payload = await _sendUri(
+        'GET',
+        baseUri.replace(
+            path: '/v1/bookings', queryParameters: {'limit': '$limit'}),
         accessToken: accessToken);
     return (payload['bookings'] as List?)
             ?.map((e) => BackendBooking.fromJson(
@@ -2843,9 +2872,11 @@ class MalvaApiClient {
   Future<BackendAuthResult> _sendAuth(
     String method,
     String path,
-    Map<String, Object?> body,
-  ) async {
-    final payload = await _send(method, path, body: body);
+    Map<String, Object?> body, {
+    bool retryOnAuth = true,
+  }) async {
+    final payload =
+        await _send(method, path, body: body, retryOnAuth: retryOnAuth);
     final user = payload['user'];
     final token = payload['access_token'];
     if (user is! Map<String, dynamic> || token is! String) {
@@ -2893,10 +2924,14 @@ class MalvaApiClient {
     Map<String, String>? extraHeaders,
     bool retryOnAuth = true,
   }) async {
+    final generation = _authGeneration;
+    final requestAccessToken =
+        _refreshedAccessTokens[accessToken] ?? accessToken;
     final headers = <String, String>{
       'Accept': 'application/json',
       if (body != null) 'Content-Type': 'application/json',
-      if (accessToken != null) 'Authorization': 'Bearer $accessToken',
+      if (requestAccessToken != null)
+        'Authorization': 'Bearer $requestAccessToken',
       if (extraHeaders != null) ...extraHeaders,
     };
     late final http.Response response;
@@ -2967,11 +3002,20 @@ class MalvaApiClient {
 
     if (response.statusCode == 401 &&
         retryOnAuth &&
+        requestAccessToken != null &&
+        generation == _authGeneration &&
         _currentRefreshToken != null) {
       try {
-        await _handleTokenRefresh();
+        final refreshedToken = await _handleTokenRefresh();
+        if (generation != _authGeneration) {
+          throw const MalvaApiException(
+              'Sesi telah berubah. Silakan coba lagi.');
+        }
+        _refreshedAccessTokens.updateAll(
+            (_, value) => value == requestAccessToken ? refreshedToken : value);
+        _refreshedAccessTokens[requestAccessToken] = refreshedToken;
         return _sendUri(method, uri,
-            accessToken: accessToken,
+            accessToken: refreshedToken,
             body: body,
             extraHeaders: extraHeaders,
             retryOnAuth: false);
@@ -4534,6 +4578,7 @@ class BackendCarePackage {
     required this.id,
     required this.patientId,
     required this.professionalId,
+    this.bookingId,
     this.professionalName = '',
     this.patientName = '',
     this.totalSessions = 4,
@@ -4555,6 +4600,7 @@ class BackendCarePackage {
       id: json['id']?.toString() ?? '',
       patientId: json['patient_id']?.toString() ?? '',
       professionalId: json['professional_id']?.toString() ?? '',
+      bookingId: json['booking_id']?.toString(),
       professionalName: json['professional_name']?.toString() ?? '',
       patientName: json['patient_name']?.toString() ?? '',
       totalSessions: (json['total_sessions'] as num?)?.toInt() ?? 4,
@@ -4575,6 +4621,7 @@ class BackendCarePackage {
   final String id;
   final String patientId;
   final String professionalId;
+  final String? bookingId;
   final String professionalName;
   final String patientName;
   final int totalSessions;
@@ -5157,6 +5204,9 @@ class BackendBooking {
     required this.status,
     this.price = 0,
     this.packageId,
+    this.sessionType = 'chat',
+    this.slotTime = '',
+    this.durationMinutes = 30,
   });
 
   factory BackendBooking.fromJson(Map<String, dynamic> json) {
@@ -5169,6 +5219,9 @@ class BackendBooking {
       status: json['status']?.toString() ?? '',
       price: (json['price'] as num?)?.toInt() ?? 0,
       packageId: json['package_id']?.toString(),
+      sessionType: json['session_type']?.toString() ?? 'chat',
+      slotTime: json['slot_time']?.toString() ?? '',
+      durationMinutes: (json['duration_minutes'] as num?)?.toInt() ?? 30,
     );
   }
 
@@ -5180,6 +5233,9 @@ class BackendBooking {
   final String status;
   final int price;
   final String? packageId;
+  final String sessionType;
+  final String slotTime;
+  final int durationMinutes;
 }
 
 class BackendPaymentResponse {
@@ -5209,6 +5265,7 @@ class BackendPayment {
     required this.status,
     this.redirectUrl = '',
     this.snapToken = '',
+    this.gateway = '',
     this.paidAt,
   });
 
@@ -5220,6 +5277,7 @@ class BackendPayment {
       status: json['status']?.toString() ?? '',
       redirectUrl: json['redirect_url']?.toString() ?? '',
       snapToken: json['snap_token']?.toString() ?? '',
+      gateway: json['gateway']?.toString() ?? '',
       paidAt: parseWibStored(json['paid_at']?.toString()),
     );
   }
@@ -5236,6 +5294,7 @@ class BackendPayment {
 
   /// Token Snap (opsional; klien saat ini memakai [redirectUrl]).
   final String snapToken;
+  final String gateway;
 
   /// Waktu pembayaran lunas (WIB) bila sudah dibayar.
   final DateTime? paidAt;

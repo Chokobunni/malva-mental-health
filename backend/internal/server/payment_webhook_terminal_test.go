@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -306,7 +307,7 @@ func TestPaymentWebhookSlotTakenKeepsPaidAndBlocksSecondPayment(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/payments", bytes.NewReader([]byte(body)))
 	recPay := httptest.NewRecorder()
 	srv.createPayment(recPay, req, auth.Claims{Subject: patient.ID, Role: "patient"})
-	if recPay.Code != http.StatusBadRequest {
-		t.Fatalf("createPayment status = %d, mau 400: %s", recPay.Code, recPay.Body.String())
+	if recPay.Code != http.StatusCreated || !strings.Contains(recPay.Body.String(), pay.Reference) || !strings.Contains(recPay.Body.String(), `"status":"paid"`) {
+		t.Fatalf("retry must return the existing paid payment: %d %s", recPay.Code, recPay.Body.String())
 	}
 }

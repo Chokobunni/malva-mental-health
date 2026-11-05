@@ -2,10 +2,10 @@ package server
 
 import "fmt"
 
-// notification_policy.go adalah SATU-SATUNYA tempat kebijakan "notifikasi mana
-// yang boleh memicu push FCM". Semua handler memakai notifyPatient/notifyUser,
-// yang menerapkan kebijakan di sini — jangan menyebar `if kind == ...` ke
-// handler.
+// notification_policy.go menentukan kelayakan enqueue FCM untuk handler.
+// Semua handler memakai notifyPatient/notifyUser. Dispatcher memeriksa ulang
+// role, pasangan, dan sesi tersimpan melalui store.OutboxPushAllowed agar
+// outbox dari versi lama tetap mengikuti kebijakan saat dikirim.
 //
 // Kebijakan push yang ditetapkan pemilik produk (final):
 //   * PASIEN  — HANYA push untuk CHAT saat sesi aktif (`chat_message`).

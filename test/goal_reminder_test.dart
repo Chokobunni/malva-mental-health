@@ -323,7 +323,7 @@ void main() {
       );
     });
 
-    test('notifikasi non-chat selalu ditampilkan', () {
+    test('notifikasi remote non-chat tidak ditampilkan', () {
       const data = <String, dynamic>{
         'type': 'crisis_alert',
         'sender_id': 'pro-1',
@@ -331,7 +331,7 @@ void main() {
 
       expect(
         PushNotificationService.shouldShowChatNotification(data, 'pro-1'),
-        isTrue,
+        isFalse,
       );
     });
   });

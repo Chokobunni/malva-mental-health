@@ -71,9 +71,15 @@ func TestActivatePendingPackageMerges(t *testing.T) {
 
 	patient := randomUUID(t, db, ctx)
 	prof := randomUUID(t, db, ctx)
+	for _, id := range []string{patient, prof} {
+		if _, err := db.ExecContext(ctx, `INSERT INTO users(id,email,password_hash,role,display_name) VALUES($1,$2,'synthetic-hash','patient','Synthetic')`, id, id+"@example.test"); err != nil {
+			t.Fatal(err)
+		}
+	}
 	defer func() {
 		_, _ = db.ExecContext(ctx, `DELETE FROM care_sessions WHERE patient_id = $1`, patient)
 		_, _ = db.ExecContext(ctx, `DELETE FROM care_packages WHERE patient_id = $1`, patient)
+		_, _ = db.ExecContext(ctx, `DELETE FROM users WHERE id IN ($1,$2)`, patient, prof)
 	}()
 
 	var targetID string
@@ -98,6 +104,9 @@ func TestActivatePendingPackageMerges(t *testing.T) {
 		t.Fatalf("insert paket pending: %v", err)
 	}
 	bookingID := randomUUID(t, db, ctx)
+	if _, err := db.ExecContext(ctx, `INSERT INTO bookings(id,patient_id,professional_id,service_type,session_type,booking_date,slot_time,price,status) VALUES($1,$2,$3,'package_session','chat',CURRENT_DATE,'12:00',200000,'paid')`, bookingID, patient, prof); err != nil {
+		t.Fatal(err)
+	}
 
 	pkg, merged, err := s.ActivatePendingPackage(ctx, patient, prof, bookingID)
 	if err != nil {

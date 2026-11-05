@@ -1,5 +1,7 @@
 # MODULE_FEATURES — Matriks Fitur Malva
 
+Perbaikan 5 November 2026: booking/payment pending idempoten dan dapat dilanjutkan; Paket MyCare difilter status; pasien membagikan Therapy Record dari chat dan profesional membuka detail berotorisasi. CF memakai interpretasi dukungan rule. Notifikasi mobile pasien hanya chat sesi aktif + reminder lokal goals/obat; profesional hanya chat sesi aktif. Rujukan implementasi: [rencana perbaikan](superpowers/plans/2026-11-05-patient-flow-repairs.md).
+
 Dokumen ini memetakan fitur per modul dan per peran (**Pasien**, **Profesional**, **Admin**).
 Sumber kebenaran endpoint: `docs/API_ROUTES.md` (dibuat otomatis dari `internal/server/server.go`).
 Status `Aktif` berarti endpoint terdaftar di `Routes()` dan diimplementasikan di handler + store.
@@ -122,3 +124,7 @@ Status `Aktif` berarti endpoint terdaftar di `Routes()` dan diimplementasikan di
 ---
 
 **Total fitur terdaftar:** 10 modul. Endpoint lengkap per rute: lihat `API_ROUTES.md`.
+
+### Koreksi mobile 0.1.3
+
+Home pasien: sesi berjalan dan video mendatang dengan foto profesional. Profesional: kartu video responsif, detail pasien terautentikasi dan Hadir tanpa penutupan dini. Pembayaran: binding legacy dan retry token terbarui. Push: data-only, validasi sesi aktif di background, cleanup shade/transport historis tanpa menghapus riwayat atau alarm yang valid.

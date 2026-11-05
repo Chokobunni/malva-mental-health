@@ -139,7 +139,7 @@ func paymentStatusOf(t *testing.T, payload map[string]any) string {
 // panggilan kedua tidak membuat sesi tambahan.
 func TestPaymentStatusReconcileMarksPaidFromGateway(t *testing.T) {
 	gw := &fakeStatusGateway{status: payment.GatewayStatus{
-		Status: "settlement", FraudStatus: "accept", TransactionID: "txn-ok",
+		Status: "settlement", FraudStatus: "accept", TransactionID: "txn-ok", GrossAmount: "102000.00",
 	}}
 	f := newReconcileFixture(t, gw)
 	booking, pay := f.pendingPayment(t, 10*time.Second)

@@ -296,14 +296,6 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 	if booking.ServiceType == "package_session" {
 		pkg, merged, err := s.store.ActivatePendingPackage(ctx, booking.PatientID, booking.ProfessionalID, booking.ID)
 		if err != nil {
-			// Pengulangan webhook setelah aktivasi paket berhasil tetapi sesi
-			// pertama gagal dibuat: paket pending sudah tidak ada, jadi pakai
-			// paket yang sudah mencatat booking ini.
-			if existing, gerr := s.store.GetCarePackageByBookingID(ctx, booking.ID); gerr == nil && existing.ID != "" {
-				pkg, merged, err = existing, false, nil
-			}
-		}
-		if err != nil {
 			return "", err
 		}
 		if _, err := s.store.LinkPatientToProfessional(ctx, booking.PatientID, booking.ProfessionalID); err != nil {
@@ -585,6 +577,20 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 	isProfessional := claims.Role == "professional"
 	patientID := req.PatientID
 	var professionalID string
+	var selectedPackage *store.CarePackage
+	if strings.EqualFold(strings.TrimSpace(req.ServiceType), "package_session") && req.PackageID != nil && strings.TrimSpace(*req.PackageID) != "" {
+		pkg, err := s.store.GetCarePackage(r.Context(), strings.TrimSpace(*req.PackageID))
+		if err != nil || claims.Role != "patient" || pkg.PatientID != claims.Subject {
+			writeError(w, http.StatusNotFound, errors.New("paket tidak ditemukan"))
+			return
+		}
+		if pkg.Status != "pending_payment" || (req.ProfessionalID != "" && req.ProfessionalID != pkg.ProfessionalID) {
+			writeError(w, http.StatusConflict, store.ErrPurchaseConflict)
+			return
+		}
+		selectedPackage = &pkg
+		req.ProfessionalID = pkg.ProfessionalID
+	}
 
 	if !isProfessional {
 		patientID = claims.Subject
@@ -645,22 +651,38 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 	// aktivasi paket terjadi saat paid (bookings.package_id TIDAK dipakai).
 	var price int64
 	if isPackageSession {
-		pkgs, err := s.store.ListCarePackages(r.Context(), patientID, "patient", "", 50)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
-		found := false
-		for _, p := range pkgs {
-			if p.ProfessionalID == professionalID && p.Status == "pending_payment" {
-				price = p.Price
-				found = true
-				break
+		if selectedPackage != nil {
+			price = selectedPackage.Price
+		} else {
+			pkgs, err := s.store.ListCarePackages(r.Context(), patientID, "patient", "", 50)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
 			}
-		}
-		if !found {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tidak ada paket pending dengan profesional ini — buat paket dulu lewat /v1/care-packages"})
-			return
+			found := false
+			for _, p := range pkgs {
+				if p.ProfessionalID == professionalID && p.Status == "pending_payment" {
+					price = p.Price
+					found = true
+					break
+				}
+			}
+			if !found {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tidak ada paket pending dengan profesional ini — buat paket dulu lewat /v1/care-packages"})
+				return
+			}
+			// Legacy clients supplied only professional_id. Bind only an
+			// unambiguous pending purchase instead of choosing another package.
+			for _, p := range pkgs {
+				if p.ProfessionalID == professionalID && p.Status == "pending_payment" {
+					if selectedPackage != nil {
+						writeError(w, http.StatusConflict, store.ErrPurchaseConflict)
+						return
+					}
+					copy := p
+					selectedPackage = &copy
+				}
+			}
 		}
 		if price <= 0 {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "harga paket tidak valid"})
@@ -709,7 +731,7 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 		return
 	}
 
-	b, err := s.store.CreateBooking(r.Context(), store.Booking{
+	input := store.Booking{
 		PatientID:       patientID,
 		ProfessionalID:  professionalID,
 		ServiceType:     serviceType,
@@ -718,8 +740,18 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 		SlotTime:        req.SlotTime,
 		DurationMinutes: duration,
 		Price:           price,
-	})
+	}
+	var b store.Booking
+	if selectedPackage != nil {
+		b, err = s.store.CreatePackageBooking(r.Context(), selectedPackage.ID, input)
+	} else {
+		b, err = s.store.CreateBooking(r.Context(), input)
+	}
 	if err != nil {
+		if errors.Is(err, store.ErrPurchaseConflict) {
+			writeError(w, http.StatusConflict, err)
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -749,7 +781,7 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, claims au
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only the booking owner can pay"})
 		return
 	}
-	if booking.Status != "pending" {
+	if booking.Status != "pending" && booking.Status != "paid" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "booking sudah dibayar atau kedaluwarsa"})
 		return
 	}
@@ -758,29 +790,9 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, claims au
 	serviceFee := int64(2000)
 	gross := bookingPrice
 	net := gross - platformFee
-
-	// IDEMPOTENSI "Lanjut Bayar": bila booking ini sudah punya payment pending
-	// yang masih bisa dipakai ulang (ada Snap token, dibuat < 24 jam), kembalikan
-	// payment itu alih-alih membuat payment + transaksi Snap BARU setiap ketukan.
-	// Tanpa ini, tiap tap meninggalkan satu payment pending + satu transaksi
-	// Midtrans yatim. Klien menerima 2xx apa pun, jadi 200 aman di sini.
-	if existing, rerr := s.store.GetReusablePendingPayment(r.Context(), req.BookingID); rerr == nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"payment": existing,
-			"breakdown": map[string]interface{}{
-				"consultation":  bookingPrice,
-				"service_fee":   serviceFee,
-				"total":         gross + serviceFee,
-				"platform_fee":  platformFee,
-				"net_to_doctor": net,
-			},
-		})
-		return
-	} else if !errors.Is(rerr, sql.ErrNoRows) {
-		// Galat DB nyata (bukan "tidak ada"): catat, tapi jangan blokir
-		// pembayaran — lanjut membuat payment baru seperti biasa.
-		s.logger.Warn("cek payment pending yang bisa dipakai ulang gagal",
-			"booking_id", req.BookingID, "error", rerr)
+	gatewayName := ""
+	if s.cfg.PaymentMode == "gateway" {
+		gatewayName = "midtrans"
 	}
 
 	p, err := s.store.CreatePayment(r.Context(), store.Payment{
@@ -791,15 +803,20 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, claims au
 		PlatformFeeAmount: platformFee,
 		NetAmount:         net,
 		Reference:         reference,
+		Gateway:           gatewayName,
 	})
 	if err != nil {
+		if errors.Is(err, store.ErrPurchaseConflict) {
+			writeError(w, http.StatusConflict, err)
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	// Mode gateway: buat transaksi Snap, simpan token/redirect ke payment.
 	// Record lokal tetap ada walau gateway gagal (webhook bisa menyusul).
-	if s.cfg.PaymentMode == "gateway" && s.payment != nil {
+	if p.Status == "pending" && s.cfg.PaymentMode == "gateway" && s.payment != nil {
 		customer := map[string]any{"first_name": claims.Subject}
 		if user, uerr := s.store.GetUserByID(r.Context(), claims.Subject); uerr == nil {
 			if strings.TrimSpace(user.DisplayName) != "" {
@@ -812,19 +829,17 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, claims au
 				customer["phone"] = *user.Phone
 			}
 		}
-		intent, gerr := s.payment.CreateTransaction(r.Context(), reference, gross+serviceFee, customer)
+		updated, gerr := s.store.InitializePaymentGateway(r.Context(), p.Reference, "midtrans", func() (string, string, error) {
+			intent, err := s.payment.CreateTransaction(r.Context(), p.Reference, gross+serviceFee, customer)
+			return intent.Token, intent.RedirectURL, err
+		})
 		if gerr != nil {
-			s.logger.Warn("gateway create transaction failed", "reference", reference, "error", gerr)
-			writeError(w, http.StatusBadGateway, errors.New("gagal membuat transaksi pembayaran, coba lagi"))
-			return
-		}
-		if updated, uerr := s.store.UpdatePaymentGateway(r.Context(), reference, "midtrans", intent.Token, intent.RedirectURL); uerr == nil {
-			p = updated
+			s.logger.Warn("gateway belum mengembalikan halaman; payment tetap dapat direkonsiliasi", "reference", p.Reference)
+			if fresh, err := s.store.GetPaymentByReference(r.Context(), p.Reference); err == nil {
+				p = fresh
+			}
 		} else {
-			s.logger.Warn("simpan token gateway gagal", "reference", reference, "error", uerr)
-			p.Gateway = "midtrans"
-			p.SnapToken = intent.Token
-			p.RedirectURL = intent.RedirectURL
+			p = updated
 		}
 	}
 
@@ -1096,7 +1111,12 @@ func (s *Server) paymentWebhook(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		return
 	default:
-		// expire/cancel/deny/pending: catat sebagai ignored.
+		if terminal := map[string]string{"expire": "expired", "cancel": "cancelled", "deny": "deny"}[eventType]; terminal != "" {
+			if err := s.store.SetPaymentTerminal(r.Context(), evt.OrderID, terminal); err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+		}
 		_ = s.store.UpdatePaymentEventStatus(r.Context(), "midtrans", evt.OrderID, eventType, "ignored", "", "")
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
 		return

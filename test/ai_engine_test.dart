@@ -2,6 +2,108 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:malva_mental_health/src/ai/ai.dart';
 
 void main() {
+  test('mild CF uses total-score evidence once in both instruments', () {
+    final engine = ForwardChainingEngine();
+    for (final answers in <List<int>>[
+      [1, 1, 1, 1, 1, 0, 0, 0, 0],
+      [3, 2, 0, 0, 0, 0, 0, 0, 0],
+    ]) {
+      final result = engine.infer(
+        questionIds: KnowledgeBase.phq9QuestionIds,
+        answers: answers,
+        rules: KnowledgeBase.phq9Rules,
+      );
+      // Two bounds on the same score use AND=min, then .72*.95=.684.
+      expect(result.certaintyFactor, closeTo(0.684, 1e-9));
+      expect(result.level, 'mild');
+    }
+    final gad7 = engine.infer(
+      questionIds: KnowledgeBase.gad7QuestionIds,
+      answers: [1, 1, 1, 1, 1, 0, 0],
+      rules: KnowledgeBase.gad7Rules,
+    );
+    expect(gad7.certaintyFactor, closeTo(0.684, 1e-9));
+    expect(gad7.level, 'mild');
+  });
+
+  test('rules require every comparison and minimum CF', () {
+    for (final condition in <RuleCondition>[
+      const RuleCondition(
+          factId: 'a',
+          operator: ConditionOperator.equals,
+          value: 2,
+          minCF: 0.61),
+      const RuleCondition(
+          factId: 'a', operator: ConditionOperator.greaterThan, value: 2),
+      const RuleCondition(
+          factId: 'missing', operator: ConditionOperator.equals, value: 0),
+      const RuleCondition(
+          factId: 'zero', operator: ConditionOperator.equals, value: 0),
+    ]) {
+      final result = ForwardChainingEngine().infer(
+        questionIds: ['a', 'zero'],
+        answers: [2, 0],
+        rules: [
+          ScreeningRule(
+            id: 'gated',
+            description: 'synthetic condition gate',
+            ruleCF: 0.8,
+            conditions: [
+              const RuleCondition(
+                  factId: 'a', operator: ConditionOperator.equals, value: 2),
+              condition,
+            ],
+            conclusions: const [
+              RuleConclusion(factId: 'gated_result', value: true, cf: 1)
+            ],
+          )
+        ],
+      );
+      expect(result.workingMemory.containsKey('gated_result'), isFalse);
+      expect(result.trace, isEmpty);
+    }
+  });
+
+  test('independent evidence combines once per rule ID', () {
+    const ruleA = ScreeningRule(
+      id: 'evidence_a',
+      description: 'synthetic independent evidence a',
+      ruleCF: 1,
+      conditions: [
+        RuleCondition(
+            factId: 'a',
+            operator: ConditionOperator.greaterThan,
+            value: 0,
+            minCF: 0.6)
+      ],
+      conclusions: [RuleConclusion(factId: 'shared', value: true, cf: 1)],
+    );
+    const ruleB = ScreeningRule(
+      id: 'evidence_b',
+      description: 'synthetic independent evidence b',
+      ruleCF: 1,
+      conditions: [
+        RuleCondition(
+            factId: 'b', operator: ConditionOperator.greaterThan, value: 0)
+      ],
+      conclusions: [RuleConclusion(factId: 'shared', value: true, cf: 1)],
+    );
+    for (final rules in <List<ScreeningRule>>[
+      [ruleA, ruleB, ruleA],
+      [ruleB, ruleA]
+    ]) {
+      final result = ForwardChainingEngine().infer(
+        questionIds: ['a', 'b'],
+        answers: [2, 1],
+        rules: rules,
+      );
+      // Independent .6 and .3 => .6+.3*(1-.6)=.72; duplicate rule adds 0.
+      expect(
+          result.workingMemory['shared']?.certaintyFactor, closeTo(0.72, 1e-9));
+      expect(result.trace, hasLength(2));
+    }
+  });
+
   group('CertaintyFactorCalculator', () {
     group('scoreToCF', () {
       test('score 0 returns CF 0.0', () {

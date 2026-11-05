@@ -30,7 +30,8 @@ class MyCareScreen extends ConsumerStatefulWidget {
   ConsumerState<MyCareScreen> createState() => _MyCareScreenState();
 }
 
-class _MyCareScreenState extends ConsumerState<MyCareScreen> {
+class _MyCareScreenState extends ConsumerState<MyCareScreen>
+    with WidgetsBindingObserver {
   String _tab = 'Paket';
 
   /// Filter status daftar sesi, DIPISAH per tab supaya pilihan di satu tab
@@ -38,6 +39,8 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   /// Default "semua".
   String _filterUpcoming = 'semua';
   String _filterPast = 'semua';
+  String _filterPackage = 'semua';
+  bool _loadInProgress = false;
   List<BackendCarePackage> _packages = const [];
   List<BackendCareSession> _sessions = const [];
   List<BackendPatientProfessionalLink> _links = const [];
@@ -49,7 +52,19 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_load(silent: true));
   }
 
   /// Memuat paket, sesi, dan tautan profesional.
@@ -57,6 +72,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   /// [silent] = true dipakai saat penyegaran otomatis (event realtime) agar
   /// indikator loading tidak berkedip menutupi data yang sudah tampil.
   Future<void> _load({bool silent = false}) async {
+    if (_loadInProgress) return;
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
     final rawToken = widget.session?.accessToken;
@@ -79,6 +95,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
         _error = null;
       });
     }
+    _loadInProgress = true;
     try {
       final results = await Future.wait([
         apiClient.listCarePackages(accessToken: accessToken),
@@ -98,6 +115,8 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
         _error = friendlyErrorMessage(e);
         _isLoading = false;
       });
+    } finally {
+      _loadInProgress = false;
     }
   }
 
@@ -265,6 +284,34 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
       ];
     }
     return [
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: [
+          for (final (status, label) in const [
+            ('semua', 'Semua'),
+            ('pending_payment', 'Menunggu pembayaran'),
+            ('active', 'Aktif'),
+            ('cancelled', 'Dibatalkan'),
+            ('completed', 'Selesai'),
+            ('expired', 'Kedaluwarsa')
+          ])
+            if (status == 'semua' || _packages.any((p) => p.status == status))
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                    label: Text(
+                        '$label ${_packages.where((p) => status == 'semua' || p.status == status).length}'),
+                    selected: _filterPackage == status,
+                    onSelected: (_) => setState(() => _filterPackage = status)),
+              ),
+        ]),
+      ),
+      const SizedBox(height: 10),
+      if (_packageGroups.isEmpty)
+        const EmptyState(
+            icon: Icons.card_membership_outlined,
+            title: 'Tidak ada paket pada status ini',
+            subtitle: 'Pilih status lain untuk melihat paketmu.'),
       for (final group in _packageGroups) ...[
         if (group.merged)
           _MergedPackageCard(
@@ -429,7 +476,8 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
   List<_PackageDisplay> get _packageGroups {
     final order = <String>[];
     final byPro = <String, List<BackendCarePackage>>{};
-    for (final p in _packages) {
+    for (final p in _packages.where(
+        (p) => _filterPackage == 'semua' || p.status == _filterPackage)) {
       if (!byPro.containsKey(p.professionalId)) {
         order.add(p.professionalId);
         byPro[p.professionalId] = [];
@@ -446,6 +494,9 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen> {
                 (a, b) => b.remainingSessions > a.remainingSessions ? b : a),
             display: _mergedAggregate(active),
             count: active.length));
+        for (final p in list.where((p) => !_isUsablePackage(p))) {
+          out.add(_PackageDisplay(primary: p, display: p, count: 1));
+        }
       } else {
         final sorted = List<BackendCarePackage>.from(list)
           ..sort((a, b) => switch ((_isUsablePackage(a), _isUsablePackage(b))) {

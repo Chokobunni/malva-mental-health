@@ -141,6 +141,32 @@ func (s *Store) CreateCarePackage(ctx context.Context, p CarePackage) (CarePacka
 	if status == "" {
 		status = "pending_payment"
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return CarePackage{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "care_pkg:"+p.PatientID+":"+p.ProfessionalID); err != nil {
+		return CarePackage{}, err
+	}
+	if status == "pending_payment" {
+		var id string
+		var price int64
+		var total, validity int
+		err := tx.QueryRowContext(ctx, `SELECT id, price, total_sessions, validity_days FROM care_packages WHERE patient_id=$1 AND professional_id=$2 AND status='pending_payment' ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, p.PatientID, p.ProfessionalID).Scan(&id, &price, &total, &validity)
+		if err == nil {
+			if price != p.Price || total != p.TotalSessions || validity != p.ValidityDays {
+				return CarePackage{}, ErrPurchaseConflict
+			}
+			if err := tx.Commit(); err != nil {
+				return CarePackage{}, err
+			}
+			return s.GetCarePackage(ctx, id)
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return CarePackage{}, err
+		}
+	}
 	const q = `INSERT INTO care_packages
 		(patient_id, professional_id, booking_id, total_sessions, validity_days, price, status, starts_at, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -149,10 +175,13 @@ func (s *Store) CreateCarePackage(ctx context.Context, p CarePackage) (CarePacka
 	if p.BookingID != nil && *p.BookingID != "" {
 		bookingID = *p.BookingID
 	}
-	err := s.db.QueryRowContext(ctx, q, p.PatientID, p.ProfessionalID, bookingID,
+	err = tx.QueryRowContext(ctx, q, p.PatientID, p.ProfessionalID, bookingID,
 		p.TotalSessions, p.ValidityDays, p.Price, status, p.StartsAt, p.ExpiresAt).
 		Scan(&p.ID, &p.CreatedAt)
 	if err != nil {
+		return CarePackage{}, err
+	}
+	if err := tx.Commit(); err != nil {
 		return CarePackage{}, err
 	}
 	p.Status = status
@@ -257,6 +286,44 @@ func (s *Store) UpdateCarePackageStatus(ctx context.Context, packageID, status s
 	return nil
 }
 
+func (s *Store) CancelPendingCarePackage(ctx context.Context, packageID, patientID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var status string
+	var bookingID sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT status,booking_id FROM care_packages WHERE id=$1 AND patient_id=$2 FOR UPDATE`, packageID, patientID).Scan(&status, &bookingID); err != nil {
+		return err
+	}
+	if status == "cancelled" {
+		return tx.Commit()
+	}
+	if status != "pending_payment" {
+		return ErrPurchaseConflict
+	}
+	if bookingID.Valid {
+		var bookingStatus string
+		if err := tx.QueryRowContext(ctx, `SELECT status FROM bookings WHERE id=$1 FOR UPDATE`, bookingID.String).Scan(&bookingStatus); err != nil {
+			return err
+		}
+		if bookingStatus == "paid" {
+			return ErrPurchaseConflict
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE payments SET status='cancelled' WHERE booking_id=$1 AND status='pending'`, bookingID.String); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE bookings SET status='cancelled' WHERE id=$1 AND status='pending'`, bookingID.String); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE care_packages SET status='cancelled',updated_at=now() WHERE id=$1`, packageID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // mergePackageTotals menjumlahkan total sesi dan harga ketika dua paket pasien
 // dengan profesional yang sama digabung. Dipisah agar bisa diuji tanpa DB.
 func mergePackageTotals(oldTotal, newTotal int, oldPrice, newPrice int64) (int, int64) {
@@ -281,19 +348,59 @@ func (s *Store) ActivatePendingPackage(ctx context.Context, patientID, professio
 		return CarePackage{}, false, err
 	}
 	now := clock.Now()
+	var bookingPatient, bookingProfessional, bookingType, bookingStatus string
+	var bookingPrice int64
+	if err := tx.QueryRowContext(ctx, `SELECT patient_id,professional_id,service_type,status,price FROM bookings WHERE id=$1`, bookingID).Scan(&bookingPatient, &bookingProfessional, &bookingType, &bookingStatus, &bookingPrice); err != nil {
+		return CarePackage{}, false, err
+	}
+	if bookingPatient != patientID || bookingProfessional != professionalID || bookingType != "package_session" || bookingStatus != "paid" {
+		return CarePackage{}, false, ErrPurchaseConflict
+	}
+	// Resolve the exact purchase before looking for unbound legacy packages.
+	var linkedID, linkedStatus, mergedInto string
+	err = tx.QueryRowContext(ctx, `SELECT id,status,COALESCE(merged_into::text,'') FROM care_packages WHERE booking_id=$1 AND patient_id=$2 AND professional_id=$3 FOR UPDATE`, bookingID, patientID, professionalID).Scan(&linkedID, &linkedStatus, &mergedInto)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return CarePackage{}, false, err
+	}
+	if err == nil && linkedStatus != "pending_payment" {
+		if linkedStatus != "active" && linkedStatus != "merged" && linkedStatus != "completed" && linkedStatus != "expired" {
+			return CarePackage{}, false, ErrPurchaseConflict
+		}
+		if mergedInto != "" {
+			linkedID = mergedInto
+		}
+		if err := tx.Commit(); err != nil {
+			return CarePackage{}, false, err
+		}
+		pkg, err := s.GetCarePackage(ctx, linkedID)
+		return pkg, mergedInto != "", err
+	}
+	if linkedID == "" {
+		var count int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM care_packages WHERE patient_id=$1 AND professional_id=$2 AND status='pending_payment' AND booking_id IS NULL`, patientID, professionalID).Scan(&count); err != nil {
+			return CarePackage{}, false, err
+		}
+		if count != 1 {
+			return CarePackage{}, false, ErrPurchaseConflict
+		}
+	}
 	var pendingID string
 	var pendingTotal int
 	var pendingPrice int64
 	var pendingExpires time.Time
 	err = tx.QueryRowContext(ctx, `SELECT id, total_sessions, price, expires_at FROM care_packages
 		WHERE patient_id = $1 AND professional_id = $2 AND status = 'pending_payment'
-		ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, patientID, professionalID).
+		AND (booking_id=$3 OR (booking_id IS NULL AND $4=''))
+		ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, patientID, professionalID, bookingID, linkedID).
 		Scan(&pendingID, &pendingTotal, &pendingPrice, &pendingExpires)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CarePackage{}, false, errors.New("tidak ada paket pending untuk pasangan ini (mungkin sudah aktif/kedaluwarsa)")
 	}
 	if err != nil {
 		return CarePackage{}, false, err
+	}
+	if pendingPrice != bookingPrice {
+		return CarePackage{}, false, ErrPurchaseConflict
 	}
 
 	// Paket aktif lain (belum kedaluwarsa) untuk pasangan yang sama -> target gabung.
@@ -338,8 +445,8 @@ func (s *Store) ActivatePendingPackage(ctx context.Context, patientID, professio
 
 	// Tidak ada paket aktif: perilaku lama, paket pending menjadi aktif.
 	if _, err := tx.ExecContext(ctx, `UPDATE care_packages
-		SET status = 'active', booking_id = $1, updated_at = now()
-		WHERE id = $2`, bookingID, pendingID); err != nil {
+		SET status = 'active', booking_id = $1, starts_at=$3::timestamptz, expires_at=$3::timestamptz + make_interval(days => validity_days), updated_at = now()
+		WHERE id = $2`, bookingID, pendingID, now); err != nil {
 		return CarePackage{}, false, err
 	}
 	if err := tx.Commit(); err != nil {

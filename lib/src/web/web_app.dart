@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
+import '../services/malva_api_client.dart';
 import '../theme.dart';
 import 'screens/admin/web_admin_doctors_screen.dart';
 import 'screens/admin/web_admin_overview_screen.dart';
@@ -44,18 +45,39 @@ class MalvaWebApp extends ConsumerStatefulWidget {
 }
 
 class _MalvaWebAppState extends ConsumerState<MalvaWebApp> {
+  late final MalvaApiClient _tokenRefreshApi;
+  late final void Function(String, String) _tokenRefreshHandler;
+  void Function(String, String)? _previousTokenRefreshHandler;
   late final WebRouteController _routes;
   bool _restoringSession = true;
 
   @override
   void initState() {
     super.initState();
+    _tokenRefreshApi = ref.read(apiClientProvider);
+    _previousTokenRefreshHandler = _tokenRefreshApi.onTokenRefreshed;
+    _tokenRefreshHandler = (accessToken, refreshToken) {
+      if (!mounted) return;
+      final updated = ref
+          .read(authStateProvider.notifier)
+          .updateTokens(accessToken, refreshToken);
+      if (updated == null) return;
+      unawaited(ref
+          .read(malvaStoreProvider.notifier)
+          .persistTokenRotation(updated)
+          .catchError((_) {}));
+      _previousTokenRefreshHandler?.call(accessToken, refreshToken);
+    };
+    _tokenRefreshApi.onTokenRefreshed = _tokenRefreshHandler;
     _routes = WebRouteController(ref.read(browserHistoryProvider));
     unawaited(_restorePersistedSession());
   }
 
   @override
   void dispose() {
+    if (identical(_tokenRefreshApi.onTokenRefreshed, _tokenRefreshHandler)) {
+      _tokenRefreshApi.onTokenRefreshed = _previousTokenRefreshHandler;
+    }
     _routes.dispose();
     super.dispose();
   }
@@ -65,9 +87,13 @@ class _MalvaWebAppState extends ConsumerState<MalvaWebApp> {
   /// khusus mobile (pengingat obat & registrasi token push).
   Future<void> _restorePersistedSession() async {
     try {
+      final authAtStart = ref.read(authStateProvider);
+      if (authAtStart.session != null) return;
       final store = ref.read(malvaStoreProvider.notifier);
       final stored = await store.restoreSession();
-      if (stored == null || !mounted) return;
+      if (!mounted ||
+          !identical(ref.read(authStateProvider), authAtStart) ||
+          stored == null) return;
       ref.read(apiClientProvider).setRefreshToken(stored.refreshToken);
       ref.read(authStateProvider.notifier).setSession(stored);
       // Fresh start: data akun tersimpan tidak boleh tercampur akun lain.
@@ -78,8 +104,8 @@ class _MalvaWebAppState extends ConsumerState<MalvaWebApp> {
         try {
           final refreshed = await store.refreshSessionOnline(refreshToken);
           if (!mounted) return;
-          // Jangan timpa bila pengguna sudah logout saat refresh berjalan.
-          if (ref.read(authStateProvider).session == null) return;
+          // A restore may finish after logout or another account has logged in.
+          if (!identical(ref.read(authStateProvider).session, stored)) return;
           ref.read(apiClientProvider).setRefreshToken(refreshed.refreshToken);
           ref.read(authStateProvider.notifier).setSession(refreshed);
         } on Object {
@@ -103,13 +129,13 @@ class _MalvaWebAppState extends ConsumerState<MalvaWebApp> {
     _routes.go(WebRoutes.homeForRole(session.role), replace: true);
   }
 
-  Future<void> _handleLogout() async {
+  void _handleLogout() {
     final session = ref.read(authStateProvider).session;
     final store = ref.read(malvaStoreProvider.notifier);
     // logoutSession menghapus sesi lokal lebih dulu (logout tetap "menempel"
     // walau jaringan menggantung), lalu mencabut refresh token di server
     // sebagai best-effort — sama seperti mobile.
-    await store.logoutSession(session);
+    unawaited(store.logoutSession(session));
     store.resetForAccount();
     ref.read(authStateProvider.notifier).clearSession();
     ref.read(apiClientProvider).setRefreshToken(null);
@@ -174,7 +200,7 @@ class _MalvaWebAppState extends ConsumerState<MalvaWebApp> {
             displayName: session.displayName,
             currentPath: effective,
             onNavigate: (String path) => _routes.go(path),
-            onLogout: () => unawaited(_handleLogout()),
+            onLogout: _handleLogout,
             child: _buildPage(session, effective),
           );
         },

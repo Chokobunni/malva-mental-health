@@ -66,7 +66,7 @@ class AssessmentResult {
   final DateTime createdAt;
   final String ruleVersion;
 
-  /// Certainty Factor akhir (0.0-1.0) dari Forward Chaining + CF.
+  /// Dukungan aturan model (0.0-1.0), bukan probabilitas diagnosis.
   final double certaintyFactor;
 
   /// Ringkasan rule yang menembak (untuk tampilan & persist).
@@ -120,7 +120,7 @@ class ScreeningBundle {
 class AssessmentEngine {
   const AssessmentEngine._();
 
-  static const ruleVersion = '2026.1';
+  static const ruleVersion = '2026.1.FC';
 
   /// Pilihan jawaban ditampilkan sebagai ANGKA (0-3) sesuai instrumen asli.
   static const responseLabels = ['0', '1', '2', '3'];
@@ -278,7 +278,8 @@ class AssessmentEngine {
 
     // Build summary with CF information
     final summary = '${inferenceResult.summary}\n'
-        'Confidence: ${(inferenceResult.certaintyFactor * 100).toStringAsFixed(1)}%';
+        'CF ${(inferenceResult.certaintyFactor * 100).toStringAsFixed(1)}% '
+        '(dukungan aturan; bukan probabilitas diagnosis).';
 
     return AssessmentResult(
       type: type,

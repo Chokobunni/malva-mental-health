@@ -51,7 +51,9 @@ class CarePackageScreen extends ConsumerStatefulWidget {
 class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
   late BackendCarePackage _package;
   List<BackendCareSession> _sessions = const [];
+  Set<String> _otherPackageBookingIds = const {};
   bool _isLoading = true;
+  bool _continuingPayment = false;
   String? _error;
 
   @override
@@ -99,6 +101,10 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
       }
       setState(() {
         if (mine != null) _package = mine;
+        _otherPackageBookingIds = {
+          for (final p in pkgs)
+            if (p.id != _package.id && p.bookingId != null) p.bookingId!
+        };
         _sessions = sessions
             .where((s) => s.packageId == _package.id)
             .toList(growable: false)
@@ -273,7 +279,8 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
                         children: [
                           Expanded(
                             child: FilledButton.icon(
-                              onPressed: _continuePayment,
+                              onPressed:
+                                  _continuingPayment ? null : _continuePayment,
                               icon: const Icon(Icons.payment_rounded, size: 16),
                               label: const Text('Lanjut Bayar'),
                             ),
@@ -564,6 +571,16 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
   /// (dari percobaan bayar sebelumnya yang gagal), pakai booking itu langsung.
   /// Kalau belum ada, buat booking baru lewat sheet pilih slot.
   Future<void> _continuePayment() async {
+    if (_continuingPayment) return;
+    setState(() => _continuingPayment = true);
+    try {
+      await _openPendingPayment();
+    } finally {
+      if (mounted) setState(() => _continuingPayment = false);
+    }
+  }
+
+  Future<void> _openPendingPayment() async {
     final token = widget.session?.accessToken;
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
@@ -575,22 +592,69 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
     // warisan ke service_packages — lihat handlers_booking.go). Mencocokkan
     // lewat packageId karena itu SELALU gagal, lalu kode lama membuat booking
     // KEDUA yang ditolak server (gejala: "Terjadi kendala"). Cocokkan lewat
-    // profesional + tipe layanan + status pending; bila ada beberapa, ambil
-    // yang paling baru berdasarkan tanggal booking.
+    // profesional + tipe layanan + status pending, dengan satu kandidat
+    // yang belum terikat ke paket lain; jangan menebak pembelian legacy.
     BackendBooking? existingBooking;
     try {
-      final bookings = await apiClient.listBookings(accessToken: token);
-      existingBooking =
-          pickPendingPackageBooking(bookings, _package.professionalId);
-    } on Object catch (_) {
-      // Gagal ambil daftar booking — lanjut buat baru.
+      final bookings =
+          await apiClient.listBookings(accessToken: token, limit: 100);
+      final eligibleBookings = bookings
+          .where((b) => !_otherPackageBookingIds.contains(b.id))
+          .toList(growable: false);
+      existingBooking = pickPendingPackageBooking(
+          eligibleBookings, _package.professionalId,
+          bookingId: _package.bookingId);
+      if ((_package.bookingId != null && existingBooking == null) ||
+          (_package.bookingId == null &&
+              eligibleBookings
+                      .where((b) =>
+                          b.professionalId == _package.professionalId &&
+                          b.serviceType == 'package_session' &&
+                          b.status == 'pending')
+                      .length >
+                  1)) {
+        throw const MalvaApiException(
+            'Pesanan paket belum dapat dipastikan. Muat ulang paket atau hubungi tim Malva.');
+      }
+    } on Object catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+      return;
+    }
+
+    if (existingBooking != null && _package.bookingId == null) {
+      try {
+        if (existingBooking.slotTime.isEmpty) {
+          throw const MalvaApiException(
+              'Jadwal pesanan lama belum lengkap. Muat ulang paket atau hubungi tim Malva sebelum membayar.');
+        }
+        final bound = await apiClient.createPackageSessionBooking(
+          accessToken: token,
+          packageId: _package.id,
+          bookingDate: existingBooking.bookingDate,
+          slotTime: existingBooking.slotTime,
+          sessionType: existingBooking.sessionType,
+          durationMinutes: existingBooking.durationMinutes,
+        );
+        if (bound.id != existingBooking.id) {
+          throw const MalvaApiException(
+              'Pesanan paket berubah. Muat ulang paket sebelum membayar.');
+        }
+        existingBooking = bound;
+      } on Object catch (e) {
+        if (mounted)
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+        return;
+      }
     }
 
     if (existingBooking != null) {
       // Booking pending sudah ada — langsung ke layar pembayaran, jangan buat
       // booking kedua. Saat pasien menekan "Bayar", layar pembayaran memanggil
-      // createPayment; server kini MENGEMBALIKAN payment pending yang masih
-      // berlaku (Snap token ada, < 24 jam) untuk booking yang sama alih-alih
+      // createPayment; server MENGEMBALIKAN payment pending atau paid
+      // untuk booking yang sama alih-alih
       // membuat payment + transaksi Snap baru — jadi aman ditekan berulang.
       // Gateway redirect / polling status ditangani di layar pembayaran.
       // Pasien TIDAK dipaksa memilih slot lagi.
@@ -600,6 +664,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
         MaterialPageRoute(
           builder: (_) => PaymentScreen(
             booking: existingBooking,
+            package: _package,
             doctorName: _package.professionalName,
             session: widget.session,
             apiClient: widget.apiClient,
@@ -638,6 +703,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
         MaterialPageRoute(
           builder: (_) => PaymentScreen(
             booking: booking,
+            package: _package,
             doctorName: _package.professionalName,
             session: widget.session,
             apiClient: widget.apiClient,
@@ -693,24 +759,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
     final token = widget.session?.accessToken;
     if (token == null || token.isEmpty) return;
     try {
-      // Batalkan booking pending terkait dulu (kalau ada), baru batalkan paket.
-      // Tanpa ini booking & payment menggantung di database selamanya.
-      try {
-        final bookings = await apiClient.listBookings(accessToken: token);
-        for (final b in bookings) {
-          if (b.serviceType == 'package_session' &&
-              b.status == 'pending' &&
-              b.packageId == _package.id) {
-            await apiClient.cancelPendingBooking(
-              accessToken: token,
-              bookingId: b.id,
-            );
-            break;
-          }
-        }
-      } on Object catch (_) {
-        // Gagal batalkan booking — lanjut batalkan paket saja.
-      }
+      // The server cancels the exact linked booking and payment atomically.
       await apiClient.cancelPendingCarePackage(
         accessToken: token,
         packageId: _package.id,
@@ -1379,15 +1428,16 @@ class _PackageSessionCard extends StatelessWidget {
 /// pencocokan lewat packageId selalu gagal. Bila ada beberapa kandidat, ambil
 /// yang tanggal booking-nya paling baru.
 BackendBooking? pickPendingPackageBooking(
-  List<BackendBooking> bookings,
-  String professionalId,
-) {
+    List<BackendBooking> bookings, String professionalId,
+    {String? bookingId}) {
   final candidates = bookings
       .where((b) =>
           b.serviceType == 'package_session' &&
-          b.status == 'pending' &&
+          (b.status == 'pending' ||
+              (bookingId != null && b.status == 'paid')) &&
+          (bookingId == null || b.id == bookingId) &&
           b.professionalId == professionalId)
       .toList()
     ..sort((a, b) => b.bookingDate.compareTo(a.bookingDate));
-  return candidates.isEmpty ? null : candidates.first;
+  return candidates.length == 1 ? candidates.first : null;
 }

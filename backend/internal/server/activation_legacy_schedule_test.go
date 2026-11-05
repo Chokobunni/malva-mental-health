@@ -62,9 +62,6 @@ func TestActivatePackageLegacyNoSlotTimeIsTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buat booking paket tanpa jam: %v", err)
 	}
-	if _, err := db.ExecContext(ctx, `UPDATE bookings SET status = 'paid' WHERE id = $1`, booking.ID); err != nil {
-		t.Fatalf("tandai booking paid: %v", err)
-	}
 	booking.Status = "paid"
 	payment, err := st.CreatePayment(ctx, store.Payment{
 		BookingID:         booking.ID,
@@ -77,6 +74,9 @@ func TestActivatePackageLegacyNoSlotTimeIsTerminal(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("buat payment: %v", err)
+	}
+	if _, err := st.MarkPaymentPaid(ctx, payment.Reference, ""); err != nil {
+		t.Fatalf("tandai payment paid: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/payments/webhook", nil)

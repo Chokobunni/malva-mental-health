@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -80,7 +81,8 @@ func newOnboardingTestServer(db *sql.DB) *Server {
 
 func createIdentityTestUser(t *testing.T, db *sql.DB, st *store.Store, role string, credential *store.ProfessionalCredential) store.User {
 	t.Helper()
-	suffix := fmt.Sprint(time.Now().UnixNano())
+	// Resolusi jam Windows dapat memberi timestamp sama pada dua fixture cepat.
+	suffix := rand.Text()
 	u, err := st.CreateUser(context.Background(), store.CreateUserParams{
 		Email: suffix + "@professional.malva.local", PasswordHash: "test-hash", Role: role,
 		DisplayName: "Original Name", ProfessionalID: "profile-" + suffix, Credential: credential,

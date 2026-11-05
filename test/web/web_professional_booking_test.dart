@@ -280,6 +280,7 @@ void main() {
   group('MyCare', () {
     testWidgets('merender paket dan sesi terjadwal',
         (WidgetTester tester) async {
+      final upcomingAt = wibNow().add(const Duration(days: 1));
       final api = FakeAdminApi()
         ..carePackages = <BackendCarePackage>[
           const BackendCarePackage(
@@ -296,13 +297,13 @@ void main() {
           ),
         ]
         ..careSessions = <BackendCareSession>[
-          const BackendCareSession(
+          BackendCareSession(
             id: 'session-1',
             patientId: 'patient-1',
             professionalId: 'pro-1',
             professionalName: 'Dr. Ayu Lestari',
             sessionType: 'video',
-            scheduledAt: '2026-11-05T10:00:00+07:00',
+            scheduledAt: wibIso(upcomingAt),
             status: 'scheduled',
             meetingUrl: 'https://meet.google.com/abc-defg-hij',
           ),
@@ -328,7 +329,7 @@ void main() {
       await tester.tap(find.text('Jadwal'));
       await tester.pumpAndSettle();
       // Muncul di ringkasan atas dan di kartu sesi.
-      expect(find.textContaining('05/11/2026 10:00'), findsWidgets);
+      expect(find.textContaining(formatWibDateTime(upcomingAt)), findsWidgets);
       expect(
           find.byKey(const Key('web-session-join-session-1')), findsOneWidget);
       expect(

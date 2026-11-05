@@ -24,9 +24,9 @@ import (
 // RuleVersion versi rule base FC+CF (samakan dengan client).
 const RuleVersion = "2026.1.FC"
 
-// Keandalan instrumen terstandar (PHQ-9/GAD-7) sebagai sumber bukti.
-// Total skor adalah keluaran kuesioner baku & tervalidasi, sehingga CF-nya
-// mencerminkan keandalan instrumen — bukan rata-rata jawaban pasien.
+// Bobot model untuk fakta total skor PHQ-9/GAD-7, bukan rata-rata jawaban.
+// Instrumen terstandar tidak menjadikan bobot ini probabilitas klinis yang
+// terkalibrasi. Nilai dipertahankan untuk kompatibilitas rule base.
 const instrumentCF = 0.95
 
 // safetyEvidenceCF: CF bukti minimum untuk item keselamatan (PHQ-9 item 9).
@@ -180,8 +180,8 @@ func (e *Engine) Infer(questionIDs []string, answers []int, rules []Rule) (Infer
 }
 
 // calcTotals menghitung total skor per instrumen. CF fakta total memakai
-// keandalan instrumen (instrumentCF) karena skor total adalah keluaran
-// kuesioner baku, bukan keyakinan pasien per item.
+// bobot model instrumentCF, bukan keyakinan pasien per item atau probabilitas
+// diagnosis. Skor/level instrumen tetap deterministik.
 func calcTotals(wm map[string]Fact, questionIDs []string, prefix, questionPrefix string) {
 	total := 0
 	count := 0

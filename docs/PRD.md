@@ -1,5 +1,13 @@
 # Product Requirements Document (PRD) - Malva Mental Health
 
+### Kriteria penerimaan perbaikan pasien — 5 November 2026
+
+- Retry booking/payment dan “Lanjut Bayar” mengacu ke intent pending yang sama. Cek status serta refresh otomatis merekonsiliasi Midtrans; callback bukan bukti lunas.
+- Tab Paket MyCare memiliki filter `pending_payment`, `active`, dan `cancelled`.
+- Chat pasien menyediakan pemilihan Therapy Record; asesmen tidak masuk daftar terapi. Profesional dapat membuka detail record yang dibagikan lewat pemeriksaan akses server.
+- Pasien: chat sesi aktif, goals harian dan waktu obat saja untuk notifikasi mobile. Profesional: chat sesi aktif saja. Logout/pergantian role membatalkan reminder pasien dan menolak hasil async milik akun lama.
+- Hasil ringan dapat menampilkan `CF 68%` dari `0.72 × 0.95`; UI menjelaskan bahwa CF bukan probabilitas diagnosis atau tingkat keparahan.
+
 **Malva Mental Health App**
 
 | Field | Value |
@@ -315,3 +323,11 @@ Malva adalah aplikasi mental health yang menghubungkan pasien dengan profesional
 ## 9. Medical Disclaimer (Wajib di Semua Layar Screening)
 
 > Hasil screening AI menggunakan instrumen PHQ-9/GAD-7 yang tervalidasi, tetapi **bukan diagnosis final**. Hasil harus divalidasi oleh psikiater/psikolog berlisensi sebelum keputusan medis apa pun. Dalam situasi darurat, hubungi hotline 119 ext 8 atau layanan darurat setempat.
+
+## Regresi mobile 0.1.3
+
+- Kartu video profesional tetap terbaca pada viewport 360px; tombol tidak menekan nama/jadwal menjadi vertikal.
+- Aksi Detail pasien meneruskan sesi dan API profesional; Hadir memakai kontrak `attended` di backend.
+- Sesi berjalan dan Video call mendatang tampil di home pasien, dengan avatar, keadaan kosong/error terpisah dan retry. Pasien tidak diberi aksi membuat link Meet milik profesional.
+- Lanjut bayar paket legacy mengikat booking yang dipilih secara eksplisit dan tidak mengambil booking paket lain. Access token yang di-refresh dipakai untuk retry dan dipersistensikan.
+- FCM data-only dan validator background menolak event di luar scope; upgrade/start/ganti akun membersihkan notifikasi yang sudah tampil tanpa menghapus jadwal goals/obat yang sah.

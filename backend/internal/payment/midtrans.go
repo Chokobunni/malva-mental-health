@@ -92,6 +92,9 @@ type midtransChargeRequest struct {
 	} `json:"transaction_details"`
 	CustomerDetails map[string]any   `json:"customer_details,omitempty"`
 	ItemDetails     []map[string]any `json:"item_details,omitempty"`
+	Callbacks       struct {
+		Finish string `json:"finish"`
+	} `json:"callbacks"`
 }
 
 // midtransChargeResponse respons Snap (subset).
@@ -116,6 +119,7 @@ func (g *MidtransGateway) CreateTransaction(ctx context.Context, orderID string,
 	body.TransactionDetails.OrderID = orderID
 	body.TransactionDetails.GrossAmount = amount
 	body.CustomerDetails = customer
+	body.Callbacks.Finish = "malva://payment/return?reference=" + url.QueryEscape(orderID)
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return PaymentIntent{}, err

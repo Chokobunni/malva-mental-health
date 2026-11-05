@@ -5,6 +5,20 @@ import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/providers/providers.dart';
 
 void main() {
+  test('mild result retains raw CF with matching server rule version', () {
+    final result = AssessmentEngine.score(
+      type: AssessmentType.phq9,
+      answers: [1, 1, 1, 1, 1, 0, 0, 0, 0],
+    );
+    // Existing model: rule 0.72 x total-score evidence 0.95 = 0.684.
+    expect(result.certaintyFactor, closeTo(0.684, 1e-9));
+    expect(result.level, RiskLevel.mild);
+    expect(result.ruleVersion, '2026.1.FC');
+    expect(result.summary, contains('CF 68.4%'));
+    expect(result.summary, contains('bukan probabilitas diagnosis'));
+    expect(result.summary, isNot(contains('Confidence:')));
+  });
+
   group('AssessmentEngine PHQ-9', () {
     test('maps PHQ-9 severity boundaries', () {
       expect(_phqNoCrisis(4).level, RiskLevel.minimal);

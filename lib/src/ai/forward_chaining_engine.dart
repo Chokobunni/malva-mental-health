@@ -16,10 +16,9 @@ class ForwardChainingEngine {
   /// Maximum number of inference cycles to prevent infinite loops.
   static const int _maxIterations = 100;
 
-  /// Keandalan instrumen terstandar (PHQ-9/GAD-7) sebagai sumber bukti.
-  /// Total skor berasal dari kuesioner baku & tervalidasi, sehingga CF-nya
-  /// mencerminkan keandalan instrumen — bukan rata-rata jawaban pasien
-  /// (yang akan mendilusi rule saat semua jawaban 0).
+  /// Bobot model untuk fakta total skor, bukan rata-rata jawaban pasien.
+  /// Validitas instrumen tidak otomatis memvalidasi bobot ini sebagai
+  /// probabilitas klinis; nilai dipertahankan sesuai rule base server.
   static const double _instrumentCF = 0.95;
 
   /// CF bukti minimum untuk item keselamatan (PHQ-9 item 9).
@@ -149,8 +148,8 @@ class ForwardChainingEngine {
 
   /// Calculate total scores and add to working memory.
   ///
-  /// CF fakta total memakai keandalan instrumen (0.95) karena skor total
-  /// adalah keluaran kuesioner baku, bukan keyakinan pasien per item.
+  /// CF fakta total memakai bobot model 0.95, bukan keyakinan pasien per
+  /// item atau probabilitas diagnosis. Skor/level tetap deterministik.
   void _calculateTotalScores(
     Map<String, ClinicalFact> workingMemory,
     List<String> questionIds,

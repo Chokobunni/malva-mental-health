@@ -2332,14 +2332,16 @@ func (s *Store) RecentChatNotification(ctx context.Context, userID, senderID str
 func (s *Store) AcquireOutboxJobs(ctx context.Context, limit int) ([]OutboxJob, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		WITH next_jobs AS (
-			SELECT id
-			FROM notification_outbox
-			WHERE delivered_at IS NULL
-			  AND next_attempt_at <= now()
-			  AND (locked_at IS NULL OR locked_at < now() - interval '2 minutes')
-			ORDER BY next_attempt_at
+			SELECT o.id
+			FROM notification_outbox o
+			JOIN notifications n ON n.id = o.notification_id
+			WHERE o.delivered_at IS NULL AND n.status = 'pending'
+			  AND o.attempts < 5
+			  AND o.next_attempt_at <= now()
+			  AND (o.locked_at IS NULL OR o.locked_at < now() - interval '2 minutes')
+			ORDER BY o.next_attempt_at
 			LIMIT $1
-			FOR UPDATE SKIP LOCKED
+			FOR UPDATE OF o SKIP LOCKED
 		),
 		locked AS (
 			UPDATE notification_outbox o
@@ -2370,6 +2372,40 @@ func (s *Store) AcquireOutboxJobs(ctx context.Context, limit int) ([]OutboxJob, 
 		jobs = append(jobs, job)
 	}
 	return jobs, rows.Err()
+}
+
+// Recheck persisted policy at dispatch: queued jobs can outlive sessions and
+// older releases may have enqueued kinds that are now in-app only.
+func (s *Store) OutboxPushAllowed(ctx context.Context, jobID string) (bool, error) {
+	var allowed bool
+	err := s.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM notification_outbox o
+			JOIN notifications n ON n.id = o.notification_id
+			JOIN users u ON u.id = n.user_id
+			JOIN care_sessions cs ON cs.id::text = n.data->>'session_id'
+			WHERE o.id = $1 AND o.delivered_at IS NULL AND n.status = 'pending'
+			  AND n.type = 'chat_message' AND n.data->>'kind' = 'chat_message'
+			  AND cs.status IN ('scheduled','completed')
+			  AND now() >= cs.scheduled_at - interval '10 minutes'
+			  AND now() < cs.scheduled_at + make_interval(mins => cs.duration_minutes)
+			  AND n.data->>'patient_id' = cs.patient_id::text
+			  AND n.data->>'professional_id' = cs.professional_id::text
+			  AND ((u.role = 'patient' AND n.user_id = cs.patient_id
+			        AND n.data->>'sender_id' = cs.professional_id::text)
+			    OR (u.role = 'professional' AND n.user_id = cs.professional_id
+			        AND n.data->>'sender_id' = cs.patient_id::text))
+		)
+	`, jobID).Scan(&allowed)
+	return allowed, err
+}
+
+// Retire transport work while retaining the in-app notification unchanged.
+func (s *Store) MarkOutboxSuppressed(ctx context.Context, jobID string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE notification_outbox
+		SET delivered_at = now(), locked_at = NULL, last_error = NULL
+		WHERE id = $1 AND delivered_at IS NULL`, jobID)
+	return err
 }
 
 func (s *Store) MarkOutboxDelivered(ctx context.Context, jobID string) error {

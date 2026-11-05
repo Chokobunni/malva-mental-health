@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Pengingat obat: jadwal notifikasi harus dipulihkan setelah reboot. -->
@@ -34,7 +35,31 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="malva" android:host="payment" android:path="/return"/>
+            </intent-filter>
         </activity>
+        <activity android:name=".PaymentWebViewActivity" android:exported="false" android:theme="@style/NormalTheme" />
+        <!-- The Flutter receiver forwards remote payloads to the account/session
+             validator. The SDK service must never render old payloads itself. -->
+        <service android:name="io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingService"
+            tools:node="remove" />
+        <service android:name="com.google.firebase.messaging.FirebaseMessagingService"
+            tools:node="remove" />
+        <service android:name=".MalvaFirebaseMessagingService" android:exported="false"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <receiver android:name=".HistoricalNotificationCleanupReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -50,6 +75,10 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@mipmap/ic_launcher" />
+        <!-- Play Services must not proxy-display notifications around our
+             background account/session validator. -->
+        <meta-data android:name="firebase_messaging_notification_delegation_enabled"
+            android:value="false" />
         <!-- flutter_local_notifications: penerima jadwal & pemulihan setelah
              reboot. Tanpa receiver boot, semua pengingat obat hilang begitu
              perangkat dimatikan/dinyalakan ulang. -->

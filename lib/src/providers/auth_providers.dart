@@ -51,6 +51,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = const AuthState();
   }
 
+  AuthSession? updateTokens(String accessToken, String refreshToken) {
+    final current = state.session;
+    if (current == null) return null;
+    final updated = AuthSession(
+      role: current.role,
+      identifier: current.identifier,
+      displayName: current.displayName,
+      backendUserId: current.backendUserId,
+      backendSynced: current.backendSynced,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+    );
+    state = state.copyWith(session: updated);
+    return updated;
+  }
+
   void updateError(String error) {
     state = state.copyWith(error: error);
   }

@@ -293,3 +293,79 @@ func TestWorkingMemoryFacts(t *testing.T) {
 		t.Errorf("trace harus ada")
 	}
 }
+
+func TestMildCFUsesRuleSupportNotAnswerAverage(t *testing.T) {
+	// The two conditions on total score are bounds on the SAME evidence;
+	// AND=min(0.95,0.95), not parallel combination. 0.72*0.95=0.684.
+	for _, answers := range [][]int{
+		{1, 1, 1, 1, 1, 0, 0, 0, 0},
+		{3, 2, 0, 0, 0, 0, 0, 0, 0},
+	} {
+		res := runPHQ9(t, answers)
+		if res.Level != "mild" || math.Abs(res.CF-0.684) > 1e-9 {
+			t.Errorf("PHQ9 level/CF = %s/%.6f, want mild/0.684", res.Level, res.CF)
+		}
+	}
+	res := runGAD7(t, []int{1, 1, 1, 1, 1, 0, 0})
+	if res.Level != "mild" || math.Abs(res.CF-0.684) > 1e-9 {
+		t.Errorf("GAD7 level/CF = %s/%.6f, want mild/0.684", res.Level, res.CF)
+	}
+}
+
+func TestRuleRequiresEveryConditionAndMinimumCF(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		condition Condition
+		wantFired bool
+	}{
+		{"threshold met", Condition{FactID: "a", Op: OpGreaterOrEq, Value: 2, MinCF: 0.6}, true},
+		{"threshold not met", Condition{FactID: "a", Op: OpGreaterOrEq, Value: 2, MinCF: 0.61}, false},
+		{"comparison false", Condition{FactID: "a", Op: OpGreaterThan, Value: 2}, false},
+		{"fact missing", Condition{FactID: "missing", Op: OpGreaterOrEq, Value: 0}, false},
+		{"zero evidence", Condition{FactID: "zero", Op: OpEquals, Value: 0}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rule := Rule{ID: "gated", RuleCF: 0.8, Conditions: []Condition{
+				{FactID: "a", Op: OpEquals, Value: 2}, tc.condition,
+			}}
+			tr := evaluateRule(rule, map[string]Fact{
+				"a": {Value: 2, CF: 0.6}, "zero": {Value: 0, CF: 0},
+			})
+			if tr.Fired != tc.wantFired {
+				t.Fatalf("Fired = %v, want %v", tr.Fired, tc.wantFired)
+			}
+			wantCF := 0.0
+			if tc.wantFired {
+				wantCF = 0.48
+			}
+			if math.Abs(tr.ResultCF-wantCF) > 1e-9 {
+				t.Errorf("ResultCF = %.6f, want %.6f", tr.ResultCF, wantCF)
+			}
+		})
+	}
+}
+
+func TestIndependentRulesCombineOncePerRuleID(t *testing.T) {
+	ruleA := Rule{ID: "evidence_a", RuleCF: 1,
+		Conditions:  []Condition{{FactID: "a", Op: OpGreaterThan, Value: 0}},
+		Conclusions: []Conclusion{{FactID: "shared", Value: "supported"}},
+	}
+	ruleB := Rule{ID: "evidence_b", RuleCF: 1,
+		Conditions:  []Condition{{FactID: "b", Op: OpGreaterThan, Value: 0}},
+		Conclusions: []Conclusion{{FactID: "shared", Value: "supported"}},
+	}
+	// Independent evidence .6 and .3: .6+.3*(1-.6)=.72.
+	// A duplicate rule ID and further fixed-point cycles must add no evidence.
+	for _, rules := range [][]Rule{{ruleA, ruleB, ruleA}, {ruleB, ruleA}} {
+		res, err := NewEngine().Infer([]string{"a", "b"}, []int{2, 1}, rules)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := res.WorkingMemory["shared"].CF; math.Abs(got-0.72) > 1e-9 {
+			t.Errorf("combined CF = %.6f, want 0.72", got)
+		}
+		if res.FiredRuleCount != 2 {
+			t.Errorf("fired count = %d, want 2", res.FiredRuleCount)
+		}
+	}
+}

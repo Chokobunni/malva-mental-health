@@ -456,7 +456,8 @@ class _ProfessionalDashboardScreenState
                             icon: Icons.folder_shared_rounded,
                             color: MalvaColors.mint,
                             title: 'Data pasien dibagikan',
-                            subtitle: 'Mood, diary, obat, health record, goals, '
+                            subtitle:
+                                'Mood, diary, obat, health record, goals, '
                                 'terapi • $_connectedPatientCount pasien',
                             onTap: () => Navigator.push(
                               context,
@@ -593,8 +594,8 @@ class _ProfessionalDashboardScreenState
 
   /// Total asesmen (screening) dari seluruh pasien terhubung — untuk subtitle
   /// kartu "Riwayat Asesmen".
-  int get _totalScreenings =>
-      _screeningsByPatient.values.fold<int>(0, (sum, list) => sum + list.length);
+  int get _totalScreenings => _screeningsByPatient.values
+      .fold<int>(0, (sum, list) => sum + list.length);
 
   /// Jumlah pasien terhubung (link aktif).
   int get _connectedPatientCount => _links.length;
@@ -1916,43 +1917,54 @@ class _UpcomingVideoCallSection extends StatelessWidget {
           SoftCard(
             bordered: true,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                InitialAvatar(
-                  name: s.patientName.isEmpty ? 'Pasien' : s.patientName,
-                  radius: 18,
-                  color: MalvaColors.seed,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        s.patientName.isEmpty ? 'Pasien' : s.patientName,
-                        style: const TextStyle(fontWeight: FontWeight.w900),
+                Row(
+                  children: [
+                    InitialAvatar(
+                      name: s.patientName.isEmpty ? 'Pasien' : s.patientName,
+                      radius: 18,
+                      color: MalvaColors.seed,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s.patientName.isEmpty ? 'Pasien' : s.patientName,
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          Text(
+                            _whenLabel(s.scheduledAt),
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant),
+                          ),
+                        ],
                       ),
-                      Text(
-                        _whenLabel(s.scheduledAt),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                if (s.meetingUrl.isNotEmpty)
-                  FilledButton.icon(
-                    onPressed: () => _join(context, s.meetingUrl),
-                    icon: const Icon(Icons.videocam_rounded, size: 18),
-                    label: const Text('Gabung'),
-                    style: FilledButton.styleFrom(
-                        visualDensity: VisualDensity.compact),
-                  )
-                else
-                  const Text('Link menyusul',
-                      style: TextStyle(fontSize: 11, color: Colors.black45)),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: s.meetingUrl.isNotEmpty
+                      ? FilledButton.icon(
+                          onPressed: () => _join(context, s.meetingUrl),
+                          icon: const Icon(Icons.videocam_rounded, size: 18),
+                          label: const Text('Gabung'),
+                          style: compactFilledButtonStyle,
+                        )
+                      : const Text('Link menyusul',
+                          style:
+                              TextStyle(fontSize: 11, color: Colors.black45)),
+                ),
               ],
             ),
           ),

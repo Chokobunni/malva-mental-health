@@ -1,5 +1,13 @@
 # System Architecture
 
+### Konsistensi transaksi dan notifikasi — 5 November 2026
+
+Pembelian pending memakai penguncian database dan relasi `care_packages.booking_id` agar retry, resume dan aktivasi membayar paket yang tepat. Pembayaran diverifikasi server terhadap Midtrans termasuk nominal; callback, polling dan lifecycle resume hanya memicu rekonsiliasi. Tidak ada tabel atau kolom baru untuk perbaikan ini.
+
+Outbox memeriksa ulang event, peran penerima dan pasangan/waktu sesi chat sebelum FCM; job terminal tidak diambil lagi. Flutter menyaring foreground dan menjadwalkan goals/obat hanya untuk akun pasien aktif dengan pemeriksaan generasi setelah operasi async. Android notification tag stabil mencegah penumpukan pengiriman ulang.
+
+Therapy Record memakai endpoint share dan read yang ada; chat hanya membawa referensi, bukan seluruh jawaban privat. CF dan kategori skor instrumen tetap terpisah; bobot model tidak dinyatakan sebagai probabilitas klinis.
+
 **Malva Mental Health App**
 
 | Field | Value |
@@ -370,3 +378,9 @@ CMD ["/api"]
 | 005_chat | Chat messages | Zero |
 
 All migrations use `CREATE TABLE IF NOT EXISTS` and are idempotent.
+
+## Sinkronisasi rilis mobile/backend 0.1.3
+
+Backend produksi sebelumnya tertinggal dari source APK, sehingga kontrak booking paket dan `attended` tidak cocok. Deploy harus memakai source teruji yang sama dengan APK. Pada cutover, hentikan worker, retire antrean transport sampai cutoff WIB memakai `backend/deploy/scripts/retire_notification_backlog.sql`, lalu jalankan worker baru. Riwayat notifikasi tidak dihapus.
+
+FCM memakai payload data-only. Receiver Flutter menerima pesan, sedangkan service Android mencegah SDK merender payload notification legacy secara otomatis. Validator foreground/background memeriksa akun dan scope sesi ongoing menggunakan jam server. Native cleanup hanya menyentuh posted notifications/delegate; alarm goals/obat tetap ditangani scheduler yang sudah ada.

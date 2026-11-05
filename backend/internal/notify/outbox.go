@@ -57,6 +57,14 @@ func (w *OutboxWorker) process(ctx context.Context) {
 }
 
 func (w *OutboxWorker) sendJob(ctx context.Context, job store.OutboxJob) error {
+	allowed, err := w.store.OutboxPushAllowed(ctx, job.ID)
+	if err != nil {
+		w.markFailed(ctx, job, err)
+		return err
+	}
+	if !allowed {
+		return w.store.MarkOutboxSuppressed(ctx, job.ID)
+	}
 	tokens, err := w.store.EnabledDeviceTokens(ctx, job.UserID)
 	if err != nil {
 		w.markFailed(ctx, job, err)
@@ -74,6 +82,7 @@ func (w *OutboxWorker) sendJob(ctx context.Context, job store.OutboxJob) error {
 	}
 
 	collapseKey := collapseKeyFor(job.Data)
+	job.Data["notification_id"] = job.NotificationID
 	var sendErr error
 	delivered := false
 	for _, token := range tokens {

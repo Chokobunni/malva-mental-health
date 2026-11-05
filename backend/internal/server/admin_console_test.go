@@ -66,7 +66,13 @@ type adminConsoleFixture struct {
 func newAdminConsoleFixture(t *testing.T) adminConsoleFixture {
 	t.Helper()
 	db, st := openOnboardingTestStore(t)
-	admin := createIdentityTestUser(t, db, st, "admin", nil)
+	// Admin dibuat oleh bootstrap, bukan registrasi publik yang hanya menerima
+	// pasien/profesional. Fixture mengikuti promosi role setelah user dibuat.
+	admin := createIdentityTestUser(t, db, st, "patient", nil)
+	if _, err := db.Exec(`UPDATE users SET role='admin' WHERE id=$1`, admin.ID); err != nil {
+		t.Fatal(err)
+	}
+	admin.Role = "admin"
 	return adminConsoleFixture{srv: newOnboardingTestServer(db), db: db, st: st, admin: admin}
 }
 
@@ -195,9 +201,21 @@ func TestAdminOverrideRefundWritesLedger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("baris ledger refund tidak ditemukan: %v", err)
 	}
-	if amount != pay.GrossAmount || kind != "refund" || status != "processed" {
-		t.Fatalf("ledger tidak sesuai: amount=%d kind=%s status=%s (mau %d/refund/processed)",
+	if amount != pay.GrossAmount || kind != "refund" || status != "paid" {
+		t.Fatalf("ledger tidak sesuai: amount=%d kind=%s status=%s (mau %d/refund/paid)",
 			amount, kind, status, pay.GrossAmount)
+	}
+	second := f.callOverride(t, pay.ID, `{"status":"refunded","reason":"retry"}`)
+	if second.Code != http.StatusOK {
+		t.Fatalf("refund retry status %d: %s", second.Code, second.Body.String())
+	}
+	var replay overrideResponse
+	if err := json.Unmarshal(second.Body.Bytes(), &replay); err != nil || replay.Changed {
+		t.Fatalf("refund retry must not change ledger: %+v, err=%v", replay, err)
+	}
+	var count int
+	if err := f.db.QueryRowContext(ctx, `SELECT count(*) FROM care_refunds WHERE idempotency_key=$1`, key).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("refund ledger count=%d err=%v", count, err)
 	}
 }
 

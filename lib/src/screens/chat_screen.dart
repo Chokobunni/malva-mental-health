@@ -11,8 +11,10 @@ import '../services/malva_api_client.dart';
 import '../services/weekly_summary_service.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/friendly_error.dart';
 import '../widgets/mini_summary.dart';
 import '../widgets/professional_avatar.dart';
+import '../widgets/therapy_library.dart';
 import '../time/wib.dart';
 import 'booking/doctor_profile_screen.dart';
 
@@ -56,6 +58,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   ChatState _chatState = ChatState.disconnected;
   bool _otherTyping = false;
   bool _isLoadingHistory = false;
+  bool _sharingData = false;
   BackendChatAccess _access = const BackendChatAccess();
   bool _accessLoaded = false;
   StreamSubscription<ChatState>? _stateSub;
@@ -63,6 +66,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   StreamSubscription<bool>? _typingSub;
   StreamSubscription<ChatPresence>? _presenceSub;
   final Map<String, bool> _onlineUsers = {};
+  late final StateController<String?> _activePeer;
 
   /// Foto lawan bicara; diisi dari parameter atau diambil dari server.
   String _photoUrl = '';
@@ -72,7 +76,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.initState();
     // Tandai percakapan ini sebagai aktif agar notifikasi chat untuk peer yang
     // sama ditekan (pesannya sudah tampil di layar).
-    ref.read(activeChatPeerProvider.notifier).state = widget.otherUserId;
+    _activePeer = ref.read(activeChatPeerProvider.notifier);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _activePeer.state = widget.otherUserId;
+    });
     _photoUrl = widget.otherUserPhotoUrl;
     _initChat();
     _loadHistory();
@@ -148,11 +155,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   /// Muat riwayat chat dari server (GET /v1/messages) agar percakapan
   /// sebelumnya tidak hilang saat layar dibuka ulang.
-  Future<void> _loadHistory() async {
+  Future<bool> _loadHistory() async {
     final session = ref.read(currentSessionProvider);
     final token = session?.accessToken;
     final myId = session?.backendUserId ?? session?.identifier;
-    if (token == null || token.isEmpty || myId == null || myId.isEmpty) return;
+    if (token == null || token.isEmpty || myId == null || myId.isEmpty)
+      return false;
     final isPatient = session?.role == UserRole.patient;
     final patientId = isPatient ? myId : widget.otherUserId;
     final professionalId = isPatient ? widget.otherUserId : myId;
@@ -163,7 +171,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             patientId: patientId,
             professionalId: professionalId,
           );
-      if (!mounted) return;
+      if (!mounted) return false;
       // Server mengembalikan terbaru dulu; tampilkan lama -> baru.
       final ordered = history.reversed.toList(growable: false);
       setState(() {
@@ -185,8 +193,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _isLoadingHistory = false;
       });
       _scrollToBottom(animated: false);
+      return true;
     } on Object {
       if (mounted) setState(() => _isLoadingHistory = false);
+      return false;
     }
   }
 
@@ -253,9 +263,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void dispose() {
     // Lepas penanda hanya bila masih menunjuk peer ini (bisa saja layar lain
     // sudah membuka percakapan berbeda).
-    if (ref.read(activeChatPeerProvider) == widget.otherUserId) {
-      ref.read(activeChatPeerProvider.notifier).state = null;
-    }
+    Future.microtask(() {
+      if (_activePeer.mounted && _activePeer.state == widget.otherUserId) {
+        _activePeer.state = null;
+      }
+    });
     _inputController.dispose();
     _scrollController.dispose();
     _stateSub?.cancel();
@@ -379,7 +391,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _showShareSheet(BuildContext context) {
-    if (!_isPatient) return; // hanya pasien yang bisa share data.
+    if (!_canShare || _sharingData) return;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -387,7 +399,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
       ),
       builder: (ctx) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
+            child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -423,6 +436,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   'Obat & Resep',
                   'prescription',
                   MalvaColors.mint
+                ),
+                (
+                  Icons.assignment_turned_in_rounded,
+                  'Therapy Record',
+                  'worksheet',
+                  MalvaColors.plum
                 ),
                 (
                   Icons.flag_rounded,
@@ -461,7 +480,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
             ],
           ),
-        ),
+        )),
       ),
     );
   }
@@ -473,6 +492,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// API gagal, karena store tidak selalu terhidrasi — itulah sebab dulu muncul
   /// toast "Belum ada goals/diary/assessment" padahal datanya ada di server.
   Future<void> _shareData(String kind, String label) async {
+    if (_sharingData || !_canShare) return;
+    setState(() => _sharingData = true);
+    try {
+      await _shareDataImpl(kind, label);
+    } on Object catch (error) {
+      if (mounted)
+        _toast('Gagal membagikan data: ${friendlyErrorMessage(error)}');
+    } finally {
+      if (mounted) setState(() => _sharingData = false);
+    }
+  }
+
+  Future<void> _shareDataImpl(String kind, String label) async {
     final session = ref.read(currentSessionProvider);
     final token = session?.accessToken;
     final api = ref.read(apiClientProvider);
@@ -486,6 +518,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     Map<String, dynamic> metadata = {};
 
     switch (kind) {
+      case 'worksheet':
+        await _shareTherapy(token: token, api: api);
+        return;
       case 'summary':
         // Ringkasan 14 hari diambil dari SERVER, bukan dari store yang belum
         // tentu terhidrasi. Store hanya fallback — tanpa ini pesan ke
@@ -581,6 +616,92 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     final sent = await _sendShare(kind: kind, text: text, metadata: metadata);
     if (sent && mounted) _toast('$label terkirim ke chat.');
+  }
+
+  Future<void> _shareTherapy({
+    required String token,
+    required MalvaApiClient api,
+  }) async {
+    List<BackendTherapySubmission> records;
+    try {
+      records = (await api.listTherapySubmissions(accessToken: token))
+          .where(isTherapyRecordSubmission)
+          .toList(growable: false);
+    } on Object catch (error) {
+      if (mounted) {
+        _toast('Gagal memuat therapy record: ${friendlyErrorMessage(error)}');
+      }
+      return;
+    }
+    if (!mounted) return;
+    if (records.isEmpty) {
+      _toast('Belum ada therapy record untuk dibagikan.');
+      return;
+    }
+    final chosen = await _pickCandidate([
+      for (final record in records)
+        _ShareCandidate(
+          title: record.title.trim().isEmpty ? 'Therapy Record' : record.title,
+          subtitle: _dateLabel(record.createdDateTime),
+          text: record.summary,
+          icon: Icons.assignment_turned_in_rounded,
+          metadata: {'submission_id': record.id},
+        ),
+    ], title: 'Pilih therapy record');
+    if (!mounted ||
+        chosen == null ||
+        !_canShare ||
+        ref.read(currentSessionProvider)?.accessToken != token) return;
+    await api.shareTherapySubmission(
+      accessToken: token,
+      submissionId: chosen.metadata['submission_id'] as String,
+      professionalId: widget.otherUserId,
+    );
+    if (!mounted) return;
+    // Endpoint share menyimpan pesan chat; mengirim pesan lagi membuat duplikat.
+    final refreshed = await _loadHistory();
+    if (!mounted) return;
+    final visible = refreshed &&
+        _messages.any((message) =>
+            message.kind == 'worksheet' &&
+            message.metadata?['submission_id'] ==
+                chosen.metadata['submission_id']);
+    _toast(visible
+        ? 'Therapy Record dibagikan ke profesional.'
+        : 'Therapy Record dibagikan, tetapi pesan chat belum terkonfirmasi. Muat ulang percakapan.');
+  }
+
+  Future<void> _openSharedTherapy(ChatMessage message) async {
+    final submissionId = message.metadata?['submission_id']?.toString() ?? '';
+    final token = ref.read(currentSessionProvider)?.accessToken;
+    if (submissionId.isEmpty || token == null || token.isEmpty) return;
+    try {
+      final record = await ref.read(apiClientProvider).getTherapySubmission(
+            accessToken: token,
+            submissionId: submissionId,
+          );
+      if (!mounted || ref.read(currentSessionProvider)?.accessToken != token)
+        return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: TherapySubmissionView(
+              moduleId: record.moduleId,
+              title: record.title,
+              answers: record.answers,
+              summary: record.summary,
+              sharedAt: record.sharedAt,
+            ),
+          ),
+        ),
+      );
+    } on Object catch (error) {
+      if (mounted)
+        _toast('Gagal membuka therapy record: ${friendlyErrorMessage(error)}');
+    }
   }
 
   /// Bagikan assessment record: screening PHQ-9/GAD-7 dan worksheet
@@ -735,7 +856,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   /// Bottom sheet pemilihan assessment record (dipanggil bila kandidat > 1).
-  Future<_ShareCandidate?> _pickCandidate(List<_ShareCandidate> candidates) {
+  Future<_ShareCandidate?> _pickCandidate(List<_ShareCandidate> candidates,
+      {String title = 'Pilih assessment record'}) {
     return showModalBottomSheet<_ShareCandidate>(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -748,8 +870,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Pilih assessment record',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+              Text(title,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w900, fontSize: 17)),
               const SizedBox(height: 4),
               Text(
                 'Hasil yang dipilih akan dikirim ke ${widget.otherUserName}.',
@@ -1068,7 +1191,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           if (showTimestamp)
                             _TimestampLabel(date: msg.timestamp),
                           const SizedBox(height: 6),
-                          _ChatBubble(message: msg),
+                          _ChatBubble(
+                            message: msg,
+                            onOpenRecord: msg.kind == 'worksheet' &&
+                                    (msg.metadata?['submission_id']
+                                                ?.toString() ??
+                                            '')
+                                        .isNotEmpty
+                                ? () => _openSharedTherapy(msg)
+                                : null,
+                          ),
                         ],
                       );
                     },
@@ -1293,9 +1425,10 @@ class _TimestampLabel extends StatelessWidget {
 }
 
 class _ChatBubble extends StatelessWidget {
-  const _ChatBubble({required this.message});
+  const _ChatBubble({required this.message, this.onOpenRecord});
 
   final ChatMessage message;
+  final VoidCallback? onOpenRecord;
 
   @override
   Widget build(BuildContext context) {
@@ -1345,7 +1478,10 @@ class _ChatBubble extends StatelessWidget {
               _VoiceBubble(message: message, isMine: isMine),
               const SizedBox(height: 6),
             ] else if (message.kind != 'text') ...[
-              _SharedCardBubble(message: message, isMine: isMine),
+              InkWell(
+                onTap: onOpenRecord,
+                child: _SharedCardBubble(message: message, isMine: isMine),
+              ),
               const SizedBox(height: 6),
             ],
             Text(
@@ -1492,7 +1628,7 @@ class _SharedCardBubble extends StatelessWidget {
       'habits' => (Icons.flag_rounded, 'Goals & Habits'),
       'summary' => (Icons.auto_awesome_rounded, 'Ringkasan'),
       'assessment' => (Icons.fact_check_rounded, 'Assessment'),
-      'worksheet' => (Icons.assignment_turned_in_rounded, 'Worksheet'),
+      'worksheet' => (Icons.assignment_turned_in_rounded, 'Therapy Record'),
       'prescription' => (Icons.medication_rounded, 'Obat & Resep'),
       'progress' => (Icons.show_chart_rounded, 'Progress'),
       _ => (Icons.insert_drive_file_rounded, 'Lampiran'),

@@ -782,7 +782,7 @@ class AssessmentResultScreen extends StatelessWidget {
                                     size: 18, color: MalvaColors.seed),
                                 SizedBox(width: 6),
                                 Text(
-                                  'Analisa Pakar (Forward Chaining + CF)',
+                                  'Dukungan aturan (Forward Chaining + CF)',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w900,
                                     fontSize: 12.5,
@@ -790,6 +790,14 @@ class AssessmentResultScreen extends StatelessWidget {
                                   ),
                                 ),
                               ],
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'CF menunjukkan dukungan aturan dalam model, '
+                              'bukan probabilitas diagnosis atau persentase '
+                              'keparahan. Skor dan tingkat gejala ditampilkan '
+                              'terpisah; hasil perlu ditinjau profesional.',
+                              style: TextStyle(fontSize: 12),
                             ),
                             const SizedBox(height: 8),
                             _CFBar(
@@ -974,7 +982,7 @@ class _RecommendDoctors extends ConsumerWidget {
   }
 }
 
-/// Bar visual CF: label + progress 0-100% + label kategori.
+/// Bar visual CF mentah: dukungan aturan, tanpa label kepastian diagnosis.
 class _CFBar extends StatelessWidget {
   const _CFBar({
     required this.label,
@@ -1002,7 +1010,7 @@ class _CFBar extends StatelessWidget {
               ),
             ),
             Text(
-              '${pct.toStringAsFixed(0)}% (${_cfLabel(cf)})',
+              'CF ${pct.toStringAsFixed(0)}%',
               style: TextStyle(
                   fontWeight: FontWeight.w900, fontSize: 11.5, color: color),
             ),
@@ -1020,14 +1028,6 @@ class _CFBar extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  static String _cfLabel(double cf) {
-    if (cf >= 0.8) return 'Sangat Pasti';
-    if (cf >= 0.6) return 'Pasti';
-    if (cf >= 0.4) return 'Cukup Pasti';
-    if (cf >= 0.2) return 'Tidak Pasti';
-    return 'Sangat Tidak Pasti';
   }
 }
 

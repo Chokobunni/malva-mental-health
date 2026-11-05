@@ -59,7 +59,7 @@ void main() {
     expect(found!.id, 'b_pending');
   });
 
-  test('bila ada beberapa pending, ambil tanggal booking terbaru', () {
+  test('legacy dengan beberapa pending tidak menebak booking milik paket', () {
     final bookings = [
       _booking(
         id: 'b_old',
@@ -77,7 +77,7 @@ void main() {
       ),
     ];
 
-    expect(pickPendingPackageBooking(bookings, 'profA')!.id, 'b_new');
+    expect(pickPendingPackageBooking(bookings, 'profA'), isNull);
   });
 
   test('mengabaikan profesional lain dan tipe layanan lain', () {

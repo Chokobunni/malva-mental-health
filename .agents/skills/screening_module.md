@@ -21,9 +21,17 @@ Modul skrining kesehatan mental. Skoring dihitung **di server** (bukan hanya kli
 - PHQ-9: 9 pertanyaan, tiap jawaban 0–3, skor maksimum **27**.
 - GAD-7: 7 pertanyaan, tiap jawaban 0–3, skor maksimum **21**.
 - Jawaban wajib 0–3; jumlah jawaban wajib persis (9 / 7), jika tidak → error 400.
-- Level: `minimal`, `mild`, `moderate`, `severe`, `crisis`. `overall_level` = level tertinggi PHQ-9/GAD-7; `crisis` bila salah satu `crisis_flag`.
-- `crisis_flag` (mis. item self-harm PHQ-9 q9) → server memanggil `notifyProfessionalsForCrisis` + publish realtime `screening.created`.
+- PHQ-9: 0–4 `minimal`, 5–9 `mild`, 10–14 `moderate`, 15–19 `moderately_severe`, 20–27 `severe`. GAD-7: 0–4 `minimal`, 5–9 `mild`, 10–14 `moderate`, 15–21 `severe`.
+- Level instrumen mengikuti skor total. Item self-harm PHQ-9 q9 > 0 menyalakan `crisis_flag` terpisah tanpa mengubah level instrumen. `overall_level` = level tertinggi PHQ-9/GAD-7; `crisis` bila salah satu `crisis_flag`.
+- Server mem-publish realtime `screening.created`; flag krisis tampil di Crisis Incident Log. Tidak membuat notifikasi `screening_crisis` per profesional.
 - Hasil menyertakan `cf` (certainty factor) dan `rule_trace` (maks 5 rule yang menembak) untuk audit.
+
+## Makna Certainty Factor
+- CF adalah **dukungan aturan dalam model**, bukan probabilitas diagnosis, persentase sakit, atau persentase keparahan. Bobot CF yang ada tidak memiliki bukti kalibrasi probabilitas klinis di repo; validitas instrumen tidak otomatis memvalidasi bobot ini.
+- Fakta jawaban memakai 0/0.3/0.6/0.9; fakta total skor memakai bobot model 0.95. AND memakai minimum CF kondisi, kemudian CF kesimpulan = `ruleCF × CF kondisi`. Bobot saat ini dipertahankan, bukan dikalibrasi ulang.
+- Contoh band ringan PHQ-9/GAD-7: `0.72 × min(0.95, 0.95) = 0.684` → **CF 68%** setelah pembulatan. Kedua kondisi adalah batas bawah/atas pada total skor yang sama, bukan dua bukti independen. Nilai tersebut tidak berarti peluang diagnosis 68%.
+- Bukti independen pada kesimpulan yang sama memakai kombinasi paralel CF; setiap ID rule hanya menembak sekali agar bukti yang sama tidak dihitung berulang. Rule pola gejala saat ini membuat fakta terpisah dan tidak menambah CF band keparahan.
+- Tampilkan CF mentah 0–1 tanpa normalisasi signed `(-1..1) → (0..1)` dan tanpa label kepastian seperti “Pasti”. Skor/level tetap ditampilkan terpisah. Item keselamatan dapat menaikkan CF hasil ke 0.95 sesuai model lama; indikator keselamatan tetap memerlukan tinjauan profesional.
 
 ## Review profesional
 - Status review valid: `reviewed`, `needs_follow_up`, `escalated` (default `reviewed`).

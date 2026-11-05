@@ -74,12 +74,16 @@ func newActivationFixture(t *testing.T, db *sql.DB, st *store.Store, cal meetCal
 
 // paidBooking membuat booking berstatus 'paid' + payment lunas untuk satu
 // slot 3 hari ke depan (aman dari aturan masa depan CreateCareSession).
-func (f activationFixture) paidBooking(t *testing.T, serviceType, sessionType string) (store.Booking, store.Payment) {
+func (f activationFixture) paidBooking(t *testing.T, serviceType, sessionType string, prices ...int64) (store.Booking, store.Payment) {
 	t.Helper()
 	ctx := context.Background()
 	start := clock.Now().In(wibLoc).AddDate(0, 0, 3)
 	dateStr := start.Format("2006-01-02")
 	slotStr := start.Format("15:04")
+	price := int64(100000)
+	if len(prices) > 0 {
+		price = prices[0]
+	}
 
 	b, err := f.st.CreateBooking(ctx, store.Booking{
 		PatientID:       f.patient.ID,
@@ -89,25 +93,25 @@ func (f activationFixture) paidBooking(t *testing.T, serviceType, sessionType st
 		BookingDate:     dateStr,
 		SlotTime:        slotStr,
 		DurationMinutes: 30,
-		Price:           100000,
+		Price:           price,
 	})
 	if err != nil {
 		t.Fatalf("buat booking: %v", err)
 	}
-	if _, err := f.db.ExecContext(ctx, `UPDATE bookings SET status = 'paid' WHERE id = $1`, b.ID); err != nil {
-		t.Fatalf("tandai booking paid: %v", err)
-	}
 	p, err := f.st.CreatePayment(ctx, store.Payment{
 		BookingID:         b.ID,
 		PaymentMethod:     "qris",
-		GrossAmount:       100000,
+		GrossAmount:       price,
 		ServiceFeeAmount:  2000,
-		PlatformFeeAmount: 10000,
-		NetAmount:         90000,
+		PlatformFeeAmount: price / 10,
+		NetAmount:         price - price/10,
 		Reference:         "REF-ACT-" + fmt.Sprint(time.Now().UnixNano()),
 	})
 	if err != nil {
 		t.Fatalf("buat payment: %v", err)
+	}
+	if _, err := f.st.MarkPaymentPaid(ctx, p.Reference, ""); err != nil {
+		t.Fatalf("tandai payment paid: %v", err)
 	}
 	// Status booking dibaca ulang oleh activatePaidBooking via GetBooking.
 	b.Status = "paid"
@@ -382,7 +386,7 @@ func TestActivatePackageNotifiesActualSessionCount(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("buat paket 8 sesi: %v", err)
 	}
-	_, payment := f.paidBooking(t, "package_session", "video")
+	_, payment := f.paidBooking(t, "package_session", "video", 200000)
 
 	if err := f.activate(t, payment); err != nil {
 		t.Fatalf("aktivasi paket tidak boleh error: %v", err)

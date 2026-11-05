@@ -479,7 +479,7 @@ func (s *Store) AdminRefundPayment(ctx context.Context, paymentID, reason, actor
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO care_refunds
 				(patient_id, professional_id, amount, kind, status, reason, idempotency_key, created_by)
-			VALUES ($1, $2, $3, 'refund', 'processed', $4, $5, $6)
+			VALUES ($1, $2, $3, 'refund', 'paid', $4, $5, $6)
 			ON CONFLICT (idempotency_key) DO NOTHING`,
 			patientID, professionalID, gross, strings.TrimSpace(reason), adminRefundKey(paymentID), createdBy); err != nil {
 			return false, false, err

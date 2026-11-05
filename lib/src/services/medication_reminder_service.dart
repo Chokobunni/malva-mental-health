@@ -260,12 +260,36 @@ class MedicationReminderService {
   /// Jadwalkan pengingat untuk sekumpulan obat (dipakai saat login/restore).
   Future<void> scheduleAll(Iterable<Medication> medications) async {
     if (!_enabled) return;
-    for (final med in medications) {
+    final current = medications.toList(growable: false);
+    await cancelObsoleteReminders(current.map((med) => med.id));
+    for (final med in current) {
       try {
         await scheduleMedicationReminder(med);
       } on Object {
         // Satu obat gagal dijadwalkan tidak boleh menggagalkan sisanya.
       }
+    }
+  }
+
+  /// OS alarms survive process restarts, so in-memory IDs cannot find removals.
+  /// Plain medication-ID payloads are distinct from goal markers and push JSON.
+  Future<void> cancelObsoleteReminders(
+      Iterable<String> currentMedicationIds) async {
+    if (!_enabled) return;
+    final keep = currentMedicationIds.toSet();
+    try {
+      final pending = await _plugin.pendingNotificationRequests();
+      for (final request in pending) {
+        final payload = request.payload;
+        if (payload == null ||
+            payload.isEmpty ||
+            keep.contains(payload) ||
+            payload == LocalNotificationRouter.goalReminderPayload ||
+            payload.trimLeft().startsWith('{')) continue;
+        await _plugin.cancel(id: request.id);
+      }
+    } on Object {
+      // Platform/permission failure must not prevent logout or fresh schedules.
     }
   }
 

@@ -1,5 +1,11 @@
 # API Documentation
 
+### Perbaikan alur pasien — 5 November 2026
+
+Kontrak yang ada dipertahankan: booking paket memakai `package_id` care package dan server memvalidasi pemilik serta menyelesaikan profesional dari paket. Retry pending memakai identifier yang sama; pembayaran dan aktivasi mengacu ke `care_packages.booking_id`, bukan `bookings.package_id` legacy. Respons status pembayaran direkonsiliasi terhadap Midtrans dan nominal sebelum dianggap lunas.
+
+Chat memakai `POST /v1/therapy-submissions/{id}/share` dengan `professional_id`, lalu riwayat pesan; hindari `POST /v1/messages` kedua. Detail dibaca lewat `GET /v1/therapy-submissions/{id}` dengan otorisasi pemilik/penerima. Tidak ada endpoint atau DTO baru untuk fitur ini.
+
 **Malva Mental Health App — Go Backend API**
 
 | Field | Value |

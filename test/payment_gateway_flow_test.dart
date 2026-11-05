@@ -2,12 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:malva_mental_health/src/models.dart';
+import 'package:malva_mental_health/src/malva_app.dart';
 import 'package:malva_mental_health/src/providers/auth_providers.dart';
 import 'package:malva_mental_health/src/screens/booking/payment_screen.dart';
+import 'package:malva_mental_health/src/screens/booking/payment_success_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
 
@@ -66,9 +70,16 @@ Widget _wrap(MalvaApiClient api, Widget child) {
 /// Fake backend untuk alur gateway. `statusSequence` menentukan jawaban
 /// `GET /v1/payments/{reference}` (default: selalu pending).
 class _GatewayBackend {
-  _GatewayBackend({this.statusSequence = const ['pending']});
+  _GatewayBackend(
+      {this.statusSequence = const ['pending'],
+      this.statusDelay = Duration.zero,
+      this.packagePurchase = false,
+      this.configFails = false});
 
   final List<String> statusSequence;
+  final Duration statusDelay;
+  final bool packagePurchase;
+  final bool configFails;
   int markPaidCalls = 0;
   int statusCalls = 0;
 
@@ -76,8 +87,38 @@ class _GatewayBackend {
     return _FakeClient((request) async {
       final key = '${request.method} ${request.url.path}';
       if (key == 'GET /v1/config/payment') {
+        if (configFails) return _json({'error': 'unavailable'}, status: 503);
         return _json(
             {'mode': 'gateway', 'provider': 'midtrans', 'env': 'sandbox'});
+      }
+      if (key == 'GET /v1/bookings') {
+        return _json({
+          'bookings': [
+            {
+              'id': 'booking_1',
+              'patient_id': 'user_pasien_1',
+              'professional_id': 'user_pro_1',
+              'service_type':
+                  packagePurchase ? 'package_session' : 'quick_consult',
+              'status': 'paid',
+              'price': 150000
+            }
+          ]
+        });
+      }
+      if (key == 'GET /v1/care-packages') {
+        return _json({
+          'packages': [
+            {
+              'id': 'package_1',
+              'booking_id': 'booking_1',
+              'patient_id': 'user_pasien_1',
+              'professional_id': 'user_pro_1',
+              'status': 'active',
+              'price': 150000
+            }
+          ]
+        });
       }
       if (key == 'POST /v1/payments') {
         return _json({
@@ -103,6 +144,8 @@ class _GatewayBackend {
             ? statusCalls
             : statusSequence.length - 1;
         statusCalls++;
+        if (statusDelay != Duration.zero)
+          await Future<void>.delayed(statusDelay);
         return _json({
           'payment': {
             'id': 'pay_1',
@@ -153,6 +196,143 @@ Widget _screen(MalvaApiClient api) => PaymentScreen(
     );
 
 void main() {
+  testWidgets('cold payment return restores the exact package context',
+      (tester) async {
+    final backend =
+        _GatewayBackend(statusSequence: const ['paid'], packagePurchase: true);
+    final api = _api(backend);
+    await tester.pumpWidget(_wrap(
+        api,
+        PaymentScreen(
+            reference: 'TXN-1', session: _patientSession, apiClient: api)));
+    await tester.pumpAndSettle();
+    final success =
+        tester.widget<PaymentSuccessScreen>(find.byType(PaymentSuccessScreen));
+    expect(success.package?.id, 'package_1');
+    expect(success.doctorUserId, 'user_pro_1');
+    expect(find.text('Lihat Paket & Jadwalkan Sesi'), findsOneWidget);
+  });
+  testWidgets(
+      'warm payment return takes over polling and preserves package context',
+      (tester) async {
+    final backend = _GatewayBackend(
+        statusSequence: const ['pending', 'paid'],
+        statusDelay: const Duration(seconds: 5));
+    final api = _api(backend);
+    const pkg = BackendCarePackage(
+        id: 'package_1',
+        patientId: 'user_pasien_1',
+        professionalId: 'user_pro_1',
+        price: 150000);
+    await tester.pumpWidget(_wrap(
+        api,
+        PaymentScreen(
+            booking: _booking(),
+            package: pkg,
+            session: _patientSession,
+            apiClient: api)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Bayar Sekarang'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    expect(backend.statusCalls, 1);
+    final context = tester.element(find.byType(PaymentScreen));
+    unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => PaymentScreen.forReturn(
+            reference: 'TXN-1', session: _patientSession, apiClient: api))));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+    expect(
+        find.byType(PaymentSuccessScreen, skipOffstage: false), findsOneWidget);
+    final success =
+        tester.widget<PaymentSuccessScreen>(find.byType(PaymentSuccessScreen));
+    expect(success.package?.id, 'package_1');
+    expect(success.doctorUserId, 'user_pro_1');
+    await tester.pump(const Duration(seconds: 6));
+    expect(backend.statusCalls, 2);
+  });
+  test('payment return route accepts the native URI and rejects other routes',
+      () {
+    expect(
+        paymentReturnReference(
+            'malva://payment/return?reference=TXN-1&transaction_status=settlement'),
+        'TXN-1');
+    expect(paymentReturnReference('/payment/return?reference=TXN-1'), 'TXN-1');
+    expect(paymentReturnReference('/return?reference=TXN-1'), 'TXN-1');
+    expect(paymentReturnReference('https://payment/return?reference=TXN-1'),
+        isNull);
+    expect(
+        paymentReturnReference('malva://evil/return?reference=TXN-1'), isNull);
+    expect(paymentReturnReference('malva://payment/return?reference=../bad'),
+        isNull);
+    expect(
+        paymentReturnReference('malva://payment/return?reference=%FF'), isNull);
+  });
+  testWidgets('payment return verifies server status before showing success',
+      (tester) async {
+    final backend = _GatewayBackend(statusSequence: const ['pending', 'paid']);
+    final api = _api(backend);
+    final reference = paymentReturnReference(
+        'malva://payment/return?reference=TXN-1&transaction_status=settlement');
+    await tester.pumpWidget(_wrap(
+        api,
+        PaymentScreen(
+            reference: reference, session: _patientSession, apiClient: api)));
+    await tester.pumpAndSettle();
+    expect(find.text('Payment Received!'), findsNothing);
+    expect(find.text('Cek status'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(find.text('Payment Received!'), findsOneWidget);
+    expect(backend.markPaidCalls, 0);
+  });
+  testWidgets('Android sandbox opens and closes the owned checkout channel',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    const channel = MethodChannel('malva/payment');
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
+        (call) async {
+      calls.add(call);
+      return call.method == 'openSandbox' ? true : null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
+    final backend =
+        _GatewayBackend(statusSequence: const ['paid'], configFails: true);
+    final api = _api(backend);
+    await tester.pumpWidget(_wrap(api, _screen(api)));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -900));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Bayar Sekarang'));
+    await tester.pump();
+    expect(calls.where((call) => call.method == 'openSandbox').single.arguments,
+        {'url': _redirectUrl});
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(calls.where((call) => call.method == 'closeSandbox'), hasLength(1));
+    expect(find.text('Payment Received!'), findsOneWidget);
+    expect(backend.markPaidCalls, 0);
+    debugDefaultTargetPlatformOverride = null;
+  });
+  testWidgets('slow gateway status checks never overlap', (tester) async {
+    final backend = _GatewayBackend(statusDelay: const Duration(seconds: 5));
+    final api = _api(backend);
+    await tester.pumpWidget(_wrap(api, _screen(api)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Bayar Sekarang'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 3));
+    expect(backend.statusCalls, 1,
+        reason: 'an in-flight status check must be shared by timer and resume');
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 6));
+  });
   testWidgets(
       'redirect_url ada → markPaymentPaid TIDAK dipanggil, keadaan menunggu',
       (tester) async {

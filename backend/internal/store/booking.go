@@ -15,6 +15,8 @@ import (
 // dengan 403 (bukan pemilik).
 var ErrPaymentNotFound = errors.New("payment not found")
 
+var ErrPurchaseConflict = errors.New("pesanan berubah atau sudah diproses; periksa paket dan pembayaran yang ada")
+
 // ============================================================
 // BOOKING & PAYMENT & EARNINGS
 // ============================================================
@@ -98,18 +100,113 @@ type PayoutInfo struct {
 }
 
 func (s *Store) CreateBooking(ctx context.Context, b Booking) (Booking, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Booking{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "booking:"+b.PatientID+":"+b.ProfessionalID); err != nil {
+		return Booking{}, err
+	}
+	var existingID string
+	err = tx.QueryRowContext(ctx, `SELECT id FROM bookings WHERE patient_id=$1 AND professional_id=$2 AND booking_date=$3::date AND slot_time=NULLIF($4,'')::time AND service_type=$5 AND session_type=$6 AND price=$7 AND duration_minutes=$8 AND status='pending' ORDER BY created_at DESC LIMIT 1`, b.PatientID, b.ProfessionalID, b.BookingDate, b.SlotTime, b.ServiceType, b.SessionType, b.Price, b.DurationMinutes).Scan(&existingID)
+	if err == nil {
+		if err := tx.Commit(); err != nil {
+			return Booking{}, err
+		}
+		return s.GetBooking(ctx, existingID)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return Booking{}, err
+	}
 	const q = `INSERT INTO bookings
 		(patient_id, professional_id, package_id, service_type, session_type, booking_date, slot_time, duration_minutes, price, status)
 		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::time, $8, $9, 'pending')
 		RETURNING id, status, created_at`
-	err := s.db.QueryRowContext(ctx, q, b.PatientID, b.ProfessionalID, b.PackageID, b.ServiceType, b.SessionType,
+	err = tx.QueryRowContext(ctx, q, b.PatientID, b.ProfessionalID, b.PackageID, b.ServiceType, b.SessionType,
 		b.BookingDate, b.SlotTime, b.DurationMinutes, b.Price).
 		Scan(&b.ID, &b.Status, &b.CreatedAt)
 	if err != nil {
 		return Booking{}, err
 	}
+	if err := tx.Commit(); err != nil {
+		return Booking{}, err
+	}
 	_ = s.AddAuditLog(ctx, b.PatientID, b.PatientID, "booking.created", "bookings", b.ID,
 		map[string]any{"professional_id": b.ProfessionalID, "price": b.Price})
+	return b, nil
+}
+
+// CreatePackageBooking binds a care package to its payment booking; package_id
+// on bookings remains reserved for the legacy service_packages table.
+func (s *Store) CreatePackageBooking(ctx context.Context, packageID string, b Booking) (Booking, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Booking{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var patientID, professionalID, status string
+	var bookingID sql.NullString
+	var price int64
+	err = tx.QueryRowContext(ctx, `SELECT patient_id,professional_id,status,booking_id,price FROM care_packages WHERE id=$1 FOR UPDATE`, packageID).Scan(&patientID, &professionalID, &status, &bookingID, &price)
+	if err != nil {
+		return Booking{}, err
+	}
+	if patientID != b.PatientID || professionalID != b.ProfessionalID || status != "pending_payment" || price != b.Price {
+		return Booking{}, ErrPurchaseConflict
+	}
+	if !bookingID.Valid {
+		// Adopt only a single matching unbound legacy booking, never another purchase.
+		rows, err := tx.QueryContext(ctx, `SELECT b.id FROM bookings b WHERE b.patient_id=$1 AND b.professional_id=$2 AND b.service_type='package_session' AND b.status='pending' AND NOT EXISTS(SELECT 1 FROM care_packages cp WHERE cp.booking_id=b.id) ORDER BY b.created_at DESC LIMIT 2`, patientID, professionalID)
+		if err != nil {
+			return Booking{}, err
+		}
+		var ids []string
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return Booking{}, err
+			}
+			ids = append(ids, id)
+		}
+		err = rows.Err()
+		_ = rows.Close()
+		if err != nil {
+			return Booking{}, err
+		}
+		if len(ids) > 1 {
+			return Booking{}, ErrPurchaseConflict
+		}
+		if len(ids) == 1 {
+			bookingID = sql.NullString{String: ids[0], Valid: true}
+		}
+	}
+	if bookingID.Valid {
+		if len(b.SlotTime) == 5 {
+			b.SlotTime += ":00"
+		}
+		var existing Booking
+		err = tx.QueryRowContext(ctx, `SELECT id,patient_id,professional_id,service_type,session_type,booking_date::text,COALESCE(slot_time::text,''),duration_minutes,price,status,created_at FROM bookings WHERE id=$1 FOR UPDATE`, bookingID.String).Scan(&existing.ID, &existing.PatientID, &existing.ProfessionalID, &existing.ServiceType, &existing.SessionType, &existing.BookingDate, &existing.SlotTime, &existing.DurationMinutes, &existing.Price, &existing.Status, &existing.CreatedAt)
+		if err != nil {
+			return Booking{}, err
+		}
+		if existing.Status != "pending" || existing.ServiceType != b.ServiceType || existing.SessionType != b.SessionType || existing.BookingDate != b.BookingDate || existing.SlotTime != b.SlotTime || existing.Price != b.Price || existing.DurationMinutes != b.DurationMinutes {
+			return Booking{}, ErrPurchaseConflict
+		}
+		b = existing
+	} else {
+		err = tx.QueryRowContext(ctx, `INSERT INTO bookings(patient_id,professional_id,service_type,session_type,booking_date,slot_time,duration_minutes,price,status) VALUES($1,$2,$3,$4,$5,$6::time,$7,$8,'pending') RETURNING id,status,created_at`, b.PatientID, b.ProfessionalID, b.ServiceType, b.SessionType, b.BookingDate, b.SlotTime, b.DurationMinutes, b.Price).Scan(&b.ID, &b.Status, &b.CreatedAt)
+		if err != nil {
+			return Booking{}, err
+		}
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE care_packages SET booking_id=$2,updated_at=now() WHERE id=$1`, packageID, b.ID); err != nil {
+		return Booking{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return Booking{}, err
+	}
 	return b, nil
 }
 
@@ -221,19 +318,108 @@ func (s *Store) CancelPendingBooking(ctx context.Context, bookingID string) erro
 }
 
 func (s *Store) CreatePayment(ctx context.Context, p Payment) (Payment, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Payment{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var bookingStatus string
+	if err := tx.QueryRowContext(ctx, `SELECT status FROM bookings WHERE id=$1 FOR UPDATE`, p.BookingID).Scan(&bookingStatus); err != nil {
+		return Payment{}, err
+	}
+	if bookingStatus != "pending" && bookingStatus != "paid" {
+		return Payment{}, ErrPurchaseConflict
+	}
+	var existingReference string
+	err = tx.QueryRowContext(ctx, `SELECT reference FROM payments WHERE booking_id=$1 AND status IN ('pending','paid') ORDER BY (status='paid') DESC,created_at DESC LIMIT 1`, p.BookingID).Scan(&existingReference)
+	if err == nil {
+		if p.Gateway != "" {
+			if _, err := tx.ExecContext(ctx, `UPDATE payments SET gateway=$2 WHERE reference=$1 AND gateway='' AND status='pending'`, existingReference, p.Gateway); err != nil {
+				return Payment{}, err
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return Payment{}, err
+		}
+		existing, err := s.GetPaymentByReference(ctx, existingReference)
+		if err != nil {
+			return Payment{}, err
+		}
+		if (bookingStatus == "paid" && existing.Status != "paid") || (existing.Status != "pending" && existing.Status != "paid") || existing.GrossAmount != p.GrossAmount || existing.ServiceFeeAmount != p.ServiceFeeAmount {
+			return Payment{}, ErrPurchaseConflict
+		}
+		return existing, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return Payment{}, err
+	}
+	if bookingStatus != "pending" {
+		return Payment{}, ErrPurchaseConflict
+	}
 	// platform_fee_pct SMALLINT (maks 32767): fee 10% disimpan sebagai 10,
 	// bukan nominal rupiah (nominal ada di platform_fee_amount BIGINT).
 	const q = `INSERT INTO payments
-		(booking_id, payment_method, gross_amount, service_fee_amount, platform_fee_pct, platform_fee_amount, net_amount, reference, status)
-		VALUES ($1, $2, $3, $4, 10, $5, $6, $7, 'pending')
+		(booking_id, payment_method, gross_amount, service_fee_amount, platform_fee_pct, platform_fee_amount, net_amount, reference, gateway,status)
+		VALUES ($1, $2, $3, $4, 10, $5, $6, $7,$8, 'pending')
 		RETURNING id, status, created_at`
-	err := s.db.QueryRowContext(ctx, q, p.BookingID, p.PaymentMethod, p.GrossAmount, p.ServiceFeeAmount,
-		p.PlatformFeeAmount, p.NetAmount, p.Reference).
+	err = tx.QueryRowContext(ctx, q, p.BookingID, p.PaymentMethod, p.GrossAmount, p.ServiceFeeAmount,
+		p.PlatformFeeAmount, p.NetAmount, p.Reference, p.Gateway).
 		Scan(&p.ID, &p.Status, &p.CreatedAt)
 	if err != nil {
 		return Payment{}, err
 	}
+	if err := tx.Commit(); err != nil {
+		return Payment{}, err
+	}
 	return p, nil
+}
+
+// InitializePaymentGateway serializes initialization, including retries after a
+// timeout. The gateway always receives the same reference for a pending payment.
+func (s *Store) InitializePaymentGateway(ctx context.Context, reference, gateway string, create func() (string, string, error)) (Payment, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Payment{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var bookingID, bookingStatus string
+	if err := tx.QueryRowContext(ctx, `SELECT booking_id FROM payments WHERE reference=$1`, reference).Scan(&bookingID); err != nil {
+		return Payment{}, err
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT status FROM bookings WHERE id=$1 FOR UPDATE`, bookingID).Scan(&bookingStatus); err != nil {
+		return Payment{}, err
+	}
+	var token, status string
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(snap_token,''),status FROM payments WHERE reference=$1 FOR UPDATE`, reference).Scan(&token, &status); err != nil {
+		return Payment{}, err
+	}
+	if (bookingStatus != "pending" && status != "paid") || (status != "pending" && status != "paid") {
+		return Payment{}, ErrPurchaseConflict
+	}
+	if status == "pending" && token == "" {
+		token, redirect, err := create()
+		if err != nil {
+			return Payment{}, err
+		}
+		if token == "" || redirect == "" {
+			return Payment{}, errors.New("gateway belum mengembalikan halaman pembayaran")
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE payments SET gateway=$2,snap_token=$3,redirect_url=$4 WHERE reference=$1`, reference, gateway, token, redirect); err != nil {
+			return Payment{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return Payment{}, err
+	}
+	return s.GetPaymentByReference(ctx, reference)
+}
+
+func (s *Store) SetPaymentTerminal(ctx context.Context, reference, status string) error {
+	if status != "cancelled" && status != "expired" && status != "deny" {
+		return ErrPurchaseConflict
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE payments SET status=$2 WHERE reference=$1 AND status='pending'`, reference, status)
+	return err
 }
 
 // GetReusablePendingPayment mengembalikan payment pending TERBARU untuk sebuah
@@ -278,6 +464,16 @@ func (s *Store) MarkPaymentPaid(ctx context.Context, reference, externalID strin
 	defer func() { _ = tx.Rollback() }()
 
 	var p Payment
+	var bookingID, bookingStatus string
+	if err := tx.QueryRowContext(ctx, `SELECT booking_id FROM payments WHERE reference=$1`, reference).Scan(&bookingID); err != nil {
+		return Payment{}, err
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT status FROM bookings WHERE id=$1 FOR UPDATE`, bookingID).Scan(&bookingStatus); err != nil {
+		return Payment{}, err
+	}
+	if bookingStatus != "pending" && bookingStatus != "paid" {
+		return Payment{}, ErrPurchaseConflict
+	}
 	const q = `UPDATE payments
 		SET status = 'paid', paid_at = now(), external_id = COALESCE(NULLIF($1,''), external_id)
 		WHERE reference = $2 AND status = 'pending'

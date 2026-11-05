@@ -14,6 +14,26 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
+func TestChatPushDoesNotQueueAndReplacesTrayEntry(t *testing.T) {
+	message := fcmMessage(Message{Token: "synthetic", Title: "Synthetic", Body: "Synthetic",
+		Data: map[string]string{"kind": "chat_message"}, CollapseKey: "chat_message:session"})
+	if message.Android.TTL == nil || *message.Android.TTL != 0 {
+		t.Fatal("chat must be discarded when it cannot be delivered immediately")
+	}
+	if message.Notification != nil || message.Android.Notification != nil {
+		t.Fatal("FCM must be data-only so background account/session policy owns display")
+	}
+	if message.Data["text"] != "Synthetic" {
+		t.Fatal("data-only chat must retain the existing notification preview")
+	}
+	if message.Android.CollapseKey != "chat_message:session" {
+		t.Fatal("retries must collapse by session")
+	}
+	if message.APNS.Headers["apns-expiration"] != "0" || message.APNS.Headers["apns-collapse-id"] != "chat_message:session" {
+		t.Fatal("APNs must not queue stale session chat and must collapse retries")
+	}
+}
+
 // Regresi: NewProvider tanpa ProjectID menyebabkan crash-loop
 // ("project ID is required to access Firebase Cloud Messaging client").
 func TestNewProviderMendeteksiProjectID(t *testing.T) {

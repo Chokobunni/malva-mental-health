@@ -13,10 +13,9 @@ package inference
 //  - Permenkes No. KP.04.05/…/2019: standar layanan kesehatan jiwa
 //    di faskes Indonesia memakai alat deteksi dini PHQ-9/GAD-7.
 //
-// CF pakar (ruleCF) memodelkan keandalan rule klinis:
-//  - 0.95: rentang cut-off baku instrumen (sangat andal)
-//  - 0.90: pola gejala dominan (andung didukung literatur)
-//  - 0.85: pola sekunder (pendukung)
+// CF pakar (ruleCF) adalah bobot dukungan aturan dalam model yang ada,
+// bukan probabilitas diagnosis yang terkalibrasi. Rujukan instrumen di atas
+// mendasari ambang skor, bukan validasi numerik bobot CF.
 // CF user mengikuti mapping jawaban 0-3 -> 0/0.3/0.6/0.9.
 // Port 1:1 dari lib/src/ai/knowledge_base.dart (client).
 //

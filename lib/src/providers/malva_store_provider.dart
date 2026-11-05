@@ -189,6 +189,8 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   final MalvaApiClient? _apiClient;
   final AssessmentDatabaseService _assessmentDb;
   final SecureStore _secureStore;
+  int _accountGeneration = 0;
+  Future<void> _sessionStorageWork = Future<void>.value();
 
   MalvaStoreNotifier(
     this._apiClient,
@@ -220,6 +222,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   /// Reset seluruh data akun ke kondisi fresh (kosong). Dipanggil saat
   /// login akun baru & logout agar data akun sebelumnya tidak bocor.
   void resetForAccount() {
+    _accountGeneration++;
     __lastAccessToken = null;
     clearPendingDoses();
     state = _seededState();
@@ -227,6 +230,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
 
   /// Terapkan sesi login: reset data lama, lalu set nama tampilan akun.
   void applySession(AuthSession session) {
+    _accountGeneration++;
     final name = session.displayName.trim().isEmpty
         ? 'Pasien'
         : session.displayName.trim();
@@ -253,19 +257,22 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   /// Muat data dari server secara paralel setelah login (non-blocking).
   /// Kegagalan satu panggilan tidak menghalangi panggilan lain.
   Future<void> _loadServerDataAsync(AuthSession session) async {
+    final generation = _accountGeneration;
     // Pulihkan offset jam server lebih dulu agar pemuatan data memakai acuan
     // waktu yang benar sejak awal (cold start offline tetap memakai offset
     // terakhir yang tersimpan).
     await ServerClock.loadPersisted();
+    if (!_isCurrentAccountGeneration(generation)) return;
 
     // Hidrasi cache log obat LOKAL lebih dulu agar riwayat kepatuhan tetap
     // tampil walau offline / server belum merespons (akar bug "adherence &
     // riwayat reset setelah logout/login"). Harus SEBELUM merge data server
     // supaya log lama server tidak salah dianggap lebih baru dari cache.
     await _hydrateMedicationLogsCache();
+    if (!_isCurrentAccountGeneration(generation)) return;
 
     final api = _apiClient;
-    final token = session.accessToken;
+    final token = _currentAccessToken;
     if (api == null || token == null || token.isEmpty) return;
 
     // Jalankan pemuatan secara paralel (mood, daftar obat, log obat).
@@ -286,11 +293,14 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     if (api == null) return;
     final token = tokenOverride ?? _currentAccessToken;
     if (token == null || token.isEmpty) return;
+    final generation = _accountGeneration;
+    if (!_isCurrentAccountRequest(generation, token)) return;
     try {
       final moods = await api.listMoodCheckins(
         accessToken: token,
         limit: 30,
       );
+      if (!_isCurrentAccountGeneration(generation)) return;
       // Konversi BackendMoodCheckin → MoodEntry untuk store lokal.
       final entries = moods
           .where((m) => m.occurredAt != null)
@@ -320,11 +330,14 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     if (api == null) return;
     final token = tokenOverride ?? _currentAccessToken;
     if (token == null || token.isEmpty) return;
+    final generation = _accountGeneration;
+    if (!_isCurrentAccountRequest(generation, token)) return;
     try {
       final meds = await api.listMedications(
         accessToken: token,
         limit: 50,
       );
+      if (!_isCurrentAccountGeneration(generation)) return;
       // Konversi BackendMedication → Medication untuk store lokal.
       final medications = meds.map((m) {
         // Parse reminder_time menjadi MedicationReminder.
@@ -371,6 +384,8 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     if (api == null) return;
     final token = tokenOverride ?? _currentAccessToken;
     if (token == null || token.isEmpty) return;
+    final generation = _accountGeneration;
+    if (!_isCurrentAccountRequest(generation, token)) return;
     try {
       final logs = await api.listMedicationLogs(
         accessToken: token,
@@ -379,6 +394,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         // wajar (termasuk pasien dengan banyak obat / banyak dosis).
         limit: 100,
       );
+      if (!_isCurrentAccountGeneration(generation)) return;
       final mapped = <MedicationLog>[];
       for (final log in logs) {
         final takenAt = log.takenAt ?? log.createdAt;
@@ -404,6 +420,14 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   }
 
   String? __lastAccessToken;
+
+  bool _isCurrentAccountRequest(int generation, String? token) =>
+      _isCurrentAccountGeneration(generation) && token == _currentAccessToken;
+
+  // Token rotation keeps the owner; only account transitions invalidate an
+  // already-started hydration response for that owner.
+  bool _isCurrentAccountGeneration(int generation) =>
+      mounted && generation == _accountGeneration;
 
   /// Perbarui nama pasien di store (dipakai setelah profil dimuat server).
   void setPatientIdentity({String? name, String? primaryProfessional}) {
@@ -695,8 +719,13 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   Future<AuthSession> refreshSessionOnline(String refreshToken) async {
     final api = _apiClient;
     if (api == null) throw _noServerFailure;
+    final generation = _accountGeneration;
+    final accessToken = _currentAccessToken;
     try {
       final result = await api.refreshSession(refreshToken: refreshToken);
+      if (!_isCurrentAccountRequest(generation, accessToken)) {
+        throw const AuthFailure('Sesi telah berubah.');
+      }
       final session = AuthSession(
         role: result.role,
         identifier: result.email,
@@ -707,6 +736,10 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         backendSynced: true,
       );
       await persistSession(session); // simpan token baru
+      if (!_isCurrentAccountRequest(generation, accessToken)) {
+        throw const AuthFailure('Sesi telah berubah.');
+      }
+      __lastAccessToken = session.accessToken;
       return session;
     } on MalvaApiException catch (e) {
       if (e.statusCode != null) rethrow;
@@ -750,7 +783,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   // SESSION PERSISTENCE
   // ============================================================
 
-  Future<void> persistSession(AuthSession session) async {
+  Future<void> persistSession(AuthSession session) {
     final data = jsonEncode({
       'role': session.role.name,
       'identifier': session.identifier,
@@ -760,12 +793,27 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       'refreshToken': session.refreshToken,
       'backendSynced': session.backendSynced,
     });
-    await _secureStore.write(_sessionKey, data);
+    final work =
+        _sessionStorageWork.then((_) => _secureStore.write(_sessionKey, data));
+    _sessionStorageWork = work.catchError((_) {});
+    return work;
+  }
+
+  /// A token rotation keeps the current owner's hydrated data and generation.
+  Future<void> persistTokenRotation(AuthSession session) {
+    if (!mounted || state.patient.id != session.backendUserId)
+      return Future<void>.value();
+    __lastAccessToken = session.accessToken;
+    return persistSession(session);
   }
 
   Future<AuthSession?> restoreSession() async {
+    final generation = _accountGeneration;
     try {
+      await _sessionStorageWork;
+      if (!_isCurrentAccountGeneration(generation)) return null;
       final data = await _secureStore.read(_sessionKey);
+      if (!_isCurrentAccountGeneration(generation)) return null;
       if (data == null || data.isEmpty) return null;
       final map = jsonDecode(data) as Map<String, dynamic>;
       final role = switch (map['role']) {
@@ -787,8 +835,13 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     }
   }
 
-  Future<void> clearSession() async {
-    await _secureStore.delete(_sessionKey);
+  Future<void> clearSession() {
+    _accountGeneration++;
+    __lastAccessToken = null;
+    final work =
+        _sessionStorageWork.then((_) => _secureStore.delete(_sessionKey));
+    _sessionStorageWork = work.catchError((_) {});
+    return work;
   }
 
   // ============================================================
@@ -1024,12 +1077,14 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   /// data server dimuat, supaya riwayat kepatuhan langsung tampil dan merge
   /// server berikutnya tidak salah menganggap log lama server lebih baru.
   Future<void> _hydrateMedicationLogsCache() async {
+    final generation = _accountGeneration;
     final accountId = state.patient.id;
     if (accountId.isEmpty) return;
     try {
       final raw = await _secureStore.read(
         '$_medicationLogsKeyPrefix$accountId',
       );
+      if (!_isCurrentAccountGeneration(generation)) return;
       if (raw == null || raw.isEmpty) return;
       final decoded = jsonDecode(raw);
       if (decoded is! List) return;
@@ -1219,7 +1274,10 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   /// dengan state (tanpa duplikat), lalu simpan kembali daftar gabungan.
   /// Panggil setelah [applySession] agar riwayat offline tampil lagi.
   Future<void> loadAndSaveAssessmentsAsync() async {
-    final local = await _assessmentDb.loadAll(state.patient.id);
+    final generation = _accountGeneration;
+    final accountId = state.patient.id;
+    final local = await _assessmentDb.loadAll(accountId);
+    if (!_isCurrentAccountGeneration(generation)) return;
     if (local.isEmpty && state.assessments.isEmpty) return;
     final seen = state.assessments.map(_assessmentKey).toSet();
     final missing =
@@ -1227,7 +1285,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     if (missing.isEmpty && local.isNotEmpty) return;
     final merged = [...state.assessments, ...missing];
     state = state.copyWith(assessments: merged);
-    await _assessmentDb.saveAll(state.patient.id, merged);
+    await _assessmentDb.saveAll(accountId, merged);
   }
 
   /// Persistensi lokal fire-and-forget (tidak menghalangi UI).

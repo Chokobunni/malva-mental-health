@@ -25,10 +25,7 @@ type Message struct {
 	Title string
 	Body  string
 	Data  map[string]string
-	// CollapseKey menyatukan notifikasi untuk peristiwa yang sama sehingga
-	// perangkat menampilkan SATU baris, bukan menumpuk N baris saat pengguna
-	// punya beberapa token aktif. Diteruskan ke FCM Android.CollapseKey dan
-	// header APNs `apns-collapse-id`.
+	// CollapseKey also becomes the Android tray tag and APNs collapse ID.
 	CollapseKey string
 }
 
@@ -111,16 +108,23 @@ type fcmProvider struct {
 }
 
 func (p *fcmProvider) Send(ctx context.Context, message Message) error {
-	ttl := time.Hour
+	_, err := p.client.Send(ctx, fcmMessage(message))
+	return err
+}
+
+func fcmMessage(message Message) *messaging.Message {
+	// Preserve the same bounded chat preview previously carried by Notification,
+	// without asking the SDK/Play Services to render it before client validation.
+	data := make(map[string]string, len(message.Data)+1)
+	for key, value := range message.Data {
+		data[key] = value
+	}
+	data["text"] = message.Body
+	// Session chat has no value when the device reconnects after the session.
+	ttl := time.Duration(0)
 	android := &messaging.AndroidConfig{
 		Priority: "high",
-		// TTL 1 jam: push basi (mis. perangkat baru kembali online berjam-jam
-		// kemudian) tidak dikirim. Chat/notifikasi yang sudah tak relevan
-		// dibuang FCM alih-alih menumpuk.
-		TTL: &ttl,
-		Notification: &messaging.AndroidNotification{
-			ChannelID: "malva_updates",
-		},
+		TTL:      &ttl,
 	}
 	// CollapseKey: bila kosong biarkan default (tanpa collapse). Saat diisi,
 	// FCM menimpa notifikasi lama dengan collapse_key sama di perangkat yang
@@ -131,24 +135,20 @@ func (p *fcmProvider) Send(ctx context.Context, message Message) error {
 
 	// APNs tidak punya field CollapseID terstruktur di SDK Go; collapse ID
 	// dikirim lewat header `apns-collapse-id` (didokumentasikan Apple).
-	var apns *messaging.APNSConfig
+	apns := &messaging.APNSConfig{
+		Headers: map[string]string{"apns-expiration": "0", "apns-push-type": "background", "apns-priority": "5"},
+		Payload: &messaging.APNSPayload{Aps: &messaging.Aps{ContentAvailable: true}},
+	}
 	if message.CollapseKey != "" {
-		apns = &messaging.APNSConfig{
-			Headers: map[string]string{"apns-collapse-id": message.CollapseKey},
-		}
+		apns.Headers["apns-collapse-id"] = message.CollapseKey
 	}
 
-	_, err := p.client.Send(ctx, &messaging.Message{
-		Token: message.Token,
-		Notification: &messaging.Notification{
-			Title: message.Title,
-			Body:  message.Body,
-		},
-		Data:    message.Data,
+	return &messaging.Message{
+		Token:   message.Token,
+		Data:    data,
 		Android: android,
 		APNS:    apns,
-	})
-	return err
+	}
 }
 
 func redactToken(token string) string {

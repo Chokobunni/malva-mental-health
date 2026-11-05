@@ -1,10 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:malva_mental_health/src/assessment_engine.dart';
 import 'package:malva_mental_health/src/screens/assessment_screen.dart';
 import 'package:malva_mental_health/src/theme.dart';
 
 void main() {
+  testWidgets('mild results explain CF without claiming diagnostic certainty',
+      (tester) async {
+    final phq9 = AssessmentEngine.score(
+      type: AssessmentType.phq9,
+      answers: [1, 1, 1, 1, 1, 0, 0, 0, 0],
+    );
+    final gad7 = AssessmentEngine.score(
+      type: AssessmentType.gad7,
+      answers: [1, 1, 1, 1, 1, 0, 0],
+    );
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        theme: buildMalvaTheme(),
+        home: AssessmentResultScreen(
+          bundle: ScreeningBundle(
+            id: 'synthetic-mild',
+            phq9: phq9,
+            gad7: gad7,
+            createdAt: phq9.createdAt,
+            isInitial: false,
+            source: 'test',
+          ),
+          onDone: () {},
+        ),
+      ),
+    ));
+
+    expect(find.text('CF 68%'), findsNWidgets(2));
+    expect(find.textContaining('Pasti'), findsNothing);
+    expect(find.textContaining('bukan probabilitas diagnosis'), findsOneWidget);
+    expect(find.textContaining('PHQ-9 5/27 Ringan'), findsOneWidget);
+    expect(find.textContaining('GAD-7 5/21 Ringan'), findsOneWidget);
+  });
+
   testWidgets('shows PHQ-9, GAD-7, then submit in one long page',
       (tester) async {
     await tester.pumpWidget(

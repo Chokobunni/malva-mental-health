@@ -7,10 +7,13 @@ import 'models.dart';
 /// - WHO GAD-7 (Generalized Anxiety Disorder-7)
 /// - Clinical practice guidelines for mental health screening
 ///
+/// These sources inform score cutoffs. Existing CF weights are model support
+/// weights; they are not calibrated diagnostic probabilities.
+///
 /// Each rule has:
 /// - Conditions that must be met (patient answers or derived facts)
 /// - Conclusions with Certainty Factors
-/// - A base CF representing the rule's clinical reliability
+/// - A base CF representing support within this model
 class KnowledgeBase {
   /// Prevent instantiation of static class.
   const KnowledgeBase._();
@@ -55,8 +58,8 @@ class KnowledgeBase {
               cf: 0.9,
             ),
           ],
-          // Kalibrasi CF pakar berjenjang per tingkat keparahan: makin berat
-          // tingkatnya, makin kuat dukungan bukti klinis sehingga CF naik.
+          // Bobot dukungan aturan model lama; bukan kalibrasi probabilitas
+          // diagnosis. Band keparahan ditentukan skor, bukan nilai CF.
           ruleCF: 0.60,
         ),
 

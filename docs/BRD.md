@@ -1,5 +1,11 @@
 # Business Requirements Document (BRD) - Malva Mental Health
 
+### Ketentuan operasional pasien — 5 November 2026
+
+Satu intent pembelian pending harus dapat dilanjutkan tanpa membuat paket atau pembayaran ganda. MyCare menyediakan filter paket `pending_payment`, `active`, dan `cancelled`. Status lunas harus dikonfirmasi server ke Midtrans sebelum aktivasi dan pemilihan data yang dibagikan.
+
+Push mobile pasien dibatasi ke chat sesi aktif; goals harian dan waktu obat memakai reminder lokal. Profesional menerima push chat sesi aktif saja. Riwayat in-app tetap dipertahankan. CF ditampilkan sebagai dukungan rule, bukan probabilitas diagnosis; Therapy Record dapat dibagikan secara eksplisit dari chat.
+
 **Malva Mental Health App**
 
 | Field | Value |
@@ -276,3 +282,7 @@ Katalog tes psikologi berbayar: Tes Kepribadian, 5 Bahasa Cinta, Happiness, Purp
 | Security | Zero data breaches | 0 incidents |
 | Professional trust | Verified STR/SIP rate | 100% sebelum akses data |
 | Scalability | Support 10K+ users | Ready |
+
+## Koreksi rilis 0.1.3 (5 November 2026)
+
+Home pasien menyediakan sesi berjalan dan video call mendatang beserta foto profesional. Kehadiran profesional tidak menutup sesi sebelum waktunya. Detail pasien tetap memakai otorisasi profesional. Notifikasi historis pada shade/antrean transport dihentikan; riwayat dalam aplikasi dipertahankan. Scope notifikasi OS tetap pasien: chat sesi aktif, goals harian, jam obat; profesional: chat sesi aktif.

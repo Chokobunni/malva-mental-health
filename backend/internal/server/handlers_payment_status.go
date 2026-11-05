@@ -139,6 +139,19 @@ func (s *Server) reconcilePendingPayment(r *http.Request, p store.Payment) store
 		if fs := strings.ToLower(strings.TrimSpace(status.FraudStatus)); fs != "" && fs != "accept" {
 			return p
 		}
+		if parseGrossAmount(status.GrossAmount) != p.GrossAmount+p.ServiceFeeAmount {
+			return p
+		}
+	case "expire", "cancel", "deny":
+		terminal := map[string]string{"expire": "expired", "cancel": "cancelled", "deny": "deny"}[strings.ToLower(strings.TrimSpace(status.Status))]
+		if err := s.store.SetPaymentTerminal(r.Context(), p.Reference, terminal); err != nil {
+			return p
+		}
+		fresh, err := s.store.GetPaymentByReference(r.Context(), p.Reference)
+		if err != nil {
+			return p
+		}
+		return fresh
 	default:
 		// pending / expire / cancel / deny: biarkan webhook yang memutuskan.
 		return p

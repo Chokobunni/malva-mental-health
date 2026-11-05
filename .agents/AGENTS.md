@@ -286,6 +286,22 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 4. **Konfirmasi perubahan skema** — setiap perubahan tabel/kolom PostgreSQL butuh persetujuan (R7.6, R1.3).
 5. **Verifikasi** — jalankan `go build ./...`, `go vet ./...`, `go test ./...`, dan `go run ./cmd/apidoc -check` sebelum menyatakan selesai.
 
+## Kontrak alur pasien (perbaikan 2026-11-05)
+
+- Retry pembelian pending memakai paket/booking/payment yang sama untuk intent yang sama. Relasi yang tepat adalah `care_packages.booking_id`; `bookings.package_id` merujuk service package legacy. Aktivasi/cancel wajib menargetkan relasi tepat dan menjaga idempotensi.
+- Status bayar bersumber dari Midtrans yang diverifikasi server, termasuk nominal; deep link/browser return hanya memicu rekonsiliasi, bukan bukti lunas.
+- Push pasien hanya chat pada sesi aktif; reminder goals harian dan obat dijadwalkan lokal hanya untuk akun pasien saat ini. Profesional hanya push chat sesi aktif. Periksa eligibility lagi saat dispatch, hentikan retry terminal, dan pertahankan riwayat in-app. Jenis push tambahan memerlukan instruksi baru.
+- CF adalah dukungan rule internal, bukan probabilitas diagnosis atau tingkat keparahan. Mild: `0.72 × 0.95 = 0.684` → `CF 68%`; hindari label “Pasti”. Cutoff instrumen dan crisis flag tetap terpisah.
+- Therapy Record di chat dipilih pasien melalui endpoint share yang memeriksa pemilik dan paket aktif. Jangan membuat pesan kedua setelah endpoint share. Detail dibaca melalui endpoint berotorisasi; jawaban privat tidak masuk payload push.
+- Rujukan: [rencana](../docs/superpowers/plans/2026-11-05-patient-flow-repairs.md), [screening](skills/screening_module.md), [therapy/chat](skills/therapy_chat_module.md).
+
+## Kontrak koreksi rilis mobile (2026-11-05)
+
+- Home pasien menampilkan Sesi berjalan dan Video call mendatang dengan foto profesional; kegagalan satu scope tidak menghilangkan scope lain, dan respons akun lama tidak boleh mengganti data akun baru.
+- Detail pasien dari jadwal profesional wajib membawa sesi/API profesional yang aktif. Aksi Hadir mengirim `attended`, mencatat marker kehadiran tanpa menutup sesi lebih awal atau mencatat earnings dua kali.
+- Push FCM memakai data-only, divalidasi pada foreground/background terhadap akun dan sesi aktif. Android tidak boleh merender otomatis payload legacy di luar scope. Bersihkan shade historis saat upgrade/start/ganti akun tanpa membatalkan alarm goals/obat yang valid. Retire backlog transport dengan cutoff WIB setelah seluruh worker berhenti; pertahankan riwayat in-app.
+- Retry pembayaran setelah token kedaluwarsa memakai token hasil refresh; rotasi dipersistensikan pada akun yang sama. Refresh yang ditolak harus selesai dengan error, tidak menunggu dirinya sendiri atau mengubah akun berikutnya.
+
 ## Commit
 
 - Format **Conventional Commits**: `feat|fix|refactor|chore|docs|perf|seo|infra: <ringkas>`.

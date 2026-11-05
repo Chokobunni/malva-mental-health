@@ -168,6 +168,7 @@ class PlatformCapabilities {
     required this.canGeolocate,
     required this.canBindGoogleCalendar,
     required this.isWebBuild,
+    this.canUseEmbeddedPaymentSandbox = false,
   });
 
   final bool canScheduleOsReminders;
@@ -178,4 +179,5 @@ class PlatformCapabilities {
   final bool canGeolocate;
   final bool canBindGoogleCalendar;
   final bool isWebBuild;
+  final bool canUseEmbeddedPaymentSandbox;
 }

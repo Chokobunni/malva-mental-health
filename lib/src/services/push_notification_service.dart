@@ -9,7 +9,9 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../models.dart';
+import '../platform/platform_factory.dart';
 import '../time/wib.dart';
+import '../platform/background_chat_delivery.dart';
 import 'local_notification_router.dart';
 import 'malva_api_client.dart';
 
@@ -20,6 +22,10 @@ Future<void> _onBackgroundMessage(RemoteMessage message) async {
   if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp();
   }
+  await BackgroundChatDelivery(
+    apiClient: MalvaApiClient(),
+    secureStore: createSecureStore(),
+  ).deliver(message.data);
 }
 
 /// Kanal notifikasi Android yang dipakai Malva.
@@ -51,6 +57,7 @@ class PushNotificationService {
     required this.apiClient,
     required this.navigatorKey,
     this.activeChatPeer,
+    this.currentSession,
     Future<String?> Function()? fcmTokenProvider,
   }) : _fcmTokenProvider = fcmTokenProvider;
 
@@ -60,6 +67,7 @@ class PushNotificationService {
   /// Peer chat yang SEDANG dibuka (null bila tidak ada). Dipakai menekan
   /// notifikasi chat untuk percakapan yang sedang dilihat pengguna.
   final String? Function()? activeChatPeer;
+  final AuthSession? Function()? currentSession;
 
   /// Sumber token FCM perangkat. Bisa diganti di test agar alur
   /// [unregisterDeviceToken] dapat diuji tanpa Firebase nyata. Bila null,
@@ -77,9 +85,16 @@ class PushNotificationService {
   /// — sebelumnya `_initialized = true` di awal membuat kegagalan pertama
   /// mengunci service selamanya.
   Future<void>? _initFuture;
+  Map<String, dynamic>? _pendingInitialNavigation;
+  bool _initialNavigationFrameQueued = false;
 
   /// User yang token-nya sudah terdaftar pada proses ini.
   String? _registeredUserId;
+  UserRole? _registeredRole;
+  int _registrationGeneration = 0;
+  Future<void> _deviceTokenWork = Future<void>.value();
+  AuthSession? _pendingRegistrationSession;
+  Future<void>? _pendingRegistration;
 
   /// Listener refresh token yang aktif (dibatalkan sebelum mendaftar ulang).
   StreamSubscription<String>? _tokenRefreshSub;
@@ -133,11 +148,26 @@ class PushNotificationService {
             LocalNotificationRouter.handlePayload(response.payload),
       );
 
-      LocalNotificationRouter.onPushPayload = _handleNotificationNavigation;
+      LocalNotificationRouter.onPushPayload =
+          _handleRemoteNotificationNavigation;
       LocalNotificationRouter.openMedicationScreen =
           () => navigatorKey.currentState?.pushNamed('/medication');
 
       await _createAndroidChannels();
+
+      final localLaunch =
+          await _localNotifications.getNotificationAppLaunchDetails();
+      final launchPayload = localLaunch?.notificationResponse?.payload;
+      if (localLaunch?.didNotificationLaunchApp == true &&
+          launchPayload != null) {
+        try {
+          final data = jsonDecode(launchPayload);
+          if (data is Map)
+            _queueInitialNavigation(Map<String, dynamic>.from(data));
+        } on FormatException {
+          // Non-JSON medicine/goals payloads use their existing local router.
+        }
+      }
 
       FirebaseMessaging.onBackgroundMessage(_onBackgroundMessage);
       FirebaseMessaging.onMessage.listen(_onForegroundMessage);
@@ -146,7 +176,7 @@ class PushNotificationService {
       final initialMessage =
           await FirebaseMessaging.instance.getInitialMessage();
       if (initialMessage != null) {
-        _handleNotificationNavigation(initialMessage.data);
+        _queueInitialNavigation(initialMessage.data);
       }
 
       _initialized = true;
@@ -224,37 +254,93 @@ class PushNotificationService {
   ///    (bootstrap sudah menginisialisasi; memanggil ulang bisa melempar dan
   ///    seluruh registrasi token ikut gagal).
   /// 4. Izin notifikasi diminta sekali per proses.
-  Future<void> registerDeviceToken(AuthSession session) async {
+  Future<void> registerDeviceToken(AuthSession session) {
+    _flushInitialNavigation();
     final accessToken = session.accessToken;
-    if (accessToken == null || accessToken.isEmpty) return;
+    if (accessToken == null || accessToken.isEmpty) return Future<void>.value();
 
     final userId = session.backendUserId ?? session.identifier;
-    if (userId.isEmpty) return;
-    if (_registeredUserId == userId) return;
+    if (userId.isEmpty || !_sessionIsCurrent(session))
+      return Future<void>.value();
+    if (_registeredUserId == userId && _registeredRole == session.role)
+      return Future<void>.value();
+    final pending = _pendingRegistrationSession;
+    if (pending != null &&
+        _pendingRegistration != null &&
+        (pending.backendUserId ?? pending.identifier) == userId &&
+        pending.role == session.role) {
+      return _pendingRegistration!;
+    }
+    final generation = ++_registrationGeneration;
+    // Another queued owner may already have changed the backend token before
+    // its response returns. A later return to the old owner must save again.
+    _registeredUserId = null;
+    _registeredRole = null;
+    final work = _queueDeviceTokenWork(() async {
+      if (!_registrationIsCurrent(session, generation)) return;
 
-    try {
       if (Firebase.apps.isEmpty) {
         await Firebase.initializeApp();
       }
+      if (!_registrationIsCurrent(session, generation)) return;
       final messaging = FirebaseMessaging.instance;
       if (!_permissionRequested) {
         _permissionRequested = true;
         await messaging.requestPermission();
       }
+      if (!_registrationIsCurrent(session, generation)) return;
 
       // Batalkan listener lama sebelum memasang yang baru.
       await _tokenRefreshSub?.cancel();
+      if (!_registrationIsCurrent(session, generation)) return;
       _tokenRefreshSub = messaging.onTokenRefresh.listen(
-        (String newToken) => _sendTokenToBackend(accessToken, newToken),
+        (String newToken) {
+          if (!_registrationIsCurrent(session, generation)) return;
+          unawaited(_queueDeviceTokenWork(() async {
+            if (_registrationIsCurrent(session, generation)) {
+              await _sendTokenToBackend(accessToken, newToken);
+            }
+          }));
+        },
       );
 
-      final token = await messaging.getToken();
-      if (token == null || token.isEmpty) return;
+      final token = await _currentFcmToken();
+      if (token == null ||
+          token.isEmpty ||
+          !_registrationIsCurrent(session, generation)) return;
       await _sendTokenToBackend(accessToken, token);
+      if (!_registrationIsCurrent(session, generation)) return;
       _registeredUserId = userId;
-    } on Object catch (error) {
-      if (kDebugMode) debugPrint('FCM token registration failed: $error');
-    }
+      _registeredRole = session.role;
+    });
+    _pendingRegistrationSession = session;
+    _pendingRegistration = work;
+    return work.whenComplete(() {
+      if (identical(_pendingRegistration, work)) {
+        _pendingRegistration = null;
+        _pendingRegistrationSession = null;
+      }
+    });
+  }
+
+  bool _sessionIsCurrent(AuthSession expected) {
+    if (currentSession == null) return true;
+    final current = currentSession!.call();
+    return current != null &&
+        current.role == expected.role &&
+        (current.backendUserId ?? current.identifier) ==
+            (expected.backendUserId ?? expected.identifier);
+  }
+
+  bool _registrationIsCurrent(AuthSession session, int generation) =>
+      generation == _registrationGeneration && _sessionIsCurrent(session);
+
+  Future<void> _queueDeviceTokenWork(Future<void> Function() operation) {
+    _deviceTokenWork =
+        _deviceTokenWork.then((_) => operation()).catchError((_) {
+      if (kDebugMode) debugPrint('FCM device token operation failed.');
+    });
+    return _deviceTokenWork;
   }
 
   /// Lupakan pendaftaran pada proses ini (dipakai saat logout).
@@ -262,7 +348,12 @@ class PushNotificationService {
   /// Tanpa ini, login ulang dengan akun yang sama akan dilewati oleh pengaman
   /// "user sudah terdaftar" walau token server baru saja dicabut.
   void resetRegistration() {
+    _pendingInitialNavigation = null;
+    _registrationGeneration++;
     _registeredUserId = null;
+    _registeredRole = null;
+    _pendingRegistration = null;
+    _pendingRegistrationSession = null;
     unawaited(_tokenRefreshSub?.cancel());
     _tokenRefreshSub = null;
   }
@@ -275,11 +366,12 @@ class PushNotificationService {
   /// aktivitas yang sesuai di aplikasi.
   ///
   /// Best-effort: kegagalan jaringan/izin TIDAK boleh menghalangi logout, jadi
-  /// seluruh langkah dibungkus try/catch dan [resetRegistration] SELALU
-  /// dijalankan di akhir.
-  Future<void> unregisterDeviceToken(String? accessToken) async {
+  /// work diserialkan setelah save lama, lalu sebelum registrasi akun baru.
+  Future<void> unregisterDeviceToken(String? accessToken) {
     final token = accessToken;
-    try {
+    // Invalidate listeners and lookups immediately, not after network logout.
+    resetRegistration();
+    return _queueDeviceTokenWork(() async {
       if (token != null && token.isNotEmpty) {
         final fcmToken = await _currentFcmToken();
         if (fcmToken != null && fcmToken.isNotEmpty) {
@@ -289,11 +381,7 @@ class PushNotificationService {
           );
         }
       }
-    } on Object catch (error) {
-      if (kDebugMode) debugPrint('FCM token unregistration failed: $error');
-    } finally {
-      resetRegistration();
-    }
+    });
   }
 
   /// Ambil token FCM perangkat: lewat [fcmTokenProvider] bila disuntikkan
@@ -307,27 +395,30 @@ class PushNotificationService {
   }
 
   Future<void> _sendTokenToBackend(String accessToken, String token) async {
-    try {
-      await apiClient.saveDeviceToken(
-        accessToken: accessToken,
-        platform: defaultTargetPlatform.name,
-        token: token,
-      );
-    } on Object catch (error) {
-      if (kDebugMode) {
-        debugPrint('Failed to send FCM token to backend: $error');
-      }
-    }
+    await apiClient.saveDeviceToken(
+      accessToken: accessToken,
+      platform: defaultTargetPlatform.name,
+      token: token,
+    );
   }
 
   // ──────────────────────────────────────────────────────────────
   // Foreground message handler
   // ──────────────────────────────────────────────────────────────
 
-  void _onForegroundMessage(RemoteMessage message) {
+  Future<void> _onForegroundMessage(RemoteMessage message) async {
     final data = message.data;
     final kind = eventKindOf(data);
 
+    final session = currentSession?.call();
+    if (!isRemoteChatForSession(data, session)) return;
+    try {
+      if (!await BackgroundChatDelivery.isActiveSession(
+          apiClient, data, session!)) return;
+    } on Object {
+      return;
+    }
+    if (!isRemoteChatForSession(data, currentSession?.call())) return;
     // Chat untuk percakapan yang sedang dibuka tidak perlu notifikasi.
     if (!shouldShowChatNotification(data, activeChatPeer?.call())) return;
 
@@ -415,14 +506,13 @@ class PushNotificationService {
 
   /// True bila notifikasi chat perlu ditampilkan.
   ///
-  /// Ditampilkan bila bukan chat, atau bila pengirimnya BUKAN percakapan yang
-  /// sedang dibuka. [activePeer] null/kosong = tidak ada chat terbuka.
+  /// Remote events only display chat; device reminders have their own scheduler.
   @visibleForTesting
   static bool shouldShowChatNotification(
     Map<String, dynamic> data,
     String? activePeer,
   ) {
-    if (eventKindOf(data) != 'chat_message') return true;
+    if (eventKindOf(data) != 'chat_message') return false;
     final sender = (data['sender_id'] ?? '').toString();
     if (sender.isEmpty) return true;
     final peer = (activePeer ?? '').trim();
@@ -430,12 +520,65 @@ class PushNotificationService {
     return sender != peer;
   }
 
+  static bool isRemoteChatForSession(
+    Map<String, dynamic> data,
+    AuthSession? session,
+  ) {
+    if (eventKindOf(data) != 'chat_message' ||
+        session == null ||
+        (session.accessToken ?? '').isEmpty ||
+        (data['session_id'] ?? '').toString().isEmpty) return false;
+    final userId = session.backendUserId ?? '';
+    final patient = (data['patient_id'] ?? '').toString();
+    final professional = (data['professional_id'] ?? '').toString();
+    final sender = (data['sender_id'] ?? '').toString();
+    if (userId.isEmpty ||
+        patient.isEmpty ||
+        professional.isEmpty ||
+        sender.isEmpty) return false;
+    return switch (session.role) {
+      UserRole.patient => userId == patient && sender == professional,
+      UserRole.professional => userId == professional && sender == patient,
+      _ => false,
+    };
+  }
+
   // ──────────────────────────────────────────────────────────────
   // Notification tap handler
   // ──────────────────────────────────────────────────────────────
 
   void _onMessageOpenedApp(RemoteMessage message) {
-    _handleNotificationNavigation(message.data);
+    _handleRemoteNotificationNavigation(message.data);
+  }
+
+  void _queueInitialNavigation(Map<String, dynamic> data) {
+    if (eventKindOf(data) != 'chat_message') return;
+    _pendingInitialNavigation = data;
+    _flushInitialNavigation();
+  }
+
+  void _flushInitialNavigation() {
+    final data = _pendingInitialNavigation;
+    if (data == null || currentSession?.call() == null) return;
+    if (navigatorKey.currentState == null) {
+      if (!_initialNavigationFrameQueued) {
+        _initialNavigationFrameQueued = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _initialNavigationFrameQueued = false;
+          if (navigatorKey.currentState != null) _flushInitialNavigation();
+        });
+      }
+      return;
+    }
+    // Consume once: a payload for a different restored owner must not be
+    // replayed if that older account logs in at a later time.
+    _pendingInitialNavigation = null;
+    _handleRemoteNotificationNavigation(data);
+  }
+
+  void _handleRemoteNotificationNavigation(Map<String, dynamic> data) {
+    if (!isRemoteChatForSession(data, currentSession?.call())) return;
+    _handleNotificationNavigation(data);
   }
 
   // ──────────────────────────────────────────────────────────────

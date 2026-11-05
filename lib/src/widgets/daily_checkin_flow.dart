@@ -346,8 +346,10 @@ class _MoodPicker extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: Colors.black54)),
         const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 4,
+          runSpacing: 8,
           children: [
             for (final mood in MoodValue.values)
               InkWell(

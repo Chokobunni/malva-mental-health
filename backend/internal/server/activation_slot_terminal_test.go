@@ -207,11 +207,12 @@ func TestActivatePaidBookingSlotTakenDoesNotRevertToPending(t *testing.T) {
 	body := `{"booking_id":"` + booking.ID + `","payment_method":"qris"}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/payments", strings.NewReader(body))
 	f.srv.createPayment(rec, req, auth.Claims{Subject: f.patient.ID, Role: "patient"})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status createPayment = %d, mau %d (body: %s)", rec.Code, http.StatusBadRequest, rec.Body.String())
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), payment.Reference) || !strings.Contains(rec.Body.String(), `"status":"paid"`) {
+		t.Fatalf("retry must return the existing paid payment: %d %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "sudah dibayar") {
-		t.Errorf("pesan createPayment = %s, mau menjelaskan booking sudah dibayar", rec.Body.String())
+	var count int
+	if err := db.QueryRowContext(context.Background(), `SELECT count(*) FROM payments WHERE booking_id=$1`, booking.ID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("retry duplicated payment: count=%d err=%v", count, err)
 	}
 }
 

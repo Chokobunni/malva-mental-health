@@ -73,4 +73,7 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    // FlutterFire already supplies this exact SDK at runtime, but hides its
+    // implementation classes from the app's compile classpath.
+    compileOnly("com.google.firebase:firebase-messaging:25.1.0")
 }

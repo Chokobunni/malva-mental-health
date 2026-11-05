@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models.dart';
 import '../../providers/providers.dart';
+import '../../platform/platform_providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
@@ -25,15 +27,33 @@ import 'payment_success_screen.dart';
 // ============================================================
 
 class PaymentScreen extends ConsumerStatefulWidget {
+  static PaymentScreen forReturn(
+      {required String reference,
+      required AuthSession session,
+      required MalvaApiClient apiClient}) {
+    final previous = _PaymentScreenState
+        ._active[_PaymentScreenState._ownerKey(session, reference)];
+    return PaymentScreen(
+      key: ValueKey('${session.backendUserId}:$reference'),
+      reference: reference,
+      booking: previous?._packageBooking ?? previous?.widget.booking,
+      package: previous?.widget.package ?? previous?._restoredPackage,
+      doctorName: previous?.widget.doctorName ?? 'Profesional',
+      session: session,
+      apiClient: apiClient,
+    );
+  }
+
   const PaymentScreen({
     super.key,
     this.booking,
     this.package,
+    this.reference,
     this.doctorName = 'Profesional',
     this.session,
     this.apiClient,
-  }) : assert(booking != null || package != null,
-            'booking atau package wajib diisi');
+  }) : assert(booking != null || package != null || reference != null,
+            'booking, package atau reference wajib diisi');
 
   /// Quick consult (sesi satu kali).
   final BackendBooking? booking;
@@ -42,6 +62,9 @@ class PaymentScreen extends ConsumerStatefulWidget {
   /// booking pending milik paket — dibuat server saat createCarePackage?
   /// Tidak: paket dibayar lewat booking tersendiri di bawah ini.
   final BackendCarePackage? package;
+
+  /// Return from the gateway only resumes authenticated server verification.
+  final String? reference;
   final String doctorName;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
@@ -54,8 +77,17 @@ class PaymentScreen extends ConsumerStatefulWidget {
 
 class _PaymentScreenState extends ConsumerState<PaymentScreen>
     with WidgetsBindingObserver {
+  static final Map<String, _PaymentScreenState> _active = {};
+  static String _ownerKey(AuthSession? session, String reference) =>
+      '${session?.backendUserId}:${session?.identifier}:$reference';
+  BackendCarePackage? _restoredPackage;
   String _method = 'qris';
   bool _isPaying = false;
+  bool _checkingStatus = false;
+  bool _navigated = false;
+  bool _embeddedPaymentPage = false;
+  static const _paymentBrowser = MethodChannel('malva/payment');
+  BackendBooking? _packageBooking;
   String? _error;
 
   /// Mode pembayaran dari server (`''` = belum diketahui). Saat `gateway`,
@@ -71,7 +103,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
   Timer? _pollTimer;
   int _pollElapsedSeconds = 0;
 
-  /// Polling status tiap 3 detik, maksimum 5 menit.
+  /// Polling tiap 3 detik; setelah 5 menit turun menjadi tiap 15 detik.
   static const Duration _pollInterval = Duration(seconds: 3);
   static const int _pollMaxSeconds = 300;
 
@@ -121,16 +153,29 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
 
   String get _doctorUserId {
     if (widget.isPackage) return widget.package!.professionalId;
-    return widget.booking!.professionalId;
+    return widget.booking?.professionalId ??
+        _packageBooking?.professionalId ??
+        _restoredPackage?.professionalId ??
+        '';
   }
 
   @override
   void initState() {
     super.initState();
+    _packageBooking = widget.booking;
     // Lifecycle observer: Android bisa membekukan timer saat aplikasi di
     // belakang, jadi status juga dicek ulang saat aplikasi kembali ke depan.
     WidgetsBinding.instance.addObserver(this);
     unawaited(_loadPaymentConfig());
+    if (widget.reference != null) {
+      _waiting = true;
+      _pendingReference = widget.reference!;
+      _claimReference();
+      _mode = 'gateway';
+      _waitingNote = 'Memeriksa status pembayaran melalui server Malva.';
+      _startPolling();
+      unawaited(_checkPaymentStatus());
+    }
   }
 
   @override
@@ -138,6 +183,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
     // Batalkan polling SEBELUM widget dibuang: timer yang hidup akan memanggil
     // setState pada state yang sudah mati.
     _pollTimer?.cancel();
+    final key = _ownerKey(widget.session, _pendingReference);
+    if (identical(_active[key], this)) _active.remove(key);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -156,7 +203,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
     try {
       final config = await _api.getPaymentConfig();
       if (!mounted) return;
-      setState(() => _mode = config.mode);
+      setState(() {
+        _mode = config.mode;
+      });
     } on Object {
       // Diabaikan dengan sengaja (lihat doc comment).
     }
@@ -173,112 +222,115 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          const SectionLabel('Payment Detail'),
-          SoftCard(
-            child: Column(
-              children: [
-                _Line(
-                    label: _itemLabel,
-                    value: 'Rp ${_rupiah(_consultationPrice)}'),
-                const SizedBox(height: 6),
-                _Line(
-                    label: 'Service Fee', value: 'Rp ${_rupiah(_serviceFee)}'),
-                const Divider(height: 20),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text('Total',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w900, fontSize: 16)),
-                    ),
-                    Text(
-                      'Rp ${_rupiah(_total)}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 18,
-                        color: MalvaColors.seed,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (_isGatewayMode)
-            const Text(
-              'Metode pembayaran dipilih di halaman Midtrans.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11.5, color: Colors.black54),
-            )
-          else
-            const Text(
-              'Mode pembayaran internal (simulasi gateway). Transaksi tercatat di server.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11.5, color: Colors.black54),
-            ),
-          const SizedBox(height: 12),
-          if (_isGatewayMode) ...[
-            // Mode gateway: metode TIDAK dipilih di sini. Grid di bawah hanya
-            // berlaku untuk mode simulasi; menampilkannya akan menyesatkan
-            // (seolah metode lokal yang dipakai padahal Midtrans yang memilih).
-            const SoftCard(
+          if (widget.reference == null) ...[
+            const SectionLabel('Payment Detail'),
+            SoftCard(
               child: Column(
                 children: [
-                  Text(
-                    'GoPay, QRIS, Virtual Account & kartu',
-                    textAlign: TextAlign.center,
-                    style:
-                        TextStyle(fontWeight: FontWeight.w900, fontSize: 13.5),
-                  ),
-                  SizedBox(height: 6),
-                  Text(
-                    'Semua metode pembayaran tersedia di halaman Midtrans. '
-                    'Setelah pembayaran selesai, status di layar ini diperbarui otomatis.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  _Line(
+                      label: _itemLabel,
+                      value: 'Rp ${_rupiah(_consultationPrice)}'),
+                  const SizedBox(height: 6),
+                  _Line(
+                      label: 'Service Fee',
+                      value: 'Rp ${_rupiah(_serviceFee)}'),
+                  const Divider(height: 20),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Total',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w900, fontSize: 16)),
+                      ),
+                      Text(
+                        'Rp ${_rupiah(_total)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                          color: MalvaColors.seed,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-          ] else ...[
-            const SectionLabel('E-Wallet'),
-            GridView.count(
-              crossAxisCount: 4,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 0.85,
-              children: [
-                for (final (value, label, icon) in _wallets)
-                  _MethodTile(
-                    label: label,
-                    icon: icon,
-                    selected: _method == value,
-                    onTap: () => setState(() => _method = value),
-                  ),
-              ],
-            ),
+            const SizedBox(height: 8),
+            if (_isGatewayMode)
+              const Text(
+                'Metode pembayaran dipilih di halaman Midtrans.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11.5, color: Colors.black54),
+              )
+            else
+              const Text(
+                'Mode pembayaran internal (simulasi gateway). Transaksi tercatat di server.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11.5, color: Colors.black54),
+              ),
             const SizedBox(height: 12),
-            const SectionLabel('Virtual Account, Bank & QRIS'),
-            GridView.count(
-              crossAxisCount: 4,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 0.85,
-              children: [
-                for (final (value, label, icon) in _banks)
-                  _MethodTile(
-                    label: label,
-                    icon: icon,
-                    selected: _method == value,
-                    onTap: () => setState(() => _method = value),
-                  ),
-              ],
-            ),
+            if (_isGatewayMode) ...[
+              // Mode gateway: metode TIDAK dipilih di sini. Grid di bawah hanya
+              // berlaku untuk mode simulasi; menampilkannya akan menyesatkan
+              // (seolah metode lokal yang dipakai padahal Midtrans yang memilih).
+              const SoftCard(
+                child: Column(
+                  children: [
+                    Text(
+                      'GoPay, QRIS, Virtual Account & kartu',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 13.5),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'Semua metode pembayaran tersedia di halaman Midtrans. '
+                      'Setelah pembayaran selesai, status di layar ini diperbarui otomatis.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              const SectionLabel('E-Wallet'),
+              GridView.count(
+                crossAxisCount: 4,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 0.85,
+                children: [
+                  for (final (value, label, icon) in _wallets)
+                    _MethodTile(
+                      label: label,
+                      icon: icon,
+                      selected: _method == value,
+                      onTap: () => setState(() => _method = value),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const SectionLabel('Virtual Account, Bank & QRIS'),
+              GridView.count(
+                crossAxisCount: 4,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 0.85,
+                children: [
+                  for (final (value, label, icon) in _banks)
+                    _MethodTile(
+                      label: label,
+                      icon: icon,
+                      selected: _method == value,
+                      onTap: () => setState(() => _method = value),
+                    ),
+                ],
+              ),
+            ],
           ],
           if (_error != null) ...[
             const SizedBox(height: 10),
@@ -304,6 +356,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
                     style: const TextStyle(fontSize: 12, color: Colors.black54),
                   ),
                   const SizedBox(height: 10),
+                  SelectableText(_pendingReference),
                   OutlinedButton(
                     onPressed: _isPaying ? null : () => _checkPaymentStatus(),
                     child: const Text('Cek status'),
@@ -316,17 +369,21 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
                             unawaited(_openPaymentPage(_pendingRedirectUrl)),
                     child: const Text('Buka halaman pembayaran'),
                   ),
+                  if (_pendingRedirectUrl.isEmpty && widget.reference == null)
+                    TextButton(
+                        onPressed: _isPaying ? null : _pay,
+                        child: const Text('Pulihkan halaman pembayaran')),
                 ],
               ),
             ),
-          ] else
+          ] else if (widget.reference == null)
             FilledButton(
               onPressed: _isPaying ? null : _pay,
               child: Text(_isPaying ? 'Memproses...' : 'Bayar Sekarang'),
             ),
           const SizedBox(height: 8),
           const Text(
-            'Setelah pembayaran berhasil, kamu akan diminta memilih data yang dibagikan ke profesional.',
+            'Setelah pembayaran berhasil, lihat paket atau sesi kamu di MyCare. Pengaturan berbagi data dapat diubah melalui Kelola Data.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: Colors.black54),
           ),
@@ -374,27 +431,45 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
   /// slot otomatis "pertama yang bebas". Setelah bayar, paket aktif dan
   /// sesi pertama langsung terjadwal sesuai pilihan pasien.
   Future<void> _payPackage(MalvaApiClient apiClient, String accessToken) async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-      ),
-      builder: (_) => PackageFirstSessionSheet(
-        apiClient: apiClient,
+    var booking = _packageBooking;
+    if (booking == null && widget.package!.bookingId != null) {
+      final bookings =
+          await apiClient.listBookings(accessToken: accessToken, limit: 100);
+      for (final b in bookings) {
+        if (b.id == widget.package!.bookingId) {
+          booking = b;
+          break;
+        }
+      }
+      if (booking == null) {
+        throw const MalvaApiException(
+            'Booking paket belum ditemukan. Muat ulang paket lalu coba lagi.');
+      }
+    }
+    if (booking == null) {
+      final picked = await showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+        ),
+        builder: (_) => PackageFirstSessionSheet(
+          apiClient: apiClient,
+          accessToken: accessToken,
+          professionalId: widget.package!.professionalId,
+        ),
+      );
+      if (picked == null || !mounted) return;
+      final parts = picked.split('|');
+      booking = await apiClient.createPackageSessionBooking(
         accessToken: accessToken,
-        professionalId: widget.package!.professionalId,
-      ),
-    );
-    if (picked == null || !mounted) return;
-    final parts = picked.split('|');
-    final booking = await apiClient.createPackageSessionBooking(
-      accessToken: accessToken,
-      packageId: widget.package!.id,
-      bookingDate: parts[0].split('T')[0],
-      slotTime: parts[0].split('T')[1],
-      sessionType: parts.length > 1 ? parts[1] : 'chat',
-    );
+        packageId: widget.package!.id,
+        bookingDate: parts[0].split('T')[0],
+        slotTime: parts[0].split('T')[1],
+        sessionType: parts.length > 1 ? parts[1] : 'chat',
+      );
+    }
+    _packageBooking = booking;
     final response = await apiClient.createPayment(
       accessToken: accessToken,
       bookingId: booking.id,
@@ -413,7 +488,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
     String accessToken,
     BackendPayment payment,
   ) async {
-    if (payment.redirectUrl.isNotEmpty) {
+    if (payment.status.toLowerCase() == 'paid') {
+      _goToSuccess(payment.reference);
+      return;
+    }
+    if (payment.redirectUrl.isNotEmpty ||
+        payment.gateway == 'midtrans' ||
+        _isGatewayMode) {
       _startWaitingForGateway(payment);
       return;
     }
@@ -435,16 +516,66 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
       _waiting = true;
       _isPaying = false;
       _error = null;
-      _waitingNote = '';
+      _waitingNote = payment.redirectUrl.isEmpty
+          ? 'Transaksi sedang diperiksa. Jangan membuat pembayaran baru. Pulihkan halaman pembayaran atau hubungi tim Malva dengan nomor referensi ini bila halaman belum tersedia.'
+          : '';
       _pendingReference = payment.reference;
       _pendingRedirectUrl = payment.redirectUrl;
       _pollElapsedSeconds = 0;
     });
+    _claimReference();
+    _startPolling();
+    unawaited(_openPaymentPage(payment.redirectUrl));
+  }
+
+  void _claimReference() {
+    final key = _ownerKey(widget.session, _pendingReference);
+    final previous = _active[key];
+    if (previous != null && !identical(previous, this)) {
+      previous._pollTimer?.cancel();
+      previous._navigated = true;
+    }
+    _active[key] = this;
+  }
+
+  Future<void> _restoreReturnContext(
+      BackendPayment payment, String accessToken) async {
+    if (widget.reference == null ||
+        widget.booking != null ||
+        widget.package != null) return;
+    final bookings =
+        await _api.listBookings(accessToken: accessToken, limit: 100);
+    for (final booking in bookings) {
+      if (booking.id == payment.bookingId) {
+        _packageBooking = booking;
+        break;
+      }
+    }
+    if (_packageBooking == null)
+      throw const MalvaApiException(
+          'Pembayaran diterima. Konteks booking belum tersedia; cek status lagi atau buka MyCare.');
+    if (_packageBooking!.serviceType == 'package_session') {
+      final packages = await _api.listCarePackages(accessToken: accessToken);
+      for (final package in packages) {
+        if (package.bookingId == payment.bookingId) {
+          _restoredPackage = package;
+          break;
+        }
+      }
+      if (_restoredPackage == null)
+        throw const MalvaApiException(
+            'Pembayaran diterima. Paket belum tersedia; cek status lagi atau buka MyCare.');
+    }
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
     _pollTimer = Timer.periodic(_pollInterval, (_) {
       _pollElapsedSeconds += _pollInterval.inSeconds;
+      if (_pollElapsedSeconds >= _pollMaxSeconds &&
+          _pollElapsedSeconds % 15 != 0) return;
       unawaited(_checkPaymentStatus(silent: true));
     });
-    unawaited(_openPaymentPage(payment.redirectUrl));
   }
 
   /// Membuka halaman pembayaran gateway. Kegagalan membuka halaman tidak
@@ -452,10 +583,18 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
   Future<void> _openPaymentPage(String url) async {
     if (url.isEmpty) return;
     try {
-      final opened = await launchUrl(
-        Uri.parse(url),
-        mode: LaunchMode.externalApplication,
-      );
+      final uri = Uri.parse(url);
+      _embeddedPaymentPage =
+          ref.read(capabilitiesProvider).canUseEmbeddedPaymentSandbox &&
+              uri.scheme == 'https' &&
+              uri.host == 'app.sandbox.midtrans.com' &&
+              uri.path.startsWith('/snap/');
+      final opened = _embeddedPaymentPage
+          ? (await _paymentBrowser
+                  .invokeMethod<bool>('openSandbox', {'url': url}) ??
+              false)
+          : await launchUrl(Uri.parse(url),
+              mode: LaunchMode.externalApplication);
       if (!opened && mounted) {
         setState(() => _waitingNote =
             'Halaman pembayaran tidak bisa dibuka otomatis. Tekan "Buka halaman pembayaran" di bawah.');
@@ -468,18 +607,24 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
   /// Memeriksa status pembayaran ke server (juga memicu aktivasi best-effort
   /// di server bila sudah lunas tetapi sesinya belum lahir).
   Future<void> _checkPaymentStatus({bool silent = false}) async {
-    if (_pendingReference.isEmpty) return;
+    if (_pendingReference.isEmpty || _checkingStatus || _navigated) return;
     final accessToken = widget.session?.accessToken;
     if (accessToken == null || accessToken.isEmpty) return;
+    _checkingStatus = true;
     if (!silent && mounted) setState(() => _isPaying = true);
     try {
       final status = await _api.getPaymentStatus(
         accessToken: accessToken,
         reference: _pendingReference,
       );
-      if (!mounted) return;
+      if (!mounted || _navigated) return;
       final state = status.payment.status.toLowerCase();
+      if (status.payment.redirectUrl.isNotEmpty) {
+        _pendingRedirectUrl = status.payment.redirectUrl;
+      }
       if (state == 'paid') {
+        await _restoreReturnContext(status.payment, accessToken);
+        if (!mounted || _navigated) return;
         _pollTimer?.cancel();
         setState(() => _waiting = false);
         _goToSuccess(_pendingReference);
@@ -491,18 +636,17 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
           _waiting = false;
           _isPaying = false;
           _error = 'Pembayaran tidak selesai ($state). '
-              'Kamu bisa mencoba lagi dengan menekan "Bayar Sekarang".';
+              '${widget.reference == null ? 'Kamu bisa mencoba lagi dengan menekan "Bayar Sekarang".' : 'Kembali ke MyCare untuk melanjutkan pembelian.'}';
         });
         return;
       }
-      // Masih pending: berhenti polling setelah batas waktu, tetapi tetap
-      // tampilkan keadaan menunggu (belum bayar bukan kegagalan).
+      // Setelah lima menit tetap pantau dengan interval lebih jarang.
       if (_pollElapsedSeconds >= _pollMaxSeconds) {
-        _pollTimer?.cancel();
         setState(() {
           _isPaying = false;
-          _waitingNote = 'Pembayaran belum terkonfirmasi. '
-              'Bila sudah membayar, tekan "Cek status" — sesi aktif otomatis setelah pembayaran diterima.';
+          _waitingNote =
+              'Pembayaran belum terkonfirmasi. Status tetap diperiksa otomatis. '
+              'Bila sudah membayar, kamu juga bisa menekan "Cek status".';
         });
         return;
       }
@@ -514,18 +658,22 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
         _isPaying = false;
         if (!silent) _waitingNote = friendlyErrorMessage(e);
       });
+    } finally {
+      _checkingStatus = false;
     }
   }
 
   /// Pindah ke layar sukses (layar itu yang mengarahkan ke MyCare).
   void _goToSuccess(String reference) {
-    if (!mounted) return;
+    if (!mounted || _navigated) return;
+    _navigated = true;
+    unawaited(_closePaymentPage());
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
         builder: (_) => PaymentSuccessScreen(
           reference: reference,
-          package: widget.package,
+          package: widget.package ?? _restoredPackage,
           doctorUserId: _doctorUserId,
           doctorName: widget.doctorName,
           session: widget.session,
@@ -533,6 +681,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
         ),
       ),
     );
+  }
+
+  Future<void> _closePaymentPage() async {
+    if (!_embeddedPaymentPage) return;
+    try {
+      await _paymentBrowser.invokeMethod<void>('closeSandbox');
+    } on Object {/* unsupported platform */}
   }
 
   static String _rupiah(int value) {
