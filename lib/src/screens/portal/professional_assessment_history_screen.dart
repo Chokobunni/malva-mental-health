@@ -410,8 +410,8 @@ class _ScreeningRow extends StatelessWidget {
             children: [
               Text(
                 patientName,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w900, fontSize: 16),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
               ),
               Text(
                 _screeningDateLabel(screening.createdAt),
@@ -482,7 +482,9 @@ class _ScoreChip extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-                fontWeight: FontWeight.w800, fontSize: 11, color: Colors.black54),
+                fontWeight: FontWeight.w800,
+                fontSize: 11,
+                color: Colors.black54),
           ),
           const SizedBox(height: 2),
           Text(
@@ -560,8 +562,8 @@ class _TraceBlock extends StatelessWidget {
             Row(
               children: [
                 const Text('Certainty Factor',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 12)),
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
                 const SizedBox(width: 8),
                 StatusPill(
                   label: certaintyFactor.toStringAsFixed(2),
@@ -573,8 +575,7 @@ class _TraceBlock extends StatelessWidget {
           if (hasTrace) ...[
             const SizedBox(height: 8),
             const Text('Jejak aturan (rule trace)',
-                style:
-                    TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
             const SizedBox(height: 4),
             SelectableText(
               ruleTrace,

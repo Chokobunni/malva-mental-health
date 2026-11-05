@@ -38,7 +38,8 @@ class SharedPatientDataScreen extends ConsumerStatefulWidget {
       _SharedPatientDataScreenState();
 }
 
-class _SharedPatientDataScreenState extends ConsumerState<SharedPatientDataScreen>
+class _SharedPatientDataScreenState
+    extends ConsumerState<SharedPatientDataScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   List<BackendPatientProfessionalLink> _links = const [];
@@ -90,8 +91,7 @@ class _SharedPatientDataScreenState extends ConsumerState<SharedPatientDataScree
       if (!mounted) return;
       setState(() {
         _links = links;
-        _selectedPatientId =
-            links.isEmpty ? null : links.first.patientId;
+        _selectedPatientId = links.isEmpty ? null : links.first.patientId;
         _isLoading = false;
       });
     } on MalvaApiException catch (error) {
@@ -509,8 +509,7 @@ class _MoodTabState
                   spacing: 8,
                   runSpacing: 4,
                   children: [
-                    _MiniStat(
-                        label: 'Tidur', value: '${mood.sleepHours} jam'),
+                    _MiniStat(label: 'Tidur', value: '${mood.sleepHours} jam'),
                     _MiniStat(label: 'Energi', value: '${mood.energy}'),
                     _MiniStat(label: 'Cemas', value: '${mood.anxiety}'),
                     _MiniStat(label: 'Iritabel', value: '${mood.irritability}'),
@@ -665,8 +664,8 @@ class _MedicationTabState
               children: [
                 const CircleAvatar(
                   backgroundColor: Color(0x1F36C7A6),
-                  child: Icon(Icons.medication_rounded,
-                      color: MalvaColors.mint),
+                  child:
+                      Icon(Icons.medication_rounded, color: MalvaColors.mint),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -777,8 +776,7 @@ class _HealthRecordTabState
           for (final med in data.medications) ...[
             SoftCard(
               bordered: true,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(
                 children: [
                   Expanded(

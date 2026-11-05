@@ -176,10 +176,9 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             final ratingLabel = reviews.reviewCount > 0
                                 ? '${reviews.averageStars.toStringAsFixed(1)} (${reviews.reviewCount})'
                                 : 'Belum ada ulasan';
-                            final specLabel =
-                                cred.specialization.trim().isEmpty
-                                    ? professionalRoleLabel(cred.specialization)
-                                    : '${professionalRoleLabel(cred.specialization)} (${cred.specialization})';
+                            final specLabel = cred.specialization.trim().isEmpty
+                                ? professionalRoleLabel(cred.specialization)
+                                : '${professionalRoleLabel(cred.specialization)} (${cred.specialization})';
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [

@@ -200,7 +200,8 @@ void main() {
   // sudah ditandai "Hadir" (completed) — yang setelah reload masuk daftar past
   // — kehilangan tombol Join/Chat. Test ini gagal sebelum `if (live)`.
   // ------------------------------------------------------------------
-  testWidgets('kartu Jadwal profesional: sesi past yang masih berjalan tetap '
+  testWidgets(
+      'kartu Jadwal profesional: sesi past yang masih berjalan tetap '
       'menampilkan "Join / Chat"', (tester) async {
     final now = wibNow();
     final pastSession = _sessionJson(

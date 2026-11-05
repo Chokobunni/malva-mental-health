@@ -67,7 +67,8 @@ class _FakeClient extends http.BaseClient {
 }
 
 void main() {
-  testWidgets('isi nama obat lalu submit tidak memunculkan '
+  testWidgets(
+      'isi nama obat lalu submit tidak memunculkan '
       '"Nama obat tidak boleh kosong"', (tester) async {
     final api = MalvaApiClient(
       baseUrl: 'http://backend.test',

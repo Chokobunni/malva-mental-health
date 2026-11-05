@@ -110,7 +110,8 @@ void main() {
     expect(notAttended.isAttended, isFalse);
   });
 
-  testWidgets('kartu sesi attended: pill "Hadir", tanpa "Tidak hadir", '
+  testWidgets(
+      'kartu sesi attended: pill "Hadir", tanpa "Tidak hadir", '
       'tetap ada "Join / Chat"', (tester) async {
     final now = wibNow();
     final attendedSession = <String, dynamic>{
@@ -154,7 +155,8 @@ void main() {
     expect(find.text('Hadir'), findsOneWidget,
         reason: 'pill "Hadir" harus tampil untuk sesi yang sudah hadir');
     expect(find.text('Tidak hadir'), findsNothing,
-        reason: 'tombol "Tidak hadir" tidak boleh ditawarkan lagi setelah hadir');
+        reason:
+            'tombol "Tidak hadir" tidak boleh ditawarkan lagi setelah hadir');
     expect(find.text('Join / Chat'), findsOneWidget,
         reason: 'sesi tetap berjalan setelah hadir; Join / Chat harus ada');
   });

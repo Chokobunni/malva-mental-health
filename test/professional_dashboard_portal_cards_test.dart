@@ -166,7 +166,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('dashboard menampilkan kartu "Riwayat Asesmen" dan '
+  testWidgets(
+      'dashboard menampilkan kartu "Riwayat Asesmen" dan '
       '"Data Pasien Dibagikan"', (tester) async {
     await _pumpDashboard(tester);
 
