@@ -24,7 +24,7 @@ import 'assessment_scoring.dart';
 import 'certainty_factor.dart';
 
 /// Versi kumpulan aturan; disimpan pada hasil agar dapat diaudit.
-const String assessmentRuleVersion = 'dass21-who5-v1';
+const String assessmentRuleVersion = 'dass21-who5-v2';
 
 /// Tingkat triage yang mungkin keluar dari mesin inferensi.
 enum TriageLevel {
@@ -94,10 +94,11 @@ class AssessmentInterpretation {
 /// `dass21` atau `who5`), sehingga rule yang membutuhkan dua instrumen
 /// sekaligus hanya menembak bila datanya ada.
 class _Facts {
-  const _Facts({this.dass, this.who5});
+  const _Facts({this.dass, this.who5, this.who5LowItem = false});
 
   final Dass21Score? dass;
   final Who5Score? who5;
+  final bool who5LowItem;
 
   String? get depressionLevel => dass?.depressionLevel;
   String? get anxietyLevel => dass?.anxietyLevel;
@@ -115,7 +116,10 @@ class _Facts {
       return _Facts(dass: scoreDass21(answers));
     }
     if (moduleId == 'who5') {
-      return _Facts(who5: scoreWho5(answers));
+      return _Facts(
+        who5: scoreWho5(answers),
+        who5LowItem: hasStandardizedWho5LowItem(answers),
+      );
     }
     return const _Facts();
   }
@@ -219,12 +223,15 @@ AssessmentInterpretation interpretDassWho5({
           'pertimbangkan konsultasi bila berlanjut.',
     ));
   }
-  if (who5Percent != null && who5Percent <= 50) {
+  if (who5Percent != null && (who5Percent < 50 || facts.who5LowItem)) {
     fired.add(_FiredRule(
       level: TriageLevel.sedang,
       certainty: 0.55,
-      reason: 'Kesejahteraan (WHO-5) $who5Percent% — di bawah ambang '
-          'kesejahteraan baik (50%).',
+      reason: facts.who5LowItem
+          ? 'WHO-5 memiliki jawaban 0–1; screening lanjutan dianjurkan '
+              'meskipun skor total $who5Percent%.'
+          : 'Kesejahteraan (WHO-5) $who5Percent% — di bawah ambang '
+              'kesejahteraan baik (50%).',
     ));
   }
 

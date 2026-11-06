@@ -193,7 +193,7 @@ class TherapyWorksheetField {
 // `assessmentSummary` tetap dapat dipakai dari sini.
 //
 // Lapisan interpretasi triage (Forward Chaining + Certainty Factor) ada di
-// `ai/assessment_interpretation.dart`. CF HANYA menilai keyakinan triage dan
+// `ai/assessment_interpretation.dart`. CF HANYA menilai dukungan aturan dan
 // TIDAK PERNAH mengubah skor/level instrumen.
 
 /// Jumlah item skala yang belum dijawab (untuk validasi assessment).
@@ -234,23 +234,24 @@ const List<String> _dassScaleShort = [
 const dass21Module = TherapyModule(
   id: 'dass21',
   title: 'DASS-21 (Depression Anxiety Stress Scales)',
-  description:
-      'Kuesioner 21 pertanyaan untuk mengukur tiga aspek: depresi, kecemasan, '
-      'dan stres selama minggu terakhir. Pilih jawaban 0-3 yang paling sesuai '
-      'untuk setiap pernyataan. Skor dihitung otomatis per kategori (0-42) dan '
-      'langsung tampil setelah semua pertanyaan terjawab.',
+  description: 'DASS-21 (Depression Anxiety Stress Scales) adalah kuesioner 21 '
+      'pernyataan tentang gejala depresi, kecemasan, dan stres selama 1 minggu '
+      'terakhir. Jawab semua pernyataan sesuai pengalamanmu dengan skala '
+      '0 = Tidak pernah, 1 = Kadang-kadang, 2 = Sering, 3 = Hampir selalu.\n\n'
+      'Skor setiap subskala = jumlah 7 jawaban × 2, sehingga masing-masing '
+      'berkisar 0-42. Rentang Normal / Ringan / Sedang / Berat / Sangat berat:\n'
+      'Depresi: 0-9 / 10-13 / 14-20 / 21-27 / 28-42.\n'
+      'Kecemasan: 0-7 / 8-9 / 10-14 / 15-19 / 20-42.\n'
+      'Stres: 0-14 / 15-18 / 19-25 / 26-33 / 34-42.\n\n'
+      'Hasil adalah screening, bukan diagnosis. Certainty Factor (CF) '
+      'menunjukkan dukungan aturan dalam model untuk arahan tindak lanjut, '
+      'bukan probabilitas diagnosis atau persentase keparahan. Bobot CF belum '
+      'dikalibrasi secara klinis; CF tidak mengubah skor atau kategori instrumen.',
   icon: Icons.assignment_rounded,
   color: MalvaColors.seed,
   category: 'Assessment',
   worksheetFields: dass21WorksheetFields,
-  steps: [
-    'Cari tempat tenang dan luangkan waktu ± 10 menit.',
-    'Jawab 21 pernyataan sesuai kondisi minggu terakhir.',
-    'Jawab berdasarkan pengalaman nyata, bukan yang "seharusnya".',
-    'Semua pertanyaan wajib dijawab — skor Depresi, Kecemasan, dan Stres dihitung otomatis.',
-    'Simpan hasilnya untuk dibagikan ke profesional saat konsultasi.',
-    'Ulangi setiap 2-4 minggu untuk memantau tren, bukan hari per hari.',
-  ],
+  steps: [],
 );
 
 /// Field worksheet DASS-21 (21 item, skala 0-3 berlabel).
@@ -480,20 +481,26 @@ const who5Module = TherapyModule(
   id: 'who5',
   title: 'WHO-5 (Well-Being Index)',
   description:
-      'Kuesioner singkat 5 pertanyaan untuk mengukur kesejahteraan psikologis '
-      'dua minggu terakhir. Pilih jawaban 0-5 yang paling sesuai untuk setiap '
-      'pernyataan. Skor total dihitung otomatis (0-25).',
+      'WHO-5 (Well-Being Index) adalah kuesioner singkat 5 pernyataan tentang '
+      'kesejahteraan psikologis selama 2 minggu terakhir. Jawab semua '
+      'pernyataan: 0 = Tidak pernah, 1 = Jarang, '
+      '2 = Kurang dari setengah waktu, 3 = Lebih dari setengah waktu, '
+      '4 = Sebagian besar waktu, 5 = Selalu.\n\n'
+      'Skor mentah = jumlah 5 jawaban (0-25). Skor persentase = skor mentah × 4 '
+      '(0-100%); semakin tinggi skor, semakin baik kesejahteraan. Skor mentah '
+      'di bawah 13 (persentase <50%) atau satu jawaban 0-1 menjadi alasan '
+      'screening lanjutan PHQ-9/GAD-7. Karena kelipatan 4, batas yang dapat '
+      'dicapai adalah 48% dan 52%, bukan tepat 50%. Skor ≤7 menunjukkan '
+      'kesejahteraan sangat rendah dan perlu penilaian profesional.\n\n'
+      'Hasil adalah screening, bukan diagnosis. Certainty Factor (CF) '
+      'menunjukkan dukungan aturan dalam model untuk arahan tindak lanjut, '
+      'bukan probabilitas diagnosis atau persentase keparahan. Bobot CF belum '
+      'dikalibrasi secara klinis; CF tidak mengubah skor instrumen.',
   icon: Icons.favorite_rounded,
   color: MalvaColors.mint,
   category: 'Assessment',
   worksheetFields: who5WorksheetFields,
-  steps: [
-    'Siapkan diri di kondisi tenang (± 3 menit).',
-    'Ingat dua minggu terakhir, bukan hanya hari ini.',
-    'Jawab kelima pernyataan — semuanya wajib dijawab.',
-    'Skor dihitung otomatis (0-25): ≤ 12 (≤ 50%) berarti kesejahteraan rendah dan disarankan screening lanjutan.',
-    'Ulangi rutin untuk melihat arah perubahan.',
-  ],
+  steps: [],
 );
 
 /// Field worksheet WHO-5 (5 item, skala 0-5 berlabel).
@@ -1503,43 +1510,45 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          SoftCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Langkah-langkah',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
-                const SizedBox(height: 10),
-                for (var i = 0; i < module.steps.length; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        CircleAvatar(
-                          radius: 11,
-                          backgroundColor: color.withValues(alpha: 0.14),
-                          child: Text(
-                            '${i + 1}',
-                            style: TextStyle(
-                                color: color,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 11),
+          if (!module.isAssessment && module.steps.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            SoftCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Langkah-langkah',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+                  const SizedBox(height: 10),
+                  for (var i = 0; i < module.steps.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CircleAvatar(
+                            radius: 11,
+                            backgroundColor: color.withValues(alpha: 0.14),
+                            child: Text(
+                              '${i + 1}',
+                              style: TextStyle(
+                                  color: color,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(module.steps[i],
-                              style: Theme.of(context).textTheme.bodyMedium),
-                        ),
-                      ],
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(module.steps[i],
+                                style: Theme.of(context).textTheme.bodyMedium),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
           if (module.worksheetFields.isNotEmpty) ...[
             const SizedBox(height: 14),
             Row(
@@ -1757,7 +1766,10 @@ String? _answerText(TherapyWorksheetField field, Object? answer) {
     }
     return '$answer';
   }
-  if (answer is num) return _answerText(field, answer.toInt());
+  if (answer is num) {
+    if (!answer.isFinite || answer != answer.roundToDouble()) return '$answer';
+    return _answerText(field, answer.toInt());
+  }
   if (answer is String) return answer.isEmpty ? null : answer;
   if (answer is List) {
     final parts = answer.map((e) => e.toString()).toList();
@@ -1816,7 +1828,7 @@ List<TherapyAnswerEntry> therapyAnswerEntries({
 ///
 /// Skor di kartu ini DETERMINISTIK (lihat `ai/assessment_scoring.dart`).
 /// Baris "Interpretasi triage" memakai lapisan pakar (forward chaining + CF,
-/// lihat `ai/assessment_interpretation.dart`) yang HANYA menilai keyakinan
+/// lihat `ai/assessment_interpretation.dart`) yang HANYA menilai dukungan aturan
 /// rujukan — tidak pernah mengubah skor maupun level subskala.
 class AssessmentResultCard extends StatelessWidget {
   const AssessmentResultCard({
@@ -1830,6 +1842,25 @@ class AssessmentResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final module = findTherapyModuleById(moduleId);
+    final complete = module?.isAssessment == true &&
+        module!.worksheetFields.every((field) {
+          final value = answers[field.id];
+          return value is num &&
+              value.isFinite &&
+              value == value.roundToDouble() &&
+              value >= field.minValue! &&
+              value <= field.maxValue!;
+        });
+    if (!complete) {
+      return const SoftCard(
+        color: Colors.white,
+        child: Text(
+          'Skor belum tersedia. Jawaban assessment tidak lengkap atau tidak '
+          'valid; skor dan interpretasi tidak ditampilkan.',
+        ),
+      );
+    }
     final interpretation =
         interpretDassWho5(answers: answers, moduleId: moduleId);
     if (moduleId == 'dass21') {
@@ -1844,7 +1875,7 @@ class AssessmentResultCard extends StatelessWidget {
   ) {
     final s = scoreDass21(answers);
     return SoftCard(
-      color: MalvaColors.seed.withValues(alpha: 0.06),
+      color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1904,18 +1935,13 @@ class AssessmentResultCard extends StatelessWidget {
     AssessmentInterpretation interpretation,
   ) {
     final s = scoreWho5(answers);
-    final level = s.possibleDepression
-        ? 'Perlu screening lanjutan'
-        : s.lowWellbeing
-            ? 'Rendah'
-            : 'Baik';
     final color = s.possibleDepression
         ? MalvaColors.danger
         : s.lowWellbeing
             ? MalvaColors.amber
             : MalvaColors.mint;
     return SoftCard(
-      color: MalvaColors.mint.withValues(alpha: 0.10),
+      color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1935,16 +1961,16 @@ class AssessmentResultCard extends StatelessWidget {
                     style: const TextStyle(
                         fontWeight: FontWeight.w900, fontSize: 18)),
               ),
-              StatusPill(label: level, color: color),
+              StatusPill(label: s.level, color: color),
             ],
           ),
           const SizedBox(height: 6),
           Text(
             s.possibleDepression
-                ? 'Skor ≤ 7 menandakan kemungkinan depresi — disarankan screening lanjutan dan konsultasi profesional.'
+                ? 'Skor ≤ 7 menunjukkan kesejahteraan sangat rendah — disarankan screening lanjutan dan konsultasi profesional.'
                 : s.lowWellbeing
-                    ? 'Skor ≤ 12 (≤ 50%) menandakan kesejahteraan rendah — pertimbangkan konsultasi.'
-                    : 'Kesejahteraan dalam rentang baik. Ulangi rutin untuk memantau tren.',
+                    ? 'Skor ≤ 12 (<50%) menunjukkan kesejahteraan rendah — pertimbangkan konsultasi.'
+                    : 'Kesejahteraan dalam rentang ${s.level.toLowerCase()}. Ulangi rutin untuk memantau tren.',
             style: const TextStyle(fontSize: 12.5),
           ),
           const SizedBox(height: 12),
@@ -1970,7 +1996,7 @@ class AssessmentResultCard extends StatelessWidget {
 /// Baris "Interpretasi triage: Tinggi (CF 78%)" + alasan singkat.
 ///
 /// Nada sengaja suportif: tujuannya mengarahkan pasien ke bantuan yang tepat,
-/// bukan menakut-nakuti. CF ditampilkan sebagai persen keyakinan sistem.
+/// bukan menakut-nakuti. CF ditampilkan sebagai dukungan aturan dalam model.
 class _TriageLine extends StatelessWidget {
   const _TriageLine({required this.interpretation});
 
@@ -1988,7 +2014,7 @@ class _TriageLine extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: _color.withValues(alpha: 0.08),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _color.withValues(alpha: 0.28)),
       ),
@@ -2014,6 +2040,12 @@ class _TriageLine extends StatelessWidget {
             const SizedBox(height: 4),
             Text('• $reason', style: const TextStyle(fontSize: 11.5)),
           ],
+          const SizedBox(height: 6),
+          const Text(
+            'CF adalah dukungan aturan dalam model, bukan probabilitas diagnosis '
+            'atau persentase keparahan. Bobot belum dikalibrasi secara klinis.',
+            style: TextStyle(fontSize: 11.5),
+          ),
         ],
       ),
     );
@@ -3427,15 +3459,7 @@ class TherapySubmissionView extends StatelessWidget {
     final Widget? resultCard = (module != null && module.isAssessment)
         ? AssessmentResultCard(
             moduleId: module.id,
-            answers: {
-              for (final f in fields)
-                if (answers[f.id] is int) f.id: (answers[f.id] as int),
-              // Penanda versi skala dari submission asli WAJIB diteruskan:
-              // tanpanya, submission baru (0-3/0-5) akan dihitung dengan rumus
-              // lama dan skornya salah.
-              if (answers[scaleVersionKey] is int)
-                scaleVersionKey: answers[scaleVersionKey] as int,
-            },
+            answers: answers,
           )
         : null;
 
@@ -3463,7 +3487,9 @@ class TherapySubmissionView extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.05),
+                color: module?.isAssessment == true
+                    ? Colors.white
+                    : color.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: color.withValues(alpha: 0.18)),
               ),
@@ -3488,6 +3514,7 @@ class TherapySubmissionView extends StatelessWidget {
     );
 
     return CollapsibleCard(
+      color: module?.isAssessment == true ? Colors.white : null,
       header: header,
       semanticLabel: 'Jawaban $title',
       child: detail,

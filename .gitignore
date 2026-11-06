@@ -60,6 +60,7 @@ coverage.out
 
 # Graphify knowledge graph output (generated, bukan source code)
 graphify-out/
+.superpowers/
 
 # Local secrets and production environment files
 .env

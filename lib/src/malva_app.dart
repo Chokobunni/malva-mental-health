@@ -8,7 +8,7 @@ import 'platform/contracts/ports.dart';
 import 'platform/background_chat_delivery.dart';
 import 'platform/platform_providers.dart';
 import 'providers/providers.dart';
-import 'screens/assessment_screen.dart';
+import 'screens/initial_symptoms_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/booking/payment_screen.dart';
 import 'screens/initial_screening_consent_screen.dart';
@@ -337,10 +337,10 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     }
 
     if (_isTakingInitialScreening) {
-      return AssessmentScreen(
+      return InitialSymptomsScreen(
+        key: ValueKey(ref.read(currentSessionProvider)?.identifier),
         session: ref.read(currentSessionProvider),
         apiClient: ref.read(apiClientProvider),
-        isInitialScreening: true,
         onComplete: () => setState(() => _isTakingInitialScreening = false),
         onBack: () => setState(() => _isTakingInitialScreening = false),
       );

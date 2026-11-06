@@ -144,3 +144,13 @@ Home pasien: sesi berjalan dan video mendatang dengan foto profesional. Profesio
 - Profesional: Messages pada navigasi, Quick Video Call ikut scroll, sesi lewat durasi yang perlu diselesaikan ditampilkan di awal jadwal.
 - MyCare Jadwal/Riwayat: jenis sesi, konteks check-in dan hasil sesi; tidak ada judul kehadiran kosong.
 - Crisis Incident Log: screening berupa riwayat; hanya SOS belum resolved dihitung sebagai perlu tindak lanjut, dengan konfirmasi penanganan tanpa wajib mengetik.
+
+## Skrining WHO-5 dan assessment terpadu (7 November 2026)
+
+Symptoms Assessment dimulai dengan WHO-5 lengkap. Persentase = raw x4;
+raw <13 atau satu item 0-1 mengaktifkan PHQ-9/GAD-7, sedangkan hasil baik
+berakhir pada kesimpulan WHO tanpa membuat skor PHQ/GAD. DASS-21 tetap manual.
+Katalog pasien dan detail profesional menyatukan empat instrumen. Skor baku
+terpisah dari CF dukungan model yang belum dikalibrasi klinis. Kontrak data,
+consent dan berbagi tetap memakai mekanisme sebelumnya.
+Rincian: [scoring dan Forward Chaining](SCREENING_SCORING.md).

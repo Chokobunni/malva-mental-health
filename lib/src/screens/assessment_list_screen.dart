@@ -12,8 +12,8 @@ import 'assessment_screen.dart';
 
 // ============================================================
 // ASSESSMENT LIST — daftar pilihan asesmen dari Home.
-// Menampilkan: PHQ-9 + GAD-7 (screening utama) serta asesmen lanjutan
-// (DASS-21, WHO-5) yang tersimpan di database sebagai worksheet.
+// Semua screening tetap dapat dipilih manual; WHO-5 dan DASS-21
+// tersimpan sebagai worksheet melalui kontrak yang sudah ada.
 // ============================================================
 
 class AssessmentListScreen extends ConsumerWidget {
@@ -45,7 +45,7 @@ class AssessmentListScreen extends ConsumerWidget {
               children: [
                 if (latest != null) ...[
                   SoftCard(
-                    color: latest.overallLevel.color.withValues(alpha: 0.10),
+                    color: Colors.white,
                     child: Row(
                       children: [
                         CircleAvatar(
@@ -82,14 +82,28 @@ class AssessmentListScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 18),
                 ],
-                const SectionLabel('Screening Utama'),
+                const SectionLabel('Screening WHO-5, GAD-7, PHQ-9, DASS-21'),
+                _AssessmentTile(
+                  icon: who5Module.icon ?? Icons.favorite_rounded,
+                  color: who5Module.color ?? MalvaColors.mint,
+                  title: who5Module.title,
+                  subtitle:
+                      '5 pertanyaan kesejahteraan psikologis, 2 minggu terakhir (skala 0-5).',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const TherapyDetailScreen(module: who5Module),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 _AssessmentTile(
                   icon: Icons.fact_check_rounded,
                   color: MalvaColors.seed,
                   title: 'PHQ-9 + GAD-7',
                   subtitle:
                       'Screening depresi & kecemasan (16 pertanyaan, 2 minggu terakhir).',
-                  badge: 'Wajib',
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -100,34 +114,18 @@ class AssessmentListScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
-                const SectionLabel('Assessment Lanjutan'),
+                const SizedBox(height: 10),
                 _AssessmentTile(
                   icon: dass21Module.icon ?? Icons.assignment_rounded,
                   color: dass21Module.color ?? MalvaColors.seed,
                   title: dass21Module.title,
                   subtitle:
-                      '21 pertanyaan: depresi, kecemasan, dan stres (skala 0-3).',
+                      '21 pertanyaan depresi, kecemasan, dan stres, 1 minggu terakhir (skala 0-3).',
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) =>
                           const TherapyDetailScreen(module: dass21Module),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                _AssessmentTile(
-                  icon: who5Module.icon ?? Icons.favorite_rounded,
-                  color: who5Module.color ?? MalvaColors.mint,
-                  title: who5Module.title,
-                  subtitle:
-                      '5 pertanyaan kesejahteraan psikologis (skala 0-5).',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          const TherapyDetailScreen(module: who5Module),
                     ),
                   ),
                 ),
@@ -199,7 +197,6 @@ class _AssessmentTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
-    this.badge,
   });
 
   final IconData icon;
@@ -207,7 +204,6 @@ class _AssessmentTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
-  final String? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -232,7 +228,6 @@ class _AssessmentTile extends StatelessWidget {
                           style: const TextStyle(
                               fontWeight: FontWeight.w900, fontSize: 14.5)),
                     ),
-                    if (badge != null) StatusPill(label: badge!, color: color),
                   ],
                 ),
                 const SizedBox(height: 3),

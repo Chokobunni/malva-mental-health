@@ -35,7 +35,10 @@ void main() {
 
     expect(find.text('CF 68%'), findsNWidgets(2));
     expect(find.textContaining('Pasti'), findsNothing);
-    expect(find.textContaining('bukan probabilitas diagnosis'), findsOneWidget);
+    expect(
+        find.textContaining(
+            'CF menunjukkan dukungan aturan dalam model, bukan probabilitas diagnosis'),
+        findsOneWidget);
     expect(find.textContaining('PHQ-9 5/27 Ringan'), findsOneWidget);
     expect(find.textContaining('GAD-7 5/21 Ringan'), findsOneWidget);
   });

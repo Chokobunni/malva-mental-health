@@ -101,6 +101,32 @@ void main() {
   });
 
   group('interpretDassWho5 — WHO-5', () {
+    test('a low standardized WHO item requires follow-up despite high total',
+        () {
+      final result =
+          interpretDassWho5(answers: _who5([1, 5, 5, 5, 5]), moduleId: 'who5');
+      expect(result.triageLevel, 'sedang');
+      expect(result.certaintyFactor, closeTo(0.55, 0.0001));
+      expect(result.reasons.join(' '), contains('0–1'));
+    });
+    test('integral numeric WHO answers retain the low-item follow-up rule', () {
+      final answers = <String, dynamic>{
+        'q1': 1.0,
+        'q2': 5.0,
+        'q3': 5.0,
+        'q4': 5.0,
+        'q5': 5.0,
+        'scale_version': 2,
+      };
+      final result = interpretDassWho5(answers: answers, moduleId: 'who5');
+      expect(result.triageLevel, 'sedang');
+      expect(result.certaintyFactor, closeTo(0.55, 0.0001));
+      expect(who5Summary(answers), contains('jawaban 0–1'));
+      for (final invalid in [null, double.nan, double.infinity, 1.5, -1, 6]) {
+        expect(
+            hasStandardizedWho5LowItem({...answers, 'q3': invalid}), isFalse);
+      }
+    });
     test('kesejahteraan rendah saja -> triage sedang', () {
       // 12/25 = 48% -> di bawah 50% tetapi di atas 28%.
       final result =

@@ -1,16 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Splash native Malva: gradien vertikal tiga warna (sama persis dengan
-  SplashScreen Flutter) + logo di tengah berukuran 140dp.
+  Splash native Malva: gradien vertikal tiga warna; logo dirender Flutter.
 
   Kenapa bukan latar putih lagi: sebelumnya layer-list memakai
   @android:color/white sehingga terjadi lompatan visual putih -> ungu saat
   Flutter mengambil alih. Logo juga dibiarkan pada ukuran intrinsik
   (launch_image.png hanya ada di mipmap-xxxhdpi) sehingga tampak sangat kecil.
 
-  `android:width`/`android:height` pada <item> berlaku sejak API 23; pada
-  perangkat lebih lama bitmap digambar pada ukuran intrinsiknya (120dp pada
-  xxxhdpi) sehingga tetap proporsional.
+  Tanpa bitmap native agar logo tidak muncul sekilas sebelum splash Flutter.
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
@@ -23,9 +20,4 @@
                 android:type="linear" />
         </shape>
     </item>
-    <item
-        android:width="140dp"
-        android:height="140dp"
-        android:drawable="@mipmap/launch_image"
-        android:gravity="center" />
 </layer-list>

@@ -1240,6 +1240,12 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         state.copyWith(initialScreeningStatus: InitialScreeningStatus.skipped);
   }
 
+  /// WHO-5 can complete the entry flow without inventing PHQ/GAD results.
+  void completeInitialScreening() {
+    state = state.copyWith(
+        initialScreeningStatus: InitialScreeningStatus.completed);
+  }
+
   void saveScreeningBundle(ScreeningBundle bundle) {
     state = state.copyWith(
       screeningBundles: [...state.screeningBundles, bundle],
@@ -1315,6 +1321,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     AuthSession? session,
     String? patientId,
   }) async {
+    final generation = _accountGeneration;
     final phq9 = AssessmentEngine.score(
       type: AssessmentType.phq9,
       answers: phq9Answers,
@@ -1366,6 +1373,10 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       uploadError = 'Kamu belum masuk atau server belum terhubung.';
     }
 
+    if (!_isCurrentAccountGeneration(generation)) {
+      throw const AuthFailure(
+          'Akun telah berubah. Buka ulang screening untuk akun aktif.');
+    }
     saveScreeningBundle(bundle);
     return ScreeningSubmitResult(
       bundle: bundle,

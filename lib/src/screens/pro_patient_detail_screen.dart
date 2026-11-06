@@ -6,7 +6,6 @@ import '../professional_role.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
-import '../time/wib.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/therapy_library.dart';
@@ -66,6 +65,7 @@ class _ProPatientDetailScreenState
   /// boleh tampil sama seperti "pasien memang tidak punya data", jadi bagian
   /// yang gagal disebutkan namanya di layar.
   List<String> _failedSections = const [];
+  List<String> _unsharedSections = const [];
 
   MalvaApiClient get _api => widget.apiClient ?? ref.read(apiClientProvider);
   String? get _token {
@@ -97,12 +97,14 @@ class _ProPatientDetailScreenState
     });
     try {
       final failed = <String>[];
+      final unshared = <String>[];
       Future<T?> safely<T>(
           Future<T> Function() load, String sectionLabel) async {
         try {
           return await load();
         } on MalvaApiException catch (e) {
           if (e.statusCode == 403) {
+            unshared.add(sectionLabel);
             // 403 = pasien tidak membagikan data ini; sudah dijelaskan lewat
             // _restricted, bukan kegagalan muat.
             if (mounted) {
@@ -124,10 +126,14 @@ class _ProPatientDetailScreenState
         _api.listCarePackages(accessToken: token, patientId: widget.patientId),
         _api.listCareSessions(
             accessToken: token, scope: 'all', patientId: widget.patientId),
-        _api.listScreenings(
-            accessToken: token, patientId: widget.patientId, limit: 10),
-        _api.listTherapySubmissions(
-            accessToken: token, patientId: widget.patientId),
+        safely(
+            () => _api.listScreenings(
+                accessToken: token, patientId: widget.patientId, limit: 10),
+            'Screening PHQ-9 / GAD-7'),
+        safely(
+            () => _api.listTherapySubmissions(
+                accessToken: token, patientId: widget.patientId),
+            'Assessment & worksheet'),
         safely(
             () =>
                 _api.listGoals(accessToken: token, patientId: widget.patientId),
@@ -153,34 +159,26 @@ class _ProPatientDetailScreenState
                 accessToken: token, patientId: widget.patientId, limit: 20),
             'Timeline'),
       ]);
-      List<BackendChatMessage> shares = const [];
-      try {
-        final myId =
-            widget.session?.backendUserId ?? widget.session?.identifier ?? '';
-        if (myId.isNotEmpty) {
-          final msgs = await _api.listMessages(
-            accessToken: token,
-            patientId: widget.patientId,
-            professionalId: myId,
-          );
-          shares = msgs.where((m) => m.kind != 'text').toList(growable: false);
-        }
-      } on Object {
-        // Riwayat kiriman opsional.
-      }
-      BackendHealthRecord? record;
-      try {
-        record = await _api.getHealthRecord(
-          accessToken: token,
-          patientId: widget.patientId,
-        );
-      } on MalvaApiException catch (e) {
-        if (e.statusCode == 403 && mounted) {
-          setState(() => _restricted = 'Health Record tidak dibagikan pasien.');
-        }
-      } on Object {
-        // opsional
-      }
+      final myId =
+          widget.session?.backendUserId ?? widget.session?.identifier ?? '';
+      final messages = myId.isEmpty
+          ? null
+          : await safely(
+              () => _api.listMessages(
+                    accessToken: token,
+                    patientId: widget.patientId,
+                    professionalId: myId,
+                  ),
+              'Kiriman pasien');
+      final shares =
+          messages?.where((m) => m.kind != 'text').toList(growable: false) ??
+              const <BackendChatMessage>[];
+      final record = await safely(
+          () => _api.getHealthRecord(
+                accessToken: token,
+                patientId: widget.patientId,
+              ),
+          'Health Record');
       if (!mounted) return;
       // Muat kredensial sendiri untuk menentukan apakah Psikiater (hanya
       // Psikiater yang boleh meresepkan). Kegagalan memuat tidak menjatuhkan
@@ -195,8 +193,10 @@ class _ProPatientDetailScreenState
       setState(() {
         _packages = results[0] as List<BackendCarePackage>;
         _sessions = results[1] as List<BackendCareSession>;
-        _screenings = results[2] as List<BackendScreeningSession>;
-        _worksheets = results[3] as List<BackendTherapySubmission>;
+        _screenings =
+            (results[2] as List<BackendScreeningSession>?) ?? const [];
+        _worksheets =
+            (results[3] as List<BackendTherapySubmission>?) ?? const [];
         _goals = (results[4] as List<BackendGoal>?) ?? const [];
         _moods = (results[5] as List<BackendMoodCheckin>?) ?? const [];
         _diaries = (results[6] as List<BackendDiaryEntry>?) ?? const [];
@@ -208,6 +208,7 @@ class _ProPatientDetailScreenState
         _isPsychiatrist =
             cred != null && isPsychiatristSpecialization(cred.specialization);
         _failedSections = List.unmodifiable(failed);
+        _unsharedSections = List.unmodifiable(unshared);
         _isLoading = false;
       });
     } on Object catch (e) {
@@ -217,6 +218,29 @@ class _ProPatientDetailScreenState
         _isLoading = false;
       });
     }
+  }
+
+  bool _isUnavailable(String section) =>
+      _failedSections.contains(section) || _unsharedSections.contains(section);
+
+  Widget _sectionStatus(String section) {
+    final unshared = _unsharedSections.contains(section);
+    return SoftCard(
+      bordered: true,
+      child: Row(
+        children: [
+          Icon(unshared ? Icons.lock_outline_rounded : Icons.cloud_off_rounded),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(unshared
+                ? '$section tidak dibagikan pasien.'
+                : '$section belum dapat dimuat.'),
+          ),
+          if (!unshared)
+            TextButton(onPressed: _load, child: const Text('Coba lagi')),
+        ],
+      ),
+    );
   }
 
   @override
@@ -257,31 +281,6 @@ class _ProPatientDetailScreenState
             else if (_error != null)
               Center(child: Text(_error!))
             else ...[
-              if (_failedSections.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: SoftCard(
-                    bordered: true,
-                    color: MalvaColors.amber.withValues(alpha: 0.10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.warning_amber_rounded,
-                            color: MalvaColors.amber, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Sebagian data gagal dimuat: '
-                            '${_failedSections.join(', ')}. Bagian tersebut '
-                            'bisa jadi kosong bukan karena pasien tidak punya '
-                            'data. Tarik ke bawah untuk memuat ulang.',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               // ============================================================
               // GRUP 1 — Ringkasan klinis
               // ============================================================
@@ -393,140 +392,78 @@ class _ProPatientDetailScreenState
                   ),
                 ),
               const SizedBox(height: 14),
-              const SectionLabel('Screening (PHQ-9 / GAD-7)'),
-              if (_screenings.isEmpty)
-                const EmptyState(
-                  icon: Icons.fact_check_outlined,
-                  title: 'Belum ada screening',
-                  subtitle: 'Hasil screening pasien muncul di sini.',
-                )
-              else
-                for (final sc in _screenings.take(3)) ...[
-                  CollapsibleCard(
-                    key: ValueKey('screening-${sc.id}'),
-                    bordered: true,
-                    semanticLabel:
-                        'Detail screening ${_screeningDate(sc.createdAt)}',
-                    header: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'PHQ-9 ${sc.phq9.score} • GAD-7 ${sc.gad7.score}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w900),
-                              ),
-                            ),
-                            if (sc.crisisFlag)
-                              const StatusPill(
-                                label: 'CRISIS',
-                                color: MalvaColors.danger,
-                                icon: Icons.warning_amber_rounded,
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${_screeningDate(sc.createdAt)} • Overall: ${sc.overallLevel}',
-                          style: TextStyle(
-                              color: sc.crisisFlag ? MalvaColors.danger : null,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12.5),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _ScreeningInstrumentDetail(
-                          name: 'PHQ-9',
-                          score: sc.phq9.score,
-                          maxScore: sc.phq9.maxScore,
-                          level: sc.phq9.level,
-                          summary: sc.phq9.summary,
-                        ),
-                        const SizedBox(height: 12),
-                        _ScreeningInstrumentDetail(
-                          name: 'GAD-7',
-                          score: sc.gad7.score,
-                          maxScore: sc.gad7.maxScore,
-                          level: sc.gad7.level,
-                          summary: sc.gad7.summary,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              const SizedBox(height: 14),
-              const SectionLabel('Worksheet dibagikan (dengan skor)'),
-              if (_worksheets.isEmpty)
-                const EmptyState(
-                  icon: Icons.assignment_outlined,
-                  title: 'Belum ada worksheet dibagikan',
-                  subtitle:
-                      'DASS-21, WHO-5, dan worksheet terapi yang dibagikan pasien muncul di sini.',
-                )
-              else
-                for (final w in _worksheets.take(5)) ...[
-                  // TherapySubmissionView sudah membungkus dirinya dengan
-                  // CollapsibleCard (SoftCard), jadi jangan dibungkus SoftCard
-                  // lagi agar kartunya tidak dobel.
-                  TherapySubmissionView(
-                    key: ValueKey('worksheet-${w.id}'),
-                    moduleId: w.moduleId,
-                    title: w.title,
-                    answers: w.answers,
-                    summary: w.summary,
-                    sharedAt: w.sharedAt,
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              const SizedBox(height: 14),
-              // F-16: hasil DASS-21 / WHO-5 & tren (bila tersedia).
-              const SectionLabel('Hasil DASS-21 / WHO-5 & tren'),
-              Builder(builder: (context) {
-                final dass = _worksheets
-                    .where((w) => w.moduleId == 'dass21')
-                    .toList(growable: false);
-                final who5 = _worksheets
-                    .where((w) => w.moduleId == 'who5')
-                    .toList(growable: false);
-                if (dass.isEmpty && who5.isEmpty) {
-                  return const EmptyState(
-                    icon: Icons.trending_up_rounded,
-                    title: 'Belum ada hasil DASS-21 / WHO-5',
-                    subtitle:
-                        'Skor dan tren muncul setelah pasien membagikan assessment.',
-                  );
-                }
-                return Column(
+              const SectionLabel('Health Record & Obat'),
+              SoftCard(
+                bordered: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (dass.isNotEmpty)
-                      _AssessmentTrendCard(
-                        title: 'DASS-21',
-                        moduleId: 'dass21',
-                        submissions: dass,
+                    if (_isUnavailable('Health Record'))
+                      _sectionStatus('Health Record')
+                    else
+                      Text(
+                        _healthRecord?.diagnosisSummary.isNotEmpty == true
+                            ? _healthRecord!.diagnosisSummary
+                            : 'Belum ada diagnosis / tidak dibagikan.',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
-                    if (dass.isNotEmpty) const SizedBox(height: 8),
-                    if (who5.isNotEmpty)
-                      _AssessmentTrendCard(
-                        title: 'WHO-5',
-                        moduleId: 'who5',
-                        submissions: who5,
-                      ),
+                    const SizedBox(height: 8),
+                    if (_isUnavailable('Obat')) _sectionStatus('Obat'),
+                    if (_medications.isNotEmpty) ...[
+                      const Text('Obat pasien:',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800, fontSize: 12.5)),
+                      const SizedBox(height: 4),
+                      for (final m in _medications.take(5))
+                        Text('• ${m.name} ${m.dosage} (stok ${m.currentStock})',
+                            style: const TextStyle(fontSize: 12.5)),
+                      const SizedBox(height: 8),
+                    ],
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: _isUnavailable('Health Record')
+                                ? null
+                                : () => _openHealthRecordEdit(context),
+                            style: compactFilledButtonStyle,
+                            icon: const Icon(Icons.edit_note_rounded, size: 16),
+                            label: const Text('Isi diagnosis'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          // Resep hanya untuk Psikiater (Sp.KJ). Psikolog
+                          // melihat keterangan, bukan tombol yang pasti 403.
+                          child: _isPsychiatrist
+                              ? OutlinedButton.icon(
+                                  onPressed: () =>
+                                      _openPrescribeMedication(context),
+                                  icon: const Icon(Icons.medication_rounded,
+                                      size: 16),
+                                  label: const Text('Resepkan obat'),
+                                )
+                              : const Text(
+                                  'Hanya Psikiater (Sp.KJ) yang dapat '
+                                  'meresepkan obat.',
+                                  style: TextStyle(fontSize: 11.5),
+                                ),
+                        ),
+                      ],
+                    ),
                   ],
-                );
-              }),
+                ),
+              ),
+              const SizedBox(height: 14),
               // ============================================================
               // GRUP 2 — Pemantauan harian (semua read-only → dilipat)
               // ============================================================
               const SizedBox(height: 22),
               const SectionLabel('Pemantauan harian',
                   icon: Icons.monitor_heart_rounded),
-              if (_goals.isEmpty)
+              if (_isUnavailable('Goals'))
+                _sectionStatus('Goals')
+              else if (_goals.isEmpty)
                 const EmptyState(
                   icon: Icons.flag_outlined,
                   title: 'Belum ada goals / tidak dibagikan',
@@ -576,14 +513,19 @@ class _ProPatientDetailScreenState
                   ),
                 ),
               const SizedBox(height: 10),
-              if (_moods.isEmpty && _diaries.isEmpty)
+              if (_isUnavailable('Mood')) _sectionStatus('Mood'),
+              if (_isUnavailable('Diary')) _sectionStatus('Diary'),
+              if (_moods.isEmpty &&
+                  _diaries.isEmpty &&
+                  !_isUnavailable('Mood') &&
+                  !_isUnavailable('Diary'))
                 const EmptyState(
                   icon: Icons.menu_book_outlined,
                   title: 'Belum ada data / tidak dibagikan',
                   subtitle:
                       'Mood & diary hanya dibaca — bahas saat sesi, tanpa balasan di luar sesi.',
                 )
-              else
+              else if (_moods.isNotEmpty || _diaries.isNotEmpty)
                 CollapsibleCard(
                   key: const ValueKey('mood-diary-section'),
                   bordered: true,
@@ -632,7 +574,9 @@ class _ProPatientDetailScreenState
                   ),
                 ),
               const SizedBox(height: 10),
-              if (_shares.isEmpty)
+              if (_isUnavailable('Kiriman pasien'))
+                _sectionStatus('Kiriman pasien')
+              else if (_shares.isEmpty)
                 const EmptyState(
                   icon: Icons.inbox_outlined,
                   title: 'Belum ada kiriman',
@@ -671,7 +615,9 @@ class _ProPatientDetailScreenState
                   ),
                 ),
               const SizedBox(height: 10),
-              if (_timeline.isEmpty)
+              if (_isUnavailable('Timeline'))
+                _sectionStatus('Timeline')
+              else if (_timeline.isEmpty)
                 const EmptyState(
                   icon: Icons.timeline_outlined,
                   title: 'Belum ada timeline / tidak dibagikan',
@@ -730,71 +676,121 @@ class _ProPatientDetailScreenState
                     ],
                   ),
                 ),
-              // ============================================================
-              // GRUP 3 — Rencana & catatan (tetap terbuka, punya aksi)
-              // ============================================================
               const SizedBox(height: 22),
-              const SectionLabel('Rencana & catatan',
-                  icon: Icons.edit_note_rounded),
-              const SectionLabel('Health record & obat'),
-              SoftCard(
-                bordered: true,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _healthRecord?.diagnosisSummary.isNotEmpty == true
-                          ? _healthRecord!.diagnosisSummary
-                          : 'Belum ada diagnosis / tidak dibagikan.',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 8),
-                    if (_medications.isNotEmpty) ...[
-                      const Text('Obat pasien:',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w800, fontSize: 12.5)),
-                      const SizedBox(height: 4),
-                      for (final m in _medications.take(5))
-                        Text('• ${m.name} ${m.dosage} (stok ${m.currentStock})',
-                            style: const TextStyle(fontSize: 12.5)),
-                      const SizedBox(height: 8),
-                    ],
-                    Row(
+              const SectionLabel('Screening WHO-5, GAD-7, PHQ-9, DASS-21',
+                  icon: Icons.assessment_rounded),
+              if (_isUnavailable('Assessment & worksheet'))
+                _sectionStatus('Assessment & worksheet'),
+              for (final w
+                  in _worksheets.where((w) => w.moduleId == 'who5')) ...[
+                TherapySubmissionView(
+                  key: ValueKey('worksheet-${w.id}'),
+                  moduleId: w.moduleId,
+                  title: w.title,
+                  answers: w.answers,
+                  summary: w.summary,
+                  sharedAt: w.sharedAt,
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (_isUnavailable('Screening PHQ-9 / GAD-7'))
+                _sectionStatus('Screening PHQ-9 / GAD-7')
+              else if (_screenings.isEmpty)
+                const EmptyState(
+                  icon: Icons.fact_check_outlined,
+                  title: 'Belum ada screening',
+                  subtitle: 'Hasil screening pasien muncul di sini.',
+                )
+              else
+                for (final sc in _screenings.take(3)) ...[
+                  CollapsibleCard(
+                    key: ValueKey('screening-${sc.id}'),
+                    bordered: true,
+                    semanticLabel:
+                        'Detail screening ${_screeningDate(sc.createdAt)}',
+                    header: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: () => _openHealthRecordEdit(context),
-                            style: compactFilledButtonStyle,
-                            icon: const Icon(Icons.edit_note_rounded, size: 16),
-                            label: const Text('Isi diagnosis'),
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${_instrumentHeader('PHQ-9', sc.phq9)} • ${_instrumentHeader('GAD-7', sc.gad7)}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w900),
+                              ),
+                            ),
+                            if (sc.crisisFlag)
+                              const StatusPill(
+                                label: 'CRISIS',
+                                color: MalvaColors.danger,
+                                icon: Icons.warning_amber_rounded,
+                              ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          // Resep hanya untuk Psikiater (Sp.KJ). Psikolog
-                          // melihat keterangan, bukan tombol yang pasti 403.
-                          child: _isPsychiatrist
-                              ? OutlinedButton.icon(
-                                  onPressed: () =>
-                                      _openPrescribeMedication(context),
-                                  icon: const Icon(Icons.medication_rounded,
-                                      size: 16),
-                                  label: const Text('Resepkan obat'),
-                                )
-                              : const Text(
-                                  'Hanya Psikiater (Sp.KJ) yang dapat '
-                                  'meresepkan obat.',
-                                  style: TextStyle(fontSize: 11.5),
-                                ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_screeningDate(sc.createdAt)} • Overall: ${sc.overallLevel}',
+                          style: TextStyle(
+                              color: sc.crisisFlag ? MalvaColors.danger : null,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.5),
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _ScreeningInstrumentDetail(
+                          name: 'PHQ-9',
+                          score: sc.phq9.score,
+                          maxScore: sc.phq9.maxScore,
+                          level: sc.phq9.level,
+                          summary: sc.phq9.summary,
+                          certaintyFactor: sc.phq9.certaintyFactor,
+                          ruleTrace: sc.phq9.ruleTrace,
+                        ),
+                        const SizedBox(height: 12),
+                        _ScreeningInstrumentDetail(
+                          name: 'GAD-7',
+                          score: sc.gad7.score,
+                          maxScore: sc.gad7.maxScore,
+                          level: sc.gad7.level,
+                          summary: sc.gad7.summary,
+                          certaintyFactor: sc.gad7.certaintyFactor,
+                          ruleTrace: sc.gad7.ruleTrace,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
               const SizedBox(height: 14),
+              for (final w
+                  in _worksheets.where((w) => w.moduleId == 'dass21')) ...[
+                TherapySubmissionView(
+                  key: ValueKey('worksheet-${w.id}'),
+                  moduleId: w.moduleId,
+                  title: w.title,
+                  answers: w.answers,
+                  summary: w.summary,
+                  sharedAt: w.sharedAt,
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (!_isUnavailable('Assessment & worksheet') &&
+                  !_worksheets.any(
+                      (w) => w.moduleId == 'who5' || w.moduleId == 'dass21'))
+                const EmptyState(
+                  icon: Icons.fact_check_outlined,
+                  title: 'Belum ada WHO-5 / DASS-21 dibagikan',
+                  subtitle:
+                      'Hasil muncul setelah pasien membagikan assessment.',
+                ),
               const SectionLabel('Catatan sesi'),
-              if (_notes.isEmpty)
+              if (_isUnavailable('Catatan sesi'))
+                _sectionStatus('Catatan sesi')
+              else if (_notes.isEmpty)
                 const EmptyState(
                   icon: Icons.edit_note_outlined,
                   title: 'Belum ada catatan',
@@ -828,6 +824,31 @@ class _ProPatientDetailScreenState
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Tulis catatan sesi'),
               ),
+              const SizedBox(height: 14),
+              const SectionLabel('Worksheet terapi dibagikan'),
+              if (_isUnavailable('Assessment & worksheet'))
+                _sectionStatus('Assessment & worksheet')
+              else if (!_worksheets
+                  .any((w) => w.moduleId != 'who5' && w.moduleId != 'dass21'))
+                const EmptyState(
+                  icon: Icons.assignment_outlined,
+                  title: 'Belum ada worksheet terapi dibagikan',
+                  subtitle:
+                      'Latihan terapi yang dibagikan pasien muncul di sini.',
+                )
+              else
+                for (final w in _worksheets.where(
+                    (w) => w.moduleId != 'who5' && w.moduleId != 'dass21')) ...[
+                  TherapySubmissionView(
+                    key: ValueKey('worksheet-${w.id}'),
+                    moduleId: w.moduleId,
+                    title: w.title,
+                    answers: w.answers,
+                    summary: w.summary,
+                    sharedAt: w.sharedAt,
+                  ),
+                  const SizedBox(height: 8),
+                ],
               // ============================================================
               // GRUP 4 — Akses data
               // ============================================================
@@ -1094,138 +1115,6 @@ class _ProPatientDetailScreenState
   }
 }
 
-// ============================================================
-// F-16 — kartu hasil & tren assessment (DASS-21 / WHO-5).
-// ============================================================
-
-class _AssessmentTrendCard extends StatelessWidget {
-  const _AssessmentTrendCard({
-    required this.title,
-    required this.moduleId,
-    required this.submissions,
-  });
-
-  final String title;
-  final String moduleId;
-  final List<BackendTherapySubmission> submissions;
-
-  /// Total skor pembanding tren: DASS-21 (turunan lebih rendah = membaik),
-  /// WHO-5 (raw lebih tinggi = membaik).
-  static int _trendValue(String moduleId, Map<String, dynamic> answers) {
-    if (moduleId == 'who5') return scoreWho5(answers).raw;
-    final d = scoreDass21(answers);
-    return d.depression + d.anxiety + d.stress;
-  }
-
-  static String _shortDate(String? iso) {
-    if (iso == null || iso.isEmpty) return '';
-    final dt = toWibOrNull(DateTime.tryParse(iso));
-    if (dt == null) return iso;
-    return '${dt.day}/${dt.month}/${dt.year}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ordered = [...submissions]..sort((a, b) =>
-        (b.sharedAt ?? b.createdAt ?? '')
-            .compareTo(a.sharedAt ?? a.createdAt ?? ''));
-    final latest = ordered.first;
-    final previous = ordered.length > 1 ? ordered[1] : null;
-
-    final latestSummary = assessmentSummary(moduleId, latest.answers);
-    final dateLabel = _shortDate(latest.sharedAt ?? latest.createdAt);
-    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
-
-    return SoftCard(
-      bordered: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(title,
-                    style: const TextStyle(fontWeight: FontWeight.w900)),
-              ),
-              if (dateLabel.isNotEmpty)
-                StatusPill(label: dateLabel, color: MalvaColors.seed),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(latestSummary, style: const TextStyle(fontSize: 12.5)),
-          if (previous != null) ...[
-            const SizedBox(height: 8),
-            _TrendLine(
-              moduleId: moduleId,
-              latestValue: _trendValue(moduleId, latest.answers),
-              previousValue: _trendValue(moduleId, previous.answers),
-            ),
-          ] else ...[
-            const SizedBox(height: 6),
-            Text(
-              'Belum ada data sebelumnya untuk menghitung tren.',
-              style: TextStyle(fontSize: 11.5, color: onSurfaceVariant),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _TrendLine extends StatelessWidget {
-  const _TrendLine({
-    required this.moduleId,
-    required this.latestValue,
-    required this.previousValue,
-  });
-
-  final String moduleId;
-  final int latestValue;
-  final int previousValue;
-
-  @override
-  Widget build(BuildContext context) {
-    final delta = latestValue - previousValue;
-    // DASS-21: skor turun = membaik. WHO-5: skor naik = membaik.
-    final bool improved = moduleId == 'who5' ? delta > 0 : delta < 0;
-
-    final Color color;
-    final String label;
-    if (delta == 0) {
-      color = Theme.of(context).colorScheme.onSurfaceVariant;
-      label = 'Stabil dibanding assessment sebelumnya';
-    } else if (improved) {
-      color = MalvaColors.mint;
-      label = 'Membaik dibanding assessment sebelumnya';
-    } else {
-      color = MalvaColors.danger;
-      label = 'Perlu perhatian dibanding assessment sebelumnya';
-    }
-
-    final IconData icon = delta > 0
-        ? Icons.trending_up_rounded
-        : delta < 0
-            ? Icons.trending_down_rounded
-            : Icons.trending_flat_rounded;
-    final String deltaLabel = delta > 0 ? '+$delta' : '$delta';
-
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            '$label ($deltaLabel)',
-            style: TextStyle(
-                fontSize: 12, color: color, fontWeight: FontWeight.w700),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 /// Tanggal screening ringkas (dd/mm/yyyy) untuk header kartu yang dilipat.
 String _screeningDate(DateTime? dt) {
   if (dt == null) return 'Tanggal tidak diketahui';
@@ -1242,6 +1131,8 @@ class _ScreeningInstrumentDetail extends StatelessWidget {
     required this.maxScore,
     required this.level,
     required this.summary,
+    required this.certaintyFactor,
+    required this.ruleTrace,
   });
 
   final String name;
@@ -1249,9 +1140,14 @@ class _ScreeningInstrumentDetail extends StatelessWidget {
   final int maxScore;
   final String level;
   final String summary;
+  final double certaintyFactor;
+  final String ruleTrace;
 
   @override
   Widget build(BuildContext context) {
+    if (maxScore <= 0 || score < 0 || score > maxScore) {
+      return Text('$name: hasil belum tersedia.');
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1272,6 +1168,24 @@ class _ScreeningInstrumentDetail extends StatelessWidget {
           value: maxScore <= 0 ? 0 : score / maxScore,
           color: MalvaColors.seed,
         ),
+        const SizedBox(height: 8),
+        if (ruleTrace.isNotEmpty &&
+            certaintyFactor.isFinite &&
+            certaintyFactor >= 0 &&
+            certaintyFactor <= 1) ...[
+          Text('Dukungan aturan (CF): ${(certaintyFactor * 100).round()}%',
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          const Text(
+            'CF adalah dukungan aturan internal, bukan probabilitas diagnosis '
+            'atau tingkat keparahan. Skor dan kategori instrumen tetap terpisah.',
+            style: TextStyle(fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          Text(ruleTrace, style: const TextStyle(fontSize: 12)),
+        ] else
+          const Text('CF dan jejak aturan belum tersedia.',
+              style: TextStyle(fontSize: 12)),
         if (summary.isNotEmpty) ...[
           const SizedBox(height: 6),
           Text(summary, style: const TextStyle(fontSize: 12.5)),
@@ -1279,4 +1193,13 @@ class _ScreeningInstrumentDetail extends StatelessWidget {
       ],
     );
   }
+}
+
+String _instrumentHeader(String name, BackendAssessmentSummary result) {
+  if (result.maxScore <= 0 ||
+      result.score < 0 ||
+      result.score > result.maxScore) {
+    return '$name belum tersedia';
+  }
+  return '$name ${result.score}';
 }

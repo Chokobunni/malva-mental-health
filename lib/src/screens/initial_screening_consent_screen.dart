@@ -4,6 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
 import '../theme.dart';
 
+const symptomsGradient = LinearGradient(
+  colors: [Color(0xFF4A2667), Color(0xFFB85FD0), Color(0xFFE99AE9)],
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+);
+
 class InitialScreeningConsentScreen extends ConsumerWidget {
   const InitialScreeningConsentScreen({
     super.key,
@@ -20,11 +26,7 @@ class InitialScreeningConsentScreen extends ConsumerWidget {
       body: Container(
         width: double.infinity,
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF4A2667), Color(0xFFB85FD0), Color(0xFFE99AE9)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+          gradient: symptomsGradient,
         ),
         child: SafeArea(
           child: Padding(
@@ -45,7 +47,7 @@ class InitialScreeningConsentScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'PHQ-9 dan GAD-7 untuk screening awal',
+                  'WHO-5 untuk screening awal',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: Colors.white.withValues(alpha: 0.9),
@@ -66,7 +68,7 @@ class InitialScreeningConsentScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'Ini adalah screening, bukan diagnosis. Hasilnya akan tersimpan sebagai pertimbangan tambahan profesional.',
+                          'Mulai dengan 5 pertanyaan WHO-5 tentang kesejahteraan selama 2 minggu terakhir. Bila perlu, lanjutkan PHQ-9 dan GAD-7. Ini adalah screening, bukan diagnosis. Hasil tersimpan dan dapat dibagikan kepada profesional sesuai persetujuanmu.',
                           textAlign: TextAlign.center,
                           style: Theme.of(context)
                               .textTheme

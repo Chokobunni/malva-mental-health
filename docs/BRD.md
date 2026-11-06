@@ -291,3 +291,13 @@ Home pasien menyediakan sesi berjalan dan video call mendatang beserta foto prof
 Kehadiran dicatat masing-masing oleh pasien dan profesional. Ketidakhadiran pasien memakai kuota; ketidakhadiran profesional mengembalikan kuota. Profesional hanya menyelesaikan sesi setelah durasi jadwal berakhir; chat/Meet tertutup pada akhir, riwayat tetap terbaca. Transaksi sukses diverifikasi melalui status Midtrans dengan referensi dan nominal yang sama, mengaktifkan paket tepat sekali.
 
 Selama sesi aktif, profesional dapat mengelola goals/habits, meminta assessment yang tersedia, mengubah diagnosis dan obat sesuai kewenangan psikiater, mengirim file/gambar resep privat, serta mengirim rangkuman homework dan insight. Perubahan obat langsung disinkronkan ke Medication Check-in pasien melalui event in-app. Batas push tetap chat sesi aktif, dengan reminder lokal goals dan obat hanya bagi pasien.
+
+## Skrining WHO-5 dan assessment terpadu (7 November 2026)
+
+Symptoms Assessment dimulai dengan WHO-5 lengkap. Persentase = raw x4;
+raw <13 atau satu item 0-1 mengaktifkan PHQ-9/GAD-7, sedangkan hasil baik
+berakhir pada kesimpulan WHO tanpa membuat skor PHQ/GAD. DASS-21 tetap manual.
+Katalog pasien dan detail profesional menyatukan empat instrumen. Skor baku
+terpisah dari CF dukungan model yang belum dikalibrasi klinis. Kontrak data,
+consent dan berbagi tetap memakai mekanisme sebelumnya.
+Rincian: [scoring dan Forward Chaining](SCREENING_SCORING.md).

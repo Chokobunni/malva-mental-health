@@ -9,8 +9,10 @@ import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/providers/auth_providers.dart';
 import 'package:malva_mental_health/src/screens/assessment_history_screen.dart';
 import 'package:malva_mental_health/src/screens/assessment_list_screen.dart';
+import 'package:malva_mental_health/src/screens/assessment_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
+import 'package:malva_mental_health/src/widgets/therapy_library.dart';
 
 // ============================================================
 // ASSESSMENT RECORD — riwayat skrining & asesmen pasien.
@@ -152,6 +154,44 @@ Widget _buildApp(MalvaApiClient api, {required Widget home}) {
 }
 
 void main() {
+  testWidgets(
+      'unified Screening keeps WHO, PHQ/GAD and DASS manually reachable',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 3200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _api(submissions: const [], screenings: const []);
+    await tester.pumpWidget(
+      _buildApp(api, home: const AssessmentListScreen()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Screening WHO-5, GAD-7, PHQ-9, DASS-21'), findsOneWidget);
+    expect(find.text('Screening Utama'), findsNothing);
+    expect(find.text('Assessment Lanjutan'), findsNothing);
+    final who = find.text('WHO-5 (Well-Being Index)');
+    final phqGad = find.text('PHQ-9 + GAD-7');
+    final dass = find.text('DASS-21 (Depression Anxiety Stress Scales)');
+    expect(tester.getTopLeft(who).dy, lessThan(tester.getTopLeft(phqGad).dy));
+    expect(tester.getTopLeft(phqGad).dy, lessThan(tester.getTopLeft(dass).dy));
+
+    for (final entry in [who, phqGad, dass]) {
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      if (entry == phqGad) {
+        expect(find.byType(AssessmentScreen), findsOneWidget);
+      } else {
+        final detail = tester.widget<TherapyDetailScreen>(
+          find.byType(TherapyDetailScreen),
+        );
+        expect(detail.module.id, entry == who ? 'who5' : 'dass21');
+      }
+      Navigator.of(tester.element(find.byType(Scaffold).last)).pop();
+      await tester.pumpAndSettle();
+    }
+  });
+
   testWidgets(
       'Assessment Record menampilkan worksheet asesmen + screening, menyembunyikan worksheet terapi, urut DESC',
       (tester) async {

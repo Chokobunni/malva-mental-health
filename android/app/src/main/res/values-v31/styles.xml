@@ -19,9 +19,9 @@
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <!-- Latar splash sistem = warna brand teratas gradien Flutter. -->
         <item name="android:windowSplashScreenBackground">@color/malva_splash_top</item>
-        <!-- Ikon splash sistem: ikon peluncur (foreground adaptive icon). -->
-        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
-        <!-- Warna cincin di belakang ikon, disamakan dengan latar brand. -->
-        <item name="android:windowSplashScreenIconBackgroundColor">@color/malva_splash_top</item>
+        <!-- Flutter menampilkan branding; hindari logo native ganda. -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_transparent</item>
+        <!-- Tidak ada bidang warna solid di belakang ikon native. -->
+        <item name="android:windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
     </style>
 </resources>

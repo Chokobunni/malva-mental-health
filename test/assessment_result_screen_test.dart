@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:malva_mental_health/src/assessment_engine.dart';
 import 'package:malva_mental_health/src/screens/assessment_screen.dart';
+import 'package:malva_mental_health/src/screens/initial_screening_consent_screen.dart';
 import 'package:malva_mental_health/src/theme.dart';
 
 void main() {
@@ -26,6 +27,12 @@ void main() {
     );
 
     expect(find.textContaining('Terima kasih'), findsOneWidget);
+    expect(
+        find.byWidgetPredicate((widget) =>
+            widget is Container &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration! as BoxDecoration).gradient == symptomsGradient),
+        findsOneWidget);
     expect(find.textContaining('PHQ-9'), findsWidgets);
     expect(find.textContaining('GAD-7'), findsWidgets);
     expect(find.text('Rekomendasi profesional'), findsOneWidget);

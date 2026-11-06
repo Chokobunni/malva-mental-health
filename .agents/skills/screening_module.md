@@ -1,4 +1,16 @@
-# Skill: Screening Module (PHQ-9 / GAD-7)
+# Skill: Screening Module (WHO-5 / PHQ-9 / GAD-7 / DASS-21)
+
+## Gerbang awal WHO-5 (2026-11-07)
+
+- Persetujuan -> 5 item WHO-5 wajib (0-5) -> simpan submission versi skala 2.
+- Raw = jumlah (0-25), persen = raw x4. R2 diprioritaskan: persen <50 ATAU
+  satu item 0-1 -> Butuh Skrining Lanjutan -> PHQ-9 + GAD-7 dengan CF lama.
+- R1 berhenti hanya bila persen >=50 DAN seluruh item >=2. Kesimpulan WHO
+  tidak membuat hasil PHQ/GAD palsu atau skor nol. DASS-21 tetap manual.
+- WHO/DASS tetap memakai submission/berbagi dan consent yang sudah ada;
+  PHQ/GAD dihitung ulang server. Tidak ada perubahan skema/DTO.
+- CF adalah dukungan model yang belum dikalibrasi klinis. Penjelasan lengkap:
+  [scoring dan alur](../../docs/SCREENING_SCORING.md).
 
 Modul skrining kesehatan mental. Skoring dihitung **di server** (bukan hanya klien) memakai rule base yang sama.
 

@@ -10,6 +10,7 @@ import '../widgets/malva_components.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/therapy_library.dart';
 import 'booking/doctor_discovery_screen.dart';
+import 'initial_screening_consent_screen.dart';
 import 'safety/emergency_dashboard_screen.dart';
 
 /// Tile modul terapi/assessment (dipakai di hasil screening).
@@ -106,153 +107,194 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          GradientHeader(
-            title: widget.isInitialScreening
-                ? 'Screening Awal'
-                : 'Self Assessments',
-            subtitle: 'PHQ-9 + GAD-7 • 16 pertanyaan dalam satu halaman',
-            leading: IconButton(
-              onPressed: widget.onBack ?? () => Navigator.maybePop(context),
-              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SoftCard(
-                  color: MalvaColors.seed.withValues(alpha: 0.08),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Jawab sesuai 2 minggu terakhir',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Hasil ini adalah screening, bukan diagnosis. Data akan tersimpan sebagai pertimbangan tambahan profesional.',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
+      body: Container(
+          decoration: widget.isInitialScreening
+              ? const BoxDecoration(gradient: symptomsGradient)
+              : null,
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              if (widget.isInitialScreening)
+                SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(children: [
+                        Align(
+                            alignment: Alignment.centerLeft,
+                            child: IconButton(
+                                onPressed: widget.onBack,
+                                icon: const Icon(Icons.arrow_back_rounded,
+                                    color: Colors.white))),
+                        const Icon(Icons.local_florist_rounded,
+                            color: Colors.white, size: 54),
+                        const SizedBox(height: 16),
+                        Text('Symptoms Assessment',
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900)),
+                        const Text('PHQ-9 + GAD-7 • 16 pertanyaan',
+                            style: TextStyle(color: Colors.white)),
+                      ]),
+                    ))
+              else
+                GradientHeader(
+                  title: widget.isInitialScreening
+                      ? 'Screening Awal'
+                      : 'Self Assessments',
+                  subtitle: 'PHQ-9 + GAD-7 • 16 pertanyaan dalam satu halaman',
+                  leading: IconButton(
+                    onPressed:
+                        widget.onBack ?? () => Navigator.maybePop(context),
+                    icon: const Icon(Icons.arrow_back_rounded,
+                        color: Colors.white),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SoftCard(
+                      color: MalvaColors.seed.withValues(alpha: 0.08),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              '$_answeredCount dari $_questionCount terjawab',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                          ),
                           Text(
-                            '${(_answeredCount / _questionCount * 100).round()}%',
-                            style: const TextStyle(
-                              color: MalvaColors.plum,
-                              fontWeight: FontWeight.w900,
-                            ),
+                            'Jawab sesuai 2 minggu terakhir',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Hasil ini adalah screening, bukan diagnosis. Data akan tersimpan sebagai pertimbangan tambahan profesional.',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '$_answeredCount dari $_questionCount terjawab',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                              Text(
+                                '${(_answeredCount / _questionCount * 100).round()}%',
+                                style: const TextStyle(
+                                  color: MalvaColors.plum,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          LinearProgressIndicator(
+                            value: _answeredCount / _questionCount,
+                            minHeight: 8,
+                            borderRadius: BorderRadius.circular(999),
+                            backgroundColor:
+                                MalvaColors.seed.withValues(alpha: 0.12),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: _answeredCount / _questionCount,
-                        minHeight: 8,
-                        borderRadius: BorderRadius.circular(999),
-                        backgroundColor:
-                            MalvaColors.seed.withValues(alpha: 0.12),
+                    ),
+                    const SizedBox(height: 18),
+                    _AssessmentSection(
+                      key: const ValueKey('phq9-section'),
+                      title: 'PHQ-9',
+                      subtitle:
+                          'PHQ-9 menilai gejala depresi selama 2 minggu terakhir. '
+                          'Jumlah 9 jawaban (0–3), total 0–27. '
+                          '0–4 minimal; 5–9 ringan; 10–14 sedang; '
+                          '15–19 cukup berat; 20–27 berat.',
+                      questions: AssessmentEngine.phq9Questions,
+                      answers: _phq9Answers,
+                      icon: Icons.sentiment_dissatisfied_rounded,
+                      color: MalvaColors.seed,
+                      onChanged: (index, value) =>
+                          setState(() => _phq9Answers[index] = value),
+                    ),
+                    const SizedBox(height: 28),
+                    _AssessmentSection(
+                      key: const ValueKey('gad7-section'),
+                      title: 'GAD-7',
+                      subtitle:
+                          'GAD-7 menilai gejala kecemasan selama 2 minggu terakhir. '
+                          'Jumlah 7 jawaban (0–3), total 0–21. '
+                          '0–4 minimal; 5–9 ringan; 10–14 sedang; 15–21 berat.',
+                      questions: AssessmentEngine.gad7Questions,
+                      answers: _gad7Answers,
+                      icon: Icons.psychology_alt_rounded,
+                      color: MalvaColors.mint,
+                      onChanged: (index, value) =>
+                          setState(() => _gad7Answers[index] = value),
+                    ),
+                    const SizedBox(height: 24),
+                    SoftCard(
+                      key: const ValueKey('screening-submit-panel'),
+                      color: _isComplete
+                          ? MalvaColors.mint.withValues(alpha: 0.1)
+                          : MalvaColors.seed.withValues(alpha: 0.06),
+                      child: Column(
+                        children: [
+                          Icon(
+                            _isComplete
+                                ? Icons.check_circle_rounded
+                                : Icons.fact_check_outlined,
+                            color: _isComplete
+                                ? MalvaColors.mint
+                                : MalvaColors.seed,
+                            size: 38,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            _isComplete
+                                ? 'PHQ-9 dan GAD-7 sudah lengkap'
+                                : '${_questionCount - _answeredCount} pertanyaan belum dijawab',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Periksa kembali jawabanmu sebelum mengirim kedua screening.',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          FilledButton.icon(
+                            key: const ValueKey('screening-submit-button'),
+                            onPressed: _isComplete && !_isSubmitting
+                                ? _submitResult
+                                : null,
+                            icon: _isSubmitting
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.send_rounded),
+                            label: Text(_isSubmitting
+                                ? 'Mengirim...'
+                                : 'Kirim hasil PHQ-9 + GAD-7'),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 18),
+                  ],
                 ),
-                const SizedBox(height: 18),
-                _AssessmentSection(
-                  key: const ValueKey('phq9-section'),
-                  title: 'PHQ-9',
-                  subtitle: AssessmentType.phq9.subtitle,
-                  questions: AssessmentEngine.phq9Questions,
-                  answers: _phq9Answers,
-                  icon: Icons.sentiment_dissatisfied_rounded,
-                  color: MalvaColors.seed,
-                  onChanged: (index, value) =>
-                      setState(() => _phq9Answers[index] = value),
-                ),
-                const SizedBox(height: 28),
-                _AssessmentSection(
-                  key: const ValueKey('gad7-section'),
-                  title: 'GAD-7',
-                  subtitle: AssessmentType.gad7.subtitle,
-                  questions: AssessmentEngine.gad7Questions,
-                  answers: _gad7Answers,
-                  icon: Icons.psychology_alt_rounded,
-                  color: MalvaColors.mint,
-                  onChanged: (index, value) =>
-                      setState(() => _gad7Answers[index] = value),
-                ),
-                const SizedBox(height: 24),
-                SoftCard(
-                  key: const ValueKey('screening-submit-panel'),
-                  color: _isComplete
-                      ? MalvaColors.mint.withValues(alpha: 0.1)
-                      : MalvaColors.seed.withValues(alpha: 0.06),
-                  child: Column(
-                    children: [
-                      Icon(
-                        _isComplete
-                            ? Icons.check_circle_rounded
-                            : Icons.fact_check_outlined,
-                        color:
-                            _isComplete ? MalvaColors.mint : MalvaColors.seed,
-                        size: 38,
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        _isComplete
-                            ? 'PHQ-9 dan GAD-7 sudah lengkap'
-                            : '${_questionCount - _answeredCount} pertanyaan belum dijawab',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Periksa kembali jawabanmu sebelum mengirim kedua screening.',
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        key: const ValueKey('screening-submit-button'),
-                        onPressed: _isComplete && !_isSubmitting
-                            ? _submitResult
-                            : null,
-                        icon: _isSubmitting
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.send_rounded),
-                        label: Text(_isSubmitting
-                            ? 'Mengirim...'
-                            : 'Kirim hasil PHQ-9 + GAD-7'),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 18),
-              ],
-            ),
-          ),
-        ],
-      ),
+              ),
+            ],
+          )),
     );
   }
 
@@ -649,245 +691,272 @@ class AssessmentResultScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          const GradientHeader(
-            title: 'Terima Kasih',
-            subtitle: 'Hasil screening sudah tersimpan',
-            leading: Icon(Icons.local_florist_rounded,
-                color: Colors.white, size: 34),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SoftCard(
-                  color: bundle.overallLevel.color.withValues(alpha: 0.1),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Terima kasih sudah membagikan isi hatimu.',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(bundle.summary,
-                          style: const TextStyle(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 14),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          StatusPill(
-                            label:
-                                'PHQ-9 ${bundle.phq9.score}/${bundle.phq9.maxScore} ${bundle.phq9.level.label}',
-                            color: bundle.phq9.level.color,
-                          ),
-                          StatusPill(
-                            label:
-                                'GAD-7 ${bundle.gad7.score}/${bundle.gad7.maxScore} ${bundle.gad7.level.label}',
-                            color: bundle.gad7.level.color,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      // Penjelasan skor PHQ-9 dan GAD-7 agar pasien paham
-                      // apa arti angka yang mereka lihat. Tanpa ini, "3/27
-                      // Minimal" tidak memberi konteks — pasien tidak tahu
-                      // apakah 3 itu bagus atau buruk.
-                      _ScoreExplanationCard(
-                        title: 'PHQ-9 (Depresi)',
-                        score: bundle.phq9.score,
-                        maxScore: bundle.phq9.maxScore,
-                        level: bundle.phq9.level,
-                        ranges: const [
-                          (
-                            '0–4',
-                            'Minimal',
-                            'Gejala depresi sangat ringan atau tidak ada.'
-                          ),
-                          (
-                            '5–9',
-                            'Ringan',
-                            'Gejala depresi ringan. Pantau kondisi dan jaga self-care.'
-                          ),
-                          (
-                            '10–14',
-                            'Sedang',
-                            'Gejala depresi sedang. Disarankan konsultasi profesional.'
-                          ),
-                          (
-                            '15–19',
-                            'Berat',
-                            'Gejala depresi berat. Segera hubungi profesional kesehatan mental.'
-                          ),
-                          (
-                            '20–27',
-                            'Sangat Berat',
-                            'Gejala depresi sangat berat. Cari bantuan segera.'
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      _ScoreExplanationCard(
-                        title: 'GAD-7 (Kecemasan)',
-                        score: bundle.gad7.score,
-                        maxScore: bundle.gad7.maxScore,
-                        level: bundle.gad7.level,
-                        ranges: const [
-                          (
-                            '0–4',
-                            'Minimal',
-                            'Kecemasan sangat ringan atau tidak ada.'
-                          ),
-                          (
-                            '5–9',
-                            'Ringan',
-                            'Kecemasan ringan. Teknik relaksasi bisa membantu.'
-                          ),
-                          (
-                            '10–14',
-                            'Sedang',
-                            'Kecemasan sedang. Disarankan konsultasi profesional.'
-                          ),
-                          (
-                            '15–21',
-                            'Berat',
-                            'Kecemasan berat. Segera hubungi profesional kesehatan mental.'
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      // === Forward Chaining + Certainty Factor ===
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: MalvaColors.seed.withValues(alpha: 0.25),
-                          ),
+      body: Container(
+        decoration: bundle.isInitial
+            ? const BoxDecoration(gradient: symptomsGradient)
+            : null,
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            if (bundle.isInitial)
+              const SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Column(children: [
+                      Icon(Icons.local_florist_rounded,
+                          color: Colors.white, size: 54),
+                      SizedBox(height: 16),
+                      Text('Terima Kasih',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900)),
+                      Text('Hasil screening sudah tersimpan',
+                          style: TextStyle(color: Colors.white)),
+                    ]),
+                  ))
+            else
+              const GradientHeader(
+                title: 'Terima Kasih',
+                subtitle: 'Hasil screening sudah tersimpan',
+                leading: Icon(Icons.local_florist_rounded,
+                    color: Colors.white, size: 34),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SoftCard(
+                    color: bundle.isInitial
+                        ? Colors.white
+                        : bundle.overallLevel.color.withValues(alpha: 0.1),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Terima kasih sudah membagikan isi hatimu.',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w900),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        const SizedBox(height: 8),
+                        Text(bundle.summary,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
-                            const Row(
-                              children: [
-                                Icon(Icons.psychology_rounded,
-                                    size: 18, color: MalvaColors.seed),
-                                SizedBox(width: 6),
-                                Text(
-                                  'Dukungan aturan (Forward Chaining + CF)',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 12.5,
-                                    color: MalvaColors.seed,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'CF menunjukkan dukungan aturan dalam model, '
-                              'bukan probabilitas diagnosis atau persentase '
-                              'keparahan. Skor dan tingkat gejala ditampilkan '
-                              'terpisah; hasil perlu ditinjau profesional.',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                            const SizedBox(height: 8),
-                            _CFBar(
-                              label: 'PHQ-9 Depresi',
-                              cf: bundle.phq9.certaintyFactor,
+                            StatusPill(
+                              label:
+                                  'PHQ-9 ${bundle.phq9.score}/${bundle.phq9.maxScore} ${bundle.phq9.level.label}',
                               color: bundle.phq9.level.color,
                             ),
-                            const SizedBox(height: 6),
-                            _CFBar(
-                              label: 'GAD-7 Kecemasan',
-                              cf: bundle.gad7.certaintyFactor,
+                            StatusPill(
+                              label:
+                                  'GAD-7 ${bundle.gad7.score}/${bundle.gad7.maxScore} ${bundle.gad7.level.label}',
                               color: bundle.gad7.level.color,
                             ),
-                            if (bundle.phq9.rulesFired.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                'Rule aktif: ${bundle.phq9.rulesFired.take(3).map((r) => r.label).join('; ')}',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant),
-                              ),
-                            ],
                           ],
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (bundle.crisisFlag) ...[
-                  const SizedBox(height: 12),
-                  _CrisisSupportCard(
-                    onOpenSafety: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const EmergencyDashboardScreen(
-                            fromCrisisFlag: true),
-                      ),
+                        const SizedBox(height: 12),
+                        // Penjelasan skor PHQ-9 dan GAD-7 agar pasien paham
+                        // apa arti angka yang mereka lihat. Tanpa ini, "3/27
+                        // Minimal" tidak memberi konteks — pasien tidak tahu
+                        // apakah 3 itu bagus atau buruk.
+                        _ScoreExplanationCard(
+                          title: 'PHQ-9 (Depresi)',
+                          score: bundle.phq9.score,
+                          maxScore: bundle.phq9.maxScore,
+                          level: bundle.phq9.level,
+                          ranges: const [
+                            (
+                              '0–4',
+                              'Minimal',
+                              'Gejala depresi sangat ringan atau tidak ada.'
+                            ),
+                            (
+                              '5–9',
+                              'Ringan',
+                              'Gejala depresi ringan. Pantau kondisi dan jaga self-care.'
+                            ),
+                            (
+                              '10–14',
+                              'Sedang',
+                              'Gejala depresi sedang. Disarankan konsultasi profesional.'
+                            ),
+                            (
+                              '15–19',
+                              'Berat',
+                              'Gejala depresi berat. Segera hubungi profesional kesehatan mental.'
+                            ),
+                            (
+                              '20–27',
+                              'Sangat Berat',
+                              'Gejala depresi sangat berat. Cari bantuan segera.'
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        _ScoreExplanationCard(
+                          title: 'GAD-7 (Kecemasan)',
+                          score: bundle.gad7.score,
+                          maxScore: bundle.gad7.maxScore,
+                          level: bundle.gad7.level,
+                          ranges: const [
+                            (
+                              '0–4',
+                              'Minimal',
+                              'Kecemasan sangat ringan atau tidak ada.'
+                            ),
+                            (
+                              '5–9',
+                              'Ringan',
+                              'Kecemasan ringan. Teknik relaksasi bisa membantu.'
+                            ),
+                            (
+                              '10–14',
+                              'Sedang',
+                              'Kecemasan sedang. Disarankan konsultasi profesional.'
+                            ),
+                            (
+                              '15–21',
+                              'Berat',
+                              'Kecemasan berat. Segera hubungi profesional kesehatan mental.'
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // === Forward Chaining + Certainty Factor ===
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: MalvaColors.seed.withValues(alpha: 0.25),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(Icons.psychology_rounded,
+                                      size: 18, color: MalvaColors.seed),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Dukungan aturan (Forward Chaining + CF)',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 12.5,
+                                      color: MalvaColors.seed,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'CF menunjukkan dukungan aturan dalam model, '
+                                'bukan probabilitas diagnosis atau persentase '
+                                'keparahan. Skor dan tingkat gejala ditampilkan '
+                                'terpisah; hasil perlu ditinjau profesional.',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              const SizedBox(height: 8),
+                              _CFBar(
+                                label: 'PHQ-9 Depresi',
+                                cf: bundle.phq9.certaintyFactor,
+                                color: bundle.phq9.level.color,
+                              ),
+                              const SizedBox(height: 6),
+                              _CFBar(
+                                label: 'GAD-7 Kecemasan',
+                                cf: bundle.gad7.certaintyFactor,
+                                color: bundle.gad7.level.color,
+                              ),
+                              if (bundle.phq9.rulesFired.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Rule aktif: ${bundle.phq9.rulesFired.take(3).map((r) => r.label).join('; ')}',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  if (bundle.crisisFlag) ...[
+                    const SizedBox(height: 12),
+                    _CrisisSupportCard(
+                      onOpenSafety: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const EmergencyDashboardScreen(
+                              fromCrisisFlag: true),
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                  _RecommendDoctors(
+                    session: session,
+                    apiClient: apiClient,
+                  ),
+                  const SizedBox(height: 18),
+                  // Screening lanjutan: DASS-21 & WHO-5 (edukasi + tutorial).
+                  const SectionLabel('Assessment lanjutan'),
+                  const _TherapyModuleTile(dass21Module),
+                  const SizedBox(height: 10),
+                  const _TherapyModuleTile(who5Module),
+                  const SizedBox(height: 18),
+                  const SectionLabel('Tips dukungan'),
+                  const _TipCard(
+                    icon: Icons.psychology_alt_rounded,
+                    title: 'Konsultasi psikiater',
+                    body:
+                        'Psikiater dapat diakses menggunakan BPJS sesuai alur faskes dan rujukan yang berlaku. Bawa hasil screening ini saat konsultasi.',
+                    color: MalvaColors.seed,
+                  ),
+                  const SizedBox(height: 10),
+                  const _TipCard(
+                    icon: Icons.health_and_safety_rounded,
+                    title: 'Psikolog dan konseling',
+                    body:
+                        'Layanan psikolog atau konseling kesehatan jiwa tersedia di sebagian Puskesmas atau layanan daerah dengan biaya lebih terjangkau. Cek Puskesmas terdekat.',
+                    color: MalvaColors.mint,
+                  ),
+                  const SizedBox(height: 10),
+                  const _TipCard(
+                    icon: Icons.edit_note_rounded,
+                    title: 'Pantau pola harian',
+                    body:
+                        'Catat mood, tidur, obat, dan trigger harian. Pola ini membantu profesional memahami kondisi dari waktu ke waktu.',
+                    color: MalvaColors.amber,
+                  ),
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: onDone,
+                    icon: const Icon(Icons.home_rounded),
+                    label: const Text('Lanjut ke Home'),
+                  ),
                 ],
-                const SizedBox(height: 18),
-                _RecommendDoctors(
-                  session: session,
-                  apiClient: apiClient,
-                ),
-                const SizedBox(height: 18),
-                // Screening lanjutan: DASS-21 & WHO-5 (edukasi + tutorial).
-                const SectionLabel('Assessment lanjutan'),
-                const _TherapyModuleTile(dass21Module),
-                const SizedBox(height: 10),
-                const _TherapyModuleTile(who5Module),
-                const SizedBox(height: 18),
-                const SectionLabel('Tips dukungan'),
-                const _TipCard(
-                  icon: Icons.psychology_alt_rounded,
-                  title: 'Konsultasi psikiater',
-                  body:
-                      'Psikiater dapat diakses menggunakan BPJS sesuai alur faskes dan rujukan yang berlaku. Bawa hasil screening ini saat konsultasi.',
-                  color: MalvaColors.seed,
-                ),
-                const SizedBox(height: 10),
-                const _TipCard(
-                  icon: Icons.health_and_safety_rounded,
-                  title: 'Psikolog dan konseling',
-                  body:
-                      'Layanan psikolog atau konseling kesehatan jiwa tersedia di sebagian Puskesmas atau layanan daerah dengan biaya lebih terjangkau. Cek Puskesmas terdekat.',
-                  color: MalvaColors.mint,
-                ),
-                const SizedBox(height: 10),
-                const _TipCard(
-                  icon: Icons.edit_note_rounded,
-                  title: 'Pantau pola harian',
-                  body:
-                      'Catat mood, tidur, obat, dan trigger harian. Pola ini membantu profesional memahami kondisi dari waktu ke waktu.',
-                  color: MalvaColors.amber,
-                ),
-                const SizedBox(height: 18),
-                FilledButton.icon(
-                  onPressed: onDone,
-                  icon: const Icon(Icons.home_rounded),
-                  label: const Text('Lanjut ke Home'),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

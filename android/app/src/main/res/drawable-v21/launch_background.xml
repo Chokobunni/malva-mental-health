@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Splash native Malva (API 21+): gradien vertikal tiga warna + logo 140dp.
+  Splash native Malva (API 21+): hanya gradien; logo dirender Flutter.
   Isi sengaja identik dengan res/drawable/launch_background.xml agar kedua
   varian resource tidak pernah berbeda tampilan.
 -->
@@ -15,9 +15,4 @@
                 android:type="linear" />
         </shape>
     </item>
-    <item
-        android:width="140dp"
-        android:height="140dp"
-        android:drawable="@mipmap/launch_image"
-        android:gravity="center" />
 </layer-list>

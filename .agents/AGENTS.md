@@ -317,6 +317,17 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Sesi profesional terjadwal yang sudah lewat durasi harus mudah ditemukan pada **Perlu diselesaikan** dengan **Selesaikan sesi**, tanpa mengaktifkan kembali Join/Chat. Kartu Jadwal/Riwayat menampilkan jenis, jadwal dan konteks yang relevan tanpa judul kehadiran kosong.
 - Flag screening historis bukan SOS unresolved. Feed tetap mempertahankan kedua sumber; hitungan unresolved hanya SOS, dan penyelesaian SOS tetap konfirmasi opsional tanpa wajib mengetik. Rujukan: [care session](skills/care_session_module.md), [safety](skills/safety_sos_module.md).
 
+## Kontrak skrining WHO-5 (2026-11-07)
+
+- Gerbang Symptoms Assessment memakai WHO-5 lengkap, raw x4; total <50 atau
+  satu item 0-1 mendahului kondisi berhenti. PHQ/GAD hanya setelah gerbang lanjut;
+  WHO sehat tidak boleh membuat skor PHQ/GAD nol. DASS tetap tersedia manual.
+- Tampilan pasien/profesional menyatukan empat assessment; data tidak lengkap
+  atau gagal dimuat tidak boleh ditampilkan sebagai hasil normal/nol.
+- Skor baku dan CF tetap terpisah; bobot CF bukan probabilitas diagnosis.
+- Rujukan: [screening](skills/screening_module.md),
+  [perhitungan dan alur](../docs/SCREENING_SCORING.md).
+
 ## Commit
 
 - Format **Conventional Commits**: `feat|fix|refactor|chore|docs|perf|seo|infra: <ringkas>`.

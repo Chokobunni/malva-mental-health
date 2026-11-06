@@ -353,6 +353,19 @@ Who5Score scoreWho5(Map<String, dynamic> answers) {
   return Who5Score(raw: raw, percent: (raw * 4).clamp(0, 100));
 }
 
+/// Low-item follow-up applies only to complete standardized WHO-5 answers.
+bool hasStandardizedWho5LowItem(Map<String, dynamic> answers) {
+  final items = [for (var i = 1; i <= 5; i++) answers['q$i']];
+  return isStandardizedScale(answers) &&
+      items.every((value) =>
+          value is num &&
+          value.isFinite &&
+          value >= 0 &&
+          value <= 5 &&
+          value == value.toInt()) &&
+      items.any((value) => (value as num) <= 1);
+}
+
 /// Ringkasan WHO-5. FORMAT DIPERTAHANKAN (dipakai backend & fitur bagikan).
 String who5Summary(Map<String, dynamic> answers) {
   final score = scoreWho5(answers);
@@ -361,6 +374,9 @@ String who5Summary(Map<String, dynamic> answers) {
     suffix = 'Perlu screening lanjutan (kemungkinan depresi)';
   } else if (score.lowWellbeing) {
     suffix = 'Kesejahteraan rendah, pertimbangkan konsultasi';
+  }
+  if (!score.lowWellbeing && hasStandardizedWho5LowItem(answers)) {
+    suffix += '. Perlu screening lanjutan karena ada jawaban 0–1';
   }
   return 'WHO-5 ${score.raw}/25 (${score.percent}%) — $suffix';
 }
