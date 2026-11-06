@@ -130,6 +130,56 @@ func TestFetchStatusRejectsWrongOrderID(t *testing.T) {
 	}
 }
 
+func TestFetchStatusCodeTransactionPairs(t *testing.T) {
+	for _, code := range []string{"200", "201", "202", "407", "401", "500", ""} {
+		for _, status := range []string{"settlement", "capture", "pending", "expire", "cancel", "deny", "unknown", ""} {
+			t.Run(code+"/"+status, func(t *testing.T) {
+				provider := newStatusServer(t, "TXN-PAIR", code, "102000.00", status, "accept", "unused")
+				defer provider.Close()
+				gateway := NewMidtransGateway(MidtransConfig{ServerKey: statusTestKey, APIBase: provider.URL})
+				got, err := gateway.FetchStatus(t.Context(), "TXN-PAIR")
+				if err != nil {
+					t.Fatal(err)
+				}
+				accepted := code == "200" || code == "201" && status == "pending" ||
+					code == "202" && status == "deny" || code == "407" && status == "expire"
+				want := "pending"
+				if accepted && status != "unknown" && status != "" {
+					want = status
+				}
+				if got.Status != want || got.StatusCode != code {
+					t.Fatalf("status=%q code=%q, want status=%q code=%q", got.Status, got.StatusCode, want, code)
+				}
+				if accepted && (got.TransactionID != "txn-TXN-PAIR" || got.GrossAmount != "102000.00") {
+					t.Fatalf("recognized transaction metadata lost: %+v", got)
+				}
+				if !accepted && (got.TransactionID != "" || got.GrossAmount != "") {
+					t.Fatalf("unrecognized code/status exposed transaction metadata: %+v", got)
+				}
+			})
+		}
+	}
+}
+
+func TestFetchStatusRecognizedNon200RequiresMatchingOrder(t *testing.T) {
+	for _, pair := range []struct{ code, status string }{{"201", "pending"}, {"202", "deny"}, {"407", "expire"}} {
+		for _, returnedOrder := range []string{"TXN-OTHER", ""} {
+			t.Run(pair.code+"/"+returnedOrder, func(t *testing.T) {
+				provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_ = json.NewEncoder(w).Encode(map[string]string{
+						"order_id": returnedOrder, "status_code": pair.code, "transaction_status": pair.status,
+					})
+				}))
+				defer provider.Close()
+				gateway := NewMidtransGateway(MidtransConfig{ServerKey: statusTestKey, APIBase: provider.URL})
+				if _, err := gateway.FetchStatus(t.Context(), "TXN-REQUESTED"); err == nil {
+					t.Fatal("recognized transaction with wrong or missing order must be rejected")
+				}
+			})
+		}
+	}
+}
+
 // TestFetchStatusNotFoundMeansPending: transaksi yang belum ada di Midtrans
 // bukan kegagalan — diperlakukan sebagai pending.
 func TestFetchStatusNotFoundMeansPending(t *testing.T) {

@@ -235,10 +235,13 @@ func (g *MidtransGateway) FetchStatus(ctx context.Context, orderID string) (Gate
 		return GatewayStatus{Status: "pending", StatusCode: statusCode}, nil
 	}
 
-	// Kode status lain di luar "200" tidak kita pahami: perlakukan sebagai
-	// pending tanpa error agar polling tidak pernah gagal karena hal yang tidak
-	// dikenali.
-	if statusCode != "200" {
+	// Kode non-200 hanya otoritatif untuk pasangan status yang didokumentasikan.
+	// Kombinasi lain tetap pending; khusus capture/settlement wajib kode 200.
+	txStatus := strings.ToLower(strings.TrimSpace(out.TransactionStatus))
+	if statusCode != "200" &&
+		(statusCode != "201" || txStatus != "pending") &&
+		(statusCode != "202" || txStatus != "deny") &&
+		(statusCode != "407" || txStatus != "expire") {
 		return GatewayStatus{Status: "pending", StatusCode: statusCode}, nil
 	}
 
@@ -250,7 +253,6 @@ func (g *MidtransGateway) FetchStatus(ctx context.Context, orderID string) (Gate
 	}
 
 	// `transaction_status` kosong/tak dikenal juga diperlakukan pending.
-	txStatus := strings.ToLower(strings.TrimSpace(out.TransactionStatus))
 	switch txStatus {
 	case "settlement", "capture", "pending", "expire", "cancel", "deny":
 	default:

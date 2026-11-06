@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -178,6 +179,70 @@ func TestPaymentStatusReconcilesAuthenticatedCapture(t *testing.T) {
 				if n := countSessionsForBooking(t, f.db, booking.ID); n != tc.wantSessions {
 					t.Fatalf("sessions=%d, want %d", n, tc.wantSessions)
 				}
+			}
+		})
+	}
+}
+
+func TestPaymentStatusReconcilesAuthenticatedNon200(t *testing.T) {
+	for _, tc := range []struct {
+		name, code, status, returnedOrder, wantStatus string
+		invalidOrder                                  bool
+	}{
+		{name: "expired", code: "407", status: "expire", wantStatus: "expired"},
+		{name: "denied", code: "202", status: "deny", wantStatus: "deny"},
+		{name: "pending", code: "201", status: "pending", wantStatus: "pending"},
+		{name: "expire_wrong_order", code: "407", status: "expire", returnedOrder: "TXN-OTHER", invalidOrder: true, wantStatus: "pending"},
+		{name: "expire_missing_order", code: "407", status: "expire", invalidOrder: true, wantStatus: "pending"},
+		{name: "deny_wrong_order", code: "202", status: "deny", returnedOrder: "TXN-OTHER", invalidOrder: true, wantStatus: "pending"},
+		{name: "deny_missing_order", code: "202", status: "deny", invalidOrder: true, wantStatus: "pending"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var reference string
+			var calls atomic.Int32
+			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				key, password, ok := r.BasicAuth()
+				if r.Method != http.MethodGet || r.URL.Path != "/v2/"+reference+"/status" || !ok || key != "sandbox-status-test-key" || password != "" {
+					t.Error("status request must authenticate the requested order")
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				order := reference
+				if tc.invalidOrder {
+					order = tc.returnedOrder
+				}
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"order_id": order, "status_code": tc.code, "transaction_status": tc.status,
+				})
+			}))
+			defer provider.Close()
+			gateway := payment.NewMidtransGateway(payment.MidtransConfig{ServerKey: "sandbox-status-test-key", APIBase: provider.URL})
+			f := newReconcileFixture(t, gateway)
+			booking, pay := f.pendingPayment(t, 10*time.Second)
+			reference = pay.Reference
+			for attempt := 0; attempt < 3; attempt++ {
+				code, payload := f.statusResult(t, reference)
+				if code != http.StatusOK || paymentStatusOf(t, payload) != tc.wantStatus {
+					t.Fatalf("HTTP %d status=%s, want %s", code, paymentStatusOf(t, payload), tc.wantStatus)
+				}
+				fresh, err := f.st.GetPaymentByReference(t.Context(), reference)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if fresh.Status != tc.wantStatus || fresh.PaidAt != nil {
+					t.Fatalf("persisted status=%s paid=%t, want %s unpaid", fresh.Status, fresh.PaidAt != nil, tc.wantStatus)
+				}
+				if n := countSessionsForBooking(t, f.db, booking.ID); n != 0 {
+					t.Fatalf("non-paid payment created %d sessions", n)
+				}
+			}
+			wantCalls := int32(1)
+			if tc.wantStatus == "pending" {
+				wantCalls = 3
+			}
+			if got := calls.Load(); got != wantCalls {
+				t.Fatalf("gateway calls=%d, want %d", got, wantCalls)
 			}
 		})
 	}
