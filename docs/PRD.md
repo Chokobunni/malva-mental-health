@@ -49,6 +49,7 @@ Malva adalah aplikasi mental health yang menghubungkan pasien dengan profesional
 - Manajemen: review screening, pro notes, follow-up, diary feedback, medication monitoring
 - E-Prescription (psikiater): digital signature + STR/SIP number + QR
 - Crisis incident log: active/past, resolution notes, liability trail
+- Koreksi mobile 0.1.5: home kedua peran menampilkan video dan sesi chat terdekat dengan dropdown seluruh jadwal; Messages tersedia pada navigasi profesional. Quick Video Call ikut scroll jadwal, dan sesi lewat durasi diprioritaskan untuk diselesaikan. Screening pada Crisis Log ditampilkan sebagai riwayat; hanya SOS belum resolved memerlukan konfirmasi tindak lanjut, tanpa wajib mengetik catatan.
 - Earnings: gross → platform fee → net → payout + transaction history
 - Profil: STR/SIPP, video intro, pendidikan, topik keahlian, paket harga
 

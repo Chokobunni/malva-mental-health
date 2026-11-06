@@ -255,7 +255,7 @@ void main() {
     // Hadir/Tidak hadir TIDAK ditawarkan ulang untuk sesi completed.
     expect(find.text('Hadir'), findsNothing);
     expect(find.text('Tidak hadir'), findsNothing);
-    expect(find.text('Sesi selesai'), findsNothing);
+    expect(find.text('Selesaikan sesi'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 }

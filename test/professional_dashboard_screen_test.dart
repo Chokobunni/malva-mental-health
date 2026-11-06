@@ -8,7 +8,7 @@ import 'package:malva_mental_health/src/theme.dart';
 
 void main() {
   testWidgets(
-      'professional dashboard renders tabs Dashboard/Jadwal/Pasien/Lainnya',
+      'professional dashboard renders Dashboard/Jadwal/Pasien/Lainnya/Messages',
       (tester) async {
     final container = ProviderContainer();
     final store = container.read(malvaStoreProvider.notifier);
@@ -37,12 +37,12 @@ void main() {
     expect(find.text('Jadwal'), findsOneWidget);
     expect(find.text('Pasien'), findsOneWidget);
     expect(find.text('Lainnya'), findsOneWidget);
+    expect(find.text('Messages'), findsOneWidget);
     expect(find.text('Tugas'), findsNothing);
 
-    // Dashboard kini tepat 3 bagian: video call mendatang, pasien terhubung
-    // (bila ada), dan Crisis Incident Log. Tanpa backend tidak ada pasien,
-    // jadi yang tampil adalah video call (empty) + Crisis Incident Log.
     expect(find.text('Video call mendatang'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Crisis Incident Log'), 200,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Crisis Incident Log'), findsOneWidget);
     expect(find.text('Prioritas pasien'), findsNothing);
 

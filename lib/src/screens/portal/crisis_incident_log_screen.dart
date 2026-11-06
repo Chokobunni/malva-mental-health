@@ -133,7 +133,7 @@ class _CrisisIncidentLogScreenState
                     children: [
                       Expanded(
                         child: Text(
-                          '$_total incident • $_unresolved belum ditangani',
+                          '$_total catatan • $_unresolved SOS perlu tindak lanjut',
                           style: const TextStyle(
                               fontWeight: FontWeight.w800, fontSize: 12.5),
                         ),
@@ -141,6 +141,14 @@ class _CrisisIncidentLogScreenState
                     ],
                   ),
                 ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'Screening adalah catatan kondisi saat pengisian. '
+                  'Penanganan SOS dapat dikonfirmasi tanpa menulis catatan.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
               for (final item in _items) ...[
                 _CrisisLogCard(
                   item: item,
@@ -281,11 +289,21 @@ class _CrisisLogCard extends StatelessWidget {
           Row(
             children: [
               StatusPill(
-                label: item.isResolved ? 'Sudah ditangani' : 'Belum ditangani',
-                color: item.isResolved ? MalvaColors.mint : MalvaColors.danger,
-                icon: item.isResolved
-                    ? Icons.check_circle_rounded
-                    : Icons.warning_amber_rounded,
+                label: !isSos
+                    ? 'Riwayat screening'
+                    : item.isResolved
+                        ? 'Sudah ditangani'
+                        : 'Perlu tindak lanjut',
+                color: !isSos
+                    ? MalvaColors.amber
+                    : item.isResolved
+                        ? MalvaColors.mint
+                        : MalvaColors.danger,
+                icon: !isSos
+                    ? Icons.history_rounded
+                    : item.isResolved
+                        ? Icons.check_circle_rounded
+                        : Icons.warning_amber_rounded,
               ),
             ],
           ),
@@ -320,8 +338,7 @@ class _CrisisLogCard extends StatelessWidget {
 
 /// Waktu insiden krisis (`d/M/yyyy HH:mm`) dalam waktu WIB.
 ///
-/// `created_at` insiden berasal dari server (UTC), jadi WAJIB `toWib()`
-/// lebih dulu — kalau tidak, insiden dini hari tercatat di tanggal kemarin.
+/// Format waktu insiden server memakai helper WIB yang sama dengan layar lain.
 String formatIncidentDate(DateTime? date) {
   if (date == null) return '';
   return formatWibDateTimeShort(date);

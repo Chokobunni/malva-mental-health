@@ -311,6 +311,12 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - client_message_id UUID stabil per intent menduplikasi ulang pesan/lampiran secara aman; pembuatan goal/obat memakai Idempotency-Key. Payload yang berubah dengan kunci sama ditolak. clinical_data_changed hanya event in-app, memicu refresh data pasien, bukan jenis push baru.
 - Rujukan desain: [sesi dan chat klinis](../docs/superpowers/specs/2026-11-06-session-clinical-chat-design.md).
 
+## Kontrak kartu sesi dan crisis log (2026-11-06)
+
+- Home kedua peran menampilkan satu sesi mendatang terdekat per jenis; dropdown membuka semua. Profesional memiliki tab Messages. Quick Video Call ikut scroll jadwal.
+- Sesi profesional terjadwal yang sudah lewat durasi harus mudah ditemukan pada **Perlu diselesaikan** dengan **Selesaikan sesi**, tanpa mengaktifkan kembali Join/Chat. Kartu Jadwal/Riwayat menampilkan jenis, jadwal dan konteks yang relevan tanpa judul kehadiran kosong.
+- Flag screening historis bukan SOS unresolved. Feed tetap mempertahankan kedua sumber; hitungan unresolved hanya SOS, dan penyelesaian SOS tetap konfirmasi opsional tanpa wajib mengetik. Rujukan: [care session](skills/care_session_module.md), [safety](skills/safety_sos_module.md).
+
 ## Commit
 
 - Format **Conventional Commits**: `feat|fix|refactor|chore|docs|perf|seo|infra: <ringkas>`.

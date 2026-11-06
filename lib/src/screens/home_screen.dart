@@ -73,6 +73,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   List<BackendCareSession> _upcomingSessions = const [];
   bool _ongoingLoadFailed = false;
   bool _upcomingLoadFailed = false;
+  bool _showAllUpcomingVideos = false;
+  bool _showAllUpcomingChats = false;
+  String? _sessionsOwnerToken;
   int _sessionsRequest = 0;
 
   AuthSession? get _session =>
@@ -139,6 +142,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final rawToken = _session?.accessToken;
     final accessToken =
         (rawToken == null || rawToken.isEmpty) ? null : rawToken;
+    if (mounted && _sessionsOwnerToken != accessToken) {
+      _sessionsOwnerToken = accessToken;
+      setState(() {
+        _showAllUpcomingVideos = false;
+        _showAllUpcomingChats = false;
+        _upcomingSessions = const [];
+        _ongoingSessions = const [];
+        _upcomingLoadFailed = false;
+        _ongoingLoadFailed = false;
+      });
+      _sessionRefresh.update(const []);
+    }
     if (accessToken == null) {
       if (mounted) {
         setState(() {
@@ -270,15 +285,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                             onChanged: _loadUpcomingSession,
                           )),
                   const SizedBox(height: 18),
-                  const SectionLabel('Video call mendatang',
-                      icon: Icons.videocam_rounded),
+                  SectionLabel('Video call mendatang',
+                      icon: Icons.videocam_rounded,
+                      action: upcomingVideos.length > 1
+                          ? IconButton(
+                              tooltip: _showAllUpcomingVideos
+                                  ? 'Tampilkan lebih sedikit sesi video'
+                                  : 'Tampilkan semua sesi video',
+                              onPressed: () => setState(() =>
+                                  _showAllUpcomingVideos =
+                                      !_showAllUpcomingVideos),
+                              icon: Icon(_showAllUpcomingVideos
+                                  ? Icons.expand_less_rounded
+                                  : Icons.expand_more_rounded))
+                          : null),
                   if (_upcomingLoadFailed)
                     const Text('Video call mendatang belum dapat dimuat.')
                   else if (upcomingVideos.isEmpty)
                     const SoftCard(
                         child: Text('Tidak ada video call mendatang.'))
                   else
-                    for (final s in upcomingVideos)
+                    for (final s in _showAllUpcomingVideos
+                        ? upcomingVideos
+                        : upcomingVideos.take(1))
                       Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: _UpcomingSessionCard(
@@ -294,9 +323,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         child: const Text('Coba lagi')),
                   if (upcomingChats.isNotEmpty) ...[
                     const SizedBox(height: 18),
-                    const SectionLabel('Chat mendatang',
-                        icon: Icons.chat_bubble_rounded),
-                    for (final s in upcomingChats)
+                    SectionLabel('Sesi chat mendatang',
+                        icon: Icons.chat_bubble_rounded,
+                        action: upcomingChats.length > 1
+                            ? IconButton(
+                                tooltip: _showAllUpcomingChats
+                                    ? 'Tampilkan lebih sedikit sesi chat'
+                                    : 'Tampilkan semua sesi chat',
+                                onPressed: () => setState(() =>
+                                    _showAllUpcomingChats =
+                                        !_showAllUpcomingChats),
+                                icon: Icon(_showAllUpcomingChats
+                                    ? Icons.expand_less_rounded
+                                    : Icons.expand_more_rounded))
+                            : null),
+                    for (final s in _showAllUpcomingChats
+                        ? upcomingChats
+                        : upcomingChats.take(1))
                       Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: _UpcomingSessionCard(

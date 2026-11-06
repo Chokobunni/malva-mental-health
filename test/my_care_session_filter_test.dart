@@ -133,6 +133,46 @@ Future<void> _tapFilter(WidgetTester tester, String label) async {
 }
 
 void main() {
+  testWidgets(
+      'future session card explains check-in and retains package action',
+      (tester) async {
+    final upcoming = _aktif()
+      ..['session_type'] = 'video'
+      ..['package_id'] = 'package-synthetic';
+    final api = MalvaApiClient(
+        baseUrl: 'http://backend.test', httpClient: _careClient([upcoming]));
+    await tester.pumpWidget(_wrap(api));
+    await tester.pumpAndSettle();
+    await _openTab(tester, 'Jadwal');
+    expect(find.textContaining('Video'), findsOneWidget);
+    expect(find.textContaining('Paket'), findsWidgets);
+    expect(find.text('Check-in dibuka 10 menit sebelum sesi.'), findsOneWidget);
+    expect(find.text('Kelola paket'), findsOneWidget);
+    expect(find.text('Kehadiran saya'), findsNothing);
+    expect(find.text('Gabung'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('history card keeps type summary and cancellation reason',
+      (tester) async {
+    final cancelled = _batal()
+      ..['summary_for_patient'] = 'Lanjutkan latihan napas.'
+      ..['cancel_reason'] = 'Jadwal berbenturan.';
+    final api = MalvaApiClient(
+        baseUrl: 'http://backend.test', httpClient: _careClient([cancelled]));
+    await tester.pumpWidget(_wrap(api));
+    await tester.pumpAndSettle();
+    await _openTab(tester, 'Riwayat');
+    expect(find.textContaining('Chat'), findsOneWidget);
+    expect(find.text('Ringkasan: Lanjutkan latihan napas.'), findsOneWidget);
+    expect(find.text('Alasan: Jadwal berbenturan.'), findsOneWidget);
+    expect(find.text('Kehadiran saya'), findsNothing);
+    expect(find.text('Join'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, 'Tidak hadir'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('filter "Dibatalkan" hanya menampilkan sesi yang dibatalkan',
       (tester) async {
     final api = MalvaApiClient(

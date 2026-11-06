@@ -320,16 +320,16 @@ func (s *Store) ListCrisisIncidentLog(ctx context.Context, professionalID string
 
 	const countsQ = `
 		SELECT COUNT(*),
-		       COUNT(*) FILTER (WHERE resolved_at IS NULL)
+		       COUNT(*) FILTER (WHERE is_sos AND resolved_at IS NULL)
 		FROM (
-			SELECT i.resolved_at
+			SELECT i.resolved_at, true AS is_sos
 			FROM crisis_incidents i
 			WHERE i.patient_id IN (
 				SELECT patient_id FROM patient_professional_links
 				WHERE professional_id = $1 AND status = 'active'
 			)
 			UNION ALL
-			SELECT NULL::timestamptz
+			SELECT NULL::timestamptz, false
 			FROM screening_sessions s
 			WHERE s.crisis_flag = true
 			  AND s.patient_id IN (

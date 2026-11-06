@@ -666,6 +666,15 @@ func (s *Store) GetCareSessionByBookingID(ctx context.Context, bookingID string)
 
 // ListCareSessions scope: upcoming | ongoing | today | past | all, untuk pasien / profesional.
 func (s *Store) ListCareSessions(ctx context.Context, userID, role, scope, patientID string, limit int) ([]CareSession, error) {
+	return s.listCareSessions(ctx, userID, role, scope, patientID, limit, false)
+}
+
+// ListCareSessionFeed keeps every scheduled session visible while bounding history.
+func (s *Store) ListCareSessionFeed(ctx context.Context, userID, role, scope, patientID string, historyLimit int) ([]CareSession, error) {
+	return s.listCareSessions(ctx, userID, role, scope, patientID, historyLimit, true)
+}
+
+func (s *Store) listCareSessions(ctx context.Context, userID, role, scope, patientID string, limit int, completeSchedule bool) ([]CareSession, error) {
 	limit = normalizeLimit(limit, 50, 200)
 	var where []string
 	var args []any
@@ -687,7 +696,8 @@ func (s *Store) ListCareSessions(ctx context.Context, userID, role, scope, patie
 	} else {
 		where = append(where, "cs.patient_id = "+ph(userID))
 	}
-	switch strings.ToLower(strings.TrimSpace(scope)) {
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	switch scope {
 	case "upcoming":
 		where = append(where, "cs.status = 'scheduled' AND cs.scheduled_at >= now()")
 	case "ongoing":
@@ -705,12 +715,25 @@ func (s *Store) ListCareSessions(ctx context.Context, userID, role, scope, patie
 	default:
 		return nil, errors.New("scope harus upcoming, ongoing, today, past, atau all")
 	}
+	filter := strings.Join(where, " AND ")
+	orderLimit := "ORDER BY cs.scheduled_at DESC LIMIT " + fmt.Sprint(limit)
+	if completeSchedule {
+		switch scope {
+		case "upcoming", "ongoing", "today":
+			orderLimit = "ORDER BY cs.scheduled_at ASC"
+		default:
+			// Reserve the history budget after all scheduled rows, using the same
+			// scope and owner filters so older unfinished sessions cannot disappear.
+			orderLimit = "ORDER BY (cs.status='scheduled') DESC, cs.scheduled_at DESC LIMIT (" + fmt.Sprint(limit) +
+				" + (SELECT COUNT(*) FROM care_sessions cs WHERE " + filter + " AND cs.status='scheduled'))"
+		}
+	}
 	q := `SELECT ` + careSessionColumns + `
 		FROM care_sessions cs
 		LEFT JOIN users pat ON pat.id = cs.patient_id
 		LEFT JOIN users pro ON pro.id = cs.professional_id
-		WHERE ` + strings.Join(where, " AND ") + `
-		ORDER BY cs.scheduled_at DESC LIMIT ` + fmt.Sprint(limit)
+		WHERE ` + filter + `
+		` + orderLimit
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err

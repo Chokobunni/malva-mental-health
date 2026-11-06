@@ -90,6 +90,44 @@ MalvaApiClient _proScheduleApi(List<Map<String, dynamic>> today) {
 void main() {
   setUpAll(initializeWib);
 
+  testWidgets(
+      'future professional card explains check-in and keeps planning actions',
+      (tester) async {
+    final api = _proScheduleApi([
+      {
+        'id': 'future-session',
+        'patient_id': 'patient',
+        'professional_id': 'user_pro_1',
+        'patient_name': 'Pasien Mendatang',
+        'session_type': 'video',
+        'scheduled_at': '2099-01-02T10:00:00+07:00',
+        'duration_minutes': 30,
+        'status': 'scheduled',
+      }
+    ]);
+    final container = ProviderContainer(
+        overrides: [apiClientProvider.overrideWithValue(api)]);
+    container.read(authStateProvider.notifier).setSession(_proSession);
+    await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+            theme: buildMalvaTheme(),
+            home: Scaffold(
+                body:
+                    ProScheduleScreen(session: _proSession, apiClient: api)))));
+    await tester.pumpAndSettle();
+    expect(find.text('Terjadwal'), findsOneWidget);
+    expect(find.text('Check-in dibuka 10 menit sebelum sesi.'), findsOneWidget);
+    expect(find.text('Kehadiran saya'), findsNothing);
+    expect(find.text('Join / Chat'), findsNothing);
+    await tester.tap(find.text('Aksi lain'));
+    await tester.pumpAndSettle();
+    expect(find.text('Detail pasien'), findsOneWidget);
+    expect(find.text('Reschedule'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    container.dispose();
+  });
+
   test('BackendCareSession mem-parse attended_marked_at -> isAttended', () {
     final attended = BackendCareSession.fromJson(<String, dynamic>{
       'id': 'cs_1',
@@ -111,7 +149,7 @@ void main() {
   });
 
   testWidgets(
-      'kartu sesi attended: pill "Hadir", tanpa "Tidak hadir", '
+      'kartu sesi attended: satu konfirmasi kehadiran, tanpa "Tidak hadir", '
       'tetap ada "Join / Chat"', (tester) async {
     final now = wibNow();
     final attendedSession = <String, dynamic>{
@@ -153,8 +191,9 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
 
-    expect(find.text('Hadir'), findsOneWidget,
-        reason: 'pill "Hadir" harus tampil untuk sesi yang sudah hadir');
+    expect(find.text('Kehadiran saya: Hadir'), findsOneWidget);
+    expect(find.text('Hadir'), findsNothing,
+        reason: 'kehadiran yang sama tidak perlu pill kedua');
     expect(find.text('Tidak hadir'), findsNothing,
         reason:
             'tombol "Tidak hadir" tidak boleh ditawarkan lagi setelah hadir');

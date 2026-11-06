@@ -21,15 +21,18 @@ const _pro = AuthSession(
     backendUserId: 'pro',
     accessToken: 'pro-token');
 
-BackendCareSession _session({bool ended = false, bool completed = false}) =>
+BackendCareSession _session(
+        {bool ended = false, bool completed = false, bool future = false}) =>
     BackendCareSession(
         id: 'session',
         patientId: 'patient',
         professionalId: 'pro',
         patientName: 'Patient',
         sessionType: 'chat',
-        scheduledAt: wibIso(ServerClock.now().subtract(
-            ended ? const Duration(hours: 8) : const Duration(minutes: 5))),
+        scheduledAt: wibIso(future
+            ? ServerClock.now().add(const Duration(days: 2))
+            : ServerClock.now().subtract(
+                ended ? const Duration(hours: 8) : const Duration(minutes: 5))),
         durationMinutes: 30,
         status: completed ? 'completed' : 'scheduled');
 
@@ -50,8 +53,18 @@ void main() {
           final scope = request.url.queryParameters['scope'];
           final body = request.url.path == '/v1/care-sessions'
               ? {
-                  'sessions': scope == 'past'
+                  'sessions': scope == 'past' || scope == 'today'
                       ? [
+                          if (scope == 'past')
+                            for (var i = 0; i < 12; i++)
+                              {
+                                'id': 'terminal-$i',
+                                'patient_id': 'patient-$i',
+                                'professional_id': 'pro',
+                                'patient_name': 'Riwayat $i',
+                                'scheduled_at': session.scheduledAt,
+                                'status': 'completed',
+                              },
                           {
                             'id': session.id,
                             'patient_id': session.patientId,
@@ -82,12 +95,72 @@ void main() {
             home: Scaffold(
                 body: ProScheduleScreen(session: _pro, apiClient: api)))));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Sesi selesai'), 300,
-        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Perlu diselesaikan'), findsOneWidget);
     expect(find.text('Join / Chat'), findsNothing);
-    expect(find.text('Sesi selesai'), findsOneWidget);
+    expect(find.text('Selesaikan sesi'), findsOneWidget);
+    expect(find.text('Selesaikan sesi').hitTestable(), findsOneWidget,
+        reason: 'actionable ended session must precede truncated history');
     expect(find.text('Kehadiran saya'), findsOneWidget,
         reason: 'legacy marker must not invent professional self attendance');
+    await tester.pumpWidget(const SizedBox());
+    container.dispose();
+  });
+
+  testWidgets(
+      'terminal response wins over stale ended session from today scope',
+      (tester) async {
+    final session = _session(ended: true);
+    final api = MalvaApiClient(
+        baseUrl: 'https://synthetic.test',
+        httpClient: MockClient((request) async {
+          final scope = request.url.queryParameters['scope'];
+          return http.Response(
+              jsonEncode({
+                if (request.url.path == '/v1/care-sessions')
+                  'sessions': scope == 'today' || scope == 'past'
+                      ? [
+                          {
+                            'id': session.id,
+                            'patient_id': session.patientId,
+                            'professional_id': session.professionalId,
+                            'patient_name': 'Patient',
+                            'session_type': 'chat',
+                            'scheduled_at': session.scheduledAt,
+                            'duration_minutes': 30,
+                            'status':
+                                scope == 'past' ? 'completed' : 'scheduled',
+                            'summary_for_patient':
+                                scope == 'past' ? 'Ringkasan akhir' : '',
+                          }
+                        ]
+                      : []
+                else ...{
+                  'schedules': [],
+                  'time_off': [],
+                  'pricing': <String, Object>{},
+                }
+              }),
+              200);
+        }));
+    final container = ProviderContainer(
+        overrides: [apiClientProvider.overrideWithValue(api)]);
+    container.read(authStateProvider.notifier).setSession(_pro);
+    await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+            home: Scaffold(
+                body: ProScheduleScreen(session: _pro, apiClient: api)))));
+    await tester.pumpAndSettle();
+    expect(find.text('Selesaikan sesi'), findsNothing);
+    expect(find.text('Perlu diselesaikan'), findsNothing);
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('past-session')), 300,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Patient'), findsOneWidget);
+    expect(find.text('Selesai'), findsOneWidget);
+    expect(find.text('Ringkasan: Ringkasan akhir'), findsOneWidget);
+    expect(find.text('Join / Chat'), findsNothing);
+    expect(find.text('Kehadiran saya'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     container.dispose();
   });
@@ -111,15 +184,39 @@ void main() {
       expect(find.text('Kehadiran saya'), findsOneWidget);
       expect(find.text('Hadir'), findsOneWidget);
       expect(find.text('Tidak hadir'), findsOneWidget);
-      expect(find.text('Sesi selesai'), findsNothing);
+      expect(find.text('Selesaikan sesi'), findsNothing);
       await mount(_session(ended: true));
       await tester.pumpAndSettle();
-      expect(find.text('Sesi selesai'),
+      expect(find.text('Selesaikan sesi'),
           role == UserRole.professional ? findsOneWidget : findsNothing);
       await mount(_session(ended: true, completed: true));
       await tester.pumpAndSettle();
       expect(find.byType(OutlinedButton), findsNothing);
       expect(find.byType(FilledButton), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      container.dispose();
+    });
+
+    testWidgets('$role future and terminal hide empty attendance controls',
+        (tester) async {
+      final container = ProviderContainer();
+      for (final session in [
+        _session(future: true),
+        _session(completed: true)
+      ]) {
+        await tester.pumpWidget(UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+                home: Scaffold(
+                    body: SessionAttendanceActions(
+                        session: session,
+                        role: role,
+                        onChanged: () async {})))));
+        await tester.pumpAndSettle();
+        expect(find.text('Kehadiran saya'), findsNothing);
+        expect(find.byType(OutlinedButton), findsNothing);
+        expect(find.byType(FilledButton), findsNothing);
+      }
       await tester.pumpWidget(const SizedBox());
       container.dispose();
     });

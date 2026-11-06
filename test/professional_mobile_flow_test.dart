@@ -25,7 +25,7 @@ class _Client extends http.BaseClient {
   bool attended = false;
 
   Map<String, dynamic> session({bool upcoming = false}) => {
-        'id': 'session-synthetic',
+        'id': upcoming ? 'session-upcoming' : 'session-synthetic',
         'patient_id': 'patient-synthetic',
         'professional_id': _professional.backendUserId,
         'patient_name': 'Pasien Sintetis Mendatang',
@@ -145,8 +145,9 @@ void main() {
       'Hadir sends attended with the professional token and keeps session live',
       (tester) async {
     final client = await _mount(tester);
-    await tester
-        .ensureVisible(find.widgetWithText(OutlinedButton, 'Hadir').first);
+    await tester.scrollUntilVisible(
+        find.widgetWithText(OutlinedButton, 'Hadir'), 200,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.widgetWithText(OutlinedButton, 'Hadir').first);
     await tester.pumpAndSettle();
     final request =

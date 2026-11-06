@@ -137,3 +137,10 @@ Home pasien: sesi berjalan dan video mendatang dengan foto profesional. Profesio
 | Attachment chat | Isi assessment saat sesi; buka goals/rangkuman; unduh file privat | Goals/habits dan tambah goal; permintaan assessment; diagnosis; Medication psikiater; file/gambar; rangkuman homework/insight |
 | Sinkronisasi | Obat dari profesional masuk Medication Check-in lewat event in-app dan dipulihkan saat resume/reconnect | Perubahan memakai scope sesi aktif dan consent |
 | Pembayaran | Status Midtrans resmi mengaktifkan paket tepat sekali | Kebijakan earnings yang ada dipertahankan |
+
+### Penyempurnaan tampilan 0.1.5
+
+- Home kedua peran: video dan sesi chat mendatang menampilkan yang terdekat, dengan dropdown seluruh jadwal.
+- Profesional: Messages pada navigasi, Quick Video Call ikut scroll, sesi lewat durasi yang perlu diselesaikan ditampilkan di awal jadwal.
+- MyCare Jadwal/Riwayat: jenis sesi, konteks check-in dan hasil sesi; tidak ada judul kehadiran kosong.
+- Crisis Incident Log: screening berupa riwayat; hanya SOS belum resolved dihitung sebagai perlu tindak lanjut, dengan konfirmasi penanganan tanpa wajib mengetik.

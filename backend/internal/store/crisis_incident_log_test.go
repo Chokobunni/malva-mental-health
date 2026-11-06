@@ -31,10 +31,11 @@ func TestListCrisisIncidentLogGabunganSumber(t *testing.T) {
 	st := New(db)
 
 	// Sumber 1: insiden SOS.
-	if _, err := st.CreateCrisisIncident(ctx, CrisisIncident{
+	incident, err := st.CreateCrisisIncident(ctx, CrisisIncident{
 		PatientID:   patient,
 		TriggeredBy: "sos_button",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("buat insiden SOS: %v", err)
 	}
 
@@ -74,11 +75,11 @@ func TestListCrisisIncidentLogGabunganSumber(t *testing.T) {
 	if sources["screening"] < 1 {
 		t.Errorf("feed tidak memuat sumber screening: %+v", sources)
 	}
-	if feed.Counts.Total < 2 {
-		t.Errorf("counts.total=%d, mau >= 2", feed.Counts.Total)
+	if feed.Counts.Total != 2 {
+		t.Errorf("counts.total=%d, mau 2", feed.Counts.Total)
 	}
-	if feed.Counts.Unresolved < 2 {
-		t.Errorf("counts.unresolved=%d, mau >= 2", feed.Counts.Unresolved)
+	if feed.Counts.Unresolved != 1 {
+		t.Errorf("counts.unresolved=%d, mau 1 (hanya SOS belum ditangani)", feed.Counts.Unresolved)
 	}
 
 	// Terbaru di atas (hanya gagal bila yang lebih lama muncul sebelum yang
@@ -88,5 +89,23 @@ func TestListCrisisIncidentLogGabunganSumber(t *testing.T) {
 			t.Errorf("feed tidak terurut terbaru-dulu di indeks %d: %v > %v",
 				i, feed.Items[i].CreatedAt, feed.Items[i-1].CreatedAt)
 		}
+	}
+
+	limited, err := st.ListCrisisIncidentLog(ctx, prof, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(limited.Items) != 1 || limited.Counts.Total != 2 || limited.Counts.Unresolved != 1 {
+		t.Fatalf("limit tidak boleh memangkas agregat: %+v", limited)
+	}
+	if _, err := st.ResolveCrisisIncident(ctx, incident.ID, prof, ""); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := st.ListCrisisIncidentLog(ctx, prof, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Counts.Total != 2 || resolved.Counts.Unresolved != 0 {
+		t.Fatalf("riwayat screening tidak menjadi SOS belum ditangani: %+v", resolved.Counts)
 	}
 }

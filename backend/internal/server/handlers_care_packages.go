@@ -357,7 +357,7 @@ func (s *Server) listCareSessions(w http.ResponseWriter, r *http.Request, claims
 	if claims.Role == "professional" {
 		patientScope = r.URL.Query().Get("patient_id")
 	}
-	sessions, err := s.store.ListCareSessions(r.Context(), claims.Subject, claims.Role, scope, patientScope, 100)
+	sessions, err := s.store.ListCareSessionFeed(r.Context(), claims.Subject, claims.Role, scope, patientScope, 100)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return

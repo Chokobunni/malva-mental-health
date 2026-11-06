@@ -893,11 +893,13 @@ class _SessionCard extends StatelessWidget {
     };
     final statusLabel = switch (session.status) {
       'scheduled' =>
-        'Terjadwal${session.packageId == null ? ' • sekali sesi' : ''}',
+        session.isAfterJoinWindow ? 'Waktu sesi berakhir' : 'Terjadwal',
       'completed' => 'Selesai',
-      'no_show' => 'Tidak hadir (hangus)',
-      'cancelled_by_professional' => 'Dibatalkan profesional (kredit kembali)',
+      'no_show' => 'Tidak hadir',
+      'cancelled_by_professional' => 'Dibatalkan profesional',
       'cancelled_by_patient' => 'Dibatalkan',
+      'expired_unpaid' => 'Pembayaran kedaluwarsa',
+      'pending_payment' => 'Menunggu pembayaran',
       _ => session.status,
     };
     // Aksi sesi hanya tersedia selama sesi scheduled berada dalam jendela.
@@ -929,32 +931,51 @@ class _SessionCard extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
                     Text(
-                      '$dateLabel • ${session.durationMinutes} mnt',
+                      dateLabel,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
-              StatusPill(label: statusLabel, color: statusColor),
             ],
           ),
+          const SizedBox(height: 8),
+          Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                StatusPill(label: statusLabel, color: statusColor),
+                Text(
+                    '${session.isVideo ? 'Video' : 'Chat'} • ${session.durationMinutes} mnt • ${session.packageId == null ? 'Sekali sesi' : 'Paket'}',
+                    style: Theme.of(context).textTheme.bodySmall),
+              ]),
+          if (session.isScheduled && session.isBeforeJoinWindow) ...[
+            const SizedBox(height: 8),
+            const Text('Check-in dibuka 10 menit sebelum sesi.'),
+          ],
           if (session.summaryForPatient.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text('Ringkasan: ${session.summaryForPatient}',
                 style: Theme.of(context).textTheme.bodySmall),
           ],
-          // F-12: tampilkan siapa yang membatalkan sesi (cancelled_by).
-          if (session.cancelledBy.isNotEmpty) ...[
+          if (session.cancelledByProfessional ||
+              session.status == 'no_show') ...[
             const SizedBox(height: 6),
             Text(
               session.cancelledByProfessional
-                  ? 'Dibatalkan oleh profesional — kuota sesi dikembalikan.'
-                  : 'Dibatalkan oleh Anda.',
+                  ? 'Kuota sesi dikembalikan.'
+                  : 'Kuota sesi terpakai.',
               style: Theme.of(context)
                   .textTheme
                   .bodySmall
                   ?.copyWith(fontWeight: FontWeight.w600),
             ),
+          ],
+          if (session.cancelReason.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text('Alasan: ${session.cancelReason}',
+                style: Theme.of(context).textTheme.bodySmall),
           ],
           if (live) ...[
             const SizedBox(height: 10),
@@ -991,17 +1012,17 @@ class _SessionCard extends StatelessWidget {
                     label: const Text('Kirim'),
                   ),
                 ),
-                if (onManage != null && session.packageId != null) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: onManage,
-                      child: const Text('Kelola'),
-                    ),
-                  ),
-                ],
               ],
             ),
+          ],
+          if (session.isScheduled &&
+              onManage != null &&
+              session.packageId != null) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+                onPressed: onManage,
+                icon: const Icon(Icons.tune_rounded, size: 16),
+                label: const Text('Kelola paket')),
           ],
           const SizedBox(height: 10),
           SessionAttendanceActions(

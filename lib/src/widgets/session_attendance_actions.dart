@@ -101,6 +101,7 @@ class _SessionAttendanceActionsState
         !now.isBefore(start.subtract(BackendCareSession.joinOpensBefore));
     final ended = start != null &&
         !now.isBefore(start.add(Duration(minutes: session.durationMinutes)));
+    if (!session.isScheduled || !opened) return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(
           'Kehadiran saya${attendance.isEmpty ? '' : ': ${attendance == 'attended' ? 'Hadir' : 'Tidak hadir'}'}',
@@ -122,7 +123,7 @@ class _SessionAttendanceActionsState
                 style: compactFilledButtonStyle,
                 onPressed: _busy ? null : () => _mark('completed'),
                 icon: const Icon(Icons.task_alt_rounded, size: 16),
-                label: const Text('Sesi selesai')),
+                label: const Text('Selesaikan sesi')),
         ]),
     ]);
   }

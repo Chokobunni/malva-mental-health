@@ -27,10 +27,12 @@ import '../time/wib.dart';
 // ============================================================
 
 class ProScheduleScreen extends ConsumerStatefulWidget {
-  const ProScheduleScreen({super.key, this.session, this.apiClient});
+  const ProScheduleScreen(
+      {super.key, this.session, this.apiClient, this.header});
 
   final AuthSession? session;
   final MalvaApiClient? apiClient;
+  final Widget? header;
 
   @override
   ConsumerState<ProScheduleScreen> createState() => _ProScheduleScreenState();
@@ -113,9 +115,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
       if (!mounted) return;
       setState(() {
         _error = null;
-        _today = (results[0] as List<BackendCareSession>)
-            .where((s) => !s.isAfterJoinWindow)
-            .toList();
+        _today = results[0] as List<BackendCareSession>;
         _upcoming = (results[1] as List<BackendCareSession>)
           ..sort(
               (a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
@@ -139,11 +139,50 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Parallel scope requests may straddle completion; terminal state wins.
+    final sessionsById = <String, BackendCareSession>{};
+    for (final s in [..._today, ..._upcoming, ..._past]) {
+      if (sessionsById[s.id]?.isScheduled ?? true) sessionsById[s.id] = s;
+    }
+    final needsCompletion = sessionsById.values
+        .where((s) => s.isScheduled && s.isAfterJoinWindow)
+        .toList()
+      ..sort((a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
+    final today = _today
+        .map((s) => sessionsById[s.id]!)
+        .where((s) => s.isScheduled && !s.isAfterJoinWindow)
+        .toList();
+    final todayIds = today.map((s) => s.id).toSet();
+    final upcoming = _upcoming
+        .map((s) => sessionsById[s.id]!)
+        .where((s) =>
+            s.isScheduled && !s.isAfterJoinWindow && !todayIds.contains(s.id))
+        .toList();
+    final completionIds = needsCompletion.map((s) => s.id).toSet();
+    final past = _past
+        .map((s) => sessionsById[s.id]!)
+        .where((s) => !completionIds.contains(s.id))
+        .toList();
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.all(18),
         children: [
+          if (widget.header != null) ...[
+            widget.header!,
+            const SizedBox(height: 14),
+          ],
+          if (needsCompletion.isNotEmpty) ...[
+            const SectionLabel('Perlu diselesaikan',
+                icon: Icons.task_alt_rounded),
+            for (final s in needsCompletion) ...[
+              _ProSessionCard(
+                  key: ValueKey('complete-${s.id}'),
+                  session: s,
+                  onChanged: _load),
+              const SizedBox(height: 10),
+            ],
+          ],
           const SectionLabel('Sesi hari ini', icon: Icons.today_rounded),
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
@@ -166,14 +205,14 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
               ),
             )
           else ...[
-            if (_today.isEmpty)
+            if (today.isEmpty)
               const EmptyState(
                 icon: Icons.event_available_outlined,
                 title: 'Tidak ada sesi hari ini',
                 subtitle: 'Sesi terjadwal hari ini muncul di sini.',
               )
             else
-              for (final s in _today) ...[
+              for (final s in today) ...[
                 _ProSessionCard(
                     key: ValueKey('today-${s.id}'),
                     session: s,
@@ -182,7 +221,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
               ],
             const SizedBox(height: 10),
             const SectionLabel('Mendatang', icon: Icons.event_rounded),
-            if (_upcoming.isEmpty)
+            if (upcoming.isEmpty)
               const EmptyState(
                 icon: Icons.calendar_month_outlined,
                 title: 'Belum ada sesi mendatang',
@@ -190,7 +229,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
                     'Pasien menjadwalkan sesi dari paket / quick consult.',
               )
             else
-              for (final s in _upcoming.take(10)) ...[
+              for (final s in upcoming.take(10)) ...[
                 _ProSessionCard(
                     key: ValueKey('upcoming-${s.id}'),
                     session: s,
@@ -225,19 +264,18 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
             ),
             const SizedBox(height: 10),
             const SectionLabel('Riwayat sesi', icon: Icons.history_rounded),
-            if (_past.isEmpty)
+            if (past.isEmpty)
               const EmptyState(
                 icon: Icons.history_rounded,
                 title: 'Belum ada riwayat',
                 subtitle: 'Sesi selesai / batal tercatat di sini.',
               )
             else
-              for (final s in _past.take(10)) ...[
+              for (final s in past.take(10)) ...[
                 _ProSessionCard(
                     key: ValueKey('past-${s.id}'),
                     session: s,
-                    onChanged: _load,
-                    past: true),
+                    onChanged: _load),
                 const SizedBox(height: 10),
               ],
           ],
@@ -262,14 +300,10 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
 
 class _ProSessionCard extends ConsumerWidget {
   const _ProSessionCard(
-      {super.key,
-      required this.session,
-      required this.onChanged,
-      this.past = false});
+      {super.key, required this.session, required this.onChanged});
 
   final BackendCareSession session;
   final Future<void> Function() onChanged;
-  final bool past;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -284,6 +318,17 @@ class _ProSessionCard extends ConsumerWidget {
       'cancelled_by_professional' => MalvaColors.amber,
       'cancelled_by_patient' => Theme.of(context).colorScheme.onSurfaceVariant,
       _ => Theme.of(context).colorScheme.onSurfaceVariant,
+    };
+    final statusLabel = switch (session.status) {
+      'scheduled' =>
+        session.isAfterJoinWindow ? 'Menunggu penyelesaian' : 'Terjadwal',
+      'completed' => 'Selesai',
+      'no_show' => 'Tidak hadir',
+      'cancelled_by_professional' => 'Dibatalkan profesional',
+      'cancelled_by_patient' => 'Dibatalkan pasien',
+      'expired_unpaid' => 'Pembayaran kedaluwarsa',
+      'pending_payment' => 'Menunggu pembayaran',
+      _ => session.status,
     };
     // Aksi sesi hanya tersedia selama sesi scheduled berada dalam jendela.
     final live = session.canJoinNow;
@@ -317,22 +362,49 @@ class _ProSessionCard extends ConsumerWidget {
                       style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
                     Text(
-                      '$dateLabel • ${session.isVideo ? 'Video' : 'Chat'} • ${session.durationMinutes} mnt'
-                      '${session.packageId == null ? ' • sekali sesi' : ''}',
+                      dateLabel,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
-              StatusPill(label: session.status, color: statusColor),
             ],
           ),
+          const SizedBox(height: 8),
+          Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                StatusPill(label: statusLabel, color: statusColor),
+                Text(
+                    '${session.isVideo ? 'Video' : 'Chat'} • ${session.durationMinutes} mnt • ${session.packageId == null ? 'Sekali sesi' : 'Paket'}',
+                    style: Theme.of(context).textTheme.bodySmall),
+              ]),
+          if (session.isScheduled && session.isBeforeJoinWindow) ...[
+            const SizedBox(height: 8),
+            const Text('Check-in dibuka 10 menit sebelum sesi.'),
+          ],
           if (session.summaryForPatient.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text('Ringkasan: ${session.summaryForPatient}',
                 style: Theme.of(context).textTheme.bodySmall),
           ],
-          if (session.summaryForPatient.isNotEmpty && past) ...[
+          if (session.cancelReason.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text('Alasan: ${session.cancelReason}',
+                style: Theme.of(context).textTheme.bodySmall),
+          ],
+          if (session.cancelledByProfessional ||
+              session.status == 'no_show') ...[
+            const SizedBox(height: 6),
+            Text(
+                session.cancelledByProfessional
+                    ? 'Kuota sesi pasien dikembalikan.'
+                    : 'Kuota sesi pasien terpakai.',
+                style: Theme.of(context).textTheme.bodySmall),
+          ],
+          if (!session.isScheduled) ...[
             const SizedBox(height: 6),
             OutlinedButton.icon(
               onPressed: () => _openPatientDetail(context, ref),
@@ -343,15 +415,6 @@ class _ProSessionCard extends ConsumerWidget {
           // Konfirmasi hadir tidak menutup sesi; batas akhir tetap menutup akses.
           if (live) ...[
             const SizedBox(height: 10),
-            // Kehadiran sudah ditandai ("Hadir"): tampilkan pill, sesi tetap
-            // berjalan sampai waktu habis.
-            if (session.professionalAttendance == 'attended') ...[
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: StatusPill(label: 'Hadir', color: MalvaColors.mint),
-              ),
-              const SizedBox(height: 10),
-            ],
             // Sesi video: tombol gabung Google Meet dengan jendela waktu.
             // Bila link belum ada, tombol berubah menjadi "Siapkan link Meet".
             if (session.isVideo) ...[
@@ -379,44 +442,44 @@ class _ProSessionCard extends ConsumerWidget {
                 ),
               ],
             ),
-            // Lapis 3 — aksi sekunder (batal/pindah/detail) hanya relevan
-            // untuk sesi yang masih scheduled.
-            if (session.isScheduled) ...[
-              const SizedBox(height: 10),
-              CollapsibleCard(
-                key: ValueKey('aksi-lain-${session.id}'),
-                header: const Text(
-                  'Aksi lain',
-                  style: TextStyle(fontWeight: FontWeight.w900),
-                ),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: () => _openPatientDetail(context, ref),
-                      icon: const Icon(Icons.person_rounded, size: 16),
-                      label: const Text('Detail pasien'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () => _cancel(context, ref),
-                      icon: const Icon(Icons.cancel_rounded, size: 16),
-                      label: const Text('Batal'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () => _reschedule(context, ref),
-                      icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-                      label: const Text('Reschedule'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () => _editDetail(context, ref),
-                      icon: const Icon(Icons.edit_note_rounded, size: 16),
-                      label: const Text('Link & ringkasan'),
-                    ),
-                  ],
-                ),
+          ],
+          // Lapis 3 — aksi sekunder (batal/pindah/detail) hanya relevan
+          // untuk sesi yang masih scheduled.
+          if (session.isScheduled && !session.isAfterJoinWindow) ...[
+            const SizedBox(height: 10),
+            CollapsibleCard(
+              key: ValueKey('aksi-lain-${session.id}'),
+              header: const Text(
+                'Aksi lain',
+                style: TextStyle(fontWeight: FontWeight.w900),
               ),
-            ],
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _openPatientDetail(context, ref),
+                    icon: const Icon(Icons.person_rounded, size: 16),
+                    label: const Text('Detail pasien'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _cancel(context, ref),
+                    icon: const Icon(Icons.cancel_rounded, size: 16),
+                    label: const Text('Batal'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _reschedule(context, ref),
+                    icon: const Icon(Icons.edit_calendar_rounded, size: 16),
+                    label: const Text('Reschedule'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _editDetail(context, ref),
+                    icon: const Icon(Icons.edit_note_rounded, size: 16),
+                    label: const Text('Link & ringkasan'),
+                  ),
+                ],
+              ),
+            ),
           ],
           const SizedBox(height: 10),
           SessionAttendanceActions(
