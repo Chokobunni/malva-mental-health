@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../ai/assessment_scoring.dart' show isCompleteAssessmentAnswers;
 import '../assessment_engine.dart';
 import '../models.dart';
 import '../platform/api_base_url.dart';
@@ -1333,9 +1334,14 @@ class MalvaApiClient {
       ),
       accessToken: accessToken,
     );
+    final seen = <String>{};
     return _expectList(payload['submissions'], 'Respons worksheet tidak valid.')
         .whereType<Map<String, dynamic>>()
         .map(BackendTherapySubmission.fromJson)
+        .where((item) =>
+            (item.moduleId != 'who5' && item.moduleId != 'dass21') ||
+            isCompleteAssessmentAnswers(item.moduleId, item.answers))
+        .where((item) => item.id.trim().isEmpty || seen.add(item.id.trim()))
         .toList(growable: false);
   }
 

@@ -195,8 +195,15 @@ class _ProPatientDetailScreenState
         _sessions = results[1] as List<BackendCareSession>;
         _screenings =
             (results[2] as List<BackendScreeningSession>?) ?? const [];
-        _worksheets =
-            (results[3] as List<BackendTherapySubmission>?) ?? const [];
+        final seenWorksheets = <String>{};
+        _worksheets = ((results[3] as List<BackendTherapySubmission>?) ??
+                const [])
+            .where((item) =>
+                (item.moduleId != 'who5' && item.moduleId != 'dass21') ||
+                isCompleteAssessmentAnswers(item.moduleId, item.answers))
+            .where((item) =>
+                item.id.trim().isEmpty || seenWorksheets.add(item.id.trim()))
+            .toList(growable: false);
         _goals = (results[4] as List<BackendGoal>?) ?? const [];
         _moods = (results[5] as List<BackendMoodCheckin>?) ?? const [];
         _diaries = (results[6] as List<BackendDiaryEntry>?) ?? const [];

@@ -325,6 +325,10 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Tampilan pasien/profesional menyatukan empat assessment; data tidak lengkap
   atau gagal dimuat tidak boleh ditampilkan sebagai hasil normal/nol.
 - Skor baku dan CF tetap terpisah; bobot CF bukan probabilitas diagnosis.
+- Riwayat WHO/DASS hanya hasil dengan semua item valid; skip/back/parsial bukan
+  hasil tes. Simpan/bagikan ulang formulir sama memakai hasil tersimpan.
+- Consent Management harus mempertahankan `share_therapy_records` bersama
+  pilihan izin lain dan menolak hasil async dari akun/profesional sebelumnya.
 - Rujukan: [screening](skills/screening_module.md),
   [perhitungan dan alur](../docs/SCREENING_SCORING.md).
 

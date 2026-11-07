@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models.dart' show AuthSession;
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
@@ -24,7 +25,10 @@ class _ConsentManagementScreenState
   bool _shareTimeline = false;
   bool _shareHealthRecord = false;
   bool _shareGoals = false;
+  bool _shareTherapyRecords = false;
   bool _isLoading = false;
+  bool _hasLoadedConsent = false;
+  int _requestRevision = 0;
   String? _error;
   List<BackendPatientProfessionalLink> _links = const [];
   String? _selectedProfessionalId;
@@ -32,21 +36,43 @@ class _ConsentManagementScreenState
   @override
   void initState() {
     super.initState();
+    ref.listenManual(currentSessionProvider, (previous, next) {
+      if (_sameAccount(previous, next)) return;
+      _selectedProfessionalId = null;
+      _links = const [];
+      unawaited(_loadConsent());
+    });
     _loadConsent();
   }
 
+  bool _sameAccount(AuthSession? first, AuthSession? second) =>
+      first?.backendUserId == second?.backendUserId &&
+      first?.identifier == second?.identifier &&
+      first?.role == second?.role;
+
+  bool _isCurrent(int revision, AuthSession? owner) =>
+      mounted &&
+      revision == _requestRevision &&
+      _sameAccount(owner, ref.read(currentSessionProvider));
+
   Future<void> _loadConsent() async {
+    final revision = ++_requestRevision;
     final apiClient = ref.read(apiClientProvider);
     final session = ref.read(currentSessionProvider);
     final accessToken = session?.accessToken;
-    if (accessToken == null || accessToken.isEmpty) {
-      return;
-    }
-
     setState(() {
-      _isLoading = true;
+      _isLoading = accessToken != null && accessToken.isNotEmpty;
+      _hasLoadedConsent = false;
+      _shareScreenings = false;
+      _shareMoodDiary = false;
+      _shareMedications = false;
+      _shareTimeline = false;
+      _shareHealthRecord = false;
+      _shareGoals = false;
+      _shareTherapyRecords = false;
       _error = null;
     });
+    if (accessToken == null || accessToken.isEmpty) return;
 
     try {
       // Daftar profesional terhubung DULU — consent bersifat per profesional,
@@ -56,18 +82,25 @@ class _ConsentManagementScreenState
       );
       final active =
           links.where((l) => l.status == 'active').toList(growable: false);
-      if (!mounted) return;
+      if (!_isCurrent(revision, session)) return;
       setState(() => _links = active);
       if (active.isEmpty) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _selectedProfessionalId = null;
+          _isLoading = false;
+        });
         return;
       }
-      _selectedProfessionalId ??= active.first.professionalUserId;
+      if (!active
+          .any((link) => link.professionalUserId == _selectedProfessionalId)) {
+        _selectedProfessionalId = active.first.professionalUserId;
+      }
       final consent = await apiClient.getPrivacyConsent(
-        accessToken: accessToken,
+        accessToken:
+            ref.read(currentSessionProvider)?.accessToken ?? accessToken,
         professionalId: _selectedProfessionalId!,
       );
-      if (mounted) {
+      if (_isCurrent(revision, session)) {
         setState(() {
           _shareScreenings = consent.shareScreenings;
           _shareMoodDiary = consent.shareMoodDiary;
@@ -75,18 +108,20 @@ class _ConsentManagementScreenState
           _shareTimeline = consent.shareTimeline;
           _shareHealthRecord = consent.shareHealthRecord;
           _shareGoals = consent.shareGoals;
+          _shareTherapyRecords = consent.shareTherapyRecords;
+          _hasLoadedConsent = true;
           _isLoading = false;
         });
       }
     } on MalvaApiException catch (error) {
-      if (mounted) {
+      if (_isCurrent(revision, session)) {
         setState(() {
           _error = error.message;
           _isLoading = false;
         });
       }
     } on Object catch (error) {
-      if (mounted) {
+      if (_isCurrent(revision, session)) {
         setState(() {
           _error = 'Gagal memuat consent: $error';
           _isLoading = false;
@@ -96,6 +131,7 @@ class _ConsentManagementScreenState
   }
 
   Future<void> _updateConsent() async {
+    if (_isLoading || !_hasLoadedConsent) return;
     final apiClient = ref.read(apiClientProvider);
     final session = ref.read(currentSessionProvider);
     final accessToken = session?.accessToken;
@@ -111,6 +147,7 @@ class _ConsentManagementScreenState
       return;
     }
     setState(() => _isLoading = true);
+    final revision = ++_requestRevision;
 
     try {
       await apiClient.updatePrivacyConsent(
@@ -122,8 +159,9 @@ class _ConsentManagementScreenState
         shareTimeline: _shareTimeline,
         shareHealthRecord: _shareHealthRecord,
         shareGoals: _shareGoals,
+        shareTherapyRecords: _shareTherapyRecords,
       );
-      if (mounted) {
+      if (_isCurrent(revision, session)) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -132,7 +170,7 @@ class _ConsentManagementScreenState
         );
       }
     } on Object catch (error) {
-      if (mounted) {
+      if (_isCurrent(revision, session)) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -191,6 +229,7 @@ class _ConsentManagementScreenState
                   )
                 else if (_links.isNotEmpty)
                   DropdownButtonFormField<String>(
+                    key: ValueKey(_selectedProfessionalId),
                     initialValue: _selectedProfessionalId,
                     decoration: const InputDecoration(
                       labelText: 'Profesional',
@@ -218,9 +257,11 @@ class _ConsentManagementScreenState
                   title: 'Screening Results',
                   subtitle: 'Hasil PHQ-9 dan GAD-7',
                   value: _shareScreenings,
-                  onChanged: (value) {
-                    setState(() => _shareScreenings = value);
-                  },
+                  onChanged: _isLoading || !_hasLoadedConsent
+                      ? null
+                      : (value) {
+                          setState(() => _shareScreenings = value);
+                        },
                 ),
                 const SizedBox(height: 12),
                 _ConsentSwitch(
@@ -228,9 +269,11 @@ class _ConsentManagementScreenState
                   title: 'Mood & Diary',
                   subtitle: 'Data mood check-in dan diary entries',
                   value: _shareMoodDiary,
-                  onChanged: (value) {
-                    setState(() => _shareMoodDiary = value);
-                  },
+                  onChanged: _isLoading || !_hasLoadedConsent
+                      ? null
+                      : (value) {
+                          setState(() => _shareMoodDiary = value);
+                        },
                 ),
                 const SizedBox(height: 12),
                 _ConsentSwitch(
@@ -238,9 +281,11 @@ class _ConsentManagementScreenState
                   title: 'Medications',
                   subtitle: 'Daftar obat dan log konsumsi',
                   value: _shareMedications,
-                  onChanged: (value) {
-                    setState(() => _shareMedications = value);
-                  },
+                  onChanged: _isLoading || !_hasLoadedConsent
+                      ? null
+                      : (value) {
+                          setState(() => _shareMedications = value);
+                        },
                 ),
                 const SizedBox(height: 12),
                 _ConsentSwitch(
@@ -248,9 +293,11 @@ class _ConsentManagementScreenState
                   title: 'Timeline',
                   subtitle: 'Riwayat aktivitas dan perubahan',
                   value: _shareTimeline,
-                  onChanged: (value) {
-                    setState(() => _shareTimeline = value);
-                  },
+                  onChanged: _isLoading || !_hasLoadedConsent
+                      ? null
+                      : (value) {
+                          setState(() => _shareTimeline = value);
+                        },
                 ),
                 const SizedBox(height: 12),
                 _ConsentSwitch(
@@ -258,9 +305,11 @@ class _ConsentManagementScreenState
                   title: 'Health Record',
                   subtitle: 'Diagnosis & catatan klinis',
                   value: _shareHealthRecord,
-                  onChanged: (value) {
-                    setState(() => _shareHealthRecord = value);
-                  },
+                  onChanged: _isLoading || !_hasLoadedConsent
+                      ? null
+                      : (value) {
+                          setState(() => _shareHealthRecord = value);
+                        },
                 ),
                 const SizedBox(height: 12),
                 _ConsentSwitch(
@@ -268,13 +317,28 @@ class _ConsentManagementScreenState
                   title: 'Goals & Habits',
                   subtitle: 'Target harian & streak',
                   value: _shareGoals,
-                  onChanged: (value) {
-                    setState(() => _shareGoals = value);
-                  },
+                  onChanged: _isLoading || !_hasLoadedConsent
+                      ? null
+                      : (value) {
+                          setState(() => _shareGoals = value);
+                        },
+                ),
+                const SizedBox(height: 12),
+                _ConsentSwitch(
+                  icon: Icons.psychology_rounded,
+                  title: 'Therapy Record (Psikologis)',
+                  subtitle: 'Worksheet dan catatan latihan terapi',
+                  value: _shareTherapyRecords,
+                  onChanged: _isLoading || !_hasLoadedConsent
+                      ? null
+                      : (value) {
+                          setState(() => _shareTherapyRecords = value);
+                        },
                 ),
                 const SizedBox(height: 24),
                 FilledButton.icon(
-                  onPressed: _isLoading ? null : _updateConsent,
+                  onPressed:
+                      _isLoading || !_hasLoadedConsent ? null : _updateConsent,
                   icon: const Icon(Icons.save_rounded),
                   label: const Text('Simpan Pengaturan'),
                 ),
@@ -325,7 +389,7 @@ class _ConsentSwitch extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {

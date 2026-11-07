@@ -82,17 +82,27 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen> {
       _load();
     });
     final isPro = widget.session?.role == UserRole.professional;
+    final embeddedProfessional = isPro && Scaffold.maybeOf(context) != null;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Messages'),
-        backgroundColor: MalvaColors.seed,
-        foregroundColor: Colors.white,
-      ),
+      appBar: embeddedProfessional
+          ? null
+          : AppBar(
+              title: const Text('Messages'),
+              backgroundColor: MalvaColors.seed,
+              foregroundColor: Colors.white,
+            ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
           padding: const EdgeInsets.all(18),
           children: [
+            if (embeddedProfessional) ...[
+              Text('Messages',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      )),
+              const SizedBox(height: 16),
+            ],
             const SectionLabel('Recent'),
             if (_isLoading)
               const Center(child: CircularProgressIndicator())

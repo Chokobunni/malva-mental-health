@@ -90,8 +90,20 @@ String formatAssessmentDate(DateTime? date) {
 String _screeningScorePart(String label, BackendAssessmentSummary summary) {
   final score = '$label ${summary.score}/${summary.maxScore}';
   // Level bisa kosong pada data lama; jangan tampilkan "( )" yang membingungkan.
-  return summary.level.isEmpty ? score : '$score (${summary.level})';
+  return summary.level.isEmpty
+      ? score
+      : '$score (${_screeningLevelLabel(summary.level)})';
 }
+
+String _screeningLevelLabel(String level) => switch (level.toLowerCase()) {
+      'minimal' => 'Minimal',
+      'mild' => 'Ringan',
+      'moderate' => 'Sedang',
+      'moderately_severe' => 'Cukup berat',
+      'severe' => 'Berat',
+      'crisis' => 'Krisis',
+      _ => level,
+    };
 
 /// Ringkasan skor screening PHQ-9 + GAD-7 dalam satu baris.
 String screeningScoreSummary(BackendScreeningSession session) =>
@@ -162,10 +174,15 @@ Future<List<AssessmentHistoryEntry>> loadAssessmentHistory({
   try {
     final submissions =
         await api.listTherapySubmissions(accessToken: accessToken);
+    final seenIds = <String>{};
     for (final submission in submissions) {
-      if (findTherapyModuleById(submission.moduleId)?.isAssessment == true) {
-        entries.add(assessmentEntryFromSubmission(submission));
+      if (!isCompleteAssessmentAnswers(
+          submission.moduleId, submission.answers)) {
+        continue;
       }
+      final id = submission.id.trim();
+      if (id.isNotEmpty && !seenIds.add(id)) continue;
+      entries.add(assessmentEntryFromSubmission(submission));
     }
   } on Object catch (e) {
     failures.add(e);
@@ -278,12 +295,14 @@ class _AssessmentDetailBody extends StatelessWidget {
             title: 'PHQ-9 — Depresi',
             summary: screening.phq9,
             color: MalvaColors.seed,
+            itemCount: 9,
           ),
           const SizedBox(height: 10),
           _ScreeningScoreCard(
             title: 'GAD-7 — Kecemasan',
             summary: screening.gad7,
             color: MalvaColors.mint,
+            itemCount: 7,
           ),
           if (screening.crisisFlag) ...[
             const SizedBox(height: 10),
@@ -340,17 +359,30 @@ class _ScreeningScoreCard extends StatelessWidget {
     required this.title,
     required this.summary,
     required this.color,
+    required this.itemCount,
   });
 
   final String title;
   final BackendAssessmentSummary summary;
   final Color color;
+  final int itemCount;
 
   @override
   Widget build(BuildContext context) {
-    final level = summary.level;
+    final level = _screeningLevelLabel(summary.level);
+    final ranges = <(String, String)>[
+      ('0–4', 'Minimal'),
+      ('5–9', 'Ringan'),
+      ('10–14', 'Sedang'),
+      if (itemCount == 9) ...[
+        ('15–19', 'Cukup berat'),
+        ('20–27', 'Berat'),
+      ] else
+        ('15–21', 'Berat'),
+    ];
+    final cf = summary.certaintyFactor;
     return SoftCard(
-      color: color.withValues(alpha: 0.07),
+      color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -371,6 +403,13 @@ class _ScreeningScoreCard extends StatelessWidget {
             '${summary.score}/${summary.maxScore}',
             style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
           ),
+          const SizedBox(height: 6),
+          Text(
+            '$itemCount pertanyaan tentang gejala '
+            '${itemCount == 9 ? 'depresi' : 'kecemasan'} dalam 2 minggu terakhir. '
+            'Tiap jawaban bernilai 0–3; total skor menentukan kategori gejala.',
+            style: const TextStyle(fontSize: 12.5),
+          ),
           if (summary.summary.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
@@ -378,6 +417,53 @@ class _ScreeningScoreCard extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
+          const SizedBox(height: 12),
+          Text(
+            cf.isFinite
+                ? 'Dukungan aturan: CF ${(cf.clamp(0.0, 1.0) * 100).round()}%'
+                : 'Dukungan aturan: CF tidak tersedia',
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'CF adalah dukungan aturan dalam model, bukan probabilitas diagnosis '
+            'atau persentase keparahan. Bobot belum dikalibrasi secara klinis; '
+            'CF tidak mengubah skor atau kategori gejala.',
+            style: TextStyle(fontSize: 11.5),
+          ),
+          const SizedBox(height: 8),
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 4),
+              shape: const Border(),
+              collapsedShape: const Border(),
+              title: const Text(
+                'Apa arti skormu?',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12.5),
+              ),
+              children: [
+                for (final range in ranges)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 64,
+                          child: Text(range.$1,
+                              style: const TextStyle(fontSize: 12)),
+                        ),
+                        Expanded(
+                          child: Text(range.$2,
+                              style: const TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );

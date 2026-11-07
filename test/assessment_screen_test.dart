@@ -33,6 +33,10 @@ void main() {
       ),
     ));
 
+    expect(find.text('CF 68%'), findsNothing);
+    await tester.ensureVisible(find.text('Lihat cara penilaian'));
+    await tester.tap(find.text('Lihat cara penilaian'));
+    await tester.pumpAndSettle();
     expect(find.text('CF 68%'), findsNWidgets(2));
     expect(find.textContaining('Pasti'), findsNothing);
     expect(

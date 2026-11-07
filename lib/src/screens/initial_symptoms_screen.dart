@@ -142,10 +142,16 @@ class _InitialSymptomsScreenState extends ConsumerState<InitialSymptomsScreen> {
                               fontSize: 20, fontWeight: FontWeight.w900)),
                       const SizedBox(height: 8),
                       const Text(
-                          'WHO-5 mengukur kesejahteraan psikologis selama 2 minggu terakhir. Jawab kelima pernyataan sesuai pengalamanmu.'),
+                          'WHO-5 mengukur kesejahteraan psikologis selama 2 minggu terakhir. Jawab kelima pernyataan sesuai pengalamanmu. Hasil ini bukan diagnosis.'),
                       const SizedBox(height: 8),
-                      const Text(
-                          'Jumlah 5 jawaban = skor 0–25; skor × 4 = 0–100%. Skor di bawah 50% atau satu jawaban 0–1 memerlukan screening lanjutan. Screening ini bukan diagnosis.'),
+                      const ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        title: Text('Lihat cara penilaian'),
+                        children: [
+                          Text(
+                              'Jumlah 5 jawaban = skor 0–25; skor × 4 = 0–100%. Skor di bawah 50% atau satu jawaban 0–1 memerlukan screening lanjutan. Screening ini bukan diagnosis.'),
+                        ],
+                      ),
                     ])),
                 for (var i = 0; i < who5WorksheetFields.length; i++) ...[
                   const SizedBox(height: 12),
@@ -222,15 +228,23 @@ class _InitialSymptomsScreenState extends ConsumerState<InitialSymptomsScreen> {
           ? 'Kami mendeteksi kondisi emosional anda sedang kurang baik. Mohon lanjut mengisi asesmen berikut untuk analisis lebih dalam.'
           : 'Kondisi psikologis Anda stabil dan luar biasa minggu ini!'),
       const SizedBox(height: 16),
-      Text('WHO-5: ${decision.rawScore}/25 × 4 = ${decision.percent}%',
+      Text('WHO-5: ${decision.percent}%',
           style: const TextStyle(fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
-      Text(
-          'Aturan ${decision.ruleTrace.join(', ')}: ${decision.needsFurtherScreening ? 'skor <50% atau ada jawaban 0–1 → lanjut PHQ-9 dan GAD-7.' : 'skor ≥50% dan seluruh jawaban ≥2 → screening awal selesai.'}'),
-      const Text('Versi aturan: $initialScreeningRuleVersion'),
-      const SizedBox(height: 8),
-      Text(
-          '${interpretation.summaryLine}. CF adalah dukungan aturan model, bukan probabilitas diagnosis atau tingkat keparahan.'),
+      ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        title: const Text('Lihat cara penilaian'),
+        children: [
+          Text('WHO-5: ${decision.rawScore}/25 × 4 = ${decision.percent}%'),
+          const SizedBox(height: 8),
+          Text(
+              'Aturan ${decision.ruleTrace.join(', ')}: ${decision.needsFurtherScreening ? 'skor <50% atau ada jawaban 0–1 → lanjut PHQ-9 dan GAD-7.' : 'skor ≥50% dan seluruh jawaban ≥2 → screening awal selesai.'}'),
+          const Text('Versi aturan: $initialScreeningRuleVersion'),
+          const SizedBox(height: 8),
+          Text(
+              '${interpretation.summaryLine}. CF adalah dukungan aturan model, bukan probabilitas diagnosis atau tingkat keparahan.'),
+        ],
+      ),
       const SizedBox(height: 8),
       const Text(
           'Hasil WHO-5 tersimpan untuk 2 minggu terakhir dan bukan diagnosis. Kamu tetap dapat berkonsultasi atau mengisi screening lagi bila membutuhkan dukungan.'),

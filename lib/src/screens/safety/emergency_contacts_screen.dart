@@ -189,70 +189,92 @@ class _ContactCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 10),
       child: SoftCard(
         padding: const EdgeInsets.all(14),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            CircleAvatar(
-              backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
-              child: Text(
-                contact.contactName.isEmpty
-                    ? '?'
-                    : contact.contactName.characters.first.toUpperCase(),
-                style: const TextStyle(
-                  color: MalvaColors.seed,
-                  fontWeight: FontWeight.w900,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
+                  child: Text(
+                    contact.contactName.isEmpty
+                        ? '?'
+                        : contact.contactName.characters.first.toUpperCase(),
+                    style: const TextStyle(
+                      color: MalvaColors.seed,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Flexible(
-                        child: Text(
-                          contact.contactName,
-                          style: const TextStyle(fontWeight: FontWeight.w900),
-                        ),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          Text(
+                            contact.contactName,
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          if (contact.isDefault)
+                            const StatusPill(
+                              label: 'Utama',
+                              color: MalvaColors.mint,
+                            ),
+                        ],
                       ),
-                      if (contact.isDefault) ...[
-                        const SizedBox(width: 6),
-                        const StatusPill(
-                          label: 'Utama',
-                          color: MalvaColors.mint,
-                        ),
-                      ],
+                      Text(
+                        '${contact.contactPhone}${contact.relationship.isEmpty ? '' : ' • ${contact.relationship}'}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ],
                   ),
-                  Text(
-                    '${contact.contactPhone}${contact.relationship.isEmpty ? '' : ' • ${contact.relationship}'}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            IconButton(
-              tooltip: 'Edit',
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined, color: MalvaColors.seed),
-            ),
-            IconButton(
-              tooltip: 'Panggil',
-              onPressed: () => _launch('tel:${contact.contactPhone}', context),
-              icon: const Icon(Icons.phone_rounded, color: MalvaColors.seed),
-            ),
-            IconButton(
-              tooltip: 'SMS',
-              onPressed: () => _launch('sms:${contact.contactPhone}', context),
-              icon:
-                  const Icon(Icons.message_rounded, color: MalvaColors.orchid),
-            ),
-            IconButton(
-              tooltip: 'Hapus',
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline_rounded,
-                  color: MalvaColors.danger),
+            const SizedBox(height: 8),
+            Wrap(
+              alignment: WrapAlignment.end,
+              children: [
+                IconButton(
+                  constraints:
+                      const BoxConstraints(minWidth: 48, minHeight: 48),
+                  tooltip: 'Edit',
+                  onPressed: onEdit,
+                  icon:
+                      const Icon(Icons.edit_outlined, color: MalvaColors.seed),
+                ),
+                IconButton(
+                  constraints:
+                      const BoxConstraints(minWidth: 48, minHeight: 48),
+                  tooltip: 'Panggil',
+                  onPressed: () =>
+                      _launch('tel:${contact.contactPhone}', context),
+                  icon:
+                      const Icon(Icons.phone_rounded, color: MalvaColors.seed),
+                ),
+                IconButton(
+                  constraints:
+                      const BoxConstraints(minWidth: 48, minHeight: 48),
+                  tooltip: 'SMS',
+                  onPressed: () =>
+                      _launch('sms:${contact.contactPhone}', context),
+                  icon: const Icon(Icons.message_rounded,
+                      color: MalvaColors.orchid),
+                ),
+                IconButton(
+                  constraints:
+                      const BoxConstraints(minWidth: 48, minHeight: 48),
+                  tooltip: 'Hapus',
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline_rounded,
+                      color: MalvaColors.danger),
+                ),
+              ],
             ),
           ],
         ),

@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../ai/assessment_interpretation.dart';
 import '../ai/assessment_scoring.dart';
+import '../models.dart' show AuthSession;
 import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
@@ -1134,6 +1137,10 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
   final _afterValues = <String, int>{};
   bool _isSaving = false;
   bool _saved = false;
+  BackendTherapySubmission? _savedSubmission;
+  String? _savedPayload;
+  AuthSession? _savedOwner;
+  int _submissionRevision = 0;
   String? _error;
 
   TherapyModule get module => widget.module;
@@ -1141,6 +1148,29 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
   @override
   void initState() {
     super.initState();
+    ref.listenManual(currentSessionProvider, (previous, next) {
+      if (previous?.backendUserId == next?.backendUserId &&
+          previous?.identifier == next?.identifier &&
+          previous?.role == next?.role) return;
+      _submissionRevision++;
+      setState(() {
+        _isSaving = false;
+        _saved = false;
+        _savedSubmission = null;
+        _savedPayload = null;
+        _savedOwner = null;
+        _error = null;
+        for (final controller in _textControllers.values) {
+          controller.clear();
+        }
+        _scaleValues.clear();
+        _numberValues.clear();
+        _choiceValues.clear();
+        _choiceMultiValues.clear();
+        _beforeValues.clear();
+        _afterValues.clear();
+      });
+    });
     for (final field in module.worksheetFields) {
       switch (field.kind) {
         case TherapyFieldKind.text:
@@ -1256,6 +1286,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
   }
 
   Future<void> _submit({bool share = false}) async {
+    if (_isSaving) return;
     // Assessment wajib dijawab lengkap agar skor valid.
     if (module.isAssessment) {
       final missing = countUnansweredScale(module, _scaleValues);
@@ -1274,6 +1305,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
       setState(() => _error = 'Login dulu untuk menyimpan worksheet.');
       return;
     }
+    final revision = ++_submissionRevision;
     setState(() {
       _isSaving = true;
       _error = null;
@@ -1281,40 +1313,60 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
     try {
       final api = ref.read(apiClientProvider);
       final answers = _answers();
-      final submission = await api.createTherapySubmission(
-        accessToken: token,
-        moduleId: module.id.isEmpty ? module.title : module.id,
-        title: module.title,
-        answers: answers,
-        summary: assessmentSummary(module.id, answers),
-      );
+      final payload = jsonEncode(answers);
+      final cached = _savedSubmission;
+      final reuse = cached != null &&
+          _savedPayload == payload &&
+          _savedOwner?.backendUserId == session!.backendUserId &&
+          _savedOwner?.identifier == session.identifier &&
+          _savedOwner?.role == session.role;
+      final submission = reuse
+          ? cached
+          : await api.createTherapySubmission(
+              accessToken: token,
+              moduleId: module.id.isEmpty ? module.title : module.id,
+              title: module.title,
+              answers: answers,
+              summary: assessmentSummary(module.id, answers),
+            );
+      if (!_isCurrentSubmissionAccount(session!, revision)) return;
+      if (submission.id.isEmpty) throw StateError('ID hasil belum tersedia.');
+      // Cache immediately: cancelling or retrying the share must not create
+      // another completed assessment for the same unchanged form.
+      _savedSubmission = submission;
+      _savedPayload = payload;
+      _savedOwner = session;
       String? sharedTo;
       if (share) {
-        sharedTo = await _pickProfessional();
+        sharedTo = await _pickProfessional(session, revision);
+        if (!_isCurrentSubmissionAccount(session, revision)) return;
         if (sharedTo == null) {
           if (mounted) {
-            setState(() => _isSaving = false);
+            setState(() {
+              _isSaving = false;
+              _saved = jsonEncode(_answers()) == payload;
+            });
             _toast('Worksheet tersimpan di Therapy Record. '
                 'Belum dibagikan ke profesional.');
           }
           return;
         }
         await api.shareTherapySubmission(
-          accessToken: token,
+          accessToken: ref.read(currentSessionProvider)!.accessToken!,
           submissionId: submission.id,
           professionalId: sharedTo,
         );
       }
-      if (!mounted) return;
+      if (!_isCurrentSubmissionAccount(session, revision)) return;
       setState(() {
         _isSaving = false;
-        _saved = true;
+        _saved = jsonEncode(_answers()) == payload;
       });
       _toast(share
           ? 'Worksheet tersimpan & dibagikan ke profesional.'
           : 'Worksheet tersimpan di Therapy Record.');
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!_isCurrentSubmissionAccount(session!, revision)) return;
       setState(() {
         _isSaving = false;
         _error = friendlyErrorMessage(e);
@@ -1322,8 +1374,18 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
     }
   }
 
+  bool _isCurrentSubmissionAccount(AuthSession owner, int revision) {
+    if (!mounted || revision != _submissionRevision) return false;
+    final current = ref.read(currentSessionProvider);
+    return current != null &&
+        (current.accessToken?.isNotEmpty ?? false) &&
+        current.backendUserId == owner.backendUserId &&
+        current.identifier == owner.identifier &&
+        current.role == owner.role;
+  }
+
   /// Pilih profesional dengan paket aktif untuk berbagi worksheet.
-  Future<String?> _pickProfessional() async {
+  Future<String?> _pickProfessional(AuthSession owner, int revision) async {
     final session = ref.read(currentSessionProvider);
     final token = session?.accessToken;
     if (token == null || token.isEmpty) return null;
@@ -1335,12 +1397,13 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
     } on Object {
       return null;
     }
+    if (!_isCurrentSubmissionAccount(owner, revision)) return null;
     final active = links
         .where((link) =>
             link.status == 'active' &&
             (link.professionalDisplayName.trim().isNotEmpty))
         .toList(growable: false);
-    if (!mounted || active.isEmpty) {
+    if (active.isEmpty) {
       _toast('Berbagi worksheet butuh paket sesi aktif dengan profesional.');
       return null;
     }
@@ -1355,7 +1418,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
     for (final link in active) {
       if (activeProIds.contains(link.professionalUserId)) eligible.add(link);
     }
-    if (!mounted) return null;
+    if (!_isCurrentSubmissionAccount(owner, revision)) return null;
     if (eligible.isEmpty) {
       _toast('Berbagi worksheet butuh paket sesi aktif dengan profesional.');
       return null;
@@ -1842,16 +1905,7 @@ class AssessmentResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final module = findTherapyModuleById(moduleId);
-    final complete = module?.isAssessment == true &&
-        module!.worksheetFields.every((field) {
-          final value = answers[field.id];
-          return value is num &&
-              value.isFinite &&
-              value == value.roundToDouble() &&
-              value >= field.minValue! &&
-              value <= field.maxValue!;
-        });
+    final complete = isCompleteAssessmentAnswers(moduleId, answers);
     if (!complete) {
       return const SoftCard(
         color: Colors.white,

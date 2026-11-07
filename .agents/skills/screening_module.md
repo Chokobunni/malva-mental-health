@@ -11,6 +11,12 @@
   PHQ/GAD dihitung ulang server. Tidak ada perubahan skema/DTO.
 - CF adalah dukungan model yang belum dikalibrasi klinis. Penjelasan lengkap:
   [scoring dan alur](../../docs/SCREENING_SCORING.md).
+- Riwayat assessment hanya memuat WHO/DASS dengan semua jawaban integer valid;
+  submission lama yang kosong/parsial tidak dihitung sebagai tes selesai.
+  Skip/back tidak menyimpan hasil. Simpan/bagikan ulang formulir yang sama
+  menggunakan ID hasil tersimpan, dan pengiriman ID yang sama tampil sekali.
+- Symptoms Assessment memakai penjelasan singkat dan dropdown cara penilaian;
+  rekomendasi assessment lanjutan hanya DASS, katalog manual tetap lengkap.
 
 Modul skrining kesehatan mental. Skoring dihitung **di server** (bukan hanya klien) memakai rule base yang sama.
 

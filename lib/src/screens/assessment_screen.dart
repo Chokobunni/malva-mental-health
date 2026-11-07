@@ -158,60 +158,12 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SoftCard(
-                      color: MalvaColors.seed.withValues(alpha: 0.08),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Jawab sesuai 2 minggu terakhir',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w900),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Hasil ini adalah screening, bukan diagnosis. Data akan tersimpan sebagai pertimbangan tambahan profesional.',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '$_answeredCount dari $_questionCount terjawab',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w900),
-                                ),
-                              ),
-                              Text(
-                                '${(_answeredCount / _questionCount * 100).round()}%',
-                                style: const TextStyle(
-                                  color: MalvaColors.plum,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          LinearProgressIndicator(
-                            value: _answeredCount / _questionCount,
-                            minHeight: 8,
-                            borderRadius: BorderRadius.circular(999),
-                            backgroundColor:
-                                MalvaColors.seed.withValues(alpha: 0.12),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 18),
                     _AssessmentSection(
                       key: const ValueKey('phq9-section'),
                       title: 'PHQ-9',
                       subtitle:
-                          'PHQ-9 menilai gejala depresi selama 2 minggu terakhir. '
-                          'Jumlah 9 jawaban (0–3), total 0–27. '
+                          'PHQ-9 menilai gejala depresi selama 2 minggu terakhir. Hasil ini bukan diagnosis.',
+                      scoringDetails: 'Jumlah 9 jawaban (0–3), total 0–27. '
                           '0–4 minimal; 5–9 ringan; 10–14 sedang; '
                           '15–19 cukup berat; 20–27 berat.',
                       questions: AssessmentEngine.phq9Questions,
@@ -226,8 +178,8 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
                       key: const ValueKey('gad7-section'),
                       title: 'GAD-7',
                       subtitle:
-                          'GAD-7 menilai gejala kecemasan selama 2 minggu terakhir. '
-                          'Jumlah 7 jawaban (0–3), total 0–21. '
+                          'GAD-7 menilai gejala kecemasan selama 2 minggu terakhir. Hasil ini bukan diagnosis.',
+                      scoringDetails: 'Jumlah 7 jawaban (0–3), total 0–21. '
                           '0–4 minimal; 5–9 ringan; 10–14 sedang; 15–21 berat.',
                       questions: AssessmentEngine.gad7Questions,
                       answers: _gad7Answers,
@@ -237,6 +189,14 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
                           setState(() => _gad7Answers[index] = value),
                     ),
                     const SizedBox(height: 24),
+                    Text(
+                      '$_answeredCount dari $_questionCount terjawab',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color:
+                              widget.isInitialScreening ? Colors.white : null),
+                    ),
+                    const SizedBox(height: 8),
                     SoftCard(
                       key: const ValueKey('screening-submit-panel'),
                       color: _isComplete
@@ -473,6 +433,7 @@ class _AssessmentSection extends StatelessWidget {
     super.key,
     required this.title,
     required this.subtitle,
+    required this.scoringDetails,
     required this.questions,
     required this.answers,
     required this.icon,
@@ -482,6 +443,7 @@ class _AssessmentSection extends StatelessWidget {
 
   final String title;
   final String subtitle;
+  final String scoringDetails;
   final List<AssessmentQuestion> questions;
   final List<int?> answers;
   final IconData icon;
@@ -496,7 +458,7 @@ class _AssessmentSection extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
+            color: Colors.white,
             border: Border.all(color: color.withValues(alpha: 0.28)),
             borderRadius: BorderRadius.circular(20),
           ),
@@ -515,14 +477,27 @@ class _AssessmentSection extends StatelessWidget {
                     Text(
                       title,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            color: MalvaColors.ink,
+                            color: Colors.black,
                             fontWeight: FontWeight.w900,
                           ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       subtitle,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                          color: Colors.black, fontWeight: FontWeight.w700),
+                    ),
+                    Material(
+                      color: Colors.transparent,
+                      child: ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        title: const Text('Lihat cara penilaian',
+                            style: TextStyle(color: Colors.black)),
+                        children: [
+                          Text(scoringDetails,
+                              style: const TextStyle(color: Colors.black)),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -764,136 +739,143 @@ class AssessmentResultScreen extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        // Penjelasan skor PHQ-9 dan GAD-7 agar pasien paham
-                        // apa arti angka yang mereka lihat. Tanpa ini, "3/27
-                        // Minimal" tidak memberi konteks — pasien tidak tahu
-                        // apakah 3 itu bagus atau buruk.
-                        _ScoreExplanationCard(
-                          title: 'PHQ-9 (Depresi)',
-                          score: bundle.phq9.score,
-                          maxScore: bundle.phq9.maxScore,
-                          level: bundle.phq9.level,
-                          ranges: const [
-                            (
-                              '0–4',
-                              'Minimal',
-                              'Gejala depresi sangat ringan atau tidak ada.'
-                            ),
-                            (
-                              '5–9',
-                              'Ringan',
-                              'Gejala depresi ringan. Pantau kondisi dan jaga self-care.'
-                            ),
-                            (
-                              '10–14',
-                              'Sedang',
-                              'Gejala depresi sedang. Disarankan konsultasi profesional.'
-                            ),
-                            (
-                              '15–19',
-                              'Berat',
-                              'Gejala depresi berat. Segera hubungi profesional kesehatan mental.'
-                            ),
-                            (
-                              '20–27',
-                              'Sangat Berat',
-                              'Gejala depresi sangat berat. Cari bantuan segera.'
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        _ScoreExplanationCard(
-                          title: 'GAD-7 (Kecemasan)',
-                          score: bundle.gad7.score,
-                          maxScore: bundle.gad7.maxScore,
-                          level: bundle.gad7.level,
-                          ranges: const [
-                            (
-                              '0–4',
-                              'Minimal',
-                              'Kecemasan sangat ringan atau tidak ada.'
-                            ),
-                            (
-                              '5–9',
-                              'Ringan',
-                              'Kecemasan ringan. Teknik relaksasi bisa membantu.'
-                            ),
-                            (
-                              '10–14',
-                              'Sedang',
-                              'Kecemasan sedang. Disarankan konsultasi profesional.'
-                            ),
-                            (
-                              '15–21',
-                              'Berat',
-                              'Kecemasan berat. Segera hubungi profesional kesehatan mental.'
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        // === Forward Chaining + Certainty Factor ===
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: MalvaColors.seed.withValues(alpha: 0.25),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Row(
-                                children: [
-                                  Icon(Icons.psychology_rounded,
-                                      size: 18, color: MalvaColors.seed),
-                                  SizedBox(width: 6),
-                                  Text(
-                                    'Dukungan aturan (Forward Chaining + CF)',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 12.5,
-                                      color: MalvaColors.seed,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'CF menunjukkan dukungan aturan dalam model, '
-                                'bukan probabilitas diagnosis atau persentase '
-                                'keparahan. Skor dan tingkat gejala ditampilkan '
-                                'terpisah; hasil perlu ditinjau profesional.',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                              const SizedBox(height: 8),
-                              _CFBar(
-                                label: 'PHQ-9 Depresi',
-                                cf: bundle.phq9.certaintyFactor,
-                                color: bundle.phq9.level.color,
-                              ),
-                              const SizedBox(height: 6),
-                              _CFBar(
-                                label: 'GAD-7 Kecemasan',
-                                cf: bundle.gad7.certaintyFactor,
-                                color: bundle.gad7.level.color,
-                              ),
-                              if (bundle.phq9.rulesFired.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Rule aktif: ${bundle.phq9.rulesFired.take(3).map((r) => r.label).join('; ')}',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant),
+                        ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: const Text('Lihat cara penilaian'),
+                          children: [
+                            _ScoreExplanationCard(
+                              title: 'PHQ-9 (Depresi)',
+                              score: bundle.phq9.score,
+                              maxScore: bundle.phq9.maxScore,
+                              level: bundle.phq9.level,
+                              ranges: const [
+                                (
+                                  '0–4',
+                                  'Minimal',
+                                  'Gejala depresi sangat ringan atau tidak ada.'
+                                ),
+                                (
+                                  '5–9',
+                                  'Ringan',
+                                  'Gejala depresi ringan. Pantau kondisi dan jaga self-care.'
+                                ),
+                                (
+                                  '10–14',
+                                  'Sedang',
+                                  'Gejala depresi sedang. Disarankan konsultasi profesional.'
+                                ),
+                                (
+                                  '15–19',
+                                  'Berat',
+                                  'Gejala depresi berat. Segera hubungi profesional kesehatan mental.'
+                                ),
+                                (
+                                  '20–27',
+                                  'Sangat Berat',
+                                  'Gejala depresi sangat berat. Cari bantuan segera.'
                                 ),
                               ],
-                            ],
-                          ),
+                            ),
+                            const SizedBox(height: 8),
+                            _ScoreExplanationCard(
+                              title: 'GAD-7 (Kecemasan)',
+                              score: bundle.gad7.score,
+                              maxScore: bundle.gad7.maxScore,
+                              level: bundle.gad7.level,
+                              ranges: const [
+                                (
+                                  '0–4',
+                                  'Minimal',
+                                  'Kecemasan sangat ringan atau tidak ada.'
+                                ),
+                                (
+                                  '5–9',
+                                  'Ringan',
+                                  'Kecemasan ringan. Teknik relaksasi bisa membantu.'
+                                ),
+                                (
+                                  '10–14',
+                                  'Sedang',
+                                  'Kecemasan sedang. Disarankan konsultasi profesional.'
+                                ),
+                                (
+                                  '15–21',
+                                  'Berat',
+                                  'Kecemasan berat. Segera hubungi profesional kesehatan mental.'
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            // === Forward Chaining + Certainty Factor ===
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color:
+                                      MalvaColors.seed.withValues(alpha: 0.25),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Row(
+                                    children: [
+                                      Icon(Icons.psychology_rounded,
+                                          size: 18, color: MalvaColors.seed),
+                                      SizedBox(width: 6),
+                                      Expanded(
+                                          child: Text(
+                                        'Dukungan aturan (Forward Chaining + CF)',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 12.5,
+                                          color: MalvaColors.seed,
+                                        ),
+                                      )),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                      'Versi aturan: ${bundle.phq9.ruleVersion}'),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'CF menunjukkan dukungan aturan dalam model, '
+                                    'bukan probabilitas diagnosis atau persentase '
+                                    'keparahan. Skor dan tingkat gejala ditampilkan '
+                                    'terpisah; hasil perlu ditinjau profesional.',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _CFBar(
+                                    label: 'PHQ-9 Depresi',
+                                    cf: bundle.phq9.certaintyFactor,
+                                    color: bundle.phq9.level.color,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  _CFBar(
+                                    label: 'GAD-7 Kecemasan',
+                                    cf: bundle.gad7.certaintyFactor,
+                                    color: bundle.gad7.level.color,
+                                  ),
+                                  if (bundle.phq9.rulesFired.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Rule aktif: ${bundle.phq9.rulesFired.take(3).map((r) => r.label).join('; ')}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -916,11 +898,8 @@ class AssessmentResultScreen extends StatelessWidget {
                     apiClient: apiClient,
                   ),
                   const SizedBox(height: 18),
-                  // Screening lanjutan: DASS-21 & WHO-5 (edukasi + tutorial).
                   const SectionLabel('Assessment lanjutan'),
                   const _TherapyModuleTile(dass21Module),
-                  const SizedBox(height: 10),
-                  const _TherapyModuleTile(who5Module),
                   const SizedBox(height: 18),
                   const SectionLabel('Tips dukungan'),
                   const _TipCard(
@@ -970,7 +949,7 @@ class _CrisisSupportCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SoftCard(
-      color: MalvaColors.danger.withValues(alpha: 0.08),
+      color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1177,14 +1156,15 @@ class _ScoreExplanationCard extends StatelessWidget {
             children: [
               Icon(Icons.info_outline_rounded, size: 16, color: level.color),
               const SizedBox(width: 6),
-              Text(
+              Expanded(
+                  child: Text(
                 '$title — Apa arti skormu?',
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   fontSize: 12.5,
                   color: level.color,
                 ),
-              ),
+              )),
             ],
           ),
           const SizedBox(height: 8),

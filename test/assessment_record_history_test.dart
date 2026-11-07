@@ -12,6 +12,7 @@ import 'package:malva_mental_health/src/screens/assessment_list_screen.dart';
 import 'package:malva_mental_health/src/screens/assessment_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
+import 'package:malva_mental_health/src/widgets/malva_components.dart';
 import 'package:malva_mental_health/src/widgets/therapy_library.dart';
 
 // ============================================================
@@ -154,6 +155,165 @@ Widget _buildApp(MalvaApiClient api, {required Widget home}) {
 }
 
 void main() {
+  test('history excludes incomplete and invalid WHO/DASS legacy submissions',
+      () async {
+    final validDass = <String, dynamic>{
+      for (var i = 1; i <= 21; i++) 'q$i': 1,
+      'scale_version': 2,
+    };
+    final invalidAnswers = <(String, Map<String, dynamic>)>[
+      ('who5', {}),
+      ('who5', {'scale_version': 2}),
+      ('who5', {..._who5Answers()}..remove('q5')),
+      ('who5', {..._who5Answers(), 'q1': -1}),
+      ('who5', {..._who5Answers(), 'q1': 6}),
+      ('who5', {..._who5Answers(), 'q1': 1.5}),
+      ('who5', {..._who5Answers(), 'q1': '3'}),
+      ('dass21', {}),
+      ('dass21', {...validDass}..remove('q21')),
+      ('dass21', {...validDass, 'q21': 4}),
+    ];
+    final api = _api(
+      submissions: [
+        for (var i = 0; i < invalidAnswers.length; i++)
+          _submission(
+            id: 'invalid_$i',
+            moduleId: invalidAnswers[i].$1,
+            title: 'Invalid $i',
+            createdAt: '2026-11-07T09:00:00+07:00',
+            summary: 'Hasil normal lama',
+            answers: invalidAnswers[i].$2,
+          ),
+        _submission(
+          id: 'complete_who',
+          moduleId: 'who5',
+          title: 'Complete WHO',
+          createdAt: '2026-11-07T10:00:00+07:00',
+          answers: _who5Answers(),
+        ),
+        _submission(
+          id: 'complete_dass',
+          moduleId: 'dass21',
+          title: 'Complete DASS',
+          createdAt: '2026-11-07T11:00:00+07:00',
+          answers: validDass,
+        ),
+      ],
+      screenings: const [],
+    );
+
+    final entries = await loadAssessmentHistory(
+      api: api,
+      accessToken: 'token_test',
+      patientId: 'user_pasien_1',
+    );
+
+    expect(
+        entries.map((entry) => entry.title), ['Complete DASS', 'Complete WHO']);
+    expect(entries.last.answers['q5'], 3);
+    expect(entries.first.answers['q21'], 1);
+  });
+
+  test('history collapses repeated delivery IDs but preserves genuine retakes',
+      () async {
+    Map<String, dynamic> who(String id, String title, String createdAt) =>
+        _submission(
+          id: id,
+          moduleId: 'who5',
+          title: title,
+          createdAt: createdAt,
+          answers: _who5Answers(),
+        );
+    final first = who('who_1', 'First', '2026-11-07T09:00:00+07:00');
+    final retake = who('who_2', 'Retake', '2026-11-07T10:00:00+07:00');
+    final entries = await loadAssessmentHistory(
+      api: _api(
+        submissions: [
+          first,
+          first,
+          retake,
+          who('', 'Without ID A', '2026-11-07T11:00:00+07:00'),
+          who('', 'Without ID B', '2026-11-07T12:00:00+07:00'),
+        ],
+        screenings: const [],
+      ),
+      accessToken: 'token_test',
+    );
+
+    expect(entries.map((entry) => entry.title),
+        ['Without ID B', 'Without ID A', 'Retake', 'First']);
+  });
+
+  testWidgets('PHQ/GAD detail separates raw severity, CF support and crisis',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final screening = _screening();
+    final bundle = screening['bundle'] as Map<String, dynamic>;
+    final phq = bundle['phq9'] as Map<String, dynamic>;
+    final gad = bundle['gad7'] as Map<String, dynamic>;
+    phq.addAll(<String, Object>{
+      'score': 16,
+      'level': 'moderately_severe',
+      'summary': 'Gejala depresi cukup berat.',
+      'crisis_flag': true,
+      'cf': 0.95,
+    });
+    gad.addAll(<String, Object>{'score': 7, 'level': 'mild', 'cf': 0.684});
+    screening['crisis_flag'] = true;
+    await tester.pumpWidget(_buildApp(
+      _api(submissions: const [], screenings: [screening]),
+      home: const AssessmentHistoryScreen(),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('PHQ-9 16/27 (Cukup berat) • GAD-7 7/21 (Ringan)'),
+        findsOneWidget);
+    await tester.tap(find.text('Screening PHQ-9 + GAD-7'));
+    await tester.pumpAndSettle();
+
+    for (final title in ['PHQ-9 — Depresi', 'GAD-7 — Kecemasan']) {
+      final card = tester.widget<SoftCard>(find
+          .ancestor(of: find.text(title), matching: find.byType(SoftCard))
+          .first);
+      expect(card.color, Colors.white);
+    }
+    expect(find.text('16/27'), findsOneWidget);
+    expect(find.text('7/21'), findsOneWidget);
+    expect(find.text('Cukup berat'), findsOneWidget);
+    expect(find.text('Ringan'), findsOneWidget);
+    expect(find.text('moderately_severe'), findsNothing);
+    expect(find.text('mild'), findsNothing);
+    expect(find.text('Dukungan aturan: CF 95%'), findsOneWidget);
+    expect(find.text('Dukungan aturan: CF 68%'), findsOneWidget);
+    expect(
+        find.textContaining('bukan probabilitas diagnosis'), findsNWidgets(2));
+    expect(find.textContaining('Screening ini menandai risiko krisis'),
+        findsOneWidget);
+    expect(find.textContaining('9 pertanyaan'), findsOneWidget);
+    expect(find.textContaining('7 pertanyaan'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Apa arti skormu?').first);
+    await tester.tap(find.text('Apa arti skormu?').first);
+    await tester.pumpAndSettle();
+    expect(find.text('15–19'), findsOneWidget);
+    expect(find.text('20–27'), findsOneWidget);
+    expect(find.text('Cukup berat'), findsNWidgets(2));
+    await tester.ensureVisible(find.text('Apa arti skormu?').first);
+    await tester.tap(find.text('Apa arti skormu?').first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Apa arti skormu?').last);
+    await tester.tap(find.text('Apa arti skormu?').last);
+    await tester.pumpAndSettle();
+    expect(find.text('15–21'), findsOneWidget);
+    expect(find.text('20–27'), findsNothing);
+    expect(find.text('16/27'), findsOneWidget);
+    expect(find.text('7/21'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
       'unified Screening keeps WHO, PHQ/GAD and DASS manually reachable',
       (tester) async {
@@ -333,6 +493,8 @@ void main() {
     expect(find.text('GAD-7 — Kecemasan'), findsOneWidget);
     expect(find.text('12/27'), findsOneWidget);
     expect(find.text('9/21'), findsOneWidget);
+    expect(find.textContaining('Screening ini menandai risiko krisis'),
+        findsNothing);
   });
 }
 

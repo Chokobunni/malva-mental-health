@@ -33,6 +33,24 @@ const String scaleMinKey = 'scale_min';
 /// Kunci nilai maksimum skala (informatif, untuk audit data).
 const String scaleMaxKey = 'scale_max';
 
+/// A saved assessment is a result only after every item was answered.
+/// Versionless complete records keep their original legacy scoring path.
+bool isCompleteAssessmentAnswers(
+    String moduleId, Map<String, dynamic> answers) {
+  final count = switch (moduleId) { 'who5' => 5, 'dass21' => 21, _ => 0 };
+  if (count == 0) return false;
+  final max = moduleId == 'who5' ? 5 : 3;
+  for (var item = 1; item <= count; item++) {
+    final value = answers['q$item'];
+    if (value is! num ||
+        !value.isFinite ||
+        value != value.roundToDouble() ||
+        value < 0 ||
+        value > max) return false;
+  }
+  return true;
+}
+
 /// Versi skala baku: DASS-21 0-3, WHO-5 0-5.
 const int standardizedScaleVersion = 2;
 
