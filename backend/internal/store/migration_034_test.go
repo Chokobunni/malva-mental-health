@@ -37,7 +37,7 @@ func TestMigration034RestoreCanonicalPracticeCoordinates(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer tx.Rollback()
+			defer func() { _ = tx.Rollback() }()
 			// Temporary tables isolate the migration from real seeded credentials.
 			if _, err := tx.ExecContext(ctx, `
 				CREATE TEMP TABLE users (id uuid PRIMARY KEY, email text) ON COMMIT DROP;
