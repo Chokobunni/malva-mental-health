@@ -21,6 +21,19 @@ void main() {
             irritability: (i + 4) % 11,
             note: i == 0 ? 'Baris akhir\n' * 75 : 'Catatan $i'));
     final reports = {
+      'diary': await buildHealthReportPdf(
+          title: 'Catatan Harian Malva',
+          diaries: [
+            DiaryEntry(
+                id: 'd',
+                createdAt: now,
+                mood: MoodValue.good,
+                title: 'Hari di taman',
+                note:
+                    'DIARY_TEXT_RETAINED\n${'Cerita panjang yang tetap disimpan. ' * 150}',
+                professionalFeedback: 'FEEDBACK_MUST_NOT_EXPORT')
+          ],
+          now: now),
       'mood': await buildHealthReportPdf(
           title: 'Laporan Riwayat Mood Malva', moods: moods, now: now),
       'medication': await buildHealthReportPdf(
@@ -57,8 +70,8 @@ void main() {
     for (final report in reports.entries) {
       final source = latin1.decode(report.value);
       expect(source.startsWith('%PDF-'), isTrue);
-      expect(
-          RegExp(r'/Type\s*/Page\b').allMatches(source).length, greaterThan(2));
+      expect(RegExp(r'/Type\s*/Page\b').allMatches(source).length,
+          greaterThan(report.key == 'diary' ? 1 : 2));
       if (report.key == 'mood')
         expect(RegExp(r'/Subtype\s*/Image').hasMatch(source), isTrue);
       final dir = Platform.environment['MALVA_HEALTH_PDF_QA'];

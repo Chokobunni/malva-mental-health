@@ -5,6 +5,27 @@ import 'package:malva_mental_health/src/time/wib.dart';
 import 'package:malva_mental_health/src/widgets/mood_insights.dart';
 
 void main() {
+  testWidgets('Recent shows only the three newest mood entries',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: MoodInsights(now: wibFromParts(2026, 11, 8), entries: [
+      for (final day in [5, 8, 6, 7])
+        MoodEntry(
+            date: wibFromParts(2026, 11, day),
+            mood: MoodValue.good,
+            sleepHours: 7,
+            energy: 8,
+            anxiety: 3,
+            irritability: 2,
+            note: '')
+    ])))));
+    expect(find.text('8 November 2026'), findsOneWidget);
+    expect(find.text('7 November 2026'), findsOneWidget);
+    expect(find.text('6 November 2026'), findsOneWidget);
+    expect(find.text('5 November 2026'), findsNothing);
+  });
   for (final keepEntries in [false, true])
     testWidgets(
         'open calendar details close when the patient owner changes (same data: $keepEntries)',

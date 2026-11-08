@@ -149,7 +149,7 @@ void main() {
       expect(find.byType(AssessmentResultCard), findsNothing);
     });
 
-    testWidgets('${module.id} shared score card uses a white background',
+    testWidgets('${module.id} shared score card uses its reference background',
         (tester) async {
       await tester.pumpWidget(_app(Scaffold(
         body: SingleChildScrollView(
@@ -171,7 +171,11 @@ void main() {
       final card = tester.widget<SoftCard>(
         find.descendant(of: result, matching: find.byType(SoftCard)).first,
       );
-      expect(card.color, Colors.white);
+      expect(
+          card.color,
+          module.id == 'who5'
+              ? const Color(0xFFF1FBF9)
+              : const Color(0xFFFAF6FD));
       expect(find.textContaining('dukungan aturan dalam model'), findsNothing);
     });
   }

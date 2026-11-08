@@ -57,6 +57,14 @@ class _Client extends http.BaseClient {
         final result = body as Map<String, dynamic>;
         result['doctors'] = (result['doctors'] as List).reversed.toList();
       }
+    } else if (request.url.path == '/v1/review-entitlements') {
+      body = {
+        'entitlements': reviewed
+            ? []
+            : [
+                {'session_id': 'session', 'professional_id': 'doctor'}
+              ]
+      };
     } else if (request.method == 'POST') {
       reviewed = true;
     } else if (request.url.path == '/v1/doctors/doctor') {
@@ -167,6 +175,7 @@ void main() {
                     professionalId: 'doctor',
                     accessToken: _session.accessToken,
                     onSubmitted: () {})))));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Tulis ulasan'));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -203,6 +212,11 @@ void main() {
     final api = MalvaApiClient(
         baseUrl: 'http://test',
         httpClient: MockClient((request) async {
+          if (request.url.path == '/v1/review-entitlements') {
+            return http.Response(
+                '{"entitlements":[{"session_id":"session","professional_id":"doctor"}]}',
+                200);
+          }
           if (request.url.path == '/v1/auth/refresh') {
             return http.Response(
                 jsonEncode({
@@ -233,6 +247,7 @@ void main() {
                     professionalId: 'doctor',
                     accessToken: _session.accessToken,
                     onSubmitted: () => submitted++)))));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Tulis ulasan'));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -335,7 +350,11 @@ void main() {
       'patient submits stars helpful and text and sees persisted feedback',
       (tester) async {
     final client = _Client();
-    await tester.pumpWidget(ProviderScope(
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    container.read(authStateProvider.notifier).setSession(_session);
+    await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
         child: MaterialApp(
             home: DoctorProfileScreen(
                 doctorUserId: 'doctor',
@@ -354,8 +373,12 @@ void main() {
     await tester.pumpAndSettle();
     final posted =
         client.requests.where((r) => r.method == 'POST').single as http.Request;
-    expect(jsonDecode(posted.body),
-        {'stars': 4, 'review_text': 'Penjelasan jelas', 'helpful': false});
+    expect(jsonDecode(posted.body), {
+      'stars': 4,
+      'review_text': 'Penjelasan jelas',
+      'helpful': false,
+      'session_id': 'session'
+    });
     expect(client.reviewed, isTrue);
     await tester.scrollUntilVisible(find.text('Penjelasan jelas'), -200);
     expect(find.text('Penjelasan jelas'), findsOneWidget);

@@ -11,6 +11,7 @@ import 'package:malva_mental_health/src/screens/chat_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
 import 'package:malva_mental_health/src/widgets/therapy_library.dart';
+import 'package:malva_mental_health/src/widgets/shared_record_detail.dart';
 
 Map<String, dynamic> _record(String id, String module, String title) => {
       'id': id,
@@ -20,6 +21,7 @@ Map<String, dynamic> _record(String id, String module, String title) => {
       'answers': {'activating': 'Situasi latihan'},
       'summary': 'Latihan tersimpan',
       'created_at': '2026-11-05T09:00:00+07:00',
+      'shared_at': '2026-11-05T09:00:00+07:00',
     };
 
 http.Response _json(Object body, [int status = 200]) =>
@@ -28,6 +30,7 @@ http.Response _json(Object body, [int status = 200]) =>
 
 class _ChatBackend {
   bool empty = false;
+  bool canShare = true;
   bool failList = false;
   bool failHistoryAfterShare = false;
   bool shared = false;
@@ -46,6 +49,7 @@ class _ChatBackend {
   Map<String, dynamic>? metadata;
   int shareCalls = 0;
   int genericSendCalls = 0;
+  Map<String, dynamic>? sentShare;
   final therapy = _record('therapy-1', 'abcde', 'Latihan ABCDE');
 
   http.Client client() => MockClient((request) async {
@@ -55,8 +59,8 @@ class _ChatBackend {
               'access': {
                 'in_session': false,
                 'can_send_text': false,
-                'can_share': true,
-                'has_active_package': true,
+                'can_share': canShare,
+                'has_active_package': canShare,
               }
             });
           case 'GET /v1/messages':
@@ -142,7 +146,39 @@ class _ChatBackend {
             return _json({'submission': therapy});
           case 'POST /v1/messages':
             genericSendCalls++;
+            final data = jsonDecode(request.body) as Map<String, dynamic>;
+            if (data['kind'] == 'diary') {
+              sentShare = data;
+              return _json({
+                'message': {
+                  'id': 'diary-message',
+                  'sender_id': 'patient-1',
+                  'text': data['text'],
+                  'kind': 'diary',
+                  'metadata': data['metadata'],
+                  'created_at': '2026-11-09T10:00:00+07:00'
+                }
+              });
+            }
             return _json({'error': 'Gunakan endpoint berbagi worksheet'}, 400);
+          case 'GET /v1/diary-entries':
+            return _json({
+              'diaries': [
+                {
+                  'id': 'new',
+                  'title': 'Diary terbaru',
+                  'note': 'Isi terbaru',
+                  'occurred_at': '2026-11-09T09:00:00+07:00'
+                },
+                if (request.url.queryParameters['limit'] == '0')
+                  {
+                    'id': 'old',
+                    'title': 'Diary lama',
+                    'note': 'Isi lama lengkap',
+                    'occurred_at': '2025-01-01T09:00:00+07:00'
+                  },
+              ]
+            });
           default:
             return _json({'error': 'Tidak ditemukan'}, 404);
         }
@@ -186,20 +222,66 @@ Future<void> _chooseTherapy(WidgetTester tester) async {
 }
 
 void main() {
+  for (final kind in [
+    'diary',
+    'goals',
+    'habits',
+    'prescription',
+    'medication',
+    'summary',
+    'progress',
+    'assessment',
+    'screening',
+    'worksheet'
+  ]) {
+    testWidgets('professional opens $kind by tapping the message body',
+        (tester) async {
+      final backend = _ChatBackend()
+        ..shared = true
+        ..kind = kind
+        ..metadata = {
+          'title': 'Snapshot pasien',
+          'note': 'Isi snapshot pasien'
+        };
+      await _open(tester, backend, professional: true);
+      await tester.tap(find.text('Worksheet Latihan ABCDE dibagikan.'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SharedRecordDetail), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+  testWidgets('patient selects an older diary from full history before sharing',
+      (tester) async {
+    final backend = _ChatBackend();
+    await _open(tester, backend);
+    await tester.tap(find.byIcon(Icons.add_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Diary'));
+    await tester.pumpAndSettle();
+    expect(backend.sentShare, isNull);
+    expect(find.text('Pilih diary'), findsOneWidget);
+    await tester.tap(find.text('Diary lama'));
+    await tester.pumpAndSettle();
+    expect(backend.sentShare?['metadata']['note'], 'Isi lama lengkap');
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final professional in [false, true]) {
     testWidgets('old shared screening opens full owned history ($professional)',
         (tester) async {
       final backend = _ChatBackend()
         ..shared = true
         ..kind = 'assessment'
+        ..canShare = false
         ..metadata = {
           'screening_id': 'old-screening',
           'title': 'Skrining lama'
         };
       await _open(tester, backend, professional: professional);
-      await tester.tap(find.textContaining('Assessment:').first);
+      await tester.tap(find.text('Worksheet Latihan ABCDE dibagikan.'));
       await tester.pumpAndSettle();
       expect(find.text('Detail skrining lama terverifikasi'), findsOneWidget);
+      expect(find.text('Detail Record'), findsOneWidget);
       expect(find.textContaining('Total Score'), findsWidgets);
       await tester.pumpWidget(const SizedBox());
     });
@@ -243,12 +325,16 @@ void main() {
 
   testWidgets('professional opens the authorized shared worksheet from chat',
       (tester) async {
-    final backend = _ChatBackend()..shared = true;
+    final backend = _ChatBackend()
+      ..shared = true
+      ..canShare = false;
     await _open(tester, backend, professional: true);
     expect(find.byIcon(Icons.add_rounded), findsNothing);
-    await tester.tap(find.textContaining('Therapy Record:').first);
+    await tester.tap(find.text('Worksheet Latihan ABCDE dibagikan.'));
     await tester.pumpAndSettle();
     expect(find.text('Latihan ABCDE'), findsOneWidget);
+    expect(find.text('2026-11-05T09:00:00+07:00'), findsNothing);
+    expect(find.text('Detail Record'), findsOneWidget);
     await tester.tap(find.text('Latihan ABCDE'));
     await tester.pumpAndSettle();
     expect(find.text('Situasi latihan'), findsOneWidget);

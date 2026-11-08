@@ -133,7 +133,14 @@ berasal dari data tersimpan. Mini Summary mengambil diary/goals dari server.
 Seluruh kartu chat dan Therapy Record membuka detail, termasuk jawaban lama.
 PHQ/GAD memakai satu filter dan label Total Score.
 
-Pasien dengan sesi selesai dapat mengirim rating/ulasan; agregat berasal dari
+Pasien mendapat tepat satu rating/ulasan per sesi satu kali selesai atau seluruh
+paket pembelian selesai (kuota completed/no_show habis, minimal satu completed).
+Saldo paket merged 4+4 tetap 8 tetapi memberi satu hak per ID pembelian setelah
+rentang empat pertemuannya terminal; server
+menegakkan entitlement atomik termasuk klien lama. Pasien diminta mengulas setelah
+refresh/resume/poll, sekali per unit/akun selama sesi aplikasi. Ulasan lama tetap
+terlihat tanpa backfill dugaan; unit historis pada/sebelum ulasan legacy terakhir
+ditekan konservatif. `GET /v1/review-entitlements` menampilkan hak tersedia. Agregat berasal dari
 ulasan nyata. Tiga contoh diberi label dan dikecualikan dari agregat. Discovery
 dan MyCare memakai jarak koordinat aktual dengan proteksi respons lokasi lama.
 PDF obat/screening memakai tabel berkode warna; mood memakai emoji, combo/radar
@@ -191,3 +198,17 @@ Reschedule kedua peran menjaga format WIB; kartu aturan paket putih. SOS menampi
 status aktual, polling terbatas serta galat/timeout; status terkirim ke gateway
 bukan bukti diterima kontak. Tidak ada perubahan skema atau rumus/CF klinis.
 Rujukan implementasi: [desain koreksi](superpowers/specs/2026-11-08-patient-professional-polish-design.md).
+
+### Pengalaman klinis 0.1.10
+
+Chat membuka seluruh jenis record lewat bubble dan menyediakan pemilihan diary.
+Popup obat/goals/diary/ringkasan/assessment mengikuti referensi. Mini Summary tujuh
+tanggal WIB tanpa last diary; Recent mood tiga entri. Ekspor diary tanpa tanggapan
+dan mood tanpa catatan. Medication aman saat reminder belum diatur. Notifikasi putih.
+
+Home profesional berisi sesi, Operasional dan Klinis; Data pasien dibagikan berada
+di Pasien. Lainnya memuat profil, portal dan relasi. Crisis Incident Log beserta
+loading/log tampilannya dihapus, tanpa menghapus insiden atau alur SOS pasien.
+Jadwal dan Ringkasan Klinis menampilkan status/kuota aktual; PHQ/GAD, WHO dan DASS
+memiliki kartu skor, makna dan jawaban. Pemantauan harian tanpa Kiriman/Timeline.
+Ulasan memakai entitlement per sesi/pembelian di atas, termasuk renewal merged.

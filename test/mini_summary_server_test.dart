@@ -13,7 +13,7 @@ import 'package:malva_mental_health/src/widgets/mini_summary.dart';
 
 void main() {
   testWidgets(
-      'server diary and completed active goals load while mood is pending, scoped to patient',
+      'seven day summary loads goals while mood is pending without diary section',
       (tester) async {
     tester.view.physicalSize = const Size(800, 2000);
     tester.view.devicePixelRatio = 1;
@@ -76,13 +76,15 @@ void main() {
     await tester.tap(find.text('Mini Summary'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.textContaining('Catatan diary server'), findsOneWidget);
+    expect(find.text('Mini Summary (7 hari)'), findsOneWidget);
+    expect(find.text('Last Diary Entry'), findsNothing);
+    expect(find.textContaining('Catatan diary server'), findsNothing);
     expect(find.text('Berjalan pagi'), findsOneWidget);
     expect(find.text('7/7 minggu ini'), findsOneWidget);
     expect(find.text('Goal nonaktif'), findsNothing);
     pendingMood.complete(http.Response('{"error":"Unavailable"}', 503));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Catatan diary server'), findsOneWidget);
+    expect(find.textContaining('Catatan diary server'), findsNothing);
     container.read(authStateProvider.notifier).setSession(const AuthSession(
         role: UserRole.professional,
         identifier: 'other',

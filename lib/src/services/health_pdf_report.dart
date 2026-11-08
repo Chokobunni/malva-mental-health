@@ -257,32 +257,28 @@ Iterable<pw.Widget> _moodSection(List<MoodEntry> entries,
     'TIDUR',
     'ENERGI',
     'CEMAS',
-    'IRITABILITAS',
-    'CATATAN'
+    'IRITABILITAS'
   ], [
     for (final entry in sorted)
-      for (final note in _chunks(entry.note))
-        [
-          _text(formatWibDateTime(entry.date)),
-          pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Image(emoji[entry.mood]!, width: 19, height: 19),
-            pw.SizedBox(height: 3),
-            _text(entry.mood.label)
-          ]),
-          _text('${entry.sleepHours.toStringAsFixed(1)} jam'),
-          _text('${entry.energy}'),
-          _text('${entry.anxiety}'),
-          _text('${entry.irritability}'),
-          _text(note.isEmpty ? '-' : note),
-        ]
+      [
+        _text(formatWibDateTime(entry.date)),
+        pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          pw.Image(emoji[entry.mood]!, width: 19, height: 19),
+          pw.SizedBox(height: 3),
+          _text(entry.mood.label)
+        ]),
+        _text('${entry.sleepHours.toStringAsFixed(1)} jam'),
+        _text('${entry.energy}'),
+        _text('${entry.anxiety}'),
+        _text('${entry.irritability}'),
+      ]
   ], {
     0: const pw.FlexColumnWidth(1.25),
     1: const pw.FlexColumnWidth(1),
     2: const pw.FlexColumnWidth(.85),
     3: const pw.FlexColumnWidth(.7),
     4: const pw.FlexColumnWidth(.7),
-    5: const pw.FlexColumnWidth(1.15),
-    6: const pw.FlexColumnWidth(1.4)
+    5: const pw.FlexColumnWidth(1.15)
   });
   yield pw.NewPage();
   yield _heading('Mood Trend (Weekly)');
@@ -308,11 +304,10 @@ Iterable<pw.Widget> _diarySection(List<DiaryEntry> entries) sync* {
   yield _table([
     'WAKTU (WIB)',
     'JUDUL',
-    'CATATAN / TANGGAPAN'
+    'ISI DIARY'
   ], [
     for (final entry in sorted)
-      for (final chunk in _chunks(
-          '${entry.note}\nTanggapan profesional: ${entry.professionalFeedback ?? "Belum ada"}'))
+      for (final chunk in _chunks(entry.note))
         [
           _text(formatWibDateTime(entry.createdAt)),
           _text(entry.title, bold: true),

@@ -111,8 +111,8 @@ void main() {
                           session: professional, apiClient: api)))));
       await tester.pumpAndSettle();
       if (!isPatient) {
-        await tester.ensureVisible(find.text('Aksi lain').first);
-        await tester.tap(find.text('Aksi lain').first);
+        await tester.ensureVisible(find.text('AKSI LAIN').first);
+        await tester.tap(find.text('AKSI LAIN').first);
         await tester.pumpAndSettle();
       }
       await tester.ensureVisible(find.text('Reschedule').first);

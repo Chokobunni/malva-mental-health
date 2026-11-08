@@ -372,3 +372,29 @@ Reschedule kedua peran menjaga format WIB; kartu aturan paket putih. SOS menampi
 status aktual, polling terbatas serta galat/timeout; status terkirim ke gateway
 bukan bukti diterima kontak. Tidak ada perubahan skema atau rumus/CF klinis.
 Rujukan implementasi: [desain koreksi](superpowers/specs/2026-11-08-patient-professional-polish-design.md).
+
+## Koreksi pengalaman klinis — 9 November 2026
+
+- Popup chat obat, goals, diary, ringkasan dan assessment mengikuti referensi
+  dengan hierarki skor/status yang terbaca. Seluruh bubble record dapat ditekan
+  oleh profesional, termasuk akses detail melalui API berotorisasi. Diary dapat
+  dipilih dari seluruh riwayat; timestamp mentah therapy tidak ditampilkan.
+- Mini Summary memakai tujuh tanggal WIB, tanpa last diary entry atau label
+  periode tetap pada Symptoms Balance Map. Recent mood maksimal tiga entri.
+  PDF diary tanpa tanggapan; PDF mood tanpa kolom Catatan.
+- Medication mendukung resep tanpa reminder di kartu, checklist, edit dan save.
+  Ketiadaan jadwal tetap tersimpan tanpa mengarang jam. Notifikasi berwarna putih.
+- Satu ulasan per sesi satu kali atau pembelian paket kontinu selesai. Paket
+  merged 4+4 tetap memberi satu hak per pembelian setelah empat pertemuan masing-
+  masing terminal dan minimal satu completed. Prompt mengikuti refresh/resume/poll
+  pasien aktif; duplikasi dan kepemilikan ditegakkan server untuk semua klien.
+- Home profesional memuat Sesi berjalan, Video call mendatang, Sesi chat mendatang,
+  Operasional (Ketersediaan & Harga, Earnings), Klinis (e-prescription). Pasien
+  memuat Data pasien dibagikan. Lainnya memuat Profil Profesional, Portal
+  Profesional (termasuk STR/SIP) dan relasi pasien-profesional.
+- Crisis Incident Log, Riwayat assessment dan Pasien terhubung di Home dihapus.
+  Pemantauan harian tanpa Kiriman pasien/Timeline. Jadwal, Ringkasan Klinis serta
+  hasil PHQ/GAD, WHO-5 dan DASS mengikuti referensi dengan data Malva; skala internal
+  DASS tidak tampil. Aturan klinis, otorisasi, sesi dan SOS tetap berlaku.
+
+Rujukan: [spesifikasi](superpowers/specs/2026-11-09-clinical-experience-design.md).

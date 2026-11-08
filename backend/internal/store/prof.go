@@ -783,28 +783,8 @@ func (s *Store) DoctorRating(ctx context.Context, professionalID string) (Doctor
 }
 
 func (s *Store) CreateDoctorReview(ctx context.Context, professionalID, patientID string, stars int, reviewText string, helpful bool) (DoctorReview, error) {
-	if err := ValidateDoctorReview(stars, reviewText); err != nil {
-		return DoctorReview{}, err
-	}
-	pct := stars * 20
-	var rv DoctorReview
-	err := s.db.QueryRowContext(ctx, `INSERT INTO doctor_reviews
-		(professional_id, patient_id, helpfulness_percent, review_text, helpful)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, created_at`,
-		professionalID, patientID, pct, strings.TrimSpace(reviewText), helpful).
-		Scan(&rv.ID, &rv.CreatedAt)
-	if err != nil {
-		return DoctorReview{}, err
-	}
-	rv.ProfessionalID = professionalID
-	rv.PatientID = patientID
-	rv.Stars = stars
-	rv.Helpful = helpful
-	rv.ReviewText = strings.TrimSpace(reviewText)
-	return rv, nil
+	return s.CreateDoctorReviewForEntitlement(ctx, professionalID, patientID, stars, reviewText, helpful, "", "")
 }
-
 func ValidateDoctorReview(stars int, reviewText string) error {
 	if stars < 1 || stars > 5 {
 		return errors.New("bintang harus antara 1 dan 5")
@@ -815,14 +795,10 @@ func ValidateDoctorReview(stars int, reviewText string) error {
 	return nil
 }
 
-// Eligibility checks the full relation, independent of the bounded history feed.
 func (s *Store) CanReviewProfessional(ctx context.Context, patientID, professionalID string) (bool, error) {
-	var eligible bool
-	err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM care_sessions
-		WHERE patient_id=$1 AND professional_id=$2 AND status='completed')`, patientID, professionalID).Scan(&eligible)
-	return eligible, err
+	items, err := s.ListReviewEntitlements(ctx, patientID, professionalID)
+	return len(items) > 0, err
 }
-
 func (s *Store) ListServicePackages(ctx context.Context, professionalID string) ([]ServicePackage, error) {
 	const q = `SELECT id, professional_id, package_sessions, package_duration_days, price, label, is_active
 		FROM service_packages WHERE professional_id = $1 AND is_active = true ORDER BY package_sessions`

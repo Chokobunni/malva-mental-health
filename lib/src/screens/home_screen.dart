@@ -8,6 +8,7 @@ import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/care_session_refresh.dart';
 import '../widgets/session_attendance_actions.dart';
+import '../widgets/doctor_review_actions.dart';
 import '../services/medication_reminder_service.dart';
 import '../theme.dart';
 import '../widgets/crisis_hotline.dart';
@@ -196,6 +197,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       _ongoingLoadFailed = ongoingFailed;
     });
     _sessionRefresh.update([...upcoming, ...ongoing]);
+    ref.read(reviewEntitlementsRevisionProvider.notifier).state++;
   }
 
   @override

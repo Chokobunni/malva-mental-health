@@ -23,6 +23,7 @@ const _professional = AuthSession(
 class _Client extends http.BaseClient {
   final requests = <http.Request>[];
   bool attended = false;
+  final schedules = <Map<String, dynamic>>[];
 
   Map<String, dynamic> session({bool upcoming = false}) => {
         'id': upcoming ? 'session-upcoming' : 'session-synthetic',
@@ -63,6 +64,7 @@ class _Client extends http.BaseClient {
       ])
         key: [],
       'pricing': <String, dynamic>{},
+      'schedules': schedules,
     };
     if (request.method == 'PATCH') {
       attended = true;
@@ -81,8 +83,28 @@ class _Client extends http.BaseClient {
   }
 }
 
-Future<_Client> _mount(WidgetTester tester, {bool dashboard = false}) async {
+Future<_Client> _mount(WidgetTester tester,
+    {bool dashboard = false, bool includeSchedules = false}) async {
   final client = _Client();
+  if (includeSchedules)
+    client.schedules.addAll([
+      {
+        'id': 'active',
+        'day_of_week': 1,
+        'start_time': '09:00',
+        'end_time': '16:00',
+        'slot_duration_minutes': 30,
+        'is_active': true
+      },
+      {
+        'id': 'inactive',
+        'day_of_week': 2,
+        'start_time': '18:00',
+        'end_time': '21:00',
+        'slot_duration_minutes': 30,
+        'is_active': false
+      },
+    ]);
   final api =
       MalvaApiClient(baseUrl: 'http://synthetic.test', httpClient: client);
   final container =
@@ -107,6 +129,31 @@ Future<_Client> _mount(WidgetTester tester, {bool dashboard = false}) async {
 void main() {
   setUpAll(initializeWib);
 
+  testWidgets('availability summary excludes disabled practice slots',
+      (tester) async {
+    await _mount(tester, includeSchedules: true);
+    await tester.scrollUntilVisible(find.text('Ketersediaan & harga'), 250,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Sen:'), findsOneWidget);
+    expect(find.text('09:00–16:00 (30 mnt)'), findsOneWidget);
+    expect(find.text('18:00–21:00 (30 mnt)'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+      'schedule exposes availability and prices without an extra disclosure',
+      (tester) async {
+    await _mount(tester);
+    await tester.scrollUntilVisible(find.text('Ketersediaan & harga'), 250,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Jam praktik mingguan'), findsOneWidget);
+    expect(find.text('Hari libur:'), findsOneWidget);
+    expect(find.text('belum ada'), findsOneWidget);
+    expect(find.text('Paket 4 sesi / 6 minggu:'), findsOneWidget);
+    expect(find.text('belum diatur'), findsNWidgets(3));
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('upcoming video patient and time stay readable on narrow mobile',
       (tester) async {
     tester.view.physicalSize = const Size(360, 800);
@@ -125,7 +172,7 @@ void main() {
   testWidgets('schedule detail keeps the authenticated professional session',
       (tester) async {
     final client = await _mount(tester);
-    await tester.tap(find.text('Aksi lain').first);
+    await tester.tap(find.text('AKSI LAIN').first);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Detail pasien').first);
     await tester.tap(find.text('Detail pasien').first);

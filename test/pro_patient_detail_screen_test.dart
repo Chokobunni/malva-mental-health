@@ -33,6 +33,24 @@ Map<String, dynamic> _screening({bool missingGad = false}) => {
           'max_score': 27,
           'level': 'Ringan',
           'summary': 'Gejala depresi ringan.',
+          'answers': [
+            for (var i = 0; i < 9; i++)
+              {
+                'question_id': [
+                  'phq_interest',
+                  'phq_low_mood',
+                  'phq_sleep',
+                  'phq_energy',
+                  'phq_appetite',
+                  'phq_self_worth',
+                  'phq_focus',
+                  'phq_motor',
+                  'phq_self_harm'
+                ][i],
+                'position': i + 1,
+                'score': i == 2 ? 2 : 0
+              }
+          ],
           'crisis_flag': false,
           'cf': 0.684,
           'rule_trace': 'PHQ9_MILD: 0.72 × 0.95 = 0.684',
@@ -68,21 +86,25 @@ Map<String, dynamic> _worksheet(String id, String title) => {
 class _Responses {
   final statusByPath = <String, int>{};
   bool missingGad = false;
+  final requested = <String>[];
   final moods = <Map<String, dynamic>>[];
+  final packages = <Map<String, dynamic>>[];
+  final sessions = <Map<String, dynamic>>[];
   final extraWorksheets = <Map<String, dynamic>>[];
 
   late final api = MalvaApiClient(
     baseUrl: 'http://backend.test',
     httpClient: MockClient((request) async {
       final path = request.url.path;
+      requested.add(path);
       final status = statusByPath[path] ?? 200;
       if (status != 200) {
         return http.Response(
             jsonEncode({'error': 'Data tidak dibagikan'}), status);
       }
       final body = switch (path) {
-        '/v1/care-packages' => {'packages': []},
-        '/v1/care-sessions' => {'sessions': []},
+        '/v1/care-packages' => {'packages': packages},
+        '/v1/care-sessions' => {'sessions': sessions},
         '/v1/screenings' => {
             'screenings': [_screening(missingGad: missingGad)]
           },
@@ -132,6 +154,78 @@ Future<void> _pump(WidgetTester tester, _Responses responses) async {
 }
 
 void main() {
+  testWidgets(
+      'package sessions remain grouped with real progress and no-show date',
+      (tester) async {
+    final responses = _Responses()
+      ..packages.addAll([
+        {
+          'id': 'package-a',
+          'total_sessions': 4,
+          'remaining_sessions': 3,
+          'used_sessions': 1,
+          'validity_days': 42,
+          'status': 'active'
+        },
+        {
+          'id': 'package-b',
+          'total_sessions': 8,
+          'remaining_sessions': 6,
+          'used_sessions': 2,
+          'validity_days': 42,
+          'status': 'active'
+        },
+      ])
+      ..sessions.addAll([
+        {
+          'id': 'a',
+          'package_id': 'package-a',
+          'session_type': 'video',
+          'scheduled_at': '2026-11-12T15:00:00+07:00',
+          'status': 'scheduled'
+        },
+        {
+          'id': 'b',
+          'package_id': 'package-b',
+          'session_type': 'video',
+          'scheduled_at': '2026-10-24T09:00:00+07:00',
+          'status': 'no_show'
+        },
+      ]);
+    await _pump(tester, responses);
+    await tester.tap(find.byKey(const ValueKey('packages-section')));
+    await tester.pumpAndSettle();
+    expect(find.text('3/4 sesi tersisa'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('12 Nov 2026')).dy,
+        lessThan(tester.getTopLeft(find.text('Paket 8 sesi / 42 hari')).dy));
+    expect(tester.widget<Text>(find.text('24 Okt 2026')).style?.decoration,
+        TextDecoration.lineThrough);
+    expect(find.text('09:00 WIB'), findsOneWidget);
+  });
+
+  testWidgets(
+      'daily monitoring omits removed patient shares and timeline requests',
+      (tester) async {
+    final responses = _Responses();
+    await _pump(tester, responses);
+    expect(responses.requested, isNot(contains('/v1/timeline')));
+    expect(responses.requested, isNot(contains('/v1/messages')));
+    expect(find.byKey(const ValueKey('shares-section')), findsNothing);
+    expect(find.byKey(const ValueKey('timeline-section')), findsNothing);
+  });
+
+  testWidgets(
+      'screening identifies only symptoms supported by recorded answers',
+      (tester) async {
+    await _pump(tester, _Responses());
+    await tester.tap(find.byKey(const ValueKey('screening-screening-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Pola tidur terganggu'), findsOneWidget);
+    expect(find.text('Risiko menyakiti diri'), findsNothing);
+    await tester.tap(find.text('Lihat detail jawaban').first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Lebih dari separuh hari'), findsWidgets);
+  });
   testWidgets(
       'professional mood section uses shared charts and calendar from server',
       (tester) async {

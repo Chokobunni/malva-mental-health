@@ -292,34 +292,10 @@ func (s *Store) ListActiveEPrescriptionsForProfessionalPatients(ctx context.Cont
 
 // AddDoctorReview menyimpan ulasan (bentuk lama, dipertahankan untuk kompatibilitas).
 func (s *Store) AddDoctorReview(ctx context.Context, r DoctorReview) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
+	stars := r.Stars
+	if stars <= 0 {
+		stars = 5
 	}
-	defer func() { _ = tx.Rollback() }()
-
-	pct := r.Stars * 20
-	if pct <= 0 {
-		pct = 100
-	}
-	const q = `INSERT INTO doctor_reviews (professional_id, patient_id, helpfulness_percent, review_text, helpful)
-		VALUES ($1, $2, $3, $4, $5)`
-	if _, err := tx.ExecContext(ctx, q, r.ProfessionalID, r.PatientID, pct, r.ReviewText, r.Helpful); err != nil {
-		return err
-	}
-
-	if r.Helpful {
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE professional_credentials SET helpfulness_count = helpfulness_count + 1 WHERE user_id = $1`,
-			r.ProfessionalID); err != nil {
-			return err
-		}
-	}
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE professional_credentials SET review_count = review_count + 1 WHERE user_id = $1`,
-		r.ProfessionalID); err != nil {
-		return err
-	}
-
-	return tx.Commit()
+	_, err := s.CreateDoctorReview(ctx, r.ProfessionalID, r.PatientID, stars, r.ReviewText, r.Helpful)
+	return err
 }

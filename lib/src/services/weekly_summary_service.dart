@@ -4,7 +4,7 @@ import 'malva_api_client.dart';
 import '../time/wib.dart';
 
 // ============================================================
-// METRIK RINGKASAN 14 HARI (Mini Summary & fitur bagikan ke profesional)
+// METRIK RINGKASAN 7 HARI (Mini Summary & fitur bagikan ke profesional)
 // ============================================================
 //
 // Sebelumnya kedua tempat ini menghitung dari `malvaStoreProvider`
@@ -20,7 +20,7 @@ typedef LocalMoodPoint = ({DateTime at, double sleepHours, int moodScore});
 /// Satu log obat lokal (dari store perangkat) untuk fallback.
 typedef LocalMedicationLog = ({DateTime at, String status});
 
-/// Metrik ringkasan 14 hari terakhir.
+/// Metrik ringkasan 7 hari terakhir.
 ///
 /// [moodKnown]/[logsKnown] membedakan "benar-benar nol" dari "tidak diketahui",
 /// supaya UI tidak pernah menampilkan 0 sebagai pengganti data yang gagal dimuat.
@@ -70,7 +70,7 @@ class WeeklySummaryMetrics {
   }
 }
 
-/// Ambil metrik 14 hari: server lebih dulu, fallback ke data lokal per metrik.
+/// Ambil metrik 7 hari: server lebih dulu, fallback ke data lokal per metrik.
 ///
 /// [localMoods]/[localLogs] diisi pemanggil dari store perangkat (boleh kosong).
 /// Mengembalikan null hanya bila TIDAK ADA satu pun sumber data.
@@ -81,7 +81,11 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
   List<LocalMoodPoint> localMoods = const [],
   List<LocalMedicationLog> localLogs = const [],
 }) async {
-  final cutoff = wibNow().subtract(const Duration(days: 14));
+  final now = wibNow();
+  final end =
+      wibFromParts(now.year, now.month, now.day).add(const Duration(days: 1));
+  final cutoff = end.subtract(const Duration(days: 7));
+  bool inPeriod(DateTime at) => !at.isBefore(cutoff) && at.isBefore(end);
 
   var entries = <MoodEntry>[];
   var moodKnown = false;
@@ -98,7 +102,7 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
       limit: 0,
     );
     final recent = moods
-        .where((m) => m.occurredAt != null && m.occurredAt!.isAfter(cutoff))
+        .where((m) => m.occurredAt != null && inPeriod(m.occurredAt!))
         .toList()
       ..sort((a, b) => a.occurredAt!.compareTo(b.occurredAt!));
     entries = moods
@@ -114,7 +118,7 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
       avgSleepHours = total / recent.length;
     }
   } on Object {
-    final recent = localMoods.where((m) => m.at.isAfter(cutoff)).toList()
+    final recent = localMoods.where((m) => inPeriod(m.at)).toList()
       ..sort((a, b) => a.at.compareTo(b.at));
     if (recent.isNotEmpty) {
       moodKnown = true;
@@ -139,7 +143,7 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
       patientId: patientId,
     );
     final recent = logs
-        .where((l) => l.takenAt == null || l.takenAt!.isAfter(cutoff))
+        .where((l) => l.takenAt != null && inPeriod(l.takenAt!))
         .toList(growable: false);
     logsKnown = true;
     logsFromApi = true;
@@ -152,7 +156,7 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
         totalLogs == 0 ? 0 : ((takenLogs / totalLogs) * 100).round();
   } on Object {
     final recent =
-        localLogs.where((l) => l.at.isAfter(cutoff)).toList(growable: false);
+        localLogs.where((l) => inPeriod(l.at)).toList(growable: false);
     if (recent.isNotEmpty) {
       logsKnown = true;
       totalLogs = recent.length;

@@ -12,13 +12,9 @@ import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
 
 // ============================================================
-// Dashboard profesional — dua kartu "satu pintu" baru harus tampil:
-//   1. "Riwayat Asesmen"  -> ProfessionalAssessmentHistoryScreen
-//   2. "Data Pasien Dibagikan" -> SharedPatientDataScreen
-//
-// Uji ini ringan: memakai klien API palsu dengan 1 pasien + 1 screening +
-// 1 sesi hari ini yang sedang berjalan, lalu memverifikasi judul kartu
-// ter-render (setelah menggulir karena berada di bawah lipatan viewport uji).
+// Home berfokus pada sesi/Operasional/Klinis. Data pasien dibagikan ada di
+// Pasien, sedangkan profil/portal/relasi tetap di Lainnya. API fixture memakai
+// satu pasien dan satu sesi berjalan agar aksi klinis tetap terverifikasi.
 // ============================================================
 
 const _session = AuthSession(
@@ -91,11 +87,14 @@ Map<String, dynamic> _careSession(String patientId, String patientName) => {
       'meeting_url': 'https://meet.google.com/abc-defg-hij',
     };
 
+final _requestedPaths = <String>[];
+
 MalvaApiClient _api() {
   return MalvaApiClient(
     baseUrl: 'http://backend.test',
     httpClient: _FakeClient((request) async {
       final path = request.url.path;
+      _requestedPaths.add(path);
       final scope = request.url.queryParameters['scope'] ?? '';
       switch (path) {
         case '/v1/patient-professional-links':
@@ -137,6 +136,7 @@ http.Response _json(Object body, {int status = 200}) {
 }
 
 Future<void> _pumpDashboard(WidgetTester tester) async {
+  _requestedPaths.clear();
   final container = ProviderContainer();
   addTearDown(container.dispose);
   container.read(malvaStoreProvider.notifier).applySession(_session);
@@ -161,37 +161,32 @@ void main() {
     await _pumpDashboard(tester);
 
     expect(find.text('Sesi berjalan'), findsOneWidget);
+    expect(_requestedPaths, isNot(contains('/v1/crisis-incident-log')));
     // Sesi berjalan (video) menampilkan aksi "Gabung".
     expect(find.text('Gabung'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-      'dashboard menampilkan kartu "Riwayat Asesmen" dan '
-      '"Data Pasien Dibagikan"', (tester) async {
+  testWidgets('home tools and shared data follow professional navigation',
+      (tester) async {
     await _pumpDashboard(tester);
-
-    // Kedua kartu berada di bawah lipatan; gulir sampai ter-render.
-    await tester.scrollUntilVisible(
-      find.text('Riwayat asesmen pasien'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('Riwayat asesmen pasien'), findsOneWidget);
-    // Subtitle: "1 asesmen dari 1 pasien terhubung".
-    expect(find.text('1 asesmen dari 1 pasien terhubung'), findsOneWidget);
-
-    await tester.scrollUntilVisible(
-      find.text('Data pasien dibagikan'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await tester.scrollUntilVisible(find.text('Operasional'), 250,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Pasien terhubung'), findsNothing);
+    expect(find.text('Riwayat asesmen pasien'), findsNothing);
+    expect(find.text('Data pasien dibagikan'), findsNothing);
+    expect(find.text('Crisis Incident Log'), findsNothing);
+    expect(find.text('Ketersediaan & harga'), findsOneWidget);
+    expect(find.text('Earnings'), findsOneWidget);
+    await tester.tap(find.text('Pasien'));
+    await tester.pumpAndSettle();
     expect(find.text('Data pasien dibagikan'), findsOneWidget);
-    expect(
-      find.textContaining('Mood, diary, obat, health record, goals, terapi'),
-      findsOneWidget,
-    );
-
+    await tester.tap(find.text('Lainnya'));
+    await tester.pumpAndSettle();
+    expect(find.text('Operasional'), findsNothing);
+    expect(find.text('Earnings'), findsNothing);
+    expect(find.text('Klinis & kepatuhan'), findsNothing);
+    expect(find.text('Verifikasi STR/SIP'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

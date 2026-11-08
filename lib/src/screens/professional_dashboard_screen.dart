@@ -26,13 +26,10 @@ import 'chat_screen.dart';
 import 'google_account_screen.dart';
 import 'messages_list_screen.dart';
 import 'notifications_screen.dart';
-import 'portal/crisis_incident_log_screen.dart';
 import 'portal/e_prescription_screen.dart';
 import 'portal/earnings_screen.dart';
-import 'portal/professional_assessment_history_screen.dart';
 import 'portal/shared_patient_data_screen.dart';
 import 'pro_patient_detail_screen.dart';
-import 'pro_pricing_screen.dart';
 import 'professional_profile_editor_screen.dart';
 import 'pro_schedule_screen.dart';
 import '../time/wib.dart';
@@ -71,7 +68,6 @@ class _ProfessionalDashboardScreenState
   Map<String, List<BackendScreeningSession>> _screeningsByPatient = const {};
   List<BackendCareSession> _upcomingSessions = const [];
   List<BackendCareSession> _todaySessions = const [];
-  int _crisisLogCount = 0;
   String _searchQuery = '';
   int _tabIndex = 0;
   bool _showAllUpcomingVideos = false;
@@ -143,478 +139,300 @@ class _ProfessionalDashboardScreenState
   @override
   Widget build(BuildContext context) {
     final patients = _patientsForDashboard();
-    return Scaffold(
-      body: Column(
-        children: [
-          GradientHeader(
-            title: 'Professional',
-            subtitle: 'Prioritas pasien, screening, sesi, dan paket',
-            leading: const Icon(
-              Icons.medical_information_rounded,
-              color: Colors.white,
-              size: 34,
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _SyncStatusIndicator(
-                  status: _syncStatus,
-                  lastSyncTime: _lastSyncTime,
-                ),
-                IconButton(
-                  tooltip: 'Notifikasi',
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => NotificationsScreen(
-                        session: widget.session,
-                        apiClient: widget.apiClient,
-                      ),
+    return Theme(
+        data: Theme.of(context).copyWith(
+            cardTheme: Theme.of(context).cardTheme.copyWith(elevation: .35)),
+        child: Scaffold(
+          body: Column(
+            children: [
+              _ProfessionalHeader(
+                actions: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _SyncStatusIndicator(
+                      status: _syncStatus,
+                      lastSyncTime: _lastSyncTime,
                     ),
-                  ),
-                  icon: const Icon(Icons.notifications_rounded,
-                      color: Colors.white),
-                ),
-                IconButton(
-                  tooltip: 'Refresh manual',
-                  onPressed: _manualRefresh,
-                  icon: _syncStatus == SyncStatus.syncing
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
+                    IconButton(
+                      tooltip: 'Notifikasi',
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => NotificationsScreen(
+                            session: widget.session,
+                            apiClient: widget.apiClient,
                           ),
-                        )
-                      : const Icon(Icons.refresh_rounded, color: Colors.white),
+                        ),
+                      ),
+                      icon: const Icon(Icons.notifications_rounded,
+                          color: Colors.white),
+                    ),
+                    IconButton(
+                      tooltip: 'Refresh manual',
+                      onPressed: _manualRefresh,
+                      icon: _syncStatus == SyncStatus.syncing
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.refresh_rounded,
+                              color: Colors.white),
+                    ),
+                    IconButton(
+                      tooltip: 'Keluar',
+                      onPressed: widget.onLogout,
+                      icon:
+                          const Icon(Icons.logout_rounded, color: Colors.white),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  tooltip: 'Keluar',
-                  onPressed: widget.onLogout,
-                  icon: const Icon(Icons.logout_rounded, color: Colors.white),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: _tabIndex == 3
-                ? MessagesListScreen(
-                    key: ObjectKey(widget.session),
-                    session: widget.session,
-                    apiClient: widget.apiClient,
-                  )
-                : _tabIndex == 1
-                    ? ProScheduleScreen(
+              ),
+              Expanded(
+                child: _tabIndex == 3
+                    ? MessagesListScreen(
+                        key: ObjectKey(widget.session),
                         session: widget.session,
                         apiClient: widget.apiClient,
-                        header: _CreateMeetingButton(
-                          session: widget.session,
-                          apiClient: widget.apiClient,
-                        ),
                       )
-                    : RefreshIndicator(
-                        onRefresh: _loadOnlineProfessionalData,
-                        child: ListView(
-                          padding: const EdgeInsets.all(18),
-                          children: [
-                            // Banner error ringkas (hanya bila pemuatan gagal).
-                            // Bukan "section" konten — sekadar pemberitahuan status
-                            // agar kegagalan server tidak senyap, dengan pesan
-                            // Indonesia yang ramah.
-                            if (_tabIndex == 0 && _onlineError != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 14),
-                                child: SoftCard(
-                                  bordered: true,
-                                  color: MalvaColors.danger
-                                      .withValues(alpha: 0.08),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.cloud_off_rounded,
-                                          color: MalvaColors.danger),
-                                      const SizedBox(width: 10),
-                                      Expanded(child: Text(_onlineError!)),
-                                      TextButton(
-                                        onPressed: _loadOnlineProfessionalData,
-                                        child: const Text('Coba lagi'),
+                    : _tabIndex == 1
+                        ? ProScheduleScreen(
+                            session: widget.session,
+                            apiClient: widget.apiClient,
+                            header: _CreateMeetingButton(
+                              session: widget.session,
+                              apiClient: widget.apiClient,
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _loadOnlineProfessionalData,
+                            child: ListView(
+                              padding: const EdgeInsets.all(18),
+                              children: [
+                                // Banner error ringkas (hanya bila pemuatan gagal).
+                                // Bukan "section" konten — sekadar pemberitahuan status
+                                // agar kegagalan server tidak senyap, dengan pesan
+                                // Indonesia yang ramah.
+                                if (_tabIndex == 0 && _onlineError != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 14),
+                                    child: SoftCard(
+                                      bordered: false,
+                                      color: MalvaColors.danger
+                                          .withValues(alpha: 0.08),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.cloud_off_rounded,
+                                              color: MalvaColors.danger),
+                                          const SizedBox(width: 10),
+                                          Expanded(child: Text(_onlineError!)),
+                                          TextButton(
+                                            onPressed:
+                                                _loadOnlineProfessionalData,
+                                            child: const Text('Coba lagi'),
+                                          ),
+                                        ],
                                       ),
-                                    ],
+                                    ),
                                   ),
-                                ),
-                              ),
-                            // ---- TAB 0 §0: Sesi berjalan (video & chat) ----
-                            if (_tabIndex == 0)
-                              const SectionLabel('Sesi berjalan',
-                                  icon: Icons.play_circle_rounded),
-                            if (_tabIndex == 0)
-                              _OngoingSessionsSection(
-                                onChanged: _loadOnlineProfessionalData,
-                                sessions: _ongoingSessions,
-                                isLoading: _isLoadingOnlineData,
-                              ),
-                            if (_tabIndex == 0) const SizedBox(height: 22),
-                            // ---- TAB 0 §1: Video call mendatang ----
-                            if (_tabIndex == 0)
-                              SectionLabel('Video call mendatang',
-                                  icon: Icons.videocam_rounded,
-                                  action: _upcomingVideoSessions.length > 1
-                                      ? IconButton(
-                                          tooltip: _showAllUpcomingVideos
-                                              ? 'Tampilkan lebih sedikit sesi video'
-                                              : 'Tampilkan semua sesi video',
-                                          onPressed: () => setState(() =>
-                                              _showAllUpcomingVideos =
-                                                  !_showAllUpcomingVideos),
-                                          icon: Icon(_showAllUpcomingVideos
-                                              ? Icons.expand_less_rounded
-                                              : Icons.expand_more_rounded))
-                                      : null),
-                            if (_tabIndex == 0)
-                              _UpcomingSessionsSection(
-                                sessions: _showAllUpcomingVideos
-                                    ? _upcomingVideoSessions
-                                    : _upcomingVideoSessions.take(1).toList(),
-                                video: true,
-                                accessToken: widget.session?.accessToken ?? '',
-                                onChanged: _loadOnlineProfessionalData,
-                                isLoading: _isLoadingOnlineData,
-                              ),
-                            if (_tabIndex == 0) const SizedBox(height: 22),
-                            if (_tabIndex == 0)
-                              SectionLabel('Sesi chat mendatang',
-                                  icon: Icons.chat_bubble_rounded,
-                                  action: _upcomingChatSessions.length > 1
-                                      ? IconButton(
-                                          tooltip: _showAllUpcomingChats
-                                              ? 'Tampilkan lebih sedikit sesi chat'
-                                              : 'Tampilkan semua sesi chat',
-                                          onPressed: () => setState(() =>
-                                              _showAllUpcomingChats =
-                                                  !_showAllUpcomingChats),
-                                          icon: Icon(_showAllUpcomingChats
-                                              ? Icons.expand_less_rounded
-                                              : Icons.expand_more_rounded))
-                                      : null),
-                            if (_tabIndex == 0)
-                              _UpcomingSessionsSection(
-                                sessions: _showAllUpcomingChats
-                                    ? _upcomingChatSessions
-                                    : _upcomingChatSessions.take(1).toList(),
-                                video: false,
-                                accessToken: widget.session?.accessToken ?? '',
-                                onChanged: _loadOnlineProfessionalData,
-                                isLoading: _isLoadingOnlineData,
-                              ),
-                            if (_tabIndex == 0) const SizedBox(height: 22),
-                            // ---- TAB 2: PASIEN ----
-                            if (_tabIndex == 2)
-                              const SectionLabel('Cari & filter pasien',
-                                  icon: Icons.search_rounded),
-                            if (_tabIndex == 2)
-                              _PatientSearch(
-                                query: _searchQuery,
-                                onChanged: (value) =>
-                                    setState(() => _searchQuery = value),
-                              ),
-                            if (_tabIndex == 2) const SizedBox(height: 14),
-                            // ---- TAB 0: Daftar pasien ringkas di dashboard ----
-                            if (_tabIndex == 0 && patients.isNotEmpty) ...[
-                              const SizedBox(height: 22),
-                              SectionLabel(
-                                'Pasien terhubung',
-                                icon: Icons.people_alt_rounded,
-                                action: TextButton.icon(
-                                  onPressed: () =>
-                                      setState(() => _tabIndex = 2),
-                                  icon: const Icon(Icons.arrow_forward_rounded,
-                                      size: 16),
-                                  label: const Text('Semua'),
-                                ),
-                              ),
-                              for (final patient in patients.take(5)) ...[
-                                SoftCard(
-                                  bordered: true,
-                                  onTap: () {
-                                    Navigator.push(
+                                // ---- TAB 0 §0: Sesi berjalan (video & chat) ----
+                                if (_tabIndex == 0)
+                                  const SectionLabel('Sesi berjalan',
+                                      icon: Icons.play_circle_rounded),
+                                if (_tabIndex == 0)
+                                  _OngoingSessionsSection(
+                                    onChanged: _loadOnlineProfessionalData,
+                                    sessions: _ongoingSessions,
+                                    isLoading: _isLoadingOnlineData,
+                                  ),
+                                if (_tabIndex == 0) const SizedBox(height: 22),
+                                // ---- TAB 0 §1: Video call mendatang ----
+                                if (_tabIndex == 0)
+                                  SectionLabel('Video call mendatang',
+                                      icon: Icons.videocam_rounded,
+                                      action: _upcomingVideoSessions.length > 1
+                                          ? IconButton(
+                                              tooltip: _showAllUpcomingVideos
+                                                  ? 'Tampilkan lebih sedikit sesi video'
+                                                  : 'Tampilkan semua sesi video',
+                                              onPressed: () => setState(() =>
+                                                  _showAllUpcomingVideos =
+                                                      !_showAllUpcomingVideos),
+                                              icon: Icon(_showAllUpcomingVideos
+                                                  ? Icons.expand_less_rounded
+                                                  : Icons.expand_more_rounded))
+                                          : null),
+                                if (_tabIndex == 0)
+                                  _UpcomingSessionsSection(
+                                    sessions: _showAllUpcomingVideos
+                                        ? _upcomingVideoSessions
+                                        : _upcomingVideoSessions
+                                            .take(1)
+                                            .toList(),
+                                    video: true,
+                                    accessToken:
+                                        widget.session?.accessToken ?? '',
+                                    onChanged: _loadOnlineProfessionalData,
+                                    isLoading: _isLoadingOnlineData,
+                                  ),
+                                if (_tabIndex == 0) const SizedBox(height: 22),
+                                if (_tabIndex == 0)
+                                  SectionLabel('Sesi chat mendatang',
+                                      icon: Icons.chat_bubble_rounded,
+                                      action: _upcomingChatSessions.length > 1
+                                          ? IconButton(
+                                              tooltip: _showAllUpcomingChats
+                                                  ? 'Tampilkan lebih sedikit sesi chat'
+                                                  : 'Tampilkan semua sesi chat',
+                                              onPressed: () => setState(() =>
+                                                  _showAllUpcomingChats =
+                                                      !_showAllUpcomingChats),
+                                              icon: Icon(_showAllUpcomingChats
+                                                  ? Icons.expand_less_rounded
+                                                  : Icons.expand_more_rounded))
+                                          : null),
+                                if (_tabIndex == 0)
+                                  _UpcomingSessionsSection(
+                                    sessions: _showAllUpcomingChats
+                                        ? _upcomingChatSessions
+                                        : _upcomingChatSessions
+                                            .take(1)
+                                            .toList(),
+                                    video: false,
+                                    accessToken:
+                                        widget.session?.accessToken ?? '',
+                                    onChanged: _loadOnlineProfessionalData,
+                                    isLoading: _isLoadingOnlineData,
+                                  ),
+                                if (_tabIndex == 0) const SizedBox(height: 22),
+                                // ---- TAB 2: PASIEN ----
+                                if (_tabIndex == 2)
+                                  const SectionLabel('Cari & filter pasien',
+                                      icon: Icons.search_rounded),
+                                if (_tabIndex == 2)
+                                  _PatientSearch(
+                                    query: _searchQuery,
+                                    onChanged: (value) =>
+                                        setState(() => _searchQuery = value),
+                                  ),
+                                if (_tabIndex == 2) const SizedBox(height: 14),
+                                // Shared records are available with the patient list.
+                                if (_tabIndex == 2) ...[
+                                  const SizedBox(height: 22),
+                                  const SectionLabel('Data Pasien Dibagikan',
+                                      icon: Icons.folder_shared_rounded),
+                                  _PortalDoorCard(
+                                    icon: Icons.folder_shared_rounded,
+                                    color: MalvaColors.mint,
+                                    title: 'Data pasien dibagikan',
+                                    subtitle:
+                                        'Mood, diary, obat, health record, goals, '
+                                        'terapi • $_connectedPatientCount pasien',
+                                    onTap: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (_) => ProPatientDetailScreen(
-                                          patientId: patient.patientId,
-                                          patientName: patient.displayName,
+                                        builder: (_) => SharedPatientDataScreen(
                                           session: widget.session,
                                           apiClient: widget.apiClient,
                                         ),
                                       ),
                                     ).then(
-                                        (_) => _loadOnlineProfessionalData());
-                                  },
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 14, vertical: 12),
-                                  child: Row(
-                                    children: [
-                                      InitialAvatar(
-                                        name: patient.displayName,
-                                        radius: 18,
-                                        color: patient.hasCrisis
-                                            ? MalvaColors.danger
-                                            : MalvaColors.seed,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              patient.displayName,
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.w900),
-                                            ),
-                                            Text(
-                                              '${patient.sourceLabel} • ${_riskLabel(patient.latestLevel)}'
-                                              '${patient.screenings.isNotEmpty ? ' • ${patient.screenings.length} screening' : ''}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .onSurfaceVariant),
-                                            ),
-                                            if (patient.screeningNotShared)
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                    top: 2),
-                                                child: Text(
-                                                  'Pasien belum membagikan data skrining',
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodySmall
-                                                      ?.copyWith(
-                                                        color: Colors.grey,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                      ),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      if (patient.hasCrisis)
-                                        const StatusPill(
-                                          label: 'Krisis',
-                                          color: MalvaColors.danger,
-                                        )
-                                      else
-                                        const Icon(Icons.chevron_right_rounded),
-                                    ],
+                                        (_) => _loadOnlineProfessionalData()),
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                              ],
-                              if (patients.length > 5)
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: TextButton(
-                                    onPressed: () =>
-                                        setState(() => _tabIndex = 2),
-                                    child: Text(
-                                        'Lihat semua ${patients.length} pasien'),
-                                  ),
-                                ),
-                            ],
-                            // ---- TAB 0 §5: Data Pasien Dibagikan (satu pintu) ----
-                            if (_tabIndex == 0) ...[
-                              const SizedBox(height: 22),
-                              const SectionLabel('Data Pasien Dibagikan',
-                                  icon: Icons.folder_shared_rounded),
-                              _PortalDoorCard(
-                                icon: Icons.folder_shared_rounded,
-                                color: MalvaColors.mint,
-                                title: 'Data pasien dibagikan',
-                                subtitle:
-                                    'Mood, diary, obat, health record, goals, '
-                                    'terapi • $_connectedPatientCount pasien',
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => SharedPatientDataScreen(
+                                ],
+                                if (_tabIndex == 0)
+                                  _ProfessionalToolsSection(
+                                      key: ValueKey(
+                                          widget.session?.backendUserId ??
+                                              widget.session?.identifier),
                                       session: widget.session,
-                                      apiClient: widget.apiClient,
-                                    ),
+                                      apiClient: widget.apiClient),
+                                if (_tabIndex == 2)
+                                  // Teks label dipertahankan persis "Pasien terhubung"
+                                  // (dipakai test widget). Jumlah pasien dipindah ke
+                                  // `action` supaya tidak mengubah string label.
+                                  SectionLabel(
+                                    'Pasien terhubung',
+                                    icon: Icons.people_alt_rounded,
+                                    action: Text('${patients.length} pasien'),
                                   ),
-                                ).then((_) => _loadOnlineProfessionalData()),
-                              ),
-                            ],
-                            // ---- TAB 0 §3: Crisis Incident Log (satu pintu) ----
-                            if (_tabIndex == 0) ...[
-                              const SizedBox(height: 22),
-                              const SectionLabel('Crisis Incident Log',
-                                  icon: Icons.shield_rounded),
-                              SoftCard(
-                                bordered: true,
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => CrisisIncidentLogScreen(
-                                      session: widget.session,
-                                      apiClient: widget.apiClient,
-                                    ),
-                                  ),
-                                ).then((_) => _loadOnlineProfessionalData()),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 14),
-                                child: Row(
-                                  children: [
-                                    CircleAvatar(
-                                      backgroundColor: (_crisisLogCount > 0
-                                              ? MalvaColors.danger
-                                              : MalvaColors.mint)
-                                          .withValues(alpha: 0.12),
-                                      child: Icon(Icons.shield_rounded,
-                                          color: _crisisLogCount > 0
-                                              ? MalvaColors.danger
-                                              : MalvaColors.mint),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const Text('Riwayat insiden krisis',
-                                              style: TextStyle(
-                                                  fontWeight: FontWeight.w900)),
-                                          Text(
-                                            _crisisLogCount > 0
-                                                ? '$_crisisLogCount SOS perlu tindak lanjut'
-                                                : 'Lihat riwayat SOS dan screening',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodySmall
-                                                ?.copyWith(
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .onSurfaceVariant),
+                                if (_tabIndex == 2)
+                                  _ConnectedPatientList(
+                                    patients: _filterPatients(patients),
+                                    onOpen: (patient) {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              ProPatientDetailScreen(
+                                            patientId: patient.patientId,
+                                            patientName: patient.displayName,
+                                            session: widget.session,
+                                            apiClient: widget.apiClient,
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                    if (_crisisLogCount > 0)
-                                      StatusPill(
-                                        label: '$_crisisLogCount',
-                                        color: MalvaColors.danger,
-                                      )
-                                    else
-                                      const Icon(Icons.chevron_right_rounded),
-                                  ],
-                                ),
-                              ),
-                            ],
-                            // ---- TAB 0 §4: Riwayat Asesmen (satu pintu) ----
-                            if (_tabIndex == 0) ...[
-                              const SizedBox(height: 22),
-                              const SectionLabel('Riwayat Asesmen',
-                                  icon: Icons.fact_check_rounded),
-                              _PortalDoorCard(
-                                icon: Icons.fact_check_rounded,
-                                color: MalvaColors.seed,
-                                title: 'Riwayat asesmen pasien',
-                                subtitle: '$_totalScreenings asesmen dari '
-                                    '$_connectedPatientCount pasien terhubung',
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        ProfessionalAssessmentHistoryScreen(
-                                      session: widget.session,
-                                      apiClient: widget.apiClient,
-                                    ),
+                                        ),
+                                      ).then(
+                                          (_) => _loadOnlineProfessionalData());
+                                    },
                                   ),
-                                ).then((_) => _loadOnlineProfessionalData()),
-                              ),
-                            ],
-                            if (_tabIndex == 2)
-                              // Teks label dipertahankan persis "Pasien terhubung"
-                              // (dipakai test widget). Jumlah pasien dipindah ke
-                              // `action` supaya tidak mengubah string label.
-                              SectionLabel(
-                                'Pasien terhubung',
-                                icon: Icons.people_alt_rounded,
-                                action: Text('${patients.length} pasien'),
-                              ),
-                            if (_tabIndex == 2)
-                              _ConnectedPatientList(
-                                patients: _filterPatients(patients),
-                                onOpen: (patient) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => ProPatientDetailScreen(
-                                        patientId: patient.patientId,
-                                        patientName: patient.displayName,
-                                        session: widget.session,
-                                        apiClient: widget.apiClient,
-                                      ),
-                                    ),
-                                  ).then((_) => _loadOnlineProfessionalData());
-                                },
-                              ),
-                            if (_tabIndex == 2 && patients.isEmpty)
-                              const EmptyState(
-                                icon: Icons.people_outline_rounded,
-                                title: 'Belum ada pasien terhubung',
-                                subtitle:
-                                    'Pasien terhubung setelah membeli paket atau booking sesi denganmu.',
-                              ),
-                            // More follows Messages in the navigation bar.
-                            if (_tabIndex == 4) ...[
-                              _ProfessionalPortalSection(
-                                session: widget.session,
-                                apiClient: widget.apiClient,
-                                onRefresh: _loadOnlineProfessionalData,
-                              ),
-                              const SizedBox(height: 22),
-                              _RelationshipManagementSection(
-                                patients: patients,
-                                professionalCode: widget.session?.identifier,
-                                onRefresh: _loadOnlineProfessionalData,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
+                                if (_tabIndex == 2 && patients.isEmpty)
+                                  const EmptyState(
+                                    icon: Icons.people_outline_rounded,
+                                    title: 'Belum ada pasien terhubung',
+                                    subtitle:
+                                        'Pasien terhubung setelah membeli paket atau booking sesi denganmu.',
+                                  ),
+                                // More follows Messages in the navigation bar.
+                                if (_tabIndex == 4) ...[
+                                  _ProfessionalPortalSection(
+                                    session: widget.session,
+                                    apiClient: widget.apiClient,
+                                    onRefresh: _loadOnlineProfessionalData,
+                                  ),
+                                  const SizedBox(height: 22),
+                                  _RelationshipManagementSection(
+                                    patients: patients,
+                                    professionalCode:
+                                        widget.session?.identifier,
+                                    onRefresh: _loadOnlineProfessionalData,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+              ),
+            ],
           ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tabIndex,
-        onDestinationSelected: (value) => setState(() => _tabIndex = value),
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.dashboard_outlined),
-              selectedIcon: Icon(Icons.dashboard_rounded),
-              label: 'Dashboard'),
-          NavigationDestination(
-              icon: Icon(Icons.calendar_month_outlined),
-              selectedIcon: Icon(Icons.calendar_month_rounded),
-              label: 'Jadwal'),
-          NavigationDestination(
-              icon: Icon(Icons.people_outline_rounded),
-              selectedIcon: Icon(Icons.people_rounded),
-              label: 'Pasien'),
-          NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline_rounded),
-              selectedIcon: Icon(Icons.chat_bubble_rounded),
-              label: 'Messages'),
-          NavigationDestination(
-              icon: Icon(Icons.grid_view_outlined),
-              selectedIcon: Icon(Icons.grid_view_rounded),
-              label: 'Lainnya'),
-        ],
-      ),
-    );
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _tabIndex,
+            onDestinationSelected: (value) => setState(() => _tabIndex = value),
+            destinations: const [
+              NavigationDestination(
+                  icon: Icon(Icons.dashboard_outlined),
+                  selectedIcon: Icon(Icons.dashboard_rounded),
+                  label: 'Dashboard'),
+              NavigationDestination(
+                  icon: Icon(Icons.calendar_month_outlined),
+                  selectedIcon: Icon(Icons.calendar_month_rounded),
+                  label: 'Jadwal'),
+              NavigationDestination(
+                  icon: Icon(Icons.people_outline_rounded),
+                  selectedIcon: Icon(Icons.people_rounded),
+                  label: 'Pasien'),
+              NavigationDestination(
+                  icon: Icon(Icons.chat_bubble_outline_rounded),
+                  selectedIcon: Icon(Icons.chat_bubble_rounded),
+                  label: 'Messages'),
+              NavigationDestination(
+                  icon: Icon(Icons.grid_view_outlined),
+                  selectedIcon: Icon(Icons.grid_view_rounded),
+                  label: 'Lainnya'),
+            ],
+          ),
+        ));
   }
 
   /// Sesi terjadwal mendatang, urut terdekat dulu.
@@ -661,11 +479,6 @@ class _ProfessionalDashboardScreenState
     });
     return list;
   }
-
-  /// Total asesmen (screening) dari seluruh pasien terhubung — untuk subtitle
-  /// kartu "Riwayat Asesmen".
-  int get _totalScreenings => _screeningsByPatient.values
-      .fold<int>(0, (sum, list) => sum + list.length);
 
   /// Jumlah pasien terhubung (link aktif).
   int get _connectedPatientCount => _links.length;
@@ -730,23 +543,19 @@ class _ProfessionalDashboardScreenState
         screeningsByPatient[link.patientId] = screenings;
       }
       // Sesi video mendatang + sesi yang SEDANG BERJALAN (untuk "Sesi
-      // berjalan") + ringkasan Crisis Incident Log (satu permintaan
-      // masing-masing).
+      // berjalan").
       final upcomingSessions = await safely(() => apiClient.listCareSessions(
           accessToken: accessToken, scope: 'upcoming'));
       // `scope=ongoing` hanya mengembalikan sesi scheduled dalam jendela waktu.
       // Klien memeriksa ulang batas waktu sebelum menampilkan aksi.
       final todaySessions = await safely(() => apiClient.listCareSessions(
           accessToken: accessToken, scope: 'ongoing'));
-      final crisisLog = await safely(() =>
-          apiClient.getCrisisIncidentLog(accessToken: accessToken, limit: 1));
       if (!mounted) return;
       setState(() {
         _links = links;
         _screeningsByPatient = screeningsByPatient;
         _upcomingSessions = upcomingSessions ?? const <BackendCareSession>[];
         _todaySessions = todaySessions ?? const <BackendCareSession>[];
-        _crisisLogCount = crisisLog?.unresolved ?? 0;
         _screeningNotShared
           ..clear()
           ..addAll(screeningNotShared);
@@ -851,7 +660,7 @@ class _ConnectedPatientList extends StatelessWidget {
       children: [
         for (final patient in patients) ...[
           SoftCard(
-            bordered: true,
+            bordered: false,
             onTap: () => onOpen(patient),
             child: Row(
               children: [
@@ -1158,69 +967,6 @@ class _ProfessionalPortalSectionState
           ),
         ],
         const SizedBox(height: 10),
-        const SectionLabel('Operasional'),
-        ActionTile(
-          icon: Icons.sell_rounded,
-          title: 'Katalog Harga',
-          subtitle: 'Atur harga quick chat, video, dan paket 4 sesi',
-          color: MalvaColors.orchid,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ProPricingScreen(
-                session: session,
-                apiClient: apiClient,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        ActionTile(
-          icon: Icons.account_balance_wallet_rounded,
-          title: 'Earnings',
-          subtitle: 'Pendapatan, fee platform, dan payout',
-          color: MalvaColors.amber,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => EarningsScreen(
-                session: session,
-                apiClient: apiClient,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 22),
-        const SectionLabel('Klinis & kepatuhan'),
-        // Resep obat hanya untuk Psikiater (Sp.KJ). Psikolog (M.Psi) tidak
-        // dapat meresepkan — jangan tampilkan tile yang pasti 403.
-        if (isPsychiatristSpecialization(specialization))
-          ActionTile(
-            icon: Icons.medication_liquid_rounded,
-            title: 'E-Prescription',
-            subtitle: 'Terbitkan resep dengan digital signature + QR',
-            color: MalvaColors.mint,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => EPrescriptionScreen(
-                  session: session,
-                  apiClient: apiClient,
-                ),
-              ),
-            ),
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Text(
-              'Resep obat hanya untuk Psikiater (Sp.KJ).',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
-          ),
-        const SizedBox(height: 10),
         ActionTile(
           icon: Icons.verified_outlined,
           title: 'Verifikasi STR/SIP',
@@ -1238,6 +984,115 @@ class _ProfessionalPortalSectionState
         ),
       ],
     );
+  }
+}
+
+class _ProfessionalHeader extends StatelessWidget {
+  const _ProfessionalHeader({required this.actions});
+  final Widget actions;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+              colors: [Color(0xFF7D20CA), Color(0xFFBD7CF3)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight),
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+        ),
+        child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 12, 20),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      const Icon(Icons.medical_information_rounded,
+                          color: Colors.white, size: 28),
+                      const Spacer(),
+                      actions
+                    ]),
+                    const SizedBox(height: 10),
+                    const Text('Professional',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 23,
+                            fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    const Text('Prioritas pasien, screening, sesi, dan paket',
+                        style: TextStyle(color: Colors.white, fontSize: 14)),
+                  ]),
+            )),
+      );
+}
+
+class _ProfessionalToolsSection extends ConsumerStatefulWidget {
+  const _ProfessionalToolsSection({super.key, this.session, this.apiClient});
+  final AuthSession? session;
+  final MalvaApiClient? apiClient;
+
+  @override
+  ConsumerState<_ProfessionalToolsSection> createState() =>
+      _ProfessionalToolsSectionState();
+}
+
+class _ProfessionalToolsSectionState
+    extends ConsumerState<_ProfessionalToolsSection> {
+  late final Future<BackendProfessionalCredential?>? _credential;
+  AuthSession? get session => widget.session;
+  MalvaApiClient? get apiClient => widget.apiClient;
+
+  @override
+  void initState() {
+    super.initState();
+    final MalvaApiClient client =
+        widget.apiClient ?? ref.read(apiClientProvider);
+    final token = session?.accessToken;
+    _credential = token == null || token.isEmpty
+        ? null
+        : client.getMyCredentials(accessToken: token);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    void open(Widget page) =>
+        Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const SectionLabel('Operasional', icon: Icons.work_outline_rounded),
+      ActionTile(
+          icon: Icons.edit_calendar_rounded,
+          title: 'Ketersediaan & harga',
+          subtitle: 'Jam praktik, hari libur dan harga layanan',
+          color: MalvaColors.seed,
+          onTap: () => open(
+              ProAvailabilityScreen(session: session, apiClient: apiClient))),
+      const SizedBox(height: 10),
+      ActionTile(
+          icon: Icons.account_balance_wallet_rounded,
+          title: 'Earnings',
+          subtitle: 'Pendapatan, fee platform, dan payout',
+          color: MalvaColors.amber,
+          onTap: () =>
+              open(EarningsScreen(session: session, apiClient: apiClient))),
+      const SizedBox(height: 22),
+      const SectionLabel('Klinis', icon: Icons.medical_services_outlined),
+      FutureBuilder<BackendProfessionalCredential?>(
+        future: _credential,
+        builder: (context, snapshot) =>
+            isPsychiatristSpecialization(snapshot.data?.specialization ?? '')
+                ? ActionTile(
+                    icon: Icons.medication_liquid_rounded,
+                    title: 'E-Prescription',
+                    subtitle: 'Terbitkan resep dengan digital signature + QR',
+                    color: MalvaColors.mint,
+                    onTap: () => open(EPrescriptionScreen(
+                        session: session, apiClient: apiClient)))
+                : const SoftCard(
+                    color: Colors.white,
+                    child: Text('Resep obat hanya untuk Psikiater (Sp.KJ).')),
+      ),
+    ]);
   }
 }
 
@@ -1360,7 +1215,7 @@ Color _riskColor(String value) {
 
 /// Tanggal screening untuk TAMPILAN **dan** EKSPOR (text/CSV).
 ///
-/// `createdAt` dari server berbentuk UTC; laporan klinis harus mengikuti
+/// `createdAt` dari server memakai WIB; laporan klinis harus mengikuti
 /// kalender LOKAL tenaga medis (WIB), jadi selalu `` lebih dulu.
 /// Satu implementasi dipakai bersama agar angka di layar dan di berkas ekspor
 /// tidak pernah berbeda tanggal.
@@ -1534,8 +1389,8 @@ class _CreateMeetingButtonState extends ConsumerState<_CreateMeetingButton> {
   @override
   Widget build(BuildContext context) {
     return SoftCard(
-      bordered: true,
-      color: MalvaColors.mint.withValues(alpha: 0.10),
+      bordered: false,
+      color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1673,7 +1528,7 @@ class _UpcomingSessionsSection extends StatelessWidget {
     }
     if (sessions.isEmpty) {
       return SoftCard(
-        bordered: true,
+        bordered: false,
         child: Row(
           children: [
             Icon(
@@ -1698,7 +1553,7 @@ class _UpcomingSessionsSection extends StatelessWidget {
       children: [
         for (final s in sessions) ...[
           SoftCard(
-            bordered: true,
+            bordered: false,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1804,7 +1659,7 @@ class _PortalDoorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SoftCard(
-      bordered: true,
+      bordered: false,
       onTap: onTap,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       child: Row(
@@ -1858,7 +1713,7 @@ class _OngoingSessionsSection extends StatelessWidget {
     }
     if (sessions.isEmpty) {
       return const SoftCard(
-        bordered: true,
+        bordered: false,
         child: Row(
           children: [
             Icon(Icons.play_circle_outline_rounded, color: Colors.black38),
@@ -1899,7 +1754,7 @@ class _OngoingSessionCard extends StatelessWidget {
     final timeRange = _timeRangeLabel(session);
     final badgeColor = isVideo ? MalvaColors.seed : MalvaColors.mint;
     return SoftCard(
-      bordered: true,
+      bordered: false,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

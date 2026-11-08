@@ -16,7 +16,6 @@ import '../widgets/mini_summary.dart';
 import '../widgets/professional_avatar.dart';
 import '../widgets/therapy_library.dart';
 import '../widgets/shared_record_detail.dart';
-import 'assessment_history_screen.dart';
 import '../time/wib.dart';
 import '../services/server_clock.dart';
 import '../platform/platform_providers.dart';
@@ -680,12 +679,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   'goals',
                   MalvaColors.amber
                 ),
-                (
-                  Icons.edit_note_rounded,
-                  'Diary Terakhir',
-                  'diary',
-                  MalvaColors.plum
-                ),
+                (Icons.edit_note_rounded, 'Diary', 'diary', MalvaColors.plum),
               ])
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
@@ -753,7 +747,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         await _shareTherapy(token: token, api: api);
         return;
       case 'summary':
-        // Ringkasan 14 hari diambil dari SERVER, bukan dari store yang belum
+        // Ringkasan 7 hari diambil dari SERVER, bukan dari store yang belum
         // tentu terhidrasi. Store hanya fallback — tanpa ini pesan ke
         // profesional bisa berisi angka palsu (0 check-in / 0 jam / 0%).
         final metrics = await loadWeeklySummary(
@@ -773,7 +767,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           ],
         );
         if (metrics == null) {
-          text = 'Ringkasan 14 hari belum tersedia '
+          text = 'Ringkasan 7 hari belum tersedia '
               '(data check-in belum dimuat).';
           metadata = {'available': false};
           break;
@@ -786,7 +780,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             'tidur rata-rata ${metrics.avgSleepHours.toStringAsFixed(1)} jam',
           if (metrics.logsKnown) 'ketaatan obat ${metrics.adherencePercent}%',
         ];
-        text = 'Ringkasan 14 hari: ${parts.join(', ')}.';
+        text = 'Ringkasan 7 hari: ${parts.join(', ')}.';
         metadata = {
           if (metrics.moodKnown) 'mood_count': metrics.moodCount,
           if (metrics.moodCount > 0)
@@ -831,15 +825,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         text = 'Goals & habits: '
             '${goals.take(5).map((g) => '${g['title']} (${g['done_this_week']}/${g['target_per_week']} minggu ini)').join(', ')}.';
       case 'diary':
-        final diary = await _collectLatestDiary(
+        final diaries = await _collectDiaries(
           token: token,
           api: api,
           fallback: store,
         );
-        if (diary == null) {
+        if (diaries.isEmpty) {
           _toast('Belum ada diary untuk dibagikan.');
           return;
         }
+        if (!mounted || !_ownerMatches) return;
+        final diary = await _pickCandidate(diaries, title: 'Pilih diary');
+        if (diary == null || !mounted || !_ownerMatches) return;
         metadata = diary.metadata;
         text = diary.text;
       default:
@@ -931,22 +928,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           );
       if (!mounted || ref.read(currentSessionProvider)?.accessToken != token)
         return;
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        builder: (_) => _ownedOverlay(SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: TherapySubmissionView(
-              moduleId: record.moduleId,
-              title: record.title,
-              answers: record.answers,
-              summary: record.summary,
-              sharedAt: record.sharedAt,
-            ),
-          ),
-        )),
-      );
+      await _showSharedDetail(message,
+          detail: TherapySubmissionView(
+            moduleId: record.moduleId,
+            title: record.title,
+            answers: record.answers,
+            summary: record.summary,
+          ));
     } on Object catch (error) {
       if (mounted)
         _toast('Gagal membuka therapy record: ${friendlyErrorMessage(error)}');
@@ -965,10 +953,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       return;
     }
     if (meta['answers'] is Map && meta['module_id'] != null) {
-      await showTherapyRecordDetail(
-          context,
-          BackendTherapySubmission(
-            id: '',
+      await _showSharedDetail(message,
+          detail: TherapySubmissionView(
             moduleId: meta['module_id'].toString(),
             title: meta['title']?.toString() ?? 'Record dibagikan',
             answers: Map<String, dynamic>.from(meta['answers'] as Map),
@@ -987,27 +973,55 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   : widget.otherUserId,
             );
         if (!mounted || !_ownerMatches) return;
-        await showAssessmentHistoryDetail(
-            context, assessmentEntryFromScreening(screening));
+        Map<String, dynamic> result(BackendAssessmentSummary value) => {
+              if (value.maxScore > 0) 'score': value.score,
+              if (value.maxScore > 0) 'max_score': value.maxScore,
+              'level': value.level,
+              if (value.summary.isNotEmpty) 'summary': value.summary,
+              if (value.answers.isNotEmpty) 'answers': value.answers,
+              if (!_isPatient && value.certaintyFactor > 0)
+                'cf': value.certaintyFactor,
+            };
+        await _showSharedDetail(ChatMessage(
+          id: message.id,
+          senderId: message.senderId,
+          senderName: message.senderName,
+          text: message.text,
+          timestamp: message.timestamp,
+          isMine: message.isMine,
+          kind: 'assessment',
+          metadata: {
+            'overall_level': screening.overallLevel,
+            'crisis_flag': screening.crisisFlag,
+            'phq9': result(screening.phq9),
+            'gad7': result(screening.gad7),
+          },
+        ));
         return;
       } on Object {
         // A shared snapshot remains readable when current category consent is absent.
       }
     }
     if (!mounted || !_ownerMatches) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _ownedOverlay(SafeArea(
-          child: ConstrainedBox(
-        constraints:
-            BoxConstraints(maxHeight: MediaQuery.of(context).size.height * .85),
-        child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: SharedRecordDetail(message: message)),
-      ))),
-    );
+    await _showSharedDetail(message);
   }
+
+  Future<void> _showSharedDetail(ChatMessage message, {Widget? detail}) =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => _ownedOverlay(SafeArea(
+            child: ConstrainedBox(
+          constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * .85),
+          child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: SharedRecordDetail(
+                  message: message,
+                  detail: detail,
+                  showClinicalAudit: !_isPatient)),
+        ))),
+      );
 
   /// Bagikan assessment record: screening PHQ-9/GAD-7 dan worksheet
   /// DASS-21/WHO-5 diambil dari server, lalu dipilih bila lebih dari satu.
@@ -1322,55 +1336,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     ];
   }
 
-  /// Diary terbaru: server dulu, fallback store lokal.
-  Future<_ShareCandidate?> _collectLatestDiary({
+  /// Semua diary server tersedia untuk dipilih; fallback hanya saat API gagal.
+  Future<List<_ShareCandidate>> _collectDiaries({
     required String token,
     required MalvaApiClient api,
     required MalvaStoreState fallback,
   }) async {
+    final entries = <({String title, String note, DateTime? at})>[];
     try {
-      final diaries = await api.listDiaryEntries(
-        accessToken: token,
-        limit: 5,
-      );
-      if (diaries.isNotEmpty) {
-        final latest = diaries.first;
-        final raw = (latest.note.trim().isEmpty ? latest.title : latest.note)
-            .trim()
-            .replaceAll('\n', ' ');
-        final excerpt = raw.length > 120 ? '${raw.substring(0, 120)}…' : raw;
-        return _ShareCandidate(
-          title: latest.title.trim().isEmpty ? 'Diary' : latest.title.trim(),
-          subtitle: _dateLabel(latest.occurredAt),
-          text: 'Diary terakhir: "$excerpt".',
+      final diaries = await api.listDiaryEntries(accessToken: token, limit: 0);
+      entries.addAll(
+          diaries.map((d) => (title: d.title, note: d.note, at: d.occurredAt)));
+    } on Object {
+      entries.addAll(fallback.diaryEntries
+          .map((d) => (title: d.title, note: d.note, at: d.createdAt)));
+    }
+    return [
+      for (final entry in entries)
+        _ShareCandidate(
+          title: entry.title.trim().isEmpty ? 'Diary' : entry.title.trim(),
+          subtitle: _dateLabel(entry.at),
+          text:
+              'Diary: "${entry.title.trim().isEmpty ? entry.note : entry.title}".',
           icon: Icons.edit_note_rounded,
           metadata: {
-            'title': latest.title,
-            'note': latest.note,
-            'occurred_at': wibIso(latest.occurredAt ?? wibNow()),
+            'title': entry.title,
+            'note': entry.note,
+            if (entry.at != null) 'occurred_at': wibIso(entry.at!),
           },
-        );
-      }
-    } on Object {
-      // Fallback di bawah.
-    }
-    if (fallback.diaryEntries.isEmpty) return null;
-    final latest = fallback.diaryEntries.first;
-    final raw = (latest.note.trim().isEmpty ? latest.title : latest.note)
-        .trim()
-        .replaceAll('\n', ' ');
-    final excerpt = raw.length > 120 ? '${raw.substring(0, 120)}…' : raw;
-    return _ShareCandidate(
-      title: latest.title.trim().isEmpty ? 'Diary' : latest.title.trim(),
-      subtitle: _dateLabel(latest.createdAt),
-      text: 'Diary terakhir: "$excerpt".',
-      icon: Icons.edit_note_rounded,
-      metadata: {
-        'title': latest.title,
-        'note': latest.note,
-        'occurred_at': wibIso(latest.createdAt),
-      },
-    );
+        ),
+    ];
   }
 
   /// Label tanggal ringkas untuk subjudul pilihan (mis. "7/9/2026").
@@ -1850,54 +1845,54 @@ class _ChatBubble extends StatelessWidget {
             bottomRight: Radius.circular(isMine ? 4 : 18),
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!isMine)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  message.senderName,
-                  // Nama pengirim tampil di latar terang (bubble lavender),
-                  // jadi wajib hitam agar terbaca. Bubble milik sendiri
-                  // (isMine) tidak menampilkan nama ini.
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.black87,
+        child: InkWell(
+          onTap: onOpenRecord,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!isMine)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    message.senderName,
+                    // Nama pengirim tampil di latar terang (bubble lavender),
+                    // jadi wajib hitam agar terbaca. Bubble milik sendiri
+                    // (isMine) tidak menampilkan nama ini.
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.black87,
+                    ),
                   ),
                 ),
+              if (message.kind == 'file') ...[
+                _FileBubble(message: message, isMine: isMine),
+                const SizedBox(height: 6),
+              ] else if (message.kind == 'voice') ...[
+                _VoiceBubble(message: message, isMine: isMine),
+                const SizedBox(height: 6),
+              ] else if (message.kind != 'text') ...[
+                _SharedCardBubble(message: message, isMine: isMine),
+                const SizedBox(height: 6),
+              ],
+              Text(
+                message.text,
+                style: TextStyle(
+                  color: isMine ? Colors.white : MalvaColors.ink,
+                ),
               ),
-            if (message.kind == 'file') ...[
-              _FileBubble(message: message, isMine: isMine),
-              const SizedBox(height: 6),
-            ] else if (message.kind == 'voice') ...[
-              _VoiceBubble(message: message, isMine: isMine),
-              const SizedBox(height: 6),
-            ] else if (message.kind != 'text') ...[
-              InkWell(
-                onTap: onOpenRecord,
-                child: _SharedCardBubble(message: message, isMine: isMine),
+              const SizedBox(height: 4),
+              Text(
+                ChatScreen.formatMessageTime(message.timestamp),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isMine
+                      ? Colors.white.withValues(alpha: 0.6)
+                      : Colors.black38,
+                ),
               ),
-              const SizedBox(height: 6),
             ],
-            Text(
-              message.text,
-              style: TextStyle(
-                color: isMine ? Colors.white : MalvaColors.ink,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              ChatScreen.formatMessageTime(message.timestamp),
-              style: TextStyle(
-                fontSize: 10,
-                color: isMine
-                    ? Colors.white.withValues(alpha: 0.6)
-                    : Colors.black38,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

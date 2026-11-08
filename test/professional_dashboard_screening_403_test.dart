@@ -172,18 +172,9 @@ void main() {
     //    Bagian pertama ("Video call mendatang") ada di paling atas sehingga
     //    langsung ter-build oleh ListView.
     expect(find.text('Video call mendatang'), findsOneWidget);
-    //    "Crisis Incident Log" adalah bagian KETIGA. Pada viewport uji default
-    //    800x600 ia berada di bawah lipatan, dan ListView hanya membangun
-    //    widget yang terlihat — jadi `find.text` belum menemukannya. Gulir
-    //    dulu sampai benar-benar ter-render. Ini murni masalah VISIBILITAS uji:
-    //    label dirender tanpa syarat di source (professional_dashboard_screen),
-    //    bukan regresi produk.
-    await tester.scrollUntilVisible(
-      find.text('Crisis Incident Log'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('Crisis Incident Log'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Operasional'), 300,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Crisis Incident Log'), findsNothing);
 
     // 3. Penanda per-pasien + kedua pasien muncul di tab Pasien.
     await tester.tap(find.text('Pasien'));

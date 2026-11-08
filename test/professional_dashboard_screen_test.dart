@@ -49,9 +49,9 @@ void main() {
     expect(find.text('Tugas'), findsNothing);
 
     expect(find.text('Video call mendatang'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Crisis Incident Log'), 200,
+    await tester.scrollUntilVisible(find.text('Operasional'), 200,
         scrollable: find.byType(Scrollable).first);
-    expect(find.text('Crisis Incident Log'), findsOneWidget);
+    expect(find.text('Crisis Incident Log'), findsNothing);
     expect(find.text('Prioritas pasien'), findsNothing);
 
     // Tab Jadwal: tombol Quick Video Call (dipindah dari Dashboard) + sesi.
@@ -64,6 +64,9 @@ void main() {
     await tester.tap(find.text('Pasien'));
     await tester.pumpAndSettle();
     expect(find.text('Pasien terhubung'), findsOneWidget);
+    await tester.scrollUntilVisible(
+        find.text('Belum ada pasien terhubung'), 200,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Belum ada pasien terhubung'), findsOneWidget);
 
     await tester.tap(find.text('Messages'));

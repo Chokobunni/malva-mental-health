@@ -14,6 +14,27 @@ import 'package:malva_mental_health/src/widgets/therapy_library.dart';
 // ============================================================
 
 void main() {
+  testWidgets('assessment answer detail excludes scale metadata',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        theme: buildMalvaTheme(),
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: TherapySubmissionView(
+                    moduleId: 'dass21',
+                    title: 'DASS',
+                    initiallyExpanded: true,
+                    answers: {
+              'scale_version': 2,
+              'scale_min': 0,
+              'scale_max': 3,
+              for (var i = 1; i <= 21; i++) 'q$i': 1
+            })))));
+    await tester.pumpAndSettle();
+    expect(find.text('scale_min'), findsNothing);
+    expect(find.text('scale_max'), findsNothing);
+    expect(find.text('Detail jawaban'), findsOneWidget);
+  });
   testWidgets('kartu WHO-5 tertutup menyembunyikan skor sampai di-tap',
       (tester) async {
     await tester.pumpWidget(

@@ -132,7 +132,7 @@ class _MoodInsightsState extends State<MoodInsights> {
       if (recent.isEmpty)
         const SoftCard(
             child: Text('Belum ada check-in. Tambahkan mood pertamamu.')),
-      for (final entry in recent.take(10))
+      for (final entry in recent.take(3))
         Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: _RecentMood(entry: entry)),

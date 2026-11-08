@@ -1067,9 +1067,11 @@ func (s *Server) deleteMySchedule(w http.ResponseWriter, r *http.Request, claims
 }
 
 type doctorReviewRequest struct {
-	Stars      int    `json:"stars"`
-	ReviewText string `json:"review_text"`
-	Helpful    *bool  `json:"helpful"`
+	SessionID     string `json:"session_id"`
+	CarePackageID string `json:"care_package_id"`
+	Stars         int    `json:"stars"`
+	ReviewText    string `json:"review_text"`
+	Helpful       *bool  `json:"helpful"`
 }
 
 func (s *Server) listDoctorReviews(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -1102,25 +1104,33 @@ func (s *Server) createDoctorReview(w http.ResponseWriter, r *http.Request, clai
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	eligible, err := s.store.CanReviewProfessional(r.Context(), claims.Subject, userID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	if !eligible {
-		writeError(w, http.StatusForbidden, errors.New("ulasan hanya bisa diberikan setelah sesi selesai"))
-		return
-	}
 	helpful := true
 	if req.Helpful != nil {
 		helpful = *req.Helpful
 	}
-	rv, err := s.store.CreateDoctorReview(r.Context(), userID, claims.Subject, req.Stars, req.ReviewText, helpful)
+	rv, err := s.store.CreateDoctorReviewForEntitlement(r.Context(), userID, claims.Subject, req.Stars, req.ReviewText, helpful, req.SessionID, req.CarePackageID)
 	if err != nil {
+		if errors.Is(err, store.ErrReviewNotEligible) {
+			writeError(w, http.StatusConflict, err)
+			return
+		}
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"review": rv})
+}
+
+func (s *Server) listReviewEntitlements(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "patient" {
+		writeError(w, http.StatusForbidden, errors.New("hanya pasien dapat mengulas"))
+		return
+	}
+	items, err := s.store.ListReviewEntitlements(r.Context(), claims.Subject, "")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entitlements": items})
 }
 
 func (s *Server) requireVerifiedProfessional(w http.ResponseWriter, r *http.Request, claims auth.Claims) bool {

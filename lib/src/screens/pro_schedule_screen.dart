@@ -163,125 +163,138 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
         .map((s) => sessionsById[s.id]!)
         .where((s) => !completionIds.contains(s.id))
         .toList();
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          if (widget.header != null) ...[
-            widget.header!,
-            const SizedBox(height: 14),
-          ],
-          if (needsCompletion.isNotEmpty) ...[
-            const SectionLabel('Perlu diselesaikan',
-                icon: Icons.task_alt_rounded),
-            for (final s in needsCompletion) ...[
-              _ProSessionCard(
-                  key: ValueKey('complete-${s.id}'),
-                  session: s,
-                  onChanged: _load),
-              const SizedBox(height: 10),
-            ],
-          ],
-          const SectionLabel('Sesi hari ini', icon: Icons.today_rounded),
-          if (_isLoading)
-            const Center(child: CircularProgressIndicator())
-          else if (_error != null)
-            SoftCard(
-              bordered: true,
-              child: Column(
-                children: [
-                  Text(_error!,
-                      style: const TextStyle(
-                          color: MalvaColors.danger,
-                          fontWeight: FontWeight.w700)),
+    return Theme(
+        data: Theme.of(context).copyWith(
+            cardTheme: Theme.of(context).cardTheme.copyWith(elevation: .35)),
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            padding: const EdgeInsets.all(18),
+            children: [
+              if (widget.header != null) ...[
+                widget.header!,
+                const SizedBox(height: 14),
+              ],
+              if (needsCompletion.isNotEmpty) ...[
+                const SectionLabel('Perlu diselesaikan',
+                    icon: Icons.task_alt_rounded),
+                for (final s in needsCompletion) ...[
+                  _ProSessionCard(
+                      key: ValueKey('complete-${s.id}'),
+                      session: s,
+                      onChanged: _load),
                   const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    onPressed: _load,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Coba Lagi'),
-                  ),
                 ],
-              ),
-            )
-          else ...[
-            if (today.isEmpty)
-              const EmptyState(
-                icon: Icons.event_available_outlined,
-                title: 'Tidak ada sesi hari ini',
-                subtitle: 'Sesi terjadwal hari ini muncul di sini.',
-              )
-            else
-              for (final s in today) ...[
-                _ProSessionCard(
-                    key: ValueKey('today-${s.id}'),
-                    session: s,
-                    onChanged: _load),
-                const SizedBox(height: 10),
               ],
-            const SizedBox(height: 10),
-            const SectionLabel('Mendatang', icon: Icons.event_rounded),
-            if (upcoming.isEmpty)
-              const EmptyState(
-                icon: Icons.calendar_month_outlined,
-                title: 'Belum ada sesi mendatang',
-                subtitle:
-                    'Pasien menjadwalkan sesi dari paket / quick consult.',
-              )
-            else
-              for (final s in upcoming.take(10)) ...[
-                _ProSessionCard(
-                    key: ValueKey('upcoming-${s.id}'),
-                    session: s,
-                    onChanged: _load),
-                const SizedBox(height: 10),
-              ],
-            const SizedBox(height: 10),
-            // Info referensi (jam praktik + harga) dilipat agar tidak setara
-            // bobotnya dengan daftar sesi. Tombol "Atur" tetap di area header
-            // (selalu terlihat) sehingga aksinya tidak tersembunyi.
-            CollapsibleCard(
-              header: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Ketersediaan & harga',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
+              const SectionLabel('Sesi hari ini', icon: Icons.today_rounded),
+              if (_isLoading)
+                const Center(child: CircularProgressIndicator())
+              else if (_error != null)
+                SoftCard(
+                  bordered: false,
+                  child: Column(
+                    children: [
+                      Text(_error!,
+                          style: const TextStyle(
+                              color: MalvaColors.danger,
+                              fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: _load,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Coba Lagi'),
+                      ),
+                    ],
                   ),
-                  TextButton.icon(
-                    onPressed: () => _openAvailability(context),
-                    icon: const Icon(Icons.edit_calendar_rounded, size: 18),
-                    label: const Text('Atur'),
-                  ),
-                ],
-              ),
-              child: _AvailabilitySummary(
-                schedules: _schedules,
-                pricing: _pricing,
-                timeOff: _timeOff,
-              ),
-            ),
-            const SizedBox(height: 10),
-            const SectionLabel('Riwayat sesi', icon: Icons.history_rounded),
-            if (past.isEmpty)
-              const EmptyState(
-                icon: Icons.history_rounded,
-                title: 'Belum ada riwayat',
-                subtitle: 'Sesi selesai / batal tercatat di sini.',
-              )
-            else
-              for (final s in past.take(10)) ...[
-                _ProSessionCard(
-                    key: ValueKey('past-${s.id}'),
-                    session: s,
-                    onChanged: _load),
+                )
+              else ...[
+                if (today.isEmpty)
+                  const EmptyState(
+                    icon: Icons.event_available_outlined,
+                    title: 'Tidak ada sesi hari ini',
+                    subtitle: 'Sesi terjadwal hari ini muncul di sini.',
+                  )
+                else
+                  for (final s in today) ...[
+                    _ProSessionCard(
+                        key: ValueKey('today-${s.id}'),
+                        session: s,
+                        onChanged: _load),
+                    const SizedBox(height: 10),
+                  ],
                 const SizedBox(height: 10),
+                const SectionLabel('Mendatang', icon: Icons.event_rounded),
+                if (upcoming.isEmpty)
+                  const EmptyState(
+                    icon: Icons.calendar_month_outlined,
+                    title: 'Belum ada sesi mendatang',
+                    subtitle:
+                        'Pasien menjadwalkan sesi dari paket / quick consult.',
+                  )
+                else
+                  for (final s in upcoming) ...[
+                    _ProSessionCard(
+                        key: ValueKey('upcoming-${s.id}'),
+                        session: s,
+                        onChanged: _load),
+                    const SizedBox(height: 10),
+                  ],
+                const SizedBox(height: 10),
+                const SectionLabel('Ketersediaan & harga',
+                    icon: Icons.assignment_rounded),
+                SoftCard(
+                    color: Colors.white,
+                    child: Column(children: [
+                      Row(children: [
+                        const Expanded(
+                            child: Text('PENGATURAN',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                    color: Colors.black54))),
+                        TextButton.icon(
+                            style: TextButton.styleFrom(
+                                backgroundColor: const Color(0xFFF2E6FB),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 4),
+                                minimumSize: Size.zero,
+                                textStyle: Theme.of(context)
+                                    .textTheme
+                                    .labelLarge
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20))),
+                            onPressed: () => _openAvailability(context),
+                            icon: const Icon(Icons.edit_calendar_rounded,
+                                size: 18),
+                            label: const Text('Atur')),
+                      ]),
+                      const Divider(height: 18),
+                      _AvailabilitySummary(
+                          schedules: _schedules,
+                          pricing: _pricing,
+                          timeOff: _timeOff),
+                    ])),
+                const SizedBox(height: 10),
+                const SectionLabel('Riwayat sesi', icon: Icons.history_rounded),
+                if (past.isEmpty)
+                  const EmptyState(
+                    icon: Icons.history_rounded,
+                    title: 'Belum ada riwayat',
+                    subtitle: 'Sesi selesai / batal tercatat di sini.',
+                  )
+                else
+                  for (final s in past.take(10)) ...[
+                    _ProSessionCard(
+                        key: ValueKey('past-${s.id}'),
+                        session: s,
+                        onChanged: _load),
+                    const SizedBox(height: 10),
+                  ],
               ],
-          ],
-        ],
-      ),
-    );
+            ],
+          ),
+        ));
   }
 
   Future<void> _openAvailability(BuildContext context) async {
@@ -310,7 +323,7 @@ class _ProSessionCard extends ConsumerWidget {
     final at = session.scheduledDateTime;
     final dateLabel = at == null
         ? '-'
-        : '${at.day}/${at.month}/${at.year} ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
+        : '${at.day}/${at.month}/${at.year} ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')} WIB';
     final statusColor = switch (session.status) {
       'scheduled' => MalvaColors.seed,
       'completed' => MalvaColors.mint,
@@ -333,159 +346,210 @@ class _ProSessionCard extends ConsumerWidget {
     // Aksi sesi hanya tersedia selama sesi scheduled berada dalam jendela.
     final live = session.canJoinNow;
     return SoftCard(
-      bordered: true,
-      accent: statusColor,
+      padding: EdgeInsets.zero,
+      color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
-                child: Text(
-                  session.patientName.isEmpty
-                      ? '?'
-                      : session.patientName.characters.first.toUpperCase(),
-                  style: const TextStyle(
-                      color: MalvaColors.seed, fontWeight: FontWeight.w900),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
+          Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      session.patientName.isEmpty
-                          ? 'Pasien'
-                          : session.patientName,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor:
+                              MalvaColors.seed.withValues(alpha: 0.12),
+                          child: Text(
+                            session.patientName.isEmpty
+                                ? '?'
+                                : session.patientName.characters.first
+                                    .toUpperCase(),
+                            style: const TextStyle(
+                                color: MalvaColors.seed,
+                                fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                session.patientName.isEmpty
+                                    ? 'Pasien'
+                                    : session.patientName,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w900),
+                              ),
+                              Text(
+                                dateLabel,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (!session.isScheduled) ...[
+                          const SizedBox(width: 8),
+                          ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 112),
+                              child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 5),
+                                  decoration: BoxDecoration(
+                                      color: statusColor.withValues(alpha: .09),
+                                      borderRadius: BorderRadius.circular(5)),
+                                  child: Text(statusLabel,
+                                      style: TextStyle(
+                                          color: statusColor,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800)))),
+                        ],
+                      ],
                     ),
-                    Text(
-                      dateLabel,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                StatusPill(label: statusLabel, color: statusColor),
-                Text(
-                    '${session.isVideo ? 'Video' : 'Chat'} • ${session.durationMinutes} mnt • ${session.packageId == null ? 'Sekali sesi' : 'Paket'}',
-                    style: Theme.of(context).textTheme.bodySmall),
-              ]),
-          if (session.isScheduled && session.isBeforeJoinWindow) ...[
-            const SizedBox(height: 8),
-            const Text('Check-in dibuka 10 menit sebelum sesi.'),
-          ],
-          if (session.summaryForPatient.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text('Ringkasan: ${session.summaryForPatient}',
-                style: Theme.of(context).textTheme.bodySmall),
-          ],
-          if (session.cancelReason.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text('Alasan: ${session.cancelReason}',
-                style: Theme.of(context).textTheme.bodySmall),
-          ],
-          if (session.cancelledByProfessional ||
-              session.status == 'no_show') ...[
-            const SizedBox(height: 6),
-            Text(
-                session.cancelledByProfessional
-                    ? 'Kuota sesi pasien dikembalikan.'
-                    : 'Kuota sesi pasien terpakai.',
-                style: Theme.of(context).textTheme.bodySmall),
-          ],
-          if (!session.isScheduled) ...[
-            const SizedBox(height: 6),
-            OutlinedButton.icon(
-              onPressed: () => _openPatientDetail(context, ref),
-              icon: const Icon(Icons.person_rounded, size: 16),
-              label: const Text('Buka detail pasien'),
-            ),
-          ],
-          // Konfirmasi hadir tidak menutup sesi; batas akhir tetap menutup akses.
-          if (live) ...[
-            const SizedBox(height: 10),
-            // Sesi video: tombol gabung Google Meet dengan jendela waktu.
-            // Bila link belum ada, tombol berubah menjadi "Siapkan link Meet".
-            if (session.isVideo) ...[
-              MeetJoinButton(
-                session: session,
-                accessToken:
-                    ref.read(currentSessionProvider)?.accessToken ?? '',
-                expanded: true,
-                onSessionChanged: (_) {
-                  onChanged();
-                },
-              ),
-              const SizedBox(height: 10),
-            ],
-            // Lapis 2 — aksi primer selama jendela sesi terbuka.
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.icon(
-                  onPressed: () => _openChat(context),
-                  style: compactFilledButtonStyle,
-                  icon: const Icon(Icons.chat_bubble_rounded, size: 16),
-                  label: const Text('Join / Chat'),
-                ),
-              ],
-            ),
-          ],
+                    const SizedBox(height: 8),
+                    Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (session.isScheduled)
+                            StatusPill(label: statusLabel, color: statusColor),
+                          Text(
+                              '${session.isVideo ? 'Video' : 'Chat'} • ${session.durationMinutes} mnt • ${session.packageId == null ? 'Sekali sesi' : 'Paket'}',
+                              style: Theme.of(context).textTheme.bodySmall),
+                        ]),
+                    if (session.isScheduled && session.isBeforeJoinWindow) ...[
+                      const SizedBox(height: 8),
+                      const Text('Check-in dibuka 10 menit sebelum sesi.'),
+                    ],
+                    if (session.summaryForPatient.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text('Ringkasan: ${session.summaryForPatient}',
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                    if (session.cancelReason.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text('Alasan: ${session.cancelReason}',
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                    if (session.cancelledByProfessional ||
+                        session.status == 'no_show') ...[
+                      const SizedBox(height: 6),
+                      Text(
+                          session.cancelledByProfessional
+                              ? 'Kuota sesi pasien dikembalikan.'
+                              : 'Kuota sesi pasien terpakai.',
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                    if (!session.isScheduled) ...[
+                      const SizedBox(height: 6),
+                      SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: () => _openPatientDetail(context, ref),
+                            style: OutlinedButton.styleFrom(
+                                side:
+                                    const BorderSide(color: Color(0xFFE5E7EB)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                                minimumSize: const Size(0, 36)),
+                            child: const Text('Buka detail pasien'),
+                          )),
+                    ],
+                    // Konfirmasi hadir tidak menutup sesi; batas akhir tetap menutup akses.
+                    if (live) ...[
+                      const SizedBox(height: 10),
+                      // Sesi video: tombol gabung Google Meet dengan jendela waktu.
+                      // Bila link belum ada, tombol berubah menjadi "Siapkan link Meet".
+                      if (session.isVideo) ...[
+                        MeetJoinButton(
+                          session: session,
+                          accessToken:
+                              ref.read(currentSessionProvider)?.accessToken ??
+                                  '',
+                          expanded: true,
+                          onSessionChanged: (_) {
+                            onChanged();
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      // Lapis 2 — aksi primer selama jendela sesi terbuka.
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: () => _openChat(context),
+                            style: compactFilledButtonStyle,
+                            icon:
+                                const Icon(Icons.chat_bubble_rounded, size: 16),
+                            label: const Text('Join / Chat'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ])),
           // Lapis 3 — aksi sekunder (batal/pindah/detail) hanya relevan
           // untuk sesi yang masih scheduled.
           if (session.isScheduled && !session.isAfterJoinWindow) ...[
-            const SizedBox(height: 10),
             CollapsibleCard(
               key: ValueKey('aksi-lain-${session.id}'),
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
               header: const Text(
-                'Aksi lain',
-                style: TextStyle(fontWeight: FontWeight.w900),
+                'AKSI LAIN',
+                style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    color: Colors.black54),
               ),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () => _openPatientDetail(context, ref),
-                    icon: const Icon(Icons.person_rounded, size: 16),
-                    label: const Text('Detail pasien'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => _cancel(context, ref),
-                    icon: const Icon(Icons.cancel_rounded, size: 16),
-                    label: const Text('Batal'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => _reschedule(context, ref),
-                    icon: const Icon(Icons.edit_calendar_rounded, size: 16),
-                    label: const Text('Reschedule'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => _editDetail(context, ref),
-                    icon: const Icon(Icons.edit_note_rounded, size: 16),
-                    label: const Text('Link & ringkasan'),
-                  ),
-                ],
-              ),
+              color: const Color(0xFFF7F8FA),
+              child: LayoutBuilder(builder: (context, constraints) {
+                Widget action(
+                        IconData icon, String title, VoidCallback onPressed) =>
+                    SizedBox(
+                        width: (constraints.maxWidth - 8) / 2,
+                        child: OutlinedButton.icon(
+                            onPressed: onPressed,
+                            style: OutlinedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                side:
+                                    const BorderSide(color: Color(0xFFE5E7EB)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(11)),
+                                minimumSize: const Size(0, 34),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 8),
+                                textStyle: Theme.of(context)
+                                    .textTheme
+                                    .labelLarge
+                                    ?.copyWith(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700)),
+                            icon: Icon(icon, size: 15),
+                            label: Text(title, textAlign: TextAlign.center)));
+                return Wrap(spacing: 8, runSpacing: 8, children: [
+                  action(Icons.person_outline_rounded, 'Detail pasien',
+                      () => _openPatientDetail(context, ref)),
+                  action(Icons.cancel_outlined, 'Batal',
+                      () => _cancel(context, ref)),
+                  action(Icons.edit_calendar_rounded, 'Reschedule',
+                      () => _reschedule(context, ref)),
+                  action(Icons.link_rounded, 'Link & ringkasan',
+                      () => _editDetail(context, ref)),
+                ]);
+              }),
             ),
           ],
-          const SizedBox(height: 10),
-          SessionAttendanceActions(
-              session: session,
-              role: UserRole.professional,
-              onChanged: onChanged),
+          if (session.isScheduled && !session.isBeforeJoinWindow)
+            Padding(
+                padding: const EdgeInsets.all(16),
+                child: SessionAttendanceActions(
+                    session: session,
+                    role: UserRole.professional,
+                    onChanged: onChanged)),
         ],
       ),
     );
@@ -808,7 +872,7 @@ class _AvailabilitySummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final byDay = <int, List<BackendProfessionalSchedule>>{};
-    for (final s in schedules) {
+    for (final s in schedules.where((s) => s.isActive)) {
       (byDay[s.dayOfWeek] ??= []).add(s);
     }
     final todayYmd = _ymdFrom(wibNow());
@@ -828,52 +892,83 @@ class _AvailabilitySummary extends StatelessWidget {
       return 'Rp ${buf.toString()}';
     }
 
-    return SoftCard(
-      bordered: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Jam praktik mingguan',
-              style: TextStyle(fontWeight: FontWeight.w900)),
-          const SizedBox(height: 6),
-          if (byDay.isEmpty)
-            const Text('Belum diatur — pasien tidak bisa booking.',
-                style: TextStyle(color: MalvaColors.danger, fontSize: 12.5))
-          else
-            for (final d in (byDay.keys.toList()..sort())) ...[
-              Text(
-                '${_dayNames[d]}: ${byDay[d]!.map((s) => '${s.startTime}–${s.endTime} (${s.slotDurationMinutes} mnt)').join(', ')}',
-                style: const TextStyle(fontSize: 12.5),
-              ),
-              const SizedBox(height: 2),
-            ],
-          const Divider(height: 18),
-          // Hari libur ikut ditampilkan di ringkasan karena tanggal yang
-          // diblokir tidak terlihat dari jadwal mingguan — tanpa ini
-          // profesional bisa lupa pasien tidak bisa booking di tanggal itu.
-          if (upcomingOff.isEmpty)
-            const Text('Hari libur: belum ada',
-                style: TextStyle(fontSize: 12.5))
-          else ...[
-            Text(
-              'Hari libur: ${upcomingOff.length} tanggal '
-              '(terdekat ${_formatYmdId(upcomingOff.first.offDate)})',
-              style: const TextStyle(fontSize: 12.5),
-            ),
-            const SizedBox(height: 2),
-          ],
-          const Divider(height: 18),
-          Text('Chat: ${rupiah(pricing.quickChatPrice)}',
-              style: const TextStyle(fontSize: 12.5)),
-          const SizedBox(height: 2),
-          Text('Video: ${rupiah(pricing.quickVideoPrice)}',
-              style: const TextStyle(fontSize: 12.5)),
-          const SizedBox(height: 2),
-          Text('Paket 4 sesi / 6 minggu: ${rupiah(pricing.packagePrice)}',
-              style: const TextStyle(fontSize: 12.5)),
-        ],
-      ),
-    );
+    Widget price(String label, int value, {bool package = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Row(children: [
+          Expanded(
+              child: Text(label,
+                  style:
+                      const TextStyle(fontSize: 12.5, color: Colors.black54))),
+          Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                  color: package
+                      ? const Color(0xFFF2E6FB)
+                      : const Color(0xFFF7F8FA),
+                  borderRadius: BorderRadius.circular(4)),
+              child: Text(rupiah(value),
+                  style: const TextStyle(
+                      fontSize: 12.5, fontWeight: FontWeight.w800))),
+        ]));
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const Text('Jam praktik mingguan',
+          style: TextStyle(fontWeight: FontWeight.w800)),
+      const SizedBox(height: 12),
+      if (byDay.isEmpty)
+        const Text('Belum diatur — pasien tidak bisa booking.',
+            style: TextStyle(color: MalvaColors.danger, fontSize: 12.5))
+      else
+        for (final day
+            in (byDay.keys.toList()
+              ..sort((a, b) => (a == 0 ? 7 : a).compareTo(b == 0 ? 7 : b))))
+          Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child:
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SizedBox(
+                    width: 40,
+                    child: Text('${_dayNames[day]}:',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 12.5))),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      for (final slot
+                          in (byDay[day]!
+                            ..sort(
+                                (a, b) => a.startTime.compareTo(b.startTime))))
+                        Padding(
+                            padding: const EdgeInsets.only(bottom: 3),
+                            child: Text(
+                                '${slot.startTime}–${slot.endTime} (${slot.slotDurationMinutes} mnt)',
+                                style: const TextStyle(
+                                    color: Colors.black54, fontSize: 12.5))),
+                    ])),
+              ])),
+      const Divider(height: 24, color: Color(0xFFEDEFF2)),
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Hari libur:',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+        const SizedBox(width: 12),
+        Expanded(
+            child: Text(
+                upcomingOff.isEmpty
+                    ? 'belum ada'
+                    : upcomingOff
+                        .map((day) => _formatYmdId(day.offDate))
+                        .join('\n'),
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.black54))),
+      ]),
+      const Divider(height: 24, color: Color(0xFFEDEFF2)),
+      price('Chat:', pricing.quickChatPrice),
+      price('Video:', pricing.quickVideoPrice),
+      price('Paket 4 sesi / 6 minggu:', pricing.packagePrice, package: true),
+    ]);
   }
 }
 
@@ -1020,7 +1115,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                       else
                         for (final s in _schedules) ...[
                           SoftCard(
-                            bordered: true,
+                            bordered: false,
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 12),
                             child: Column(
@@ -1083,7 +1178,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                           const SizedBox(height: 8),
                         ],
                       SoftCard(
-                        bordered: true,
+                        bordered: false,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -1146,7 +1241,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                       const SizedBox(height: 14),
                       const SectionLabel('Hari libur'),
                       SoftCard(
-                        bordered: true,
+                        bordered: false,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -1241,7 +1336,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                       const SizedBox(height: 14),
                       const SectionLabel('Harga layanan'),
                       SoftCard(
-                        bordered: true,
+                        bordered: false,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [

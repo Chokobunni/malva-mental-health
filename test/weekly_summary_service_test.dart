@@ -7,6 +7,68 @@ import 'package:malva_mental_health/src/services/weekly_summary_service.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
 
 void main() {
+  test(
+      'summary includes exactly seven WIB calendar days and excludes future records',
+      () async {
+    final now = wibNow();
+    final start = wibFromParts(now.year, now.month, now.day)
+        .subtract(const Duration(days: 6));
+    final api = MalvaApiClient(
+        baseUrl: 'http://backend.test',
+        httpClient: MockClient((request) async => http.Response(
+            jsonEncode(request.url.path == '/v1/mood-checkins'
+                ? {
+                    'moods': [
+                      {
+                        'id': 'boundary',
+                        'mood': 'good',
+                        'occurred_at': wibIso(start),
+                        'sleep_hours': 8
+                      },
+                      {
+                        'id': 'before',
+                        'mood': 'sad',
+                        'occurred_at':
+                            wibIso(start.subtract(const Duration(minutes: 1))),
+                        'sleep_hours': 2
+                      },
+                      {
+                        'id': 'future',
+                        'mood': 'great',
+                        'occurred_at':
+                            wibIso(start.add(const Duration(days: 7))),
+                        'sleep_hours': 12
+                      },
+                    ]
+                  }
+                : {
+                    'medication_logs': [
+                      {
+                        'id': 'boundary',
+                        'status': 'taken',
+                        'taken_at': wibIso(start)
+                      },
+                      {
+                        'id': 'before',
+                        'status': 'missed',
+                        'taken_at':
+                            wibIso(start.subtract(const Duration(minutes: 1)))
+                      },
+                      {
+                        'id': 'future',
+                        'status': 'missed',
+                        'taken_at': wibIso(start.add(const Duration(days: 7)))
+                      },
+                      {'id': 'unknown', 'status': 'missed'},
+                    ]
+                  }),
+            200)));
+    final result = await loadWeeklySummary(api: api, accessToken: 'token');
+    expect(result!.moodCount, 1);
+    expect(result.avgSleepHours, 8);
+    expect(result.totalLogs, 1);
+    expect(result.adherencePercent, 100);
+  });
   test('screening detail resolves older entries from full owned history',
       () async {
     final api = MalvaApiClient(

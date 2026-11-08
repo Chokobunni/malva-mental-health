@@ -35,6 +35,23 @@ Status paket: `pending_payment` → `active` (saat booking dibayar) → `complet
 - MyCare mempertahankan paket pending dan terminal dalam daftar dan menyediakan filter status; penggabungan tampilan paket aktif tidak menyembunyikan pembelian pending.
 
 ## Aturan mengikat (JANGAN dilanggar)
+- **Ulasan:** satu per sesi satu kali `completed`, atau satu per paket setelah
+  `completed`/`no_show` menghabiskan kuota pembelian, tanpa sesi scheduled/pending
+  dalam rentang pembelian dan minimal satu completed. Saldo merged 4+4 tetap 8,
+  tetapi ID pembelian awal/merged mendapat masing-masing satu hak. Kuota awal
+  adalah total target dikurangi semua kuota child merged; sesi pemakai kuota
+  diurut scheduled_at,id dan dibagi rentang awal lalu merged_at,created_at,id.
+  Hak renewal menunggu semua pertemuan pemakai kuota sebelumnya terminal agar
+  absensi profesional yang terlambat/credit replacement tidak menggeser hak terpakai.
+  Ownership/rantai merge/kuota ambigu ditolak konservatif. Tidak ada ulasan per pertemuan paket atau
+  paket seluruhnya no-show. `GET /v1/review-entitlements` pasien membaca unit yang
+  belum dipakai; POST review menerima `session_id`/`care_package_id` opsional,
+  klien lama memilih unit tertua. Store mengunci pasangan dalam transaksi dan
+  index unik migrasi 035 mencegah replay/paralel. Ulasan legacy tidak dibackfill;
+  unit selesai pada/sebelum ulasan legacy terakhir pasangan ditekan konservatif
+  (created_at NULL menutup semua sampai rekonsiliasi); unit sesudahnya tersedia.
+  Prompt pasien pada refresh/resume/poll hanya sekali per akun/unit selama sesi
+  aplikasi; aksi manual tetap tersedia setelah dialog ditutup. Tidak ada push baru.
 - Home pasien/profesional menampilkan sesi video dan chat terdekat; dropdown membuka seluruh sesi mendatang. Kartu tetap mematuhi jendela akses server. Messages profesional memakai daftar percakapan yang sama dengan pasien.
 - Feed HTTP sesi mempertahankan semua scheduled; upcoming/today/ongoing terurut terdekat dahulu. Past/all menyertakan seluruh scheduled dan maksimal 100 riwayat lain. Jangan memotong sesi mendatang atau sesi perlu diselesaikan sebelum klien menyusun kartu. Method store bounded `ListCareSessions` tetap mempertahankan limit/urutan lamanya.
 - Jadwal profesional menampilkan sesi terjadwal yang sudah lewat durasi pada bagian **Perlu diselesaikan**, sebelum riwayat dan tanpa batas sepuluh item. **Selesaikan sesi** tidak muncul sebelum akhir jadwal; Quick Video Call ikut menggulir dengan konten jadwal. Jangan tampilkan judul kehadiran tanpa isi pada sesi mendatang atau terminal.
@@ -52,3 +69,10 @@ Status paket: `pending_payment` → `active` (saat booking dibayar) → `complet
 - Payload jadwal/reschedule kedua peran adalah wall-clock WIB `yyyy-MM-ddTHH:mm`. Hasil pemilih pasien membawa akhiran `|chat`/`|video` untuk keperluan UI; pisahkan akhiran tersebut sebelum mengirim `scheduled_at`, termasuk saat reschedule.
 - Sesi video **wajib** memakai Google Meet. Tidak ada penyedia fallback: bila pembuatan link gagal, permintaan ditolak dan bisa diulang lewat `POST /v1/care-sessions/{id}/meet-link`.
 - Token Google dikelola senyap (tanpa notifikasi izin kedaluwarsa). Sweeper sepuluh menit menyegarkan access token yang tersisa ≤15 menit atau pemeliharaan tujuh hari jatuh tempo; hasil/rotasi/`last_refreshed_at` atomik. `invalid_grant` dihapus tanpa notifikasi. Batas tujuh hari Testing tidak dapat diperpanjang programatik; operator harus OAuth consent screen → Publish app. Rujukan: `docs/GOOGLE_CALENDAR_SETUP.md`, migrasi 030.
+
+## Presentasi profesional (2026-11-09)
+
+- Home profesional memuat Sesi berjalan, Video call mendatang dan Sesi chat mendatang; Operasional berisi Ketersediaan & harga serta Earnings, Klinis berisi E-Prescription sesuai kewenangan psikiater. Data pasien dibagikan berada pada tab Pasien. Lainnya hanya memuat Profil Profesional, Portal Profesional (termasuk STR/SIP) dan relasi pasien–profesional.
+- Crisis Incident Log dihapus dari navigasi, konten dan pemuatan dashboard profesional. Endpoint/riwayat insiden global serta alur SOS pasien dipertahankan.
+- Jadwal menampilkan Quick Video Call, sesi hari ini, mendatang, ketersediaan/harga dan riwayat. Aksi lain membuka Detail pasien/Batal/Reschedule/Link & ringkasan; aturan check-in, penyelesaian dan jendela akses tetap berlaku. Ringkasan praktik hanya menampilkan slot aktif, dikelompokkan per hari, dengan hari libur dan harga server.
+- Ringkasan klinis mengelompokkan sesi menurut paket, memakai progres/kuota server, tanggal WIB serta status aktual; no-show dipudarkan dan tanggal dicoret. Pemantauan harian tidak lagi menampilkan atau mengambil kiriman chat dan timeline pasien.

@@ -72,3 +72,9 @@ Modul skrining kesehatan mental. Skoring dihitung **di server** (bukan hanya kli
 ## Aturan mengikat
 - Skoring adalah **alat bantu**, bukan diagnosis. Keputusan klinis tetap pada profesional berlisensi.
 - Jangan mengubah bobot rule/level tanpa memperbarui `RuleVersion` dan menyamakannya dengan klien Flutter.
+
+## Detail profesional (2026-11-09)
+
+- PHQ/GAD menampilkan skor, kategori, indikator keselamatan, interpretasi dan detail jawaban; gejala teridentifikasi bersumber hanya dari jawaban positif pada `bundle.*.answers` yang sudah disediakan API. Jawaban hilang/invalid tetap tidak tersedia, tidak direkayasa menjadi jawaban nol atau gejala dari skor total. Skor/CF/jejak aturan dipertahankan.
+- WHO-5 memakai panel mint dan DASS panel lavender dengan skor/subskala, kategori, arahan tindak lanjut serta penjelasan skor. Detail per item memakai jawaban tersimpan. Metadata `scale_min`/`scale_max`/`scale_version` tidak menjadi jawaban klinis yang ditampilkan.
+- Penghapusan Crisis Incident Log profesional tidak menghapus indikator keselamatan skrining atau data SOS global/pasien.

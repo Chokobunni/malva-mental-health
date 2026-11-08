@@ -324,3 +324,23 @@ Reschedule kedua peran menjaga format WIB; kartu aturan paket putih. SOS menampi
 status aktual, polling terbatas serta galat/timeout; status terkirim ke gateway
 bukan bukti diterima kontak. Tidak ada perubahan skema atau rumus/CF klinis.
 Rujukan implementasi: [desain koreksi](superpowers/specs/2026-11-08-patient-professional-polish-design.md).
+
+## Koreksi pengalaman klinis — 9 November 2026
+
+Ulasan dibatasi satu per sesi satu kali selesai atau per pembelian paket kontinu
+yang seluruh kuotanya selesai/terpakai, dengan minimal satu pertemuan completed.
+Perpanjangan yang digabung ke saldo paket tetap mempunyai hak per pembelian;
+aturan pembayaran, kuota dan jadwal tidak berubah. Pasien mendapat prompt setelah
+server mengonfirmasi kelayakan, dan server menolak pengiriman ulang secara atomik.
+Ulasan lama dipertahankan tanpa menebak tautan sesi historis.
+
+Home profesional berfokus pada sesi, Operasional dan Klinis. Data pasien dibagikan
+berada di Pasien. Crisis Incident Log dan isinya dihilangkan dari antarmuka
+profesional; alur SOS pasien dan data keselamatan server tetap tersedia sesuai
+otorisasi. Ringkasan Klinis serta screening memakai data pasien sebenarnya.
+
+Chat kedua peran membuka detail semua record; pasien memilih diary mana yang
+dibagikan. Mini Summary memakai tujuh tanggal WIB termasuk hari ini, tanpa last
+diary entry. Ekspor diary menghilangkan tanggapan profesional, dan ekspor mood
+menghilangkan kolom catatan. Diary asli, emoji dan chart mood tetap dipertahankan.
+Rujukan: [spesifikasi](superpowers/specs/2026-11-09-clinical-experience-design.md).

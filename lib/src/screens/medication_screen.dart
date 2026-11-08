@@ -155,12 +155,14 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
                   name: b.name,
                   dosage: b.dosage,
                   form: b.form,
-                  reminders: [
-                    MedicationReminder(
-                      time: _parseReminderTime(b.reminderTime),
-                      relationToMeal: 'Setelah makan',
-                    ),
-                  ],
+                  reminders: b.reminderTime.isEmpty
+                      ? []
+                      : [
+                          MedicationReminder(
+                            time: _parseReminderTime(b.reminderTime),
+                            relationToMeal: b.relationToMeal,
+                          ),
+                        ],
                   currentStock: b.currentStock,
                   alertBelow: b.alertBelow,
                   // Pakai sumber asli dari server ('Pasien'/'Profesional')
@@ -563,6 +565,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text('Log ${medication.name}'),
+        scrollable: true,
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -728,7 +731,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
       return;
     }
     try {
-      final reminder = medication.reminders.first;
+      final reminder = medication.reminders.firstOrNull;
       if (!isNew && _looksLikeServerId(medication.id)) {
         // Jalur ubah: PUT ke id yang sudah dikenal server. Sebelumnya "edit"
         // selalu dikirim sebagai POST, dan UpsertMedication di server adalah
@@ -739,8 +742,8 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
           name: medication.name,
           dosage: medication.dosage,
           form: medication.form,
-          reminderTime: reminder.label,
-          relationToMeal: reminder.relationToMeal,
+          reminderTime: reminder?.label ?? '',
+          relationToMeal: reminder?.relationToMeal ?? '',
           currentStock: medication.currentStock,
           alertBelow: medication.alertBelow,
           source: medication.source,
@@ -752,8 +755,8 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
         name: medication.name,
         dosage: medication.dosage,
         form: medication.form,
-        reminderTime: reminder.label,
-        relationToMeal: reminder.relationToMeal,
+        reminderTime: reminder?.label ?? '',
+        relationToMeal: reminder?.relationToMeal ?? '',
         currentStock: medication.currentStock,
         alertBelow: medication.alertBelow,
         source: medication.source,
@@ -865,7 +868,7 @@ class _MedicationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final firstReminder = medication.reminders.first;
+    final firstReminder = medication.reminders.firstOrNull;
     return SoftCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -893,8 +896,12 @@ class _MedicationCard extends StatelessWidget {
                     Text(medication.name,
                         style: const TextStyle(
                             fontWeight: FontWeight.w900, fontSize: 16)),
-                    Text(
-                        '${medication.dosage} - ${medication.form} - ${firstReminder.relationToMeal}'),
+                    Text([
+                      medication.dosage,
+                      medication.form,
+                      if (firstReminder?.relationToMeal.isNotEmpty ?? false)
+                        firstReminder!.relationToMeal,
+                    ].join(' - ')),
                   ],
                 ),
               ),
@@ -908,7 +915,7 @@ class _MedicationCard extends StatelessWidget {
             runSpacing: 8,
             children: [
               StatusPill(
-                label: firstReminder.label,
+                label: firstReminder?.label ?? 'Belum diatur',
                 color: MalvaColors.seed,
                 icon: Icons.schedule_rounded,
               ),
@@ -984,7 +991,7 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
   late final TextEditingController _form;
   late final TextEditingController _stock;
   late final TextEditingController _alertBelow;
-  late TimeOfDay _time;
+  TimeOfDay? _time;
   String _relation = 'Setelah makan';
 
   @override
@@ -997,8 +1004,13 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
     _stock = TextEditingController(text: (med?.currentStock ?? 30).toString());
     _alertBelow =
         TextEditingController(text: (med?.alertBelow ?? 5).toString());
-    _time = med?.reminders.first.time ?? const TimeOfDay(hour: 8, minute: 0);
-    _relation = med?.reminders.first.relationToMeal ?? 'Setelah makan';
+    final reminder = med?.reminders.firstOrNull;
+    _time = med == null ? const TimeOfDay(hour: 8, minute: 0) : reminder?.time;
+    _relation = reminder?.relationToMeal ?? 'Setelah makan';
+    if (!['Sebelum makan', 'Setelah makan', 'Sebelum tidur']
+        .contains(_relation)) {
+      _relation = 'Setelah makan';
+    }
   }
 
   @override
@@ -1050,11 +1062,13 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
             OutlinedButton.icon(
               onPressed: _pickTime,
               icon: const Icon(Icons.schedule_rounded),
-              label: Text(
-                  'Reminder ${_time.hour.toString().padLeft(2, '0')}:${_time.minute.toString().padLeft(2, '0')}'),
+              label: Text(_time == null
+                  ? 'Reminder belum diatur'
+                  : 'Reminder ${_time!.hour.toString().padLeft(2, '0')}:${_time!.minute.toString().padLeft(2, '0')}'),
             ),
             DropdownButtonFormField<String>(
               initialValue: _relation,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Relasi makan'),
               items: const [
                 DropdownMenuItem(
@@ -1107,8 +1121,10 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(context: context, initialTime: _time);
-    if (picked != null) setState(() => _time = picked);
+    final picked = await showTimePicker(
+        context: context,
+        initialTime: _time ?? const TimeOfDay(hour: 8, minute: 0));
+    if (picked != null && mounted) setState(() => _time = picked);
   }
 
   void _save() {
@@ -1120,7 +1136,8 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
         dosage: _dosage.text.trim().isEmpty ? '0 mg' : _dosage.text.trim(),
         form: _form.text.trim().isEmpty ? 'Tablet' : _form.text.trim(),
         reminders: [
-          MedicationReminder(time: _time, relationToMeal: _relation),
+          if (_time != null)
+            MedicationReminder(time: _time!, relationToMeal: _relation),
         ],
         currentStock: int.tryParse(_stock.text.trim()) ?? 0,
         alertBelow: int.tryParse(_alertBelow.text.trim()) ?? 5,

@@ -17,6 +17,10 @@ func TestDoctorReviewPersistsStarsIndependentOfHelpfulAndSearchUsesRealTotals(t 
 		}
 	}
 	t.Cleanup(func() { cleanupTestUsers(t, db, patient, professional) })
+	t.Cleanup(func() { _, _ = db.ExecContext(ctx, `DELETE FROM care_sessions WHERE patient_id=$1`, patient) })
+	if _, err := db.ExecContext(ctx, `INSERT INTO care_sessions(patient_id,professional_id,scheduled_at,status) VALUES($1,$2,now()-interval '1 hour','completed')`, patient, professional); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO professional_credentials(user_id,specialization,verification_status,review_count,helpfulness_count) VALUES($1,$2,'VERIFIED',4,3)`, professional, suffix); err != nil {
 		t.Fatal(err)
 	}

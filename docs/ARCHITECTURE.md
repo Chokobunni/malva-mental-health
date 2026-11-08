@@ -1,5 +1,25 @@
 # System Architecture
 
+### Entitlement ulasan — 9 November 2026
+
+Store menurunkan satu hak dari sesi satu kali selesai atau paket yang seluruh
+kuota pembeliannya selesai/no-show (minimal satu completed). Saldo merged tetap
+digabung, namun ID setiap pembelian tetap satu unit ulasan. Store membagi sesi
+pemakai kuota (urut scheduled_at,id) ke rentang pembelian awal lalu renewal (urut
+merged_at,created_at,id); kuota awal diperoleh dengan mengurangi kuota child dari
+total target. Ownership/kuota/rantai merged ambigu ditolak konservatif. Hak
+renewal menunggu seluruh prefix pertemuan pemakai kuota terminal; konfirmasi
+absensi yang masih mungkin mengembalikan kredit tidak boleh menggeser hak terpakai.
+Tidak ada
+perubahan aktivasi/pembayaran/ledger. Pembacaan pasien tidak dibatasi
+feed riwayat. Pengiriman mengambil advisory lock pasangan pasien/profesional,
+membaca ulang hak di transaksi, lalu INSERT dengan ID unit; unique partial index
+migrasi 035 membatasi satu ulasan per sesi/paket. POST lama tanpa ID memakai hak
+tertua. Ulasan legacy tetap tanpa tautan dan memblokir unit selesai pada/sebelum
+ulasan lama terakhir pasangan secara konservatif, tanpa backfill dugaan.
+Flutter membaca endpoint hak, memeriksa identitas akun setelah async dan menjaga
+satu dialog/unit/account selama sesi aplikasi. Tidak ada push baru.
+
 ### Konsistensi transaksi dan notifikasi — 5 November 2026
 
 Pembelian pending memakai penguncian database dan relasi `care_packages.booking_id` agar retry, resume dan aktivasi membayar paket yang tepat. Pembayaran diverifikasi server terhadap Midtrans termasuk nominal; callback, polling dan lifecycle resume hanya memicu rekonsiliasi. Tidak ada tabel atau kolom baru untuk perbaikan ini.

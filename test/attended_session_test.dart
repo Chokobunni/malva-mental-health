@@ -120,7 +120,7 @@ void main() {
     expect(find.text('Check-in dibuka 10 menit sebelum sesi.'), findsOneWidget);
     expect(find.text('Kehadiran saya'), findsNothing);
     expect(find.text('Join / Chat'), findsNothing);
-    await tester.tap(find.text('Aksi lain'));
+    await tester.tap(find.text('AKSI LAIN'));
     await tester.pumpAndSettle();
     expect(find.text('Detail pasien'), findsOneWidget);
     expect(find.text('Reschedule'), findsOneWidget);

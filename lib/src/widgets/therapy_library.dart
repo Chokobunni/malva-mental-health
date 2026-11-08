@@ -1879,6 +1879,8 @@ List<TherapyAnswerEntry> therapyAnswerEntries({
   for (final entry in answers.entries) {
     if (known.contains(entry.key) ||
         entry.key == 'scale_version' ||
+        entry.key == 'scale_min' ||
+        entry.key == 'scale_max' ||
         entry.value == null) continue;
     final value = entry.value;
     entries.add((
@@ -1939,7 +1941,7 @@ class AssessmentResultCard extends StatelessWidget {
   ) {
     final s = scoreDass21(answers);
     return SoftCard(
-      color: Colors.white,
+      color: const Color(0xFFFAF6FD),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2005,7 +2007,7 @@ class AssessmentResultCard extends StatelessWidget {
             ? MalvaColors.amber
             : MalvaColors.mint;
     return SoftCard(
-      color: Colors.white,
+      color: const Color(0xFFF1FBF9),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2068,8 +2070,8 @@ class _TriageLine extends StatelessWidget {
 
   Color get _color => switch (interpretation.triageLevel) {
         'krisis' || 'tinggi' => MalvaColors.danger,
-        'sedang' => MalvaColors.amber,
-        _ => MalvaColors.mint,
+        'sedang' => const Color(0xFF8C4A10),
+        _ => const Color(0xFF147D6C),
       };
 
   @override
@@ -2078,7 +2080,7 @@ class _TriageLine extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _color.withValues(alpha: .05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _color.withValues(alpha: 0.28)),
       ),
@@ -2249,15 +2251,22 @@ class _ScoreRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text('$label: $score',
-              style: const TextStyle(fontWeight: FontWeight.w900)),
-        ),
-        StatusPill(label: level, color: severityColor(level)),
-      ],
-    );
+    return SoftCard(
+        color: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text('$label: $score',
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
+            ),
+            StatusPill(
+                label: level,
+                color: level.toLowerCase() == 'sedang'
+                    ? const Color(0xFF8C4A10)
+                    : severityColor(level)),
+          ],
+        ));
   }
 }
 
@@ -3554,20 +3563,26 @@ class TherapySubmissionView extends StatelessWidget {
           Text(summary, style: const TextStyle(fontStyle: FontStyle.italic)),
           const SizedBox(height: 10),
         ],
+        const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text('Detail jawaban',
+                style: TextStyle(
+                    fontWeight: FontWeight.w900, color: Colors.black54))),
         for (final item
             in therapyAnswerEntries(moduleId: moduleId, answers: answers))
           Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(item.label,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w800, fontSize: 12.5)),
-                  const SizedBox(height: 4),
-                  SelectableText(item.answer),
-                ],
-              )),
+              child: SoftCard(
+                  color: const Color(0xFFF7F8FA),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(item.label,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 6),
+                        SelectableText(item.answer),
+                      ]))),
       ],
     );
 

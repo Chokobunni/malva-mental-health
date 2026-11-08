@@ -10,10 +10,9 @@ import '../services/malva_api_client.dart';
 import 'mood_insights.dart';
 import '../theme.dart';
 import 'malva_components.dart';
-import '../time/wib.dart';
 
 // ============================================================
-// CHAT MINI SUMMARY (14 hari) — ringkasan 14 hari untuk dokter
+// CHAT MINI SUMMARY (7 hari) — ringkasan 7 hari untuk dokter
 // Angka mood/tidur/kepatuhan diambil dari SERVER (fallback ke store lokal),
 // karena store tidak selalu terhidrasi saat chat dibuka — dulu kartu ini
 // menampilkan 0 check-in / 0.0 jam / 0% padahal data pasien ada.
@@ -66,7 +65,6 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
   WeeklySummaryMetrics? _metrics;
   bool _isLoading = true;
   late final AuthSession? _owner;
-  List<BackendDiaryEntry>? _diaries;
   List<BackendGoal>? _goals;
 
   @override
@@ -76,7 +74,7 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
     unawaited(_loadMetrics());
   }
 
-  /// Muat metrik 14 hari sekali saat sheet dibuka.
+  /// Muat metrik 7 hari sekali saat sheet dibuka.
   Future<void> _loadMetrics() async {
     final store = ref.read(malvaStoreProvider);
     final token = ref.read(currentSessionProvider)?.accessToken;
@@ -114,13 +112,6 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
       }(),
       () async {
         try {
-          final diaries = await api.listDiaryEntries(
-              accessToken: token, patientId: widget.patientId, limit: 0);
-          if (isCurrent()) setState(() => _diaries = diaries);
-        } on Object {/* Unknown stays visible. */}
-      }(),
-      () async {
-        try {
           final goals = await api.listGoals(
               accessToken: token, patientId: widget.patientId);
           if (isCurrent()) setState(() => _goals = goals);
@@ -137,12 +128,6 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
           padding: EdgeInsets.all(24), child: Text('Sesi akun telah berubah.'));
     }
     final metrics = _metrics;
-    final cutoff = wibNow().subtract(const Duration(days: 14));
-
-    final diaries = (_diaries ?? <BackendDiaryEntry>[])
-        .where((e) => e.occurredAt != null && e.occurredAt!.isAfter(cutoff))
-        .toList()
-      ..sort((a, b) => b.occurredAt!.compareTo(a.occurredAt!));
     final activeGoals =
         (_goals ?? <BackendGoal>[]).where((g) => g.isActive).toList();
 
@@ -185,12 +170,12 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
           ),
           const SizedBox(height: 14),
           const Text(
-            'Mini Summary (14 hari)',
+            'Mini Summary (7 hari)',
             style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
           ),
           const SizedBox(height: 4),
           Text(
-            'Ringkasan 14 hari terakhir — dihitung dari data tersimpan.',
+            'Ringkasan 7 hari terakhir — dihitung dari data tersimpan.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           if (_isLoading) ...[
@@ -210,7 +195,7 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
             const SectionLabel('Tren mood — 7 hari terakhir'),
             MoodTrendChart(entries: metrics.entries),
             const SizedBox(height: 12),
-            const SectionLabel('Keseimbangan gejala — 7 hari terakhir'),
+            const SectionLabel('Keseimbangan gejala'),
             SymptomsBalanceChart(entries: metrics.entries),
             const SizedBox(height: 12),
           ],
@@ -229,16 +214,6 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
             value: logsKnown
                 ? '$adherence% ($taken dari $totalLogs log)'
                 : 'Data log obat belum dimuat',
-          ),
-          _SummaryTile(
-            icon: Icons.edit_note_rounded,
-            color: MalvaColors.amber,
-            title: 'Last Diary Entry',
-            value: _diaries == null
-                ? 'Data diary belum dimuat'
-                : diaries.isEmpty
-                    ? 'Belum ada diary 14 hari terakhir'
-                    : '"${_truncate(diaries.first.note.isEmpty ? diaries.first.title : diaries.first.note, 90)}"',
           ),
           const SizedBox(height: 8),
           const SectionLabel('Current Goals'),
@@ -262,18 +237,13 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Text(
-              'Ringkasan 14 hari dari data tersimpan. Grafik menampilkan 7 hari terakhir.',
+              'Ringkasan 7 hari dari data tersimpan.',
               style: TextStyle(fontSize: 12),
             ),
           ),
         ],
       ),
     );
-  }
-
-  String _truncate(String text, int max) {
-    if (text.length <= max) return text;
-    return '${text.substring(0, max)}…';
   }
 }
 

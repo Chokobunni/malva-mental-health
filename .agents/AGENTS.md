@@ -365,7 +365,13 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - `limit=0` eksplisit pada mood/diary/log obat/screening meminta seluruh riwayat
   milik/berizin. Default tetap 20, positif maksimum 100. Isolasi pasien dan consent
   tetap wajib. Ekspor berhenti bila satu sumber yang diminta gagal.
-- Ulasan pasien memerlukan sesi selesai dengan profesional terkait, bintang 1-5
+- Ulasan pasien tepat satu per sesi satu kali selesai atau paket penuh selesai,
+  termasuk masing-masing ID pembelian pada saldo merged 4+4; sesi pemakai kuota
+  dibagi berurutan ke rentang pembelian awal/renewal, tanpa mengubah saldo/booking.
+  bukan per pertemuan paket; ownership dan keunikan atomik wajib di server, termasuk
+  klien lama tanpa ID. Legacy tidak ditautkan secara dugaan; unit selesai sebelum/
+  pada ulasan legacy terakhir ditekan konservatif, unit kemudian tetap tersedia.
+  Prompt setelah refresh/resume pasien dijaga per akun/unit. Bintang 1-5
   dan komentar maksimal 2000 karakter. Contoh diberi label dan tidak masuk agregat
   ulasan nyata. `helpful` tidak mengubah bintang.
 - Jarak dihitung dari koordinat profesional dan posisi pasien yang tersedia.
@@ -388,3 +394,8 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
   - store/care.go: RecordRefund idempoten
   - migrations/018_care_refund.sql: tabel care_refunds
   ```
+
+## Kontrak tampilan profesional (2026-11-09)
+
+- Home profesional mengutamakan tiga bagian sesi serta alat Operasional/Klinis; data dibagikan berada di Pasien. Lainnya memuat profil, portal/STR-SIP dan relasi. Crisis Incident Log profesional beserta pemuatannya dihapus, tanpa menghapus data insiden atau SOS pasien.
+- Jadwal memakai slot aktif/harga/hari libur server dan mempertahankan seluruh guard aksi. Detail klinis mengelompokkan sesi per paket; pemantauan harian tidak mengambil timeline/kiriman chat. Gejala PHQ/GAD hanya berasal dari jawaban aktual; scoring, CF dan ketidaktersediaan data tetap dipertahankan. Rujukan: [care session](skills/care_session_module.md), [screening](skills/screening_module.md).

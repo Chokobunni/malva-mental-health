@@ -462,6 +462,8 @@ type bodyField struct {
 // Endpoint yang tidak ada di sini tidak diberi requestBody.
 var requestBodies = map[string][]bodyField{
 	"POST /v1/doctors/{user_id}/reviews": {
+		{"session_id", "string", "uuid", false},
+		{"care_package_id", "string", "uuid", false},
 		{"stars", "integer", "", true},
 		{"review_text", "string", "", false},
 		{"helpful", "boolean", "", false},

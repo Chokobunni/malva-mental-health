@@ -14,6 +14,7 @@ import 'messages_list_screen.dart';
 import 'more_screen.dart';
 import 'my_care_screen.dart';
 import '../widgets/sos_fab.dart';
+import '../widgets/doctor_review_actions.dart';
 
 // ============================================================
 // PATIENT SHELL — Navbar bawah baru (4 ikon, tanpa label):
@@ -213,7 +214,7 @@ class _PatientShellState extends ConsumerState<PatientShell>
       ),
     ];
 
-    return Scaffold(
+    final scaffold = Scaffold(
       body: IndexedStack(index: _index, children: pages),
       // SOS hanya di Home.
       floatingActionButton: _index == 0 ? const SosFab() : null,
@@ -246,5 +247,8 @@ class _PatientShellState extends ConsumerState<PatientShell>
         ],
       ),
     );
+    return ReviewCompletionPrompt(
+        apiClient: widget.apiClient ?? ref.read(apiClientProvider),
+        child: scaffold);
   }
 }

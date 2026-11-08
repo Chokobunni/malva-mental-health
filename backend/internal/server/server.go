@@ -346,6 +346,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /v1/professional/schedules/{id}", s.requireAuth(s.deleteMySchedule))
 	mux.HandleFunc("GET /v1/doctors/{user_id}/reviews", s.public(s.listDoctorReviews))
 	mux.HandleFunc("POST /v1/doctors/{user_id}/reviews", s.requireAuth(s.createDoctorReview))
+	mux.HandleFunc("GET /v1/review-entitlements", s.requireAuth(s.listReviewEntitlements))
 	mux.HandleFunc("GET /v1/earnings", s.requireAuth(s.earningsSummary))
 	// Saldo gabungan: satu permintaan mencairkan semua earning pending.
 	mux.HandleFunc("POST /v1/earnings/payout", s.requireAuth(s.requestPayoutAll))

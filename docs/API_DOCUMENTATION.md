@@ -7,8 +7,48 @@
 dan rating. `POST /v1/doctors/{user_id}/reviews` menerima `stars` wajib 1–5,
 `review_text` opsional maksimal 2.000 karakter, dan `helpful` opsional (default
 true). Bintang disimpan independen dari pilihan terbantu. Hanya pasien yang
-memiliki sesi `completed` dengan profesional tersebut dapat mengirim; pemeriksaan
-meliputi seluruh riwayat sesi. Nama penulis pada daftar ulasan tetap tersamar.
+memiliki hak ulasan yang belum dipakai dengan profesional tersebut dapat mengirim.
+`GET /v1/review-entitlements` (pasien terautentikasi) mengembalikan `entitlements`
+berisi `professional_id`, `professional_name`, `completed_at` WIB dan tepat satu
+dari `session_id` / `care_package_id`. Satu sesi satu kali `completed` memberi satu
+hak. Setiap pembelian paket memberi satu hak setelah seluruh kuota pembeliannya
+terpakai oleh `completed`/`no_show`, tanpa sesi scheduled/pending pada rentang
+pembelian itu, dan setidaknya satu completed;
+pembatalan profesional tidak menghabiskan kuota. Paket seluruhnya no-show tidak
+memberi hak. Pemeriksaan berasal dari sesi aktual, tanpa menunggu sweeper paket.
+Penggabungan saldo paket tetap berlaku: pembelian 4+4 tampil sebagai saldo 8, tetapi
+tetap memiliki dua hak terpisah memakai ID baris pembelian asal yang dipertahankan.
+Kuota pembelian awal adalah total target dikurangi kuota seluruh pembelian merged;
+baris merged menyimpan kuota pembelian tambahannya. Sesi yang memakai kuota
+(completed/no_show/scheduled/pending_payment, tanpa pembatalan) diurut scheduled_at,id
+dan dialokasikan ke rentang pembelian: awal lebih dulu, lalu merged_at,created_at,id
+(tanggal merge legacy kosong lebih dulu). Empat pertama terminal dapat diulas
+walau empat berikutnya masih scheduled. Hak pembelian lanjutan juga menunggu seluruh pertemuan pemakai kuota
+sebelumnya terminal: kehadiran yang belum diputuskan masih dapat dibatalkan
+profesional dan mengembalikan kredit, sehingga urutan belum stabil. Setelah
+prefix terminal, pembatalan/reschedule tidak dapat menghapus urutan sebelumnya.
+Pembelian tambahan tidak mengganti ID hak
+lama, dan unique index mencegah reschedule/pembatalan membuat ulasan kedua pada ID
+yang sudah dipakai. Ownership tidak cocok, kuota tidak dapat direkonsiliasi atau
+rantai merged bertingkat yang ambigu tidak diberi hak sampai rekonsiliasi.
+`completed_at` adalah akhir jadwal sesi terminal, atau akhir jadwal terakhir hanya
+dari sesi completed/no_show dalam rentang pembelian; bukan waktu konfirmasi profesional yang mungkin
+terlambat. Akhir jadwal stabil setelah terminal, sementara updated_at berubah saat
+edit ringkasan. Karena itu detail edit tidak membuka lagi hak legacy. Penyelesaian
+terlambat atas jadwal lama dapat tetap ditekan oleh cutoff legacy secara konservatif.
+POST menerima salah satu ID tersebut (opsional); klien lama tanpa ID memakai hak
+tertua yang tersedia. Otorisasi, pemeriksaan dan penyimpanan atomik di server;
+konflik, belum selesai, ID asing atau sudah diulas menghasilkan 409. Salah role 403.
+Pengiriman paralel tetap menghasilkan satu ulasan per unit. Nama penulis pada
+daftar ulasan tetap tersamar.
+
+Migrasi 035 mempertahankan ulasan lama tanpa mengarang tautan: unit yang selesai
+pada/sebelum ulasan legacy tanpa ID terakhir untuk pasangan pasien/profesional
+tidak ditawarkan lagi. Unit yang selesai sesudahnya tetap tersedia. Legacy dengan
+created_at NULL menutup seluruh unit pasangan itu sampai rekonsiliasi manual.
+Tidak ada backfill atau penghapusan ulasan. Aplikasi meminta ulasan setelah refresh,
+resume atau kembali ke layar pasien (poll 30 detik); pembatalan dialog menekan
+prompt otomatis unit itu selama sesi aplikasi, sementara aksi manual tetap ada.
 Contoh ulasan di aplikasi ditandai **Contoh/demo**, tidak ditulis ke tabel pasien,
 dan tidak termasuk rata-rata, jumlah ulasan, atau persentase terbantu.
 

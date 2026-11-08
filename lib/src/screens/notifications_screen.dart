@@ -240,7 +240,7 @@ class _NotificationCard extends StatelessWidget {
     };
     return SoftCard(
       onTap: item.isRead ? null : onTap,
-      color: item.isRead ? null : MalvaColors.seed.withValues(alpha: 0.05),
+      color: Colors.white,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

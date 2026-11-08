@@ -8,6 +8,7 @@ import '../providers/providers.dart';
 import '../services/care_session_refresh.dart';
 import '../services/server_clock.dart';
 import '../widgets/session_attendance_actions.dart';
+import '../widgets/doctor_review_actions.dart';
 import '../services/malva_api_client.dart';
 import '../services/meeting_launcher.dart';
 import '../theme.dart';
@@ -137,6 +138,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
         _isLoading = false;
       });
       _sessionRefresh.update(_sessions);
+      ref.read(reviewEntitlementsRevisionProvider.notifier).state++;
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {

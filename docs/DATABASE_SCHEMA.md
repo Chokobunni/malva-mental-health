@@ -888,10 +888,17 @@ Ulasan pasien atas profesional.
 | `id` | uuid | PK, DEFAULT gen_random_uuid() | Review ID |
 | `professional_id` / `patient_id` | uuid | NOT NULL, FK → users(id) CASCADE | Pihak terkait |
 | `booking_id` | uuid | NULLABLE, FK → bookings(id) | Booking asal |
+| `session_id` | uuid | NULLABLE, UNIQUE parsial (035) | Sesi satu kali yang diulas |
+| `care_package_id` | uuid | NULLABLE, UNIQUE parsial (035) | Paket care yang diulas |
 | `helpfulness_percent` | integer | NOT NULL, CHECK 0–100 | Persentase membantu |
 | `review_text` | text | NULLABLE | Isi ulasan |
 | `helpful` | boolean | NOT NULL, DEFAULT true | Tandai membantu |
 | `created_at` | timestamptz | DEFAULT CURRENT_TIMESTAMP | Waktu dibuat |
+
+Migrasi 035 memastikan kedua ID entitlement tidak dapat diisi bersama. Keduanya
+kosong hanya pada ulasan legacy; tidak ada backfill dugaan. Store memvalidasi
+pemilik/profesional dan penyelesaian dalam transaksi dengan advisory lock pasangan,
+serta unique index per unit. Lihat [aturan API](API_DOCUMENTATION.md).
 
 ### 3.35 e_prescriptions (migrasi 006)
 

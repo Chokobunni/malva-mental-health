@@ -2364,12 +2364,26 @@ class MalvaApiClient {
     return BackendDoctorReviews.fromJson(payload);
   }
 
+  Future<List<BackendReviewEntitlement>> listReviewEntitlements({
+    required String accessToken,
+  }) async {
+    final payload =
+        await _send('GET', '/v1/review-entitlements', accessToken: accessToken);
+    return _expectList(
+            payload['entitlements'], 'Respons hak ulasan tidak valid.')
+        .whereType<Map<String, dynamic>>()
+        .map(BackendReviewEntitlement.fromJson)
+        .toList(growable: false);
+  }
+
   Future<void> createDoctorReview({
     required String accessToken,
     required String userId,
     required int stars,
     String reviewText = '',
     bool helpful = true,
+    String? sessionId,
+    String? carePackageId,
   }) async {
     await _send('POST', '/v1/doctors/$userId/reviews',
         accessToken: accessToken,
@@ -2377,6 +2391,9 @@ class MalvaApiClient {
           'stars': stars,
           'review_text': reviewText,
           'helpful': helpful,
+          if (sessionId?.isNotEmpty == true) 'session_id': sessionId,
+          if (carePackageId?.isNotEmpty == true)
+            'care_package_id': carePackageId,
         });
   }
 
@@ -3267,6 +3284,7 @@ class BackendAssessmentSummary {
     required this.crisisFlag,
     this.certaintyFactor = 0.0,
     this.ruleTrace = '',
+    this.answers = const {},
   });
 
   factory BackendAssessmentSummary.fromJson(Map<String, dynamic> json) {
@@ -3279,6 +3297,15 @@ class BackendAssessmentSummary {
       crisisFlag: json['crisis_flag'] == true,
       certaintyFactor: (json['cf'] as num?)?.toDouble() ?? 0.0,
       ruleTrace: json['rule_trace']?.toString() ?? '',
+      answers: {
+        for (final answer in (json['answers'] as List? ?? const []))
+          if (answer is Map &&
+              answer['question_id'] is String &&
+              answer['score'] is int &&
+              (answer['score'] as int) >= 0 &&
+              (answer['score'] as int) <= 3)
+            answer['question_id'] as String: answer['score'] as int
+      },
     );
   }
 
@@ -3294,6 +3321,7 @@ class BackendAssessmentSummary {
 
   /// Jejak rule yang menembak (audit trail ringkas).
   final String ruleTrace;
+  final Map<String, int> answers;
 }
 
 class BackendScreeningSession {
@@ -5086,6 +5114,30 @@ class BackendChatAccess {
   final bool hasActivePackage;
   final String sessionId;
   final DateTime? sessionEndsAt;
+}
+
+class BackendReviewEntitlement {
+  const BackendReviewEntitlement(
+      {this.sessionId = '',
+      this.carePackageId = '',
+      required this.professionalId,
+      this.professionalName = 'Profesional',
+      this.completedAt});
+  factory BackendReviewEntitlement.fromJson(Map<String, dynamic> json) =>
+      BackendReviewEntitlement(
+          sessionId: json['session_id']?.toString() ?? '',
+          carePackageId: json['care_package_id']?.toString() ?? '',
+          professionalId: json['professional_id']?.toString() ?? '',
+          professionalName:
+              json['professional_name']?.toString() ?? 'Profesional',
+          completedAt: json['completed_at']?.toString());
+  final String sessionId;
+  final String carePackageId;
+  final String professionalId;
+  final String professionalName;
+  final String? completedAt;
+  String get key => '$professionalId:$sessionId:$carePackageId';
+  bool get isPackage => carePackageId.isNotEmpty;
 }
 
 class BackendDoctorReviewItem {
