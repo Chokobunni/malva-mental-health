@@ -63,9 +63,26 @@
   Production API/Google configuration is present in all three compiled clients,
   with all five mood emoji assets. The same APK installed and rendered the
   role-selection screen on an Android emulator without an app fatal exception.
+- Release APK SHA-256:
+  `e5df706fe2ff370c4994a89afa194301611fa9248cf56f392a3af108351aa6d8`.
+  Public versioned and latest downloads were fetched again and match this hash.
+  [Download universal APK](https://malva.web.id/downloads/Malva-0.1.10-build11-2026-11-09-ce2a06e-universal.apk).
+- APK client source: `ce2a06e708d2a10163edb325df1f7c079e46110a`.
+  Backend cleanup follow-up: `99819b956f0cf07e87c9919c5badfcc3683b4573`.
+  Client source directories are unchanged by that follow-up. The deployed API
+  binary's Go build information confirms the latter revision with
+  `vcs.modified=false`; health check succeeds and the entitlement route requires
+  authentication. Backend/web/APK deployment workflows completed successfully.
+- Flutter CI passed analyzer, both timezone test jobs, web build and Windows
+  build. Backend CI passed lint, PostgreSQL tests with `-race` and all convention,
+  environment, migration, coverage and API-documentation gates.
+- All final runtime workflows succeeded: Flutter CI `42532013484`, web deploy
+  `42532013536`, APK build/deploy `42532013617`, backend CI `42532615270`,
+  backend deploy `42532615182`, Security Gates `42532615226`. Backend binary,
+  Docker and security-scan jobs also completed successfully. The earlier failed
+  backend lint run is superseded by the verified cleanup follow-up.
 
-Release artifact and deployment results are recorded after the remaining gates
-complete. Operational logs, PNGs, PDFs and the release manifest are retained in
+Operational logs, PNGs, PDFs and the release manifest are retained in
 `D:/Project/Malva/2026-07-09/_qa_2026_11_09_clinical/` and
 `D:/Project/Malva/2026-07-09/_qa_2026_11_09_clinical_reviews/`.
 

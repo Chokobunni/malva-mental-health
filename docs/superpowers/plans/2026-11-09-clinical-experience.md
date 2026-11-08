@@ -73,4 +73,6 @@ Task 4 evidence: `patient-corrections-red-v11.log` captures `Bad state: No eleme
 - [x] Review integrated diff against every requested item/reference and resolve conflicts/regressions.
 - [x] Run Flutter full suite/analyzer/format, Go build/vet/tests with PostgreSQL and all repository gates.
 - [x] Update domain contracts, QA record, version; build signed universal APK and inspect startup.
-- [ ] Commit Conventional Commits, push and verify workflows/deployment/download integrity using existing release procedure.
+- [x] Commit Conventional Commits, push and verify workflows/deployment/download integrity using existing release procedure.
+
+Release evidence: APK 0.1.10+11 is signed for ARM32/ARM64/x86_64, installed and launched on the emulator. Public versioned/latest downloads match SHA-256 `e5df706fe2ff370c4994a89afa194301611fa9248cf56f392a3af108351aa6d8`. Runtime changes are pushed to main/work branch; client, backend, security and deployment workflows pass. See `docs/qa/2026-11-09-clinical-experience.md` and external release manifest for source revisions and limits.
