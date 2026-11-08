@@ -72,5 +72,5 @@ Task 4 evidence: `patient-corrections-red-v11.log` captures `Bad state: No eleme
 
 - [x] Review integrated diff against every requested item/reference and resolve conflicts/regressions.
 - [x] Run Flutter full suite/analyzer/format, Go build/vet/tests with PostgreSQL and all repository gates.
-- [ ] Update domain contracts, QA record, version; build signed universal APK and inspect startup.
+- [x] Update domain contracts, QA record, version; build signed universal APK and inspect startup.
 - [ ] Commit Conventional Commits, push and verify workflows/deployment/download integrity using existing release procedure.

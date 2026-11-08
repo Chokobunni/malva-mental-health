@@ -18,7 +18,9 @@ func TestReviewEntitlementLegacyCutoffAndOwnership(t *testing.T) {
 		}
 	}
 	t.Cleanup(func() {
-		db.ExecContext(ctx, `DELETE FROM care_sessions WHERE professional_id=$1`, professional)
+		if _, err := db.ExecContext(ctx, `DELETE FROM care_sessions WHERE professional_id=$1`, professional); err != nil {
+			t.Errorf("cleanup care sessions: %v", err)
+		}
 		cleanupTestUsers(t, db, patient, professional, other)
 	})
 	var oldSession, newSession string
@@ -71,8 +73,10 @@ func TestReviewEntitlementConcurrentLegacyRequests(t *testing.T) {
 		}
 	}
 	t.Cleanup(func() {
+		if _, err := db.ExecContext(ctx, `DELETE FROM care_sessions WHERE patient_id=$1`, patient); err != nil {
+			t.Errorf("cleanup care sessions: %v", err)
+		}
 		cleanupTestUsers(t, db, patient, professional)
-		db.ExecContext(ctx, `DELETE FROM care_sessions WHERE patient_id=$1`, patient)
 	})
 	if _, err := db.ExecContext(ctx, `INSERT INTO care_sessions(patient_id,professional_id,scheduled_at,status) VALUES($1,$2,now()-interval '1 hour','completed')`, patient, professional); err != nil {
 		t.Fatal(err)
@@ -101,8 +105,12 @@ func TestReviewEntitlementWaitsForWholePackage(t *testing.T) {
 	s, db, ctx := attendedTestStore(t)
 	patient, professional, pkg := mustUUID(t, db, ctx), mustUUID(t, db, ctx), mustUUID(t, db, ctx)
 	t.Cleanup(func() {
-		db.ExecContext(ctx, `DELETE FROM care_sessions WHERE package_id=$1`, pkg)
-		db.ExecContext(ctx, `DELETE FROM care_packages WHERE id=$1`, pkg)
+		if _, err := db.ExecContext(ctx, `DELETE FROM care_sessions WHERE package_id=$1`, pkg); err != nil {
+			t.Errorf("cleanup care sessions: %v", err)
+		}
+		if _, err := db.ExecContext(ctx, `DELETE FROM care_packages WHERE id=$1`, pkg); err != nil {
+			t.Errorf("cleanup care package: %v", err)
+		}
 	})
 	if _, err := db.ExecContext(ctx, `INSERT INTO care_packages(id,patient_id,professional_id,status,expires_at) VALUES($1,$2,$3,'active',now()+interval '1 day')`, pkg, patient, professional); err != nil {
 		t.Fatal(err)

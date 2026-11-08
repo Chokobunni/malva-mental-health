@@ -17,8 +17,12 @@ func TestReviewRenewalWaitsForEarlierAttendanceAndCreditReplacement(t *testing.T
 		}
 	}
 	t.Cleanup(func() {
-		db.ExecContext(ctx, `DELETE FROM care_sessions WHERE patient_id=$1`, patient)
-		db.ExecContext(ctx, `DELETE FROM care_packages WHERE patient_id=$1`, patient)
+		if _, err := db.ExecContext(ctx, `DELETE FROM care_sessions WHERE patient_id=$1`, patient); err != nil {
+			t.Errorf("cleanup care sessions: %v", err)
+		}
+		if _, err := db.ExecContext(ctx, `DELETE FROM care_packages WHERE patient_id=$1`, patient); err != nil {
+			t.Errorf("cleanup care packages: %v", err)
+		}
 		cleanupTestUsers(t, db, patient, professional)
 	})
 	var original, renewal, delayed string
@@ -94,8 +98,12 @@ func TestReviewMergedPurchasesUnlockOwnCompletedRange(t *testing.T) {
 		}
 	}
 	t.Cleanup(func() {
-		db.ExecContext(ctx, `DELETE FROM care_sessions WHERE patient_id=$1`, patient)
-		db.ExecContext(ctx, `DELETE FROM care_packages WHERE professional_id=$1`, professional)
+		if _, err := db.ExecContext(ctx, `DELETE FROM care_sessions WHERE patient_id=$1`, patient); err != nil {
+			t.Errorf("cleanup care sessions: %v", err)
+		}
+		if _, err := db.ExecContext(ctx, `DELETE FROM care_packages WHERE professional_id=$1`, professional); err != nil {
+			t.Errorf("cleanup care packages: %v", err)
+		}
 		cleanupTestUsers(t, db, patient, professional, foreign)
 	})
 	var original, booking, pending string
@@ -171,8 +179,12 @@ func TestReviewCompletedPackageThenRenewalKeepsSeparateEntitlements(t *testing.T
 		}
 	}
 	t.Cleanup(func() {
-		db.ExecContext(ctx, `DELETE FROM care_sessions WHERE patient_id=$1`, patient)
-		db.ExecContext(ctx, `DELETE FROM care_packages WHERE patient_id=$1`, patient)
+		if _, err := db.ExecContext(ctx, `DELETE FROM care_sessions WHERE patient_id=$1`, patient); err != nil {
+			t.Errorf("cleanup care sessions: %v", err)
+		}
+		if _, err := db.ExecContext(ctx, `DELETE FROM care_packages WHERE patient_id=$1`, patient); err != nil {
+			t.Errorf("cleanup care packages: %v", err)
+		}
 		cleanupTestUsers(t, db, patient, professional)
 	})
 	var original string

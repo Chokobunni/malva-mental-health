@@ -23,8 +23,12 @@ func TestReviewPackageConcurrentLegacyPOSTAndOwnership(t *testing.T) {
 		}
 	}
 	t.Cleanup(func() {
-		db.ExecContext(ctx, `DELETE FROM care_sessions WHERE patient_id=$1`, ids[0])
-		db.ExecContext(ctx, `DELETE FROM care_packages WHERE patient_id=$1`, ids[0])
+		if _, err := db.ExecContext(ctx, `DELETE FROM care_sessions WHERE patient_id=$1`, ids[0]); err != nil {
+			t.Errorf("cleanup care sessions: %v", err)
+		}
+		if _, err := db.ExecContext(ctx, `DELETE FROM care_packages WHERE patient_id=$1`, ids[0]); err != nil {
+			t.Errorf("cleanup care packages: %v", err)
+		}
 		cleanupTestUsers(t, db, ids...)
 	})
 	var pkg, session string

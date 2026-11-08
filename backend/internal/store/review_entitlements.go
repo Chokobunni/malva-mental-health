@@ -87,7 +87,7 @@ func listReviewEntitlements(ctx context.Context, db reviewQuerier, patientID, pr
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make([]ReviewEntitlement, 0)
 	for rows.Next() {
 		var e ReviewEntitlement
@@ -114,7 +114,7 @@ func (s *Store) CreateDoctorReviewForEntitlement(ctx context.Context, profession
 	if err != nil {
 		return DoctorReview{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	// Serialize old and new clients before checking eligibility; uniqueness also
 	// protects each unit independently of the patient/professional lock.
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, patientID+":"+professionalID); err != nil {

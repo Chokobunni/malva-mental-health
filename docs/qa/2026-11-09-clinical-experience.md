@@ -52,6 +52,17 @@
 - Go build/vet, generated API documentation (144 API routes plus one static),
   convention/WIB, environment, migration and coverage gates passed. Dart WIB
   and platform-isolation gates passed with the existing nine allowlisted hits.
+- CI's first lint run exposed unchecked database cleanup errors. Cleanup tests
+  now report failures; deferred row close/transaction rollback follow existing
+  store conventions. No eligibility or client behavior changed in this follow-up.
+  Local golangci-lint reports zero issues; full serial PostgreSQL tests,
+  build/vet, conventions and API checks passed again after the fix.
+- Signed universal APK 0.1.10+11 built successfully (ARM32/ARM64/x86_64).
+  Certificate SHA-256 matches the established release certificate
+  `965f7430ec7f67a44b7a99e83f155e601116ff16c18fa8db57a4e79de4f2d300`.
+  Production API/Google configuration is present in all three compiled clients,
+  with all five mood emoji assets. The same APK installed and rendered the
+  role-selection screen on an Android emulator without an app fatal exception.
 
 Release artifact and deployment results are recorded after the remaining gates
 complete. Operational logs, PNGs, PDFs and the release manifest are retained in
