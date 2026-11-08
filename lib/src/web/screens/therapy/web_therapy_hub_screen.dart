@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../platform/platform_providers.dart';
 import '../../../providers/providers.dart';
 import '../../../services/malva_api_client.dart';
 import '../../../theme.dart';
@@ -74,6 +73,7 @@ class _WebTherapyHubScreenState extends ConsumerState<WebTherapyHubScreen> {
   Future<void> _save(Map<String, dynamic> answers) async {
     final module = _module;
     if (module == null || _saving) return;
+    final owner = ref.read(currentSessionProvider);
     setState(() {
       _saving = true;
       _saveError = null;
@@ -87,10 +87,10 @@ class _WebTherapyHubScreenState extends ConsumerState<WebTherapyHubScreen> {
                 answers: answers,
                 summary: assessmentSummary(module.id, answers),
               );
-      if (!mounted) return;
+      if (!mounted || ref.read(currentSessionProvider) != owner) return;
       setState(() => _saving = false);
       final action = await _showSavedDialog(module, answers);
-      if (!mounted) return;
+      if (!mounted || ref.read(currentSessionProvider) != owner) return;
       if (action == _WebSavedAction.share) {
         await _share(submission);
       } else if (action == _WebSavedAction.download) {
@@ -194,21 +194,23 @@ class _WebTherapyHubScreenState extends ConsumerState<WebTherapyHubScreen> {
     Map<String, dynamic> answers,
   ) async {
     final now = wibNow();
+    final owner = ref.read(currentSessionProvider);
     try {
-      await ref.read(fileExporterProvider).saveText(
+      await ref.read(exportServiceProvider).sharePdf(
+            title: 'Worksheet ${module.title} — Malva',
             filename: webWorksheetFileName(module, now),
-            content: webWorksheetSummaryText(
+            lines: webWorksheetSummaryText(
               module: module,
               answers: answers,
               createdAt: now,
-            ),
-            mimeType: 'text/plain',
-            subject: module.title,
+            ).split('\n'),
+            canShare: () =>
+                mounted && ref.read(currentSessionProvider) == owner,
           );
-      if (!mounted) return;
+      if (!mounted || ref.read(currentSessionProvider) != owner) return;
       _showMessage('Ringkasan diunduh.');
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || ref.read(currentSessionProvider) != owner) return;
       _showMessage('Gagal mengunduh. ${friendlyErrorMessage(error)}');
     }
   }

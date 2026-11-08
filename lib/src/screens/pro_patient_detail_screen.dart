@@ -10,6 +10,7 @@ import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/therapy_library.dart';
 import 'chat_screen.dart';
+import 'assessment_history_screen.dart';
 
 // ============================================================
 // PRO PATIENT DETAIL — semua yang dibutuhkan profesional untuk
@@ -40,6 +41,110 @@ class ProPatientDetailScreen extends ConsumerStatefulWidget {
 
 class _ProPatientDetailScreenState
     extends ConsumerState<ProPatientDetailScreen> {
+  Set<String> _assessmentInstruments = {'who5', 'gad7', 'phq9', 'dass21'};
+  bool _oldestAssessmentFirst = false;
+  int _visibleAssessments = 5;
+
+  List<Widget> _clinicalAssessmentRecords() {
+    final entries = filterAssessmentHistory([
+      for (final screening in _screenings)
+        assessmentEntryFromScreening(screening),
+      for (final worksheet in _worksheets)
+        if (isCompleteAssessmentAnswers(worksheet.moduleId, worksheet.answers))
+          assessmentEntryFromSubmission(worksheet),
+    ],
+        instruments: _assessmentInstruments,
+        oldestFirst: _oldestAssessmentFirst);
+    return [
+      if (entries.isEmpty &&
+          !_isUnavailable('Screening PHQ-9 / GAD-7') &&
+          !_isUnavailable('Assessment & worksheet'))
+        const EmptyState(
+            icon: Icons.fact_check_outlined,
+            title: 'Belum ada screening',
+            subtitle: 'Tidak ada hasil untuk filter ini.'),
+      for (final entry in entries.take(_visibleAssessments)) ...[
+        if (entry.screening != null)
+          _clinicalScreening(entry.screening!)
+        else
+          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(formatAssessmentDate(entry.date),
+                style: const TextStyle(fontSize: 12)),
+            TherapySubmissionView(
+                key: ValueKey('worksheet-' + entry.sourceId),
+                moduleId: entry.moduleId,
+                title: entry.title,
+                answers: entry.answers,
+                summary: entry.subtitle),
+          ]),
+        const SizedBox(height: 8),
+      ],
+      if (entries.length > _visibleAssessments)
+        TextButton(
+            onPressed: () => setState(() => _visibleAssessments += 5),
+            child: const Text('Tampilkan lebih banyak')),
+    ];
+  }
+
+  Widget _clinicalScreening(BackendScreeningSession sc) => CollapsibleCard(
+        key: ValueKey('screening-${sc.id}'),
+        bordered: true,
+        semanticLabel: 'Detail screening ${_screeningDate(sc.createdAt)}',
+        header: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${_instrumentHeader('PHQ-9', sc.phq9)} • ${_instrumentHeader('GAD-7', sc.gad7)}',
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                ),
+                if (sc.crisisFlag)
+                  const StatusPill(
+                    label: 'CRISIS',
+                    color: MalvaColors.danger,
+                    icon: Icons.warning_amber_rounded,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${_screeningDate(sc.createdAt)} • Overall: ${sc.overallLevel}',
+              style: TextStyle(
+                  color: sc.crisisFlag ? MalvaColors.danger : null,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.5),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ScreeningInstrumentDetail(
+              name: 'PHQ-9',
+              score: sc.phq9.score,
+              maxScore: sc.phq9.maxScore,
+              level: sc.phq9.level,
+              summary: sc.phq9.summary,
+              certaintyFactor: sc.phq9.certaintyFactor,
+              ruleTrace: sc.phq9.ruleTrace,
+            ),
+            const SizedBox(height: 12),
+            _ScreeningInstrumentDetail(
+              name: 'GAD-7',
+              score: sc.gad7.score,
+              maxScore: sc.gad7.maxScore,
+              level: sc.gad7.level,
+              summary: sc.gad7.summary,
+              certaintyFactor: sc.gad7.certaintyFactor,
+              ruleTrace: sc.gad7.ruleTrace,
+            ),
+          ],
+        ),
+      );
+
   List<BackendCarePackage> _packages = const [];
   List<BackendCareSession> _sessions = const [];
   List<BackendScreeningSession> _screenings = const [];
@@ -684,116 +789,21 @@ class _ProPatientDetailScreenState
                   ),
                 ),
               const SizedBox(height: 22),
-              const SectionLabel('Screening WHO-5, GAD-7, PHQ-9, DASS-21',
-                  icon: Icons.assessment_rounded),
+              const SectionLabel('Screening', center: true),
+              AssessmentHistoryFilters(
+                selected: _assessmentInstruments,
+                oldestFirst: _oldestAssessmentFirst,
+                onChanged: (selected, oldest) => setState(() {
+                  _assessmentInstruments = selected;
+                  _oldestAssessmentFirst = oldest;
+                  _visibleAssessments = 5;
+                }),
+              ),
               if (_isUnavailable('Assessment & worksheet'))
                 _sectionStatus('Assessment & worksheet'),
-              for (final w
-                  in _worksheets.where((w) => w.moduleId == 'who5')) ...[
-                TherapySubmissionView(
-                  key: ValueKey('worksheet-${w.id}'),
-                  moduleId: w.moduleId,
-                  title: w.title,
-                  answers: w.answers,
-                  summary: w.summary,
-                  sharedAt: w.sharedAt,
-                ),
-                const SizedBox(height: 8),
-              ],
               if (_isUnavailable('Screening PHQ-9 / GAD-7'))
-                _sectionStatus('Screening PHQ-9 / GAD-7')
-              else if (_screenings.isEmpty)
-                const EmptyState(
-                  icon: Icons.fact_check_outlined,
-                  title: 'Belum ada screening',
-                  subtitle: 'Hasil screening pasien muncul di sini.',
-                )
-              else
-                for (final sc in _screenings.take(3)) ...[
-                  CollapsibleCard(
-                    key: ValueKey('screening-${sc.id}'),
-                    bordered: true,
-                    semanticLabel:
-                        'Detail screening ${_screeningDate(sc.createdAt)}',
-                    header: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${_instrumentHeader('PHQ-9', sc.phq9)} • ${_instrumentHeader('GAD-7', sc.gad7)}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w900),
-                              ),
-                            ),
-                            if (sc.crisisFlag)
-                              const StatusPill(
-                                label: 'CRISIS',
-                                color: MalvaColors.danger,
-                                icon: Icons.warning_amber_rounded,
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${_screeningDate(sc.createdAt)} • Overall: ${sc.overallLevel}',
-                          style: TextStyle(
-                              color: sc.crisisFlag ? MalvaColors.danger : null,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12.5),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _ScreeningInstrumentDetail(
-                          name: 'PHQ-9',
-                          score: sc.phq9.score,
-                          maxScore: sc.phq9.maxScore,
-                          level: sc.phq9.level,
-                          summary: sc.phq9.summary,
-                          certaintyFactor: sc.phq9.certaintyFactor,
-                          ruleTrace: sc.phq9.ruleTrace,
-                        ),
-                        const SizedBox(height: 12),
-                        _ScreeningInstrumentDetail(
-                          name: 'GAD-7',
-                          score: sc.gad7.score,
-                          maxScore: sc.gad7.maxScore,
-                          level: sc.gad7.level,
-                          summary: sc.gad7.summary,
-                          certaintyFactor: sc.gad7.certaintyFactor,
-                          ruleTrace: sc.gad7.ruleTrace,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              const SizedBox(height: 14),
-              for (final w
-                  in _worksheets.where((w) => w.moduleId == 'dass21')) ...[
-                TherapySubmissionView(
-                  key: ValueKey('worksheet-${w.id}'),
-                  moduleId: w.moduleId,
-                  title: w.title,
-                  answers: w.answers,
-                  summary: w.summary,
-                  sharedAt: w.sharedAt,
-                ),
-                const SizedBox(height: 8),
-              ],
-              if (!_isUnavailable('Assessment & worksheet') &&
-                  !_worksheets.any(
-                      (w) => w.moduleId == 'who5' || w.moduleId == 'dass21'))
-                const EmptyState(
-                  icon: Icons.fact_check_outlined,
-                  title: 'Belum ada WHO-5 / DASS-21 dibagikan',
-                  subtitle:
-                      'Hasil muncul setelah pasien membagikan assessment.',
-                ),
+                _sectionStatus('Screening PHQ-9 / GAD-7'),
+              ..._clinicalAssessmentRecords(),
               const SectionLabel('Catatan sesi'),
               if (_isUnavailable('Catatan sesi'))
                 _sectionStatus('Catatan sesi')

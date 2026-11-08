@@ -163,9 +163,6 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
                       title: 'PHQ-9',
                       subtitle:
                           'PHQ-9 menilai gejala depresi selama 2 minggu terakhir. Hasil ini bukan diagnosis.',
-                      scoringDetails: 'Jumlah 9 jawaban (0–3), total 0–27. '
-                          '0–4 minimal; 5–9 ringan; 10–14 sedang; '
-                          '15–19 cukup berat; 20–27 berat.',
                       questions: AssessmentEngine.phq9Questions,
                       answers: _phq9Answers,
                       icon: Icons.sentiment_dissatisfied_rounded,
@@ -179,8 +176,6 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
                       title: 'GAD-7',
                       subtitle:
                           'GAD-7 menilai gejala kecemasan selama 2 minggu terakhir. Hasil ini bukan diagnosis.',
-                      scoringDetails: 'Jumlah 7 jawaban (0–3), total 0–21. '
-                          '0–4 minimal; 5–9 ringan; 10–14 sedang; 15–21 berat.',
                       questions: AssessmentEngine.gad7Questions,
                       answers: _gad7Answers,
                       icon: Icons.psychology_alt_rounded,
@@ -199,9 +194,7 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
                     const SizedBox(height: 8),
                     SoftCard(
                       key: const ValueKey('screening-submit-panel'),
-                      color: _isComplete
-                          ? MalvaColors.mint.withValues(alpha: 0.1)
-                          : MalvaColors.seed.withValues(alpha: 0.06),
+                      color: Colors.white,
                       child: Column(
                         children: [
                           Icon(
@@ -433,7 +426,6 @@ class _AssessmentSection extends StatelessWidget {
     super.key,
     required this.title,
     required this.subtitle,
-    required this.scoringDetails,
     required this.questions,
     required this.answers,
     required this.icon,
@@ -443,7 +435,6 @@ class _AssessmentSection extends StatelessWidget {
 
   final String title;
   final String subtitle;
-  final String scoringDetails;
   final List<AssessmentQuestion> questions;
   final List<int?> answers;
   final IconData icon;
@@ -486,18 +477,6 @@ class _AssessmentSection extends StatelessWidget {
                       subtitle,
                       style: const TextStyle(
                           color: Colors.black, fontWeight: FontWeight.w700),
-                    ),
-                    Material(
-                      color: Colors.transparent,
-                      child: ExpansionTile(
-                        tilePadding: EdgeInsets.zero,
-                        title: const Text('Lihat cara penilaian',
-                            style: TextStyle(color: Colors.black)),
-                        children: [
-                          Text(scoringDetails,
-                              style: const TextStyle(color: Colors.black)),
-                        ],
-                      ),
                     ),
                   ],
                 ),
@@ -741,7 +720,7 @@ class AssessmentResultScreen extends StatelessWidget {
                         const SizedBox(height: 12),
                         ExpansionTile(
                           tilePadding: EdgeInsets.zero,
-                          title: const Text('Lihat cara penilaian'),
+                          title: const Text('Apa arti skormu?'),
                           children: [
                             _ScoreExplanationCard(
                               title: 'PHQ-9 (Depresi)',
@@ -804,76 +783,6 @@ class AssessmentResultScreen extends StatelessWidget {
                                   'Kecemasan berat. Segera hubungi profesional kesehatan mental.'
                                 ),
                               ],
-                            ),
-                            const SizedBox(height: 12),
-                            // === Forward Chaining + Certainty Factor ===
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color:
-                                      MalvaColors.seed.withValues(alpha: 0.25),
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Row(
-                                    children: [
-                                      Icon(Icons.psychology_rounded,
-                                          size: 18, color: MalvaColors.seed),
-                                      SizedBox(width: 6),
-                                      Expanded(
-                                          child: Text(
-                                        'Dukungan aturan (Forward Chaining + CF)',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w900,
-                                          fontSize: 12.5,
-                                          color: MalvaColors.seed,
-                                        ),
-                                      )),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                      'Versi aturan: ${bundle.phq9.ruleVersion}'),
-                                  const SizedBox(height: 8),
-                                  const Text(
-                                    'CF menunjukkan dukungan aturan dalam model, '
-                                    'bukan probabilitas diagnosis atau persentase '
-                                    'keparahan. Skor dan tingkat gejala ditampilkan '
-                                    'terpisah; hasil perlu ditinjau profesional.',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  _CFBar(
-                                    label: 'PHQ-9 Depresi',
-                                    cf: bundle.phq9.certaintyFactor,
-                                    color: bundle.phq9.level.color,
-                                  ),
-                                  const SizedBox(height: 6),
-                                  _CFBar(
-                                    label: 'GAD-7 Kecemasan',
-                                    cf: bundle.gad7.certaintyFactor,
-                                    color: bundle.gad7.level.color,
-                                  ),
-                                  if (bundle.phq9.rulesFired.isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Rule aktif: ${bundle.phq9.rulesFired.take(3).map((r) => r.label).join('; ')}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurfaceVariant),
-                                    ),
-                                  ],
-                                ],
-                              ),
                             ),
                           ],
                         ),
@@ -1023,55 +932,6 @@ class _RecommendDoctors extends ConsumerWidget {
                 label: const Text('Cari Profesional'),
               ),
             ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Bar visual CF mentah: dukungan aturan, tanpa label kepastian diagnosis.
-class _CFBar extends StatelessWidget {
-  const _CFBar({
-    required this.label,
-    required this.cf,
-    required this.color,
-  });
-
-  final String label;
-  final double cf;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final pct = (cf.clamp(0.0, 1.0) * 100);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style:
-                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
-              ),
-            ),
-            Text(
-              'CF ${pct.toStringAsFixed(0)}%',
-              style: TextStyle(
-                  fontWeight: FontWeight.w900, fontSize: 11.5, color: color),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(999),
-          child: LinearProgressIndicator(
-            value: cf.clamp(0.0, 1.0),
-            minHeight: 8,
-            color: color,
-            backgroundColor: Colors.black.withValues(alpha: 0.08),
           ),
         ),
       ],

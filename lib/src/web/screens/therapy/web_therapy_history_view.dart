@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../platform/platform_providers.dart';
 import '../../../providers/providers.dart';
 import '../../../services/malva_api_client.dart';
 import '../../../time/wib.dart';
@@ -87,8 +86,9 @@ class _WebTherapyHistoryViewState extends ConsumerState<WebTherapyHistoryView> {
   }
 
   Future<void> _download(BackendTherapySubmission item) async {
+    final owner = ref.read(currentSessionProvider);
     final module = webTherapyModuleById(item.moduleId);
-    final createdAt = parseWibStored(item.createdAt) ?? wibNow();
+    final createdAt = parseWibStored(item.createdAt);
     final content = module == null
         ? item.summary
         : webWorksheetSummaryText(
@@ -97,7 +97,8 @@ class _WebTherapyHistoryViewState extends ConsumerState<WebTherapyHistoryView> {
             createdAt: createdAt,
           );
     try {
-      await ref.read(fileExporterProvider).saveText(
+      await ref.read(exportServiceProvider).sharePdf(
+            title: 'Worksheet ${item.title} — Malva',
             filename: webWorksheetFileName(
               module ??
                   TherapyModule(
@@ -105,16 +106,19 @@ class _WebTherapyHistoryViewState extends ConsumerState<WebTherapyHistoryView> {
                     description: '',
                     steps: const <String>[],
                   ),
-              createdAt,
+              createdAt ?? wibNow(),
             ),
-            content: content,
-            mimeType: 'text/plain',
-            subject: item.title,
+            lines: [
+              if (createdAt == null) 'Tanggal tidak tercatat',
+              ...content.split('\n')
+            ],
+            canShare: () =>
+                mounted && ref.read(currentSessionProvider) == owner,
           );
-      if (!mounted) return;
+      if (!mounted || ref.read(currentSessionProvider) != owner) return;
       _showMessage('Ringkasan diunduh.');
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || ref.read(currentSessionProvider) != owner) return;
       _showMessage('Gagal mengunduh. ${friendlyErrorMessage(error)}');
     }
   }

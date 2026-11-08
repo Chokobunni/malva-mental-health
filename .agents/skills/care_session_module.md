@@ -49,5 +49,6 @@ Status paket: `pending_payment` → `active` (saat booking dibayar) → `complet
 - **Profesional boleh batal** kapan saja sebelum sesi mulai → kredit sesi otomatis kembali (`recordAutoCredit`, idempoten).
 - **Refund uang** hanya untuk sesi `cancelled_by_professional`; nilai refund = `price / total_sessions` (`RefundValue`). Cegah double-refund (409).
 - Validasi slot berlaku untuk kedua peran: di dalam jam praktik, bukan hari libur, belum terisi. Lead time 24 jam hanya untuk pasien.
+- Payload jadwal/reschedule kedua peran adalah wall-clock WIB `yyyy-MM-ddTHH:mm`. Hasil pemilih pasien membawa akhiran `|chat`/`|video` untuk keperluan UI; pisahkan akhiran tersebut sebelum mengirim `scheduled_at`, termasuk saat reschedule.
 - Sesi video **wajib** memakai Google Meet. Tidak ada penyedia fallback: bila pembuatan link gagal, permintaan ditolak dan bisa diulang lewat `POST /v1/care-sessions/{id}/meet-link`.
 - Token Google dikelola senyap (tanpa notifikasi izin kedaluwarsa). Sweeper sepuluh menit menyegarkan access token yang tersisa ≤15 menit atau pemeliharaan tujuh hari jatuh tempo; hasil/rotasi/`last_refreshed_at` atomik. `invalid_grant` dihapus tanpa notifikasi. Batas tujuh hari Testing tidak dapat diperpanjang programatik; operator harus OAuth consent screen → Publish app. Rujukan: `docs/GOOGLE_CALENDAR_SETUP.md`, migrasi 030.

@@ -22,7 +22,7 @@ void _phoneSize(WidgetTester tester) {
 
 void main() {
   testWidgets(
-      'WHO instructions and saved conclusion disclose mechanics on demand',
+      'WHO instructions stay concise and saved conclusion explains score without model',
       (tester) async {
     _phoneSize(tester);
     const session = AuthSession(
@@ -56,11 +56,10 @@ void main() {
       ),
     ));
     expect(find.textContaining('Jumlah 5 jawaban'), findsNothing);
-    await tester.tap(find.text('Lihat cara penilaian'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Jumlah 5 jawaban'), findsOneWidget);
-    await tester.tap(find.text('Lihat cara penilaian'));
-    await tester.pumpAndSettle();
+    expect(find.text('Apa arti skormu?'), findsNothing);
+    expect(find.textContaining('WHO-5 mengukur kesejahteraan psikologis'),
+        findsOneWidget);
+    expect(find.text('0 = Tidak pernah'), findsWidgets);
     for (var i = 1; i <= 5; i++) {
       final chip = find.byKey(ValueKey('initial-who5-q$i-5'));
       await tester.ensureVisible(chip);
@@ -77,14 +76,17 @@ void main() {
     expect(find.text('WHO-5: 100%'), findsOneWidget);
     expect(find.textContaining('Versi aturan:'), findsNothing);
     expect(find.textContaining('CF adalah'), findsNothing);
-    await tester.ensureVisible(find.text('Lihat cara penilaian'));
-    await tester.tap(find.text('Lihat cara penilaian'));
+    await tester.ensureVisible(find.text('Apa arti skormu?'));
+    await tester.tap(find.text('Apa arti skormu?'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Versi aturan:'), findsOneWidget);
-    expect(find.textContaining('CF adalah'), findsOneWidget);
+    expect(find.textContaining('Kesejahteraanmu berada dalam rentang baik'),
+        findsOneWidget);
+    expect(find.textContaining('Versi aturan:'), findsNothing);
+    expect(find.textContaining('CF adalah'), findsNothing);
   });
 
-  testWidgets('PHQ and GAD introductions keep score mechanics collapsed',
+  testWidgets(
+      'PHQ and GAD introductions omit mechanics and retain numeric anchors',
       (tester) async {
     _phoneSize(tester);
     await tester.pumpWidget(ProviderScope(
@@ -95,12 +97,19 @@ void main() {
     expect(find.text('Jawab sesuai 2 minggu terakhir'), findsNothing);
     expect(find.textContaining('Jumlah 9 jawaban'), findsNothing);
     expect(find.textContaining('Jumlah 7 jawaban'), findsNothing);
-    expect(find.text('Lihat cara penilaian'), findsNWidgets(2));
-    await tester.ensureVisible(find.text('Lihat cara penilaian').first);
-    await tester.tap(find.text('Lihat cara penilaian').first);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Jumlah 9 jawaban'), findsOneWidget);
-    expect(find.textContaining('Jumlah 7 jawaban'), findsNothing);
+    expect(find.text('Apa arti skormu?'), findsNothing);
+    expect(find.textContaining('PHQ-9 menilai gejala depresi'), findsOneWidget);
+    expect(
+        find.textContaining('GAD-7 menilai gejala kecemasan'), findsOneWidget);
+    final answers = find.descendant(
+        of: find.byKey(const ValueKey('phq-9-question-1')),
+        matching: find.byType(ChoiceChip));
+    expect(answers, findsNWidgets(4));
+    expect(
+        tester
+            .widgetList<ChoiceChip>(answers)
+            .map((chip) => (chip.label as Text).data),
+        ['0', '1', '2', '3']);
   });
 
   testWidgets(
@@ -130,11 +139,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(safety.hitTestable(), findsOneWidget);
     expect(find.textContaining('Crisis Support:'), findsOneWidget);
-    await tester.ensureVisible(find.text('Lihat cara penilaian'));
+    await tester.ensureVisible(find.text('Apa arti skormu?'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Lihat cara penilaian'));
+    await tester.tap(find.text('Apa arti skormu?'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('CF menunjukkan'), findsOneWidget);
+    expect(find.textContaining('CF menunjukkan'), findsNothing);
+    expect(find.textContaining('PHQ-9 (Depresi) — Apa arti skormu?'),
+        findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

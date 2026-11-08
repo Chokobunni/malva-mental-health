@@ -332,6 +332,26 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Rujukan: [screening](skills/screening_module.md),
   [perhitungan dan alur](../docs/SCREENING_SCORING.md).
 
+## Kontrak pemolesan pasien/profesional (2026-11-08)
+
+- Symptoms Assessment khusus pasien baru saat registrasi, sekali. Login/restore
+  akun lama menuju Home, termasuk setelah reinstall; abandon/skip/back tidak
+  membuat assessment. Status tawaran disimpan per akun sebelum presentasi.
+- Pasien melihat tujuan, total dan arti skor dengan jangkar jawaban, tanpa
+  rumus/CF/model. Perhitungan dan indikator keselamatan tidak berubah; audit
+  profesional tetap tersedia. Katalog berjudul `Screening`.
+- Riwayat screening kedua peran berfilter instrumen/urutan, bertanggal dan dibatasi
+  lima tampilan awal dengan ekspansi. Record bisa dibagikan sebagai PDF atau ke
+  profesional melalui otorisasi server yang sudah ada. Semua aksi ekspor memakai
+  PDF asli, menjaga pergantian akun dan kegagalan sumber; bukan backup seumur hidup.
+- Reschedule mengirim `yyyy-MM-ddTHH:mm` WIB tanpa akhiran tipe sesi. SOS memeriksa
+  status melalui query endpoint dan polling terbatas; penerimaan gateway bukan
+  bukti kontak sudah menerima pesan. Error/kosong/timeout tampil jujur.
+- Profil memuat/menyimpan identitas melalui `/v1/me`; jangan tampilkan identitas
+  contoh. Tiga switch privasi lokal dihapus, Consent Management tetap ada.
+- Rujukan: [desain](../docs/superpowers/specs/2026-11-08-patient-professional-polish-design.md),
+  [screening](skills/screening_module.md), [safety](skills/safety_sos_module.md).
+
 ## Commit
 
 - Format **Conventional Commits**: `feat|fix|refactor|chore|docs|perf|seo|infra: <ringkas>`.

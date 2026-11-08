@@ -154,3 +154,26 @@ Katalog pasien dan detail profesional menyatukan empat instrumen. Skor baku
 terpisah dari CF dukungan model yang belum dikalibrasi klinis. Kontrak data,
 consent dan berbagi tetap memakai mekanisme sebelumnya.
 Rincian: [scoring dan Forward Chaining](SCREENING_SCORING.md).
+
+
+## Koreksi pengalaman pasien/profesional — 8 November 2026
+
+Symptoms Assessment hanya pada registrasi pasien baru, sekali. Login/restore
+menuju Home; skip/back tidak menjadi hasil tes. Tampilan pasien mempertahankan
+penjelasan instrumen, total/arti skor, jangkar jawaban dan disclaimer tanpa rumus.
+Katalog `Screening`, filter instrumen/urutan dan lima hasil awal yang dapat diperluas
+berlaku bagi pasien/profesional. Share menyediakan PDF dan profesional berizin.
+Semua aksi ekspor menggunakan PDF; ringkasan memuat data yang tersedia dengan
+batas feed yang dinyatakan, bukan backup lengkap seumur hidup.
+
+Mood Medication Check-in masuk Self-Care; Therapy Record melalui bagian bawah
+Psychological Therapy; tujuh jenis jebakan pikiran memiliki penjelasan singkat.
+Profil memakai data akun nyata. Switch privasi lokal dihapus, izin berbagi tetap
+melalui Consent Management. Home profesional menempatkan data dibagikan setelah
+pasien terhubung; nav Messages sebelum Lainnya; Profil Profesional paling atas di
+Lainnya, tanpa audit/export ringkasan atau duplikasi Crisis Log.
+
+Reschedule kedua peran menjaga format WIB; kartu aturan paket putih. SOS menampilkan
+status aktual, polling terbatas serta galat/timeout; status terkirim ke gateway
+bukan bukti diterima kontak. Tidak ada perubahan skema atau rumus/CF klinis.
+Rujukan implementasi: [desain koreksi](superpowers/specs/2026-11-08-patient-professional-polish-design.md).

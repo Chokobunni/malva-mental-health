@@ -239,7 +239,7 @@ class WebWorksheetAnswers {
   }
 }
 
-/// Teks ringkasan satu worksheet (dialog sukses & unduhan `.txt`).
+/// Teks ringkasan satu worksheet (dialog sukses & isi PDF).
 ///
 /// Memakai `therapyAnswerEntries` dari therapy_library sehingga format label
 /// dan jawaban sama dengan viewer profesional di mobile.
@@ -280,5 +280,5 @@ String webWorksheetFileName(TherapyModule module, DateTime createdAt) {
       .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
       .replaceAll(RegExp(r'^-+|-+$'), '');
   final date = formatWibDate(createdAt).replaceAll('/', '-');
-  return 'malva-${slug.isEmpty ? 'worksheet' : slug}-$date.txt';
+  return 'malva-${slug.isEmpty ? 'worksheet' : slug}-$date.pdf';
 }

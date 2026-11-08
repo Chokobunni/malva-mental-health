@@ -328,7 +328,10 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
     if (storeState.needsInitialScreeningDecision &&
         !_isTakingInitialScreening) {
       return InitialScreeningConsentScreen(
-        onAgree: () => setState(() => _isTakingInitialScreening = true),
+        onAgree: () {
+          ref.read(malvaStoreProvider.notifier).skipInitialScreening();
+          setState(() => _isTakingInitialScreening = true);
+        },
         onSkip: () {
           ref.read(malvaStoreProvider.notifier).skipInitialScreening();
           setState(() => _isTakingInitialScreening = false);

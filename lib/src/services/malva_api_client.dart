@@ -185,6 +185,7 @@ class MalvaApiClient {
   Future<BackendAuthResult> googleLogin({
     required String idToken,
     UserRole role = UserRole.patient,
+    void Function()? onAccountCreated,
   }) async {
     return _sendAuth(
       'POST',
@@ -193,6 +194,7 @@ class MalvaApiClient {
         'id_token': idToken,
         'role': role.name,
       },
+      onAccountCreated: onAccountCreated,
     );
   }
 
@@ -2574,9 +2576,14 @@ class MalvaApiClient {
     required String accessToken,
     required String incidentId,
   }) async {
-    final payload = await _send(
-        'GET', '/v1/sos-blast-status?incident_id=$incidentId',
-        accessToken: accessToken);
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/sos-blast-status',
+        queryParameters: {'incident_id': incidentId},
+      ),
+      accessToken: accessToken,
+    );
     return BackendSOSBlastStatus.fromJson(
         _expectMap(payload['blast'], 'Respons blast tidak valid.'));
   }
@@ -2977,9 +2984,13 @@ class MalvaApiClient {
     String path,
     Map<String, Object?> body, {
     bool retryOnAuth = true,
+    void Function()? onAccountCreated,
   }) async {
-    final payload =
-        await _send(method, path, body: body, retryOnAuth: retryOnAuth);
+    var created = false;
+    final payload = await _send(method, path,
+        body: body,
+        retryOnAuth: retryOnAuth,
+        onSuccessStatus: (status) => created = status == 201);
     final user = payload['user'];
     final token = payload['access_token'];
     if (user is! Map<String, dynamic> || token is! String) {
@@ -2992,6 +3003,7 @@ class MalvaApiClient {
       'admin' => UserRole.admin,
       _ => UserRole.patient,
     };
+    if (created) onAccountCreated?.call();
     return BackendAuthResult(
       userId: user['id']?.toString() ?? '',
       email: user['email']?.toString() ?? '',
@@ -3010,12 +3022,14 @@ class MalvaApiClient {
     Map<String, Object?>? body,
     Map<String, String>? extraHeaders,
     bool retryOnAuth = true,
+    void Function(int)? onSuccessStatus,
   }) async {
     final uri = baseUri.replace(path: path);
     return _sendUri(method, uri,
         accessToken: accessToken,
         body: body,
         extraHeaders: extraHeaders,
+        onSuccessStatus: onSuccessStatus,
         retryOnAuth: retryOnAuth);
   }
 
@@ -3026,6 +3040,7 @@ class MalvaApiClient {
     Map<String, Object?>? body,
     Map<String, String>? extraHeaders,
     bool retryOnAuth = true,
+    void Function(int)? onSuccessStatus,
   }) async {
     final generation = _authGeneration;
     final requestAccessToken =
@@ -3121,6 +3136,7 @@ class MalvaApiClient {
             accessToken: refreshedToken,
             body: body,
             extraHeaders: extraHeaders,
+            onSuccessStatus: onSuccessStatus,
             retryOnAuth: false);
       } on Object {
         throw MalvaApiException(
@@ -3139,6 +3155,7 @@ class MalvaApiClient {
         code: decoded['code']?.toString(),
       );
     }
+    onSuccessStatus?.call(response.statusCode);
 
     // Sinkronkan jam perangkat ke jam server memakai header `Date` (Go
     // net/http selalu mengirimnya). Non-blocking & tidak pernah melempar:

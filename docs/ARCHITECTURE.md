@@ -403,3 +403,24 @@ Katalog pasien dan detail profesional menyatukan empat instrumen. Skor baku
 terpisah dari CF dukungan model yang belum dikalibrasi klinis. Kontrak data,
 consent dan berbagi tetap memakai mekanisme sebelumnya.
 Rincian: [scoring dan Forward Chaining](SCREENING_SCORING.md).
+
+
+## Koreksi klien mobile/web — 8 November 2026
+
+Penawaran initial screening dibatasi pada respons pendaftaran baru: Google memakai
+status HTTP 201 yang sudah ada; login 200/restore tidak mengaktifkan gerbang.
+SecureStore per akun menyimpan keputusan sebelum presentasi. Formulir/hasil tetap
+terpisah sehingga abandon bukan hasil tes. Profil GET/PATCH `/v1/me` menjaga
+identitas dan rotasi kredensial; respons akun lama ditolak.
+
+Ekspor memakai `ExportService.buildPdf/sharePdf` (pdf + font Roboto terbundel),
+MultiPage dan FileExporter.saveBytes untuk unduhan web/share sheet mobile.
+Blok teks dibatasi karakter dan baris eksplisit; penjagaan akun diperiksa kembali
+sebelum share. Ekspor screening meminta kedua sumber berhasil dan menyebut batas
+feed. Tidak ada perubahan endpoint/DTO/skema. Share profesional tetap memakai
+endpoint/otorisasi paket, tautan dan izin server yang sudah ada.
+
+Reschedule memisahkan tipe sesi dari nilai picker sebelum serialisasi WIB.
+SOS memakai queryParameters pada URI; status pending dipoll maksimal 60 detik,
+berhenti saat terminal/error/dispose/ganti akun. Gateway accepted dipisahkan dari
+delivery receipt; backend belum memiliki alur callback receipt otomatis.

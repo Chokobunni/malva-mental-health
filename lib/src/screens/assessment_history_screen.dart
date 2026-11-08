@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/providers.dart';
+import '../models.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
@@ -36,6 +37,7 @@ class AssessmentHistoryEntry {
     this.answers = const <String, dynamic>{},
     this.screening,
     this.isShared = false,
+    this.sourceId = '',
   });
 
   /// Hasil screening PHQ-9 + GAD-7 (tabel `screenings`).
@@ -55,6 +57,7 @@ class AssessmentHistoryEntry {
   final Map<String, dynamic> answers;
   final BackendScreeningSession? screening;
   final bool isShared;
+  final String sourceId;
 
   bool get isScreening => kind == kindScreening;
 
@@ -127,6 +130,7 @@ AssessmentHistoryEntry assessmentEntryFromSubmission(
     // (`scale_version`) ikut terbawa ke kartu skor.
     answers: submission.answers,
     isShared: submission.isShared,
+    sourceId: submission.id,
   );
 }
 
@@ -140,6 +144,7 @@ AssessmentHistoryEntry assessmentEntryFromScreening(
     subtitle: screeningScoreSummary(session),
     date: session.createdAt,
     screening: session,
+    sourceId: session.id,
   );
 }
 
@@ -151,6 +156,71 @@ int _byDateDescending(AssessmentHistoryEntry a, AssessmentHistoryEntry b) {
   if (dateA == null) return 1;
   if (dateB == null) return -1;
   return dateB.compareTo(dateA);
+}
+
+List<AssessmentHistoryEntry> filterAssessmentHistory(
+  Iterable<AssessmentHistoryEntry> entries, {
+  required Set<String> instruments,
+  bool oldestFirst = false,
+}) {
+  final filtered = entries
+      .where((entry) => entry.isScreening
+          ? instruments.contains('phq9') || instruments.contains('gad7')
+          : instruments.contains(entry.moduleId))
+      .toList();
+  filtered.sort((a, b) {
+    if (a.date == null || b.date == null) return _byDateDescending(a, b);
+    return oldestFirst ? a.date!.compareTo(b.date!) : _byDateDescending(a, b);
+  });
+  return filtered;
+}
+
+class AssessmentHistoryFilters extends StatelessWidget {
+  const AssessmentHistoryFilters(
+      {super.key,
+      required this.selected,
+      required this.oldestFirst,
+      required this.onChanged});
+  final Set<String> selected;
+  final bool oldestFirst;
+  final void Function(Set<String>, bool) onChanged;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButton<bool>(
+            value: oldestFirst,
+            items: const [
+              DropdownMenuItem(value: false, child: Text('Terbaru')),
+              DropdownMenuItem(value: true, child: Text('Terlama')),
+            ],
+            onChanged: (value) {
+              if (value != null) onChanged(selected, value);
+            },
+          ),
+          Wrap(spacing: 8, runSpacing: 4, children: [
+            for (final instrument in const {
+              'who5': 'WHO-5',
+              'gad7': 'GAD-7',
+              'phq9': 'PHQ-9',
+              'dass21': 'DASS-21'
+            }.entries)
+              FilterChip(
+                label: Text(instrument.value),
+                selected: selected.contains(instrument.key),
+                onSelected: (enabled) {
+                  final next = {...selected};
+                  enabled
+                      ? next.add(instrument.key)
+                      : next.remove(instrument.key);
+                  onChanged(next, oldestFirst);
+                },
+              ),
+          ]),
+          const SizedBox(height: 12),
+        ],
+      );
 }
 
 /// Muat seluruh riwayat assessment record (worksheet assessment + screening).
@@ -166,6 +236,7 @@ Future<List<AssessmentHistoryEntry>> loadAssessmentHistory({
   required MalvaApiClient api,
   required String accessToken,
   String? patientId,
+  bool requireAllSources = false,
 }) async {
   final entries = <AssessmentHistoryEntry>[];
   final failures = <Object>[];
@@ -205,7 +276,7 @@ Future<List<AssessmentHistoryEntry>> loadAssessmentHistory({
     }
   }
 
-  if (entries.isEmpty && failures.isNotEmpty) {
+  if (failures.isNotEmpty && (requireAllSources || entries.isEmpty)) {
     throw failures.first;
   }
 
@@ -221,6 +292,8 @@ Future<void> showAssessmentHistoryDetail(
   BuildContext context,
   AssessmentHistoryEntry entry,
 ) {
+  final owner = ProviderScope.containerOf(context, listen: false)
+      .read(currentSessionProvider);
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -237,7 +310,13 @@ Future<void> showAssessmentHistoryDetail(
         // lebih tinggi dari layar.
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
-          child: _AssessmentDetailBody(entry: entry),
+          child: Consumer(builder: (context, ref, _) {
+            if (ref.watch(currentSessionProvider) != owner) {
+              return const Text(
+                  'Akun telah berubah. Buka kembali record milik akun ini.');
+            }
+            return _AssessmentDetailBody(entry: entry);
+          }),
         ),
       ),
     ),
@@ -347,6 +426,8 @@ class _AssessmentDetailBody extends StatelessWidget {
             'Skor assessment adalah alat bantu screening, bukan diagnosis.',
             style: TextStyle(fontSize: 11.5, color: onSurfaceVariant),
           ),
+          const SizedBox(height: 12),
+          AssessmentRecordShareActions(entry: entry),
         ],
       ],
     );
@@ -380,7 +461,6 @@ class _ScreeningScoreCard extends StatelessWidget {
       ] else
         ('15–21', 'Berat'),
     ];
-    final cf = summary.certaintyFactor;
     return SoftCard(
       color: Colors.white,
       child: Column(
@@ -407,7 +487,7 @@ class _ScreeningScoreCard extends StatelessWidget {
           Text(
             '$itemCount pertanyaan tentang gejala '
             '${itemCount == 9 ? 'depresi' : 'kecemasan'} dalam 2 minggu terakhir. '
-            'Tiap jawaban bernilai 0–3; total skor menentukan kategori gejala.',
+            'Skor membantu memahami tingkat gejala yang kamu alami.',
             style: const TextStyle(fontSize: 12.5),
           ),
           if (summary.summary.isNotEmpty) ...[
@@ -417,20 +497,6 @@ class _ScreeningScoreCard extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
-          const SizedBox(height: 12),
-          Text(
-            cf.isFinite
-                ? 'Dukungan aturan: CF ${(cf.clamp(0.0, 1.0) * 100).round()}%'
-                : 'Dukungan aturan: CF tidak tersedia',
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'CF adalah dukungan aturan dalam model, bukan probabilitas diagnosis '
-            'atau persentase keparahan. Bobot belum dikalibrasi secara klinis; '
-            'CF tidak mengubah skor atau kategori gejala.',
-            style: TextStyle(fontSize: 11.5),
-          ),
           const SizedBox(height: 8),
           Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -542,6 +608,9 @@ class _AssessmentHistoryScreenState
   List<AssessmentHistoryEntry> _entries = const [];
   bool _isLoading = true;
   String? _error;
+  Set<String> _instruments = {'who5', 'gad7', 'phq9', 'dass21'};
+  bool _oldestFirst = false;
+  int _visibleCount = 5;
 
   @override
   void initState() {
@@ -569,13 +638,13 @@ class _AssessmentHistoryScreenState
         accessToken: token,
         patientId: session?.backendUserId,
       );
-      if (!mounted) return;
+      if (!mounted || ref.read(currentSessionProvider) != session) return;
       setState(() {
         _entries = entries;
         _isLoading = false;
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || ref.read(currentSessionProvider) != session) return;
       setState(() {
         _isLoading = false;
         _error = friendlyErrorMessage(e);
@@ -585,6 +654,14 @@ class _AssessmentHistoryScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(currentSessionProvider, (previous, next) {
+      if (previous == next) return;
+      _entries = const [];
+      _visibleCount = 5;
+      _load();
+    });
+    final visible = filterAssessmentHistory(_entries,
+        instruments: _instruments, oldestFirst: _oldestFirst);
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: _load,
@@ -609,6 +686,15 @@ class _AssessmentHistoryScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  AssessmentHistoryFilters(
+                    selected: _instruments,
+                    oldestFirst: _oldestFirst,
+                    onChanged: (instruments, oldest) => setState(() {
+                      _instruments = instruments;
+                      _oldestFirst = oldest;
+                      _visibleCount = 5;
+                    }),
+                  ),
                   if (_isLoading)
                     const SoftCard(
                       child: Center(
@@ -629,8 +715,10 @@ class _AssessmentHistoryScreenState
                           'selesaikan screening PHQ-9 + GAD-7. Hasilnya '
                           'tersimpan di sini.',
                     )
-                  else
-                    for (final entry in _entries) ...[
+                  else if (visible.isEmpty)
+                    const Text('Tidak ada hasil untuk filter ini.')
+                  else ...[
+                    for (final entry in visible.take(_visibleCount)) ...[
                       AssessmentHistoryCard(
                         entry: entry,
                         onTap: () => showAssessmentHistoryDetail(
@@ -640,6 +728,13 @@ class _AssessmentHistoryScreenState
                       ),
                       const SizedBox(height: 10),
                     ],
+                    if (visible.length > _visibleCount)
+                      TextButton(
+                        onPressed: () => setState(() => _visibleCount += 5),
+                        child: Text(
+                            'Tampilkan lebih banyak (${visible.length - _visibleCount})'),
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -718,6 +813,169 @@ class AssessmentHistoryCard extends StatelessWidget {
 /// Memuat datanya sendiri dan sengaja TIDAK menampilkan spinner besar:
 /// halaman induk tidak boleh tertahan menunggu endpoint ini. Bila kosong atau
 /// gagal, yang tampil hanya kartu ajakan/keterangan ringkas.
+/// Sharing uses the same server authorization as chat and worksheet records.
+class AssessmentRecordShareActions extends ConsumerStatefulWidget {
+  const AssessmentRecordShareActions({super.key, required this.entry});
+  final AssessmentHistoryEntry entry;
+  @override
+  ConsumerState<AssessmentRecordShareActions> createState() =>
+      _AssessmentRecordShareActionsState();
+}
+
+class _AssessmentRecordShareActionsState
+    extends ConsumerState<AssessmentRecordShareActions> {
+  late final AuthSession? _owner;
+  bool _busy = false;
+  @override
+  void initState() {
+    super.initState();
+    _owner = ref.read(currentSessionProvider);
+  }
+
+  bool get _ownerMatches =>
+      mounted && ref.read(currentSessionProvider) == _owner;
+  void _toast(String message) {
+    if (_ownerMatches)
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _share({required bool pdf}) async {
+    if (_busy || !_ownerMatches || _owner?.role != UserRole.patient) return;
+    final token = _owner?.accessToken;
+    if (token == null || token.isEmpty) {
+      _toast('Login dulu untuk membagikan hasil.');
+      return;
+    }
+    setState(() => _busy = true);
+    final entry = widget.entry;
+    try {
+      if (pdf) {
+        final lines = <String>[formatAssessmentDate(entry.date)];
+        final screening = entry.screening;
+        if (screening != null) {
+          lines.add(screeningScoreSummary(screening));
+          if (screening.phq9.summary.isNotEmpty)
+            lines.add(screening.phq9.summary);
+          if (screening.gad7.summary.isNotEmpty)
+            lines.add(screening.gad7.summary);
+          if (screening.crisisFlag)
+            lines.add(
+                'Risiko krisis: segera hubungi bantuan darurat atau profesional terdekat.');
+        } else if (entry.moduleId == 'who5') {
+          lines.add(who5Summary(entry.answers));
+        } else if (entry.moduleId == 'dass21') {
+          final score = scoreDass21(entry.answers);
+          lines.addAll([
+            'Depresi: ${score.depression}/42 — ${score.depressionLevel}',
+            'Kecemasan: ${score.anxiety}/42 — ${score.anxietyLevel}',
+            'Stres: ${score.stress}/42 — ${score.stressLevel}'
+          ]);
+        }
+        lines.add('Hasil screening adalah alat bantu, bukan diagnosis.');
+        await ref.read(exportServiceProvider).sharePdf(
+            title: entry.title,
+            lines: lines,
+            filename: 'malva_assessment_record.pdf',
+            canShare: () => _ownerMatches);
+        return;
+      }
+      if (entry.sourceId.isEmpty) {
+        _toast('Record tersimpan belum tersedia untuk dibagikan.');
+        return;
+      }
+      final api = ref.read(apiClientProvider);
+      final packages = await api.listCarePackages(accessToken: token);
+      if (!_ownerMatches) return;
+      final links = await api.listPatientProfessionalLinks(accessToken: token);
+      if (!_ownerMatches) return;
+      final professionalIds = packages
+          .where((p) => p.isActive)
+          .map((p) => p.professionalId)
+          .toSet();
+      final eligible = links
+          .where((link) =>
+              link.status == 'active' &&
+              professionalIds.contains(link.professionalUserId))
+          .toList();
+      if (eligible.isEmpty) {
+        _toast(
+            'Berbagi data membutuhkan paket aktif dengan profesional terhubung.');
+        return;
+      }
+      final selected = await showDialog<BackendPatientProfessionalLink>(
+          context: context,
+          builder: (dialogContext) => SimpleDialog(
+                title: const Text('Bagikan ke profesional'),
+                children: [
+                  for (final link in eligible)
+                    SimpleDialogOption(
+                      onPressed: () => Navigator.pop(dialogContext, link),
+                      child: Text(link.professionalDisplayName.isEmpty
+                          ? 'Profesional terhubung'
+                          : link.professionalDisplayName),
+                    )
+                ],
+              ));
+      if (selected == null || !_ownerMatches) return;
+      final permission = await api.chatPermission(
+          accessToken: token, professionalId: selected.professionalUserId);
+      if (!_ownerMatches) return;
+      if (!permission.canShare) {
+        _toast('Berbagi data belum tersedia untuk profesional ini.');
+        return;
+      }
+      if (entry.isScreening) {
+        final screening = entry.screening!;
+        final text = 'Hasil screening: ${screeningScoreSummary(screening)}.';
+        await api.sendChatMessage(
+            accessToken: token,
+            recipientId: selected.professionalUserId,
+            text: text,
+            kind: 'assessment',
+            metadata: {
+              'source': 'screening',
+              'screening_id': entry.sourceId,
+              'overall_level': screening.overallLevel,
+              'phq9_score': screening.phq9.score,
+              'gad7_score': screening.gad7.score,
+              'crisis_flag': screening.crisisFlag,
+              'summary': text,
+              if (entry.date != null) 'shared_at': wibIso(entry.date!),
+            });
+      } else {
+        await api.shareTherapySubmission(
+            accessToken: token,
+            submissionId: entry.sourceId,
+            professionalId: selected.professionalUserId);
+      }
+      _toast('Assessment record dibagikan ke profesional.');
+    } on Object catch (error) {
+      _toast('Gagal membagikan hasil: ${friendlyErrorMessage(error)}');
+    } finally {
+      if (_ownerMatches) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(currentSessionProvider, (previous, next) {
+      if (next != _owner && mounted) Navigator.maybePop(context);
+    });
+    if (_owner?.role != UserRole.patient) return const SizedBox.shrink();
+    return Wrap(spacing: 8, runSpacing: 8, children: [
+      OutlinedButton.icon(
+          onPressed: _busy ? null : () => _share(pdf: false),
+          icon: const Icon(Icons.send_rounded),
+          label: const Text('Bagikan ke profesional')),
+      OutlinedButton.icon(
+          onPressed: _busy ? null : () => _share(pdf: true),
+          icon: const Icon(Icons.picture_as_pdf_rounded),
+          label: const Text('Bagikan PDF')),
+    ]);
+  }
+}
+
 class AssessmentHistoryPreview extends ConsumerStatefulWidget {
   const AssessmentHistoryPreview({super.key});
 
@@ -745,7 +1003,7 @@ class _AssessmentHistoryPreviewState
     final session = ref.read(currentSessionProvider);
     final token = session?.accessToken;
     if (token == null || token.isEmpty) {
-      if (!mounted) return;
+      if (!mounted || ref.read(currentSessionProvider) != session) return;
       setState(() {
         _isLoading = false;
         _error = 'Login dulu untuk melihat assessment record.';
@@ -758,14 +1016,14 @@ class _AssessmentHistoryPreviewState
         accessToken: token,
         patientId: session?.backendUserId,
       );
-      if (!mounted) return;
+      if (!mounted || ref.read(currentSessionProvider) != session) return;
       setState(() {
         _entries = entries;
         _isLoading = false;
         _error = null;
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || ref.read(currentSessionProvider) != session) return;
       setState(() {
         _isLoading = false;
         _error = friendlyErrorMessage(e);
@@ -775,6 +1033,15 @@ class _AssessmentHistoryPreviewState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(currentSessionProvider, (previous, next) {
+      if (previous == next) return;
+      setState(() {
+        _entries = const [];
+        _isLoading = true;
+        _error = null;
+      });
+      _load();
+    });
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     // Placeholder ringkas: baris teks + indikator kecil, bukan spinner besar.
     if (_isLoading) {

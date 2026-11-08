@@ -51,6 +51,7 @@ class _FakeApi extends MalvaApiClient {
   Future<BackendAuthResult> googleLogin({
     required String idToken,
     UserRole role = UserRole.patient,
+    void Function()? onAccountCreated,
   }) async {
     googleTokens.add(idToken);
     return const BackendAuthResult(

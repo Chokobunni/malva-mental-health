@@ -82,7 +82,7 @@ class AssessmentListScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 18),
                 ],
-                const SectionLabel('Screening WHO-5, GAD-7, PHQ-9, DASS-21'),
+                const SectionLabel('Screening', center: true),
                 _AssessmentTile(
                   icon: who5Module.icon ?? Icons.favorite_rounded,
                   color: who5Module.color ?? MalvaColors.mint,

@@ -87,7 +87,7 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
           ),
           const SizedBox(height: 14),
           SoftCard(
-            color: MalvaColors.seed.withValues(alpha: 0.06),
+            color: Colors.white,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

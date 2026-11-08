@@ -38,6 +38,14 @@ void main() {
     expect(find.text('Pasien'), findsOneWidget);
     expect(find.text('Lainnya'), findsOneWidget);
     expect(find.text('Messages'), findsOneWidget);
+    expect(
+        tester
+            .widget<NavigationBar>(find.byType(NavigationBar))
+            .destinations
+            .cast<NavigationDestination>()
+            .map((item) => item.label)
+            .toList(),
+        ['Dashboard', 'Jadwal', 'Pasien', 'Messages', 'Lainnya']);
     expect(find.text('Tugas'), findsNothing);
 
     expect(find.text('Video call mendatang'), findsOneWidget);
@@ -58,18 +66,20 @@ void main() {
     expect(find.text('Pasien terhubung'), findsOneWidget);
     expect(find.text('Belum ada pasien terhubung'), findsOneWidget);
 
-    // Tab Lainnya: relasi, audit, portal.
+    await tester.tap(find.text('Messages'));
+    await tester.pumpAndSettle();
+    expect(find.text('Recent'), findsOneWidget);
+
+    // Profile is first; obsolete audit and duplicate crisis entry are absent.
     await tester.tap(find.text('Lainnya'));
     await tester.pumpAndSettle();
-    expect(find.text('Relasi pasien–profesional'), findsOneWidget);
-    expect(find.text('Audit & export ringkasan'), findsOneWidget);
-    await tester.dragUntilVisible(
-      find.text('Portal Profesional'),
-      find.byType(ListView).first,
-      const Offset(0, -200),
-    );
-    await tester.pumpAndSettle();
+    expect(find.text('Audit & export ringkasan'), findsNothing);
+    expect(find.text('Crisis Incident Log'), findsNothing);
+    expect(find.text('Profil Profesional'), findsOneWidget);
     expect(find.text('Portal Profesional'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Relasi pasien–profesional'), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Relasi pasien–profesional'), findsOneWidget);
 
     expect(tester.takeException(), isNull);
   });

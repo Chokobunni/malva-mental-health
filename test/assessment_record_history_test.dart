@@ -155,6 +155,83 @@ Widget _buildApp(MalvaApiClient api, {required Widget home}) {
 }
 
 void main() {
+  test(
+      'PDF loader can require every assessment source while history retains partial results',
+      () async {
+    final api = MalvaApiClient(
+        baseUrl: 'http://backend.test',
+        httpClient: _FakeClient((request) async {
+          if (request.url.path == '/v1/therapy-submissions')
+            return http.Response('{"error":"Unavailable"}', 500);
+          return http.Response(
+              jsonEncode({
+                'screenings': [_screening()]
+              }),
+              200);
+        }));
+    final partial = await loadAssessmentHistory(
+        api: api, accessToken: 'test-token', patientId: 'user_pasien_1');
+    expect(partial.length, 1);
+    await expectLater(
+        loadAssessmentHistory(
+            api: api,
+            accessToken: 'test-token',
+            patientId: 'user_pasien_1',
+            requireAllSources: true),
+        throwsA(isA<MalvaApiException>()));
+  });
+  testWidgets(
+      'patient record filters retain retakes, sort both ways and reveal bounded results',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 5000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = _api(submissions: [
+      for (var i = 1; i <= 6; i++)
+        _submission(
+            id: 'who-$i',
+            moduleId: 'who5',
+            title: 'Retake $i',
+            createdAt: '2026-11-0${i}T09:00:00+07:00',
+            answers: _who5Answers()),
+      _submission(
+          id: 'unknown',
+          moduleId: 'who5',
+          title: 'Unknown date',
+          createdAt: '',
+          answers: _who5Answers()),
+    ], screenings: [
+      _screening()
+    ]);
+    await tester
+        .pumpWidget(_buildApp(api, home: const AssessmentHistoryScreen()));
+    await tester.pumpAndSettle();
+    expect(find.byType(AssessmentHistoryCard), findsNWidgets(5));
+    expect(find.text('Retake 1'), findsNothing);
+    await tester.tap(find.textContaining('Tampilkan lebih banyak'));
+    await tester.pumpAndSettle();
+    expect(find.text('Retake 1'), findsOneWidget);
+    expect(find.text('Tanggal tidak tercatat'), findsOneWidget);
+    final dropdown =
+        tester.widget<DropdownButton<bool>>(find.byType(DropdownButton<bool>));
+    dropdown.onChanged!(true);
+    await tester.pumpAndSettle();
+    final cards = tester
+        .widgetList<AssessmentHistoryCard>(find.byType(AssessmentHistoryCard))
+        .toList();
+    expect(cards.first.entry.title, 'Screening PHQ-9 + GAD-7');
+    expect(cards[1].entry.title, 'Retake 1');
+    await tester.tap(find.widgetWithText(FilterChip, 'WHO-5'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AssessmentHistoryCard), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilterChip, 'PHQ-9'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AssessmentHistoryCard), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilterChip, 'GAD-7'));
+    await tester.pumpAndSettle();
+    expect(find.text('Tidak ada hasil untuk filter ini.'), findsOneWidget);
+  });
   test('history excludes incomplete and invalid WHO/DASS legacy submissions',
       () async {
     final validDass = <String, dynamic>{
@@ -244,7 +321,8 @@ void main() {
         ['Without ID B', 'Without ID A', 'Retake', 'First']);
   });
 
-  testWidgets('PHQ/GAD detail separates raw severity, CF support and crisis',
+  testWidgets(
+      'PHQ/GAD patient detail keeps scores and crisis without model copy',
       (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -286,10 +364,9 @@ void main() {
     expect(find.text('Ringan'), findsOneWidget);
     expect(find.text('moderately_severe'), findsNothing);
     expect(find.text('mild'), findsNothing);
-    expect(find.text('Dukungan aturan: CF 95%'), findsOneWidget);
-    expect(find.text('Dukungan aturan: CF 68%'), findsOneWidget);
-    expect(
-        find.textContaining('bukan probabilitas diagnosis'), findsNWidgets(2));
+    expect(find.text('Dukungan aturan: CF 95%'), findsNothing);
+    expect(find.text('Dukungan aturan: CF 68%'), findsNothing);
+    expect(find.textContaining('bukan probabilitas diagnosis'), findsNothing);
     expect(find.textContaining('Screening ini menandai risiko krisis'),
         findsOneWidget);
     expect(find.textContaining('9 pertanyaan'), findsOneWidget);
@@ -327,7 +404,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Screening WHO-5, GAD-7, PHQ-9, DASS-21'), findsOneWidget);
+    expect(find.text('Screening'), findsOneWidget);
     expect(find.text('Screening Utama'), findsNothing);
     expect(find.text('Assessment Lanjutan'), findsNothing);
     final who = find.text('WHO-5 (Well-Being Index)');

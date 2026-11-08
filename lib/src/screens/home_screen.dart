@@ -397,6 +397,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   ),
                   const SizedBox(height: 22),
 
+                  // Mood and medication belong to Self Care.
+                  _MoodMedicationBanner(
+                    onTap: () => _push(
+                      MoodMedicationCheckinScreen(
+                        session: widget.session,
+                        apiClient: widget.apiClient,
+                        medicationReminderService:
+                            widget.medicationReminderService,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+
                   // === 4. PROFESSIONAL CARE ===
                   const SectionLabel('Professional Care', center: true),
                   _FindProfessionalsButton(
@@ -424,17 +437,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   ),
                   const SizedBox(height: 22),
 
-                  // === 5. MOOD MEDICATION CHECK-IN ===
-                  _MoodMedicationBanner(
-                    onTap: () => _push(
-                      MoodMedicationCheckinScreen(
-                        session: widget.session,
-                        apiClient: widget.apiClient,
-                        medicationReminderService:
-                            widget.medicationReminderService,
-                      ),
-                    ),
-                  ),
                   const SizedBox(height: 24),
                 ],
               ),

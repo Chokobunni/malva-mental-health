@@ -237,19 +237,8 @@ const List<String> _dassScaleShort = [
 const dass21Module = TherapyModule(
   id: 'dass21',
   title: 'DASS-21 (Depression Anxiety Stress Scales)',
-  description: 'DASS-21 (Depression Anxiety Stress Scales) adalah kuesioner 21 '
-      'pernyataan tentang gejala depresi, kecemasan, dan stres selama 1 minggu '
-      'terakhir. Jawab semua pernyataan sesuai pengalamanmu dengan skala '
-      '0 = Tidak pernah, 1 = Kadang-kadang, 2 = Sering, 3 = Hampir selalu.\n\n'
-      'Skor setiap subskala = jumlah 7 jawaban × 2, sehingga masing-masing '
-      'berkisar 0-42. Rentang Normal / Ringan / Sedang / Berat / Sangat berat:\n'
-      'Depresi: 0-9 / 10-13 / 14-20 / 21-27 / 28-42.\n'
-      'Kecemasan: 0-7 / 8-9 / 10-14 / 15-19 / 20-42.\n'
-      'Stres: 0-14 / 15-18 / 19-25 / 26-33 / 34-42.\n\n'
-      'Hasil adalah screening, bukan diagnosis. Certainty Factor (CF) '
-      'menunjukkan dukungan aturan dalam model untuk arahan tindak lanjut, '
-      'bukan probabilitas diagnosis atau persentase keparahan. Bobot CF belum '
-      'dikalibrasi secara klinis; CF tidak mengubah skor atau kategori instrumen.',
+  description:
+      'DASS-21 menilai gejala depresi, kecemasan, dan stres selama 1 minggu terakhir melalui 21 pernyataan. Hasil ini adalah screening, bukan diagnosis.',
   icon: Icons.assignment_rounded,
   color: MalvaColors.seed,
   category: 'Assessment',
@@ -484,21 +473,7 @@ const who5Module = TherapyModule(
   id: 'who5',
   title: 'WHO-5 (Well-Being Index)',
   description:
-      'WHO-5 (Well-Being Index) adalah kuesioner singkat 5 pernyataan tentang '
-      'kesejahteraan psikologis selama 2 minggu terakhir. Jawab semua '
-      'pernyataan: 0 = Tidak pernah, 1 = Jarang, '
-      '2 = Kurang dari setengah waktu, 3 = Lebih dari setengah waktu, '
-      '4 = Sebagian besar waktu, 5 = Selalu.\n\n'
-      'Skor mentah = jumlah 5 jawaban (0-25). Skor persentase = skor mentah × 4 '
-      '(0-100%); semakin tinggi skor, semakin baik kesejahteraan. Skor mentah '
-      'di bawah 13 (persentase <50%) atau satu jawaban 0-1 menjadi alasan '
-      'screening lanjutan PHQ-9/GAD-7. Karena kelipatan 4, batas yang dapat '
-      'dicapai adalah 48% dan 52%, bukan tepat 50%. Skor ≤7 menunjukkan '
-      'kesejahteraan sangat rendah dan perlu penilaian profesional.\n\n'
-      'Hasil adalah screening, bukan diagnosis. Certainty Factor (CF) '
-      'menunjukkan dukungan aturan dalam model untuk arahan tindak lanjut, '
-      'bukan probabilitas diagnosis atau persentase keparahan. Bobot CF belum '
-      'dikalibrasi secara klinis; CF tidak mengubah skor instrumen.',
+      'WHO-5 menilai kesejahteraan psikologis selama 2 minggu terakhir melalui 5 pernyataan. Hasil ini adalah screening, bukan diagnosis.',
   icon: Icons.favorite_rounded,
   color: MalvaColors.mint,
   category: 'Assessment',
@@ -663,6 +638,19 @@ const List<String> _thinkingTrapChoices = [
   'Fortune telling',
   'Emotional reasoning',
 ];
+
+const _thinkingTrapDefinitions = {
+  'Catastrophizing': 'Membayangkan hasil terburuk seolah pasti terjadi.',
+  'Mind reading': 'Menganggap tahu pikiran orang lain tanpa bukti.',
+  'All-or-nothing':
+      'Melihat hanya dua pilihan ekstrem, misalnya sempurna atau gagal.',
+  'Overgeneralization':
+      'Menganggap satu pengalaman buruk akan selalu terulang.',
+  'Should statements': 'Menekan diri atau orang lain dengan tuntutan “harus”.',
+  'Fortune telling': 'Meramalkan masa depan secara negatif tanpa bukti cukup.',
+  'Emotional reasoning':
+      'Menganggap perasaan sebagai bukti bahwa sesuatu benar.',
+};
 
 /// Field worksheet Thinking Traps.
 const thinkingTrapsWorksheetFields = <TherapyWorksheetField>[
@@ -1472,7 +1460,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
     );
   }
 
-  /// Unduh worksheet sebagai teks (share via share sheet).
+  /// Unduh worksheet sebagai PDF melalui port ekspor yang sama.
   Future<void> _download() async {
     if (module.isAssessment) {
       final missing = countUnansweredScale(module, _scaleValues);
@@ -1505,14 +1493,21 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
       ..writeln('Catatan: dokumen ini alat bantu latihan, '
           'bukan pengganti diagnosis profesional.');
     final text = buffer.toString();
-    await ref.read(fileExporterProvider).saveText(
-          filename: 'malva-worksheet-'
-              '${module.id.isEmpty ? 'terapi' : module.id}-'
-              '${wibNow().millisecondsSinceEpoch}.txt',
-          content: text,
-          mimeType: 'text/plain',
-          subject: 'Worksheet ${module.title} — Malva',
-        );
+    final owner = ref.read(currentSessionProvider);
+    try {
+      await ref.read(exportServiceProvider).sharePdf(
+            title: 'Worksheet ${module.title} — Malva',
+            filename: 'malva-worksheet-'
+                '${module.id.isEmpty ? 'terapi' : module.id}-'
+                '${wibNow().millisecondsSinceEpoch}.pdf',
+            lines: text.split('\n'),
+            canShare: () =>
+                mounted && ref.read(currentSessionProvider) == owner,
+          );
+    } on Object catch (error) {
+      if (!mounted || ref.read(currentSessionProvider) != owner) return;
+      _toast('Gagal mengunduh. ${friendlyErrorMessage(error)}');
+    }
   }
 
   void _toast(String message) {
@@ -2081,7 +2076,7 @@ class _TriageLine extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  interpretation.summaryLine,
+                  'Arahan tindak lanjut: ${interpretation.triageLabel}',
                   style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 12.5,
@@ -2094,12 +2089,6 @@ class _TriageLine extends StatelessWidget {
             const SizedBox(height: 4),
             Text('• $reason', style: const TextStyle(fontSize: 11.5)),
           ],
-          const SizedBox(height: 6),
-          const Text(
-            'CF adalah dukungan aturan dalam model, bukan probabilitas diagnosis '
-            'atau persentase keparahan. Bobot belum dikalibrasi secara klinis.',
-            style: TextStyle(fontSize: 11.5),
-          ),
         ],
       ),
     );
@@ -2352,6 +2341,25 @@ class _WorksheetFieldBlock extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 8),
+          if (field.id == 'trap_type')
+            Material(
+              color: Colors.transparent,
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('Arti 7 jebakan pikiran',
+                    style: TextStyle(fontSize: 13)),
+                children: [
+                  for (final trap in _thinkingTrapDefinitions.entries)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('${trap.key}: ${trap.value}',
+                              style: const TextStyle(fontSize: 12))),
+                    ),
+                ],
+              ),
+            ),
           switch (field.kind) {
             TherapyFieldKind.scale => _ScaleOptions(
                 field: field,
@@ -3367,18 +3375,6 @@ class TherapyCatalogScreen extends StatelessWidget {
         title: const Text('Psychological Therapy'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            tooltip: 'Therapy Record (worksheet tersimpan)',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const TherapySubmissionsScreen(),
-              ),
-            ),
-            icon: const Icon(Icons.folder_copy_rounded),
-          ),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(18),

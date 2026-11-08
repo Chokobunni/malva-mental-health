@@ -54,6 +54,8 @@ void main() {
 
     // Banner Mood Medication Check-in.
     expect(find.text('Mood Medication Check-in'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('Mood Medication Check-in')).dy,
+        lessThan(tester.getTopLeft(find.text('Professional Care')).dy));
 
     // Tanpa booking aktif: kartu sesi tidak tampil.
     expect(find.text('Join'), findsNothing);

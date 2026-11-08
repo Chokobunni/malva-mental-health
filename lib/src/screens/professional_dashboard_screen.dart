@@ -60,7 +60,6 @@ class _ProfessionalDashboardScreenState
     extends ConsumerState<ProfessionalDashboardScreen>
     with WidgetsBindingObserver {
   late final CareSessionRefresh _sessionRefresh;
-  final Map<String, List<BackendProfessionalNote>> _professionalNotes = {};
 
   /// Pasien yang menolak/tidak membagikan data screening (403 access_denied
   /// per-pasien). Dipakai untuk menampilkan penanda kecil di kartu pasien,
@@ -70,11 +69,9 @@ class _ProfessionalDashboardScreenState
 
   List<BackendPatientProfessionalLink> _links = const [];
   Map<String, List<BackendScreeningSession>> _screeningsByPatient = const {};
-  List<_AuditEntry> _serverAuditEntries = const [];
   List<BackendCareSession> _upcomingSessions = const [];
   List<BackendCareSession> _todaySessions = const [];
   int _crisisLogCount = 0;
-  String? _selectedPatientId;
   String _searchQuery = '';
   int _tabIndex = 0;
   bool _showAllUpcomingVideos = false;
@@ -146,7 +143,6 @@ class _ProfessionalDashboardScreenState
   @override
   Widget build(BuildContext context) {
     final patients = _patientsForDashboard();
-    final selected = _selectedPatient(patients);
     return Scaffold(
       body: Column(
         children: [
@@ -202,7 +198,7 @@ class _ProfessionalDashboardScreenState
             ),
           ),
           Expanded(
-            child: _tabIndex == 4
+            child: _tabIndex == 3
                 ? MessagesListScreen(
                     key: ObjectKey(widget.session),
                     session: widget.session,
@@ -428,6 +424,29 @@ class _ProfessionalDashboardScreenState
                                   ),
                                 ),
                             ],
+                            // ---- TAB 0 §5: Data Pasien Dibagikan (satu pintu) ----
+                            if (_tabIndex == 0) ...[
+                              const SizedBox(height: 22),
+                              const SectionLabel('Data Pasien Dibagikan',
+                                  icon: Icons.folder_shared_rounded),
+                              _PortalDoorCard(
+                                icon: Icons.folder_shared_rounded,
+                                color: MalvaColors.mint,
+                                title: 'Data pasien dibagikan',
+                                subtitle:
+                                    'Mood, diary, obat, health record, goals, '
+                                    'terapi • $_connectedPatientCount pasien',
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => SharedPatientDataScreen(
+                                      session: widget.session,
+                                      apiClient: widget.apiClient,
+                                    ),
+                                  ),
+                                ).then((_) => _loadOnlineProfessionalData()),
+                              ),
+                            ],
                             // ---- TAB 0 §3: Crisis Incident Log (satu pintu) ----
                             if (_tabIndex == 0) ...[
                               const SizedBox(height: 22),
@@ -516,29 +535,6 @@ class _ProfessionalDashboardScreenState
                                 ).then((_) => _loadOnlineProfessionalData()),
                               ),
                             ],
-                            // ---- TAB 0 §5: Data Pasien Dibagikan (satu pintu) ----
-                            if (_tabIndex == 0) ...[
-                              const SizedBox(height: 22),
-                              const SectionLabel('Data Pasien Dibagikan',
-                                  icon: Icons.folder_shared_rounded),
-                              _PortalDoorCard(
-                                icon: Icons.folder_shared_rounded,
-                                color: MalvaColors.mint,
-                                title: 'Data pasien dibagikan',
-                                subtitle:
-                                    'Mood, diary, obat, health record, goals, '
-                                    'terapi • $_connectedPatientCount pasien',
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => SharedPatientDataScreen(
-                                      session: widget.session,
-                                      apiClient: widget.apiClient,
-                                    ),
-                                  ),
-                                ).then((_) => _loadOnlineProfessionalData()),
-                              ),
-                            ],
                             if (_tabIndex == 2)
                               // Teks label dipertahankan persis "Pasien terhubung"
                               // (dipakai test widget). Jumlah pasien dipindah ke
@@ -572,24 +568,17 @@ class _ProfessionalDashboardScreenState
                                 subtitle:
                                     'Pasien terhubung setelah membeli paket atau booking sesi denganmu.',
                               ),
-                            // ---- TAB 3: LAINNYA ----
-                            if (_tabIndex == 3) ...[
-                              _RelationshipManagementSection(
-                                patients: patients,
-                                professionalCode: widget.session?.identifier,
-                                onRefresh: _loadOnlineProfessionalData,
-                              ),
-                              const SizedBox(height: 22),
-                              _AuditAndExportSection(
-                                auditEntries: _serverAuditEntries,
-                                onExport: selected == null
-                                    ? () {}
-                                    : () => _openExportSummary(selected),
-                              ),
-                              const SizedBox(height: 22),
+                            // More follows Messages in the navigation bar.
+                            if (_tabIndex == 4) ...[
                               _ProfessionalPortalSection(
                                 session: widget.session,
                                 apiClient: widget.apiClient,
+                                onRefresh: _loadOnlineProfessionalData,
+                              ),
+                              const SizedBox(height: 22),
+                              _RelationshipManagementSection(
+                                patients: patients,
+                                professionalCode: widget.session?.identifier,
                                 onRefresh: _loadOnlineProfessionalData,
                               ),
                             ],
@@ -616,13 +605,13 @@ class _ProfessionalDashboardScreenState
               selectedIcon: Icon(Icons.people_rounded),
               label: 'Pasien'),
           NavigationDestination(
-              icon: Icon(Icons.grid_view_outlined),
-              selectedIcon: Icon(Icons.grid_view_rounded),
-              label: 'Lainnya'),
-          NavigationDestination(
               icon: Icon(Icons.chat_bubble_outline_rounded),
               selectedIcon: Icon(Icons.chat_bubble_rounded),
               label: 'Messages'),
+          NavigationDestination(
+              icon: Icon(Icons.grid_view_outlined),
+              selectedIcon: Icon(Icons.grid_view_rounded),
+              label: 'Lainnya'),
         ],
       ),
     );
@@ -705,8 +694,6 @@ class _ProfessionalDashboardScreenState
       final links = await apiClient.listPatientProfessionalLinks(
           accessToken: accessToken);
       final screeningsByPatient = <String, List<BackendScreeningSession>>{};
-      final serverAuditEntries = <_AuditEntry>[];
-      final notesByPatient = <String, List<BackendProfessionalNote>>{};
       // Pasien yang 403 (tidak membagikan screening). Dikumpulkan di sini
       // agar tidak tercampur dengan error jaringan/500.
       final screeningNotShared = <String>{};
@@ -736,46 +723,11 @@ class _ProfessionalDashboardScreenState
           }
         }
 
-        final results = await Future.wait<Object?>([
-          loadScreenings(),
-          safely(() => apiClient.listProfessionalNotes(
-                accessToken: accessToken,
-                patientId: patientId,
-                limit: 5,
-              )),
-          safely(() => apiClient.listAuditLogs(
-                accessToken: accessToken,
-                patientId: patientId,
-                limit: 20,
-              )),
-        ]);
-
-        return (link, results);
+        return (link, await loadScreenings());
       }).toList();
-
       final patientResults = await Future.wait(patientFutures);
-
-      for (final (link, results) in patientResults) {
-        final patientId = link.patientId;
-
-        screeningsByPatient[patientId] =
-            results[0] as List<BackendScreeningSession>;
-
-        final notes = results[1] as List<BackendProfessionalNote>? ??
-            const <BackendProfessionalNote>[];
-        notesByPatient[patientId] = notes;
-
-        final auditLogs =
-            results[2] as List<BackendAuditLog>? ?? const <BackendAuditLog>[];
-        serverAuditEntries.addAll(
-          auditLogs.map(
-            (entry) => _AuditEntry(
-              title: entry.action,
-              body: entry.entityType,
-              createdAt: entry.createdAt ?? wibNow(),
-            ),
-          ),
-        );
+      for (final (link, screenings) in patientResults) {
+        screeningsByPatient[link.patientId] = screenings;
       }
       // Sesi video mendatang + sesi yang SEDANG BERJALAN (untuk "Sesi
       // berjalan") + ringkasan Crisis Incident Log (satu permintaan
@@ -792,17 +744,12 @@ class _ProfessionalDashboardScreenState
       setState(() {
         _links = links;
         _screeningsByPatient = screeningsByPatient;
-        _serverAuditEntries = serverAuditEntries;
-        _professionalNotes
-          ..clear()
-          ..addAll(notesByPatient);
         _upcomingSessions = upcomingSessions ?? const <BackendCareSession>[];
         _todaySessions = todaySessions ?? const <BackendCareSession>[];
         _crisisLogCount = crisisLog?.unresolved ?? 0;
         _screeningNotShared
           ..clear()
           ..addAll(screeningNotShared);
-        _selectedPatientId ??= links.isEmpty ? null : links.first.patientId;
         _isLoadingOnlineData = false;
         _lastSyncTime = wibNow();
       });
@@ -856,150 +803,6 @@ class _ProfessionalDashboardScreenState
             patient.patientId.toLowerCase().contains(query) ||
             patient.latestLevel.toLowerCase().contains(query))
         .toList(growable: false);
-  }
-
-  _ProfessionalPatient? _selectedPatient(List<_ProfessionalPatient> patients) {
-    if (patients.isEmpty) return null;
-    final selectedId = _selectedPatientId;
-    if (selectedId != null) {
-      for (final patient in patients) {
-        if (patient.patientId == selectedId) return patient;
-      }
-    }
-    return patients.first;
-  }
-
-  void _exportData() async {
-    final exportPatients = _patientsForDashboard();
-    final selected = _selectedPatient(exportPatients);
-
-    final StringBuffer csv = StringBuffer();
-    csv.writeln('Malva Professional Dashboard Export');
-    csv.writeln('Date: ${wibNow()}');
-    csv.writeln();
-
-    csv.writeln('--- Patient Info ---');
-    csv.writeln('Name: ${selected?.displayName ?? "N/A"}');
-    csv.writeln('ID: ${selected?.patientId ?? "N/A"}');
-    csv.writeln();
-
-    csv.writeln('--- Screening History ---');
-    csv.writeln(
-        'ID,PHQ-9 Score,PHQ-9 Level,GAD-7 Score,GAD-7 Level,Crisis,Created');
-    if (selected != null) {
-      for (final s in selected.screenings) {
-        csv.writeln(
-            '${s.id},${s.phq9Score},${s.phq9Level},${s.gad7Score},${s.gad7Level},${s.crisisFlag},${s.createdAt}');
-      }
-    }
-    csv.writeln();
-
-    csv.writeln('--- Audit Logs (server) ---');
-    csv.writeln('Title,Body,Created');
-    for (final a in _serverAuditEntries) {
-      csv.writeln('${a.title},${a.body},${a.createdAt}');
-    }
-
-    try {
-      await SharePlus.instance.share(
-        ShareParams(
-          text: csv.toString(),
-          subject: 'Malva Dashboard Export',
-        ),
-      );
-    } on Object {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Export gagal'), backgroundColor: MalvaColors.danger),
-      );
-    }
-  }
-
-  void _openExportSummary(_ProfessionalPatient patient) {
-    final latest = patient.latestScreening;
-    final summary = [
-      'Ringkasan Malva - ${patient.displayName}',
-      'Patient ID: ${patient.patientId}',
-      'Status relasi: ${patient.status}',
-      if (latest != null) ...[
-        'Screening terakhir: ${formatScreeningDate(latest.createdAt)}',
-        'Overall: ${latest.overallLevelLabel}',
-        'PHQ-9: ${latest.phq9Score}/${latest.phq9MaxScore}',
-        'GAD-7: ${latest.gad7Score}/${latest.gad7MaxScore}',
-        'Crisis flag: ${latest.crisisFlag ? 'Ya' : 'Tidak'}',
-      ],
-      if (_professionalNotes[patient.patientId]?.isNotEmpty == true)
-        'Catatan profesional: ${_professionalNotes[patient.patientId]!.map((n) => n.body).join("; ")}',
-    ].join('\n');
-
-    final csvData = [
-      'Field,Value',
-      'Patient Name,${patient.displayName}',
-      'Patient ID,${patient.patientId}',
-      'Status,${patient.status}',
-      if (latest != null) ...[
-        'Screening Date,${formatScreeningDate(latest.createdAt)}',
-        'Overall Level,${latest.overallLevelLabel}',
-        'PHQ-9 Score,${latest.phq9Score}/${latest.phq9MaxScore}',
-        'GAD-7 Score,${latest.gad7Score}/${latest.gad7MaxScore}',
-        'Crisis Flag,${latest.crisisFlag ? 'Yes' : 'No'}',
-      ],
-    ].join('\n');
-
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Export ringkasan'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Format Text:',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: MalvaColors.seed.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: SelectableText(summary,
-                    style: const TextStyle(fontSize: 12)),
-              ),
-              const SizedBox(height: 16),
-              const Text('Format CSV:',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: MalvaColors.seed.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: SelectableText(csvData,
-                    style: const TextStyle(fontSize: 12)),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Tutup'),
-          ),
-          FilledButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              _exportData();
-            },
-            icon: const Icon(Icons.copy_rounded),
-            label: const Text('Copy Data'),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -1175,87 +978,6 @@ class _RelationshipManagementSection extends StatelessWidget {
             ],
           ),
         ),
-      ],
-    );
-  }
-}
-
-class _AuditAndExportSection extends StatelessWidget {
-  const _AuditAndExportSection({
-    required this.auditEntries,
-    required this.onExport,
-  });
-
-  final List<_AuditEntry> auditEntries;
-  final VoidCallback onExport;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SectionLabel(
-          'Audit & export ringkasan',
-          icon: Icons.history_rounded,
-          action: TextButton.icon(
-            onPressed: onExport,
-            icon: const Icon(Icons.ios_share_rounded),
-            label: const Text('Export'),
-          ),
-        ),
-        if (auditEntries.isEmpty)
-          const EmptyState(
-            icon: Icons.history_rounded,
-            title: 'Belum ada audit UI lokal',
-            subtitle:
-                'Review, catatan, follow-up, dan export akan tercatat di sini.',
-          )
-        else
-          // Daftar audit dilipat; tombol "Export" tetap di luar (header).
-          CollapsibleCard(
-            initiallyExpanded: false,
-            header: Row(
-              children: [
-                const Icon(Icons.history_rounded, color: MalvaColors.seed),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Riwayat audit (${auditEntries.length})',
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                for (final entry in auditEntries.take(6)) ...[
-                  Row(
-                    children: [
-                      const Icon(Icons.history_rounded,
-                          color: MalvaColors.seed),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              entry.title,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                            Text(
-                                '${entry.body} - ${formatScreeningDate(entry.createdAt)}'),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (entry != auditEntries.take(6).last)
-                    const Divider(height: 18),
-                ],
-              ],
-            ),
-          ),
       ],
     );
   }
@@ -1500,22 +1222,6 @@ class _ProfessionalPortalSectionState
           ),
         const SizedBox(height: 10),
         ActionTile(
-          icon: Icons.shield_rounded,
-          title: 'Crisis Incident Log',
-          subtitle: 'Incident aktif, resolusi, dan jejak liability',
-          color: MalvaColors.danger,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CrisisIncidentLogScreen(
-                session: session,
-                apiClient: apiClient,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        ActionTile(
           icon: Icons.verified_outlined,
           title: 'Verifikasi STR/SIP',
           subtitle: 'Upload dokumen lisensi untuk verifikasi admin',
@@ -1622,18 +1328,6 @@ class _ScreeningView {
   Color get overallColor => _riskColor(overallLevel);
   Color get phq9Color => _riskColor(phq9Level);
   Color get gad7Color => _riskColor(gad7Level);
-}
-
-class _AuditEntry {
-  const _AuditEntry({
-    required this.title,
-    required this.body,
-    required this.createdAt,
-  });
-
-  final String title;
-  final String body;
-  final DateTime createdAt;
 }
 
 String _riskLabel(String value) {

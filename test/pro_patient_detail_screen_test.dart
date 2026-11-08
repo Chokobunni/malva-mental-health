@@ -66,6 +66,7 @@ Map<String, dynamic> _worksheet(String id, String title) => {
 class _Responses {
   final statusByPath = <String, int>{};
   bool missingGad = false;
+  final extraWorksheets = <Map<String, dynamic>>[];
 
   late final api = MalvaApiClient(
     baseUrl: 'http://backend.test',
@@ -87,6 +88,7 @@ class _Responses {
               _worksheet('who5', 'WHO-5 dibagikan'),
               _worksheet('dass21', 'DASS-21 dibagikan'),
               _worksheet('abcde', 'Latihan ABCDE'),
+              ...extraWorksheets,
             ],
           },
         '/v1/goals' => {'goals': []},
@@ -127,12 +129,42 @@ Future<void> _pump(WidgetTester tester, _Responses responses) async {
 }
 
 void main() {
+  testWidgets(
+      'clinical assessment filters keep PHQ GAD combined and show more dated retakes',
+      (tester) async {
+    final responses = _Responses();
+    for (var i = 1; i <= 6; i++) {
+      responses.extraWorksheets.add({
+        ..._worksheet('who5', 'WHO retake $i'),
+        'id': 'retake-$i',
+        'created_at': '2026-11-08T0$i:00:00+07:00'
+      });
+    }
+    await _pump(tester, responses);
+    expect(find.text('WHO retake 1'), findsNothing);
+    expect(find.text('Tampilkan lebih banyak'), findsOneWidget);
+    await tester.tap(find.text('Tampilkan lebih banyak'));
+    await tester.pumpAndSettle();
+    expect(find.text('WHO retake 1'), findsOneWidget);
+    expect(find.text('08/11/2026 01:00'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilterChip, 'WHO-5'));
+    await tester.pumpAndSettle();
+    expect(find.text('WHO retake 1'), findsNothing);
+    expect(find.byKey(const ValueKey('screening-screening-1')), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilterChip, 'PHQ-9'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('screening-screening-1')), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilterChip, 'GAD-7'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('screening-screening-1')), findsNothing);
+    expect(find.text('DASS-21 dibagikan'), findsOneWidget);
+  });
   testWidgets('groups clinical data and shows real PHQ/GAD CF and rule trace',
       (tester) async {
     await _pump(tester, _Responses());
     final health = find.text('Health Record & Obat');
     final daily = find.text('Pemantauan harian');
-    final screening = find.text('Screening WHO-5, GAD-7, PHQ-9, DASS-21');
+    final screening = find.text('Screening');
     final notes = find.text('Catatan sesi');
     expect(health, findsOneWidget);
     expect(screening, findsOneWidget);

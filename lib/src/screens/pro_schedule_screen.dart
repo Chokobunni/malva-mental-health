@@ -583,8 +583,8 @@ class _ProSessionCard extends ConsumerWidget {
   }
 
   Future<void> _reschedule(BuildContext context, WidgetRef ref) async {
-    final dateController = TextEditingController();
-    final timeController = TextEditingController();
+    var date = '';
+    var time = '';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -593,13 +593,13 @@ class _ProSessionCard extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
-              controller: dateController,
+              onChanged: (value) => date = value,
               decoration: const InputDecoration(
                   labelText: 'Tanggal (YYYY-MM-DD)', hintText: '2026-10-20'),
             ),
             const SizedBox(height: 8),
             TextField(
-              controller: timeController,
+              onChanged: (value) => time = value,
               decoration: const InputDecoration(
                   labelText: 'Jam (HH:MM)', hintText: '10:00'),
             ),
@@ -625,10 +625,7 @@ class _ProSessionCard extends ConsumerWidget {
         ],
       ),
     );
-    final scheduledAt =
-        '${dateController.text.trim()}T${timeController.text.trim()}';
-    dateController.dispose();
-    timeController.dispose();
+    final scheduledAt = '${date.trim()}T${time.trim()}';
     if (confirmed != true || !context.mounted) return;
     final api = ref.read(apiClientProvider);
     final token = ref.read(currentSessionProvider)?.accessToken;

@@ -208,6 +208,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
             ),
             const SizedBox(height: 12),
             const SoftCard(
+              color: Colors.white,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -408,17 +409,17 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
       ),
     );
     if (picked == null || !mounted) return;
+    final parts = picked.split('|');
     try {
       if (existing != null) {
         final result = await apiClient.rescheduleCareSession(
           accessToken: token,
           sessionId: existing.id,
-          scheduledAt: picked,
+          scheduledAt: parts[0],
         );
         if (!mounted) return;
         _showRescheduleResult(result);
       } else {
-        final parts = picked.split('|');
         final result = await apiClient.scheduleSession(
           accessToken: token,
           packageId: _package.id,

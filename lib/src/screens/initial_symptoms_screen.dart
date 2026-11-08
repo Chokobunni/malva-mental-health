@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../ai/initial_screening.dart';
-import '../ai/assessment_interpretation.dart';
 import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
@@ -144,14 +143,6 @@ class _InitialSymptomsScreenState extends ConsumerState<InitialSymptomsScreen> {
                       const Text(
                           'WHO-5 mengukur kesejahteraan psikologis selama 2 minggu terakhir. Jawab kelima pernyataan sesuai pengalamanmu. Hasil ini bukan diagnosis.'),
                       const SizedBox(height: 8),
-                      const ExpansionTile(
-                        tilePadding: EdgeInsets.zero,
-                        title: Text('Lihat cara penilaian'),
-                        children: [
-                          Text(
-                              'Jumlah 5 jawaban = skor 0–25; skor × 4 = 0–100%. Skor di bawah 50% atau satu jawaban 0–1 memerlukan screening lanjutan. Screening ini bukan diagnosis.'),
-                        ],
-                      ),
                     ])),
                 for (var i = 0; i < who5WorksheetFields.length; i++) ...[
                   const SizedBox(height: 12),
@@ -214,8 +205,6 @@ class _InitialSymptomsScreenState extends ConsumerState<InitialSymptomsScreen> {
   }
 
   Widget _conclusion(BuildContext context, InitialScreeningDecision decision) {
-    final interpretation =
-        interpretDassWho5(answers: _submissionAnswers, moduleId: 'who5');
     return _card(
         Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Text(
@@ -233,16 +222,11 @@ class _InitialSymptomsScreenState extends ConsumerState<InitialSymptomsScreen> {
       const SizedBox(height: 8),
       ExpansionTile(
         tilePadding: EdgeInsets.zero,
-        title: const Text('Lihat cara penilaian'),
+        title: const Text('Apa arti skormu?'),
         children: [
-          Text('WHO-5: ${decision.rawScore}/25 × 4 = ${decision.percent}%'),
-          const SizedBox(height: 8),
-          Text(
-              'Aturan ${decision.ruleTrace.join(', ')}: ${decision.needsFurtherScreening ? 'skor <50% atau ada jawaban 0–1 → lanjut PHQ-9 dan GAD-7.' : 'skor ≥50% dan seluruh jawaban ≥2 → screening awal selesai.'}'),
-          const Text('Versi aturan: $initialScreeningRuleVersion'),
-          const SizedBox(height: 8),
-          Text(
-              '${interpretation.summaryLine}. CF adalah dukungan aturan model, bukan probabilitas diagnosis atau tingkat keparahan.'),
+          Text(decision.needsFurtherScreening
+              ? 'Kesejahteraanmu perlu diperhatikan. Lanjutkan PHQ-9 dan GAD-7 untuk memahami gejala lebih jauh.'
+              : 'Kesejahteraanmu berada dalam rentang baik. Pantau perubahan perasaanmu dan cari dukungan bila perlu.'),
         ],
       ),
       const SizedBox(height: 8),

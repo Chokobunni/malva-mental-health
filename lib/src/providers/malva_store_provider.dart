@@ -16,6 +16,7 @@ import '../time/wib.dart';
 
 const _sessionKey = 'malva_active_session';
 const _continuousConsentKey = 'malva_continuous_support_consent';
+const _initialScreeningKeyPrefix = 'malva_initial_screening_';
 
 /// Prefix cache lokal log minum obat per akun (`..._<backendUserId>`).
 /// Selaras dengan isolasi per-akun yang dipakai sesi & consent di atas.
@@ -192,6 +193,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   int _accountGeneration = 0;
   int _medicationRequestGeneration = 0;
   Future<void> _sessionStorageWork = Future<void>.value();
+  AuthSession? _registrationEntrySession;
 
   MalvaStoreNotifier(
     this._apiClient,
@@ -224,6 +226,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   /// login akun baru & logout agar data akun sebelumnya tidak bocor.
   void resetForAccount() {
     _accountGeneration++;
+    _registrationEntrySession = null;
     __lastAccessToken = null;
     clearPendingDoses();
     state = _seededState();
@@ -232,12 +235,17 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   /// Terapkan sesi login: reset data lama, lalu set nama tampilan akun.
   void applySession(AuthSession session) {
     _accountGeneration++;
+    final isRegistration = identical(session, _registrationEntrySession);
+    _registrationEntrySession = null;
     final name = session.displayName.trim().isEmpty
         ? 'Pasien'
         : session.displayName.trim();
     // Dosis pending milik akun sebelumnya tidak boleh terbawa.
     clearPendingDoses();
     state = MalvaStoreState(
+      initialScreeningStatus: isRegistration
+          ? InitialScreeningStatus.pending
+          : InitialScreeningStatus.skipped,
       patient: PatientProfile(
         id: session.backendUserId ?? 'patient_local',
         name: name,
@@ -248,6 +256,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     );
     // Simpan token akses untuk pemuatan data server nanti.
     __lastAccessToken = session.accessToken;
+    if (!isRegistration) unawaited(_restoreInitialScreeningDecision());
     // Muat riwayat asesmen lokal akun ini (fire-and-forget).
     loadAndSaveAssessmentsAsync();
     // Muat riwayat check-in dan obat dari server agar tidak hilang
@@ -507,6 +516,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     String? dateOfBirth,
     String? gender,
   }) async {
+    final generation = _accountGeneration;
     final api = _apiClient;
     if (api == null) throw _noServerFailure;
     try {
@@ -519,7 +529,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         dateOfBirth: dateOfBirth,
         gender: gender,
       );
-      return AuthSession(
+      final session = AuthSession(
         role: UserRole.patient,
         identifier: result.email,
         displayName: result.displayName,
@@ -528,6 +538,8 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         refreshToken: result.refreshToken,
         backendSynced: true,
       );
+      await _prepareRegistrationEntry(session, generation);
+      return session;
     } on MalvaApiException catch (e) {
       if (e.statusCode != null) rethrow;
       throw _noServerFailure;
@@ -539,14 +551,17 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   Future<AuthSession> loginPatientWithGoogle({
     required String idToken,
   }) async {
+    final generation = _accountGeneration;
     final api = _apiClient;
     if (api == null) throw _noServerFailure;
     try {
-      final result = await api.googleLogin(idToken: idToken);
+      var created = false;
+      final result = await api.googleLogin(
+          idToken: idToken, onAccountCreated: () => created = true);
       if (result.role != UserRole.patient && result.role != UserRole.admin) {
         throw const AuthFailure('Akun ini bukan akun pasien.');
       }
-      return AuthSession(
+      final session = AuthSession(
         role: result.role,
         identifier: result.email,
         displayName: result.displayName,
@@ -555,6 +570,10 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         refreshToken: result.refreshToken,
         backendSynced: true,
       );
+      if (created && session.role == UserRole.patient) {
+        await _prepareRegistrationEntry(session, generation);
+      }
+      return session;
     } on MalvaApiException catch (e) {
       if (e.statusCode != null) rethrow;
       throw _noServerFailure;
@@ -1235,15 +1254,62 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   // SCREENING METHODS
   // ============================================================
 
+  Future<void> _prepareRegistrationEntry(
+      AuthSession session, int generation) async {
+    // Only this registration response may offer entry; restoring or logging in
+    // again must never revive an abandoned form.
+    final accountId = session.backendUserId;
+    if (accountId == null || accountId.isEmpty) return;
+    try {
+      await _secureStore.write('$_initialScreeningKeyPrefix$accountId',
+          InitialScreeningStatus.skipped.name);
+    } on Object {
+      // A storage failure must not turn a created account into a failed login.
+    }
+    if (_isCurrentAccountGeneration(generation)) {
+      _registrationEntrySession = session;
+    }
+  }
+
+  Future<void> _restoreInitialScreeningDecision() async {
+    final generation = _accountGeneration;
+    final accountId = state.patient.id;
+    try {
+      await _sessionStorageWork;
+      final raw =
+          await _secureStore.read('$_initialScreeningKeyPrefix$accountId');
+      if (!_isCurrentAccountGeneration(generation) ||
+          state.initialScreeningStatus != InitialScreeningStatus.skipped)
+        return;
+      if (raw == InitialScreeningStatus.completed.name) {
+        state = state.copyWith(
+            initialScreeningStatus: InitialScreeningStatus.completed);
+      }
+    } on Object {
+      // Legacy accounts and unavailable storage proceed directly to Home.
+    }
+  }
+
+  void _persistInitialScreeningDecision(InitialScreeningStatus status) {
+    final accountId = state.patient.id;
+    if (accountId.isEmpty || accountId == 'patient_local') return;
+    _sessionStorageWork = _sessionStorageWork
+        .then((_) => _secureStore.write(
+            '$_initialScreeningKeyPrefix$accountId', status.name))
+        .catchError((_) {});
+  }
+
   void skipInitialScreening() {
     state =
         state.copyWith(initialScreeningStatus: InitialScreeningStatus.skipped);
+    _persistInitialScreeningDecision(InitialScreeningStatus.skipped);
   }
 
   /// WHO-5 can complete the entry flow without inventing PHQ/GAD results.
   void completeInitialScreening() {
     state = state.copyWith(
         initialScreeningStatus: InitialScreeningStatus.completed);
+    _persistInitialScreeningDecision(InitialScreeningStatus.completed);
   }
 
   void saveScreeningBundle(ScreeningBundle bundle) {
@@ -1254,6 +1320,9 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
           ? InitialScreeningStatus.completed
           : state.initialScreeningStatus,
     );
+    if (bundle.isInitial) {
+      _persistInitialScreeningDecision(InitialScreeningStatus.completed);
+    }
   }
 
   void addScreeningBundle(ScreeningBundle bundle) {

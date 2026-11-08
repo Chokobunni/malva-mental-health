@@ -15,8 +15,20 @@
   submission lama yang kosong/parsial tidak dihitung sebagai tes selesai.
   Skip/back tidak menyimpan hasil. Simpan/bagikan ulang formulir yang sama
   menggunakan ID hasil tersimpan, dan pengiriman ID yang sama tampil sekali.
-- Symptoms Assessment memakai penjelasan singkat dan dropdown cara penilaian;
-  rekomendasi assessment lanjutan hanya DASS, katalog manual tetap lengkap.
+- Symptoms Assessment hanya ditawarkan pada respons pendaftaran pasien baru
+  (Google HTTP 201 atau registrasi password), bukan login/restore akun lama.
+  Tawaran dikonsumsi sebelum formulir dibuka; skip/back/restart tidak mengulang
+  gerbang dan tidak membuat hasil screening. Keputusan tersimpan per akun.
+- Tampilan pasien memakai penjelasan singkat instrumen, total dan arti skor,
+  serta jangkar angka jawaban; tanpa rumus/CF/model. Rekomendasi lanjutan hanya
+  DASS, katalog manual tetap lengkap. Detail audit profesional tetap tersedia.
+- Judul katalog `Screening`. Riwayat pasien/profesional memakai filter instrumen
+  independen WHO/GAD/PHQ/DASS, urutan terbaru/terlama, tanggal atau label tanggal
+  tidak tercatat, lima entri awal dengan ekspansi. Retake sah tetap terpisah.
+- Share record mendukung PDF dan profesional yang dipilih melalui izin/paket/
+  tautan aktif yang sudah ada. PDF WHO mempertahankan peringatan item rendah.
+  Kegagalan sebagian sumber harus menggagalkan ekspor yang meminta seluruh
+  sumber; jangan mengklaim riwayat seumur hidup dari feed terbatas 50 screening.
 
 Modul skrining kesehatan mental. Skoring dihitung **di server** (bukan hanya klien) memakai rule base yang sama.
 

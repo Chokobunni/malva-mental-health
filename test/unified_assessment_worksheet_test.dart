@@ -10,7 +10,8 @@ Widget _app(Widget child) => ProviderScope(
     );
 
 void main() {
-  testWidgets('WHO-5 preserves the score category when displaying CF triage',
+  testWidgets(
+      'WHO-5 preserves the score category when displaying supportive follow-up',
       (tester) async {
     await tester.pumpWidget(_app(const Scaffold(
       body: AssessmentResultCard(
@@ -45,7 +46,7 @@ void main() {
       await tester.tap(find.text(module.title));
       await tester.pumpAndSettle();
       expect(find.textContaining('Skor belum tersedia'), findsOneWidget);
-      expect(find.textContaining('Interpretasi triage:'), findsNothing);
+      expect(find.textContaining('Arahan tindak lanjut:'), findsNothing);
       expect(find.textContaining('Hasil WHO-5'), findsNothing);
       expect(find.textContaining('Hasil DASS-21'), findsNothing);
       expect(find.text('(tidak dijawab)'), findsWidgets);
@@ -77,7 +78,7 @@ void main() {
         )));
         expect(find.textContaining('Skor belum tersedia'), findsOneWidget,
             reason: 'invalid item $bad must not become zero or get clamped');
-        expect(find.textContaining('Interpretasi triage:'), findsNothing);
+        expect(find.textContaining('Arahan tindak lanjut:'), findsNothing);
       }
     });
 
@@ -115,7 +116,7 @@ void main() {
             ),
           ),
         )));
-        if (find.textContaining('Interpretasi triage:').evaluate().isEmpty) {
+        if (find.textContaining('Arahan tindak lanjut:').evaluate().isEmpty) {
           await tester.tap(find.text(module.title));
           await tester.pumpAndSettle();
         }
@@ -171,8 +172,7 @@ void main() {
         find.descendant(of: result, matching: find.byType(SoftCard)).first,
       );
       expect(card.color, Colors.white);
-      expect(
-          find.textContaining('dukungan aturan dalam model'), findsOneWidget);
+      expect(find.textContaining('dukungan aturan dalam model'), findsNothing);
     });
   }
 

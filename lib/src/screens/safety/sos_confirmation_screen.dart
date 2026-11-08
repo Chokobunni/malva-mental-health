@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -25,17 +27,69 @@ class SosConfirmationScreen extends ConsumerStatefulWidget {
 }
 
 class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
+  Timer? _pollTimer;
+  Timer? _deadline;
+  late final SafetyNotifier _notifier;
+  String? _accountId;
+  bool _refreshing = false;
+  bool _timedOut = false;
+  bool _accountChanged = false;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+    _notifier = ref.read(safetyProvider.notifier);
+    _accountId = ref.read(currentSessionProvider)?.backendUserId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_refresh());
+    });
+  }
+
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _deadline?.cancel();
+    _notifier.cancelBlastRefresh();
+  }
+
+  @override
+  void dispose() {
+    _stopPolling();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
-    await ref
-        .read(safetyProvider.notifier)
-        .refreshBlastStatus(widget.incident.id);
-    if (mounted) setState(() {});
+    if (_refreshing ||
+        _accountChanged ||
+        _accountId == null ||
+        _accountId != widget.incident.patientId ||
+        !widget.incident.deliveryConfigured ||
+        _accountId != ref.read(currentSessionProvider)?.backendUserId) return;
+    _stopPolling();
+    setState(() => _timedOut = false);
+    _deadline = Timer(const Duration(seconds: 60), () {
+      _stopPolling();
+      if (mounted) setState(() => _timedOut = true);
+    });
+    await _poll();
+  }
+
+  Future<void> _poll() async {
+    if (!mounted ||
+        _accountChanged ||
+        _timedOut ||
+        _accountId != ref.read(currentSessionProvider)?.backendUserId) return;
+    _refreshing = true;
+    final blast = await _notifier.refreshBlastStatus(widget.incident.id);
+    _refreshing = false;
+    if (!mounted ||
+        _accountChanged ||
+        _timedOut ||
+        _accountId != ref.read(currentSessionProvider)?.backendUserId) return;
+    if (blast != null && (blast.total == 0 || blast.pending > 0)) {
+      _pollTimer = Timer(const Duration(seconds: 2), () => unawaited(_poll()));
+    } else {
+      _stopPolling();
+    }
   }
 
   String get _mapsLink {
@@ -48,11 +102,27 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
   @override
   Widget build(BuildContext context) {
     final safety = ref.watch(safetyProvider);
-    final blast = safety.blastStatus;
-    final total = blast?.total ?? safety.contacts.length;
-    // Hanya hitung yang benar-benar diterima gateway. Sebelumnya status
-    // "terkirim" dikarang server walau tidak ada transport sama sekali.
-    final terkirim = (blast?.delivered ?? 0) + (blast?.sent ?? 0);
+    final accountChanged = _accountChanged ||
+        _accountId == null ||
+        _accountId != widget.incident.patientId ||
+        _accountId != ref.watch(currentSessionProvider)?.backendUserId;
+    ref.listen(
+        currentSessionProvider.select((session) => session?.backendUserId),
+        (_, __) {
+      _stopPolling();
+      setState(() => _accountChanged = true);
+    });
+    if (accountChanged) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('SOS')),
+        body: const Center(
+            child: Text('Sesi akun berubah. Buka kembali halaman SOS.')),
+      );
+    }
+    final blast = safety.blastIncidentId == widget.incident.id
+        ? safety.blastStatus
+        : null;
+    final total = blast?.total ?? 0;
     final gagal = blast?.failed ?? 0;
     final menunggu = blast?.pending ?? 0;
     // delivery_configured=false berarti MALVA_FONNTE_TOKEN belum diisi di
@@ -60,16 +130,15 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
     // padahal pesan WhatsApp tidak pernah keluar dari server.
     final unconfigured = !widget.incident.deliveryConfigured;
     final statusText = unconfigured
-        ? 'WhatsApp belum dikonfigurasi di server — hubungi admin'
-        : terkirim > 0
-            ? 'Terkirim ke $terkirim dari $total kontak'
-            : menunggu > 0
-                ? 'Sedang mengirim ke $total kontak…'
-                : gagal > 0
-                    ? 'Gagal mengirim ke $gagal kontak'
-                    : total == 0
-                        ? 'Belum ada kontak darurat terdaftar'
-                        : 'Menunggu status pengiriman…';
+        ? 'WhatsApp belum tersedia. Pesan belum terkirim.'
+        : _timedOut
+            ? 'Batas waktu pemeriksaan tercapai. Pengiriman belum dapat dipastikan.'
+            : safety.blastError != null
+                ? safety.blastError!
+                : total == 0
+                    ? 'Status pengiriman belum tersedia. Sedang memeriksa…'
+                    : 'Antrean: $menunggu • Diterima layanan WhatsApp: ${blast?.sent ?? 0}\n'
+                        'Diterima kontak: ${blast?.delivered ?? 0} • Gagal: $gagal';
 
     return Scaffold(
       appBar: AppBar(
@@ -116,7 +185,7 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
                     children: [
                       Icon(Icons.message_rounded, color: MalvaColors.seed),
                       SizedBox(width: 8),
-                      Text('SMS/WhatsApp',
+                      Text('WhatsApp',
                           style: TextStyle(fontWeight: FontWeight.w900)),
                     ],
                   ),
@@ -154,7 +223,7 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: const Text(
-                      'LIVE',
+                      'SOS',
                       style: TextStyle(
                           color: Colors.white, fontWeight: FontWeight.w900),
                     ),
@@ -165,7 +234,7 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Contacting Emergency Contacts...',
+                          'Status kontak darurat',
                           style: TextStyle(fontWeight: FontWeight.w900),
                         ),
                         Text(
@@ -174,14 +243,16 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
                         ),
                         if (unconfigured)
                           const Text(
-                            'MALVA_FONNTE_TOKEN belum diisi di server. Pesan WhatsApp tidak terkirim — hubungi admin atau gunakan hotline 119 ext 8.',
+                            'Pesan belum terkirim. Hubungi kontak daruratmu sendiri atau hotline 119 ext 8.',
                             style: TextStyle(
                               color: MalvaColors.danger,
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
                             ),
                           )
-                        else if (gagal > 0)
+                        else if (gagal > 0 ||
+                            _timedOut ||
+                            safety.blastError != null)
                           const Text(
                             'Hubungi kontak daruratmu sendiri atau hotline 119 ext 8.',
                             style: TextStyle(
@@ -195,7 +266,7 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
                   ),
                   IconButton(
                     tooltip: 'Refresh status',
-                    onPressed: _refresh,
+                    onPressed: unconfigured ? null : _refresh,
                     icon: const Icon(Icons.refresh_rounded),
                   ),
                 ],
@@ -219,7 +290,8 @@ class _SosConfirmationScreenState extends ConsumerState<SosConfirmationScreen> {
                           'Profesional tertaut',
                           style: TextStyle(fontWeight: FontWeight.w900),
                         ),
-                        Text('Notified (High Priority)'),
+                        Text(
+                            'SOS dicatat. Jika perlu, hubungi profesional secara langsung.'),
                       ],
                     ),
                   ),

@@ -17,6 +17,8 @@ class SafetyState {
     this.error,
     this.activeIncident,
     this.blastStatus,
+    this.blastIncidentId,
+    this.blastError,
   });
 
   final List<BackendEmergencyContact> contacts;
@@ -25,6 +27,8 @@ class SafetyState {
   final String? error;
   final BackendCrisisIncident? activeIncident;
   final BackendSOSBlastStatus? blastStatus;
+  final String? blastIncidentId;
+  final String? blastError;
 
   SafetyState copyWith({
     List<BackendEmergencyContact>? contacts,
@@ -33,6 +37,10 @@ class SafetyState {
     String? error,
     BackendCrisisIncident? activeIncident,
     BackendSOSBlastStatus? blastStatus,
+    String? blastIncidentId,
+    String? blastError,
+    bool clearBlast = false,
+    bool clearBlastError = false,
     bool clearActive = false,
   }) {
     return SafetyState(
@@ -42,7 +50,13 @@ class SafetyState {
       error: error,
       activeIncident:
           clearActive ? null : (activeIncident ?? this.activeIncident),
-      blastStatus: clearActive ? null : (blastStatus ?? this.blastStatus),
+      blastStatus:
+          clearActive || clearBlast ? null : (blastStatus ?? this.blastStatus),
+      blastIncidentId:
+          clearActive ? null : (blastIncidentId ?? this.blastIncidentId),
+      blastError: clearActive || clearBlast || clearBlastError
+          ? null
+          : (blastError ?? this.blastError),
     );
   }
 }
@@ -55,6 +69,8 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
   SafetyNotifier(this._ref) : super(const SafetyState());
 
   final Ref _ref;
+  int _generation = 0;
+  int _blastRequest = 0;
 
   MalvaApiClient get _api => _ref.read(apiClientProvider);
   String? get _token => _ref.read(currentSessionProvider)?.accessToken;
@@ -70,6 +86,8 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
   /// (mis. incidents error), data yang berhasil tetap ditampilkan —
   /// kontak darurat tidak boleh hilang gara-gara incident gagal dimuat.
   Future<void> load() async {
+    final generation = _generation;
+    final token = _token;
     if (!_hasBackend) {
       state = state.copyWith(error: null, isLoading: false);
       return;
@@ -81,7 +99,7 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
     String? error;
 
     try {
-      contacts = await _api.listEmergencyContacts(accessToken: _token!);
+      contacts = await _api.listEmergencyContacts(accessToken: token!);
     } on MalvaApiException catch (e) {
       error = e.message;
     } on Object catch (e) {
@@ -89,12 +107,13 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
     }
 
     try {
-      incidents = await _api.listCrisisIncidents(accessToken: _token!);
+      if (!mounted || generation != _generation) return;
+      incidents = await _api.listCrisisIncidents(accessToken: token!);
     } on Object {
       // Incident opsional: kontak tetap dipertahankan.
     }
 
-    if (!mounted) return;
+    if (!mounted || generation != _generation) return;
     state = state.copyWith(
       contacts: contacts ?? state.contacts,
       incidents: incidents ?? state.incidents,
@@ -211,19 +230,23 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
     List<String>? contactPhones,
   }) async {
     final token = _token;
+    final generation = _generation;
     if (token == null || token.isEmpty) {
       throw const AuthFailure('Harus login untuk mengirim SOS.');
     }
     if (state.contacts.isEmpty) {
       // Coba refresh sekali — mungkin kontak baru saja ditambah.
       await load();
+      if (!mounted || generation != _generation) {
+        throw const AuthFailure('Sesi akun berubah. Buka kembali halaman SOS.');
+      }
       if (state.contacts.isEmpty) {
         throw const AuthFailure(
           'Tambahkan minimal 1 kontak darurat sebelum mengirim SOS.',
         );
       }
     }
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(isLoading: true, error: null, clearBlast: true);
     try {
       final incident = await _api.createCrisisAlertV2(
         accessToken: token,
@@ -234,6 +257,7 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
         message: message,
         contactPhones: contactPhones,
       );
+      if (!mounted || generation != _generation) return incident;
       BackendSOSBlastStatus? blast;
       try {
         blast = await _api.getBlastStatus(
@@ -243,19 +267,22 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
       } on Object catch (_) {
         // Status blast boleh gagal — incident tetap valid.
       }
-      if (!mounted) return incident;
+      if (!mounted || generation != _generation) return incident;
       state = state.copyWith(
         isLoading: false,
         activeIncident: incident,
         blastStatus: blast,
+        blastIncidentId: incident.id,
+        clearBlast: blast == null,
         incidents: [incident, ...state.incidents],
       );
       return incident;
     } on MalvaApiException catch (e) {
-      if (mounted) state = state.copyWith(isLoading: false, error: e.message);
+      if (mounted && generation == _generation)
+        state = state.copyWith(isLoading: false, error: e.message);
       rethrow;
     } on Object catch (e) {
-      if (mounted) {
+      if (mounted && generation == _generation) {
         state =
             state.copyWith(isLoading: false, error: friendlyErrorMessage(e));
       }
@@ -266,18 +293,35 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
   Future<BackendSOSBlastStatus?> refreshBlastStatus(String incidentId) async {
     final token = _token;
     if (token == null || token.isEmpty) return null;
+    final generation = _generation;
+    final request = ++_blastRequest;
+    state = state.copyWith(
+      blastIncidentId: incidentId,
+      clearBlast: state.blastIncidentId != incidentId,
+      clearBlastError: true,
+    );
     try {
       final blast =
           await _api.getBlastStatus(accessToken: token, incidentId: incidentId);
-      if (!mounted) return blast;
+      if (!mounted || generation != _generation || request != _blastRequest)
+        return null;
       state = state.copyWith(blastStatus: blast);
       return blast;
     } on Object catch (_) {
+      if (mounted && generation == _generation && request == _blastRequest) {
+        state = state.copyWith(
+            blastError: 'Status pengiriman tidak dapat diperiksa.');
+      }
       return null;
     }
   }
 
+  void cancelBlastRefresh() {
+    _blastRequest++;
+  }
+
   void clearActiveIncident() {
+    cancelBlastRefresh();
     state = state.copyWith(clearActive: true);
   }
 
@@ -289,6 +333,8 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
   /// untuk mengirim SOS — oleh akun berikutnya di perangkat yang sama.
   void reset() {
     if (!mounted) return;
+    _generation++;
+    _blastRequest++;
     state = const SafetyState();
   }
 }
@@ -299,7 +345,10 @@ class SafetyNotifier extends StateNotifier<SafetyState> {
 
 final safetyProvider =
     StateNotifierProvider<SafetyNotifier, SafetyState>((ref) {
-  return SafetyNotifier(ref);
+  final notifier = SafetyNotifier(ref);
+  ref.listen(currentSessionProvider.select((session) => session?.backendUserId),
+      (_, __) => notifier.reset());
+  return notifier;
 });
 
 final hasEmergencyContactsProvider = Provider<bool>((ref) {

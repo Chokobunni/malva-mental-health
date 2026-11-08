@@ -4,9 +4,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:malva_mental_health/src/assessment_engine.dart';
 import 'package:malva_mental_health/src/screens/assessment_screen.dart';
 import 'package:malva_mental_health/src/theme.dart';
+import 'package:malva_mental_health/src/widgets/malva_components.dart';
+import 'package:malva_mental_health/src/widgets/therapy_library.dart';
 
 void main() {
-  testWidgets('mild results explain CF without claiming diagnostic certainty',
+  test('manual instrument descriptions contain no formulas or model copy', () {
+    for (final module in [who5Module, dass21Module]) {
+      expect(module.description, isNot(contains('CF')));
+      expect(module.description, isNot(contains('×')));
+      expect(module.description, isNot(contains('Jawab semua')));
+      expect(module.description, contains('bukan diagnosis'));
+    }
+  });
+  testWidgets('patient results explain scores without model details',
       (tester) async {
     final phq9 = AssessmentEngine.score(
       type: AssessmentType.phq9,
@@ -34,15 +44,16 @@ void main() {
     ));
 
     expect(find.text('CF 68%'), findsNothing);
-    await tester.ensureVisible(find.text('Lihat cara penilaian'));
-    await tester.tap(find.text('Lihat cara penilaian'));
+    expect(find.text('Apa arti skormu?'), findsOneWidget);
+    await tester.ensureVisible(find.text('Apa arti skormu?'));
+    await tester.tap(find.text('Apa arti skormu?'));
     await tester.pumpAndSettle();
-    expect(find.text('CF 68%'), findsNWidgets(2));
+    expect(find.text('CF 68%'), findsNothing);
     expect(find.textContaining('Pasti'), findsNothing);
     expect(
         find.textContaining(
             'CF menunjukkan dukungan aturan dalam model, bukan probabilitas diagnosis'),
-        findsOneWidget);
+        findsNothing);
     expect(find.textContaining('PHQ-9 5/27 Ringan'), findsOneWidget);
     expect(find.textContaining('GAD-7 5/21 Ringan'), findsOneWidget);
   });
@@ -69,6 +80,9 @@ void main() {
     expect(find.byKey(const ValueKey('phq-9-question-9')), findsOneWidget);
     expect(find.byKey(const ValueKey('gad-7-question-7')), findsOneWidget);
     expect(find.byKey(submitPanel), findsOneWidget);
+    expect(
+        tester.widget<SoftCard>(find.byKey(submitPanel)).color, Colors.white);
+    expect(find.text('Lihat cara penilaian'), findsNothing);
 
     final phqTop = tester.getTopLeft(find.byKey(phqSection)).dy;
     final gadTop = tester.getTopLeft(find.byKey(gadSection)).dy;

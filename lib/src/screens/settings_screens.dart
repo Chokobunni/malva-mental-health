@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
+import '../time/wib.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
@@ -118,16 +119,130 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
-  final _name = TextEditingController(text: 'Emerie R');
-  final _dob = TextEditingController(text: '01/01/2007');
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  final _name = TextEditingController();
+  final _dob = TextEditingController();
+  int _generation = 0;
+  bool _loading = true;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile(ref.read(currentSessionProvider));
+  }
+
+  bool _ownsRequest(AuthSession session, int generation) =>
+      mounted &&
+      generation == _generation &&
+      ref.read(currentSessionProvider)?.backendUserId ==
+          session.backendUserId &&
+      ref.read(currentSessionProvider)?.identifier == session.identifier;
+
+  Future<void> _loadProfile(AuthSession? session) async {
+    final generation = ++_generation;
+    _name.text = session?.displayName ?? '';
+    _dob.clear();
+    _error = null;
+    _saving = false;
+    _loading = true;
+    final token = session?.accessToken;
+    if (session == null || token == null || token.isEmpty) {
+      _loading = false;
+      return;
+    }
+    try {
+      final profile = await ref
+          .read(apiClientProvider)
+          .fetchUserProfile(accessToken: token);
+      if (!_ownsRequest(session, generation)) return;
+      if (profile.id != session.backendUserId) {
+        throw const AuthFailure('Profil tidak sesuai dengan akun aktif.');
+      }
+      _name.text = profile.displayName;
+      final birthDate = profile.birthDateTime;
+      _dob.text = birthDate == null ? '' : formatWibDate(birthDate);
+    } on Object catch (error) {
+      if (_ownsRequest(session, generation)) {
+        _error = friendlyErrorMessage(error);
+      }
+    } finally {
+      if (_ownsRequest(session, generation)) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _saveProfile() async {
+    final session = ref.read(currentSessionProvider);
+    final token = session?.accessToken;
+    if (session == null || token == null || token.isEmpty) return;
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Nama harus diisi.');
+      return;
+    }
+    final rawDob = _dob.text.trim();
+    String? dob;
+    if (rawDob.isNotEmpty) {
+      final parts = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(rawDob);
+      final date = parts == null
+          ? null
+          : parseWibStored('${parts[3]}-${parts[2]}-${parts[1]}');
+      if (date == null ||
+          formatWibDate(date) != rawDob ||
+          date.isAfter(wibNow())) {
+        setState(
+            () => _error = 'Tanggal lahir tidak valid. Gunakan DD/MM/YYYY.');
+        return;
+      }
+      dob = wibDateKey(date);
+    }
+    final generation = _generation;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final profile = await ref.read(apiClientProvider).updateMe(
+          accessToken: token, displayName: name, dateOfBirth: dob ?? '');
+      if (!_ownsRequest(session, generation)) return;
+      if (profile.id != session.backendUserId) {
+        throw const AuthFailure('Profil tidak sesuai dengan akun aktif.');
+      }
+      final current = ref.read(currentSessionProvider)!;
+      final updated = AuthSession(
+          role: current.role,
+          identifier: current.identifier,
+          displayName: profile.displayName,
+          backendUserId: current.backendUserId,
+          backendSynced: current.backendSynced,
+          accessToken: current.accessToken,
+          refreshToken: current.refreshToken);
+      ref.read(authStateProvider.notifier).setSession(updated);
+      final store = ref.read(malvaStoreProvider.notifier);
+      if (ref.read(malvaStoreProvider).patient.id == current.backendUserId) {
+        store.setPatientIdentity(name: profile.displayName);
+      }
+      await store.persistSession(updated);
+      if (!_ownsRequest(session, generation)) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Perubahan profil tersimpan.')),
+      );
+      Navigator.pop(context);
+    } on Object catch (error) {
+      if (_ownsRequest(session, generation))
+        setState(() => _error = friendlyErrorMessage(error));
+    } finally {
+      if (_ownsRequest(session, generation)) setState(() => _saving = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -138,6 +253,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(currentSessionProvider);
+    ref.listen<AuthSession?>(currentSessionProvider, (previous, next) {
+      if (previous?.backendUserId != next?.backendUserId ||
+          previous?.identifier != next?.identifier) {
+        _loadProfile(next);
+      }
+    });
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
@@ -150,6 +272,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SectionLabel('Name'),
           TextField(
             controller: _name,
+            enabled: !_loading && !_saving,
             textCapitalization: TextCapitalization.words,
             decoration: const InputDecoration(labelText: 'Name'),
           ),
@@ -157,6 +280,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SectionLabel('Date of Birth'),
           TextField(
             controller: _dob,
+            enabled: !_loading && !_saving,
             keyboardType: TextInputType.datetime,
             decoration: const InputDecoration(
               labelText: 'Date of Birth',
@@ -164,14 +288,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 18),
+          if (_loading) const LinearProgressIndicator(),
+          if (_error != null)
+            Text(_error!, style: const TextStyle(color: MalvaColors.danger)),
           FilledButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Perubahan profil tersimpan.')),
-              );
-              Navigator.pop(context);
-            },
-            child: const Text('Save changes'),
+            onPressed:
+                _loading || _saving || session?.accessToken?.isNotEmpty != true
+                    ? null
+                    : _saveProfile,
+            child: Text(_saving ? 'Menyimpan...' : 'Save changes'),
           ),
         ],
       ),

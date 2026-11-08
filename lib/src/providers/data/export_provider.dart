@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../platform/platform_providers.dart';
 import '../../services/export_service.dart';
+import '../../time/wib.dart';
 import '../malva_store_provider.dart';
 
 // ============================================================
@@ -11,6 +12,27 @@ import '../malva_store_provider.dart';
 final exportServiceProvider = Provider<ExportService>((ref) {
   return ExportService(ref.watch(fileExporterProvider));
 });
+
+final moodReportProvider = Provider<List<String>>((ref) => [
+      'RIWAYAT MOOD',
+      for (final e in ref.watch(malvaStoreProvider).moodEntries)
+        '${formatWibDateTime(e.date)} | Mood: ${e.mood.name}\n'
+            'Tidur: ${e.sleepHours} jam; energi: ${e.energy}; kecemasan: ${e.anxiety}; '
+            'iritabilitas: ${e.irritability}\nCatatan: ${e.note}',
+    ]);
+
+final medicationReportProvider = Provider<List<String>>((ref) => [
+      'RIWAYAT KONSUMSI OBAT',
+      for (final e in ref.watch(malvaStoreProvider).medicationLogs)
+        '${formatWibDateTime(e.takenAt)} | ${e.medicationName} | ${e.status}',
+    ]);
+
+final diaryReportProvider = Provider<List<String>>((ref) => [
+      'CATATAN HARIAN',
+      for (final e in ref.watch(malvaStoreProvider).diaryEntries)
+        '${formatWibDateTime(e.createdAt)} | ${e.title}\nMood: ${e.mood.name}\n'
+            '${e.note}\nTanggapan profesional: ${e.professionalFeedback ?? "Belum ada"}',
+    ]);
 
 // ----------------------------------------------------------
 // CSV GENERATORS (derived providers)
