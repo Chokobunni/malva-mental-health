@@ -21,9 +21,10 @@
   independent. Real persisted reviews determine aggregates. Three labeled demo
   examples are excluded from actual patient reviews and aggregates.
 - Discovery refreshes on GPS updates and discards older overlapping responses.
-  MyCare resolves linked profiles directly. Migration 033 restores the known
+  MyCare resolves linked profiles directly. Migrations 033-034 restore the known
   canonical RSI Jemursari coordinates only when both coordinates are absent and
-  the established identity/practice/address still match.
+  the immutable identity/practice/address still match. Login email is mutable
+  and does not determine the practice's identity.
 - PHQ/GAD share a combined filter and explicit Total Score labels. Labels wrap
   on narrow screens.
 - Medication/screening PDFs use repeated table headers and status/severity
@@ -40,6 +41,9 @@
 - API documentation check: 143 API endpoints plus one static endpoint in sync.
 - Convention/WIB, environment, migration and coverage gates passed. Migration
   033 was applied twice in the isolated database to verify repeatability.
+  Migration 034 additionally covers a changed login, other professionals,
+  existing/partial coordinates, moved clinics and changed addresses; each case
+  is applied twice without overwriting newer practice information.
 - Independent reviews found and verified fixes for account/token races, stale
   GPS responses, temporary-medication stock accounting, old assessment limits,
   professional therapy taps and narrow score labels.

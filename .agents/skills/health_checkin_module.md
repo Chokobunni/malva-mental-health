@@ -17,5 +17,8 @@
   walau total tinggi. Warna adalah kategori hasil, bukan diagnosis.
 - Ulasan tersimpan hanya dari pasien dengan sesi completed. Contoh ditandai jelas,
   tidak disimpan sebagai ulasan pasien atau dihitung dalam agregat nyata.
+- Backfill lokasi praktik lama mengikat UUID profesional dan alamat praktik
+  yang diketahui, tanpa menggantungkan identitas pada email login yang dapat
+  berubah. Pertahankan koordinat yang sudah ada dan praktik/alamat yang berubah.
 - Pengujian utama: mood_insights*, medication_checklist_ui, diary_separation,
   doctor_reviews_distance, health_export_server, health_pdf_report.
