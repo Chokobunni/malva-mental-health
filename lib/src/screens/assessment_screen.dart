@@ -707,12 +707,12 @@ class AssessmentResultScreen extends StatelessWidget {
                           children: [
                             StatusPill(
                               label:
-                                  'PHQ-9 ${bundle.phq9.score}/${bundle.phq9.maxScore} ${bundle.phq9.level.label}',
+                                  'PHQ-9 Total Score: ${bundle.phq9.score}/${bundle.phq9.maxScore} ${bundle.phq9.level.label}',
                               color: bundle.phq9.level.color,
                             ),
                             StatusPill(
                               label:
-                                  'GAD-7 ${bundle.gad7.score}/${bundle.gad7.maxScore} ${bundle.gad7.level.label}',
+                                  'GAD-7 Total Score: ${bundle.gad7.score}/${bundle.gad7.maxScore} ${bundle.gad7.level.label}',
                               color: bundle.gad7.level.color,
                             ),
                           ],
@@ -1082,7 +1082,7 @@ class _ScoreExplanationCard extends StatelessWidget {
           ],
           const SizedBox(height: 4),
           Text(
-            'Skormu: $score/$maxScore (${level.label})',
+            'Total Score: $score/$maxScore (${level.label})',
             style: TextStyle(
               fontWeight: FontWeight.w900,
               fontSize: 12,

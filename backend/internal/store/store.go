@@ -899,7 +899,7 @@ func (s *Store) ListScreeningSessions(ctx context.Context, patientID string, lim
 	if patientID == "" {
 		return nil, errors.New("patient_id is required")
 	}
-	limit = normalizeLimit(limit, 20, 100)
+	sqlLimit := historyQueryLimit(limit)
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, patient_id, submitted_by, source, is_initial,
@@ -908,7 +908,7 @@ func (s *Store) ListScreeningSessions(ctx context.Context, patientID string, lim
 		WHERE patient_id = $1
 		ORDER BY created_at DESC
 		LIMIT $2
-	`, patientID, limit)
+	`, patientID, sqlLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -1343,7 +1343,7 @@ func (s *Store) UpsertMoodCheckin(ctx context.Context, input MoodCheckin) (MoodC
 }
 
 func (s *Store) ListMoodCheckins(ctx context.Context, patientID string, limit int) ([]MoodCheckin, error) {
-	limit = normalizeLimit(limit, 20, 100)
+	sqlLimit := historyQueryLimit(limit)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, patient_id, mood, sleep_hours, energy, anxiety, irritability, note,
 		       medication_taken, COALESCE(professional_feedback, ''), occurred_at, created_at
@@ -1351,7 +1351,7 @@ func (s *Store) ListMoodCheckins(ctx context.Context, patientID string, limit in
 		WHERE patient_id = $1
 		ORDER BY occurred_at DESC
 		LIMIT $2
-	`, patientID, limit)
+	`, patientID, sqlLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -1460,7 +1460,7 @@ func (s *Store) DeleteDiaryEntry(ctx context.Context, patientID, diaryID string)
 }
 
 func (s *Store) ListDiaryEntries(ctx context.Context, patientID string, sharedOnly bool, limit int) ([]DiaryEntry, error) {
-	limit = normalizeLimit(limit, 20, 100)
+	sqlLimit := historyQueryLimit(limit)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, patient_id, mood, title, note, shared_with_professionals,
 		       professional_feedback, occurred_at, created_at, updated_at
@@ -1470,7 +1470,7 @@ func (s *Store) ListDiaryEntries(ctx context.Context, patientID string, sharedOn
 		  AND ($2 = false OR shared_with_professionals = true)
 		ORDER BY occurred_at DESC
 		LIMIT $3
-	`, patientID, sharedOnly, limit)
+	`, patientID, sharedOnly, sqlLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -1743,14 +1743,14 @@ func (s *Store) CreateMedicationLog(ctx context.Context, input MedicationLog) (M
 }
 
 func (s *Store) ListMedicationLogs(ctx context.Context, patientID string, limit int) ([]MedicationLog, error) {
-	limit = normalizeLimit(limit, 20, 100)
+	sqlLimit := historyQueryLimit(limit)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, patient_id, medication_id, medication_name, status, taken_at, created_at
 		FROM medication_logs
 		WHERE patient_id = $1
 		ORDER BY taken_at DESC
 		LIMIT $2
-	`, patientID, limit)
+	`, patientID, sqlLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -2476,6 +2476,14 @@ func durationInterval(duration time.Duration) string {
 		seconds = 1
 	}
 	return fmt.Sprintf("%d seconds", seconds)
+}
+
+// Explicit zero requests complete patient-owned history; SQL LIMIT NULL is unbounded.
+func historyQueryLimit(value int) any {
+	if value == 0 {
+		return nil
+	}
+	return normalizeLimit(value, 20, 100)
 }
 
 func normalizeLimit(value, fallback, max int) int {

@@ -42,84 +42,88 @@ class ClinicalChatCard extends StatelessWidget {
                 : 'Goals & Habits';
     final action = attachment
         ? 'Buka lampiran'
-        : assessment
+        : assessment && isPatient
             ? 'Isi assessment'
-            : 'Lihat Goals';
-    final canOpen =
-        attachment || (isPatient && (assessment || goalIds.isNotEmpty));
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-          color: MalvaColors.seed.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(16)),
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(children: [
-              Icon(
-                  attachment
-                      ? Icons.attach_file
-                      : assessment
-                          ? Icons.fact_check_outlined
-                          : Icons.summarize_outlined,
-                  color: MalvaColors.seed),
-              const SizedBox(width: 8),
-              Expanded(
-                  child: Text(title,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w800, color: MalvaColors.ink)))
-            ]),
-            if (summary || goalIds.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              if (goals.isEmpty && goalIds.isNotEmpty)
-                Text('${goalIds.length} homework goals tersimpan'),
-              for (final goal in goals)
-                Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(Icons.check_circle_outline,
-                              size: 18, color: MalvaColors.seed),
-                          const SizedBox(width: 8),
-                          Expanded(
-                              child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                Text(goal['title']?.toString() ?? 'Goal'),
-                                Text(
-                                    '${goal['target_per_week'] ?? 3} kali per minggu',
-                                    style:
-                                        Theme.of(context).textTheme.bodySmall)
-                              ])),
-                        ])),
-              if (insight.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                const Text('Insight',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text(insight)
-              ],
-            ],
-            if (assessment)
-              const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text(
-                      'Isi sendiri untuk mencatat kondisi terkini. Hasil tersimpan di Assessment Record.')),
-            if (attachment)
-              Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                      '${meta['mime'] ?? ''} · ${((meta['size'] is num ? meta['size'] as num : 0) / 1024).ceil()} KB')),
-            if (canOpen)
-              TextButton.icon(
-                  onPressed: onAction,
-                  icon: Icon(
-                      attachment ? Icons.download_outlined : Icons.open_in_new,
-                      size: 18),
-                  label: Text(action)),
-          ]),
-    );
+            : 'Lihat detail';
+    return InkWell(
+        onTap: onAction,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+              color: MalvaColors.seed.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(16)),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(children: [
+                  Icon(
+                      attachment
+                          ? Icons.attach_file
+                          : assessment
+                              ? Icons.fact_check_outlined
+                              : Icons.summarize_outlined,
+                      color: MalvaColors.seed),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: Text(title,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: MalvaColors.ink)))
+                ]),
+                if (summary || goalIds.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  if (goals.isEmpty && goalIds.isNotEmpty)
+                    Text('${goalIds.length} homework goals tersimpan'),
+                  for (final goal in goals)
+                    Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.check_circle_outline,
+                                  size: 18, color: MalvaColors.seed),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                  child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                    Text(goal['title']?.toString() ?? 'Goal'),
+                                    Text(
+                                        '${goal['target_per_week'] ?? 3} kali per minggu',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall)
+                                  ])),
+                            ])),
+                  if (insight.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    const Text('Insight',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(insight)
+                  ],
+                ],
+                if (assessment)
+                  const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text(
+                          'Isi sendiri untuk mencatat kondisi terkini. Hasil tersimpan di Assessment Record.')),
+                if (attachment)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                          '${meta['mime'] ?? ''} · ${((meta['size'] is num ? meta['size'] as num : 0) / 1024).ceil()} KB')),
+                TextButton.icon(
+                    onPressed: onAction,
+                    icon: Icon(
+                        attachment
+                            ? Icons.download_outlined
+                            : Icons.open_in_new,
+                        size: 18),
+                    label: Text(action)),
+              ]),
+        ));
   }
 }

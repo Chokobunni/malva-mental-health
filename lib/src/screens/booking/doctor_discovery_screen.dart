@@ -37,6 +37,7 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
   Object? _error;
   bool _offlineMode = false;
   List<BackendDoctorSearchResult> _doctors = const [];
+  int _loadGeneration = 0;
 
   static const _sortOptions = [
     ('name_asc', 'Nama A-Z'),
@@ -64,6 +65,7 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
   /// Muat direktori profesional dari server (tanpa data demo).
   /// [silent] dipakai saat penyegaran otomatis agar daftar tidak berkedip.
   Future<void> _load({bool silent = false}) async {
+    final generation = ++_loadGeneration;
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
     final rawToken = widget.session?.accessToken;
@@ -86,14 +88,14 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
         patientLat: pos?.latitude,
         patientLng: pos?.longitude,
       );
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _doctors = doctors;
         _offlineMode = false;
         _isLoading = false;
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _doctors = const [];
         _offlineMode = true;
@@ -113,6 +115,9 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<PatientLocationState>(patientLocationProvider, (previous, next) {
+      if (previous?.position != next.position) unawaited(_load(silent: true));
+    });
     // Foto profesional berubah → segarkan daftar tanpa mengganggu pencarian.
     ref.listen<int>(professionalProfileRevisionProvider, (previous, next) {
       if (previous != next) {
@@ -285,7 +290,6 @@ class _DoctorCard extends StatelessWidget {
   final double? patientLng;
 
   double? get _effectiveKm {
-    if (doctor.distanceKm != null) return doctor.distanceKm;
     return distanceKmBetween(
       fromLat: patientLat,
       fromLng: patientLng,
@@ -335,7 +339,8 @@ class _DoctorCard extends StatelessWidget {
                           color: Colors.black54, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 6),
-                    Row(
+                    Wrap(
+                      spacing: 4,
                       children: [
                         const Icon(Icons.star_rounded,
                             size: 16, color: MalvaColors.amber),
@@ -343,18 +348,19 @@ class _DoctorCard extends StatelessWidget {
                         Text(
                           doctor.reviewCount == 0
                               ? 'Belum ada ulasan'
-                              : '${doctor.helpfulnessPercent}% terbantu',
+                              : '${doctor.averageStars.toStringAsFixed(1)} / 5',
                           style: const TextStyle(
                               fontWeight: FontWeight.w900, fontSize: 12.5),
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          '($helpful% terbantu • ${doctor.reviewCount} ulasan)',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: Colors.black54),
-                        ),
+                        if (doctor.reviewCount > 0)
+                          Text(
+                            '($helpful% terbantu • ${doctor.reviewCount} ulasan)',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: Colors.black54),
+                          ),
                       ],
                     ),
                   ],
@@ -400,6 +406,16 @@ class _DoctorCard extends StatelessWidget {
               ],
             ],
           ),
+          if (km == null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                  professionalDistanceLabel(
+                      km: km,
+                      hospitalLat: doctor.hospitalLat,
+                      hospitalLng: doctor.hospitalLng),
+                  style: Theme.of(context).textTheme.bodySmall),
+            ),
           const Divider(height: 16),
           Row(
             children: [

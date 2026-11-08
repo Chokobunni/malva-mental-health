@@ -8,6 +8,7 @@ import '../assessment_engine.dart';
 import '../models.dart';
 import '../platform/contracts/ports.dart';
 import '../time/wib.dart';
+import 'health_pdf_report.dart';
 
 // ============================================================
 // EXPORT SERVICE
@@ -23,6 +24,31 @@ class ExportService {
   ExportService(this._exporter);
 
   final FileExporter _exporter;
+
+  Future<void> shareHealthReport({
+    required String title,
+    required String filename,
+    List<MoodEntry>? moods,
+    List<MedicationLog>? medicationLogs,
+    List<ScreeningPdfRow>? screenings,
+    List<DiaryEntry>? diaryEntries,
+    String? patientName,
+    bool Function()? canShare,
+  }) async {
+    final bytes = await buildHealthReportPdf(
+        title: title,
+        moods: moods,
+        medicationLogs: medicationLogs,
+        screenings: screenings,
+        diaries: diaryEntries,
+        patientName: patientName);
+    if (canShare != null && !canShare()) return;
+    await _exporter.saveBytes(
+        filename: filename,
+        bytes: bytes,
+        mimeType: 'application/pdf',
+        subject: title);
+  }
 
   Future<void> sharePdf(
       {required String title,
@@ -166,12 +192,11 @@ class ExportService {
 
   String exportDiaryCsv(List<DiaryEntry> entries) {
     final buffer = StringBuffer();
-    buffer.writeln('ID,Date,Mood,Title,Note,Professional Feedback');
+    buffer.writeln('ID,Date,Title,Note,Professional Feedback');
     for (final e in entries) {
       buffer.writeln(
         '"${e.id}",'
         '${wibIso(e.createdAt)},'
-        '${e.mood.name},'
         '"${e.title.replaceAll('"', '""')}",'
         '"${e.note.replaceAll('"', '""')}",'
         '"${(e.professionalFeedback ?? '').replaceAll('"', '""')}"',
@@ -234,7 +259,6 @@ class ExportService {
           .map((e) => {
                 'id': e.id,
                 'createdAt': wibIso(e.createdAt),
-                'mood': e.mood.name,
                 'title': e.title,
                 'note': e.note,
               })

@@ -5,10 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models.dart';
 import '../../services/malva_api_client.dart';
+import '../../services/mood_insights.dart';
+import '../../widgets/mood_insights.dart';
+import '../../providers/providers.dart';
 import '../../theme.dart';
 import '../../time/wib.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
+import '../../widgets/therapy_library.dart';
 
 // ============================================================
 // DATA PASIEN DIBAGIKAN (professional) — SATU PINTU dari dashboard.
@@ -46,6 +50,7 @@ class _SharedPatientDataScreenState
   String? _selectedPatientId;
   bool _isLoading = true;
   String? _error;
+  late final AuthSession? _owner;
 
   static const List<_TabSpec> _tabs = [
     _TabSpec('Mood', Icons.mood_rounded),
@@ -59,6 +64,7 @@ class _SharedPatientDataScreenState
   @override
   void initState() {
     super.initState();
+    _owner = ref.read(currentSessionProvider);
     _tabController = TabController(length: _tabs.length, vsync: this);
     unawaited(_loadLinks());
   }
@@ -90,8 +96,8 @@ class _SharedPatientDataScreenState
           accessToken: accessToken);
       if (!mounted) return;
       setState(() {
-        _links = links;
-        _selectedPatientId = links.isEmpty ? null : links.first.patientId;
+        _links = links.where((link) => link.status == 'active').toList();
+        _selectedPatientId = _links.isEmpty ? null : _links.first.patientId;
         _isLoading = false;
       });
     } on MalvaApiException catch (error) {
@@ -111,6 +117,10 @@ class _SharedPatientDataScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (ref.watch(currentSessionProvider) != _owner) {
+      return const Scaffold(
+          body: Center(child: Text('Sesi akun telah berubah.')));
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Data Pasien Dibagikan'),
@@ -476,60 +486,16 @@ class _MoodTabState
   Future<List<BackendMoodCheckin>> loadData(
       MalvaApiClient apiClient, String accessToken) {
     return apiClient.listMoodCheckins(
-        accessToken: accessToken, patientId: widget.patientId);
+        accessToken: accessToken, patientId: widget.patientId, limit: 0);
   }
 
   @override
   Widget buildContent(BuildContext context, List<BackendMoodCheckin> data) {
-    return Column(
-      children: [
-        for (final mood in data) ...[
-          SoftCard(
-            bordered: true,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        mood.mood.isEmpty ? 'Mood' : mood.mood,
-                        style: const TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                    ),
-                    Text(
-                      _wibDate(mood.occurredAt),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    _MiniStat(label: 'Tidur', value: '${mood.sleepHours} jam'),
-                    _MiniStat(label: 'Energi', value: '${mood.energy}'),
-                    _MiniStat(label: 'Cemas', value: '${mood.anxiety}'),
-                    _MiniStat(label: 'Iritabel', value: '${mood.irritability}'),
-                  ],
-                ),
-                if (mood.note.trim().isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(mood.note,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: Colors.black54)),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ],
-    );
+    return MoodInsights(
+        entries: data
+            .where((m) => m.occurredAt != null)
+            .map(moodEntryFromBackend)
+            .toList());
   }
 }
 
@@ -593,19 +559,10 @@ class _DiaryTabState
                     ),
                   ],
                 ),
-                if (entry.mood.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text('Mood: ${entry.mood}',
-                        style: Theme.of(context).textTheme.bodySmall),
-                  ),
                 if (entry.note.trim().isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(entry.note,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: Colors.black54)),
+                      style: Theme.of(context).textTheme.bodySmall),
                 ],
               ],
             ),
@@ -921,6 +878,7 @@ class _TherapyTabState extends _PatientDataTabStateBase<
       children: [
         for (final submission in data) ...[
           SoftCard(
+            onTap: () => showTherapyRecordDetail(context, submission),
             bordered: true,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Column(
@@ -960,26 +918,6 @@ class _TherapyTabState extends _PatientDataTabStateBase<
           const SizedBox(height: 8),
         ],
       ],
-    );
-  }
-}
-
-class _MiniStat extends StatelessWidget {
-  const _MiniStat({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text('$label: $value',
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
     );
   }
 }

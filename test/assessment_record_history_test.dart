@@ -155,6 +155,40 @@ Widget _buildApp(MalvaApiClient api, {required Widget home}) {
 }
 
 void main() {
+  test('full assessment export retains older assessments behind 100 worksheets',
+      () async {
+    final api = MalvaApiClient(
+        baseUrl: 'http://backend.test',
+        httpClient: _FakeClient((request) async {
+          final body = request.url.path == '/v1/therapy-submissions'
+              ? {
+                  'submissions': [
+                    for (var i = 0; i < 100; i++)
+                      _submission(
+                          id: 'therapy-$i',
+                          moduleId: 'abcde',
+                          title: 'Worksheet',
+                          createdAt: '2026-11-08T09:00:00+07:00'),
+                    if (request.url.queryParameters['limit'] == '0')
+                      _submission(
+                          id: 'older-who5',
+                          moduleId: 'who5',
+                          title: 'WHO lama',
+                          createdAt: '2025-01-01T09:00:00+07:00',
+                          answers: _who5Answers())
+                  ]
+                }
+              : {'screenings': []};
+          return http.Response(jsonEncode(body), 200);
+        }));
+    final entries = await loadAssessmentHistory(
+        api: api,
+        accessToken: 'token',
+        patientId: 'patient-1',
+        requireAllSources: true);
+    expect(entries, hasLength(1));
+    expect(entries.single.title, 'WHO lama');
+  });
   test(
       'PDF loader can require every assessment source while history retains partial results',
       () async {
@@ -225,10 +259,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilterChip, 'WHO-5'));
     await tester.pumpAndSettle();
     expect(find.byType(AssessmentHistoryCard), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilterChip, 'PHQ-9'));
-    await tester.pumpAndSettle();
-    expect(find.byType(AssessmentHistoryCard), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilterChip, 'GAD-7'));
+    await tester.tap(find.widgetWithText(FilterChip, 'PHQ-9 + GAD-7'));
     await tester.pumpAndSettle();
     expect(find.text('Tidak ada hasil untuk filter ini.'), findsOneWidget);
   });
@@ -358,8 +389,8 @@ void main() {
           .first);
       expect(card.color, Colors.white);
     }
-    expect(find.text('16/27'), findsOneWidget);
-    expect(find.text('7/21'), findsOneWidget);
+    expect(find.text('Total Score: 16/27'), findsOneWidget);
+    expect(find.text('Total Score: 7/21'), findsOneWidget);
     expect(find.text('Cukup berat'), findsOneWidget);
     expect(find.text('Ringan'), findsOneWidget);
     expect(find.text('moderately_severe'), findsNothing);
@@ -386,8 +417,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('15–21'), findsOneWidget);
     expect(find.text('20–27'), findsNothing);
-    expect(find.text('16/27'), findsOneWidget);
-    expect(find.text('7/21'), findsOneWidget);
+    expect(find.text('Total Score: 16/27'), findsOneWidget);
+    expect(find.text('Total Score: 7/21'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -568,8 +599,8 @@ void main() {
 
     expect(find.text('PHQ-9 — Depresi'), findsOneWidget);
     expect(find.text('GAD-7 — Kecemasan'), findsOneWidget);
-    expect(find.text('12/27'), findsOneWidget);
-    expect(find.text('9/21'), findsOneWidget);
+    expect(find.text('Total Score: 12/27'), findsOneWidget);
+    expect(find.text('Total Score: 9/21'), findsOneWidget);
     expect(find.textContaining('Screening ini menandai risiko krisis'),
         findsNothing);
   });

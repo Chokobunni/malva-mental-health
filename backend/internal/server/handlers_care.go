@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -307,6 +308,12 @@ const maxTherapyModuleID = 64
 const maxTherapyAnswersBytes = 64 * 1024
 
 func (s *Server) listTherapySubmissions(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	limit := 100
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed >= 0 {
+			limit = parsed
+		}
+	}
 	// Profesional melihat yang dibagikan ke dirinya; pasien melihat miliknya.
 	professionalView := claims.Role == "professional"
 	if professionalView && r.URL.Query().Get("patient_id") != "" {
@@ -316,7 +323,7 @@ func (s *Server) listTherapySubmissions(w http.ResponseWriter, r *http.Request, 
 			writeError(w, http.StatusForbidden, err)
 			return
 		}
-		all, err := s.store.ListTherapySubmissions(r.Context(), patientID, false)
+		all, err := s.store.ListTherapySubmissions(r.Context(), patientID, false, limit)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err)
 			return
@@ -338,7 +345,7 @@ func (s *Server) listTherapySubmissions(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	owner := claims.Subject
-	submissions, err := s.store.ListTherapySubmissions(r.Context(), owner, professionalView)
+	submissions, err := s.store.ListTherapySubmissions(r.Context(), owner, professionalView, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return

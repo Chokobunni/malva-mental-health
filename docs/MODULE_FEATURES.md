@@ -125,6 +125,20 @@ Status `Aktif` berarti endpoint terdaftar di `Routes()` dan diimplementasikan di
 
 **Total fitur terdaftar:** 10 modul. Endpoint lengkap per rute: lihat `API_ROUTES.md`.
 
+### Check-in dan record 0.1.9
+
+Diary dan mood terpisah. Kedua role memakai statistik hari WIB, kalender, combo
+chart mood/tidur, Symptoms Balance Map dengan filter periode, serta Recent yang
+berasal dari data tersimpan. Mini Summary mengambil diary/goals dari server.
+Seluruh kartu chat dan Therapy Record membuka detail, termasuk jawaban lama.
+PHQ/GAD memakai satu filter dan label Total Score.
+
+Pasien dengan sesi selesai dapat mengirim rating/ulasan; agregat berasal dari
+ulasan nyata. Tiga contoh diberi label dan dikecualikan dari agregat. Discovery
+dan MyCare memakai jarak koordinat aktual dengan proteksi respons lokasi lama.
+PDF obat/screening memakai tabel berkode warna; mood memakai emoji, combo/radar
+chart; diary memuat catatan lengkap dari server. Semua ekspor terikat akun aktif.
+
 ### Koreksi mobile 0.1.3
 
 Home pasien: sesi berjalan dan video mendatang dengan foto profesional. Profesional: kartu video responsif, detail pasien terautentikasi dan Hadir tanpa penutupan dini. Pembayaran: binding legacy dan retry token terbarui. Push: data-only, validasi sesi aktif di background, cleanup shade/transport historis tanpa menghapus riwayat atau alarm yang valid.

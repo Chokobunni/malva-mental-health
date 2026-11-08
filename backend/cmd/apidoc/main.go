@@ -461,6 +461,11 @@ type bodyField struct {
 // (handlers_safety.go), dan payment.WebhookEvent (internal/payment).
 // Endpoint yang tidak ada di sini tidak diberi requestBody.
 var requestBodies = map[string][]bodyField{
+	"POST /v1/doctors/{user_id}/reviews": {
+		{"stars", "integer", "", true},
+		{"review_text", "string", "", false},
+		{"helpful", "boolean", "", false},
+	},
 	"POST /v1/auth/register": {
 		{"email", "string", "", true},
 		{"password", "string", "", true},

@@ -335,6 +335,7 @@ class FakeAdminApi extends MalvaApiClient {
   Future<List<BackendTherapySubmission>> listTherapySubmissions({
     required String accessToken,
     String? patientId,
+    int limit = 100,
   }) async {
     _maybeFail();
     return therapySubmissions;

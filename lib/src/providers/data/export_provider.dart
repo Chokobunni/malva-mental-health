@@ -30,7 +30,7 @@ final medicationReportProvider = Provider<List<String>>((ref) => [
 final diaryReportProvider = Provider<List<String>>((ref) => [
       'CATATAN HARIAN',
       for (final e in ref.watch(malvaStoreProvider).diaryEntries)
-        '${formatWibDateTime(e.createdAt)} | ${e.title}\nMood: ${e.mood.name}\n'
+        '${formatWibDateTime(e.createdAt)} | ${e.title}\n'
             '${e.note}\nTanggapan profesional: ${e.professionalFeedback ?? "Belum ada"}',
     ]);
 

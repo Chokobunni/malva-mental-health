@@ -1,3 +1,5 @@
+import '../models.dart';
+import 'mood_insights.dart';
 import 'malva_api_client.dart';
 import '../time/wib.dart';
 
@@ -24,6 +26,7 @@ typedef LocalMedicationLog = ({DateTime at, String status});
 /// supaya UI tidak pernah menampilkan 0 sebagai pengganti data yang gagal dimuat.
 class WeeklySummaryMetrics {
   const WeeklySummaryMetrics({
+    this.entries = const [],
     required this.source,
     required this.moodKnown,
     required this.moodCount,
@@ -37,6 +40,7 @@ class WeeklySummaryMetrics {
 
   /// 'api' (server), 'local' (store perangkat), atau 'mixed'.
   final String source;
+  final List<MoodEntry> entries;
 
   /// True bila jumlah mood diketahui (dari server atau store berisi data).
   final bool moodKnown;
@@ -73,11 +77,13 @@ class WeeklySummaryMetrics {
 Future<WeeklySummaryMetrics?> loadWeeklySummary({
   required MalvaApiClient api,
   required String accessToken,
+  String? patientId,
   List<LocalMoodPoint> localMoods = const [],
   List<LocalMedicationLog> localLogs = const [],
 }) async {
   final cutoff = wibNow().subtract(const Duration(days: 14));
 
+  var entries = <MoodEntry>[];
   var moodKnown = false;
   var moodFromApi = false;
   var moodCount = 0;
@@ -88,11 +94,17 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
   try {
     final moods = await api.listMoodCheckins(
       accessToken: accessToken,
-      limit: 14,
+      patientId: patientId,
+      limit: 0,
     );
     final recent = moods
-        .where((m) => m.occurredAt == null || m.occurredAt!.isAfter(cutoff))
-        .toList(growable: false);
+        .where((m) => m.occurredAt != null && m.occurredAt!.isAfter(cutoff))
+        .toList()
+      ..sort((a, b) => a.occurredAt!.compareTo(b.occurredAt!));
+    entries = moods
+        .where((m) => m.occurredAt != null)
+        .map(moodEntryFromBackend)
+        .toList();
     moodKnown = true;
     moodFromApi = true;
     moodCount = recent.length;
@@ -102,8 +114,8 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
       avgSleepHours = total / recent.length;
     }
   } on Object {
-    final recent =
-        localMoods.where((m) => m.at.isAfter(cutoff)).toList(growable: false);
+    final recent = localMoods.where((m) => m.at.isAfter(cutoff)).toList()
+      ..sort((a, b) => a.at.compareTo(b.at));
     if (recent.isNotEmpty) {
       moodKnown = true;
       moodCount = recent.length;
@@ -123,7 +135,8 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
   try {
     final logs = await api.listMedicationLogs(
       accessToken: accessToken,
-      limit: 100,
+      limit: 0,
+      patientId: patientId,
     );
     final recent = logs
         .where((l) => l.takenAt == null || l.takenAt!.isAfter(cutoff))
@@ -158,6 +171,7 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
       : (moodFromApi || logsFromApi ? 'mixed' : 'local');
 
   return WeeklySummaryMetrics(
+    entries: entries,
     source: source,
     moodKnown: moodKnown,
     moodCount: moodCount,

@@ -48,13 +48,20 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
   bool _isCheckingPermission = false;
 
   /// Guard agar satu dosis tidak tercatat dua kali karena tap ganda.
-  bool _isLogging = false;
+  final Set<String> _pendingLogs = {};
+  final Map<String, DateTime> _lastLogAt = {};
 
-  /// Kunci debounce terakhir ("<id>|<status>") dan waktunya.
-  String? _lastLogKey;
-  DateTime? _lastLogAt;
+  String? _owner(AuthSession? session) => session == null
+      ? null
+      : '${session.role.name}|${session.backendUserId ?? session.identifier}';
+  AuthSession? get _session {
+    final active = ref.read(authStateProvider).session;
+    if (active == null) return widget.session;
+    if (widget.session != null && _owner(active) != _owner(widget.session))
+      return null;
+    return active;
+  }
 
-  AuthSession? get _session => widget.session;
   MalvaApiClient? get _apiClient => widget.apiClient;
   MedicationReminderService? get _reminderService =>
       widget.medicationReminderService;
@@ -125,6 +132,8 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
     final store = ref.read(malvaStoreProvider.notifier);
     final content = RefreshIndicator(
       onRefresh: () async {
+        final startedOwner = _owner(_session);
+        final startedAuthOwner = _owner(ref.read(authStateProvider).session);
         final accessToken = _session?.accessToken;
         final api = _apiClient;
         if (api == null || accessToken == null || accessToken.isEmpty) {
@@ -135,6 +144,10 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
           final backendMeds = await api.listMedications(
             accessToken: accessToken,
           );
+          if (!mounted ||
+              _owner(_session) != startedOwner ||
+              _owner(ref.read(authStateProvider).session) != startedAuthOwner)
+            return;
           final meds = backendMeds
               .map(
                 (b) => Medication(
@@ -285,7 +298,12 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
                   for (final med in storeState.medications) ...[
                     _MedicationCard(
                       medication: med,
-                      onTake: () => _takeMedication(context, med),
+                      serverReady: _looksLikeServerId(med.id),
+                      busy: _pendingLogs.contains(med.id),
+                      onTake: _pendingLogs.contains(med.id) ||
+                              !_looksLikeServerId(med.id)
+                          ? null
+                          : () => _takeMedication(context, med),
                       onEdit: () => _openMedicationForm(context, med),
                     ),
                     const SizedBox(height: 12),
@@ -539,9 +557,11 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
   }
 
   void _takeMedication(BuildContext context, Medication medication) {
+    if (_pendingLogs.contains(medication.id) ||
+        !_looksLikeServerId(medication.id)) return;
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text('Log ${medication.name}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -552,7 +572,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
               title: const Text('Taken'),
               subtitle: const Text('Obat sudah diminum'),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 unawaited(_logMedication(context, medication, 'taken'));
               },
             ),
@@ -562,7 +582,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
               title: const Text('Skipped'),
               subtitle: const Text('Dilewati dengan sengaja'),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 unawaited(_logMedication(context, medication, 'skipped'));
               },
             ),
@@ -572,7 +592,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
               title: const Text('Missed'),
               subtitle: const Text('Terlewat tanpa sengaja'),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 unawaited(_logMedication(context, medication, 'missed'));
               },
             ),
@@ -582,7 +602,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
               title: const Text('Partial'),
               subtitle: const Text('Sebagian diminum'),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 unawaited(_logMedication(context, medication, 'partial'));
               },
             ),
@@ -590,7 +610,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Batal'),
           ),
         ],
@@ -609,26 +629,30 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
     Medication medication,
     String status,
   ) async {
-    if (_isLogging) return;
+    if (_session == null) return;
+    if (_pendingLogs.contains(medication.id)) return;
     // Debounce per obat + status: tap ganda dalam 3 detik diabaikan.
     final key = '${medication.id}|$status';
     final now = wibNow();
-    final last = _lastLogAt;
-    if (_lastLogKey == key &&
-        last != null &&
-        now.difference(last) < const Duration(seconds: 3)) {
+    final last = _lastLogAt[key];
+    if (last != null && now.difference(last) < const Duration(seconds: 3)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Dosis ini baru saja dicatat.')));
       return;
     }
-    _lastLogKey = key;
-    _lastLogAt = now;
-    setState(() => _isLogging = true);
+    _lastLogAt[key] = now;
+    final startedAuthOwner = _owner(ref.read(authStateProvider).session);
+    final startedOwner = _owner(_session);
+    setState(() => _pendingLogs.add(medication.id));
 
     final store = ref.read(malvaStoreProvider.notifier);
     final consumed = status == 'taken' || status == 'partial';
     store.takeMedication(medication.id, status: status);
     final accepted = await _syncMedicationLog(context, medication, status);
     if (!mounted) return;
-    setState(() => _isLogging = false);
+    setState(() => _pendingLogs.remove(medication.id));
+    if (_owner(ref.read(authStateProvider).session) != startedAuthOwner ||
+        _owner(_session) != startedOwner) return;
 
     if (accepted) {
       if (consumed) store.confirmDose(medication.id);
@@ -780,12 +804,8 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
 
   /// Kirim log minum obat ke server.
   ///
-  /// Mengembalikan `true` HANYA bila server menerima log SEKALIGUS memotong
-  /// stok — yaitu saat `medication_id` benar-benar dikirim. Tanpa
-  /// `medication_id`, backend tidak memotong stok (lihat
-  /// `backend/internal/store/store.go` pada CreateMedicationLog), sehingga
-  /// refresh berikutnya mengembalikan stok lama: inilah akar bug "stok 2
-  /// kembali jadi 3".
+  /// Penerimaan server adalah final, termasuk obat lokal tanpa id server;
+  /// jangan antrekan lagi log yang sudah diterima karena akan menduplikasi dosis.
   Future<bool> _syncMedicationLog(
     BuildContext context,
     Medication medication,
@@ -805,7 +825,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
         // tidak tercatat di hari yang salah bila jam perangkat meleset.
         takenAt: ServerClock.now(),
       );
-      return serverId != null;
+      return true;
     } on Object catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -833,11 +853,15 @@ class _MedicationCard extends StatelessWidget {
     required this.medication,
     required this.onTake,
     required this.onEdit,
+    this.busy = false,
+    this.serverReady = true,
   });
 
   final Medication medication;
-  final VoidCallback onTake;
+  final VoidCallback? onTake;
   final VoidCallback onEdit;
+  final bool busy;
+  final bool serverReady;
 
   @override
   Widget build(BuildContext context) {
@@ -919,8 +943,16 @@ class _MedicationCard extends StatelessWidget {
                   minimumSize: const Size(0, 44),
                   padding: const EdgeInsets.symmetric(horizontal: 18),
                 ),
-                icon: const Icon(Icons.check_rounded),
-                label: const Text('Take Now'),
+                icon: busy
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.check_rounded),
+                label: Text(busy
+                    ? 'Menyimpan…'
+                    : serverReady
+                        ? 'Take Now'
+                        : 'Menunggu sync'),
               ),
             ],
           ),

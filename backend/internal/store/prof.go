@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"malva/backend/internal/clock"
 )
@@ -51,6 +52,7 @@ type DoctorSearchResult struct {
 	DisplayName      string   `json:"display_name"`
 	DistanceKM       *float64 `json:"distance_km,omitempty"`
 	IsAvailableToday bool     `json:"is_available_today"`
+	AverageStars     float64  `json:"average_stars"`
 }
 
 // parsePGTextArray parses Postgres text[] literals like {a,"b,c"} into []string.
@@ -443,10 +445,14 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 	case "sessions":
 		orderBy = "pc.legacy_count DESC"
 	case "popular":
-		orderBy = "pc.review_count DESC"
+		orderBy = "review_count DESC, u.display_name ASC"
+	case "rating_desc":
+		orderBy = "average_stars DESC, review_count DESC, u.display_name ASC"
+	case "experience_desc":
+		orderBy = "pc.years_experience DESC, u.display_name ASC"
 	case "distance":
 		if hasCoords {
-			orderBy = "distance_km ASC NULLS LAST"
+			orderBy = "distance_km ASC NULLS LAST, u.display_name ASC"
 		}
 	case "availability":
 		orderBy = "is_available_today DESC"
@@ -465,11 +471,14 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 	query := fmt.Sprintf(`SELECT pc.id, pc.user_id, u.display_name, COALESCE(pc.str_number,''), COALESCE(pc.sip_number,''), COALESCE(pc.sipp_number,''),
 		pc.specialization, COALESCE(pc.sub_specialties,'{}'), pc.hospital_lat, pc.hospital_lng, COALESCE(pc.hospital_name,''),
 		COALESCE(pc.address_details,''), pc.is_bpjs_supported, COALESCE(pc.photo_intro_url,''), COALESCE(pc.video_intro_url,''),
-		COALESCE(pc.bio,''), COALESCE(pc.education,'[]'::jsonb), pc.legacy_count, pc.helpfulness_count, pc.review_count, pc.years_experience,
+		COALESCE(pc.bio,''), COALESCE(pc.education,'[]'::jsonb), pc.legacy_count,
+		(SELECT COUNT(*) FROM doctor_reviews dr WHERE dr.professional_id=pc.user_id AND dr.helpful) AS helpfulness_count,
+		(SELECT COUNT(*) FROM doctor_reviews dr WHERE dr.professional_id=pc.user_id) AS review_count, pc.years_experience,
 		COALESCE(pc.price_from, 0),
 		(SELECT COUNT(*) FROM patient_professional_links WHERE professional_id = pc.user_id AND status='active') AS patient_count,
 		CASE WHEN EXISTS (SELECT 1 FROM professional_schedules ps WHERE ps.professional_id = pc.user_id AND ps.day_of_week = EXTRACT(dow FROM CURRENT_DATE)::int AND ps.is_active = true) THEN 1 ELSE 0 END AS is_available_today,
-		%s
+		%s,
+		(SELECT COALESCE(AVG((dr.helpfulness_percent+19)/20),0) FROM doctor_reviews dr WHERE dr.professional_id=pc.user_id) AS average_stars
 		FROM professional_credentials pc
 		JOIN users u ON u.id = pc.user_id
 		WHERE %s
@@ -492,7 +501,7 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 			&r.Specialization, &sub, &r.HospitalLat, &r.HospitalLng, &r.HospitalName, &r.AddressDetails,
 			&r.IsBPJSSupported, &r.PhotoIntroURL, &r.VideoIntroURL, &r.Bio, &edu, &r.LegacyCount,
 			&r.HelpfulnessCount, &r.ReviewCount, &r.YearsExperience, &r.PriceFrom, &r.PatientCount, &available,
-			&r.DistanceKM); err != nil {
+			&r.DistanceKM, &r.AverageStars); err != nil {
 			return nil, err
 		}
 		r.IsAvailableToday = available == 1
@@ -774,16 +783,10 @@ func (s *Store) DoctorRating(ctx context.Context, professionalID string) (Doctor
 }
 
 func (s *Store) CreateDoctorReview(ctx context.Context, professionalID, patientID string, stars int, reviewText string, helpful bool) (DoctorReview, error) {
-	if stars < 1 {
-		stars = 5
-	}
-	if stars > 5 {
-		stars = 5
+	if err := ValidateDoctorReview(stars, reviewText); err != nil {
+		return DoctorReview{}, err
 	}
 	pct := stars * 20
-	if !helpful {
-		pct = 0
-	}
 	var rv DoctorReview
 	err := s.db.QueryRowContext(ctx, `INSERT INTO doctor_reviews
 		(professional_id, patient_id, helpfulness_percent, review_text, helpful)
@@ -800,6 +803,24 @@ func (s *Store) CreateDoctorReview(ctx context.Context, professionalID, patientI
 	rv.Helpful = helpful
 	rv.ReviewText = strings.TrimSpace(reviewText)
 	return rv, nil
+}
+
+func ValidateDoctorReview(stars int, reviewText string) error {
+	if stars < 1 || stars > 5 {
+		return errors.New("bintang harus antara 1 dan 5")
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(reviewText)) > 2000 {
+		return errors.New("ulasan maksimal 2000 karakter")
+	}
+	return nil
+}
+
+// Eligibility checks the full relation, independent of the bounded history feed.
+func (s *Store) CanReviewProfessional(ctx context.Context, patientID, professionalID string) (bool, error) {
+	var eligible bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM care_sessions
+		WHERE patient_id=$1 AND professional_id=$2 AND status='completed')`, patientID, professionalID).Scan(&eligible)
+	return eligible, err
 }
 
 func (s *Store) ListServicePackages(ctx context.Context, professionalID string) ([]ServicePackage, error) {

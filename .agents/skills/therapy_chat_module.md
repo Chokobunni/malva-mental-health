@@ -6,6 +6,10 @@
 - Kartu dibuka lewat `GET /v1/therapy-submissions/{submission_id}`. Profesional hanya membaca record yang dibagikan kepadanya; pasien hanya miliknya sendiri. Jangan mengirim jawaban privat ke push atau metadata chat.
 - Pemilihan dapat dibatalkan; daftar kosong dan gangguan jaringan harus memiliki umpan balik. Kunci aksi selama request dan periksa kembali akun setelah operasi async.
 - Pengujian: `test/chat_therapy_share_test.dart`, `backend/internal/server/therapy_chat_flow_test.go` dan test consent yang ada.
+- Semua kartu mood, diary, obat, screening, assessment dan therapy membuka detail
+  untuk kedua peserta. Worksheet assessment DASS/WHO memakai share endpoint yang
+  sama, tanpa duplikasi pesan. Screening lama diselesaikan dari seluruh riwayat
+  berizin; kartu portal Therapy juga membuka jawaban lengkap termasuk legacy.
 
 ## Alat klinis profesional selama sesi
 

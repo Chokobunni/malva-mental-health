@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../ai/assessment_scoring.dart';
+import '../services/health_pdf_report.dart';
+import '../services/mood_insights.dart';
 import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
-import '../time/wib.dart';
 import 'assessment_history_screen.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
@@ -161,66 +163,106 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
     final generation = _accountGeneration;
     final session = ref.read(currentSessionProvider);
     final store = ref.read(malvaStoreProvider);
-    final mood = ref.read(moodReportProvider);
-    final medications = ref.read(medicationReportProvider);
-    final diary = ref.read(diaryReportProvider);
     bool isCurrent() => mounted && generation == _accountGeneration;
     setState(() => _exporting = true);
     try {
-      final screeningLines = <String>[];
-      if (category == 'screenings' || category == 'full_export') {
-        final token = session?.accessToken;
-        if (token != null && token.isNotEmpty) {
-          final entries = await loadAssessmentHistory(
-            api: ref.read(apiClientProvider),
-            accessToken: token,
-            patientId: session?.backendUserId,
-            requireAllSources: true,
-          );
-          screeningLines.addAll([
-            'RIWAYAT SCREENING',
-            'Hasil yang tersedia di Assessment Record (hingga 50 sesi PHQ-9/GAD-7 terbaru).',
-            if (entries.isEmpty) 'Belum ada hasil screening lengkap.',
-            for (final entry in entries)
-              '${entry.title} | ${formatAssessmentDate(entry.date)}\n${entry.subtitle}',
-          ]);
+      final all = category == 'full_export';
+      List<MoodEntry>? moods =
+          all || category == 'mood_history' ? store.moodEntries : null;
+      List<MedicationLog>? medications =
+          all || category == 'medication_log' ? store.medicationLogs : null;
+      List<DiaryEntry>? diaries =
+          all || category == 'diary' ? store.diaryEntries : null;
+      List<ScreeningPdfRow>? screenings;
+      final api = ref.read(apiClientProvider);
+      final token = session?.accessToken;
+      final remote = token != null && token.isNotEmpty;
+      final loads = <Future<void>>[];
+      if (remote && moods != null) {
+        loads.add(
+            api.listMoodCheckins(accessToken: token, limit: 0).then((rows) {
+          if (rows.any((e) => e.occurredAt == null))
+            throw const FormatException('Waktu mood tidak valid.');
+          moods = rows.map(moodEntryFromBackend).toList();
+        }));
+      }
+      if (remote && medications != null) {
+        loads.add(
+            api.listMedicationLogs(accessToken: token, limit: 0).then((rows) {
+          medications = rows
+              .map((e) => MedicationLog(
+                  medicationId: e.medicationId,
+                  medicationName: e.medicationName,
+                  takenAt: e.takenAt ??
+                      e.createdAt ??
+                      (throw const FormatException('Waktu obat tidak valid.')),
+                  status: e.status))
+              .toList();
+        }));
+      }
+      if (remote && diaries != null) {
+        loads.add(
+            api.listDiaryEntries(accessToken: token, limit: 0).then((rows) {
+          diaries = rows
+              .map((e) => DiaryEntry(
+                  id: e.id,
+                  createdAt: e.occurredAt ??
+                      (throw const FormatException('Waktu diary tidak valid.')),
+                  mood: MoodValue.okay,
+                  title: e.title,
+                  note: e.note,
+                  professionalFeedback: e.professionalFeedback))
+              .toList();
+        }));
+      }
+      if (category == 'screenings' || all) {
+        if (remote) {
+          if (session?.backendUserId?.isNotEmpty != true)
+            throw StateError('Identitas pasien belum tersedia.');
+          loads.add(loadAssessmentHistory(
+                  api: api,
+                  accessToken: token,
+                  patientId: session?.backendUserId,
+                  requireAllSources: true)
+              .then((entries) {
+            screenings = entries.map(assessmentPdfRow).toList();
+          }));
         } else {
-          screeningLines.addAll([
-            'RIWAYAT SCREENING LOKAL',
-            'Hanya data yang tersimpan pada perangkat ini.',
-            if (store.screeningBundles.isEmpty)
-              'Belum ada hasil screening lokal.',
-            for (final bundle in store.screeningBundles)
-              '${formatWibDateTime(bundle.createdAt)} | '
-                  'PHQ-9 ${bundle.phq9.score}/27 (${bundle.phq9.level}); '
-                  'GAD-7 ${bundle.gad7.score}/21 (${bundle.gad7.level})',
-          ]);
+          screenings = [
+            for (final b in store.screeningBundles)
+              ScreeningPdfRow(
+                  date: b.createdAt,
+                  title: 'PHQ-9 + GAD-7',
+                  crisis: b.crisisFlag,
+                  scores: [
+                    for (final score in [b.phq9, b.gad7])
+                      ScreeningPdfScore(
+                          instrument: score.type.name.toUpperCase(),
+                          total: '${score.score}/${score.maxScore}',
+                          interpretation: score.level.label,
+                          rank: _screeningRank(score.level.name))
+                  ])
+          ];
         }
       }
+      await Future.wait(loads);
       if (!isCurrent()) return;
-      final (title, lines) = switch (category) {
-        'mood_history' => ('Riwayat Mood', mood),
-        'screenings' => ('Hasil Screening', screeningLines),
-        'medication_log' => ('Riwayat Konsumsi Obat', medications),
-        'diary' => ('Catatan Harian', diary),
-        _ => (
-            'Ringkasan Data Pasien',
-            [
-              'Nama: ${session?.displayName ?? store.patient.name}',
-              'Ringkasan untuk konsultasi: mood, screening, konsumsi obat, dan catatan harian yang tersedia pada akun/perangkat ini.',
-              ...mood,
-              ...screeningLines,
-              ...medications,
-              ...diary,
-            ]
-          ),
+      final title = switch (category) {
+        'mood_history' => 'Laporan Riwayat Mood: MALVA',
+        'screenings' => 'Hasil Screening Psikologis: MALVA',
+        'medication_log' => 'Riwayat Konsumsi Obat: MALVA',
+        'diary' => 'Catatan Harian: MALVA',
+        _ => 'Ringkasan Data Pasien: MALVA',
       };
-      await ref.read(exportServiceProvider).sharePdf(
-            title: title,
-            lines: lines,
-            filename: 'malva_$category.pdf',
-            canShare: isCurrent,
-          );
+      await ref.read(exportServiceProvider).shareHealthReport(
+          title: title,
+          filename: 'malva_$category.pdf',
+          moods: moods,
+          medicationLogs: medications,
+          diaryEntries: diaries,
+          screenings: screenings,
+          patientName: session?.displayName ?? store.patient.name,
+          canShare: isCurrent);
     } catch (_) {
       if (isCurrent()) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -346,3 +388,70 @@ class _ExportTile extends StatelessWidget {
     );
   }
 }
+
+ScreeningPdfRow assessmentPdfRow(AssessmentHistoryEntry entry) {
+  final screening = entry.screening;
+  if (screening != null) {
+    return ScreeningPdfRow(
+        date: entry.date,
+        title: entry.title,
+        crisis: screening.crisisFlag,
+        scores: [
+          for (final (name, score) in [
+            ('PHQ-9', screening.phq9),
+            ('GAD-7', screening.gad7)
+          ])
+            ScreeningPdfScore(
+                instrument: name,
+                total: '${score.score}/${score.maxScore}',
+                interpretation: _screeningLabel(score.level),
+                rank: _screeningRank(score.level))
+        ]);
+  }
+  if (entry.moduleId == 'who5') {
+    final score = scoreWho5(entry.answers);
+    return ScreeningPdfRow(date: entry.date, title: entry.title, scores: [
+      ScreeningPdfScore(
+          instrument: 'WHO-5',
+          total: '${score.raw}/25 (${score.percent}%)',
+          interpretation: who5Summary(entry.answers),
+          rank: score.possibleDepression
+              ? 4
+              : score.lowWellbeing
+                  ? 3
+                  : hasStandardizedWho5LowItem(entry.answers)
+                      ? 2
+                      : 0)
+    ]);
+  }
+  final score = scoreDass21(entry.answers);
+  return ScreeningPdfRow(date: entry.date, title: entry.title, scores: [
+    for (final (name, total, level) in [
+      ('DASS-21 Depresi', score.depression, score.depressionLevel),
+      ('DASS-21 Kecemasan', score.anxiety, score.anxietyLevel),
+      ('DASS-21 Stres', score.stress, score.stressLevel)
+    ])
+      ScreeningPdfScore(
+          instrument: name,
+          total: '$total/42',
+          interpretation: level,
+          rank: dassLevelRank(level))
+  ]);
+}
+
+int _screeningRank(String level) => switch (level.toLowerCase()) {
+      'mild' => 1,
+      'moderate' => 2,
+      'moderately_severe' || 'moderatelysevere' => 3,
+      'severe' || 'crisis' => 4,
+      _ => 0,
+    };
+String _screeningLabel(String level) => switch (level.toLowerCase()) {
+      'minimal' => 'Minimal',
+      'mild' => 'Ringan',
+      'moderate' => 'Sedang',
+      'moderately_severe' || 'moderatelysevere' => 'Cukup berat',
+      'severe' => 'Berat',
+      'crisis' => 'Krisis',
+      _ => level,
+    };

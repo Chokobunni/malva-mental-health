@@ -13,6 +13,7 @@ import '../../time/wib.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 import '../../widgets/professional_avatar.dart';
+import '../../widgets/doctor_review_actions.dart';
 import 'booking_detail_screen.dart';
 import 'package_booking_screen.dart';
 
@@ -465,6 +466,22 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                           const SizedBox(height: 16),
 
                           // ===== PAKET AKTIF (bila ada) =====
+                          DoctorReviewActions(
+                            apiClient:
+                                widget.apiClient ?? ref.read(apiClientProvider),
+                            professionalId: widget.doctorUserId,
+                            accessToken:
+                                widget.session?.role == UserRole.patient
+                                    ? widget.session?.accessToken
+                                    : null,
+                            onSubmitted: () {
+                              ref
+                                  .read(professionalProfileRevisionProvider
+                                      .notifier)
+                                  .state++;
+                              unawaited(_load(silent: true));
+                            },
+                          ),
                           if (_activePackage != null)
                             SoftCard(
                               color: MalvaColors.mint.withValues(alpha: 0.10),
@@ -641,8 +658,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
       toLat: cred.hospitalLat,
       toLng: cred.hospitalLng,
     );
-    if (km == null) return faskes;
-    return '$faskes, ${km.toStringAsFixed(1)} km';
+    return '$faskes · ${professionalDistanceLabel(km: km, hospitalLat: cred.hospitalLat, hospitalLng: cred.hospitalLng)}';
   }
 
   static const _dayNamesId = [

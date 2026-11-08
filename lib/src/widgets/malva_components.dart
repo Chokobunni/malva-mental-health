@@ -441,10 +441,12 @@ class StatusPill extends StatelessWidget {
             Icon(icon, size: 14, color: color),
             const SizedBox(width: 5),
           ],
-          Text(
-            label,
-            style: TextStyle(
-                color: color, fontWeight: FontWeight.w900, fontSize: 12),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                  color: color, fontWeight: FontWeight.w900, fontSize: 12),
+            ),
           ),
         ],
       ),

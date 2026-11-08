@@ -352,6 +352,30 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Rujukan: [desain](../docs/superpowers/specs/2026-11-08-patient-professional-polish-design.md),
   [screening](skills/screening_module.md), [safety](skills/safety_sos_module.md).
 
+## Kontrak check-in, record dan ekspor (2026-11-09)
+
+- Diary terpisah dari mood. Form diary hanya judul/catatan; field mood legacy
+  tetap kompatibel di API. History, Mini Summary dan ekspor membaca server,
+  bukan hanya cache perangkat; gagal memuat tidak boleh menjadi laporan kosong.
+- Mood memakai hari WIB unik untuk streak, kalender dan total hari. Chart mingguan
+  tidak mengisi tanggal kosong dengan data buatan. Radar memakai seluruh data pada
+  rentang yang dipilih; pasien/profesional memakai kalkulasi yang sama.
+- Semua kartu record chat dapat dibuka. Therapy dan DASS/WHO memakai endpoint
+  share/detail berotorisasi; endpoint share tidak diikuti pesan duplikat.
+- `limit=0` eksplisit pada mood/diary/log obat/screening meminta seluruh riwayat
+  milik/berizin. Default tetap 20, positif maksimum 100. Isolasi pasien dan consent
+  tetap wajib. Ekspor berhenti bila satu sumber yang diminta gagal.
+- Ulasan pasien memerlukan sesi selesai dengan profesional terkait, bintang 1-5
+  dan komentar maksimal 2000 karakter. Contoh diberi label dan tidak masuk agregat
+  ulasan nyata. `helpful` tidak mengubah bintang.
+- Jarak dihitung dari koordinat profesional dan posisi pasien yang tersedia.
+  Respons pencarian lama tidak boleh menimpa hasil lokasi/filter terbaru.
+- Tutup atau kosongkan detail privat saat pemilik akun berubah; refresh token
+  pada pemilik yang sama bukan pergantian akun. Obat baru belum dapat dicentang
+  sebelum memiliki ID server agar log dan pengurangan stok konsisten.
+- Rujukan: [check-in](skills/health_checkin_module.md),
+  [screening](skills/screening_module.md), [therapy/chat](skills/therapy_chat_module.md).
+
 ## Commit
 
 - Format **Conventional Commits**: `feat|fix|refactor|chore|docs|perf|seo|infra: <ringkas>`.

@@ -5,6 +5,8 @@ import '../models.dart';
 import '../professional_role.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
+import '../services/mood_insights.dart';
+import '../widgets/mood_insights.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
@@ -245,7 +247,7 @@ class _ProPatientDetailScreenState
             'Goals'),
         safely(
             () => _api.listMoodCheckins(
-                accessToken: token, patientId: widget.patientId, limit: 10),
+                accessToken: token, patientId: widget.patientId, limit: 0),
             'Mood'),
         safely(
             () => _api.listDiaryEntries(
@@ -659,13 +661,12 @@ class _ProPatientDetailScreenState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (final m in _moods.take(3)) ...[
-                        Text(
-                          '${m.mood} • tidur ${m.sleepHours.toStringAsFixed(1)}j • energi ${m.energy}/10${m.note.isEmpty ? '' : '\n${m.note}'}',
-                          style: const TextStyle(fontSize: 12.5),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
+                      if (_moods.isNotEmpty)
+                        MoodInsights(
+                            entries: _moods
+                                .where((m) => m.occurredAt != null)
+                                .map(moodEntryFromBackend)
+                                .toList()),
                       for (final d in _diaries.take(3)) ...[
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1172,7 +1173,7 @@ class _ScreeningInstrumentDetail extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                '$name: $score/$maxScore',
+                '$name Total Score: $score/$maxScore',
                 style: const TextStyle(fontWeight: FontWeight.w900),
               ),
             ),

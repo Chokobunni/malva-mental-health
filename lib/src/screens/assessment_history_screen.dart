@@ -202,18 +202,20 @@ class AssessmentHistoryFilters extends StatelessWidget {
           Wrap(spacing: 8, runSpacing: 4, children: [
             for (final instrument in const {
               'who5': 'WHO-5',
-              'gad7': 'GAD-7',
-              'phq9': 'PHQ-9',
+              'phq9_gad7': 'PHQ-9 + GAD-7',
               'dass21': 'DASS-21'
             }.entries)
               FilterChip(
                 label: Text(instrument.value),
-                selected: selected.contains(instrument.key),
+                selected: instrument.key == 'phq9_gad7'
+                    ? selected.contains('phq9') || selected.contains('gad7')
+                    : selected.contains(instrument.key),
                 onSelected: (enabled) {
                   final next = {...selected};
-                  enabled
-                      ? next.add(instrument.key)
-                      : next.remove(instrument.key);
+                  final keys = instrument.key == 'phq9_gad7'
+                      ? {'phq9', 'gad7'}
+                      : {instrument.key};
+                  enabled ? next.addAll(keys) : next.removeAll(keys);
                   onChanged(next, oldestFirst);
                 },
               ),
@@ -244,7 +246,7 @@ Future<List<AssessmentHistoryEntry>> loadAssessmentHistory({
   // Sumber 1: worksheet asesmen DASS-21 / WHO-5.
   try {
     final submissions =
-        await api.listTherapySubmissions(accessToken: accessToken);
+        await api.listTherapySubmissions(accessToken: accessToken, limit: 0);
     final seenIds = <String>{};
     for (final submission in submissions) {
       if (!isCompleteAssessmentAnswers(
@@ -266,7 +268,7 @@ Future<List<AssessmentHistoryEntry>> loadAssessmentHistory({
       final screenings = await api.listScreenings(
         accessToken: accessToken,
         patientId: resolvedPatientId,
-        limit: 50,
+        limit: 0,
       );
       for (final session in screenings) {
         entries.add(assessmentEntryFromScreening(session));
@@ -480,7 +482,7 @@ class _ScreeningScoreCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '${summary.score}/${summary.maxScore}',
+            'Total Score: ${summary.score}/${summary.maxScore}',
             style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
           ),
           const SizedBox(height: 6),

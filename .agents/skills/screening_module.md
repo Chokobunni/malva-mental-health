@@ -28,7 +28,8 @@
 - Share record mendukung PDF dan profesional yang dipilih melalui izin/paket/
   tautan aktif yang sudah ada. PDF WHO mempertahankan peringatan item rendah.
   Kegagalan sebagian sumber harus menggagalkan ekspor yang meminta seluruh
-  sumber; jangan mengklaim riwayat seumur hidup dari feed terbatas 50 screening.
+  sumber. History/ekspor memakai `limit=0` untuk seluruh screening berizin;
+  default feed tetap 20 dan batas positif maksimum 100.
 
 Modul skrining kesehatan mental. Skoring dihitung **di server** (bukan hanya klien) memakai rule base yang sama.
 

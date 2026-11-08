@@ -23,7 +23,7 @@ void main() {
     ))));
     expect(tester.takeException(), isNull);
   });
-  testWidgets('summary shows real homework and insight with goals action',
+  testWidgets('summary shows real homework and insight with detail action',
       (tester) async {
     var opened = false;
     await tester.pumpWidget(MaterialApp(
@@ -49,7 +49,7 @@ void main() {
     ))));
     expect(find.text('Latihan napas'), findsOneWidget);
     expect(find.text('Praktikkan perlahan.'), findsOneWidget);
-    await tester.tap(find.text('Lihat Goals'));
+    await tester.tap(find.text('Lihat detail'));
     expect(opened, isTrue);
   });
   testWidgets('assessment action is available only to receiving patient',

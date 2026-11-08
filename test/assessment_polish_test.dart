@@ -27,7 +27,7 @@ void main() {
         subtitle: '',
         moduleId: 'who5'),
   ];
-  testWidgets('records provide independent instrument check chips and ordering',
+  testWidgets('records provide combined PHQ GAD filter and ordering',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -36,7 +36,8 @@ void main() {
       oldestFirst: false,
       onChanged: (_, __) {},
     ))));
-    expect(find.byType(FilterChip), findsNWidgets(4));
+    expect(find.byType(FilterChip), findsNWidgets(3));
+    expect(find.text('PHQ-9 + GAD-7'), findsOneWidget);
     expect(find.text('Terbaru'), findsOneWidget);
     expect(
         tester

@@ -9,6 +9,8 @@ import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/screens/pro_patient_detail_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
+import 'package:malva_mental_health/src/widgets/mood_insights.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 
 const _session = AuthSession(
   role: UserRole.professional,
@@ -66,6 +68,7 @@ Map<String, dynamic> _worksheet(String id, String title) => {
 class _Responses {
   final statusByPath = <String, int>{};
   bool missingGad = false;
+  final moods = <Map<String, dynamic>>[];
   final extraWorksheets = <Map<String, dynamic>>[];
 
   late final api = MalvaApiClient(
@@ -92,7 +95,7 @@ class _Responses {
             ],
           },
         '/v1/goals' => {'goals': []},
-        '/v1/mood-checkins' => {'moods': []},
+        '/v1/mood-checkins' => {'moods': moods},
         '/v1/diary-entries' => {'diaries': []},
         '/v1/professional-notes' => {'notes': []},
         '/v1/medications' => {'medications': []},
@@ -130,6 +133,28 @@ Future<void> _pump(WidgetTester tester, _Responses responses) async {
 
 void main() {
   testWidgets(
+      'professional mood section uses shared charts and calendar from server',
+      (tester) async {
+    final responses = _Responses()
+      ..moods.add({
+        'id': 'm',
+        'mood': 'great',
+        'occurred_at': wibIso(wibNow()),
+        'sleep_hours': 8,
+        'energy': 8,
+        'anxiety': 2,
+        'irritability': 1,
+        'note': 'Catatan server'
+      });
+    await _pump(tester, responses);
+    await tester.tap(find.byKey(const ValueKey('mood-diary-section')));
+    await tester.pumpAndSettle();
+    expect(find.byType(MoodInsights), findsOneWidget);
+    expect(find.byType(MoodTrendChart), findsOneWidget);
+    expect(find.byType(SymptomsBalanceChart), findsOneWidget);
+  });
+
+  testWidgets(
       'clinical assessment filters keep PHQ GAD combined and show more dated retakes',
       (tester) async {
     final responses = _Responses();
@@ -151,10 +176,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('WHO retake 1'), findsNothing);
     expect(find.byKey(const ValueKey('screening-screening-1')), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilterChip, 'PHQ-9'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('screening-screening-1')), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilterChip, 'GAD-7'));
+    await tester.tap(find.widgetWithText(FilterChip, 'PHQ-9 + GAD-7'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('screening-screening-1')), findsNothing);
     expect(find.text('DASS-21 dibagikan'), findsOneWidget);
@@ -179,8 +201,8 @@ void main() {
     expect(find.text('Hasil DASS-21 / WHO-5 & tren'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('screening-screening-1')));
     await tester.pumpAndSettle();
-    expect(find.text('PHQ-9: 7/27'), findsOneWidget);
-    expect(find.text('GAD-7: 6/21'), findsOneWidget);
+    expect(find.text('PHQ-9 Total Score: 7/27'), findsOneWidget);
+    expect(find.text('GAD-7 Total Score: 6/21'), findsOneWidget);
     expect(find.text('Dukungan aturan (CF): 68%'), findsNWidgets(2));
     expect(find.text('PHQ9_MILD: 0.72 × 0.95 = 0.684'), findsOneWidget);
     expect(find.textContaining('bukan probabilitas diagnosis'), findsWidgets);

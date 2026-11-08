@@ -1,5 +1,23 @@
 # API Documentation
 
+### Ulasan dan jarak profesional — 8 November 2026
+
+`GET /v1/doctors/search` mengirim `average_stars`, `review_count`, dan
+`helpfulness_count` dari ulasan pasien yang tersimpan, termasuk urutan populer
+dan rating. `POST /v1/doctors/{user_id}/reviews` menerima `stars` wajib 1–5,
+`review_text` opsional maksimal 2.000 karakter, dan `helpful` opsional (default
+true). Bintang disimpan independen dari pilihan terbantu. Hanya pasien yang
+memiliki sesi `completed` dengan profesional tersebut dapat mengirim; pemeriksaan
+meliputi seluruh riwayat sesi. Nama penulis pada daftar ulasan tetap tersamar.
+Contoh ulasan di aplikasi ditandai **Contoh/demo**, tidak ditulis ke tabel pasien,
+dan tidak termasuk rata-rata, jumlah ulasan, atau persentase terbantu.
+
+Jarak dihitung dari koordinat pasien terkini dan praktik yang diketahui; tanpa
+salah satunya aplikasi menampilkan alasan jarak belum tersedia. Urutan terdekat
+menempatkan praktik tanpa koordinat terakhir. Migrasi 033 memperbaiki penghitung
+legacy dan mengembalikan koordinat RSI Jemursari yang sudah dicatat migrasi 007
+hanya bila identitas, nama/alamat praktik masih cocok dan kedua koordinat kosong.
+
 ### Perbaikan alur pasien — 5 November 2026
 
 Kontrak yang ada dipertahankan: booking paket memakai `package_id` care package dan server memvalidasi pemilik serta menyelesaikan profesional dari paket. Retry pending memakai identifier yang sama; pembayaran dan aktivasi mengacu ke `care_packages.booking_id`, bukan `bookings.package_id` legacy. Respons status pembayaran direkonsiliasi terhadap Midtrans dan nominal sebelum dianggap lunas.
@@ -380,7 +398,7 @@ List screening sessions for a patient.
 | Param | Type | Required | Default |
 |---|---|---|---|
 | patient_id | string | ✅ | — |
-| limit | int | ❌ | 20 (max 200) |
+| limit | int | ❌ | 20 (positive values max 100; `0` returns complete authorized patient history) |
 
 **Response:** `200 OK`
 ```json
@@ -1293,6 +1311,13 @@ WebSocket endpoint for real-time events.
 ### 3.19 Therapy Worksheet (Submissions)
 
 ---
+
+#### `GET /v1/therapy-submissions`
+
+`GET /v1/therapy-submissions` accepts optional `limit` (default 100, positive
+values capped at 100). Explicit `limit=0` returns complete authorized history;
+patient ownership, professional links, category consent and individual sharing
+checks remain applicable.
 
 #### `POST /v1/therapy-submissions/{submission_id}/share`
 

@@ -16,6 +16,7 @@ build/
 !android/app/src/main/res/**/*.png
 # Logo resmi Malva (asset aplikasi, dipakai lintas platform)
 !assets/images/*.png
+!assets/mood_emojis/*.png
 !windows/runner/resources/*.ico
 
 # Local IDE and machine state

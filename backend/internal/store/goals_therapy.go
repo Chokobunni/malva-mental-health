@@ -318,10 +318,18 @@ func (s *Store) CreateTherapySubmission(ctx context.Context, patientID, moduleID
 
 // ListTherapySubmissions: untuk pasien (miliknya sendiri) atau profesional
 // (hanya yang dibagikan ke dia bila sharedOnly=true).
-func (s *Store) ListTherapySubmissions(ctx context.Context, userID string, sharedOnly bool) ([]TherapySubmission, error) {
+func (s *Store) ListTherapySubmissions(ctx context.Context, userID string, sharedOnly bool, limits ...int) ([]TherapySubmission, error) {
 	userID = strings.TrimSpace(userID)
 	if userID == "" {
 		return nil, errors.New("user_id is required")
+	}
+	var sqlLimit any = 100
+	if len(limits) > 0 {
+		if limits[0] == 0 {
+			sqlLimit = nil
+		} else {
+			sqlLimit = normalizeLimit(limits[0], 100, 100)
+		}
 	}
 	query := `
 		SELECT id, patient_id, module_id, title, answers, summary,
@@ -329,7 +337,7 @@ func (s *Store) ListTherapySubmissions(ctx context.Context, userID string, share
 		FROM therapy_submissions
 		WHERE patient_id = $1
 		ORDER BY created_at DESC
-		LIMIT 100
+		LIMIT $2
 	`
 	if sharedOnly {
 		query = `
@@ -338,10 +346,10 @@ func (s *Store) ListTherapySubmissions(ctx context.Context, userID string, share
 			FROM therapy_submissions
 			WHERE shared_with_professional_id = $1
 			ORDER BY created_at DESC
-			LIMIT 100
+			LIMIT $2
 		`
 	}
-	rows, err := s.db.QueryContext(ctx, query, userID)
+	rows, err := s.db.QueryContext(ctx, query, userID, sqlLimit)
 	if err != nil {
 		return nil, err
 	}

@@ -162,7 +162,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
         final screenings = await apiClient.listScreenings(
           accessToken: accessToken,
           patientId: patientId,
-          limit: 50,
+          limit: 0,
         );
         if (!isCurrent()) return;
         setState(() => _screenings = screenings);

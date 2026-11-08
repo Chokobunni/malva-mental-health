@@ -851,8 +851,7 @@ class MalvaApiClient {
     );
   }
 
-  /// Detail screening diambil dari daftar (server tidak punya
-  /// GET /v1/screenings/{id}) agar tidak pernah 404.
+  /// Resolve an exact screening from complete authorized patient history.
   Future<BackendScreeningSession> getScreeningDetail({
     required String accessToken,
     required String screeningId,
@@ -861,7 +860,7 @@ class MalvaApiClient {
     final sessions = await listScreenings(
       accessToken: accessToken,
       patientId: patientId,
-      limit: 100,
+      limit: 0,
     );
     for (final s in sessions) {
       if (s.id == screeningId) return s;
@@ -1324,12 +1323,14 @@ class MalvaApiClient {
   Future<List<BackendTherapySubmission>> listTherapySubmissions({
     required String accessToken,
     String? patientId,
+    int limit = 100,
   }) async {
     final payload = await _sendUri(
       'GET',
       baseUri.replace(
         path: '/v1/therapy-submissions',
         queryParameters: {
+          'limit': '$limit',
           if (patientId != null && patientId.trim().isNotEmpty)
             'patient_id': patientId.trim(),
         },
@@ -4467,6 +4468,7 @@ class BackendDoctorSearchResult {
     required this.legacyCount,
     required this.helpfulnessCount,
     required this.reviewCount,
+    this.averageStars = 0,
     required this.yearsExperience,
     required this.isBpjsSupported,
     this.distanceKm,
@@ -4488,6 +4490,7 @@ class BackendDoctorSearchResult {
       legacyCount: (json['legacy_count'] as num?)?.toInt() ?? 0,
       helpfulnessCount: (json['helpfulness_count'] as num?)?.toInt() ?? 0,
       reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
+      averageStars: (json['average_stars'] as num?)?.toDouble() ?? 0,
       yearsExperience: (json['years_experience'] as num?)?.toInt() ?? 0,
       isBpjsSupported: json['is_bpjs_supported'] == true,
       distanceKm: (json['distance_km'] as num?)?.toDouble(),
@@ -4508,6 +4511,7 @@ class BackendDoctorSearchResult {
   final int legacyCount;
   final int helpfulnessCount;
   final int reviewCount;
+  final double averageStars;
   final int yearsExperience;
   final bool isBpjsSupported;
   final double? distanceKm;
@@ -4536,6 +4540,7 @@ class BackendDoctorSearchResult {
       legacyCount: legacyCount,
       helpfulnessCount: helpfulnessCount,
       reviewCount: reviewCount,
+      averageStars: averageStars,
       yearsExperience: yearsExperience,
       isBpjsSupported: isBpjsSupported,
       distanceKm: distanceKm ?? this.distanceKm,
@@ -4546,6 +4551,7 @@ class BackendDoctorSearchResult {
       hospitalLng: hospitalLng,
       addressDetails: addressDetails,
       priceFrom: priceFrom,
+      photoIntroUrl: photoIntroUrl,
     );
   }
 }

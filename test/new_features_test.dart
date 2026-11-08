@@ -138,7 +138,7 @@ void main() {
     await tester.tap(find.text('Mini Summary'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Mini Summary (Weekly)'), findsOneWidget);
+    expect(find.text('Mini Summary (14 hari)'), findsOneWidget);
     expect(find.text('Mood Trend'), findsOneWidget);
     expect(find.text('Rata-rata Jam Tidur'), findsOneWidget);
     expect(find.text('Ketaatan Obat'), findsOneWidget);

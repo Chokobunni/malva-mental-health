@@ -2761,6 +2761,21 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                stars:
+                  type: integer
+                review_text:
+                  type: string
+                helpful:
+                  type: boolean
+              required:
+                - stars
       security:
         - bearerAuth: []
       responses:

@@ -1872,8 +1872,23 @@ List<TherapyAnswerEntry> therapyAnswerEntries({
   final entries = <TherapyAnswerEntry>[];
   for (final field in fields) {
     final text = _answerText(field, answers[field.id]);
-    if (text == null) continue;
-    entries.add((label: _fieldHeadline(field), answer: text));
+    entries
+        .add((label: _fieldHeadline(field), answer: text ?? '(tidak dijawab)'));
+  }
+  final known = fields.map((field) => field.id).toSet();
+  for (final entry in answers.entries) {
+    if (known.contains(entry.key) ||
+        entry.key == 'scale_version' ||
+        entry.value == null) continue;
+    final value = entry.value;
+    entries.add((
+      label: entry.key,
+      answer: value is List
+          ? value.join('\n')
+          : value is Map
+              ? const JsonEncoder.withIndent('  ').convert(value)
+              : value.toString()
+    ));
   }
   return entries;
 }
@@ -2870,6 +2885,8 @@ class _TherapySubmissionsScreenState
   List<BackendTherapySubmission> _items = const [];
   bool _isLoading = true;
   String? _error;
+  late final AuthSession? _owner;
+  bool get _isOwner => ref.read(currentSessionProvider) == _owner;
 
   /// Submission yang benar-benar worksheet terapi.
   ///
@@ -2881,6 +2898,7 @@ class _TherapySubmissionsScreenState
   @override
   void initState() {
     super.initState();
+    _owner = ref.read(currentSessionProvider);
     _load();
   }
 
@@ -2901,13 +2919,13 @@ class _TherapySubmissionsScreenState
       final items = await ref
           .read(apiClientProvider)
           .listTherapySubmissions(accessToken: token);
-      if (!mounted) return;
+      if (!mounted || ref.read(currentSessionProvider) != _owner) return;
       setState(() {
         _items = items;
         _isLoading = false;
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || !_isOwner) return;
       setState(() {
         _isLoading = false;
         _error = friendlyErrorMessage(e);
@@ -2928,7 +2946,7 @@ class _TherapySubmissionsScreenState
       return;
     }
     final active = links.where((l) => l.status == 'active').toList();
-    if (!mounted || active.isEmpty) {
+    if (!mounted || !_isOwner || active.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Belum ada profesional aktif yang terhubung.')),
@@ -2944,7 +2962,7 @@ class _TherapySubmissionsScreenState
     final eligible = active
         .where((l) => activeProIds.contains(l.professionalUserId))
         .toList();
-    if (!mounted) return;
+    if (!mounted || !_isOwner) return;
     if (eligible.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -2986,14 +3004,14 @@ class _TherapySubmissionsScreenState
         ),
       ),
     );
-    if (chosen == null) return;
+    if (chosen == null || !_isOwner) return;
     try {
       await ref.read(apiClientProvider).shareTherapySubmission(
             accessToken: token,
             submissionId: submission.id,
             professionalId: chosen,
           );
-      if (!mounted) return;
+      if (!mounted || !_isOwner) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Worksheet dibagikan ke profesional.'),
@@ -3002,7 +3020,7 @@ class _TherapySubmissionsScreenState
       );
       await _load();
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || !_isOwner) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(friendlyErrorMessage(e)),
@@ -3029,13 +3047,13 @@ class _TherapySubmissionsScreenState
         ],
       ),
     );
-    if (confirm != true) return;
+    if (confirm != true || !_isOwner) return;
     try {
       await ref.read(apiClientProvider).deleteTherapySubmission(
           accessToken: token, submissionId: submission.id);
       await _load();
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || !_isOwner) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(friendlyErrorMessage(e)),
@@ -3046,6 +3064,10 @@ class _TherapySubmissionsScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (ref.watch(currentSessionProvider) != _owner) {
+      return const Scaffold(
+          body: Center(child: Text('Sesi akun telah berubah.')));
+    }
     final items = _therapyItems;
     return Scaffold(
       appBar: AppBar(
@@ -3090,6 +3112,8 @@ class _TherapySubmissionsScreenState
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 10),
                             child: SoftCard(
+                              onTap: () =>
+                                  showTherapyRecordDetail(context, item),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -3465,6 +3489,8 @@ class TherapySubmissionView extends StatelessWidget {
     required this.answers,
     this.summary = '',
     this.sharedAt,
+    this.initiallyExpanded = false,
+    this.isShared = true,
   });
 
   final String moduleId;
@@ -3472,12 +3498,12 @@ class TherapySubmissionView extends StatelessWidget {
   final Map<String, dynamic> answers;
   final String summary;
   final String? sharedAt;
+  final bool initiallyExpanded;
+  final bool isShared;
 
   @override
   Widget build(BuildContext context) {
     final module = findTherapyModuleById(moduleId);
-    final fields = module?.worksheetFields ?? const <TherapyWorksheetField>[];
-    final color = module?.color ?? MalvaColors.seed;
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
 
     // Header ringkas: selalu terlihat & bisa di-tap untuk membuka detail.
@@ -3490,8 +3516,8 @@ class TherapySubmissionView extends StatelessWidget {
               child: Text(title,
                   style: const TextStyle(fontWeight: FontWeight.w900)),
             ),
-            const StatusPill(
-              label: 'Dibagikan',
+            StatusPill(
+              label: isShared ? 'Dibagikan' : 'Tersimpan',
               color: MalvaColors.mint,
               icon: Icons.send_rounded,
             ),
@@ -3528,46 +3554,57 @@ class TherapySubmissionView extends StatelessWidget {
           Text(summary, style: const TextStyle(fontStyle: FontStyle.italic)),
           const SizedBox(height: 10),
         ],
-        if (fields.isEmpty)
-          Text(answers.toString(), style: const TextStyle(fontSize: 12.5))
-        else
-          for (final field in fields) ...[
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: module?.isAssessment == true
-                    ? Colors.white
-                    : color.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: color.withValues(alpha: 0.18)),
-              ),
+        for (final item
+            in therapyAnswerEntries(moduleId: moduleId, answers: answers))
+          Padding(
+              padding: const EdgeInsets.only(bottom: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    _fieldHeadline(field),
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 12.5),
-                  ),
+                  Text(item.label,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800, fontSize: 12.5)),
                   const SizedBox(height: 4),
-                  Text(
-                    _answerText(field, answers[field.id]) ?? '(tidak dijawab)',
-                    style: const TextStyle(fontSize: 13),
-                  ),
+                  SelectableText(item.answer),
                 ],
-              ),
-            ),
-          ],
+              )),
       ],
     );
 
     return CollapsibleCard(
+      initiallyExpanded: initiallyExpanded,
       color: module?.isAssessment == true ? Colors.white : null,
       header: header,
       semanticLabel: 'Jawaban $title',
       child: detail,
     );
   }
+}
+
+Future<void> showTherapyRecordDetail(
+    BuildContext context, BackendTherapySubmission record) {
+  final owner = ProviderScope.containerOf(context, listen: false)
+      .read(currentSessionProvider);
+  return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+              child: ConstrainedBox(
+            constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(sheetContext).size.height * .85),
+            child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Consumer(builder: (context, ref, _) {
+                  if (ref.watch(currentSessionProvider) != owner)
+                    return const Text('Sesi akun telah berubah.');
+                  return TherapySubmissionView(
+                      moduleId: record.moduleId,
+                      title: record.title,
+                      answers: record.answers,
+                      summary: record.summary,
+                      sharedAt: record.sharedAt,
+                      isShared: record.isShared,
+                      initiallyExpanded: true);
+                })),
+          )));
 }

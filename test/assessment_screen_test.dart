@@ -54,8 +54,10 @@ void main() {
         find.textContaining(
             'CF menunjukkan dukungan aturan dalam model, bukan probabilitas diagnosis'),
         findsNothing);
-    expect(find.textContaining('PHQ-9 5/27 Ringan'), findsOneWidget);
-    expect(find.textContaining('GAD-7 5/21 Ringan'), findsOneWidget);
+    expect(
+        find.textContaining('PHQ-9 Total Score: 5/27 Ringan'), findsOneWidget);
+    expect(
+        find.textContaining('GAD-7 Total Score: 5/21 Ringan'), findsOneWidget);
   });
 
   testWidgets('shows PHQ-9, GAD-7, then submit in one long page',

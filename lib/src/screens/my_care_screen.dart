@@ -17,6 +17,7 @@ import '../widgets/malva_components.dart';
 import '../widgets/professional_avatar.dart';
 import 'care_package_screen.dart';
 import 'chat_screen.dart';
+import 'booking/doctor_profile_screen.dart';
 
 // ============================================================
 // MY CARE — paket sesi + jadwal sesi + profesional (sharing)
@@ -46,6 +47,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
   List<BackendCarePackage> _packages = const [];
   List<BackendCareSession> _sessions = const [];
   List<BackendPatientProfessionalLink> _links = const [];
+  Map<String, BackendDoctorProfile> _professionals = const {};
   bool _isLoading = true;
   late final CareSessionRefresh _sessionRefresh;
   String? _error;
@@ -114,11 +116,24 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
         apiClient.listCareSessions(accessToken: accessToken, scope: 'all'),
         apiClient.listPatientProfessionalLinks(accessToken: accessToken),
       ]);
+      // Fetch exact linked profiles: a bounded directory can omit a linked doctor.
+      final professionals = <String, BackendDoctorProfile>{};
+      final links = results[2] as List<BackendPatientProfessionalLink>;
+      await Future.wait(
+          links.map((link) => link.professionalUserId).toSet().map((id) async {
+        try {
+          professionals[id] = await apiClient.getDoctorProfile(
+              accessToken: accessToken, userId: id);
+        } catch (_) {
+          /* Care remains available; show profile data as unavailable. */
+        }
+      }));
       if (!mounted) return;
       setState(() {
         _packages = results[0] as List<BackendCarePackage>;
         _sessions = results[1] as List<BackendCareSession>;
         _links = results[2] as List<BackendPatientProfessionalLink>;
+        _professionals = professionals;
         _isLoading = false;
       });
       _sessionRefresh.update(_sessions);
@@ -461,6 +476,15 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
       for (final link in _activeLinks) ...[
         _ProfessionalLinkCard(
           link: link,
+          doctor: _professionals[link.professionalUserId],
+          onProfile: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => DoctorProfileScreen(
+                      doctorUserId: link.professionalUserId,
+                      doctorName: link.professionalDisplayName,
+                      session: widget.session,
+                      apiClient: widget.apiClient))),
           package: _packageForProfessional(link.professionalUserId),
           onChat: () => _openChatFor(link),
           onManage: () => _openManageData(link),
@@ -1033,12 +1057,14 @@ class _SessionCard extends StatelessWidget {
   }
 }
 
-class _ProfessionalLinkCard extends StatelessWidget {
+class _ProfessionalLinkCard extends ConsumerWidget {
   const _ProfessionalLinkCard({
     required this.link,
     this.package,
     this.onChat,
     this.onManage,
+    this.doctor,
+    this.onProfile,
   });
 
   final BackendPatientProfessionalLink link;
@@ -1047,9 +1073,17 @@ class _ProfessionalLinkCard extends StatelessWidget {
   final BackendCarePackage? package;
   final VoidCallback? onChat;
   final VoidCallback? onManage;
+  final BackendDoctorProfile? doctor;
+  final VoidCallback? onProfile;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final position = ref.watch(patientLocationProvider).position;
+    final km = distanceKmBetween(
+        fromLat: position?.latitude,
+        fromLng: position?.longitude,
+        toLat: doctor?.credential.hospitalLat,
+        toLng: doctor?.credential.hospitalLng);
     final pkg = package;
     final pkgLabel = pkg == null
         ? 'Tanpa paket aktif'
@@ -1102,6 +1136,22 @@ class _ProfessionalLinkCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
+          if (doctor != null)
+            Text(doctor!.reviews.reviewCount > 0
+                ? '${doctor!.reviews.averageStars.toStringAsFixed(1)} / 5 (${doctor!.reviews.reviewCount} ulasan)'
+                : 'Belum ada ulasan'),
+          Text(
+              doctor == null
+                  ? 'Data lokasi praktik belum dapat dimuat'
+                  : professionalDistanceLabel(
+                      km: km,
+                      hospitalLat: doctor?.credential.hospitalLat,
+                      hospitalLng: doctor?.credential.hospitalLng),
+              style: Theme.of(context).textTheme.bodySmall),
+          Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                  onPressed: onProfile, child: const Text('Lihat profil'))),
           Row(
             children: [
               Expanded(

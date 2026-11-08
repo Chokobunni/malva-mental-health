@@ -89,6 +89,28 @@ MalvaApiClient _apiWithSubmissions(List<Map<String, dynamic>> submissions) {
 
 void main() {
   testWidgets(
+      'saved therapy card opens complete answers including legacy fields',
+      (tester) async {
+    final api = _apiWithSubmissions([
+      _submission(
+          id: 'saved',
+          moduleId: 'abcde',
+          title: 'Latihan tersimpan',
+          createdAt: '2026-11-08T09:00:00+07:00',
+          answers: {
+            'activating': 'Situasi lengkap',
+            'legacy_detail': 'Jawaban lama tetap terbaca'
+          })
+    ]);
+    await tester.pumpWidget(_buildApp(api));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Latihan tersimpan'));
+    await tester.pumpAndSettle();
+    expect(find.text('Situasi lengkap'), findsOneWidget);
+    expect(find.text('Jawaban lama tetap terbaca'), findsOneWidget);
+  });
+
+  testWidgets(
       'Therapy Record menampilkan worksheet terapi dan menyembunyikan hasil assessment WHO-5',
       (tester) async {
     final api = _apiWithSubmissions([

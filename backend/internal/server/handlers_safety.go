@@ -1098,16 +1098,14 @@ func (s *Server) createDoctorReview(w http.ResponseWriter, r *http.Request, clai
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	// Ulasan hanya setelah pernah ada sesi completed dengan profesional tsb.
-	sessions, err := s.store.ListCareSessions(r.Context(), claims.Subject, "patient", "past", "", 50)
-	eligible := false
-	if err == nil {
-		for _, cs := range sessions {
-			if cs.ProfessionalID == userID && cs.Status == "completed" {
-				eligible = true
-				break
-			}
-		}
+	if err := store.ValidateDoctorReview(req.Stars, req.ReviewText); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	eligible, err := s.store.CanReviewProfessional(r.Context(), claims.Subject, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
 	}
 	if !eligible {
 		writeError(w, http.StatusForbidden, errors.New("ulasan hanya bisa diberikan setelah sesi selesai"))

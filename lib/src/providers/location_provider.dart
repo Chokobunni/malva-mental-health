@@ -89,7 +89,8 @@ class PatientLocationNotifier extends StateNotifier<PatientLocationState> {
 
   /// Coba lagi dari halaman Cari Profesional (mis. user baru izinkan).
   Future<void> retry() async {
-    state = const PatientLocationState(resolving: true);
+    if (state.resolving) return;
+    state = const PatientLocationState();
     await resolveOnStartup();
   }
 }
@@ -109,6 +110,11 @@ double? distanceKmBetween({
   if (fromLat == null || fromLng == null || toLat == null || toLng == null) {
     return null;
   }
+  if (![fromLat, fromLng, toLat, toLng].every((v) => v.isFinite) ||
+      fromLat.abs() > 90 ||
+      toLat.abs() > 90 ||
+      fromLng.abs() > 180 ||
+      toLng.abs() > 180) return null;
   const earthRadius = 6371.0;
   final dLat = _deg2rad(toLat - fromLat);
   final dLng = _deg2rad(toLng - fromLng);
@@ -117,8 +123,19 @@ double? distanceKmBetween({
           math.cos(_deg2rad(toLat)) *
           math.sin(dLng / 2) *
           math.sin(dLng / 2);
-  final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  final bounded = a.clamp(0.0, 1.0);
+  final c = 2 * math.atan2(math.sqrt(bounded), math.sqrt(1 - bounded));
   return double.parse((earthRadius * c).toStringAsFixed(1));
 }
 
 double _deg2rad(double deg) => deg * (math.pi / 180.0);
+
+String professionalDistanceLabel(
+    {required double? km,
+    required double? hospitalLat,
+    required double? hospitalLng}) {
+  if (km != null) return '${km.toStringAsFixed(1)} km';
+  return hospitalLat == null || hospitalLng == null
+      ? 'Lokasi praktik belum tersedia'
+      : 'Lokasi pasien belum tersedia';
+}

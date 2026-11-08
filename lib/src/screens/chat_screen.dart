@@ -15,6 +15,8 @@ import '../widgets/friendly_error.dart';
 import '../widgets/mini_summary.dart';
 import '../widgets/professional_avatar.dart';
 import '../widgets/therapy_library.dart';
+import '../widgets/shared_record_detail.dart';
+import 'assessment_history_screen.dart';
 import '../time/wib.dart';
 import '../services/server_clock.dart';
 import '../platform/platform_providers.dart';
@@ -584,7 +586,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       }
       return;
     }
-    if (!_isPatient) return;
+    if (!_isPatient || message.kind != 'assessment_request') {
+      await _openSharedRecord(message);
+      return;
+    }
     if (message.kind == 'assessment_request') {
       // Assessment requests are actionable while this consultation is active.
       await _loadAccess();
@@ -878,9 +883,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         chosen == null ||
         !_canShare ||
         ref.read(currentSessionProvider)?.accessToken != token) return;
+    await _shareSavedSubmission(
+      token: token,
+      api: api,
+      submissionId: chosen.metadata['submission_id'] as String,
+      kind: 'worksheet',
+      label: 'Therapy Record',
+    );
+  }
+
+  Future<void> _shareSavedSubmission({
+    required String token,
+    required MalvaApiClient api,
+    required String submissionId,
+    required String kind,
+    required String label,
+  }) async {
+    if (!_ownerMatches ||
+        !_canShare ||
+        ref.read(currentSessionProvider)?.accessToken != token) return;
     await api.shareTherapySubmission(
       accessToken: token,
-      submissionId: chosen.metadata['submission_id'] as String,
+      submissionId: submissionId,
       professionalId: widget.otherUserId,
     );
     if (!mounted || !_ownerMatches) return;
@@ -889,12 +913,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     if (!mounted || !_ownerMatches) return;
     final visible = refreshed &&
         _messages.any((message) =>
-            message.kind == 'worksheet' &&
-            message.metadata?['submission_id'] ==
-                chosen.metadata['submission_id']);
+            message.kind == kind &&
+            message.metadata?['submission_id'] == submissionId);
     _toast(visible
-        ? 'Therapy Record dibagikan ke profesional.'
-        : 'Therapy Record dibagikan, tetapi pesan chat belum terkonfirmasi. Muat ulang percakapan.');
+        ? '$label dibagikan ke profesional.'
+        : '$label dibagikan, tetapi pesan chat belum terkonfirmasi. Muat ulang percakapan.');
   }
 
   Future<void> _openSharedTherapy(ChatMessage message) async {
@@ -930,6 +953,62 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
+  Future<void> _openSharedRecord(ChatMessage message) async {
+    if (!_ownerMatches) return;
+    final meta = message.metadata ?? const <String, dynamic>{};
+    final token = ref.read(currentSessionProvider)?.accessToken;
+    if (token == null || token.isEmpty) return;
+    final submissionId = meta['submission_id']?.toString() ?? '';
+    if (submissionId.isNotEmpty &&
+        (message.kind == 'worksheet' || message.kind == 'assessment')) {
+      await _openSharedTherapy(message);
+      return;
+    }
+    if (meta['answers'] is Map && meta['module_id'] != null) {
+      await showTherapyRecordDetail(
+          context,
+          BackendTherapySubmission(
+            id: '',
+            moduleId: meta['module_id'].toString(),
+            title: meta['title']?.toString() ?? 'Record dibagikan',
+            answers: Map<String, dynamic>.from(meta['answers'] as Map),
+            summary: meta['summary']?.toString() ?? message.text,
+          ));
+      return;
+    }
+    final screeningId = meta['screening_id']?.toString() ?? '';
+    if (screeningId.isNotEmpty) {
+      try {
+        final screening = await ref.read(apiClientProvider).getScreeningDetail(
+              accessToken: token,
+              screeningId: screeningId,
+              patientId: _isPatient
+                  ? (ref.read(currentSessionProvider)?.backendUserId ?? '')
+                  : widget.otherUserId,
+            );
+        if (!mounted || !_ownerMatches) return;
+        await showAssessmentHistoryDetail(
+            context, assessmentEntryFromScreening(screening));
+        return;
+      } on Object {
+        // A shared snapshot remains readable when current category consent is absent.
+      }
+    }
+    if (!mounted || !_ownerMatches) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _ownedOverlay(SafeArea(
+          child: ConstrainedBox(
+        constraints:
+            BoxConstraints(maxHeight: MediaQuery.of(context).size.height * .85),
+        child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: SharedRecordDetail(message: message)),
+      ))),
+    );
+  }
+
   /// Bagikan assessment record: screening PHQ-9/GAD-7 dan worksheet
   /// DASS-21/WHO-5 diambil dari server, lalu dipilih bila lebih dari satu.
   Future<void> _shareAssessment({
@@ -953,6 +1032,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       final picked = await _pickCandidate(candidates);
       if (picked == null) return; // pasien membatalkan
       chosen = picked;
+    }
+    final submissionId = chosen.metadata['submission_id']?.toString() ?? '';
+    if (submissionId.isNotEmpty) {
+      await _shareSavedSubmission(
+          token: token,
+          api: api,
+          submissionId: submissionId,
+          kind: 'assessment',
+          label: label);
+      return;
     }
     final sent = await _sendShare(
       kind: 'assessment',
@@ -995,6 +1084,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             'overall_level': screening.overallLevel,
             'phq9_score': screening.phq9.score,
             'gad7_score': screening.gad7.score,
+            'phq9_max_score': screening.phq9.maxScore,
+            'gad7_max_score': screening.gad7.maxScore,
+            'phq9_level': screening.phq9.level,
+            'gad7_level': screening.gad7.level,
             'crisis_flag': screening.crisisFlag,
             'summary': text,
             'shared_at': wibIso(screening.createdAt ?? wibNow()),
@@ -1172,6 +1265,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               'dosage': med.dosage,
               'form': med.form,
               'reminder_time': med.reminderTime,
+              'relation_to_meal': med.relationToMeal,
+              'source': med.source,
             },
         ];
       }
@@ -1205,6 +1300,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           for (final goal in active)
             {
               'title': goal.title,
+              'category': goal.category,
+              'last_logged_on': goal.lastLoggedOn,
               'target_per_week': goal.targetPerWeek,
               'done_this_week': goal.doneThisWeek,
               'is_active': goal.isActive,
@@ -1238,7 +1335,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       );
       if (diaries.isNotEmpty) {
         final latest = diaries.first;
-        final mood = latest.mood.trim().isEmpty ? 'tanpa mood' : latest.mood;
         final raw = (latest.note.trim().isEmpty ? latest.title : latest.note)
             .trim()
             .replaceAll('\n', ' ');
@@ -1246,11 +1342,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         return _ShareCandidate(
           title: latest.title.trim().isEmpty ? 'Diary' : latest.title.trim(),
           subtitle: _dateLabel(latest.occurredAt),
-          text: 'Diary terakhir ($mood): "$excerpt".',
+          text: 'Diary terakhir: "$excerpt".',
           icon: Icons.edit_note_rounded,
           metadata: {
             'title': latest.title,
-            'mood': latest.mood,
+            'note': latest.note,
             'occurred_at': wibIso(latest.occurredAt ?? wibNow()),
           },
         );
@@ -1267,11 +1363,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     return _ShareCandidate(
       title: latest.title.trim().isEmpty ? 'Diary' : latest.title.trim(),
       subtitle: _dateLabel(latest.createdAt),
-      text: 'Diary terakhir (${latest.mood.label}): "$excerpt".',
+      text: 'Diary terakhir: "$excerpt".',
       icon: Icons.edit_note_rounded,
       metadata: {
         'title': latest.title,
-        'mood': latest.mood.label,
+        'note': latest.note,
         'occurred_at': wibIso(latest.createdAt),
       },
     );
@@ -1378,7 +1474,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           ],
         ),
         actions: [
-          const MiniSummaryButton(),
+          MiniSummaryButton(patientId: _isPatient ? null : widget.otherUserId),
           _TypingIndicator(isTyping: _otherTyping),
         ],
       ),
@@ -1481,12 +1577,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                           else
                             _ChatBubble(
                               message: msg,
-                              onOpenRecord: msg.kind == 'worksheet' &&
-                                      (msg.metadata?['submission_id']
-                                                  ?.toString() ??
-                                              '')
-                                          .isNotEmpty
-                                  ? () => _openSharedTherapy(msg)
+                              onOpenRecord: const [
+                                'worksheet',
+                                'assessment',
+                                'screening',
+                                'prescription',
+                                'medication',
+                                'diary',
+                                'goals',
+                                'habits',
+                                'summary',
+                                'progress'
+                              ].contains(msg.kind)
+                                  ? () => _openSharedRecord(msg)
                                   : null,
                             ),
                         ],
@@ -1922,8 +2025,10 @@ class _SharedCardBubble extends StatelessWidget {
       'habits' => (Icons.flag_rounded, 'Goals & Habits'),
       'summary' => (Icons.auto_awesome_rounded, 'Ringkasan'),
       'assessment' => (Icons.fact_check_rounded, 'Assessment'),
+      'screening' => (Icons.fact_check_rounded, 'Screening'),
       'worksheet' => (Icons.assignment_turned_in_rounded, 'Therapy Record'),
       'prescription' => (Icons.medication_rounded, 'Obat & Resep'),
+      'medication' => (Icons.medication_rounded, 'Obat & Resep'),
       'progress' => (Icons.show_chart_rounded, 'Progress'),
       _ => (Icons.insert_drive_file_rounded, 'Lampiran'),
     };

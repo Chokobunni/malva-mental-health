@@ -6,19 +6,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../providers/providers.dart';
 import '../services/weekly_summary_service.dart';
+import '../services/malva_api_client.dart';
+import 'mood_insights.dart';
 import '../theme.dart';
 import 'malva_components.dart';
 import '../time/wib.dart';
 
 // ============================================================
-// CHAT MINI SUMMARY (Weekly) — ringkasan 14 hari untuk dokter
+// CHAT MINI SUMMARY (14 hari) — ringkasan 14 hari untuk dokter
 // Angka mood/tidur/kepatuhan diambil dari SERVER (fallback ke store lokal),
 // karena store tidak selalu terhidrasi saat chat dibuka — dulu kartu ini
 // menampilkan 0 check-in / 0.0 jam / 0% padahal data pasien ada.
 // ============================================================
 
 class MiniSummaryButton extends ConsumerWidget {
-  const MiniSummaryButton({super.key});
+  const MiniSummaryButton({super.key, this.patientId});
+  final String? patientId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,7 +46,7 @@ class MiniSummaryButton extends ConsumerWidget {
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
           ),
-          builder: (_) => const _MiniSummarySheet(),
+          builder: (_) => _MiniSummarySheet(patientId: patientId),
         ),
       ),
     );
@@ -51,7 +54,8 @@ class MiniSummaryButton extends ConsumerWidget {
 }
 
 class _MiniSummarySheet extends ConsumerStatefulWidget {
-  const _MiniSummarySheet();
+  const _MiniSummarySheet({this.patientId});
+  final String? patientId;
 
   @override
   ConsumerState<_MiniSummarySheet> createState() => _MiniSummarySheetState();
@@ -61,59 +65,86 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
   /// Metrik dari server (fallback store). null = belum selesai dimuat.
   WeeklySummaryMetrics? _metrics;
   bool _isLoading = true;
+  late final AuthSession? _owner;
+  List<BackendDiaryEntry>? _diaries;
+  List<BackendGoal>? _goals;
 
   @override
   void initState() {
     super.initState();
+    _owner = ref.read(currentSessionProvider);
     unawaited(_loadMetrics());
   }
 
   /// Muat metrik 14 hari sekali saat sheet dibuka.
   Future<void> _loadMetrics() async {
     final store = ref.read(malvaStoreProvider);
-    final session = ref.read(currentSessionProvider);
-    final token = session?.accessToken;
-    WeeklySummaryMetrics? metrics;
-    if (token != null && token.isNotEmpty) {
-      try {
-        metrics = await loadWeeklySummary(
-          api: ref.read(apiClientProvider),
-          accessToken: token,
-          localMoods: [
-            for (final entry in store.moodEntries)
-              (
-                at: entry.date,
-                sleepHours: entry.sleepHours,
-                moodScore: entry.mood.score,
-              ),
-          ],
-          localLogs: [
-            for (final log in store.medicationLogs)
-              (at: log.takenAt, status: log.status),
-          ],
-        );
-      } on Object {
-        metrics = null;
-      }
+    final token = ref.read(currentSessionProvider)?.accessToken;
+    if (token == null || token.isEmpty) {
+      setState(() => _isLoading = false);
+      return;
     }
-    if (!mounted) return;
-    setState(() {
-      _metrics = metrics;
-      _isLoading = false;
-    });
+    final api = ref.read(apiClientProvider);
+    bool isCurrent() => mounted && ref.read(currentSessionProvider) == _owner;
+    await Future.wait([
+      () async {
+        WeeklySummaryMetrics? metrics;
+        try {
+          metrics = await loadWeeklySummary(
+            api: api,
+            accessToken: token,
+            patientId: widget.patientId,
+            localMoods: [
+              for (final entry in store.moodEntries)
+                if (widget.patientId == null)
+                  (
+                    at: entry.date,
+                    sleepHours: entry.sleepHours,
+                    moodScore: entry.mood.score
+                  )
+            ],
+            localLogs: [
+              for (final log in store.medicationLogs)
+                if (widget.patientId == null)
+                  (at: log.takenAt, status: log.status)
+            ],
+          );
+        } on Object {/* Unknown stays visible. */}
+        if (isCurrent()) setState(() => _metrics = metrics);
+      }(),
+      () async {
+        try {
+          final diaries = await api.listDiaryEntries(
+              accessToken: token, patientId: widget.patientId, limit: 0);
+          if (isCurrent()) setState(() => _diaries = diaries);
+        } on Object {/* Unknown stays visible. */}
+      }(),
+      () async {
+        try {
+          final goals = await api.listGoals(
+              accessToken: token, patientId: widget.patientId);
+          if (isCurrent()) setState(() => _goals = goals);
+        } on Object {/* Unknown stays visible. */}
+      }(),
+    ]);
+    if (isCurrent()) setState(() => _isLoading = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    final store = ref.watch(malvaStoreProvider);
+    if (ref.watch(currentSessionProvider) != _owner) {
+      return const Padding(
+          padding: EdgeInsets.all(24), child: Text('Sesi akun telah berubah.'));
+    }
     final metrics = _metrics;
     final cutoff = wibNow().subtract(const Duration(days: 14));
 
-    // Diary & goals tetap dari store (bukan bagian metrik yang diperbaiki).
-    final diaries =
-        store.diaryEntries.where((e) => e.createdAt.isAfter(cutoff)).toList();
+    final diaries = (_diaries ?? <BackendDiaryEntry>[])
+        .where((e) => e.occurredAt != null && e.occurredAt!.isAfter(cutoff))
+        .toList()
+      ..sort((a, b) => b.occurredAt!.compareTo(a.occurredAt!));
     final activeGoals =
-        store.goals.where((g) => !g.completedToday).take(3).toList();
+        (_goals ?? <BackendGoal>[]).where((g) => g.isActive).toList();
 
     // Angka mood/tidur/kepatuhan hanya ditampilkan bila benar-benar diketahui.
     final moodKnown = metrics?.moodKnown ?? false;
@@ -154,7 +185,7 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
           ),
           const SizedBox(height: 14),
           const Text(
-            'Mini Summary (Weekly)',
+            'Mini Summary (14 hari)',
             style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
           ),
           const SizedBox(height: 4),
@@ -175,6 +206,14 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
                 ? '$moodTrend ($moodCount check-in)'
                 : 'Data check-in belum dimuat',
           ),
+          if (metrics != null && metrics.entries.isNotEmpty) ...[
+            const SectionLabel('Tren mood — 7 hari terakhir'),
+            MoodTrendChart(entries: metrics.entries),
+            const SizedBox(height: 12),
+            const SectionLabel('Keseimbangan gejala — 7 hari terakhir'),
+            SymptomsBalanceChart(entries: metrics.entries),
+            const SizedBox(height: 12),
+          ],
           _SummaryTile(
             icon: Icons.bedtime_rounded,
             color: MalvaColors.orchid,
@@ -195,17 +234,24 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
             icon: Icons.edit_note_rounded,
             color: MalvaColors.amber,
             title: 'Last Diary Entry',
-            value: diaries.isEmpty
-                ? 'Belum ada diary 14 hari terakhir'
-                : '"${_truncate(diaries.first.note.isEmpty ? diaries.first.title : diaries.first.note, 90)}"',
+            value: _diaries == null
+                ? 'Data diary belum dimuat'
+                : diaries.isEmpty
+                    ? 'Belum ada diary 14 hari terakhir'
+                    : '"${_truncate(diaries.first.note.isEmpty ? diaries.first.title : diaries.first.note, 90)}"',
           ),
           const SizedBox(height: 8),
           const SectionLabel('Current Goals'),
-          if (store.goals.isEmpty)
+          if (_goals == null)
+            const Text('Data goals belum dimuat.')
+          else if (activeGoals.isEmpty)
             const Text('Belum ada goal aktif.')
           else
             for (final goal in activeGoals) ...[
-              _GoalRow(name: goal.title, streak: goal.streakDays),
+              _GoalRow(
+                  name: goal.title,
+                  progress:
+                      '${goal.doneThisWeek}/${goal.targetPerWeek} minggu ini'),
               const SizedBox(height: 6),
             ],
           const SizedBox(height: 8),
@@ -216,7 +262,7 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Text(
-              'Ringkasan ini dihitung dari data check-in & log obat di server. Versi AI (Gemini) menyusul via backend.',
+              'Ringkasan 14 hari dari data tersimpan. Grafik menampilkan 7 hari terakhir.',
               style: TextStyle(fontSize: 12),
             ),
           ),
@@ -276,10 +322,10 @@ class _SummaryTile extends StatelessWidget {
 }
 
 class _GoalRow extends StatelessWidget {
-  const _GoalRow({required this.name, required this.streak});
+  const _GoalRow({required this.name, required this.progress});
 
   final String name;
-  final int streak;
+  final String progress;
 
   @override
   Widget build(BuildContext context) {
@@ -292,8 +338,8 @@ class _GoalRow extends StatelessWidget {
                 Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
           ),
           StatusPill(
-            label: '$streak streak',
-            color: streak > 0 ? MalvaColors.mint : Colors.black54,
+            label: progress,
+            color: MalvaColors.mint,
             icon: Icons.local_fire_department_rounded,
           ),
         ],

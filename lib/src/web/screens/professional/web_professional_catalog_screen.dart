@@ -7,6 +7,7 @@ import '../../../providers/providers.dart';
 import '../../../services/malva_api_client.dart';
 import '../../../theme.dart';
 import '../../../widgets/professional_avatar.dart';
+import '../../../widgets/doctor_review_actions.dart';
 import '../../services/web_care_service.dart';
 import '../../web_format.dart';
 import '../../web_theme.dart';
@@ -37,6 +38,7 @@ class _WebProfessionalCatalogScreenState
       const <BackendDoctorSearchResult>[];
   bool _loading = true;
   Object? _error;
+  int _loadGeneration = 0;
 
   WebDoctorGroup? _group;
   bool _bpjsOnly = false;
@@ -71,25 +73,29 @@ class _WebProfessionalCatalogScreenState
   }
 
   Future<void> _loadDoctors() async {
+    final generation = ++_loadGeneration;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
+      final position = ref.read(patientLocationProvider).position;
       final doctors = await ref.read(apiClientProvider).searchDoctors(
             accessToken: _token.isEmpty ? null : _token,
             maxPrice: _maxPrice,
             isBpjsSupported: _bpjsOnly ? true : null,
             sortBy: _sortBy,
             limit: 50,
+            patientLat: position?.latitude,
+            patientLng: position?.longitude,
           );
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _doctors = doctors;
         _loading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = error;
         _loading = false;
@@ -217,6 +223,12 @@ class _WebProfessionalCatalogScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<PatientLocationState>(patientLocationProvider, (previous, next) {
+      if (previous?.position != next.position) unawaited(_loadDoctors());
+    });
+    ref.listen<int>(professionalProfileRevisionProvider, (previous, next) {
+      if (previous != next) unawaited(_loadDoctors());
+    });
     final selected = _selected;
     if (selected != null) return _buildDetail(context, selected);
     return _buildCatalog(context);
@@ -434,6 +446,8 @@ class _WebProfessionalCatalogScreenState
                       value: 'experience_desc', child: Text('Pengalaman')),
                   DropdownMenuItem<String>(
                       value: 'rating_desc', child: Text('Rating')),
+                  DropdownMenuItem<String>(
+                      value: 'distance', child: Text('Terdekat')),
                 ],
                 onChanged: (String? value) {
                   setState(() => _sortBy = value ?? 'name_asc');
@@ -803,10 +817,11 @@ class _WebProfessionalCatalogScreenState
     final reviews = profile?.reviews;
     final items = reviews?.reviews ?? const <BackendDoctorReviewItem>[];
     if (items.isEmpty) {
-      return const Text(
-        'Belum ada ulasan untuk profesional ini.',
-        style: TextStyle(fontSize: 12.5, color: Color(0xFF8B8194)),
-      );
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('Belum ada ulasan untuk profesional ini.',
+            style: TextStyle(fontSize: 12.5, color: Color(0xFF8B8194))),
+        _reviewActions(),
+      ]);
     }
     final visible = _showAllReviews ? items : items.take(5).toList();
     return Column(
@@ -872,20 +887,37 @@ class _WebProfessionalCatalogScreenState
             onPressed: () => setState(() => _showAllReviews = true),
             child: const Text('Lihat semua ulasan'),
           ),
+        _reviewActions(),
       ],
     );
   }
+
+  Widget _reviewActions() => DoctorReviewActions(
+        apiClient: ref.read(apiClientProvider),
+        professionalId: _selected!.userId,
+        accessToken: _token.isEmpty ? null : _token,
+        onSubmitted: () {
+          ref.read(professionalProfileRevisionProvider.notifier).state++;
+          unawaited(_openDetail(_selected!));
+        },
+      );
 }
 
 /// Kartu profesional pada katalog.
-class _DoctorCard extends StatelessWidget {
+class _DoctorCard extends ConsumerWidget {
   const _DoctorCard({required this.doctor, required this.onOpen});
 
   final BackendDoctorSearchResult doctor;
   final VoidCallback onOpen;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final position = ref.watch(patientLocationProvider).position;
+    final km = distanceKmBetween(
+        fromLat: position?.latitude,
+        fromLng: position?.longitude,
+        toLat: doctor.hospitalLat,
+        toLng: doctor.hospitalLng);
     return Container(
       padding: const EdgeInsets.all(WebSpacing.card),
       decoration: BoxDecoration(
@@ -960,6 +992,12 @@ class _DoctorCard extends StatelessWidget {
             style: const TextStyle(fontSize: 12, color: Color(0xFF6B6377)),
           ),
           const SizedBox(height: 8),
+          Text(
+              professionalDistanceLabel(
+                  km: km,
+                  hospitalLat: doctor.hospitalLat,
+                  hospitalLng: doctor.hospitalLng),
+              style: const TextStyle(fontSize: 11.5)),
           Row(
             children: <Widget>[
               const Icon(Icons.star_rounded,
@@ -967,7 +1005,7 @@ class _DoctorCard extends StatelessWidget {
               const SizedBox(width: 3),
               Text(
                 doctor.reviewCount > 0
-                    ? '${doctor.reviewCount} ulasan'
+                    ? '${doctor.averageStars.toStringAsFixed(1)} / 5 (${doctor.reviewCount} ulasan)'
                     : 'Belum ada ulasan',
                 style: const TextStyle(fontSize: 11.5),
               ),

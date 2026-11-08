@@ -887,7 +887,12 @@ func (s *Server) listScreenings(w http.ResponseWriter, r *http.Request, claims a
 		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data skrining"))
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	limit := 20
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed >= 0 {
+			limit = parsed
+		}
+	}
 	sessions, err := s.store.ListScreeningSessions(r.Context(), patientID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -1139,7 +1144,13 @@ func (s *Server) listMoodCheckins(w http.ResponseWriter, r *http.Request, claims
 		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data mood/diary"))
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	limit := 20
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, parseErr := strconv.Atoi(raw)
+		if parseErr == nil && parsed >= 0 {
+			limit = parsed
+		}
+	}
 	items, err := s.store.ListMoodCheckins(r.Context(), patientID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -1190,7 +1201,13 @@ func (s *Server) listDiaryEntries(w http.ResponseWriter, r *http.Request, claims
 		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data mood/diary"))
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	limit := 20
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, parseErr := strconv.Atoi(raw)
+		if parseErr == nil && parsed >= 0 {
+			limit = parsed
+		}
+	}
 	items, err := s.store.ListDiaryEntries(r.Context(), patientID, claims.Role == "professional", limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -1539,7 +1556,13 @@ func (s *Server) listMedicationLogs(w http.ResponseWriter, r *http.Request, clai
 		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data obat"))
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	limit := 20
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, parseErr := strconv.Atoi(raw)
+		if parseErr == nil && parsed >= 0 {
+			limit = parsed
+		}
+	}
 	items, err := s.store.ListMedicationLogs(r.Context(), patientID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
