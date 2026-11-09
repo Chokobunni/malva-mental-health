@@ -6,6 +6,7 @@ import 'package:malva_mental_health/src/screens/assessment_screen.dart';
 import 'package:malva_mental_health/src/theme.dart';
 import 'package:malva_mental_health/src/widgets/malva_components.dart';
 import 'package:malva_mental_health/src/widgets/therapy_library.dart';
+import 'package:malva_mental_health/src/widgets/shared_record_detail.dart';
 
 void main() {
   test('manual instrument descriptions contain no formulas or model copy', () {
@@ -16,7 +17,8 @@ void main() {
       expect(module.description, contains('bukan diagnosis'));
     }
   });
-  testWidgets('patient results explain scores without model details',
+  testWidgets(
+      'patient results share the score presentation and both factual CFs',
       (tester) async {
     final phq9 = AssessmentEngine.score(
       type: AssessmentType.phq9,
@@ -43,21 +45,45 @@ void main() {
       ),
     ));
 
-    expect(find.text('CF 68%'), findsNothing);
+    final detail = find.byType(SharedRecordDetail);
+    expect(detail, findsOneWidget);
+    expect(
+        find.descendant(of: detail, matching: find.text('PHQ-9 Total Score')),
+        findsOneWidget);
+    expect(
+        find.descendant(of: detail, matching: find.text('GAD-7 Total Score')),
+        findsOneWidget);
+    expect(find.descendant(of: detail, matching: find.text('5')),
+        findsNWidgets(2));
+    expect(find.descendant(of: detail, matching: find.text('Ringan')),
+        findsNWidgets(3));
+    expect(
+        find.descendant(
+            of: detail,
+            matching: find.text('PHQ-9 · Dukungan rule internal (CF)')),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: detail,
+            matching: find.text('GAD-7 · Dukungan rule internal (CF)')),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: detail,
+            matching: find.textContaining('0.68 (68%)', findRichText: true)),
+        findsNWidgets(2));
     expect(find.text('Apa arti skormu?'), findsOneWidget);
     await tester.ensureVisible(find.text('Apa arti skormu?'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Apa arti skormu?'));
     await tester.pumpAndSettle();
-    expect(find.text('CF 68%'), findsNothing);
     expect(find.textContaining('Pasti'), findsNothing);
     expect(
         find.textContaining(
             'CF menunjukkan dukungan aturan dalam model, bukan probabilitas diagnosis'),
         findsNothing);
-    expect(
-        find.textContaining('PHQ-9 Total Score: 5/27 Ringan'), findsOneWidget);
-    expect(
-        find.textContaining('GAD-7 Total Score: 5/21 Ringan'), findsOneWidget);
+    expect(find.text('Total Score: 5/27 (Ringan)'), findsOneWidget);
+    expect(find.text('Total Score: 5/21 (Ringan)'), findsOneWidget);
   });
 
   testWidgets('shows PHQ-9, GAD-7, then submit in one long page',

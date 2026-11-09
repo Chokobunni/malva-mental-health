@@ -9,6 +9,7 @@ import '../theme.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/therapy_library.dart';
+import '../widgets/shared_record_detail.dart';
 import 'booking/doctor_discovery_screen.dart';
 import 'initial_screening_consent_screen.dart';
 import 'safety/emergency_dashboard_screen.dart';
@@ -682,42 +683,13 @@ class AssessmentResultScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  SharedRecordDetail.bundle(bundle: bundle),
+                  const SizedBox(height: 12),
                   SoftCard(
-                    color: bundle.isInitial
-                        ? Colors.white
-                        : bundle.overallLevel.color.withValues(alpha: 0.1),
+                    color: Colors.white,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Terima kasih sudah membagikan isi hatimu.',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w900),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(bundle.summary,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 14),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            StatusPill(
-                              label:
-                                  'PHQ-9 Total Score: ${bundle.phq9.score}/${bundle.phq9.maxScore} ${bundle.phq9.level.label}',
-                              color: bundle.phq9.level.color,
-                            ),
-                            StatusPill(
-                              label:
-                                  'GAD-7 Total Score: ${bundle.gad7.score}/${bundle.gad7.maxScore} ${bundle.gad7.level.label}',
-                              color: bundle.gad7.level.color,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
                         ExpansionTile(
                           tilePadding: EdgeInsets.zero,
                           title: const Text('Apa arti skormu?'),

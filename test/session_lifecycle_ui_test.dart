@@ -153,6 +153,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Selesaikan sesi'), findsNothing);
     expect(find.text('Perlu diselesaikan'), findsNothing);
+    expect(find.byKey(const ValueKey('past-session')), findsNothing);
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('session-history-toggle')), 300,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byKey(const ValueKey('session-history-toggle')));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
         find.byKey(const ValueKey('past-session')), 300,
         scrollable: find.byType(Scrollable).first);

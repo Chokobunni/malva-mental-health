@@ -386,7 +386,10 @@ func (s *Store) GetTherapySubmission(ctx context.Context, userID, submissionID s
 			SELECT id, patient_id, module_id, title, answers, summary,
 			       shared_with_professional_id, shared_at, created_at, updated_at
 			FROM therapy_submissions
-			WHERE id = $1 AND shared_with_professional_id = $2
+			WHERE id = $1 AND (shared_with_professional_id = $2
+                OR EXISTS (SELECT 1 FROM patient_data_consents pc
+                    WHERE pc.patient_id=therapy_submissions.patient_id
+                    AND pc.professional_id=$2 AND pc.share_therapy_records))
 		`
 	}
 	err := s.db.QueryRowContext(ctx, query, args...).

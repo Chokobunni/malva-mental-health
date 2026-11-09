@@ -402,6 +402,8 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 
 ## Kontrak sesi dan rutinitas resep (2026-11-10)
 
+- CRUD resep hanya oleh psikiater terverifikasi penulis: POST/PUT mendukung `draft`/`issued` serta diagnosis; PUT mengganti isi penuh memakai ID item stabil, pasien immutable; DELETE soft-delete. Draft hanya untuk penulis. Draft/delete menonaktifkan obat terkait dan membatalkan QR/tanda tangan; log klinis serta audit tetap tersimpan. Item `current_stock` adalah snapshot pasokan, `remaining_stock` respons adalah stok berjalan; edit memakai delta pasokan, bukan reset konsumsi. Migrasi 039 adalah DDL diagnosis/item active; 040 adalah backfill terpisah hanya untuk snapshot pasokan positif yang terbukti belum diedit/dikonsumsi. Jangan menebak pasokan legacy nol.
+
 - Sesi satu kali dan paket memakai durasi default 60 menit, minimum 60 dan maksimum 180. Slot praktik juga minimum 60 menit dan rentangnya harus memuat satu slot penuh. Booking/jadwal baru pasien otomatis Video; jenis Chat historis dan resume pembayaran yang sudah memilih Chat dipertahankan.
 - Reschedule menyimpan jadwal sesi dan booking asal dalam satu transaksi. Konflik dihitung dari irisan durasi dan dikunci per profesional; sesi yang dipindahkan dikecualikan dari pemeriksaan slotnya sendiri. Jam WIB dan batas 24 jam pasien tetap berlaku.
 - Consent kategori boleh dipilih sebelum sesi. Tanpa paket aktif, berbagi record pasien dan akses profesional hanya sejak jadwal sampai sebelum akhir durasi sesi scheduled. Paket aktif mempertahankan berbagi antarsesi dengan consent eksplisit. Chat/Meet tetap mempunyai akses bergabung 10 menit lebih awal; lampiran profesional bergantung pada sesi/relasi/verifikasi, bukan switch consent pasien.
@@ -409,3 +411,9 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Resep Sp.KJ terverifikasi menyimpan bentuk, dosis dan satuan, jadwal WIB, jumlah per dosis, stok awal serta batas pengingat. Resep dan obat pasien dibuat atomik; jadwal tidak diturunkan kembali dari teks frekuensi. Obat tanpa jadwal legacy tetap kompatibel.
 - Migrasi 036 (durasi/default), 037 (jadwal/stok resep) dan 038 (relasi pembatalan lama) wajib diterapkan sebelum rilis backend ini; pada pekerjaan ini baru diuji lokal, belum diterapkan produksi. Memanjangkan sesi legacy tidak menggeser waktu mulainya: jadwal berdekatan perlu diperiksa karena dapat menjadi tumpang tindih.
 - Rujukan: [sesi](skills/care_session_module.md), [obat/check-in](skills/health_checkin_module.md), [skema](../docs/DATABASE_SCHEMA.md).
+
+## Kontrak detail screening (2026-11-10)
+
+- Hasil PHQ/GAD langsung, riwayat pasien/profesional, detail klinis dan chat memakai tampilan detail record yang sama; dua kartu CF instrumen tetap terpisah saat nilainya sama. CF hilang/invalid bukan nol; CF gabungan historis tidak disalin ke kedua instrumen.
+- WHO/DASS menampilkan CF triage model yang sudah ada sebagai dukungan aturan, bukan peluang diagnosis/keparahan. Jawaban parsial tidak menghasilkan skor atau CF; skoring dan bobot tidak berubah.
+- GET detail therapy/assessment profesional menerima pembagian individual atau consent kategori `therapy_records` untuk pasangan yang sama, selaras daftar, dengan relasi dan jendela akses tetap wajib. Penolakan GET tidak dibypass fallback jawaban. Rujukan: [screening](skills/screening_module.md), [therapy/chat](skills/therapy_chat_module.md).

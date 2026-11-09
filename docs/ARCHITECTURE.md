@@ -471,3 +471,15 @@ dipakai kembali untuk checklist dan notifikasi lokal, bukan diparsing dari label
 frekuensi. Migrasi 037 menambah penyimpanan jadwal/stok tanpa menghapus reminder
 legacy. Migrasi 036–038 belum diterapkan produksi dalam pekerjaan ini;
 perpanjangan jadwal legacy perlu pemeriksaan irisan karena jam mulai dipertahankan.
+
+CRUD resep memakai satu transaksi untuk header, item, medication dan audit.
+Update mengunci header milik penulis; ID item/medication tetap, item yang tidak
+dikirim menjadi inactive. Stok medication diperbarui dengan delta snapshot
+pasokan sehingga checklist paralel tidak hilang. `remaining_stock` dibaca dari
+medication; `current_stock` item tetap snapshot pasokan. Draft tidak mengaktifkan
+obat dan hanya terlihat oleh penulis; soft-delete mempertahankan log klinis.
+QR acak dirotasi setiap simpan dan draft/delete membatalkan tanda tangan/token
+sebelumnya. Migrasi 039 menambah diagnosis/item active, sedangkan backfill 040
+terpisah hanya memakai bukti pasokan positif yang belum diedit/dikonsumsi.
+Detail, daftar dan verifikasi QR membaca header/item dalam snapshot repeatable
+read, sehingga revisi draft paralel tidak bercampur dengan header issued lama.

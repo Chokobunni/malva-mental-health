@@ -11,6 +11,7 @@ class SharedRecordDetail extends StatelessWidget {
       {super.key,
       required this.message,
       this.detail,
+      this.statusLabel,
       this.showClinicalAudit = false,
       this.timestampAvailable = true});
   factory SharedRecordDetail.screening({
@@ -23,11 +24,12 @@ class SharedRecordDetail extends StatelessWidget {
           'level': value.level,
           if (value.summary.isNotEmpty) 'summary': value.summary,
           'crisis_flag': value.crisisFlag,
-          'cf': value.certaintyFactor,
+          if (value.hasCertaintyFactor) 'cf': value.certaintyFactor,
         };
     return SharedRecordDetail(
       key: key,
       showClinicalAudit: true,
+      statusLabel: 'Hasil Screening',
       timestampAvailable: screening.createdAt != null,
       message: ChatMessage(
         id: screening.id,
@@ -46,9 +48,38 @@ class SharedRecordDetail extends StatelessWidget {
     );
   }
 
+  factory SharedRecordDetail.bundle(
+      {Key? key, required ScreeningBundle bundle}) {
+    Map<String, dynamic> instrument(AssessmentResult value) => {
+          'score': value.score,
+          'max_score': value.maxScore,
+          'level': value.level.name,
+          'crisis_flag': value.crisisFlag,
+          if (value.hasCertaintyFactor) 'cf': value.certaintyFactor,
+        };
+    return SharedRecordDetail(
+        key: key,
+        showClinicalAudit: true,
+        statusLabel: 'Hasil Screening',
+        message: ChatMessage(
+            id: bundle.id,
+            senderId: '',
+            senderName: '',
+            text: '',
+            timestamp: bundle.createdAt,
+            isMine: true,
+            kind: 'screening',
+            metadata: {
+              'crisis_flag': bundle.crisisFlag,
+              'phq9': instrument(bundle.phq9),
+              'gad7': instrument(bundle.gad7),
+            }));
+  }
+
   final bool timestampAvailable;
   final ChatMessage message;
   final Widget? detail;
+  final String? statusLabel;
   final bool showClinicalAudit;
 
   static const _labels = {
@@ -495,6 +526,9 @@ class SharedRecordDetail extends StatelessWidget {
       ]),
       scoreAccent: color);
 
+  num? _validCF(dynamic value) =>
+      value is num && value.isFinite && value >= 0 && value <= 1 ? value : null;
+
   Widget _cfCard(String label, dynamic value) => _card(Row(children: [
         const CircleAvatar(
             radius: 23,
@@ -510,8 +544,9 @@ class SharedRecordDetail extends StatelessWidget {
           const SizedBox(height: 6),
           Text.rich(TextSpan(children: [
             TextSpan(
-                text:
-                    value is num ? value.toStringAsFixed(2) : value.toString(),
+                text: value is num
+                    ? value.toStringAsFixed(2)
+                    : 'CF belum tersedia.',
                 style: const TextStyle(
                     fontSize: 23, fontWeight: FontWeight.w900, color: _ink)),
             if (value is num)
@@ -527,7 +562,11 @@ class SharedRecordDetail extends StatelessWidget {
         meta['bundle'] is Map ? {...meta, ...meta['bundle'] as Map} : meta;
     Map instrument(String id) => data[id] is Map
         ? data[id] as Map
-        : {'score': data['${id}_score'], 'max_score': data['${id}_max_score']};
+        : {
+            'score': data['${id}_score'],
+            'max_score': data['${id}_max_score'],
+            'cf': data['${id}_cf']
+          };
     final rawPhq = instrument('phq9');
     final rawGad = instrument('gad7');
     final phqLevel = AssessmentEngine.levelFromScore(
@@ -550,9 +589,6 @@ class SharedRecordDetail extends StatelessWidget {
         .any((value) => value['crisis_flag'] == true);
     final hasSafety = [meta, data, rawPhq, rawGad]
         .any((value) => value['crisis_flag'] is bool);
-    final sharedCF = meta['cf'] ??
-        meta['certainty_factor'] ??
-        (phq['cf'] is num && phq['cf'] == gad['cf'] ? phq['cf'] : null);
     final overall = crisis
         ? 'crisis'
         : phqLevel != null && gadLevel != null
@@ -626,13 +662,19 @@ class SharedRecordDetail extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(child: _scoreCard('GAD-7', gad, Colors.orange.shade800)),
       ]),
-      if (showClinicalAudit && sharedCF is num) _cfCard('Assessment', sharedCF),
-      for (final item in [('PHQ-9', phq), ('GAD-7', gad)]) ...[
-        if (showClinicalAudit && sharedCF == null && item.$2['cf'] != null)
+      for (final item in [('PHQ-9', phq), ('GAD-7', gad)])
+        if (showClinicalAudit)
           Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: _cfCard(item.$1, item.$2['cf'])),
-      ],
+              child: _cfCard(item.$1, _validCF(item.$2['cf']))),
+      if (showClinicalAudit &&
+          (meta['cf'] ?? meta['certainty_factor']) is num &&
+          _validCF(phq['cf']) == null &&
+          _validCF(gad['cf']) == null)
+        Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+                'CF gabungan historis: ${_validCF(meta['cf'] ?? meta['certainty_factor'])?.toStringAsFixed(2) ?? 'belum tersedia'}. Nilai per instrumen tidak tercatat.')),
     ];
   }
 
@@ -679,10 +721,11 @@ class SharedRecordDetail extends StatelessWidget {
                             color: _ink)),
                     const SizedBox(height: 7),
                     Text(
-                        message.kind == 'assessment' ||
-                                message.kind == 'screening'
-                            ? 'Assessment Dibagikan'
-                            : 'Dibagikan',
+                        statusLabel ??
+                            (message.kind == 'assessment' ||
+                                    message.kind == 'screening'
+                                ? 'Assessment Dibagikan'
+                                : 'Dibagikan'),
                         style: const TextStyle(fontSize: 12, color: _muted)),
                   ]);
               final right =

@@ -95,8 +95,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('E-Prescription'), findsOneWidget);
-    // Tanpa backend: tampil pesan mode offline yang ramah.
-    expect(find.textContaining('Mode offline'), findsOneWidget);
+    // Tanpa akun: data resep tidak ditampilkan.
+    expect(find.textContaining('Sesi akun berubah'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

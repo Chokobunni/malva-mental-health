@@ -401,6 +401,14 @@ Rujukan: [spesifikasi](superpowers/specs/2026-11-09-clinical-experience-design.m
 
 ## Kriteria sesi dan resep — 10 November 2026
 
+- E-Prescription mendukung draft/penerbitan, diagnosis/indikasi, edit beberapa
+  obat dengan identitas stabil, dan soft-delete oleh psikiater terverifikasi
+  penulis. Draft hanya terlihat penulis; pasien hanya melihat resep issued.
+  Instruksi makan/catatan per obat pulang-pergi utuh. Edit jumlah pasokan
+  mempertahankan konsumsi dan penyesuaian stok pasien; stok tersisa dibaca dari
+  server. Draft/delete menonaktifkan obat serta membatalkan QR/tanda tangan lama,
+  tetapi mempertahankan log klinis dan audit.
+
 - Booking/jadwal baru pasien otomatis Video; sesi satu kali dan paket default
   60 menit. Durasi dan slot praktik minimum 60, maksimum 180 menit. Rentang
   praktik harus memuat satu slot penuh. Jenis Chat historis serta resume

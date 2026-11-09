@@ -2946,6 +2946,8 @@ class MalvaApiClient {
     required String patientId,
     String instructions = '',
     String notes = '',
+    String diagnosis = '',
+    String status = 'issued',
     required List<BackendEPrescriptionItem> items,
   }) async {
     final payload = await _send('POST', '/v1/e-prescriptions',
@@ -2954,10 +2956,41 @@ class MalvaApiClient {
           'patient_id': patientId,
           'instructions': instructions,
           'notes': notes,
+          'diagnosis': diagnosis,
+          'status': status,
           'items': items.map((i) => i.toJson()).toList(),
         });
     return BackendEPrescription.fromJson(
         _expectMap(payload['prescription'], 'Respons resep tidak valid.'));
+  }
+
+  Future<BackendEPrescription> updateEPrescription(
+      {required String accessToken,
+      required String prescriptionId,
+      required String patientId,
+      required List<BackendEPrescriptionItem> items,
+      String notes = '',
+      String instructions = '',
+      String diagnosis = '',
+      String status = 'issued'}) async {
+    final payload = await _send('PUT', '/v1/e-prescriptions/$prescriptionId',
+        accessToken: accessToken,
+        body: {
+          'patient_id': patientId,
+          'items': items.map((i) => i.toJson()).toList(),
+          'notes': notes,
+          'instructions': instructions,
+          'diagnosis': diagnosis,
+          'status': status
+        });
+    return BackendEPrescription.fromJson(
+        _expectMap(payload['prescription'], 'Respons resep tidak valid.'));
+  }
+
+  Future<void> deleteEPrescription(
+      {required String accessToken, required String prescriptionId}) async {
+    await _send('DELETE', '/v1/e-prescriptions/$prescriptionId',
+        accessToken: accessToken);
   }
 
   Future<BackendEPrescription> getEPrescription({
@@ -3302,6 +3335,7 @@ class BackendAssessmentSummary {
     required this.summary,
     required this.crisisFlag,
     this.certaintyFactor = 0.0,
+    this.hasCertaintyFactor = false,
     this.ruleTrace = '',
     this.answers = const {},
   });
@@ -3324,7 +3358,11 @@ class BackendAssessmentSummary {
           : level?.name ?? '',
       summary: valid ? json['summary']?.toString() ?? '' : '',
       crisisFlag: json['crisis_flag'] == true,
-      certaintyFactor: (json['cf'] as num?)?.toDouble() ?? 0.0,
+      certaintyFactor: json['cf'] is num ? (json['cf'] as num).toDouble() : 0.0,
+      hasCertaintyFactor: json['cf'] is num &&
+          (json['cf'] as num).isFinite &&
+          (json['cf'] as num) >= 0 &&
+          (json['cf'] as num) <= 1,
       ruleTrace: json['rule_trace']?.toString() ?? '',
       answers: {
         for (final answer in (json['answers'] as List? ?? const []))
@@ -3347,6 +3385,7 @@ class BackendAssessmentSummary {
 
   /// CF hasil Forward Chaining server-side (0.0-1.0).
   final double certaintyFactor;
+  final bool hasCertaintyFactor;
 
   /// Jejak rule yang menembak (audit trail ringkas).
   final String ruleTrace;
@@ -5718,6 +5757,8 @@ class BackendEarningsFull {
 class BackendEPrescriptionItem {
   const BackendEPrescriptionItem({
     this.medicationId,
+    this.id = '',
+    this.remainingStock,
     this.form = 'Tablet',
     this.unit = 'mg',
     this.currentStock = 30,
@@ -5731,7 +5772,9 @@ class BackendEPrescriptionItem {
   });
 
   BackendEPrescriptionItem.fromJson(Map<String, dynamic> json)
-      : medicationId = json['medication_id']?.toString(),
+      : id = json['id']?.toString() ?? '',
+        remainingStock = (json['remaining_stock'] as num?)?.toInt(),
+        medicationId = json['medication_id']?.toString(),
         form = json['form']?.toString() ?? 'Tablet',
         unit = json['unit']?.toString() ?? 'mg',
         currentStock = (json['current_stock'] as num?)?.toInt() ?? 0,
@@ -5748,6 +5791,8 @@ class BackendEPrescriptionItem {
         unitsPerDay = (json['units_per_day'] as num?)?.toInt() ?? 1;
 
   final String? medicationId;
+  final String id;
+  final int? remainingStock;
   final String form;
   final String unit;
   final int currentStock;
@@ -5760,6 +5805,7 @@ class BackendEPrescriptionItem {
   final int unitsPerDay;
 
   Map<String, dynamic> toJson() => {
+        if (id.isNotEmpty) 'id': id,
         if (medicationId != null) 'medication_id': medicationId,
         'name': name,
         'form': form,
@@ -5783,12 +5829,18 @@ class BackendEPrescription {
     required this.signatureData,
     required this.qrToken,
     this.items = const [],
+    this.notes = '',
+    this.diagnosis = '',
+    this.createdAt,
     this.status = '',
   });
 
   factory BackendEPrescription.fromJson(Map<String, dynamic> json) {
     final sig = json['signature_data'];
     return BackendEPrescription(
+      notes: json['notes']?.toString() ?? '',
+      diagnosis: json['diagnosis']?.toString() ?? '',
+      createdAt: parseWibStored(json['created_at']?.toString()),
       id: json['id']?.toString() ?? '',
       professionalId: json['professional_id']?.toString() ?? '',
       patientId: json['patient_id']?.toString() ?? '',
@@ -5806,6 +5858,9 @@ class BackendEPrescription {
   }
 
   final String id;
+  final String notes;
+  final String diagnosis;
+  final DateTime? createdAt;
   final String professionalId;
   final String patientId;
   final String instructions;

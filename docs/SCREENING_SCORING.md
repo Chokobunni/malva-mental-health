@@ -401,7 +401,16 @@ Build/analyzer dan tes otomatis memeriksa konsistensi implementasi. Uji widget d
 ## Tampilan profesional
 
 
-Health Record & Obat → Pemantauan harian → Screening WHO-5, GAD-7, PHQ-9, DASS-21 → Catatan sesi. Skor/CF/penjelasan disatukan dalam kartu putih. Bagian tren duplikat dihapus; kegagalan suatu bagian tidak boleh tampak sebagai skor normal atau hasil nol.
+Health Record & Obat → Pemantauan harian → Screening WHO-5, GAD-7, PHQ-9, DASS-21. Skor/CF/penjelasan disatukan dalam kartu putih. Bagian tren duplikat dihapus; kegagalan suatu bagian tidak boleh tampak sebagai skor normal atau hasil nol.
+
+
+## Keseragaman hasil (10 November 2026)
+
+PHQ/GAD memakai renderer detail record yang sama pada hasil langsung, riwayat pasien/profesional, detail klinis dan chat. PHQ-9 dan GAD-7 selalu memiliki kartu CF terpisah meskipun nilainya sama. CF tersimpan yang hilang atau invalid tetap belum tersedia; nilai gabungan historis tidak dianggap sebagai nilai masing-masing instrumen. Jawaban dan gejala aktual profesional tetap tersedia di bawah ringkasan.
+
+WHO-5 dan DASS-21 menampilkan CF triage dari model interpretasi yang sudah ada, termasuk kesimpulan WHO awal. Label menjelaskan dukungan aturan model, bukan probabilitas diagnosis atau tingkat keparahan. Jawaban parsial tidak menghasilkan skor atau CF. Tidak ada perubahan rumus, bobot atau versi model.
+
+Detail submission profesional menerima pembagian individual atau consent kategori therapy_records pada pasangan yang sama, mengikuti izin daftar. Jendela akses sesi/paket dan relasi tetap diperiksa; 403/404 bukan alasan membuka snapshot privat sebagai fallback.
 
 
 # Referensi dan agenda tinjauan profesional

@@ -44,6 +44,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
   List<BackendCareSession> _past = const [];
   bool _isLoading = true;
   bool _loadInProgress = false;
+  bool _historyExpanded = false;
   String? _error;
 
   MalvaApiClient get _api => widget.apiClient ?? ref.read(apiClientProvider);
@@ -229,15 +230,27 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
                     const SizedBox(height: 10),
                   ],
                 const SizedBox(height: 10),
-                const SectionLabel('Riwayat sesi', icon: Icons.history_rounded),
-                if (past.isEmpty)
+                ListTile(
+                  key: const ValueKey('session-history-toggle'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.history_rounded),
+                  title: const Text('Riwayat sesi',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text('${past.length} sesi'),
+                  trailing: Icon(_historyExpanded
+                      ? Icons.expand_less_rounded
+                      : Icons.expand_more_rounded),
+                  onTap: () =>
+                      setState(() => _historyExpanded = !_historyExpanded),
+                ),
+                if (_historyExpanded && past.isEmpty)
                   const EmptyState(
                     icon: Icons.history_rounded,
                     title: 'Belum ada riwayat',
                     subtitle: 'Sesi selesai / batal tercatat di sini.',
                   )
-                else
-                  for (final s in past.take(10)) ...[
+                else if (_historyExpanded)
+                  for (final s in past) ...[
                     _ProSessionCard(
                         key: ValueKey('past-${s.id}'),
                         session: s,

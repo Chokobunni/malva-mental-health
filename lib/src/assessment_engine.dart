@@ -53,8 +53,9 @@ class AssessmentResult {
     required this.rulesFired,
     required this.createdAt,
     required this.ruleVersion,
-    this.certaintyFactor = 0.0,
-  });
+    double? certaintyFactor,
+  })  : certaintyFactor = certaintyFactor ?? 0.0,
+        _hasCertaintyFactor = certaintyFactor != null;
 
   final AssessmentType type;
   final int score;
@@ -68,6 +69,12 @@ class AssessmentResult {
 
   /// Dukungan aturan model (0.0-1.0), bukan probabilitas diagnosis.
   final double certaintyFactor;
+  final bool _hasCertaintyFactor;
+  bool get hasCertaintyFactor =>
+      _hasCertaintyFactor &&
+      certaintyFactor.isFinite &&
+      certaintyFactor >= 0 &&
+      certaintyFactor <= 1;
 
   /// Ringkasan rule yang menembak (untuk tampilan & persist).
   String get ruleTrace => rulesFired.isEmpty

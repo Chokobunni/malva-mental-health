@@ -88,3 +88,36 @@ func TestTherapyChatShareRequiresActivePackageAndOwnership(t *testing.T) {
 		}
 	}
 }
+
+func TestAssessmentDetailHonorsCategoryConsentAndRevocation(t *testing.T) {
+	f := newTherapyConsentFixture(t)
+	grantContinuousTherapyAccess(t, f)
+	ctx := context.Background()
+	for _, module := range []string{"who5", "dass21", "phq9", "gad7"} {
+		t.Run(module, func(t *testing.T) {
+			sub, err := f.st.CreateTherapySubmission(ctx, f.patient.ID, module, module, json.RawMessage(`{"q1":2}`), "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			read := func() int {
+				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				req.SetPathValue("submission_id", sub.ID)
+				rec := httptest.NewRecorder()
+				f.srv.getTherapySubmission(rec, req, auth.Claims{Subject: f.prof.ID, Role: "professional"})
+				return rec.Code
+			}
+			for _, allowed := range []bool{false, true, false} {
+				if _, err := f.st.UpdatePatientDataConsent(ctx, store.PatientDataConsent{PatientID: f.patient.ID, ProfessionalID: f.prof.ID, ShareTherapyRecords: allowed}); err != nil {
+					t.Fatal(err)
+				}
+				want := http.StatusNotFound
+				if allowed {
+					want = http.StatusOK
+				}
+				if got := read(); got != want {
+					t.Fatalf("category consent=%v: detail status=%d want %d", allowed, got, want)
+				}
+			}
+		})
+	}
+}

@@ -63,11 +63,78 @@ void main() {
     expect(find.text('09:26'), findsOneWidget);
     expect(find.text('KRISIS'), findsOneWidget);
     expect(find.text('INDIKATOR KESELAMATAN: YA'), findsOneWidget);
-    expect(
-        find.text('Assessment · Dukungan rule internal (CF)'), findsOneWidget);
-    expect(find.textContaining('0.95', findRichText: true), findsOneWidget);
+    expect(find.text('PHQ-9 · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.text('GAD-7 · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.textContaining('0.95', findRichText: true), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('missing saved CF remains unavailable instead of becoming zero',
+      (tester) async {
+    final screening = BackendScreeningSession.fromJson({
+      'id': 'legacy',
+      'patient_id': 'patient',
+      'bundle': {
+        'phq9': {'score': 7, 'max_score': 27},
+        'gad7': {'score': 6, 'max_score': 21, 'cf': 0}
+      },
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: SharedRecordDetail.screening(screening: screening)))));
+    expect(find.text('CF belum tersedia.'), findsOneWidget);
+    expect(find.textContaining('0.00', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets(
+      'legacy flat per-instrument CF remains distinct and aggregate is not invented',
+      (tester) async {
+    Future<void> show(Map<String, dynamic> values) => tester.pumpWidget(
+        MaterialApp(
+            home: Scaffold(
+                body: SingleChildScrollView(
+                    child: SharedRecordDetail(
+                        showClinicalAudit: true,
+                        message: ChatMessage(
+                            id: 'old',
+                            senderId: 'p',
+                            senderName: '',
+                            text: '',
+                            timestamp: wibFromParts(2026, 11, 10),
+                            isMine: false,
+                            kind: 'assessment',
+                            metadata: {
+                              'phq9_score': 23,
+                              'gad7_score': 7,
+                              ...values
+                            }))))));
+    await show({'phq9_cf': 0.95, 'gad7_cf': 0.684});
+    expect(find.text('PHQ-9 · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.text('GAD-7 · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.textContaining('0.95', findRichText: true), findsOneWidget);
+    expect(find.textContaining('0.68', findRichText: true), findsOneWidget);
+    await show({'cf': 0.95});
+    expect(
+        find.text('CF belum tersedia.', findRichText: true), findsNWidgets(2));
+    expect(find.textContaining('CF gabungan historis: 0.95'), findsOneWidget);
+  });
+
+  for (final invalid in [
+    null,
+    -0.1,
+    1.1,
+    '0.95',
+    double.nan,
+    double.infinity
+  ]) {
+    test('stored CF availability rejects missing or invalid values ($invalid)',
+        () {
+      final summary = BackendAssessmentSummary.fromJson(
+          {'type': 'phq9', 'score': 7, 'max_score': 27, 'cf': invalid});
+      expect(summary.hasCertaintyFactor, isFalse);
+    });
+  }
 
   testWidgets('legacy summary keeps period and metrics without repeated quote',
       (tester) async {
@@ -208,7 +275,8 @@ void main() {
               'crisis_flag': true,
               'phq9_level': 'severe',
               'gad7_level': 'severe',
-              'cf': 0.95
+              'phq9_cf': 0.95,
+              'gad7_cf': 0.684
             },
         };
         final capture = GlobalKey();

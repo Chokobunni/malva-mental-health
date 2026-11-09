@@ -1359,6 +1359,16 @@ values capped at 100). Explicit `limit=0` returns complete authorized history;
 patient ownership, professional links, category consent and individual sharing
 checks remain applicable.
 
+#### `GET /v1/therapy-submissions/{submission_id}`
+
+Detail memakai aturan kepemilikan/berbagi yang sama dengan daftar: pasien hanya
+miliknya sendiri; profesional dengan relasi aktif dapat membaca pembagian
+individual kepadanya atau consent kategori `therapy_records` dari pasien yang
+sama. Consent milik pasangan lain tidak memberi akses. Akses data profesional
+tetap dibatasi jendela sesi satu kali atau paket aktif. Record yang hilang atau
+tidak berizin menghasilkan 404; klien tidak membuka jawaban snapshot sebagai
+fallback atas penolakan tersebut.
+
 #### `POST /v1/therapy-submissions/{submission_id}/share`
 
 Bagikan worksheet terapi (termasuk hasil DASS-21 & WHO-5) ke profesional, atau
@@ -1483,8 +1493,44 @@ Example daily routine:
 {"times":["08:00","20:00"],"weekdays":[1,2,3,4,5,6,7],"start_at":"2026-11-10T08:00:00+07:00","interval_hours":0,"interval_days":0,"units_per_dose":1,"refill_enabled":true}
 ```
 
-Deploy migrations 036–038 before this backend version. They have been exercised
+Deploy migrations 036–040 before this backend version. They have been exercised
 locally and have not been applied to production in this work. Migration 036
 raises legacy durations below 60 without shifting appointment starts; adjacent
 legacy appointments may therefore overlap. Unpaid checkouts continue to follow
 the existing non-reservation policy and activation reschedule flow.
+
+### Prescription CRUD and stock semantics
+
+- `POST /v1/e-prescriptions` accepts `patient_id`, `status` (`issued` by default,
+  or `draft`), `diagnosis`, `notes`, `instructions` and `items`. A draft may have
+  no items. POST returns 201 and PUT returns 200 with the complete
+  `{ "prescription": { ...header, "items": [...] } }` response.
+- `PUT /v1/e-prescriptions/{id}` replaces the editable prescription contents.
+  Omitted `patient_id` and `status` retain their existing values; the patient
+  cannot change. Send each existing item's `id` to preserve its linked
+  `medication_id`; omit `id` for new items. Missing old items are deactivated.
+  Foreign/removed IDs or changed medication references return 409 and roll back
+  the entire update. All other editable fields are full replacement values.
+- `DELETE /v1/e-prescriptions/{id}` returns 200 `{ "status": "deleted" }`.
+  It soft-deletes the prescription and deactivates its medications. Medication
+  logs, removed item rows and audit records remain available in storage.
+- Create/update/delete require a verified psychiatrist; only the author can
+  update/delete (other verified authors receive 404; patients receive 403).
+  Draft reads/lists are author-only. Patient lists/detail and public QR
+  verification expose only issued prescriptions. Each save rotates the random
+  QR token; draft/delete invalidate the previous QR and clear the signature.
+- Item `current_stock` is the supplied quantity snapshot. Read-only
+  `remaining_stock` is the linked medication's live stock. Editing supply applies
+  the difference atomically: supplied 30 with remaining 25, changed to supplied
+  40, yields remaining 35. An unchanged supply preserves consumption and patient
+  stock adjustments. Draft → issued retains item/medication IDs and consumption.
+  Do not send `remaining_stock` as the supplied quantity.
+- Optional per-item `schedule.relation_to_meal` and `schedule.instructions`
+  persist with the routine. Both are combined for the patient's medication meal
+  instructions; global prescription instructions are the fallback only if both
+  per-item values are empty. New routine items on issued prescriptions require
+  positive supply; existing exhausted items may retain zero.
+- Migration 039 adds diagnosis and item activity; migration 040 is a separate,
+  idempotent backfill restricted to positive linked supply snapshots with no
+  edits, taken/partial logs or ambiguous medication references. Unknown legacy
+  zero supply is left unchanged.

@@ -355,6 +355,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/e-prescriptions", s.requireAuth(s.createEPrescription))
 	mux.HandleFunc("GET /v1/e-prescriptions", s.requireAuth(s.listEPrescriptions))
 	mux.HandleFunc("GET /v1/e-prescriptions/{id}", s.requireAuth(s.getEPrescription))
+	mux.HandleFunc("PUT /v1/e-prescriptions/{id}", s.requireAuth(s.updateEPrescription))
+	mux.HandleFunc("DELETE /v1/e-prescriptions/{id}", s.requireAuth(s.deleteEPrescription))
 	// QR verification (public - one-time token)
 	mux.HandleFunc("GET /v1/e-prescriptions/verify", s.verifyEPrescriptionQR)
 	// Health Record — pasien read-only; profesional terverifikasi menulis diagnosis.

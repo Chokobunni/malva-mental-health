@@ -203,7 +203,10 @@ class MedicationSchedule {
       this.intervalHours = 0,
       this.intervalDays = 0,
       this.unitsPerDose = 1,
-      this.refillEnabled = true});
+      this.refillEnabled = true,
+      this.relationToMeal = '',
+      this.instructions = '',
+      this.additional = const {}});
   factory MedicationSchedule.fromJson(Map<String, dynamic> json) =>
       MedicationSchedule(
         times:
@@ -218,6 +221,9 @@ class MedicationSchedule {
         unitsPerDose:
             ((json['units_per_dose'] as num?)?.toInt() ?? 1).clamp(1, 1000),
         refillEnabled: json['refill_enabled'] != false,
+        relationToMeal: json['relation_to_meal']?.toString() ?? '',
+        instructions: json['instructions']?.toString() ?? '',
+        additional: Map<String, dynamic>.from(json),
       );
   final List<String> times;
   final List<int> weekdays;
@@ -226,7 +232,13 @@ class MedicationSchedule {
   final int intervalDays;
   final int unitsPerDose;
   final bool refillEnabled;
+  final String relationToMeal;
+  final String instructions;
+  final Map<String, dynamic> additional;
   Map<String, dynamic> toJson() => {
+        ...additional,
+        'relation_to_meal': relationToMeal,
+        'instructions': instructions,
         'times': times,
         'weekdays': weekdays,
         'start_at': wibIso(startAt),

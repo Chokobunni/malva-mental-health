@@ -22,7 +22,7 @@ void _phoneSize(WidgetTester tester) {
 
 void main() {
   testWidgets(
-      'WHO instructions stay concise and saved conclusion explains score without model',
+      'WHO instructions stay concise and saved conclusion shows score and correctly labelled CF',
       (tester) async {
     _phoneSize(tester);
     const session = AuthSession(
@@ -75,14 +75,16 @@ void main() {
     expect(find.text('Kondisi Mental Sangat Baik'), findsOneWidget);
     expect(find.text('WHO-5: 100%'), findsOneWidget);
     expect(find.textContaining('Versi aturan:'), findsNothing);
-    expect(find.textContaining('CF adalah'), findsNothing);
+    expect(find.textContaining('Dukungan aturan triage (CF)'), findsOneWidget);
+    expect(find.textContaining('bukan probabilitas diagnosis'), findsOneWidget);
     await tester.ensureVisible(find.text('Apa arti skormu?'));
     await tester.tap(find.text('Apa arti skormu?'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Kesejahteraanmu berada dalam rentang baik'),
         findsOneWidget);
     expect(find.textContaining('Versi aturan:'), findsNothing);
-    expect(find.textContaining('CF adalah'), findsNothing);
+    expect(find.textContaining('Dukungan aturan triage (CF)'), findsOneWidget);
+    expect(find.textContaining('bukan probabilitas diagnosis'), findsOneWidget);
   });
 
   testWidgets(

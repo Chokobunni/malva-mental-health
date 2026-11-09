@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../ai/initial_screening.dart';
+import '../ai/assessment_interpretation.dart';
 import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
@@ -219,6 +220,10 @@ class _InitialSymptomsScreenState extends ConsumerState<InitialSymptomsScreen> {
       const SizedBox(height: 16),
       Text('WHO-5: ${decision.percent}%',
           style: const TextStyle(fontWeight: FontWeight.w800)),
+      const SizedBox(height: 12),
+      AssessmentTriageSummary(
+          interpretation:
+              interpretDassWho5(answers: _submissionAnswers, moduleId: 'who5')),
       const SizedBox(height: 8),
       ExpansionTile(
         tilePadding: EdgeInsets.zero,

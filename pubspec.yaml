@@ -1,7 +1,7 @@
 name: malva_mental_health
 description: Flutter MVP for a mental health patient and professional app.
 publish_to: "none"
-version: 0.1.13+14
+version: 0.1.14+15
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -34,6 +34,7 @@ dependencies:
   # transitif Flutter web; dideklarasikan eksplisit agar impornya sah.
   web: ^1.1.1
   pdf: ^3.13.1
+  qr: 3.0.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

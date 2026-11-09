@@ -84,6 +84,7 @@ Map<String, dynamic> _worksheet(String id, String title) => {
     };
 
 class _Responses {
+  bool psychiatrist = false;
   final statusByPath = <String, int>{};
   bool missingGad = false;
   final requested = <String>[];
@@ -126,7 +127,14 @@ class _Responses {
         '/v1/health-record' => {
             'health_record': {'diagnosis_summary': 'Diagnosis tersimpan'},
           },
-        '/v1/credentials/me' => {'credential': null},
+        '/v1/credentials/me' => {
+            'credential': psychiatrist
+                ? {
+                    'specialization': 'Sp.KJ',
+                    'verification_status': 'APPROVED',
+                  }
+                : null
+          },
         _ => throw StateError('Unexpected request $path'),
       };
       return http.Response(jsonEncode(body), 200);
@@ -154,6 +162,17 @@ Future<void> _pump(WidgetTester tester, _Responses responses) async {
 }
 
 void main() {
+  testWidgets('prescribe from patient detail opens the new medicine wizard',
+      (tester) async {
+    final responses = _Responses()..psychiatrist = true;
+    await _pump(tester, responses);
+    await tester.tap(find.text('Resepkan obat'));
+    await tester.pumpAndSettle();
+    expect(find.text('Detail Obat'), findsWidgets);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Pasien'), findsWidgets);
+    expect(find.text('Atur Jadwal Minum Obat Pasien'), findsOneWidget);
+  });
   testWidgets(
       'package sessions remain grouped with real progress and no-show date',
       (tester) async {
@@ -298,9 +317,12 @@ void main() {
     expect(find.text('Hasil DASS-21 / WHO-5 & tren'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('screening-screening-1')));
     await tester.pumpAndSettle();
-    expect(find.text('PHQ-9 Total Score: 7/27'), findsOneWidget);
-    expect(find.text('GAD-7 Total Score: 6/21'), findsOneWidget);
-    expect(find.text('Dukungan aturan (CF): 68%'), findsNWidgets(2));
+    expect(find.text('Detail Record'), findsOneWidget);
+    expect(find.text('PHQ-9 Total Score'), findsOneWidget);
+    expect(find.text('GAD-7 Total Score'), findsOneWidget);
+    expect(find.text('PHQ-9 · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.text('GAD-7 · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.textContaining('0.68', findRichText: true), findsNWidgets(2));
     expect(find.text('PHQ9_MILD: 0.72 × 0.95 = 0.684'), findsNothing);
     expect(find.textContaining('bukan probabilitas diagnosis'), findsNothing);
   });

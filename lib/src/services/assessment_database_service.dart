@@ -72,7 +72,7 @@ class AssessmentDatabaseService {
         'level': r.level.name,
         'summary': r.summary,
         'crisisFlag': r.crisisFlag,
-        'certaintyFactor': r.certaintyFactor,
+        if (r.hasCertaintyFactor) 'certaintyFactor': r.certaintyFactor,
         'createdAt': wibIso(r.createdAt),
         'ruleVersion': r.ruleVersion,
         'rulesFired': [
@@ -116,7 +116,9 @@ class AssessmentDatabaseService {
         rulesFired: rules,
         createdAt: parseWibStored(json['createdAt']?.toString()) ?? wibNow(),
         ruleVersion: json['ruleVersion']?.toString() ?? '',
-        certaintyFactor: (json['certaintyFactor'] as num?)?.toDouble() ?? 0.0,
+        certaintyFactor: json['certaintyFactor'] is num
+            ? (json['certaintyFactor'] as num).toDouble()
+            : null,
       );
     } on Object {
       return null;

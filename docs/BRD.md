@@ -366,3 +366,11 @@ bersama resep, sehingga pasien tidak perlu menyusun ulang instruksi dokter.
 Migrasi 036–038 tersedia dan diuji lokal; penerapan produksi belum dilakukan
 dalam pekerjaan ini. Perpanjangan sesi legacy mempertahankan jam mulai dan
 dapat menimbulkan irisan jadwal yang perlu direkonsiliasi sebelum rilis.
+
+Penulis resep yang merupakan psikiater terverifikasi dapat menyimpan draft,
+menerbitkan, mengedit beberapa obat dan menghapus resep secara soft-delete.
+Diagnosis/indikasi dan instruksi per obat disimpan dari input dokter. Draft
+hanya terlihat penulis; penghapusan/draft menonaktifkan obat pasien, sementara
+riwayat konsumsi dan audit dipertahankan. Pasokan resep dipisahkan dari stok
+berjalan: perubahan pasokan menyesuaikan selisihnya tanpa menghapus konsumsi
+pasien. QR lama tidak berlaku setelah revisi, draft atau penghapusan.

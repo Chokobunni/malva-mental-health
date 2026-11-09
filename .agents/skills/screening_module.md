@@ -20,8 +20,9 @@
   Tawaran dikonsumsi sebelum formulir dibuka; skip/back/restart tidak mengulang
   gerbang dan tidak membuat hasil screening. Keputusan tersimpan per akun.
 - Tampilan pasien memakai penjelasan singkat instrumen, total dan arti skor,
-  serta jangkar angka jawaban; tanpa rumus/CF/model. Rekomendasi lanjutan hanya
-  DASS, katalog manual tetap lengkap. Detail audit profesional tetap tersedia.
+  serta jangkar angka jawaban. CF hasil ditampilkan sebagai dukungan aturan
+  model, terpisah dari skor dan bukan probabilitas diagnosis; tanpa jejak rumus
+  teknis. Rekomendasi lanjutan hanya DASS, katalog manual tetap lengkap.
 - Judul katalog `Screening`. Riwayat pasien/profesional memakai filter instrumen
   independen WHO/GAD/PHQ/DASS, urutan terbaru/terlama, tanggal atau label tanggal
   tidak tercatat, lima entri awal dengan ekspansi. Retake sah tetap terpisah.
@@ -82,3 +83,9 @@ Modul skrining kesehatan mental. Skoring dihitung **di server** (bukan hanya kli
 - PHQ/GAD menampilkan skor, kategori, indikator keselamatan, interpretasi dan detail jawaban; gejala teridentifikasi bersumber hanya dari jawaban positif pada `bundle.*.answers` yang sudah disediakan API. Jawaban hilang/invalid tetap tidak tersedia, tidak direkayasa menjadi jawaban nol atau gejala dari skor total. Skor/CF/jejak aturan dipertahankan.
 - WHO-5 memakai panel mint dan DASS panel lavender dengan skor/subskala, kategori, arahan tindak lanjut serta penjelasan skor. Detail per item memakai jawaban tersimpan. Metadata `scale_min`/`scale_max`/`scale_version` tidak menjadi jawaban klinis yang ditampilkan.
 - Penghapusan Crisis Incident Log profesional tidak menghapus indikator keselamatan skrining atau data SOS global/pasien.
+
+## Keseragaman detail dan CF (2026-11-10)
+
+- PHQ/GAD pada hasil langsung, riwayat pasien/profesional, detail klinis dan chat memakai `SharedRecordDetail`. Dua kartu CF instrumen selalu terpisah, termasuk saat nilainya sama. Nilai lama yang hilang/invalid tampil belum tersedia; CF gabungan historis tidak diduplikasi menjadi dua nilai instrumen.
+- WHO/DASS menampilkan CF triage dari `interpretDassWho5` yang sudah ada, termasuk kesimpulan WHO awal. Jawaban tidak lengkap tidak menghasilkan skor, interpretasi atau CF. Skor, bobot dan versi aturan tidak berubah.
+- Metadata berbagi PHQ/GAD mempertahankan CF instrumen aktual tanpa menambahkan jawaban privat. Pergantian akun menutup detail; refresh token pemilik yang sama tidak membuang hasil berizin yang sedang dimuat.

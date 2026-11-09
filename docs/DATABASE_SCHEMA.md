@@ -888,6 +888,7 @@ Ulasan pasien atas profesional.
 |---|---|---|---|
 | `id` | uuid | PK, DEFAULT gen_random_uuid() | Review ID |
 | `professional_id` / `patient_id` | uuid | NOT NULL, FK → users(id) CASCADE | Pihak terkait |
+| `diagnosis` | text | NOT NULL, DEFAULT '' (039) | Diagnosis ICD10/indikasi yang diisi penulis |
 | `booking_id` | uuid | NULLABLE, FK → bookings(id) | Booking asal |
 | `session_id` | uuid | NULLABLE, UNIQUE parsial (035) | Sesi satu kali yang diulas |
 | `care_package_id` | uuid | NULLABLE, UNIQUE parsial (035) | Paket care yang diulas |
@@ -912,7 +913,7 @@ Resep elektronik dengan token QR.
 | `notes` / `instructions` | text | NULLABLE | Catatan & instruksi |
 | `signature_data` | jsonb | NULLABLE | Data tanda tangan |
 | `qr_token` | varchar(255) | NOT NULL, UNIQUE | Token QR verifikasi |
-| `status` | varchar(20) | NOT NULL, DEFAULT 'issued' | issued / dispensed / cancelled |
+| `status` | varchar(20) | NOT NULL, DEFAULT 'issued' | CRUD memakai draft / issued / deleted; nilai legacy dispensed / cancelled tetap tersimpan |
 | `created_at` | timestamptz | DEFAULT CURRENT_TIMESTAMP | Waktu dibuat |
 
 ### 3.36 e_prescription_items (migrasi 006)
@@ -932,8 +933,9 @@ Item obat dalam resep elektronik.
 | `units_per_day` | integer | NOT NULL, DEFAULT 1 | Unit per hari |
 | `unit` | varchar(20) | NOT NULL, DEFAULT 'tablet' | Satuan |
 | `schedule` | jsonb | NOT NULL, DEFAULT '{}' (037) | Snapshot rutinitas obat WIB |
-| `current_stock` | integer | NOT NULL, DEFAULT 0, CHECK >= 0 (037) | Snapshot stok awal saat penerbitan |
+| `current_stock` | integer | NOT NULL, DEFAULT 0, CHECK >= 0 (037) | Snapshot jumlah pasokan resep; edit memakai delta terhadap stok obat berjalan |
 | `alert_below` | integer | NOT NULL, DEFAULT 3, CHECK >= 0 (037) | Batas pengingat stok pada resep |
+| `active` | boolean | NOT NULL, DEFAULT true (039) | Item aktif; item yang dihapus tetap tersimpan untuk riwayat |
 
 ### 3.37 emergency_contacts (migrasi 006)
 
@@ -1075,7 +1077,7 @@ Katalog tes psikologi berbayar.
 
 ## Migrasi sesi dan rutinitas — 10 November 2026
 
-Migrasi 036–038 tersedia dalam source dan sudah diuji pada PostgreSQL lokal;
+Migrasi 036–040 tersedia dalam source dan sudah diuji pada PostgreSQL lokal;
 belum diterapkan produksi dalam pekerjaan ini. Backend baru harus dijalankan
 setelah migrasi diterapkan berurutan.
 
@@ -1084,6 +1086,8 @@ setelah migrasi diterapkan berurutan.
 | 036_session_hour_backfill | Durasi lama di bawah 60 pada `care_sessions`, `bookings`, `professional_schedules` menjadi 60; ketiga default menjadi 60 | Idempoten, mempertahankan jam mulai dan durasi kustom >=60; constraint DB lama tidak diganti |
 | 037_prescription_routine | `medications.schedule`; `e_prescription_items.schedule`, `current_stock`, `alert_below` | `ADD COLUMN IF NOT EXISTS`, default aman bagi data lama; kolom stok obat pasien sudah ada |
 | 038_cancelled_one_time_links | Link aktif dengan bukti pembatalan satu kali menjadi inactive bila tidak ada hak sesi/paket/pembelian lain | Data saja, idempoten; relasi manual tanpa bukti pembatalan tidak disentuh |
+| 039_prescription_crud | `e_prescriptions.diagnosis text NOT NULL DEFAULT ''`; `e_prescription_items.active boolean NOT NULL DEFAULT true` | DDL saja, idempoten; soft-delete resep memakai nilai status `deleted` yang sudah didukung kolom |
+| 040_prescription_known_supply_backfill | Stok obat nol diisi dari snapshot item positif yang pasti | Data saja, idempoten; hanya pasangan pasien/obat tepat, resep issued/item dan obat aktif, source prescription, obat belum diedit, tanpa log taken/partial dan hanya satu referensi item |
 
 `schedule` menyimpan `times`, `weekdays` (1–7, Senin–Minggu), `start_at`
 beroffset WIB, `interval_hours`, `interval_days`, `units_per_dose`, dan
@@ -1091,6 +1095,13 @@ beroffset WIB, `interval_hours`, `interval_days`, `units_per_dose`, dan
 pengingat legacy. Resep/item/obat pasien dibuat dalam satu transaksi, sehingga
 `medication_id` menunjuk obat yang baru dibuat untuk resep tersebut. Stok pada
 item resep merupakan snapshot penerbitan; stok berjalan berada di `medications`.
+
+Edit mempertahankan ID item/obat dan menambah selisih pasokan ke stok berjalan
+secara atomik dengan batas nol. Respons `remaining_stock` dihitung dari
+`medications.current_stock`, bukan kolom baru. Item yang dihapus memakai
+`active=false`; draft dan resep deleted menonaktifkan obat tanpa menghapus log.
+Simpan/delete mencatat audit dalam transaksi yang sama dan merotasi QR; draft
+dan deleted mengosongkan signature. Pasokan legacy nol tidak diinferensikan.
 
 Normalisasi 036 tidak menggeser jadwal legacy yang berdekatan. Durasi lebih
 panjang dapat menghasilkan irisan yang perlu direkonsiliasi sebelum rilis;

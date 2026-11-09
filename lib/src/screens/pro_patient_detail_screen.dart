@@ -12,7 +12,9 @@ import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/therapy_library.dart';
+import '../widgets/shared_record_detail.dart';
 import 'chat_screen.dart';
+import 'portal/prescription_wizard_screen.dart';
 import 'assessment_history_screen.dart';
 
 // ============================================================
@@ -125,14 +127,14 @@ class _ProPatientDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            SharedRecordDetail.screening(screening: sc),
+            const SizedBox(height: 12),
             _ScreeningInstrumentDetail(
               name: 'PHQ-9',
               score: sc.phq9.score,
               maxScore: sc.phq9.maxScore,
               level: sc.phq9.level,
               summary: sc.phq9.summary,
-              certaintyFactor: sc.phq9.certaintyFactor,
-              ruleTrace: sc.phq9.ruleTrace,
               answers: sc.phq9.answers,
               crisisFlag: sc.phq9.crisisFlag,
             ),
@@ -143,8 +145,6 @@ class _ProPatientDetailScreenState
               maxScore: sc.gad7.maxScore,
               level: sc.gad7.level,
               summary: sc.gad7.summary,
-              certaintyFactor: sc.gad7.certaintyFactor,
-              ruleTrace: sc.gad7.ruleTrace,
               answers: sc.gad7.answers,
               crisisFlag: sc.gad7.crisisFlag,
             ),
@@ -711,101 +711,15 @@ class _ProPatientDetailScreenState
   }
 
   Future<void> _openPrescribeMedication(BuildContext context) async {
-    final nameController = TextEditingController();
-    final dosageController = TextEditingController();
-    final formController = TextEditingController(text: 'Tablet');
-    final timeController = TextEditingController();
-    final mealController = TextEditingController();
-    final stockController = TextEditingController();
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Resepkan obat'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: 'Nama obat *')),
-              TextField(
-                  controller: dosageController,
-                  decoration:
-                      const InputDecoration(labelText: 'Dosis (mis. 50 mg)')),
-              TextField(
-                  controller: formController,
-                  decoration: const InputDecoration(labelText: 'Bentuk')),
-              TextField(
-                  controller: timeController,
-                  decoration: const InputDecoration(
-                      labelText: 'Jam minum (mis. 08:00)')),
-              TextField(
-                  controller: mealController,
-                  decoration: const InputDecoration(labelText: 'Kaitan makan')),
-              TextField(
-                  controller: stockController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Stok awal')),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: compactFilledButtonStyle,
-            child: const Text('Resepkan'),
-          ),
-        ],
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => EPrescriptionFormScreen(
+        session: widget.session,
+        apiClient: _api,
+        preselectedPatientId: widget.patientId,
+        preselectedPatientName: widget.patientName,
       ),
-    );
-    final name = nameController.text.trim();
-    final dosage = dosageController.text.trim();
-    final form = formController.text.trim();
-    final reminder = timeController.text.trim();
-    final meal = mealController.text.trim();
-    final stock = int.tryParse(stockController.text.trim()) ?? 0;
-    nameController.dispose();
-    dosageController.dispose();
-    formController.dispose();
-    timeController.dispose();
-    mealController.dispose();
-    stockController.dispose();
-    if (saved != true || name.isEmpty) return;
-    final token = _token;
-    if (token == null) return;
-    try {
-      await _api.createMedication(
-        accessToken: token,
-        patientId: widget.patientId,
-        name: name,
-        dosage: dosage,
-        form: form,
-        reminderTime: reminder,
-        relationToMeal: meal,
-        currentStock: stock,
-        alertBelow: 5,
-        source: 'Profesional',
-      );
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Obat diresepkan ke pasien.'),
-          backgroundColor: MalvaColors.mint,
-        ),
-      );
-      await _load();
-    } on Object catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: MalvaColors.danger),
-      );
-    }
+    ));
+    if (mounted) await _load();
   }
 
   Future<void> _openHealthRecordEdit(BuildContext context) async {
@@ -881,8 +795,6 @@ class _ScreeningInstrumentDetail extends StatelessWidget {
     required this.maxScore,
     required this.level,
     required this.summary,
-    required this.certaintyFactor,
-    required this.ruleTrace,
     required this.answers,
     required this.crisisFlag,
   });
@@ -892,8 +804,6 @@ class _ScreeningInstrumentDetail extends StatelessWidget {
   final int maxScore;
   final String level;
   final String summary;
-  final double certaintyFactor;
-  final String ruleTrace;
   final Map<String, int> answers;
   final bool crisisFlag;
 
@@ -911,24 +821,8 @@ class _ScreeningInstrumentDetail extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                '$name Total Score: $score/$maxScore',
-                style: const TextStyle(fontWeight: FontWeight.w900),
-              ),
-            ),
-            if (level.isNotEmpty)
-              StatusPill(label: level, color: MalvaColors.seed),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ProgressStrip(
-          value: maxScore <= 0 ? 0 : score / maxScore,
-          color: MalvaColors.seed,
-        ),
-        const SizedBox(height: 18),
+        Text(name, style: const TextStyle(fontWeight: FontWeight.w900)),
+        const SizedBox(height: 12),
         const Text('Indikator klinis',
             style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
         const SizedBox(height: 10),
@@ -1007,15 +901,6 @@ class _ScreeningInstrumentDetail extends StatelessWidget {
                                       : '${answers[q.id]} • ${AssessmentEngine.responseDescriptions[answers[q.id]!]}'),
                                 ]))),
                 ])),
-        const SizedBox(height: 8),
-        if (ruleTrace.isNotEmpty &&
-            certaintyFactor.isFinite &&
-            certaintyFactor >= 0 &&
-            certaintyFactor <= 1) ...[
-          Text('Dukungan aturan (CF): ${(certaintyFactor * 100).round()}%',
-              style: const TextStyle(fontWeight: FontWeight.w700)),
-        ] else
-          const Text('CF belum tersedia.', style: TextStyle(fontSize: 12)),
       ],
     );
   }

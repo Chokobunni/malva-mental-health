@@ -1295,6 +1295,8 @@ func (s *Server) requestPayoutAll(w http.ResponseWriter, r *http.Request, claims
 // ============================================================
 
 type createEPrescriptionRequest struct {
+	Status       string           `json:"status"`
+	Diagnosis    string           `json:"diagnosis"`
 	PatientID    string           `json:"patient_id"`
 	Instructions string           `json:"instructions"`
 	Notes        string           `json:"notes"`
@@ -1302,17 +1304,19 @@ type createEPrescriptionRequest struct {
 }
 
 type eRxItemRequest struct {
-	Form         string          `json:"form"`
-	Unit         string          `json:"unit"`
-	CurrentStock int             `json:"current_stock"`
-	AlertBelow   int             `json:"alert_below"`
-	Schedule     json.RawMessage `json:"schedule,omitempty"`
-	Name         string          `json:"name"`
-	Dosage       string          `json:"dosage"`
-	Frequency    string          `json:"frequency"`
-	Days         int             `json:"days"`
-	UnitsPerDay  int             `json:"units_per_day"`
-	MedicationID *string         `json:"medication_id,omitempty"`
+	ID            string          `json:"id,omitempty"`
+	StockProvided bool            `json:"-"`
+	Form          string          `json:"form"`
+	Unit          string          `json:"unit"`
+	CurrentStock  int             `json:"current_stock"`
+	AlertBelow    int             `json:"alert_below"`
+	Schedule      json.RawMessage `json:"schedule,omitempty"`
+	Name          string          `json:"name"`
+	Dosage        string          `json:"dosage"`
+	Frequency     string          `json:"frequency"`
+	Days          int             `json:"days"`
+	UnitsPerDay   int             `json:"units_per_day"`
+	MedicationID  *string         `json:"medication_id,omitempty"`
 }
 
 func (s *Server) createEPrescription(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -1334,33 +1338,13 @@ func (s *Server) createEPrescription(w http.ResponseWriter, r *http.Request, cla
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
-	if len(req.Items) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one medication item is required"})
+	if req.Status == "" {
+		req.Status = "issued"
+	}
+	if err := validatePrescriptionRequest(req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-
-	for _, item := range req.Items {
-		if strings.TrimSpace(item.Name) == "" || len(item.Name) > 255 || len(item.Dosage) > 100 || len(item.Frequency) > 50 || item.CurrentStock < 0 || item.AlertBelow < 0 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Nama, dosis, jadwal, dan stok obat tidak valid."})
-			return
-		}
-		if len(item.Schedule) > 0 {
-			doseParts := strings.Fields(item.Dosage)
-			dose := 0.0
-			if len(doseParts) > 0 {
-				dose, _ = strconv.ParseFloat(strings.ReplaceAll(doseParts[0], ",", "."), 64)
-			}
-			if !(dose > 0) || dose > 1e9 || item.CurrentStock <= 0 || !oneOf(item.Form, "Tablet", "Kapsul", "Sirup", "Injeksi") || !oneOf(item.Unit, "mg", "mcg", "g", "ml", "IU") {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Dosis dan stok harus lebih dari 0; bentuk serta satuan obat wajib valid."})
-				return
-			}
-		}
-		if err := store.ValidateMedicationSchedule(item.Schedule); err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-	}
-
 	// Resep hanya boleh diterbitkan untuk pasien yang benar-benar terhubung
 	// dengan psikiater ini. Tanpa cek ini, profesional mana pun bisa menulis
 	// resep (dan mengirim notifikasi) ke pasien yang tak pernah ia tangani —
@@ -1388,10 +1372,12 @@ func (s *Server) createEPrescription(w http.ResponseWriter, r *http.Request, cla
 		"timestamp":   clock.Now().Format(time.RFC3339),
 	}
 
-	qrToken := fmt.Sprintf("RX-%s-%d", claims.Subject[:8], time.Now().UnixNano()/1e6)
+	qrToken := generateChatMessageID()
 	rx, err := s.store.CreateEPrescription(r.Context(), store.EPrescription{
 		ProfessionalID: claims.Subject,
 		PatientID:      req.PatientID,
+		Status:         req.Status,
+		Diagnosis:      req.Diagnosis,
 		Notes:          req.Notes,
 		Instructions:   req.Instructions,
 		SignatureData:  sig,
@@ -1407,17 +1393,25 @@ func (s *Server) createEPrescription(w http.ResponseWriter, r *http.Request, cla
 	if user, uerr := s.store.GetUserByID(r.Context(), claims.Subject); uerr == nil && strings.TrimSpace(user.DisplayName) != "" {
 		doctorName = strings.TrimSpace(user.DisplayName)
 	}
-	s.notifyPatient(r, rx.PatientID, "prescription_created",
-		"Resep baru dari "+doctorName,
-		"Resep elektronik barumu sudah tersedia. Buka Malva untuk melihat detail.",
-		map[string]string{"prescription_id": rx.ID, "professional_id": claims.Subject})
-	writeJSON(w, http.StatusCreated, map[string]interface{}{"prescription": rx})
+	if rx.Status == "issued" {
+		s.notifyPatient(r, rx.PatientID, "prescription_created",
+			"Resep baru dari "+doctorName,
+			"Resep elektronik barumu sudah tersedia. Buka Malva untuk melihat detail.",
+			map[string]string{"prescription_id": rx.ID, "professional_id": claims.Subject})
+	}
+	full, err := s.store.GetEPrescription(r.Context(), rx.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"prescription": full})
 }
 
 func rxItemsFromRequest(items []eRxItemRequest) []store.EPrescriptionItem {
 	out := make([]store.EPrescriptionItem, len(items))
 	for i, item := range items {
 		out[i] = store.EPrescriptionItem{
+			ID:           item.ID,
 			MedicationID: item.MedicationID,
 			Form:         item.Form, Unit: item.Unit, CurrentStock: item.CurrentStock, AlertBelow: item.AlertBelow, Schedule: item.Schedule,
 			Name: item.Name,
@@ -1444,7 +1438,7 @@ func rxItemsFromRequest(items []eRxItemRequest) []store.EPrescriptionItem {
 		if item.Days <= 0 {
 			out[i].Days = 30
 		}
-		if len(item.Schedule) == 0 {
+		if len(item.Schedule) == 0 && !item.StockProvided && item.CurrentStock == 0 {
 			out[i].CurrentStock = out[i].Days * out[i].UnitsPerDay
 			out[i].AlertBelow = 3
 		}
@@ -1457,6 +1451,10 @@ func (s *Server) getEPrescription(w http.ResponseWriter, r *http.Request, claims
 	rx, err := s.store.GetEPrescription(r.Context(), rxID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	if rx.Status != "issued" && !(claims.Role == "professional" && claims.Subject == rx.ProfessionalID) {
+		writeError(w, http.StatusNotFound, errors.New("resep tidak ditemukan"))
 		return
 	}
 	isDoctor := claims.Role == "professional" && claims.Subject == rx.ProfessionalID

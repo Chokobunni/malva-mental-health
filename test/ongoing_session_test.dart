@@ -242,6 +242,12 @@ void main() {
 
     // Gulir ke kartu yang harus tetap ada, bukan tombol yang memang dilarang.
     final card = find.byKey(const ValueKey('past-s_past_live'));
+    expect(card, findsNothing);
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('session-history-toggle')), 300,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byKey(const ValueKey('session-history-toggle')));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(card, 300,
         scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();

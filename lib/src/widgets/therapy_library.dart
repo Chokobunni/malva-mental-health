@@ -1962,7 +1962,7 @@ class AssessmentResultCard extends StatelessWidget {
           const SizedBox(height: 8),
           _ScoreRow(label: 'Stres', score: s.stress, level: s.stressLevel),
           const SizedBox(height: 12),
-          _TriageLine(interpretation: interpretation),
+          AssessmentTriageSummary(interpretation: interpretation),
           const SizedBox(height: 8),
           _ScoreMeaningExpansion(
             children: [
@@ -2040,7 +2040,7 @@ class AssessmentResultCard extends StatelessWidget {
             style: const TextStyle(fontSize: 12.5),
           ),
           const SizedBox(height: 12),
-          _TriageLine(interpretation: interpretation),
+          AssessmentTriageSummary(interpretation: interpretation),
           const SizedBox(height: 8),
           _ScoreMeaningExpansion(
             children: [
@@ -2063,8 +2063,8 @@ class AssessmentResultCard extends StatelessWidget {
 ///
 /// Nada sengaja suportif: tujuannya mengarahkan pasien ke bantuan yang tepat,
 /// bukan menakut-nakuti. CF ditampilkan sebagai dukungan aturan dalam model.
-class _TriageLine extends StatelessWidget {
-  const _TriageLine({required this.interpretation});
+class AssessmentTriageSummary extends StatelessWidget {
+  const AssessmentTriageSummary({super.key, required this.interpretation});
 
   final AssessmentInterpretation interpretation;
 
@@ -2102,6 +2102,15 @@ class _TriageLine extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          Text(
+              'Dukungan aturan triage (CF): ${interpretation.certaintyFactor.toStringAsFixed(2)} (${interpretation.certaintyPercent}%)',
+              style:
+                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+          const SizedBox(height: 4),
+          const Text(
+              'CF adalah dukungan aturan model, bukan probabilitas diagnosis atau tingkat keparahan.',
+              style: TextStyle(fontSize: 11.5)),
           for (final reason in reasons) ...[
             const SizedBox(height: 4),
             Text('• $reason', style: const TextStyle(fontSize: 11.5)),

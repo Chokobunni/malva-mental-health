@@ -934,8 +934,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             accessToken: token,
             submissionId: submissionId,
           );
-      if (!mounted || ref.read(currentSessionProvider)?.accessToken != token)
-        return;
+      if (!mounted || !_ownerMatches) return;
       await _showSharedDetail(message,
           detail: TherapySubmissionView(
             moduleId: record.moduleId,
@@ -944,8 +943,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             summary: record.summary,
           ));
     } on Object catch (error) {
-      if (mounted)
-        _toast('Gagal membuka therapy record: ${friendlyErrorMessage(error)}');
+      if (mounted && _ownerMatches) {
+        final label = message.kind == 'assessment' ? 'assessment' : 'therapy';
+        _toast('Gagal membuka $label record: ${friendlyErrorMessage(error)}');
+      }
     }
   }
 
@@ -1091,6 +1092,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             'gad7_max_score': screening.gad7.maxScore,
             'phq9_level': screening.phq9.level,
             'gad7_level': screening.gad7.level,
+            if (screening.phq9.hasCertaintyFactor)
+              'phq9_cf': screening.phq9.certaintyFactor,
+            if (screening.gad7.hasCertaintyFactor)
+              'gad7_cf': screening.gad7.certaintyFactor,
             'crisis_flag': screening.crisisFlag,
             'summary': text,
             'shared_at': wibIso(screening.createdAt ?? wibNow()),
@@ -1160,6 +1165,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             'source': 'screening',
             'phq9_score': bundle.phq9.score,
             'gad7_score': bundle.gad7.score,
+            if (bundle.phq9.hasCertaintyFactor)
+              'phq9_cf': bundle.phq9.certaintyFactor,
+            if (bundle.gad7.hasCertaintyFactor)
+              'gad7_cf': bundle.gad7.certaintyFactor,
             'overall_level': overall.label,
             'crisis_flag': bundle.crisisFlag,
             'summary': text,
@@ -1187,6 +1196,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               'score': result.score,
               'max_score': result.maxScore,
               'level': resultLevel.label,
+              if (result.hasCertaintyFactor) 'cf': result.certaintyFactor,
             },
             'crisis_flag': result.crisisFlag,
             'summary': text,

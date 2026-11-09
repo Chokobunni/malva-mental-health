@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,6 +40,8 @@ class _ChatBackend {
   bool shared = false;
   bool noAssessments = false;
   String assessmentModule = 'who5';
+  int assessmentDetailStatus = 200;
+  Completer<http.Response>? pendingDetail;
   Map<String, dynamic> get assessment => {
         ..._record('assessment-1', assessmentModule,
             '$assessmentModule hasil asesmen'),
@@ -143,6 +146,10 @@ class _ChatBackend {
               'chat_message_id': 'message-1'
             });
           case 'GET /v1/therapy-submissions/assessment-1':
+            if (pendingDetail != null) return pendingDetail!.future;
+            if (assessmentDetailStatus != 200)
+              return _json(
+                  {'error': 'Data tidak ditemukan'}, assessmentDetailStatus);
             return shared
                 ? _json({'submission': assessment})
                 : _json({'error': 'worksheet tidak ditemukan'}, 404);
@@ -446,6 +453,88 @@ void main() {
           await tester.pumpAndSettle();
         }
       }
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  for (final module in ['who5', 'dass21']) {
+    for (final professional in [false, true]) {
+      testWidgets('$module legacy inline share opens for role $professional',
+          (tester) async {
+        final backend = _ChatBackend()
+          ..assessmentModule = module
+          ..shared = true
+          ..kind = 'assessment';
+        backend.metadata = {
+          'module_id': module,
+          'title': 'Hasil lama',
+          'answers': backend.assessment['answers']
+        };
+        await _open(tester, backend, professional: professional);
+        await tester.tap(find.textContaining('Assessment:').first);
+        await tester.pumpAndSettle();
+        expect(find.byType(TherapySubmissionView), findsOneWidget);
+        await tester.tap(find.text('Hasil lama'));
+        await tester.pumpAndSettle();
+        expect(
+            find.textContaining('Dukungan aturan triage (CF)'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
+    for (final status in [403, 404]) {
+      testWidgets(
+          '$module denied or stale submission $status never bypasses detail authorization',
+          (tester) async {
+        final backend = _ChatBackend()
+          ..assessmentModule = module
+          ..shared = true
+          ..kind = 'assessment'
+          ..assessmentDetailStatus = status;
+        backend.metadata = {
+          'submission_id': 'assessment-1',
+          'module_id': module,
+          'title': 'Hasil lama',
+          'answers': backend.assessment['answers']
+        };
+        await _open(tester, backend, professional: true);
+        await tester.tap(find.textContaining('Assessment:').first);
+        await tester.pumpAndSettle();
+        expect(find.byType(TherapySubmissionView), findsNothing);
+        expect(find.textContaining('Gagal membuka assessment record:'),
+            findsOneWidget);
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
+  }
+
+  for (final changeOwner in [false, true]) {
+    testWidgets(
+        'pending assessment detail ${changeOwner ? 'is hidden after account switch' : 'survives same-account token refresh'}',
+        (tester) async {
+      final backend = _ChatBackend()
+        ..shared = true
+        ..kind = 'assessment'
+        ..pendingDetail = Completer<http.Response>()
+        ..metadata = {'submission_id': 'assessment-1', 'module_id': 'who5'};
+      await _open(tester, backend);
+      await tester.tap(find.textContaining('Assessment:').first);
+      await tester.pump();
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(ChatScreen)));
+      container.read(authStateProvider.notifier).setSession(AuthSession(
+          role: UserRole.patient,
+          identifier: changeOwner ? 'another' : 'patient-1',
+          backendUserId: changeOwner ? 'another' : 'patient-1',
+          displayName: 'Pasien',
+          accessToken: 'refreshed-token'));
+      await tester.pump();
+      backend.pendingDetail!
+          .complete(_json({'submission': backend.assessment}));
+      await tester.pumpAndSettle();
+      expect(find.byType(TherapySubmissionView),
+          changeOwner ? findsNothing : findsOneWidget);
+      expect(find.textContaining('Gagal membuka'), findsNothing);
       await tester.pumpWidget(const SizedBox());
     });
   }

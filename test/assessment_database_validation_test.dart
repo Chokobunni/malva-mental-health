@@ -29,6 +29,20 @@ void main() {
     'level': 'unknown',
     'createdAt': '2026-11-09T12:00:00+07:00'
   };
+  test('missing local CF stays unavailable after restore and save', () async {
+    final result = (await restore(base)).single;
+    expect(result.hasCertaintyFactor, isFalse);
+    final store = _MemoryStore();
+    final database = AssessmentDatabaseService(store: store);
+    await database.saveAll('acc', [result]);
+    final again = (await database.loadAll('acc')).single;
+    expect(again.hasCertaintyFactor, isFalse);
+  });
+  test('real zero local CF remains available', () async {
+    final result = (await restore({...base, 'certaintyFactor': 0})).single;
+    expect(result.hasCertaintyFactor, isTrue);
+    expect(result.certaintyFactor, 0);
+  });
   for (final invalid in [null, -1, 28, 2.5, '7']) {
     test('local restore rejects invalid PHQ score before conversion ($invalid)',
         () async {

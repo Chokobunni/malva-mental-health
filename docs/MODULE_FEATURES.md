@@ -55,7 +55,7 @@ Status `Aktif` berarti endpoint terdaftar di `Routes()` dan diimplementasikan di
 | FEAT-035 | Webhook pembayaran (signature) | Sistem | `POST /v1/webhooks/payment` | Aktif (Midtrans) |
 | FEAT-036 | Ulasan dokter | Pasien | `GET/POST /v1/doctors/{user_id}/reviews` | Aktif |
 | FEAT-037 | Pendapatan & pencairan (payout) | Profesional | `GET /v1/earnings`, `POST /v1/earnings/payout` | Aktif |
-| FEAT-038 | E-prescription, rutinitas WIB dan stok obat | Profesional (Sp.KJ) | `POST/GET /v1/e-prescriptions`, `GET /v1/e-prescriptions/verify` | Aktif; migrasi 037 sebelum rilis |
+| FEAT-038 | E-prescription CRUD draft/issued, rutinitas WIB dan stok obat | Profesional (Sp.KJ) | `POST/GET /v1/e-prescriptions`, `GET/PUT/DELETE /v1/e-prescriptions/{id}`, `GET /v1/e-prescriptions/verify` | Aktif; migrasi 037, 039–040 sebelum rilis |
 
 ## 5. Care Package & Sesi
 
@@ -219,6 +219,14 @@ memiliki kartu skor, makna dan jawaban. Pemantauan harian tanpa Kiriman/Timeline
 Ulasan memakai entitlement per sesi/pembelian di atas, termasuk renewal merged.
 
 ## Kontrak sesi dan resep — 10 November 2026
+
+- E-Prescription mendukung diagnosis/indikasi, draft, revisi penuh beberapa obat
+  dengan ID stabil, dan soft-delete oleh penulis psikiater terverifikasi.
+  Draft hanya terlihat penulis. `current_stock` item adalah pasokan;
+  `remaining_stock` adalah stok obat berjalan. Revisi memakai selisih pasokan,
+  mempertahankan konsumsi dan log. Instruksi makan/catatan per obat tersimpan
+  pada schedule. Draft/delete menonaktifkan obat dan membatalkan QR/tanda tangan;
+  audit tetap disimpan. Migrasi 039 DDL terpisah dari backfill konservatif 040.
 
 - Booking baru pasien otomatis Video, default 60 menit. Sesi satu kali/paket
   dan slot praktik minimum 60 menit, maksimum 180. Jenis sesi historis serta

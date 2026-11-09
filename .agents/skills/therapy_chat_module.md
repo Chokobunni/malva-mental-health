@@ -3,7 +3,7 @@
 - UI pasien: `lib/src/screens/chat_screen.dart` → “Therapy Record” → pilih satu worksheet dari `isTherapyRecordSubmission`. DASS-21 dan WHO-5 tetap di Assessment Record.
 - `POST /v1/therapy-submissions/{submission_id}/share` memakai `professional_id` yang dipilih. Server memeriksa pemilik worksheet dan paket aktif; izin kategori tidak otomatis diaktifkan oleh UI ini.
 - Endpoint share sudah membuat pesan `worksheet`; jangan lanjut `POST /v1/messages` untuk record yang sama. Muat riwayat untuk menampilkan pesan tersimpan dan bedakan sukses share dari kegagalan konfirmasi chat.
-- Kartu dibuka lewat `GET /v1/therapy-submissions/{submission_id}`. Profesional hanya membaca record yang dibagikan kepadanya; pasien hanya miliknya sendiri. Jangan mengirim jawaban privat ke push atau metadata chat.
+- Kartu dibuka lewat `GET /v1/therapy-submissions/{submission_id}`. Profesional membaca record yang dibagikan individual kepadanya atau melalui consent kategori `therapy_records` untuk pasangan pasien/profesional yang sama; pasien hanya miliknya sendiri. Detail dan daftar memakai pilihan izin yang sama, tetap dengan relasi serta jendela akses sesi/paket aktif. Jangan mengirim jawaban privat ke push atau metadata chat.
 - Pemilihan dapat dibatalkan; daftar kosong dan gangguan jaringan harus memiliki umpan balik. Kunci aksi selama request dan periksa kembali akun setelah operasi async.
 - Pengujian: `test/chat_therapy_share_test.dart`, `backend/internal/server/therapy_chat_flow_test.go` dan test consent yang ada.
 - Semua kartu mood, diary, obat, screening, assessment dan therapy membuka detail
@@ -27,3 +27,8 @@
 - `GET /v1/chat-attachments/{attachment_id}` membutuhkan token Authorization dan peserta pasangan pesan; riwayat tetap dapat dibaca setelah sesi/link berakhir. Berkas disimpan di sibling `UploadDir + '-chat-private'`, tidak di static `/uploads/`; operator wajib memberi akses tulis privat kepada akun service dan melindungi backup. Lampiran resep manual bukan penerbitan E-Rx atau tanda tangan elektronik.
 - Mutasi goals/obat/diagnosis mengirim event realtime `clinical_data_changed` dengan `{patient_id,resource}` (`goals`, `medications`, `health_record`) agar klien memuat ulang store bersama. Event/kartu ini tidak menambah OS push; kebijakan push sesi-chat dan pengingat lokal pasien tetap berlaku.
 - Pengujian backend: `backend/internal/server/clinical_chat_test.go` mencakup REST/WS, izin, idempotensi, validasi/riwayat lampiran privat, dan refresh realtime tanpa outbox push.
+
+## Kompatibilitas detail assessment (2026-11-10)
+
+- ID submission WHO/DASS/worksheet dibuka melalui GET berotorisasi; 403/404 tidak membuka fallback jawaban snapshot. Snapshot inline legacy tanpa ID tetap dapat ditampilkan dari pesan chat berizin.
+- WHO/DASS mempertahankan hasil dari jawaban lengkap yang tersimpan beserta CF triage aktual. PHQ/GAD memakai dua kartu CF terpisah. Kesalahan membuka assessment memakai label assessment, dan respons tertunda tidak boleh tampil setelah pergantian pemilik akun.

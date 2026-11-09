@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/providers.dart';
+import 'prescription_widgets.dart';
 
 import '../../models.dart';
 import '../../services/malva_api_client.dart';
@@ -7,7 +10,7 @@ import '../../time/wib.dart';
 import '../../widgets/friendly_error.dart';
 
 /// One medicine, three steps: clinical detail, routine, and patient reminders.
-class EPrescriptionFormScreen extends StatefulWidget {
+class EPrescriptionFormScreen extends ConsumerStatefulWidget {
   const EPrescriptionFormScreen(
       {super.key,
       this.session,
@@ -23,11 +26,17 @@ class EPrescriptionFormScreen extends StatefulWidget {
   final String preselectedPatientName;
   final VoidCallback? onCreated;
   @override
-  State<EPrescriptionFormScreen> createState() => _PrescriptionWizardState();
+  ConsumerState<EPrescriptionFormScreen> createState() =>
+      _PrescriptionWizardState();
 }
 
-class _PrescriptionWizardState extends State<EPrescriptionFormScreen> {
+class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
   static const _purple = Color(0xff9346a4);
+  late final PrescriptionAccountGuard _account;
+  final _diagnosis = TextEditingController();
+  String _status = 'issued';
+  AuthSession? get _session =>
+      _account.session(ref.read(authStateProvider).session);
   final _name = TextEditingController();
   final _dose = TextEditingController();
   final _notes = TextEditingController();
@@ -53,6 +62,8 @@ class _PrescriptionWizardState extends State<EPrescriptionFormScreen> {
   @override
   void initState() {
     super.initState();
+    _account = PrescriptionAccountGuard(
+        widget.session, ref.read(authStateProvider).session);
     if (widget.preselectedPatientId.isNotEmpty)
       _patientId = widget.preselectedPatientId;
   }
@@ -60,6 +71,7 @@ class _PrescriptionWizardState extends State<EPrescriptionFormScreen> {
   @override
   void dispose() {
     for (final c in [
+      _diagnosis,
       _name,
       _dose,
       _notes,
@@ -155,6 +167,10 @@ class _PrescriptionWizardState extends State<EPrescriptionFormScreen> {
       ]));
   @override
   Widget build(BuildContext context) {
+    if (!_account.current(ref.watch(authStateProvider).session))
+      return const Scaffold(
+          body: Center(
+              child: Text('Sesi akun berubah. Buka kembali halaman resep.')));
     final titles = ['Detail Obat', 'Atur Rutinitas', 'Atur Pengingat'];
     return PopScope(
         canPop: _step == 0 && !_saving,
@@ -328,6 +344,10 @@ class _PrescriptionWizardState extends State<EPrescriptionFormScreen> {
                 ],
                 onChanged: (v) => setState(() => _unit = v!)))
       ]),
+      _label('Diagnosis (opsional)'),
+      TextField(
+          controller: _diagnosis,
+          decoration: _decoration('Diagnosis ICD-10 / Indikasi')),
       _label('Stok obat yang diberikan'),
       _number(_stock, 'Jumlah stok'),
       _label('Catatan (opsional)'),
@@ -449,6 +469,17 @@ class _PrescriptionWizardState extends State<EPrescriptionFormScreen> {
   List<Widget> _reminders() => [
         const SizedBox(height: 22),
         _summary(),
+        _label('Status Penerbitan'),
+        DropdownButtonFormField<String>(
+            initialValue: _status,
+            decoration: _decoration('Status'),
+            items: const [
+              DropdownMenuItem(
+                  value: 'issued', child: Text('Issued • kirim ke pasien')),
+              DropdownMenuItem(
+                  value: 'draft', child: Text('Draft • simpan dahulu'))
+            ],
+            onChanged: (v) => setState(() => _status = v!)),
         _label('Mulai pengingat'),
         OutlinedButton.icon(
             icon: const Icon(Icons.calendar_today_outlined),
@@ -562,7 +593,7 @@ class _PrescriptionWizardState extends State<EPrescriptionFormScreen> {
       return;
     }
     final api = widget.apiClient;
-    final token = widget.session?.accessToken;
+    final token = _session?.accessToken;
     if (api == null || token == null || token.isEmpty) {
       setState(() => _error = 'Hubungkan ke server untuk menerbitkan resep.');
       return;
@@ -582,7 +613,8 @@ class _PrescriptionWizardState extends State<EPrescriptionFormScreen> {
             ? int.parse(_interval.text)
             : 0,
         unitsPerDose: units,
-        refillEnabled: _refill);
+        refillEnabled: _refill,
+        instructions: _notes.text.trim());
     setState(() {
       _saving = true;
       _error = null;
@@ -591,6 +623,8 @@ class _PrescriptionWizardState extends State<EPrescriptionFormScreen> {
       await api.createEPrescription(
           accessToken: token,
           patientId: _patientId!,
+          diagnosis: _diagnosis.text.trim(),
+          status: _status,
           instructions: _notes.text.trim(),
           notes: _notes.text.trim(),
           items: [
@@ -607,13 +641,16 @@ class _PrescriptionWizardState extends State<EPrescriptionFormScreen> {
                 alertBelow: threshold,
                 schedule: schedule)
           ]);
+      if (!mounted || _session == null) return;
       widget.onCreated?.call();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Resep dan rutinitas obat dikirim ke pasien.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(_status == 'draft'
+              ? 'Draft resep disimpan.'
+              : 'Resep dan rutinitas obat dikirim ke pasien.')));
       Navigator.pop(context);
     } on Object catch (e) {
-      if (mounted) setState(() => _error = friendlyErrorMessage(e));
+      if (mounted && _session != null)
+        setState(() => _error = friendlyErrorMessage(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:malva_mental_health/src/ai/assessment_interpretation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:malva_mental_health/src/theme.dart';
@@ -32,6 +33,26 @@ void main() {
   });
 
   for (final module in [who5Module, dass21Module]) {
+    testWidgets(
+        '${module.id} displays existing model CF with its proper meaning',
+        (tester) async {
+      final answers = <String, dynamic>{
+        for (var i = 1; i <= (module.id == 'who5' ? 5 : 21); i++) 'q$i': 2,
+        scaleVersionKey: 2
+      };
+      final actual = interpretDassWho5(moduleId: module.id, answers: answers);
+      await tester.pumpWidget(_app(Scaffold(
+          body: SingleChildScrollView(
+              child: AssessmentResultCard(
+                  moduleId: module.id, answers: answers)))));
+      expect(
+          find.textContaining(
+              'Dukungan aturan triage (CF): ${actual.certaintyFactor.toStringAsFixed(2)} (${actual.certaintyPercent}%)'),
+          findsOneWidget);
+      expect(
+          find.textContaining('bukan probabilitas diagnosis'), findsOneWidget);
+    });
+
     testWidgets('${module.id} incomplete shared answers never produce a score',
         (tester) async {
       await tester.pumpWidget(_app(Scaffold(
@@ -47,6 +68,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('Skor belum tersedia'), findsOneWidget);
       expect(find.textContaining('Arahan tindak lanjut:'), findsNothing);
+      expect(find.textContaining('Dukungan aturan triage (CF)'), findsNothing);
       expect(find.textContaining('Hasil WHO-5'), findsNothing);
       expect(find.textContaining('Hasil DASS-21'), findsNothing);
       expect(find.text('(tidak dijawab)'), findsWidgets);
@@ -79,6 +101,8 @@ void main() {
         expect(find.textContaining('Skor belum tersedia'), findsOneWidget,
             reason: 'invalid item $bad must not become zero or get clamped');
         expect(find.textContaining('Arahan tindak lanjut:'), findsNothing);
+        expect(
+            find.textContaining('Dukungan aturan triage (CF)'), findsNothing);
       }
     });
 
