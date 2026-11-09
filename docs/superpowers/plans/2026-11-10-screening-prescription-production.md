@@ -24,5 +24,5 @@
 - [x] Frontend prescription: referenced searchable status-filtered cards, detailed QR/notes/medication view, multi-item edit/add/remove, draft/delete controls and refresh; test payloads and account guards; visually render phone sizes.
 - [x] Professional navigation/history: replace old prescription popup; add collapsed expandable session history without losing existing cards/actions. Regression tests.
 - [x] Review and validation: independent review, full Flutter tests/analyzer/format, Go build/vet/full database tests, generated API docs and all repository gates.
-- [ ] Release: commit, signed universal APK, verify certificate/launch; backup production database/binary; integrate current remote changes if any, push/deploy backend/web/APK as needed; verify workflows, live revision, schema and all historical minimum durations.
-- [ ] Record QA, exact migration/deployment evidence and remaining real-device limits. Do not send a live SOS or clinical messages as a smoke test.
+- [x] Release: commit, signed universal APK, verify certificate/launch; backup production database/binary; integrate current remote changes if any, push/deploy backend/web/APK as needed; verify workflows, live revision, schema and all historical minimum durations.
+- [x] Record QA, exact migration/deployment evidence and remaining real-device limits. Do not send a live SOS or clinical messages as a smoke test.

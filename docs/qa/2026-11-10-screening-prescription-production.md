@@ -79,11 +79,29 @@ instruction sources. Backend, migrations and client must be deployed together.
   no matching fatal startup error. Screenshot/XML archived with production QA.
 - Published versioned universal APK at
   `https://malva.web.id/downloads/Malva-0.1.14-15-universal.apk` (HTTP 200).
-  Server file checksum matches the signed local build.
+  Server file and a fresh public HTTP download both match the signed local build.
 - Initial Go CI caught unchecked close/rollback/test setup errors and a
   boolean lint suggestion. Follow-up corrects those checks without changing
-  contracts; local golangci-lint v2.15.0 now reports zero issues. Final workflow
-  status will be recorded after that follow-up deploy.
+  contracts; local golangci-lint v2.15.0 now reports zero issues. Follow-up
+  `0883f58a37dbeffd3978940b9df6a758626d66cd` deployed successfully through
+  workflow 42718768938. Final binary SHA-256:
+  `ad5220cac878944668607b8e054d25afbfe3b92084f53335ab1532a1771a71b3`;
+  embedded revision matches, `vcs.modified=false`. Rechecked service, health,
+  ledger/defaults/durations and supply/live stock after this deployment.
+- Follow-up Security Gates workflow 42718768991 passed. Complete
+  [Go CI 42718768917](https://github.com/Chokobunni/malva-mental-health/actions/runs/42718768917)
+  passed lint, all PostgreSQL tests with race detection, binary/container builds
+  and its security stage. Complete
+  [Flutter CI 42717958832](https://github.com/Chokobunni/malva-mental-health/actions/runs/42717958832)
+  passed analyzer, both device-timezone test runs, security checks, web and
+  Windows builds. No failing runtime-release workflow remains.
+- APK workflow 42717958718 completed successfully, including signed build,
+  publication and download health check. The versioned universal build above
+  also supports x86_64 and 32-bit ARM.
+- Local APK:
+  `D:/Project/Malva/2026-07-09/deliverables/2026-11-10-screening-prescription/Malva-0.1.14-15-universal.apk`.
+  The isolated local PostgreSQL QA cluster was stopped after verification;
+  the installed PostgreSQL service on port 5432 was not changed.
 
 ## Evidence and limits
 
