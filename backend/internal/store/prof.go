@@ -618,7 +618,17 @@ func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, sche
 			order = append(order, key)
 		}
 		if sch.SlotDurationMinutes <= 0 {
-			sch.SlotDurationMinutes = 30
+			sch.SlotDurationMinutes = 60
+		}
+		if sch.SlotDurationMinutes < 60 || sch.SlotDurationMinutes > 180 {
+			return errors.New("slot_duration_minutes harus 60-180")
+		}
+		startText := strings.TrimSpace(sch.StartTime)
+		endText := strings.TrimSpace(sch.EndTime)
+		start, startErr := time.ParseInLocation("15:04", startText[:min(5, len(startText))], clock.Location())
+		end, endErr := time.ParseInLocation("15:04", endText[:min(5, len(endText))], clock.Location())
+		if startErr != nil || endErr != nil || end.Sub(start) < time.Duration(sch.SlotDurationMinutes)*time.Minute {
+			return errors.New("rentang jadwal harus memuat setidaknya satu slot sesi")
 		}
 		seen[key] = sch
 	}

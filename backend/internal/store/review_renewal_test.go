@@ -59,7 +59,7 @@ func TestReviewRenewalWaitsForEarlierAttendanceAndCreditReplacement(t *testing.T
 	if _, err := s.CreateDoctorReviewForEntitlement(ctx, professional, patient, 5, "Awal selesai", true, "", original); err != nil {
 		t.Fatal(err)
 	}
-	replacement, err := s.CreateCareSession(ctx, CareSession{PackageID: &original, PatientID: patient, ProfessionalID: professional, SessionType: "chat", ScheduledAt: clock.Now().Add(time.Hour), DurationMinutes: 30})
+	replacement, err := s.CreateCareSession(ctx, CareSession{PackageID: &original, PatientID: patient, ProfessionalID: professional, SessionType: "chat", ScheduledAt: clock.Now().Add(time.Hour), DurationMinutes: 60})
 	if err != nil {
 		t.Fatal(err)
 	}

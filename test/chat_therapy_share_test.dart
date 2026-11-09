@@ -313,7 +313,10 @@ void main() {
       await _open(tester, backend, professional: professional);
       await tester.tap(find.text('Worksheet Latihan ABCDE dibagikan.'));
       await tester.pumpAndSettle();
-      expect(find.text('Detail skrining lama terverifikasi'), findsOneWidget);
+      expect(find.text('Detail skrining lama terverifikasi'), findsNothing);
+      expect(find.text('12'), findsOneWidget);
+      expect(find.text('7'), findsOneWidget);
+      expect(find.text('01/01/2025'), findsOneWidget);
       expect(find.text('Detail Record'), findsOneWidget);
       expect(find.textContaining('Total Score'), findsWidgets);
       await tester.pumpWidget(const SizedBox());
@@ -362,7 +365,7 @@ void main() {
       ..shared = true
       ..canShare = false;
     await _open(tester, backend, professional: true);
-    expect(find.byIcon(Icons.add_rounded), findsNothing);
+    expect(find.byTooltip('Lampirkan berkas'), findsOneWidget);
     await tester.tap(find.text('Worksheet Latihan ABCDE dibagikan.'));
     await tester.pumpAndSettle();
     expect(find.text('Latihan ABCDE'), findsOneWidget);

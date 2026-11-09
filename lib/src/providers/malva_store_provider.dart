@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../assessment_engine.dart';
 import '../models.dart';
@@ -350,32 +349,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       );
       if (!_isCurrentAccountGeneration(generation) ||
           requestGeneration != _medicationRequestGeneration) return;
-      // Konversi BackendMedication → Medication untuk store lokal.
-      final medications = meds.map((m) {
-        // Parse reminder_time menjadi MedicationReminder.
-        final reminders = <MedicationReminder>[];
-        if (m.reminderTime.isNotEmpty) {
-          final parts = m.reminderTime.split(':');
-          if (parts.length >= 2) {
-            final hour = int.tryParse(parts[0]) ?? 8;
-            final minute = int.tryParse(parts[1]) ?? 0;
-            reminders.add(MedicationReminder(
-              time: TimeOfDay(hour: hour, minute: minute),
-              relationToMeal: m.relationToMeal,
-            ));
-          }
-        }
-        return Medication(
-          id: m.id,
-          name: m.name,
-          dosage: m.dosage,
-          form: m.form,
-          reminders: reminders,
-          currentStock: m.currentStock,
-          alertBelow: m.alertBelow,
-          source: m.source,
-        );
-      }).toList();
+      final medications = meds.map((m) => m.toMedication()).toList();
       replaceMedications(medications);
     } on Object {
       // Gagal memuat (offline/server error): jangan halangi UI.
@@ -888,7 +862,8 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     final consumed = status == 'taken' || status == 'partial';
     final updatedMed = consumed
         ? med.copyWith(
-            currentStock: (med.currentStock - 1).clamp(0, 999).toInt(),
+            currentStock:
+                (med.currentStock - med.unitsPerDose).clamp(0, 999).toInt(),
             lastTakenAt: now,
           )
         : med;
@@ -994,8 +969,9 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
         pending <= 0
             ? med
             : med.copyWith(
-                currentStock:
-                    (med.currentStock - pending).clamp(0, 999).toInt(),
+                currentStock: (med.currentStock - pending * med.unitsPerDose)
+                    .clamp(0, 999)
+                    .toInt(),
               ),
       );
     }

@@ -345,6 +345,11 @@ func (s *Store) ListTherapySubmissions(ctx context.Context, userID string, share
 			       shared_with_professional_id, shared_at, created_at, updated_at
 			FROM therapy_submissions
 			WHERE shared_with_professional_id = $1
+              AND (EXISTS (SELECT 1 FROM care_packages cp WHERE cp.patient_id=therapy_submissions.patient_id
+                   AND cp.professional_id=$1 AND cp.status='active' AND cp.expires_at>now())
+                OR EXISTS (SELECT 1 FROM care_sessions cs WHERE cs.patient_id=therapy_submissions.patient_id
+                   AND cs.professional_id=$1 AND cs.status='scheduled' AND cs.scheduled_at<=now()
+                   AND cs.scheduled_at + make_interval(mins=>cs.duration_minutes)>now()))
 			ORDER BY created_at DESC
 			LIMIT $2
 		`

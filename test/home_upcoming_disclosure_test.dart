@@ -292,7 +292,9 @@ void main() {
     await tester.tap(messages);
     await tester.pumpAndSettle();
     expect(find.byType(MessagesListScreen), findsOneWidget);
-    expect(find.text('Belum ada percakapan'), findsOneWidget);
+    expect(find.text('Pasien video 6'), findsOneWidget);
+    expect(find.text('Belum ada percakapan'), findsNothing,
+        reason: 'a scheduled patient is visible before the first message');
     expect(find.textContaining('Mode offline'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
@@ -312,7 +314,7 @@ void main() {
     await tester.tap(find.descendant(
         of: find.byType(NavigationBar), matching: find.text('Messages')));
     await tester.pumpAndSettle();
-    expect(find.text('Belum ada percakapan'), findsOneWidget);
+    expect(find.text('Pasien video 6'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

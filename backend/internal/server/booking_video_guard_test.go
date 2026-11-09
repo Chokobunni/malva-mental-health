@@ -37,7 +37,7 @@ func verifiedProfessional(t *testing.T, db *sql.DB, st *store.Store) store.User 
 func bookingVideoBody(profID string) string {
 	return fmt.Sprintf(
 		`{"professional_id":%q,"service_type":"quick_consult_video","session_type":"video",`+
-			`"booking_date":%q,"slot_time":"10:00","duration_minutes":30}`,
+			`"booking_date":%q,"slot_time":"10:00","duration_minutes":60}`,
 		profID, time.Now().Add(72*time.Hour).Format("2006-01-02"))
 }
 

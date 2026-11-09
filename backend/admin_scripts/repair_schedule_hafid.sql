@@ -11,7 +11,7 @@
 --   di backend/internal/store/prof.go).
 --
 -- BASELINE YANG DIMAKSUD (migrasi 007 + 008)
---   Senin–Jumat 09:00–16:00 (30 mnt) + Sabtu 09:00–12:00 (30 mnt),
+--   Senin–Jumat 09:00–16:00 (60 mnt) + Sabtu 09:00–12:00 (60 mnt),
 --   SEMUA AKTIF — sama seperti tiga profesional demo lainnya.
 --
 -- SIFAT SKRIP
@@ -44,9 +44,9 @@ BEGIN;
 
 -- 1a. Aktifkan kembali baris baseline yang sah.
 UPDATE professional_schedules
-   SET is_active = true
+   SET is_active = true, slot_duration_minutes = 60
  WHERE professional_id = 'a1111111-1111-4111-8111-111111111111'
-   AND slot_duration_minutes = 30
+   AND slot_duration_minutes IN (30, 60)
    AND (
         (day_of_week BETWEEN 1 AND 5
          AND start_time = '09:00'::time AND end_time = '16:00'::time)
@@ -59,7 +59,7 @@ UPDATE professional_schedules
    SET is_active = false
  WHERE professional_id = 'a1111111-1111-4111-8111-111111111111'
    AND NOT (
-        slot_duration_minutes = 30
+        slot_duration_minutes = 60
         AND (
              (day_of_week BETWEEN 1 AND 5
               AND start_time = '09:00'::time AND end_time = '16:00'::time)

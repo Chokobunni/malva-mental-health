@@ -222,7 +222,7 @@ void main() {
 
       // Ringkasan: total dari pricing palsu, persetujuan belum dicentang.
       expect(find.text('Ringkasan & persetujuan'), findsOneWidget);
-      expect(find.text('Rp150.000'), findsOneWidget);
+      expect(find.text('Rp250.000'), findsOneWidget);
       expect(tester.widget<FilledButton>(next).onPressed, isNull);
 
       await tester.tap(find.byKey(const Key('web-booking-agree')));
@@ -255,6 +255,11 @@ void main() {
       // Langkah pembayaran: belum ada tagihan.
       expect(find.byKey(const Key('web-booking-pay')), findsOneWidget);
       await tester.tap(find.byKey(const Key('web-booking-pay')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('durasi sesi satu jam'), findsOneWidget);
+      final allow = find.text('Allow & Continue');
+      await tester.ensureVisible(allow);
+      await tester.tap(allow);
       // Hindari pumpAndSettle: polling berjalan periodik.
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));

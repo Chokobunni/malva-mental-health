@@ -26,7 +26,7 @@ func TestCreateCareSessionRejectsVideoWithoutLink(t *testing.T) {
 		ProfessionalID:  "00000000-0000-0000-0000-000000000002",
 		SessionType:     "video",
 		ScheduledAt:     clock.Now().Add(2 * time.Hour),
-		DurationMinutes: 30,
+		DurationMinutes: 60,
 	})
 	if err == nil {
 		t.Fatal("sesi video tanpa link harus ditolak, tetapi berhasil dibuat")
@@ -70,7 +70,7 @@ func TestCreateCareSessionVideoWithLinkAccepted(t *testing.T) {
 		ProfessionalID:  profID,
 		SessionType:     "video",
 		ScheduledAt:     clock.Now().Add(48 * time.Hour).Truncate(time.Microsecond),
-		DurationMinutes: 30,
+		DurationMinutes: 60,
 		MeetingURL:      wantURL,
 		GoogleEventID:   "evt-video-wajib-link",
 	})

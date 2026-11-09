@@ -7,6 +7,7 @@ import '../../../providers/providers.dart';
 import '../../../services/malva_api_client.dart';
 import '../../../theme.dart';
 import '../../../widgets/friendly_error.dart';
+import '../../../screens/booking/consent_request_sheet.dart';
 import '../../services/web_care_service.dart';
 import '../../web_format.dart';
 
@@ -138,6 +139,12 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
 
   Future<void> _pay() async {
     if (_busy || _paid) return;
+    final granted = await showConsentRequestSheet(
+      context: context,
+      professionalId: widget.doctor.userId,
+      oneTime: !_service.isPackage,
+    );
+    if (!granted || !mounted) return;
     setState(() {
       _busy = true;
       _error = null;

@@ -21,8 +21,8 @@ import (
 // validateSlot memastikan slot bisa dipesan pasien: masa depan, minimal 24 jam
 // ke depan (sama dengan aturan cancel/reschedule pasien), di dalam jam praktik,
 // bukan hari libur, dan belum terisi.
-func (s *Server) validateSlot(ctx context.Context, professionalID string, start time.Time, durationMinutes int) error {
-	if start.Before(time.Now().Add(-time.Minute)) {
+func (s *Server) validateSlot(ctx context.Context, professionalID string, start time.Time, durationMinutes int, excludeSessionID ...string) error {
+	if start.Before(clock.Now().Add(-time.Minute)) {
 		return errors.New("slot harus di masa depan")
 	}
 	// Lead time 24 jam: sesi butuh persiapan kedua belah pihak.
@@ -30,7 +30,7 @@ func (s *Server) validateSlot(ctx context.Context, professionalID string, start 
 	if time.Until(start) < 24*time.Hour {
 		return errors.New("booking minimal 24 jam sebelum sesi")
 	}
-	return s.validateSlotWindow(ctx, professionalID, start, durationMinutes)
+	return s.validateSlotWindow(ctx, professionalID, start, durationMinutes, excludeSessionID...)
 }
 
 // validateSlotWindow memeriksa syarat slot yang berlaku untuk SEMUA peran:
@@ -38,8 +38,8 @@ func (s *Server) validateSlot(ctx context.Context, professionalID string, start 
 // Dipisahkan dari validateSlot supaya profesional tetap bisa menjadwalkan
 // atau memindahkan sesi secara mendadak (<24 jam) — mis. kendala di hari-H —
 // tanpa melewati aturan jam praktik/hari libur.
-func (s *Server) validateSlotWindow(ctx context.Context, professionalID string, start time.Time, durationMinutes int) error {
-	if start.Before(time.Now().Add(-time.Minute)) {
+func (s *Server) validateSlotWindow(ctx context.Context, professionalID string, start time.Time, durationMinutes int, excludeSessionID ...string) error {
+	if start.Before(clock.Now().Add(-time.Minute)) {
 		return errors.New("slot harus di masa depan")
 	}
 	wibStart := start.In(wibLoc)
@@ -71,13 +71,12 @@ func (s *Server) validateSlotWindow(ctx context.Context, professionalID string, 
 		if len(endT) > 5 {
 			endT = endT[:5]
 		}
-		endClock, err := time.ParseInLocation("15:04", endT, wibLoc)
+		endClock, err := time.ParseInLocation("2006-01-02 15:04", dateStr+" "+endT, wibLoc)
 		if err != nil {
 			continue
 		}
 		slotEnd := wibStart.Add(time.Duration(durationMinutes) * time.Minute)
-		slotEndClock := slotEnd.Format("15:04")
-		if startT <= clock && slotEndClock <= endClock.Format("15:04") {
+		if startT <= clock && !slotEnd.After(endClock) {
 			fits = true
 			break
 		}
@@ -85,7 +84,11 @@ func (s *Server) validateSlotWindow(ctx context.Context, professionalID string, 
 	if !fits {
 		return errors.New("slot di luar jam praktik profesional")
 	}
-	booked, err := s.store.IsSlotBooked(ctx, professionalID, start)
+	excluded := ""
+	if len(excludeSessionID) > 0 {
+		excluded = excludeSessionID[0]
+	}
+	booked, err := s.store.IsSlotBookedExcluding(ctx, professionalID, start, durationMinutes, excluded)
 	if err != nil {
 		return err
 	}
@@ -102,7 +105,7 @@ func (s *Server) slotDurationFor(ctx context.Context, professionalID string, sta
 	clock := wibStart.Format("15:04")
 	schedules, err := s.store.ListActiveSchedulesForProfessional(ctx, professionalID)
 	if err != nil {
-		return 30
+		return 60
 	}
 	for _, sch := range schedules {
 		if sch.DayOfWeek != dayOfWeek {
@@ -117,10 +120,10 @@ func (s *Server) slotDurationFor(ctx context.Context, professionalID string, sta
 			endT = endT[:5]
 		}
 		if startT <= clock && clock < endT && sch.SlotDurationMinutes > 0 {
-			return sch.SlotDurationMinutes
+			return max(60, sch.SlotDurationMinutes)
 		}
 	}
-	return 30
+	return 60
 }
 
 // Penyebab slot sesi berbayar tidak bisa dipakai. Dipakai jalur terminal
@@ -310,7 +313,7 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 			return "", nil
 		}
 		duration := booking.DurationMinutes
-		if duration <= 0 {
+		if duration < 60 {
 			duration = s.slotDurationFor(ctx, booking.ProfessionalID, start)
 		}
 		// Slot sesi pertama paket bisa sudah lewat saat pembayaran settle (VA/
@@ -394,7 +397,7 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 			// Balapan sempit: slot bisa terisi di antara pemeriksaan di atas dan
 			// INSERT. Bila sekarang benar-benar terisi, jadikan terminal
 			// (notifikasi + 200) alih-alih 5xx yang diulang selamanya.
-			if booked, berr := s.store.IsSlotBooked(ctx, booking.ProfessionalID, start); berr == nil && booked {
+			if booked, berr := s.store.IsSlotBooked(ctx, booking.ProfessionalID, start, duration); berr == nil && booked {
 				s.handlePaidBookingSlotUnusable(ctx, booking, p.ID, start, slotCauseTaken, "Paket Anda tetap aktif. ")
 				return "", nil
 			}
@@ -444,7 +447,7 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		return "", nil
 	}
 	duration := booking.DurationMinutes
-	if duration <= 0 {
+	if duration < 60 {
 		duration = s.slotDurationFor(ctx, booking.ProfessionalID, start)
 	}
 	// Slot sudah lewat saat pembayaran settle: terminal, bukan 5xx (lihat
@@ -453,7 +456,7 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		s.handlePaidBookingSlotUnusable(ctx, booking, p.ID, start, slotCausePassed, "")
 		return "", nil
 	}
-	if booked, berr := s.store.IsSlotBooked(ctx, booking.ProfessionalID, start); berr != nil {
+	if booked, berr := s.store.IsSlotBooked(ctx, booking.ProfessionalID, start, duration); berr != nil {
 		// Galat baca database: transien, biarkan gateway mengulang webhook.
 		return "", berr
 	} else if booked {
@@ -509,7 +512,7 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		}
 		// Balapan sempit: slot terisi di antara pemeriksaan dan INSERT. Lihat
 		// catatan di cabang paket.
-		if booked, berr := s.store.IsSlotBooked(ctx, booking.ProfessionalID, start); berr == nil && booked {
+		if booked, berr := s.store.IsSlotBooked(ctx, booking.ProfessionalID, start, duration); berr == nil && booked {
 			s.handlePaidBookingSlotUnusable(ctx, booking, p.ID, start, slotCauseTaken, "")
 			return "", nil
 		}
@@ -629,6 +632,19 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 		return
 	}
 	sessionType := strings.ToLower(strings.TrimSpace(req.SessionType))
+	if claims.Role == "patient" {
+		sessionType = "video"
+		if selectedPackage != nil {
+			legacy, found, err := s.store.PendingBookingForCarePackage(r.Context(), selectedPackage.ID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err)
+				return
+			}
+			if found {
+				sessionType = legacy.SessionType
+			}
+		}
+	}
 	switch sessionType {
 	case "video":
 	case "chat":
@@ -639,9 +655,9 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 	// Setiap sesi video WAJIB punya ruang pertemuan, jadi kemampuan profesional
 	// membuat link Meet diperiksa SEBELUM pasien membayar. Menolak di sini jauh
 	// lebih baik daripada menerima uang lalu gagal membuat link saat aktivasi.
-	if sessionType == "video" && !s.googleCalendarReady(r.Context(), professionalID) {
+	if sessionType == "video" && (s.calendar == nil || (claims.Role != "patient" && !s.googleCalendarReady(r.Context(), professionalID))) {
 		writeJSON(w, http.StatusConflict, map[string]string{
-			"error": "Profesional ini belum mengaktifkan Google Meet, sehingga sesi video belum bisa dipesan. Pilih sesi chat, atau minta profesional mengaktifkan Google Meet lebih dulu.",
+			"error": "Profesional ini belum mengaktifkan Google Meet, sehingga sesi video belum bisa dipesan. Coba lagi setelah integrasi Google Meet tersedia.",
 			"code":  "meet_belum_aktif",
 		})
 		return
@@ -711,15 +727,14 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 		return
 	}
 	duration := req.DurationMinutes
-	if duration <= 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "duration_minutes wajib diisi (10-180)"})
+	if duration == 0 {
+		duration = 60
+	}
+	if duration < 60 || duration > 180 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "duration_minutes harus 60-180 menit"})
 		return
 	}
-	if duration < 10 || duration > 180 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "duration_minutes harus 10-180 menit"})
-		return
-	}
-	if target.Before(time.Now().Add(-time.Minute)) {
+	if target.Before(clock.Now().Add(-time.Minute)) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "slot harus di masa depan"})
 		return
 	}
@@ -1287,12 +1302,17 @@ type createEPrescriptionRequest struct {
 }
 
 type eRxItemRequest struct {
-	Name         string  `json:"name"`
-	Dosage       string  `json:"dosage"`
-	Frequency    string  `json:"frequency"`
-	Days         int     `json:"days"`
-	UnitsPerDay  int     `json:"units_per_day"`
-	MedicationID *string `json:"medication_id,omitempty"`
+	Form         string          `json:"form"`
+	Unit         string          `json:"unit"`
+	CurrentStock int             `json:"current_stock"`
+	AlertBelow   int             `json:"alert_below"`
+	Schedule     json.RawMessage `json:"schedule,omitempty"`
+	Name         string          `json:"name"`
+	Dosage       string          `json:"dosage"`
+	Frequency    string          `json:"frequency"`
+	Days         int             `json:"days"`
+	UnitsPerDay  int             `json:"units_per_day"`
+	MedicationID *string         `json:"medication_id,omitempty"`
 }
 
 func (s *Server) createEPrescription(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -1304,7 +1324,7 @@ func (s *Server) createEPrescription(w http.ResponseWriter, r *http.Request, cla
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if cred.Specialization != "Sp.KJ" {
+	if !isPsychiatristSpecialization(cred.Specialization) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "E-Prescription hanya untuk Psikiater (Sp.KJ). Psikolog M.Psi tidak dapat membuat resep."})
 		return
 	}
@@ -1317,6 +1337,28 @@ func (s *Server) createEPrescription(w http.ResponseWriter, r *http.Request, cla
 	if len(req.Items) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one medication item is required"})
 		return
+	}
+
+	for _, item := range req.Items {
+		if strings.TrimSpace(item.Name) == "" || len(item.Name) > 255 || len(item.Dosage) > 100 || len(item.Frequency) > 50 || item.CurrentStock < 0 || item.AlertBelow < 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Nama, dosis, jadwal, dan stok obat tidak valid."})
+			return
+		}
+		if len(item.Schedule) > 0 {
+			doseParts := strings.Fields(item.Dosage)
+			dose := 0.0
+			if len(doseParts) > 0 {
+				dose, _ = strconv.ParseFloat(strings.ReplaceAll(doseParts[0], ",", "."), 64)
+			}
+			if !(dose > 0) || dose > 1e9 || item.CurrentStock <= 0 || !oneOf(item.Form, "Tablet", "Kapsul", "Sirup", "Injeksi") || !oneOf(item.Unit, "mg", "mcg", "g", "ml", "IU") {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Dosis dan stok harus lebih dari 0; bentuk serta satuan obat wajib valid."})
+				return
+			}
+		}
+		if err := store.ValidateMedicationSchedule(item.Schedule); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
 	}
 
 	// Resep hanya boleh diterbitkan untuk pasien yang benar-benar terhubung
@@ -1359,6 +1401,7 @@ func (s *Server) createEPrescription(w http.ResponseWriter, r *http.Request, cla
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	s.publishClinicalChange(rx.PatientID, "medications")
 	// Notifikasi pasien (best-effort; kegagalan TIDAK menggagalkan resep). AC-3.1.
 	doctorName := "dokter"
 	if user, uerr := s.store.GetUserByID(r.Context(), claims.Subject); uerr == nil && strings.TrimSpace(user.DisplayName) != "" {
@@ -1376,7 +1419,8 @@ func rxItemsFromRequest(items []eRxItemRequest) []store.EPrescriptionItem {
 	for i, item := range items {
 		out[i] = store.EPrescriptionItem{
 			MedicationID: item.MedicationID,
-			Name:         item.Name,
+			Form:         item.Form, Unit: item.Unit, CurrentStock: item.CurrentStock, AlertBelow: item.AlertBelow, Schedule: item.Schedule,
+			Name: item.Name,
 			// Dosage WAJIB dipetakan: dulu field ini terbuang diam-diam sehingga
 			// e_prescription_items.dosage selalu tersimpan kosong. Dampaknya
 			// nyata — obat hasil resep yang disalin ke tabel `medications`
@@ -1388,11 +1432,21 @@ func rxItemsFromRequest(items []eRxItemRequest) []store.EPrescriptionItem {
 			Days:        item.Days,
 			UnitsPerDay: item.UnitsPerDay,
 		}
+		if out[i].Form == "" {
+			out[i].Form = "Tablet"
+		}
+		if out[i].Unit == "" {
+			out[i].Unit = "tablet"
+		}
 		if item.UnitsPerDay <= 0 {
 			out[i].UnitsPerDay = 1
 		}
 		if item.Days <= 0 {
 			out[i].Days = 30
+		}
+		if len(item.Schedule) == 0 {
+			out[i].CurrentStock = out[i].Days * out[i].UnitsPerDay
+			out[i].AlertBelow = 3
 		}
 	}
 	return out

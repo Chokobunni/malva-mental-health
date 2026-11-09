@@ -25,6 +25,7 @@ class MedicationReminderService {
   MedicationReminderService({bool enabled = true}) : _enabled = enabled;
 
   final bool _enabled;
+  final Set<String> _lowStockNotified = {};
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -221,6 +222,10 @@ class MedicationReminderService {
     if (!_enabled) return;
     // Bersihkan id lama lebih dulu agar jadwal tidak dobel setelah edit.
     await cancelReminder(med.id);
+    if (med.schedule != null) {
+      await _scheduleRoutine(med);
+      return;
+    }
     if (med.reminders.isEmpty) return;
 
     for (var index = 0; index < med.reminders.length; index++) {
@@ -265,10 +270,126 @@ class MedicationReminderService {
     for (final med in current) {
       try {
         await scheduleMedicationReminder(med);
+        await showLowStockNotification(med);
       } on Object {
         // Satu obat gagal dijadwalkan tidak boleh menggagalkan sisanya.
       }
     }
+  }
+
+  /// Actual stock notification, once per low-stock period, with its own ID.
+  Future<void> showLowStockNotification(Medication med) async {
+    if (!_enabled) return;
+    final id = _stableHash('${med.id}#stock');
+    if (!med.needsRefill) {
+      _lowStockNotified.remove(med.id);
+      await _plugin.cancel(id: id);
+      return;
+    }
+    if (!_lowStockNotified.add(med.id)) return;
+    try {
+      await _plugin.show(
+          id: id,
+          title: 'Stok obat hampir habis',
+          body:
+              '${med.name} tersisa ${med.currentStock} unit. Siapkan isi ulang.',
+          notificationDetails: _notificationDetails(),
+          payload: med.id);
+    } on Object {
+      _lowStockNotified.remove(med.id);
+      rethrow;
+    }
+  }
+
+  Future<void> _scheduleRoutine(Medication med) async {
+    final routine = med.schedule!;
+    final periodic = routine.intervalHours > 0 || routine.intervalDays > 1;
+    final occurrences = routineOccurrences(routine, limit: periodic ? 60 : 70);
+    final seen = <String>{};
+    var index = 0;
+    for (final date in occurrences) {
+      if (!periodic && !seen.add('${date.weekday}:${date.hour}:${date.minute}'))
+        continue;
+      final id = _notificationId(med.id, index++);
+      final repeat = periodic ? null : DateTimeComponents.dayOfWeekAndTime;
+      final body =
+          '${med.name} • ${med.dosage} • ${med.unitsPerDose} unit${med.reminders.firstOrNull?.relationToMeal.isNotEmpty == true ? ' • ${med.reminders.first.relationToMeal}' : ''}';
+      try {
+        await _plugin.zonedSchedule(
+            id: id,
+            title: 'Waktunya minum obat',
+            body: body,
+            scheduledDate: date,
+            notificationDetails: _notificationDetails(),
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            matchDateTimeComponents: repeat,
+            payload: med.id);
+      } on Object {
+        await _plugin.zonedSchedule(
+            id: id,
+            title: 'Waktunya minum obat',
+            body: body,
+            scheduledDate: date,
+            notificationDetails: _notificationDetails(),
+            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            matchDateTimeComponents: repeat,
+            payload: med.id);
+      }
+    }
+  }
+
+  /// Next occurrences are calculated from the persisted anchor, never the device zone.
+  /// shortcut: arbitrary intervals queue 60 occurrences; replenish on app resume/refresh.
+  static List<tz.TZDateTime> routineOccurrences(MedicationSchedule routine,
+      {DateTime? now, int limit = 60}) {
+    if (routine.times.isEmpty || routine.weekdays.isEmpty || limit < 1)
+      return [];
+    final base = toWib(now ?? wibNow());
+    final start = toWib(routine.startAt);
+    final result = <tz.TZDateTime>[];
+    if (routine.intervalHours > 0) {
+      final interval = Duration(hours: routine.intervalHours);
+      var candidate = tz.TZDateTime.from(start, wibLocation);
+      if (!candidate.isAfter(base)) {
+        final jumps =
+            base.difference(candidate).inMinutes ~/ interval.inMinutes + 1;
+        candidate = candidate.add(interval * jumps);
+      }
+      for (var i = 0;
+          i < limit * 7 + 7 && result.length < limit;
+          i++, candidate = candidate.add(interval)) {
+        if (routine.weekdays.contains(candidate.weekday)) result.add(candidate);
+      }
+      return result;
+    }
+    final startDate = wibFromParts(start.year, start.month, start.day);
+    final baseDate = wibFromParts(base.year, base.month, base.day);
+    var date = baseDate.isBefore(startDate) ? startDate : baseDate;
+    final times = routine.reminders('')
+      ..sort((a, b) => (a.time.hour * 60 + a.time.minute)
+          .compareTo(b.time.hour * 60 + b.time.minute));
+    final step = routine.intervalDays > 1 ? routine.intervalDays : 1;
+    final remainder = date.difference(startDate).inDays % step;
+    if (remainder > 0)
+      date = wibFromParts(date.year, date.month, date.day + step - remainder);
+    for (var attempts = 0;
+        attempts < limit * 7 + 7 && result.length < limit;
+        attempts++,
+        date = wibFromParts(date.year, date.month, date.day + step)) {
+      if (!routine.weekdays.contains(date.weekday)) continue;
+      if (routine.intervalDays > 1 &&
+          date.difference(startDate).inDays % routine.intervalDays != 0)
+        continue;
+      for (final reminder in times) {
+        final candidate = wibFromParts(date.year, date.month, date.day,
+            reminder.time.hour, reminder.time.minute);
+        if (candidate.isAfter(base) && !candidate.isBefore(start)) {
+          result.add(candidate);
+          if (result.length == limit) break;
+        }
+      }
+    }
+    return result;
   }
 
   /// OS alarms survive process restarts, so in-memory IDs cannot find removals.
@@ -360,6 +481,13 @@ class MedicationReminderService {
   ///    berbunyi ganda pada jam pertama.
   Future<void> cancelReminder(String medicationId) async {
     if (!_enabled) return;
+    try {
+      final pending = await _plugin.pendingNotificationRequests();
+      for (final request in pending) {
+        if (request.payload == medicationId)
+          await _plugin.cancel(id: request.id);
+      }
+    } on Object {/* Legacy IDs below still cover old daily alarms. */}
     for (var index = 0; index < 10; index++) {
       await _plugin.cancel(id: _notificationId(medicationId, index));
     }
@@ -380,6 +508,8 @@ class MedicationReminderService {
     if (!_enabled) return;
     for (final id in medicationIds) {
       await cancelReminder(id);
+      await _plugin.cancel(id: _stableHash('$id#stock'));
+      _lowStockNotified.remove(id);
     }
   }
 }

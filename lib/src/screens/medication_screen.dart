@@ -148,30 +148,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
               _owner(_session) != startedOwner ||
               _owner(ref.read(authStateProvider).session) != startedAuthOwner)
             return;
-          final meds = backendMeds
-              .map(
-                (b) => Medication(
-                  id: b.id,
-                  name: b.name,
-                  dosage: b.dosage,
-                  form: b.form,
-                  reminders: b.reminderTime.isEmpty
-                      ? []
-                      : [
-                          MedicationReminder(
-                            time: _parseReminderTime(b.reminderTime),
-                            relationToMeal: b.relationToMeal,
-                          ),
-                        ],
-                  currentStock: b.currentStock,
-                  alertBelow: b.alertBelow,
-                  // Pakai sumber asli dari server ('Pasien'/'Profesional')
-                  // agar badge tidak salah label untuk obat yang ditambahkan
-                  // pasien sendiri. Fallback ke 'Profesional' bila kosong.
-                  source: b.source.isEmpty ? 'Profesional' : b.source,
-                ),
-              )
-              .toList();
+          final meds = backendMeds.map((b) => b.toMedication()).toList();
           // replaceMedications() ikut mengurangkan dosis yang masih pending,
           // sehingga stok yang belum terpotong di server tidak menaikkan
           // angka di layar.
@@ -693,15 +670,13 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
       );
     }
 
-    if (medication.needsRefill) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              '${medication.name} stok rendah (${medication.currentStock}). Segera refill!'),
-          backgroundColor: MalvaColors.amber,
-          duration: const Duration(seconds: 4),
-        ),
-      );
+    final updated = ref
+        .read(malvaStoreProvider)
+        .medications
+        .where((m) => m.id == medication.id)
+        .firstOrNull;
+    if (updated != null && updated.needsRefill && consumed) {
+      await _reminderService?.showLowStockNotification(updated);
     }
   }
 
@@ -747,6 +722,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
           currentStock: medication.currentStock,
           alertBelow: medication.alertBelow,
           source: medication.source,
+          schedule: medication.schedule,
         );
         return;
       }
@@ -760,6 +736,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
         currentStock: medication.currentStock,
         alertBelow: medication.alertBelow,
         source: medication.source,
+        schedule: medication.schedule,
       );
       // Simpan id dari server agar edit berikutnya memakai PUT, bukan POST
       // yang akan melahirkan baris baru lagi.
@@ -843,14 +820,6 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
   }
 }
 
-TimeOfDay _parseReminderTime(String reminderTime) {
-  final parts = reminderTime.split(':');
-  return TimeOfDay(
-    hour: int.tryParse(parts[0]) ?? 8,
-    minute: parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0,
-  );
-}
-
 class _MedicationCard extends StatelessWidget {
   const _MedicationCard({
     required this.medication,
@@ -915,7 +884,8 @@ class _MedicationCard extends StatelessWidget {
             runSpacing: 8,
             children: [
               StatusPill(
-                label: firstReminder?.label ?? 'Belum diatur',
+                label: medication.schedule?.label ??
+                    (firstReminder?.label ?? 'Belum diatur'),
                 color: MalvaColors.seed,
                 icon: Icons.schedule_rounded,
               ),
@@ -1003,7 +973,7 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
     _form = TextEditingController(text: med?.form ?? 'Tablet');
     _stock = TextEditingController(text: (med?.currentStock ?? 30).toString());
     _alertBelow =
-        TextEditingController(text: (med?.alertBelow ?? 5).toString());
+        TextEditingController(text: (med?.alertBelow ?? 3).toString());
     final reminder = med?.reminders.firstOrNull;
     _time = med == null ? const TimeOfDay(hour: 8, minute: 0) : reminder?.time;
     _relation = reminder?.relationToMeal ?? 'Setelah makan';
@@ -1060,11 +1030,12 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
             ),
             const SizedBox(height: 10),
             OutlinedButton.icon(
-              onPressed: _pickTime,
+              onPressed: widget.initial?.schedule == null ? _pickTime : null,
               icon: const Icon(Icons.schedule_rounded),
-              label: Text(_time == null
-                  ? 'Reminder belum diatur'
-                  : 'Reminder ${_time!.hour.toString().padLeft(2, '0')}:${_time!.minute.toString().padLeft(2, '0')}'),
+              label: Text(widget.initial?.schedule?.label ??
+                  (_time == null
+                      ? 'Reminder belum diatur'
+                      : 'Reminder ${_time!.hour.toString().padLeft(2, '0')}:${_time!.minute.toString().padLeft(2, '0')}')),
             ),
             DropdownButtonFormField<String>(
               initialValue: _relation,
@@ -1135,12 +1106,14 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
         name: _name.text.trim().isEmpty ? 'Medication' : _name.text.trim(),
         dosage: _dosage.text.trim().isEmpty ? '0 mg' : _dosage.text.trim(),
         form: _form.text.trim().isEmpty ? 'Tablet' : _form.text.trim(),
-        reminders: [
-          if (_time != null)
-            MedicationReminder(time: _time!, relationToMeal: _relation),
-        ],
+        reminders: widget.initial?.schedule?.reminders(_relation) ??
+            [
+              if (_time != null)
+                MedicationReminder(time: _time!, relationToMeal: _relation),
+            ],
         currentStock: int.tryParse(_stock.text.trim()) ?? 0,
-        alertBelow: int.tryParse(_alertBelow.text.trim()) ?? 5,
+        alertBelow: int.tryParse(_alertBelow.text.trim()) ?? 3,
+        schedule: widget.initial?.schedule,
         source: widget.initial?.source ?? 'Pasien',
       ),
     );

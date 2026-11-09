@@ -781,7 +781,7 @@ class _PackageCard extends StatelessWidget {
     return SoftCard(
       bordered: true,
       onTap: onOpen,
-      color: MalvaColors.mint.withValues(alpha: 0.08),
+      color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

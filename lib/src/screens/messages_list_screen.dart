@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -24,21 +26,50 @@ class MessagesListScreen extends ConsumerStatefulWidget {
   ConsumerState<MessagesListScreen> createState() => _MessagesListScreenState();
 }
 
-class _MessagesListScreenState extends ConsumerState<MessagesListScreen> {
+class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
+    with WidgetsBindingObserver {
   List<BackendPatientProfessionalLink> _links = const [];
   bool _isLoading = true;
   String? _error;
+  int _request = 0;
+  Timer? _refreshTimer;
+  AuthSession? get _session =>
+      widget.session ?? ref.read(currentSessionProvider);
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+    _refreshTimer =
+        Timer.periodic(const Duration(seconds: 30), (_) => _load(silent: true));
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_load(silent: true));
+  }
+
+  @override
+  void didUpdateWidget(covariant MessagesListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.session?.accessToken != widget.session?.accessToken ||
+        oldWidget.apiClient != widget.apiClient) unawaited(_load());
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    final request = ++_request;
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
-    final rawToken = widget.session?.accessToken;
+    final auth = _session;
+    final rawToken = auth?.accessToken;
     final accessToken =
         (rawToken == null || rawToken.isEmpty) ? null : rawToken;
     if (accessToken == null) {
@@ -51,21 +82,49 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen> {
       }
       return;
     }
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-    try {
-      final links = await apiClient.listPatientProfessionalLinks(
-        accessToken: accessToken,
-      );
-      if (!mounted) return;
+    if (!silent)
       setState(() {
-        _links = links;
+        _isLoading = true;
+        _error = null;
+      });
+    try {
+      final results = await Future.wait([
+        apiClient.listPatientProfessionalLinks(accessToken: accessToken),
+        apiClient.listCareSessions(accessToken: accessToken, scope: 'upcoming'),
+      ]);
+      if (!mounted ||
+          request != _request ||
+          _session?.accessToken != accessToken) return;
+      final links = results[0] as List<BackendPatientProfessionalLink>;
+      final sessions = results[1] as List<BackendCareSession>;
+      final isPro = auth?.role == UserRole.professional;
+      final peers = <String, BackendPatientProfessionalLink>{
+        for (final link in links)
+          (isPro ? link.patientId : link.professionalUserId): link,
+      };
+      for (final session in sessions.where((s) => s.status == 'scheduled')) {
+        final peer = isPro ? session.patientId : session.professionalId;
+        if (peer.isEmpty) continue;
+        peers.putIfAbsent(
+            peer,
+            () => BackendPatientProfessionalLink(
+                patientId: session.patientId,
+                professionalUserId: session.professionalId,
+                professionalId: '',
+                patientDisplayName: session.patientName,
+                professionalDisplayName: session.professionalName,
+                professionalPhotoUrl: session.photoIntroUrl,
+                status: 'active'));
+      }
+      setState(() {
+        _links = peers.values.toList();
+        _error = null;
         _isLoading = false;
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted ||
+          request != _request ||
+          _session?.accessToken != accessToken) return;
       setState(() {
         _error = friendlyErrorMessage(e);
         _isLoading = false;
@@ -81,7 +140,14 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen> {
     ref.listen<int>(professionalProfileRevisionProvider, (previous, next) {
       _load();
     });
-    final isPro = widget.session?.role == UserRole.professional;
+    ref.listen<AuthSession?>(currentSessionProvider, (previous, next) {
+      if (widget.session == null &&
+          previous?.accessToken != next?.accessToken) {
+        _links = const [];
+        unawaited(_load());
+      }
+    });
+    final isPro = _session?.role == UserRole.professional;
     final embeddedProfessional = isPro && Scaffold.maybeOf(context) != null;
     return Scaffold(
       appBar: embeddedProfessional
@@ -157,7 +223,9 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen> {
                               isPro ? '' : link.professionalPhotoUrl,
                         ),
                       ),
-                    );
+                    ).then((_) {
+                      if (mounted) unawaited(_load(silent: true));
+                    });
                   },
                 ),
                 const SizedBox(height: 10),
@@ -227,7 +295,7 @@ class _ConversationCard extends StatelessWidget {
                 Row(
                   children: [
                     StatusPill(
-                      label: status == 'active' ? 'Active Now' : status,
+                      label: status == 'active' ? 'Terhubung' : status,
                       color: status == 'active'
                           ? MalvaColors.mint
                           : Colors.black54,

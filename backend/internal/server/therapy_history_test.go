@@ -14,6 +14,7 @@ import (
 
 func TestTherapyFullHistoryPreservesOwnershipConsentAndDefaultLimit(t *testing.T) {
 	f := newTherapyConsentFixture(t)
+	grantContinuousTherapyAccess(t, f)
 	for _, patient := range []string{f.patient.ID, f.other.ID} {
 		_, err := f.db.ExecContext(context.Background(), `INSERT INTO therapy_submissions(patient_id,module_id,title,answers,summary,created_at) SELECT $1,'abcde','Test','{}','',$2::timestamptz + make_interval(mins=>n) FROM generate_series(1,125)n`, patient, clock.Now())
 		if err != nil {

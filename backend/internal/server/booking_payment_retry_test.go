@@ -22,6 +22,7 @@ func TestPackageBookingUsesSelectedPackageAndRetries(t *testing.T) {
 	patient := createIdentityTestUser(t, db, st, "patient", nil)
 	prof := verifiedProfessional(t, db, st)
 	srv := newOnboardingTestServer(db)
+	srv.calendar = &fakeMeetCalendar{}
 	start := clock.Now().AddDate(0, 0, 4)
 	if _, err := db.Exec(`INSERT INTO professional_schedules(professional_id,day_of_week,start_time,end_time) VALUES($1,$2,'00:00','23:59')`, prof.ID, int(start.Weekday())); err != nil {
 		t.Fatal(err)
@@ -31,7 +32,7 @@ func TestPackageBookingUsesSelectedPackageAndRetries(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM care_packages WHERE patient_id=$1`, patient.ID) })
-	body := fmt.Sprintf(`{"package_id":%q,"service_type":"package_session","session_type":"chat","booking_date":%q,"slot_time":"10:00","duration_minutes":30}`, pkg.ID, start.Format("2006-01-02"))
+	body := fmt.Sprintf(`{"package_id":%q,"service_type":"package_session","session_type":"chat","booking_date":%q,"slot_time":"10:00","duration_minutes":60}`, pkg.ID, start.Format("2006-01-02"))
 	var id string
 	for i := 0; i < 2; i++ {
 		rec := httptest.NewRecorder()
@@ -75,8 +76,9 @@ func TestLegacyResumeBindsSelectedPackageAmongDuplicatePendingPurchases(t *testi
 	if err := db.QueryRow(`INSERT INTO care_packages(patient_id,professional_id,price,expires_at) VALUES($1,$2,100000,$3) RETURNING id`, patient.ID, prof.ID, start.AddDate(0, 0, 42)).Scan(&duplicateID); err != nil {
 		t.Fatal(err)
 	}
-	body := fmt.Sprintf(`{"package_id":%q,"service_type":"package_session","session_type":"chat","booking_date":%q,"slot_time":%q,"duration_minutes":30}`, selected.ID, booking.BookingDate, booking.SlotTime)
+	body := fmt.Sprintf(`{"package_id":%q,"service_type":"package_session","session_type":"chat","booking_date":%q,"slot_time":%q,"duration_minutes":60}`, selected.ID, booking.BookingDate, booking.SlotTime)
 	srv := newOnboardingTestServer(db)
+	srv.calendar = &fakeMeetCalendar{}
 	for i := 0; i < 2; i++ {
 		rec := httptest.NewRecorder()
 		srv.createBooking(rec, httptest.NewRequest("POST", "/v1/bookings", strings.NewReader(body)), auth.Claims{Subject: patient.ID, Role: "patient"})
@@ -267,7 +269,7 @@ func TestQuickBookingConcurrentRetry(t *testing.T) {
 	db, st := openOnboardingTestStore(t)
 	patient := createIdentityTestUser(t, db, st, "patient", nil)
 	prof := verifiedProfessional(t, db, st)
-	b := store.Booking{PatientID: patient.ID, ProfessionalID: prof.ID, ServiceType: "quick_consult", SessionType: "chat", BookingDate: clock.Now().AddDate(0, 0, 5).Format("2006-01-02"), SlotTime: "12:00", DurationMinutes: 30, Price: 100000}
+	b := store.Booking{PatientID: patient.ID, ProfessionalID: prof.ID, ServiceType: "quick_consult", SessionType: "chat", BookingDate: clock.Now().AddDate(0, 0, 5).Format("2006-01-02"), SlotTime: "12:00", DurationMinutes: 60, Price: 100000}
 	var wg sync.WaitGroup
 	ids := make(chan string, 4)
 	errs := make(chan error, 4)
@@ -389,7 +391,7 @@ func TestPackageBookingRejectsChangedIntentAndOtherOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM care_packages WHERE patient_id=$1`, patient.ID) })
-	b := store.Booking{PatientID: patient.ID, ProfessionalID: prof.ID, ServiceType: "package_session", SessionType: "chat", BookingDate: clock.Now().AddDate(0, 0, 4).Format("2006-01-02"), SlotTime: "12:00", DurationMinutes: 30, Price: 100000}
+	b := store.Booking{PatientID: patient.ID, ProfessionalID: prof.ID, ServiceType: "package_session", SessionType: "chat", BookingDate: clock.Now().AddDate(0, 0, 4).Format("2006-01-02"), SlotTime: "12:00", DurationMinutes: 60, Price: 100000}
 	if _, err := st.CreatePackageBooking(context.Background(), pkg.ID, b); err != nil {
 		t.Fatal(err)
 	}
@@ -486,11 +488,12 @@ func TestUncertainGatewayRetryRetainsReconcilablePayment(t *testing.T) {
 	db, st := openOnboardingTestStore(t)
 	patient := createIdentityTestUser(t, db, st, "patient", nil)
 	prof := verifiedProfessional(t, db, st)
-	booking, err := st.CreateBooking(context.Background(), store.Booking{PatientID: patient.ID, ProfessionalID: prof.ID, ServiceType: "quick_consult", SessionType: "chat", BookingDate: clock.Now().AddDate(0, 0, 5).Format("2006-01-02"), SlotTime: "12:00", DurationMinutes: 30, Price: 100000})
+	booking, err := st.CreateBooking(context.Background(), store.Booking{PatientID: patient.ID, ProfessionalID: prof.ID, ServiceType: "quick_consult", SessionType: "chat", BookingDate: clock.Now().AddDate(0, 0, 5).Format("2006-01-02"), SlotTime: "12:00", DurationMinutes: 60, Price: 100000})
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv := newOnboardingTestServer(db)
+	srv.calendar = &fakeMeetCalendar{}
 	srv.cfg.PaymentMode = "gateway"
 	gw := &uncertainSnapGateway{}
 	srv.payment = gw

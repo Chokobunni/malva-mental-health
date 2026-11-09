@@ -457,7 +457,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   void _joinSession(BuildContext context, BackendCareSession session) {
-    if (!session.canJoinNow) return;
+    if (session.professionalId.isEmpty) return;
     Navigator.push(
       context,
       MaterialPageRoute(

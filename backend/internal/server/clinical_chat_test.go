@@ -412,6 +412,10 @@ func TestClinicalMutationsPublishInAppRefreshWithoutPush(t *testing.T) {
 
 func TestClinicalAttachmentValidationAndRetry(t *testing.T) {
 	f := newClinicalFixture(t)
+	// Professional attachments belong to the session, independent of patient-data consent.
+	if _, err := f.st.UpdatePatientDataConsent(context.Background(), store.PatientDataConsent{PatientID: f.patient.ID, ProfessionalID: f.prof.ID}); err != nil {
+		t.Fatal(err)
+	}
 	token, _ := f.srv.auth.Issue(f.prof.ID, "professional")
 	upload := func(name string, data []byte, clientID string) *httptest.ResponseRecorder {
 		t.Helper()

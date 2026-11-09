@@ -444,3 +444,30 @@ Reschedule memisahkan tipe sesi dari nilai picker sebelum serialisasi WIB.
 SOS memakai queryParameters pada URI; status pending dipoll maksimal 60 detik,
 berhenti saat terminal/error/dispose/ganti akun. Gateway accepted dipisahkan dari
 delivery receipt; backend belum memiliki alur callback receipt otomatis.
+
+## Konsistensi sesi dan rutinitas resep — 10 November 2026
+
+Handler booking/jadwal menormalisasi permintaan baru pasien ke Video dan memakai
+slot minimal satu jam. Store pembuatan/reschedule memakai advisory transaction
+lock per profesional dan pemeriksaan irisan interval. Reschedule memperbarui
+sesi serta booking asal dalam transaksi yang sama; pengingat/kehadiran direset.
+Pembaruan Calendar dilakukan setelah commit sehingga konflik DB tidak mengubah
+event kalender, sedangkan kegagalan Calendar tetap menghasilkan warning.
+Ketersediaan memakai query batch untuk seluruh kandidat beserta durasinya.
+
+`PatientDataAccessActive` memisahkan hak record dari jendela chat/Meet. Preferensi
+consent tetap tersimpan per pasangan; tanpa paket aktif, record hanya tersedia
+sepanjang durasi sesi scheduled. Paket aktif mempertahankan akses antarsesi
+sesuai consent. Share worksheet dan pembacaan profesional memakai batas yang
+sama. Lampiran profesional menggunakan verifikasi, relasi dan jendela sesi;
+riwayat pesan yang telah dikirim tetap berotorisasi sebagai riwayat percakapan.
+Pembatalan satu kali dan migrasi 038 menonaktifkan link hanya setelah tidak ada
+sesi/paket/pembelian lain yang memberi hak.
+
+Wizard resep mengirim rutinitas terstruktur, bentuk/dosis/satuan serta stok.
+Transaksi `CreateEPrescription` menulis resep, item dan obat pasien bersama,
+sehingga kegagalan salah satunya membatalkan seluruh penerbitan. Rutinitas JSON
+dipakai kembali untuk checklist dan notifikasi lokal, bukan diparsing dari label
+frekuensi. Migrasi 037 menambah penyimpanan jadwal/stok tanpa menghapus reminder
+legacy. Migrasi 036–038 belum diterapkan produksi dalam pekerjaan ini;
+perpanjangan jadwal legacy perlu pemeriksaan irisan karena jam mulai dipertahankan.

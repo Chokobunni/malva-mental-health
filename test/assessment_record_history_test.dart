@@ -12,7 +12,6 @@ import 'package:malva_mental_health/src/screens/assessment_list_screen.dart';
 import 'package:malva_mental_health/src/screens/assessment_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
-import 'package:malva_mental_health/src/widgets/malva_components.dart';
 import 'package:malva_mental_health/src/widgets/therapy_library.dart';
 
 // ============================================================
@@ -353,7 +352,7 @@ void main() {
   });
 
   testWidgets(
-      'PHQ/GAD patient detail keeps scores and crisis without model copy',
+      'PHQ/GAD patient detail shares record layout, scores, safety and stored CF',
       (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -383,43 +382,21 @@ void main() {
     await tester.tap(find.text('Screening PHQ-9 + GAD-7'));
     await tester.pumpAndSettle();
 
-    for (final title in ['PHQ-9 — Depresi', 'GAD-7 — Kecemasan']) {
-      final card = tester.widget<SoftCard>(find
-          .ancestor(of: find.text(title), matching: find.byType(SoftCard))
-          .first);
-      expect(card.color, Colors.white);
-    }
-    expect(find.text('Total Score: 16/27'), findsOneWidget);
-    expect(find.text('Total Score: 7/21'), findsOneWidget);
-    expect(find.text('Cukup berat'), findsOneWidget);
+    expect(find.text('Detail Record'), findsOneWidget);
+    expect(find.text('PHQ-9 Total Score'), findsOneWidget);
+    expect(find.text('GAD-7 Total Score'), findsOneWidget);
+    expect(find.text('16'), findsOneWidget);
+    expect(find.text('7'), findsOneWidget);
+    expect(find.text('Cukup Berat'), findsOneWidget);
     expect(find.text('Ringan'), findsOneWidget);
+    expect(find.text('KRISIS'), findsOneWidget);
+    expect(find.text('INDIKATOR KESELAMATAN: YA'), findsOneWidget);
+    expect(find.text('PHQ-9 · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.text('GAD-7 · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.textContaining('0.95', findRichText: true), findsOneWidget);
+    expect(find.textContaining('0.68', findRichText: true), findsOneWidget);
     expect(find.text('moderately_severe'), findsNothing);
     expect(find.text('mild'), findsNothing);
-    expect(find.text('Dukungan aturan: CF 95%'), findsNothing);
-    expect(find.text('Dukungan aturan: CF 68%'), findsNothing);
-    expect(find.textContaining('bukan probabilitas diagnosis'), findsNothing);
-    expect(find.textContaining('Screening ini menandai risiko krisis'),
-        findsOneWidget);
-    expect(find.textContaining('9 pertanyaan'), findsNothing);
-    expect(find.textContaining('7 pertanyaan'), findsNothing);
-    expect(find.text('Gejala depresi cukup berat.'), findsNothing);
-
-    await tester.ensureVisible(find.text('Apa arti skormu?').first);
-    await tester.tap(find.text('Apa arti skormu?').first);
-    await tester.pumpAndSettle();
-    expect(find.text('15–19'), findsOneWidget);
-    expect(find.text('20–27'), findsOneWidget);
-    expect(find.text('Cukup berat'), findsNWidgets(2));
-    await tester.ensureVisible(find.text('Apa arti skormu?').first);
-    await tester.tap(find.text('Apa arti skormu?').first);
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Apa arti skormu?').last);
-    await tester.tap(find.text('Apa arti skormu?').last);
-    await tester.pumpAndSettle();
-    expect(find.text('15–21'), findsOneWidget);
-    expect(find.text('20–27'), findsNothing);
-    expect(find.text('Total Score: 16/27'), findsOneWidget);
-    expect(find.text('Total Score: 7/21'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -598,10 +575,10 @@ void main() {
     await tester.tap(find.text('Screening PHQ-9 + GAD-7'));
     await tester.pumpAndSettle();
 
-    expect(find.text('PHQ-9 — Depresi'), findsOneWidget);
-    expect(find.text('GAD-7 — Kecemasan'), findsOneWidget);
-    expect(find.text('Total Score: 12/27'), findsOneWidget);
-    expect(find.text('Total Score: 9/21'), findsOneWidget);
+    expect(find.text('PHQ-9 Total Score'), findsOneWidget);
+    expect(find.text('GAD-7 Total Score'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
+    expect(find.text('9'), findsOneWidget);
     expect(find.textContaining('Screening ini menandai risiko krisis'),
         findsNothing);
   });

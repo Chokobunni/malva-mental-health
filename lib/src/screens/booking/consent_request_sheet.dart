@@ -27,6 +27,7 @@ import '../../widgets/malva_components.dart';
 Future<bool> showConsentRequestSheet({
   required BuildContext context,
   required String professionalId,
+  bool oneTime = false,
 }) async {
   final result = await showModalBottomSheet<bool>(
     context: context,
@@ -37,15 +38,17 @@ Future<bool> showConsentRequestSheet({
       borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
     ),
     builder: (sheetContext) =>
-        _ConsentRequestSheet(professionalId: professionalId),
+        _ConsentRequestSheet(professionalId: professionalId, oneTime: oneTime),
   );
   return result == true;
 }
 
 class _ConsentRequestSheet extends ConsumerStatefulWidget {
-  const _ConsentRequestSheet({required this.professionalId});
+  const _ConsentRequestSheet(
+      {required this.professionalId, this.oneTime = false});
 
   final String professionalId;
+  final bool oneTime;
 
   @override
   ConsumerState<_ConsentRequestSheet> createState() =>
@@ -110,9 +113,13 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Profesional dapat memantau progresmu selama paket aktif '
-              '(4 sesi / 6 minggu). Pilih yang ingin dibagikan — bisa '
-              'diubah kapan saja.',
+              widget.oneTime
+                  ? 'Pilih data yang ingin dibagikan kepada profesional. Izin berbagi '
+                      'data hanya berlaku selama durasi sesi satu jam dan berakhir '
+                      'saat sesi selesai. Pilihan dapat diubah kapan saja.'
+                  : 'Profesional dapat memantau progresmu selama paket aktif '
+                      '(4 sesi / 6 minggu). Pilih yang ingin dibagikan — bisa '
+                      'diubah kapan saja.',
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -246,22 +253,19 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
       if (!mounted) return;
       Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'Izin monitoring paket aktif. Profesional dapat memantau progresmu.'),
+        SnackBar(
+          content: Text(widget.oneTime
+              ? 'Pilihan sharing disimpan dan berlaku saat sesi berlangsung.'
+              : 'Pilihan sharing disimpan dan berlaku selama paket aktif.'),
           backgroundColor: MalvaColors.mint,
         ),
       );
     } on Object catch (e) {
       if (!mounted) return;
-      // Gagal server: tetap lanjut dengan izin lokal.
-      await _saveLocalPreferences();
       setState(() {
         _isSaving = false;
-
         _error = friendlyErrorMessage(e);
       });
-      Navigator.pop(context, true);
     }
   }
 
@@ -301,7 +305,7 @@ class _ConsentToggle extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: SoftCard(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        color: value ? color.withValues(alpha: 0.06) : null,
+        color: Colors.white,
         child: Row(
           children: [
             CircleAvatar(

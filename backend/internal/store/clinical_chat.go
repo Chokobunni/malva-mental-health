@@ -89,6 +89,10 @@ func (s *Store) ValidateProfessionalChatCard(ctx context.Context, patientID, pro
 			return nil, denied
 		}
 		if len(meta.GoalIDs) > 0 {
+			active, err := s.PatientDataAccessActive(ctx, patientID, professionalID)
+			if err != nil || !active {
+				return nil, denied
+			}
 			consent, err := s.GetPatientDataConsent(ctx, patientID, professionalID)
 			if err != nil || !consent.ShareGoals {
 				return nil, denied

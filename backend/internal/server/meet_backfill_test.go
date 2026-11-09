@@ -69,7 +69,7 @@ func (f backfillFixture) pendingSession(t *testing.T, startIn time.Duration) sto
 		ProfessionalID:   f.prof.ID,
 		SessionType:      "video",
 		ScheduledAt:      clock.Now().Add(startIn),
-		DurationMinutes:  30,
+		DurationMinutes:  60,
 		Status:           "scheduled",
 		AllowPendingMeet: true,
 	})

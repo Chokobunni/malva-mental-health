@@ -525,8 +525,11 @@ func (s *Store) CreateCareSession(ctx context.Context, cs CareSession) (CareSess
 	if cs.ScheduledAt.IsZero() {
 		return CareSession{}, errors.New("scheduled_at is required")
 	}
-	if cs.DurationMinutes < 10 || cs.DurationMinutes > 180 {
-		return CareSession{}, errors.New("duration_minutes harus 10-180 menit")
+	if cs.DurationMinutes == 0 {
+		cs.DurationMinutes = 60
+	}
+	if cs.DurationMinutes < 60 || cs.DurationMinutes > 180 {
+		return CareSession{}, errors.New("duration_minutes harus 60-180 menit")
 	}
 	cs.SessionType = strings.ToLower(strings.TrimSpace(cs.SessionType))
 	if cs.SessionType != "chat" && cs.SessionType != "video" {
@@ -567,8 +570,9 @@ func (s *Store) CreateCareSession(ctx context.Context, cs CareSession) (CareSess
 	// Blokir bila sudah ada sesi aktif di jam yang sama.
 	var clash int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM care_sessions
-		WHERE professional_id = $1 AND scheduled_at = $2
-		  AND status IN ('scheduled','pending_payment')`, cs.ProfessionalID, start).Scan(&clash); err != nil {
+		WHERE professional_id = $1 AND scheduled_at < $2::timestamptz + make_interval(mins => $3)
+		  AND scheduled_at + make_interval(mins => duration_minutes) > $2
+		  AND status IN ('scheduled','pending_payment')`, cs.ProfessionalID, start, cs.DurationMinutes).Scan(&clash); err != nil {
 		return CareSession{}, err
 	}
 	if clash > 0 {
@@ -847,6 +851,11 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 			return CareSession{}, err
 		}
 	}
+	if status == "cancelled_by_patient" || status == "cancelled_by_professional" {
+		if err := deactivateCancelledOneTimeLink(ctx, tx, sessionID); err != nil {
+			return CareSession{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return CareSession{}, err
 	}
@@ -860,6 +869,22 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 }
 
 var ErrCareSessionTerminal = errors.New("sesi sudah berakhir atau dibatalkan")
+
+// A cancelled one-time appointment must not leave a permanent care link.
+// Other unfinished appointments and purchases retain the relationship.
+func deactivateCancelledOneTimeLink(ctx context.Context, tx *sql.Tx, sessionID string) error {
+	_, err := tx.ExecContext(ctx, `UPDATE patient_professional_links l SET status='inactive'
+		FROM care_sessions cancelled WHERE cancelled.id=$1 AND cancelled.package_id IS NULL
+		  AND l.patient_id=cancelled.patient_id AND l.professional_id=cancelled.professional_id AND l.status='active'
+		  AND NOT EXISTS (SELECT 1 FROM care_sessions cs WHERE cs.patient_id=l.patient_id AND cs.professional_id=l.professional_id
+		    AND cs.status IN ('scheduled','pending_payment'))
+		  AND NOT EXISTS (SELECT 1 FROM care_packages cp WHERE cp.patient_id=l.patient_id AND cp.professional_id=l.professional_id
+		    AND cp.status IN ('pending_payment','active'))
+		  AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.patient_id=l.patient_id AND b.professional_id=l.professional_id
+		    AND (b.status='pending' OR (b.status='paid' AND NOT EXISTS (SELECT 1 FROM care_sessions terminal WHERE terminal.booking_id=b.id
+		      AND terminal.status IN ('completed','no_show','cancelled_by_patient','cancelled_by_professional','expired_unpaid')))))`, sessionID)
+	return err
+}
 
 // MarkCareSessionAttendance records only the authenticated participant's choice.
 // Its row lock serializes attendance, terminal completion, cancellation and sweep.
@@ -915,6 +940,9 @@ func (s *Store) MarkCareSessionAttendance(ctx context.Context, sessionID, role, 
 		return CareSession{}, err
 	}
 	if attendance == "absent" && role == "professional" {
+		if err := deactivateCancelledOneTimeLink(ctx, tx, sessionID); err != nil {
+			return CareSession{}, err
+		}
 		// A completed package can contain a legacy scheduled final session.
 		// Returning that session's quota makes the unexpired package usable again.
 		if _, err := tx.ExecContext(ctx, `UPDATE care_packages SET status='active',updated_at=now()
@@ -960,9 +988,10 @@ func (s *Store) RescheduleCareSession(ctx context.Context, sessionID string, new
 	}
 	var clash int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM care_sessions
-		WHERE professional_id = $1 AND scheduled_at = $2 AND id <> $3
+		WHERE professional_id = $1 AND scheduled_at < $2::timestamptz + make_interval(mins => $4) AND id <> $3
+		  AND scheduled_at + make_interval(mins => duration_minutes) > $2
 		  AND status IN ('scheduled','pending_payment')`,
-		current.ProfessionalID, newTime, sessionID).Scan(&clash); err != nil {
+		current.ProfessionalID, newTime, sessionID, max(60, current.DurationMinutes)).Scan(&clash); err != nil {
 		return CareSession{}, err
 	}
 	if clash > 0 {
@@ -984,11 +1013,18 @@ func (s *Store) RescheduleCareSession(ctx context.Context, sessionID string, new
 	// jadwal lama wajib diingatkan lagi pada jadwal baru. Tanpa reset, sweeper
 	// pengingat menganggapnya sudah terkirim dan pasien tidak diingatkan.
 	if _, err := tx.ExecContext(ctx, `UPDATE care_sessions
-		SET scheduled_at = $1, status = 'scheduled', reschedule_count = reschedule_count + 1,
+		SET scheduled_at = $1, duration_minutes=GREATEST(duration_minutes,60), status = 'scheduled', reschedule_count = reschedule_count + 1,
 		    reminder_sent_at = NULL, attended_marked_at=NULL,
 		    patient_attendance='',professional_attendance='',
 		    patient_attendance_marked_at=NULL,professional_attendance_marked_at=NULL,updated_at = now()
 		WHERE id = $2`, newTime, sessionID); err != nil {
+		return CareSession{}, err
+	}
+	// Booking and session are two views of the same appointment.
+	if _, err := tx.ExecContext(ctx, `UPDATE bookings b SET booking_date=$1::date, slot_time=$2::time,
+		duration_minutes=GREATEST(cs.duration_minutes,60)
+		FROM care_sessions cs WHERE cs.id=$3 AND b.id=cs.booking_id`,
+		newTime.In(clock.Location()).Format("2006-01-02"), newTime.In(clock.Location()).Format("15:04:05"), sessionID); err != nil {
 		return CareSession{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1245,25 +1281,45 @@ func (s *Store) UpsertProfessionalPricing(ctx context.Context, p ProfessionalPri
 }
 
 // IsSlotBooked true bila slot jam sudah ditempati sesi aktif.
-func (s *Store) IsSlotBooked(ctx context.Context, professionalID string, at time.Time) (bool, error) {
+func (s *Store) IsSlotBooked(ctx context.Context, professionalID string, at time.Time, durations ...int) (bool, error) {
+	duration := 60
+	if len(durations) > 0 {
+		duration = max(60, durations[0])
+	}
+	return s.IsSlotBookedExcluding(ctx, professionalID, at, duration, "")
+}
+
+// IsSlotBookedExcluding permits a move within the appointment's own old interval.
+func (s *Store) IsSlotBookedExcluding(ctx context.Context, professionalID string, at time.Time, duration int, excludeSessionID string) (bool, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM care_sessions
-		WHERE professional_id = $1 AND scheduled_at = $2
-		  AND status IN ('scheduled','pending_payment')`, professionalID, at).Scan(&n)
+  WHERE professional_id=$1 AND scheduled_at<$2::timestamptz+make_interval(mins=>$3)
+  AND scheduled_at+make_interval(mins=>duration_minutes)>$2
+  AND id::text<>$4 AND status IN ('scheduled','pending_payment')`, professionalID, at, max(60, duration), excludeSessionID).Scan(&n)
 	return n > 0, err
 }
 
 // CountBookedSessions jumlah sesi aktif profesional pada daftar waktu (sekali query).
 // Kunci map = unix detik (bebas zona) agar pembanding dengan slot di handler
 // tetap cocok tanpa menormalkan ke UTC.
-func (s *Store) CountBookedSessions(ctx context.Context, professionalID string, times []time.Time) (map[string]bool, error) {
+func (s *Store) CountBookedSessions(ctx context.Context, professionalID string, times []time.Time, durations ...int) (map[string]bool, error) {
 	out := map[string]bool{}
 	if len(times) == 0 {
 		return out, nil
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT scheduled_at FROM care_sessions
-		WHERE professional_id = $1 AND scheduled_at = ANY($2::timestamptz[])
-		  AND status IN ('scheduled','pending_payment')`, professionalID, timesToArray(times))
+	ends := make([]time.Time, len(times))
+	for i, at := range times {
+		duration := 60
+		if i < len(durations) {
+			duration = max(60, durations[i])
+		}
+		ends[i] = at.Add(time.Duration(duration) * time.Minute)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT candidate.start_at FROM unnest($2::timestamptz[], $3::timestamptz[]) candidate(start_at,end_at)
+		WHERE EXISTS (SELECT 1 FROM care_sessions
+		WHERE professional_id = $1 AND scheduled_at < candidate.end_at
+		  AND scheduled_at + make_interval(mins => duration_minutes) > candidate.start_at
+		  AND status IN ('scheduled','pending_payment'))`, professionalID, timesToArray(times), timesToArray(ends))
 	if err != nil {
 		return nil, err
 	}
@@ -1309,7 +1365,7 @@ type ChatAccess struct {
 // tambahan, karena chat/Meet harus tertutup begitu waktu sesi habis.
 func inSessionWindow(now, start time.Time, durationMinutes int) bool {
 	if durationMinutes <= 0 {
-		durationMinutes = 30
+		durationMinutes = 60
 	}
 	return !now.Before(start.Add(-10*time.Minute)) &&
 		now.Before(start.Add(time.Duration(durationMinutes)*time.Minute))
@@ -1356,7 +1412,7 @@ func (s *Store) ChatAccessFor(ctx context.Context, patientID, professionalID, se
 	}
 	if out.InSession {
 		out.CanSendText = true
-		out.CanShare = true
+		out.CanShare = senderRole != "patient" || hasPkg || !now.Before(start)
 		return out, nil
 	}
 	// Di luar sesi: pasien dengan paket aktif boleh share data, TANPA teks.
@@ -1368,6 +1424,21 @@ func (s *Store) ChatAccessFor(ctx context.Context, patientID, professionalID, se
 	}
 	out.Reason = chatAccessReason(senderRole, out.NextSession)
 	return out, nil
+}
+
+// PatientDataAccessActive is narrower than chat's ten-minute early join window:
+// saved consent preferences become effective only during the scheduled duration.
+func (s *Store) PatientDataAccessActive(ctx context.Context, patientID, professionalID string) (bool, error) {
+	_, hasPackage, err := s.ActivePackageBetween(ctx, patientID, professionalID)
+	if err != nil || hasPackage {
+		return hasPackage, err
+	}
+	var active bool
+	err = s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM care_sessions
+		WHERE patient_id=$1 AND professional_id=$2 AND status='scheduled'
+		AND scheduled_at <= $3 AND scheduled_at + make_interval(mins => duration_minutes) > $3)`,
+		patientID, professionalID, clock.Now()).Scan(&active)
+	return active, err
 }
 
 // chatAccessReason menyusun teks alasan (role-aware) saat chat teks tidak

@@ -182,31 +182,23 @@ class WebServiceOption {
 List<WebServiceOption> webServiceOptions(BackendProfessionalPricing pricing) {
   return <WebServiceOption>[
     WebServiceOption(
-      id: 'quick_chat',
-      label: 'Chat cepat',
-      description: 'Sesi tanya jawab via chat, 30 menit.',
-      price: pricing.quickChatPrice,
-      durationMinutes: 30,
-      serviceType: 'quick_consult',
-      sessionType: 'chat',
-    ),
-    WebServiceOption(
       id: 'quick_video',
       label: 'Video cepat',
-      description: 'Konsultasi tatap muka video, 30 menit.',
+      description: 'Konsultasi tatap muka video, 1 jam.',
       price: pricing.quickVideoPrice,
-      durationMinutes: 30,
+      durationMinutes: 60,
       serviceType: 'quick_consult_video',
       sessionType: 'video',
     ),
     WebServiceOption(
       id: 'package',
       label: 'Paket perawatan',
-      description: 'Beberapa sesi dengan profesional yang sama, lebih hemat.',
+      description:
+          '4 sesi video, masing-masing 1 jam, dengan profesional yang sama.',
       price: pricing.packagePrice,
-      durationMinutes: 30,
+      durationMinutes: 60,
       serviceType: 'care_package',
-      sessionType: 'chat',
+      sessionType: 'video',
       isPackage: true,
     ),
   ];
@@ -246,7 +238,7 @@ bool webIsMeetNotReady(Object error) {
 String webBookingErrorMessage(Object error) {
   if (webIsMeetNotReady(error)) {
     return 'Video call belum bisa dijadwalkan karena akun Google profesional '
-        'belum aktif. Coba chat cepat, atau hubungi profesional lewat chat.';
+        'belum aktif. Hubungi profesional untuk menyiapkan video call.';
   }
   return error is MalvaApiException
       ? error.message

@@ -454,9 +454,22 @@ func (s *Server) resolveCrisisIncident(w http.ResponseWriter, r *http.Request, c
 }
 
 func (s *Server) listBlastStatus(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "patient" {
+		writeUserError(w, http.StatusForbidden, "Hanya pasien pemilik SOS yang dapat melihat status pengiriman.")
+		return
+	}
 	incidentID := r.URL.Query().Get("incident_id")
 	if incidentID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "incident_id is required"})
+		return
+	}
+	incident, err := s.store.GetCrisisIncident(r.Context(), incidentID)
+	if err != nil {
+		writeUserError(w, http.StatusNotFound, "Insiden SOS tidak ditemukan.")
+		return
+	}
+	if incident.PatientID != claims.Subject {
+		writeUserError(w, http.StatusForbidden, "Status SOS hanya tersedia untuk pemilik insiden.")
 		return
 	}
 	status, err := s.store.SOSBlastStatusForIncident(r.Context(), incidentID)
@@ -778,24 +791,11 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 		})
 		return
 	}
-	// Tandai slot yang sudah terisi sesi (pending/scheduled) agar tidak double-book.
-	dayStart := time.Date(target.Year(), target.Month(), target.Day(), 0, 0, 0, 0, wibLoc)
-	booked := map[string]bool{}
-	if sessions, err := s.store.ListCareSessions(r.Context(), userID, "professional", "all", "", 200); err == nil {
-		for _, cs := range sessions {
-			if cs.Status != "scheduled" && cs.Status != "pending_payment" {
-				continue
-			}
-			local := cs.ScheduledAt.In(wibLoc)
-			if local.Year() == target.Year() && local.Month() == target.Month() && local.Day() == target.Day() {
-				booked[local.Format("15:04")] = true
-			}
-		}
-	}
-	_ = dayStart
 	nowWIB := clock.Now()
 
 	slots := make([]interface{}, 0)
+	candidateTimes := []time.Time{}
+	candidateDurations := []int{}
 	for _, sch := range schedules {
 		if sch.DayOfWeek != dayOfWeek {
 			continue
@@ -805,16 +805,18 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 		if !okStart || !okEnd || !start.Before(end) {
 			continue
 		}
-		step := time.Duration(sch.SlotDurationMinutes) * time.Minute
+		step := time.Duration(max(60, sch.SlotDurationMinutes)) * time.Minute
 		if step <= 0 {
-			step = 30 * time.Minute
+			step = 60 * time.Minute
 		}
 		for t := start; t.Add(step).Before(end) || t.Add(step).Equal(end); t = t.Add(step) {
 			label := t.Format("15:04")
-			available := !booked[label]
+			available := true
 			// Lead time 24 jam: sesi butuh persiapan kedua belah pihak
 			// (aturan yang sama dipakai createBooking/validateSlot).
 			slotTime, _ := time.ParseInLocation("2006-01-02 15:04", dateStr+" "+label, wibLoc)
+			candidateTimes = append(candidateTimes, slotTime)
+			candidateDurations = append(candidateDurations, int(step/time.Minute))
 			if !slotTime.After(nowWIB.Add(24 * time.Hour)) {
 				available = false
 			}
@@ -822,6 +824,16 @@ func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request,
 				"time":      label,
 				"available": available,
 			})
+		}
+	}
+	booked, err := s.store.CountBookedSessions(r.Context(), userID, candidateTimes, candidateDurations...)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	for i, at := range candidateTimes {
+		if booked[strconv.FormatInt(at.Unix(), 10)] {
+			slots[i].(map[string]interface{})["available"] = false
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"slots": slots, "date": dateStr})
@@ -867,6 +879,7 @@ func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, c
 	// Langkah 1 — kumpulkan semua slot kandidat tanpa menyentuh database.
 	candidates := make([][]time.Time, 14)
 	allTimes := make([]time.Time, 0, 128)
+	allDurations := make([]int, 0, 128)
 	for i := 0; i < 14; i++ {
 		day := startDate.AddDate(0, 0, i)
 		dateStr := day.Format("2006-01-02")
@@ -878,9 +891,9 @@ func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, c
 			if sch.DayOfWeek != dayOfWeek {
 				continue
 			}
-			step := sch.SlotDurationMinutes
+			step := max(60, sch.SlotDurationMinutes)
 			if step <= 0 {
-				step = 30
+				step = 60
 			}
 			startMin, ok1 := parseClockLocal(sch.StartTime)
 			endMin, ok2 := parseClockLocal(sch.EndTime)
@@ -904,6 +917,7 @@ func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, c
 				}
 				candidates[i] = append(candidates[i], slotTime)
 				allTimes = append(allTimes, slotTime)
+				allDurations = append(allDurations, step)
 			}
 		}
 	}
@@ -912,7 +926,7 @@ func (s *Server) getDoctorAvailability(w http.ResponseWriter, r *http.Request, c
 	// dipanggil per slot, sehingga satu permintaan ketersediaan bisa menembak
 	// ±224 query ke database dan menjadikan endpoint ini yang paling berat.
 	booked := map[string]bool{}
-	if b, err := s.store.CountBookedSessions(r.Context(), userID, allTimes); err == nil {
+	if b, err := s.store.CountBookedSessions(r.Context(), userID, allTimes, allDurations...); err == nil {
 		booked = b
 	}
 
@@ -1007,10 +1021,10 @@ func (s *Server) updateMySchedules(w http.ResponseWriter, r *http.Request, claim
 		}
 		duration := sch.SlotDurationMinutes
 		if duration <= 0 {
-			duration = 30
+			duration = 60
 		}
-		if duration < 10 || duration > 180 {
-			writeError(w, http.StatusBadRequest, errors.New("slot_duration_minutes harus 10-180"))
+		if duration < 60 || duration > 180 {
+			writeError(w, http.StatusBadRequest, errors.New("slot_duration_minutes harus 60-180"))
 			return
 		}
 		// Default aktif bila klien tidak mengirim is_active.

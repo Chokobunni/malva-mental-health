@@ -133,9 +133,9 @@ class AssessmentListScreen extends ConsumerWidget {
                 // Disclaimer diletakkan DI ATAS daftar Assessment Record agar
                 // pasien membaca konteks (skor = screening, bukan diagnosis)
                 // sebelum melihat riwayat skornya.
-                SoftCard(
-                  color: MalvaColors.amber.withValues(alpha: 0.10),
-                  child: const Row(
+                const SoftCard(
+                  color: Colors.white,
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(Icons.info_outline_rounded,

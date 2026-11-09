@@ -178,7 +178,7 @@ func TestActivatePaidBookingSlotTakenDoesNotRevertToPending(t *testing.T) {
 		ProfessionalID:  f.prof.ID,
 		SessionType:     "chat",
 		ScheduledAt:     start,
-		DurationMinutes: 30,
+		DurationMinutes: 60,
 		Status:          "scheduled",
 	}); err != nil {
 		t.Fatalf("buat sesi yang menempati slot: %v", err)
@@ -265,7 +265,7 @@ func TestCreateCareSessionPastToleranceMatchesHandler(t *testing.T) {
 			ProfessionalID:  prof.ID,
 			SessionType:     "chat",
 			ScheduledAt:     at,
-			DurationMinutes: 30,
+			DurationMinutes: 60,
 			Status:          "scheduled",
 		}
 	}

@@ -317,7 +317,7 @@ func TestEnsureMeetLinkHandlerConflictWhenNotReady(t *testing.T) {
 		ProfessionalID:   prof.ID,
 		SessionType:      "video",
 		ScheduledAt:      clock.Now().Add(72 * time.Hour),
-		DurationMinutes:  30,
+		DurationMinutes:  60,
 		Status:           "scheduled",
 		AllowPendingMeet: true,
 	})

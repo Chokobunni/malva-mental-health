@@ -509,7 +509,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   Future<void> _openProfessionalTools({bool openFiles = false}) async {
     await _loadAccess();
-    if (!mounted || !_canUseProfessionalTools) return;
+    if (!mounted) return;
+    if (!_canUseProfessionalTools) {
+      _toast('Lampiran dan alat klinis tersedia saat sesi berjalan.');
+      return;
+    }
     final session = ref.read(currentSessionProvider)!;
     await Navigator.push<void>(
         context,
@@ -621,7 +625,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _showShareSheet(BuildContext context) {
-    if (!_canShare || _sharingData) return;
+    if (_sharingData) return;
+    if (!_canShare) {
+      _toast('Berbagi data tersedia selama sesi atau paket aktif.');
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -973,30 +981,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   : widget.otherUserId,
             );
         if (!mounted || !_ownerMatches) return;
-        Map<String, dynamic> result(BackendAssessmentSummary value) => {
-              if (value.maxScore > 0) 'score': value.score,
-              if (value.maxScore > 0) 'max_score': value.maxScore,
-              'level': value.level,
-              if (value.summary.isNotEmpty) 'summary': value.summary,
-              if (value.answers.isNotEmpty) 'answers': value.answers,
-              if (!_isPatient && value.certaintyFactor > 0)
-                'cf': value.certaintyFactor,
-            };
-        await _showSharedDetail(ChatMessage(
-          id: message.id,
-          senderId: message.senderId,
-          senderName: message.senderName,
-          text: message.text,
-          timestamp: message.timestamp,
-          isMine: message.isMine,
-          kind: 'assessment',
-          metadata: {
-            'overall_level': screening.overallLevel,
-            'crisis_flag': screening.crisisFlag,
-            'phq9': result(screening.phq9),
-            'gad7': result(screening.gad7),
-          },
-        ));
+        await _showSharedDetail(message, screening: screening);
         return;
       } on Object {
         // A shared snapshot remains readable when current category consent is absent.
@@ -1006,7 +991,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     await _showSharedDetail(message);
   }
 
-  Future<void> _showSharedDetail(ChatMessage message, {Widget? detail}) =>
+  Future<void> _showSharedDetail(ChatMessage message,
+          {Widget? detail, BackendScreeningSession? screening}) =>
       showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
@@ -1016,10 +1002,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               maxHeight: MediaQuery.of(context).size.height * .85),
           child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
-              child: SharedRecordDetail(
-                  message: message,
-                  detail: detail,
-                  showClinicalAudit: !_isPatient)),
+              child: screening != null
+                  ? SharedRecordDetail.screening(screening: screening)
+                  : SharedRecordDetail(
+                      message: message,
+                      detail: detail,
+                      showClinicalAudit: true)),
         ))),
       );
 
@@ -1637,12 +1625,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               enabled: _canSendText,
               onChanged: _onInputChanged,
               onSend: _send,
-              onShareTap: _canShare
+              onShareTap: _isPatient
                   ? () => _showShareSheet(context)
-                  : _canUseProfessionalTools
+                  : _ownerMatches
                       ? _openProfessionalTools
                       : null,
-              onAttachTap: _canUseProfessionalTools
+              onAttachTap: !_isPatient && _ownerMatches
                   ? () => _openProfessionalTools(openFiles: true)
                   : null,
               disabledHint: _liveExpired

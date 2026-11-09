@@ -807,10 +807,22 @@ class AssessmentResultScreen extends StatelessWidget {
                     apiClient: apiClient,
                   ),
                   const SizedBox(height: 18),
-                  const SectionLabel('Assessment lanjutan'),
+                  const Padding(
+                      padding: EdgeInsets.fromLTRB(4, 8, 4, 12),
+                      child: Text('Assessment lanjutan',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16))),
                   const _TherapyModuleTile(dass21Module),
                   const SizedBox(height: 18),
-                  const SectionLabel('Tips dukungan'),
+                  const Padding(
+                      padding: EdgeInsets.fromLTRB(4, 8, 4, 12),
+                      child: Text('Tips dukungan',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16))),
                   const _TipCard(
                     icon: Icons.psychology_alt_rounded,
                     title: 'Konsultasi psikiater',
@@ -906,7 +918,13 @@ class _RecommendDoctors extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionLabel('Rekomendasi profesional'),
+        const Padding(
+            padding: EdgeInsets.fromLTRB(4, 8, 4, 12),
+            child: Text('Rekomendasi profesional',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16))),
         SoftCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

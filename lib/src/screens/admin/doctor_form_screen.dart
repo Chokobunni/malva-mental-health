@@ -83,7 +83,7 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
   int _newDay = 1;
   final _newStart = TextEditingController(text: '09:00');
   final _newEnd = TextEditingController(text: '12:00');
-  final _newDur = TextEditingController(text: '30');
+  final _newDur = TextEditingController(text: '60');
   final _schedules = <_ScheduleRow>[];
 
   final _pkgSessions = TextEditingController(text: '4');
@@ -172,7 +172,7 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
           day: (m['day_of_week'] as num?)?.toInt() ?? 1,
           start: (m['start_time']?.toString() ?? '09:00').substring(0, 5),
           end: (m['end_time']?.toString() ?? '12:00').substring(0, 5),
-          duration: (m['slot_duration_minutes'] as num?)?.toInt() ?? 30,
+          duration: (m['slot_duration_minutes'] as num?)?.toInt() ?? 60,
         ));
       }
       _packages.clear();
@@ -552,11 +552,16 @@ class _DoctorFormScreenState extends ConsumerState<DoctorFormScreen> {
                       _snack('Format jam HH:MM, cth 09:00.');
                       return;
                     }
+                    final slotMinutes = int.tryParse(_newDur.text.trim()) ?? 0;
+                    if (slotMinutes < 60 || slotMinutes > 180) {
+                      _snack('Slot minimal 60 menit dan maksimal 180 menit.');
+                      return;
+                    }
                     setState(() => _schedules.add(_ScheduleRow(
                           day: _newDay,
                           start: _newStart.text.trim(),
                           end: _newEnd.text.trim(),
-                          duration: int.tryParse(_newDur.text.trim()) ?? 30,
+                          duration: int.tryParse(_newDur.text.trim()) ?? 60,
                         )));
                   },
                   icon: const Icon(Icons.add_rounded),

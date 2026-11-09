@@ -1439,3 +1439,52 @@ tarik izin berbagi bila `professional_id` dikirim kosong.
 - Medication create/update/delete by professional requires verified psychiatrist, linked patient, consent and active session. Health-record diagnosis and goals use corresponding consent scopes. Existing patient self-management remains supported.
 - Payment GET status trusts configured authenticated HTTPS provider transport, binds response order to requested reference and enforces amount/fraud validation. Webhook signature remains required.
 - Provider body codes are accepted only as 200 for capture/settlement, 201/pending, 202/deny and 407/expire. Unrecognized non-200 combinations stay pending; missing or mismatched orders cannot change state. Terminal reconciliation is idempotent and never activates an unpaid booking.
+
+## Session and prescription contracts — 2026-11-10
+
+- New patient `POST /v1/bookings` and `POST /v1/care-sessions` requests select
+  Video automatically. An existing pending package booking retains its chosen
+  type when payment is resumed. Historical Chat records remain readable.
+  Session and availability duration defaults are 60 minutes; explicit values
+  must be 60–180. Package scheduling derives duration from the practice slot.
+- With server Calendar configured, a patient may book Video before the
+  professional's Google grant is ready. Activation can return a session waiting
+  for Meet; a server without Calendar integration still rejects Video.
+- `POST /v1/care-sessions/{session_id}/reschedule` continues to accept
+  `scheduled_at` as WIB `yyyy-MM-ddTHH:mm`. Session and originating booking
+  date/time update atomically. Duration overlaps exclude the session being
+  moved; competing moves/creates serialize per professional. Calendar failures
+  after persistence are reported as warnings.
+- `GET/PUT /v1/privacy/consents` reads/writes pair preferences, including before
+  the session. Without an active package, professional record access and patient
+  record sharing require a `scheduled` session with `start <= now < end`.
+  An active package preserves access between sessions under explicit consent.
+  Chat/Meet keep their separate ten-minute early join window.
+- Worksheet share accepts a running one-time session or active package.
+  Professional worksheet list/detail expires with one-time access. Professional
+  `POST /v1/chat-attachments` requires verification, relationship and session,
+  independently of patient-data consent. Persisted chat/attachment history
+  retains its existing participant authorization.
+- `POST /v1/e-prescriptions` item fields add `form`, `unit`, `current_stock`,
+  `alert_below` and optional `schedule`; reads return them alongside the
+  generated `medication_id`. New routines require positive dosage/stock, valid
+  form/unit, selected days/times and positive `units_per_dose`. The verified
+  psychiatrist and linked-patient authorization remains in force. Prescription,
+  items and patient medications persist in one transaction.
+- `schedule` uses `times` (`HH:mm`, WIB), `weekdays` (Monday=1, Sunday=7),
+  `start_at` (RFC3339 with `+07:00`), `interval_hours`, `interval_days`,
+  `units_per_dose` and `refill_enabled`. Hour/day intervals are mutually
+  exclusive; zero means no interval of that kind. Legacy medication routines
+  may be `{}` and keep their existing `reminder_time` behavior.
+
+Example daily routine:
+
+```json
+{"times":["08:00","20:00"],"weekdays":[1,2,3,4,5,6,7],"start_at":"2026-11-10T08:00:00+07:00","interval_hours":0,"interval_days":0,"units_per_dose":1,"refill_enabled":true}
+```
+
+Deploy migrations 036–038 before this backend version. They have been exercised
+locally and have not been applied to production in this work. Migration 036
+raises legacy durations below 60 without shifting appointment starts; adjacent
+legacy appointments may therefore overlap. Unpaid checkouts continue to follow
+the existing non-reservation policy and activation reschedule flow.

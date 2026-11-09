@@ -317,6 +317,13 @@ func (s *Server) listTherapySubmissions(w http.ResponseWriter, r *http.Request, 
 	// Profesional melihat yang dibagikan ke dirinya; pasien melihat miliknya.
 	professionalView := claims.Role == "professional"
 	if professionalView && r.URL.Query().Get("patient_id") != "" {
+		active, err := s.store.PatientDataAccessActive(r.Context(), r.URL.Query().Get("patient_id"), claims.Subject)
+		if err != nil || !active {
+			writeError(w, http.StatusForbidden, errors.New("data pasien tersedia selama durasi sesi aktif"))
+			return
+		}
+	}
+	if professionalView && r.URL.Query().Get("patient_id") != "" {
 		// Profesional menelusuri submission satu pasien yang terhubung.
 		patientID, _, err := s.resolvePatientScope(r, claims, r.URL.Query().Get("patient_id"))
 		if err != nil {
@@ -387,6 +394,12 @@ func (s *Server) getTherapySubmission(w http.ResponseWriter, r *http.Request, cl
 	submissionID := r.PathValue("submission_id")
 	professionalView := claims.Role == "professional"
 	sub, err := s.store.GetTherapySubmission(r.Context(), claims.Subject, submissionID, professionalView)
+	if err == nil && professionalView {
+		active, accessErr := s.store.PatientDataAccessActive(r.Context(), sub.PatientID, claims.Subject)
+		if accessErr != nil || !active {
+			err = sql.ErrNoRows
+		}
+	}
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusNotFound, errors.New("worksheet tidak ditemukan"))
@@ -411,12 +424,11 @@ func (s *Server) shareTherapySubmission(w http.ResponseWriter, r *http.Request, 
 	}
 	professionalID := strings.TrimSpace(req.ProfessionalID)
 	if professionalID != "" {
-		// Sharing worksheet butuh paket continuous aktif (bukan sekadar link).
-		if _, has, err := s.store.ActivePackageBetween(r.Context(), claims.Subject, professionalID); err != nil {
+		if has, err := s.store.PatientDataAccessActive(r.Context(), claims.Subject, professionalID); err != nil {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		} else if !has {
-			writeError(w, http.StatusForbidden, errors.New("berbagi worksheet butuh paket sesi aktif dengan profesional tersebut"))
+			writeError(w, http.StatusForbidden, errors.New("berbagi worksheet tersedia selama sesi atau paket aktif"))
 			return
 		}
 	}

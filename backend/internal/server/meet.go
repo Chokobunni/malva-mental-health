@@ -360,7 +360,7 @@ func (s *Server) updateMeetEventOnReschedule(ctx context.Context, cal meetCalend
 		return nil
 	}
 	if durationMinutes <= 0 {
-		durationMinutes = 30
+		durationMinutes = 60
 	}
 	newEnd := newStart.Add(time.Duration(durationMinutes) * time.Minute)
 	if err := cal.UpdateMeetEvent(ctx, professionalID, eventID, newStart, newEnd); err != nil {
@@ -411,7 +411,7 @@ func (s *Server) meetEventOptions(ctx context.Context, cs store.CareSession) goo
 	start := cs.ScheduledAt
 	duration := cs.DurationMinutes
 	if duration <= 0 {
-		duration = 30
+		duration = 60
 	}
 	summary := "Sesi Malva"
 	if strings.TrimSpace(cs.PatientName) != "" {
@@ -507,7 +507,7 @@ func (s *Server) prepareMeetEventFor(ctx context.Context, patientID, professiona
 		return "", "", false, ErrMeetUnavailable
 	}
 	if durationMinutes <= 0 {
-		durationMinutes = 30
+		durationMinutes = 60
 	}
 	opts := googlecal.MeetEventOptions{
 		Summary:        "Sesi Malva",

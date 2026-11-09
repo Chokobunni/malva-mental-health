@@ -68,7 +68,8 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
   Future<void> _load({bool silent = false}) async {
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
-    final token = widget.session?.accessToken;
+    final token =
+        (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
     if (token == null || token.isEmpty) {
       if (mounted) {
         setState(() {
@@ -155,7 +156,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
           padding: const EdgeInsets.all(18),
           children: [
             SoftCard(
-              color: MalvaColors.mint.withValues(alpha: 0.10),
+              color: Colors.white,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -327,7 +328,10 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
                     onOpenChat: () => _openChat(s),
                     onReschedule: () => _openScheduler(context, existing: s),
                     onCancel: () => _cancelSession(s),
-                    accessToken: widget.session?.accessToken ?? '',
+                    accessToken:
+                        (widget.session ?? ref.read(currentSessionProvider))
+                                ?.accessToken ??
+                            '',
                     onSessionChanged: (_) => _load(silent: true),
                   ),
                   const SizedBox(height: 10),
@@ -390,7 +394,8 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
 
   Future<void> _openScheduler(BuildContext context,
       {BackendCareSession? existing}) async {
-    final token = widget.session?.accessToken;
+    final token =
+        (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
     if (token == null || token.isEmpty) return;
@@ -405,7 +410,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
         accessToken: token,
         professionalId: _package.professionalId,
         expiresAt: _package.expiresDateTime,
-        initialType: existing?.sessionType ?? 'chat',
+        initialType: 'video',
       ),
     );
     if (picked == null || !mounted) return;
@@ -424,7 +429,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
           accessToken: token,
           packageId: _package.id,
           scheduledAt: parts[0],
-          sessionType: parts.length > 1 ? parts[1] : 'chat',
+          sessionType: 'video',
         );
         if (!mounted) return;
         // meet_pending = sesi video terjadwal tetapi link belum ada. Itu
@@ -476,7 +481,8 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
     if (confirmed != true) return;
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
-    final token = widget.session?.accessToken;
+    final token =
+        (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
     if (token == null || token.isEmpty) return;
     try {
       await apiClient.updateCareSession(
@@ -502,7 +508,8 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
   /// Minta refund uang untuk sesi yang dibatalkan profesional
   /// (POST /v1/care-sessions/{id}/refund). Idempoten di sisi server.
   Future<void> _requestRefund(BackendCareSession s) async {
-    final token = widget.session?.accessToken;
+    final token =
+        (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
     if (token == null || token.isEmpty) return;
@@ -582,7 +589,8 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
   }
 
   Future<void> _openPendingPayment() async {
-    final token = widget.session?.accessToken;
+    final token =
+        (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
     if (token == null || token.isEmpty) return;
@@ -667,7 +675,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
             booking: existingBooking,
             package: _package,
             doctorName: _package.professionalName,
-            session: widget.session,
+            session: widget.session ?? ref.read(currentSessionProvider),
             apiClient: widget.apiClient,
           ),
         ),
@@ -696,7 +704,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
         packageId: _package.id,
         bookingDate: parts[0].split('T')[0],
         slotTime: parts[0].split('T')[1],
-        sessionType: parts.length > 1 ? parts[1] : 'chat',
+        sessionType: 'video',
       );
       if (!mounted) return;
       Navigator.push(
@@ -706,7 +714,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
             booking: booking,
             package: _package,
             doctorName: _package.professionalName,
-            session: widget.session,
+            session: widget.session ?? ref.read(currentSessionProvider),
             apiClient: widget.apiClient,
           ),
         ),
@@ -757,7 +765,8 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
     if (confirmed != true || !mounted) return;
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
-    final token = widget.session?.accessToken;
+    final token =
+        (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
     if (token == null || token.isEmpty) return;
     try {
       // The server cancels the exact linked booking and payment atomically.
@@ -789,7 +798,7 @@ class _SessionSchedulerSheet extends StatefulWidget {
     required this.accessToken,
     required this.professionalId,
     this.expiresAt,
-    this.initialType = 'chat',
+    this.initialType = 'video',
   });
 
   final MalvaApiClient apiClient;
@@ -806,7 +815,7 @@ class _SessionSchedulerSheetState extends State<_SessionSchedulerSheet> {
   List<BackendAvailabilityDay> _days = const [];
   String? _date;
   String? _slot;
-  String _type = 'chat';
+  final String _type = 'video';
   bool _loadingDays = true;
   String? _error;
 
@@ -818,7 +827,6 @@ class _SessionSchedulerSheetState extends State<_SessionSchedulerSheet> {
   @override
   void initState() {
     super.initState();
-    _type = widget.initialType == 'video' ? 'video' : 'chat';
     _loadDays();
     _loadMeetStatus();
   }
@@ -904,21 +912,8 @@ class _SessionSchedulerSheetState extends State<_SessionSchedulerSheet> {
                   fontSize: 12.5),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                ChoiceChip(
-                  label: const Text('Chat'),
-                  selected: _type == 'chat',
-                  onSelected: (_) => setState(() => _type = 'chat'),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('Video'),
-                  selected: _type == 'video',
-                  onSelected: (_) => setState(() => _type = 'video'),
-                ),
-              ],
-            ),
+            const Text('Video • 1 jam per sesi',
+                style: TextStyle(fontWeight: FontWeight.w700)),
             // Catatan info (bukan error) bila Google Meet profesional belum
             // aktif: sesi video tetap bisa dijadwalkan, link dibuat menyusul.
             if (_type == 'video' && _meetReady == false) ...[
@@ -1029,7 +1024,7 @@ class _PackageFirstSessionSheetState extends State<PackageFirstSessionSheet> {
   List<BackendAvailabilityDay> _days = const [];
   String? _date;
   String? _slot;
-  String _type = 'chat';
+  final String _type = 'video';
   bool _loadingDays = true;
   String? _error;
 
@@ -1097,21 +1092,8 @@ class _PackageFirstSessionSheetState extends State<PackageFirstSessionSheet> {
                   fontSize: 12.5),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                ChoiceChip(
-                  label: const Text('Chat'),
-                  selected: _type == 'chat',
-                  onSelected: (_) => setState(() => _type = 'chat'),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('Video'),
-                  selected: _type == 'video',
-                  onSelected: (_) => setState(() => _type = 'video'),
-                ),
-              ],
-            ),
+            const Text('Video • 1 jam per sesi',
+                style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
             if (_loadingDays)
               const Center(child: CircularProgressIndicator())
@@ -1379,7 +1361,11 @@ class _PackageSessionCard extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: onReschedule,
-                    child: const Text('Reschedule'),
+                    style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8)),
+                    child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('Reschedule', maxLines: 1)),
                   ),
                 ),
                 const SizedBox(width: 8),

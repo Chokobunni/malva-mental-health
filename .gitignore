@@ -36,6 +36,7 @@ android/*.jks
 android/*.keystore
 !android/key.properties.example
 android/.gradle/
+android/.kotlin/
 android/app/build/
 
 # iOS/macOS generated files if those platforms are added later

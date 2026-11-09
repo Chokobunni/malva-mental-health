@@ -811,7 +811,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   int _newDay = 1;
   final _newStart = TextEditingController(text: '09:00');
   final _newEnd = TextEditingController(text: '16:00');
-  final _newDuration = TextEditingController(text: '30');
+  final _newDuration = TextEditingController(text: '60');
   final _offReason = TextEditingController();
   DateTime? _offDate;
   bool _savingOff = false;
@@ -1320,7 +1320,12 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   Future<void> _addSchedule() async {
     final token = _token;
     if (token == null) return;
-    final duration = int.tryParse(_newDuration.text.trim()) ?? 30;
+    final duration = int.tryParse(_newDuration.text.trim()) ?? 0;
+    if (duration < 60 || duration > 180) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Slot minimal 60 menit dan maksimal 180 menit.')));
+      return;
+    }
     final next = [
       ..._schedules.map(_scheduleToPayload),
       {

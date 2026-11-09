@@ -245,7 +245,7 @@ def proj(r, active):
         "day_of_week": r.get("day_of_week"),
         "start_time": st[:5],
         "end_time": en[:5],
-        "slot_duration_minutes": r.get("slot_duration_minutes") or 30,
+        "slot_duration_minutes": max(r.get("slot_duration_minutes") or 60, 60),
         "is_active": bool(active),
     }
 

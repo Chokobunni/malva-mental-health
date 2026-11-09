@@ -62,6 +62,33 @@ class FakeAdminApi extends MalvaApiClient {
   int rescheduleCalls = 0;
   int cancelSessionCalls = 0;
   int cancelPackageCalls = 0;
+  int consentUpdates = 0;
+
+  @override
+  Future<BackendPatientDataConsent> updatePrivacyConsent({
+    required String accessToken,
+    required String professionalId,
+    required bool shareScreenings,
+    required bool shareMoodDiary,
+    required bool shareMedications,
+    required bool shareTimeline,
+    bool shareHealthRecord = true,
+    bool shareGoals = true,
+    bool shareTherapyRecords = false,
+  }) async {
+    _maybeFail();
+    consentUpdates++;
+    return BackendPatientDataConsent(
+      professionalId: professionalId,
+      shareScreenings: shareScreenings,
+      shareMoodDiary: shareMoodDiary,
+      shareMedications: shareMedications,
+      shareTimeline: shareTimeline,
+      shareHealthRecord: shareHealthRecord,
+      shareGoals: shareGoals,
+      shareTherapyRecords: shareTherapyRecords,
+    );
+  }
 
   /// Bila diisi, semua panggilan melempar error ini (uji tampilan error).
   Object? failWith;

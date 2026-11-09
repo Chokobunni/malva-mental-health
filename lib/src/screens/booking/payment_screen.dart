@@ -79,7 +79,26 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
     with WidgetsBindingObserver {
   static final Map<String, _PaymentScreenState> _active = {};
   static String _ownerKey(AuthSession? session, String reference) =>
-      '${session?.backendUserId}:${session?.identifier}:$reference';
+      '${_identity(session)}:$reference';
+  late final AuthSession? _owner;
+  late final bool _providerOwned;
+  bool _ownerChanged = false;
+  static String? _identity(AuthSession? session) => session == null
+      ? null
+      : '${session.role.name}:${session.backendUserId?.isNotEmpty == true ? session.backendUserId : session.identifier}';
+  bool get _ownerMatches {
+    final current = ref.read(currentSessionProvider);
+    return !_ownerChanged &&
+        _identity(widget.session ?? _owner) == _identity(_owner) &&
+        (!_providerOwned && current == null ||
+            _identity(current) == _identity(_owner));
+  }
+
+  AuthSession? get _session {
+    final current = ref.read(currentSessionProvider);
+    return _identity(current) == _identity(_owner) ? current : _owner;
+  }
+
   BackendCarePackage? _restoredPackage;
   String _method = 'qris';
   bool _isPaying = false;
@@ -143,7 +162,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
     if (widget.isPackage) {
       return 'Paket Continuous (4 sesi / 6 minggu) • ${widget.doctorName}';
     }
-    return 'Konsultasi (30 mnt) • ${widget.doctorName}';
+    return 'Konsultasi (1 jam) • ${widget.doctorName}';
   }
 
   /// True bila metode pembayaran dipilih di halaman gateway (Midtrans).
@@ -162,6 +181,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
   @override
   void initState() {
     super.initState();
+    final current = ref.read(currentSessionProvider);
+    _owner = widget.session ?? current;
+    _providerOwned = current != null;
     _packageBooking = widget.booking;
     // Lifecycle observer: Android bisa membekukan timer saat aplikasi di
     // belakang, jadi status juga dicek ulang saat aplikasi kembali ke depan.
@@ -183,7 +205,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
     // Batalkan polling SEBELUM widget dibuang: timer yang hidup akan memanggil
     // setState pada state yang sudah mati.
     _pollTimer?.cancel();
-    final key = _ownerKey(widget.session, _pendingReference);
+    final key = _ownerKey(_owner, _pendingReference);
     if (identical(_active[key], this)) _active.remove(key);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -213,6 +235,23 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthSession?>(currentSessionProvider, (_, next) {
+      if (!_ownerMatches) {
+        _pollTimer?.cancel();
+        final key = _ownerKey(_owner, _pendingReference);
+        if (identical(_active[key], this)) _active.remove(key);
+        setState(() => _ownerChanged = true);
+        unawaited(_closePaymentPage());
+      }
+    });
+    if (!_ownerMatches) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Payment')),
+        body: const Center(
+            child: Text(
+                'Akun telah berubah. Buka kembali pembayaran dari MyCare.')),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Payment'),
@@ -393,10 +432,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
   }
 
   Future<void> _pay() async {
+    if (!_ownerMatches) return;
     // Fallback ke provider bila apiClient tidak dioper eksplisit (mis.
     // deep-link), konsisten dengan layar lain.
     final MalvaApiClient apiClient = _api;
-    final accessToken = widget.session?.accessToken;
+    final accessToken = _session?.accessToken;
     if (accessToken == null || accessToken.isEmpty) {
       setState(() => _error = 'Mode offline aktif. '
           'Hubungkan ke server untuk melakukan pembayaran.');
@@ -418,11 +458,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
       );
       await _afterPaymentCreated(apiClient, accessToken, response.payment);
     } on MalvaApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted && _ownerMatches) setState(() => _error = e.message);
     } on Object catch (e) {
-      if (mounted) setState(() => _error = friendlyErrorMessage(e));
+      if (mounted && _ownerMatches)
+        setState(() => _error = friendlyErrorMessage(e));
     } finally {
-      if (mounted) setState(() => _isPaying = false);
+      if (mounted && _ownerMatches) setState(() => _isPaying = false);
     }
   }
 
@@ -435,6 +476,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
     if (booking == null && widget.package!.bookingId != null) {
       final bookings =
           await apiClient.listBookings(accessToken: accessToken, limit: 100);
+      if (!mounted || !_ownerMatches) return;
       for (final b in bookings) {
         if (b.id == widget.package!.bookingId) {
           booking = b;
@@ -459,16 +501,17 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
           professionalId: widget.package!.professionalId,
         ),
       );
-      if (picked == null || !mounted) return;
+      if (picked == null || !mounted || !_ownerMatches) return;
       final parts = picked.split('|');
       booking = await apiClient.createPackageSessionBooking(
         accessToken: accessToken,
         packageId: widget.package!.id,
         bookingDate: parts[0].split('T')[0],
         slotTime: parts[0].split('T')[1],
-        sessionType: parts.length > 1 ? parts[1] : 'chat',
+        sessionType: 'video',
       );
     }
+    if (!mounted || !_ownerMatches) return;
     _packageBooking = booking;
     final response = await apiClient.createPayment(
       accessToken: accessToken,
@@ -488,6 +531,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
     String accessToken,
     BackendPayment payment,
   ) async {
+    if (!mounted || !_ownerMatches) return;
     if (payment.status.toLowerCase() == 'paid') {
       _goToSuccess(payment.reference);
       return;
@@ -511,6 +555,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
   /// channel tidak tersedia / pengguna menutup browser), karena webhook tetap
   /// bisa melunasi pembayaran tanpa aplikasi membuka apa pun.
   void _startWaitingForGateway(BackendPayment payment) {
+    if (!mounted || !_ownerMatches) return;
     _pollTimer?.cancel();
     setState(() {
       _waiting = true;
@@ -529,7 +574,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
   }
 
   void _claimReference() {
-    final key = _ownerKey(widget.session, _pendingReference);
+    final key = _ownerKey(_owner, _pendingReference);
     final previous = _active[key];
     if (previous != null && !identical(previous, this)) {
       previous._pollTimer?.cancel();
@@ -545,6 +590,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
         widget.package != null) return;
     final bookings =
         await _api.listBookings(accessToken: accessToken, limit: 100);
+    if (!mounted || !_ownerMatches) return;
     for (final booking in bookings) {
       if (booking.id == payment.bookingId) {
         _packageBooking = booking;
@@ -556,6 +602,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
           'Pembayaran diterima. Konteks booking belum tersedia; cek status lagi atau buka MyCare.');
     if (_packageBooking!.serviceType == 'package_session') {
       final packages = await _api.listCarePackages(accessToken: accessToken);
+      if (!mounted || !_ownerMatches) return;
       for (final package in packages) {
         if (package.bookingId == payment.bookingId) {
           _restoredPackage = package;
@@ -581,7 +628,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
   /// Membuka halaman pembayaran gateway. Kegagalan membuka halaman tidak
   /// menggagalkan alur: pengguna tetap punya tombol "Buka halaman pembayaran".
   Future<void> _openPaymentPage(String url) async {
-    if (url.isEmpty) return;
+    if (url.isEmpty || !_ownerMatches) return;
     try {
       final uri = Uri.parse(url);
       _embeddedPaymentPage =
@@ -595,7 +642,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
               false)
           : await launchUrl(Uri.parse(url),
               mode: LaunchMode.externalApplication);
-      if (!opened && mounted) {
+      if (!opened && mounted && _ownerMatches) {
         setState(() => _waitingNote =
             'Halaman pembayaran tidak bisa dibuka otomatis. Tekan "Buka halaman pembayaran" di bawah.');
       }
@@ -607,8 +654,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
   /// Memeriksa status pembayaran ke server (juga memicu aktivasi best-effort
   /// di server bila sudah lunas tetapi sesinya belum lahir).
   Future<void> _checkPaymentStatus({bool silent = false}) async {
-    if (_pendingReference.isEmpty || _checkingStatus || _navigated) return;
-    final accessToken = widget.session?.accessToken;
+    if (!_ownerMatches ||
+        _pendingReference.isEmpty ||
+        _checkingStatus ||
+        _navigated) return;
+    final accessToken = _session?.accessToken;
     if (accessToken == null || accessToken.isEmpty) return;
     _checkingStatus = true;
     if (!silent && mounted) setState(() => _isPaying = true);
@@ -617,14 +667,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
         accessToken: accessToken,
         reference: _pendingReference,
       );
-      if (!mounted || _navigated) return;
+      if (!mounted || !_ownerMatches || _navigated) return;
       final state = status.payment.status.toLowerCase();
       if (status.payment.redirectUrl.isNotEmpty) {
         _pendingRedirectUrl = status.payment.redirectUrl;
       }
       if (state == 'paid') {
         await _restoreReturnContext(status.payment, accessToken);
-        if (!mounted || _navigated) return;
+        if (!mounted || !_ownerMatches || _navigated) return;
         _pollTimer?.cancel();
         setState(() => _waiting = false);
         _goToSuccess(_pendingReference);
@@ -650,10 +700,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
         });
         return;
       }
-      if (mounted) setState(() => _isPaying = false);
+      if (mounted && _ownerMatches) setState(() => _isPaying = false);
     } on Object catch (e) {
       // Kegagalan jaringan saat memeriksa status bukan kegagalan pembayaran.
-      if (!mounted) return;
+      if (!mounted || !_ownerMatches) return;
       setState(() {
         _isPaying = false;
         if (!silent) _waitingNote = friendlyErrorMessage(e);
@@ -665,7 +715,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
 
   /// Pindah ke layar sukses (layar itu yang mengarahkan ke MyCare).
   void _goToSuccess(String reference) {
-    if (!mounted || _navigated) return;
+    if (!mounted || !_ownerMatches || _navigated) return;
     _navigated = true;
     unawaited(_closePaymentPage());
     Navigator.pushReplacement(
@@ -676,7 +726,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
           package: widget.package ?? _restoredPackage,
           doctorUserId: _doctorUserId,
           doctorName: widget.doctorName,
-          session: widget.session,
+          session: _session,
           apiClient: widget.apiClient,
         ),
       ),

@@ -83,7 +83,7 @@ class _PaymentSuccessScreenState extends ConsumerState<PaymentSuccessScreen> {
               if (widget.isPackage) ...[
                 const SizedBox(height: 10),
                 SoftCard(
-                  color: MalvaColors.mint.withValues(alpha: 0.10),
+                  color: Colors.white,
                   child: Row(
                     children: [
                       const Icon(Icons.card_membership_rounded,

@@ -96,7 +96,7 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
                         TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
                 const SizedBox(height: 8),
                 for (final rule in const [
-                  '4 sesi pertemuan (chat/video) dengan profesional ini.',
+                  '4 sesi video, masing-masing 1 jam dengan profesional ini.',
                   'Berlaku 6 minggu sejak pembayaran — sisa sesi setelah itu hangus.',
                   'Tidak hadir saat sesi = sesi hangus (tetap dihitung berkurang).',
                   'Profesional membatalkan = kredit sesi kembali, bisa dijadwalkan ulang.',
@@ -171,7 +171,8 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
     // tidak dioper eksplisit (deep-link), konsisten dengan layar lain.
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
-    final accessToken = widget.session?.accessToken;
+    final accessToken =
+        (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
     if (accessToken == null || accessToken.isEmpty) {
       setState(() => _error = 'Mode offline aktif. '
           'Hubungkan ke server untuk membeli paket.');
@@ -199,7 +200,7 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
           builder: (_) => PaymentScreen(
             package: pkg,
             doctorName: widget.doctorName,
-            session: widget.session,
+            session: widget.session ?? ref.read(currentSessionProvider),
             apiClient: widget.apiClient,
           ),
         ),

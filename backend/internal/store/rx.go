@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 )
@@ -26,16 +25,19 @@ type EPrescription struct {
 }
 
 type EPrescriptionItem struct {
-	ID             string  `json:"id"`
-	PrescriptionID string  `json:"prescription_id"`
-	MedicationID   *string `json:"medication_id,omitempty"`
-	Name           string  `json:"name"`
-	Form           string  `json:"form"`
-	Dosage         string  `json:"dosage"`
-	Frequency      string  `json:"frequency"`
-	Days           int     `json:"days"`
-	UnitsPerDay    int     `json:"units_per_day"`
-	Unit           string  `json:"unit"`
+	Schedule       json.RawMessage `json:"schedule"`
+	CurrentStock   int             `json:"current_stock"`
+	AlertBelow     int             `json:"alert_below"`
+	ID             string          `json:"id"`
+	PrescriptionID string          `json:"prescription_id"`
+	MedicationID   *string         `json:"medication_id,omitempty"`
+	Name           string          `json:"name"`
+	Form           string          `json:"form"`
+	Dosage         string          `json:"dosage"`
+	Frequency      string          `json:"frequency"`
+	Days           int             `json:"days"`
+	UnitsPerDay    int             `json:"units_per_day"`
+	Unit           string          `json:"unit"`
 }
 
 type EPrescriptionFull struct {
@@ -61,77 +63,37 @@ func (s *Store) CreateEPrescription(ctx context.Context, rx EPrescription, items
 	}
 
 	for _, item := range items {
+		schedule := item.Schedule
+		if len(schedule) == 0 {
+			schedule = json.RawMessage(`{}`)
+		}
+		var firstTime string
+		var routine struct {
+			Times []string `json:"times"`
+		}
+		_ = json.Unmarshal(schedule, &routine)
+		if len(routine.Times) > 0 {
+			firstTime = routine.Times[0]
+		}
+		var medicationID string
+		// The medication and signed prescription must either both persist or both fail.
+		err = ptx.QueryRowContext(ctx, `INSERT INTO medications(patient_id,name,dosage,form,reminder_time,relation_to_meal,current_stock,alert_below,source,schedule)
+   VALUES($1,$2,$3,$4,$5,$6,$7,$8,'prescription',$9) RETURNING id`, rx.PatientID, item.Name, item.Dosage, item.Form, firstTime, rx.Instructions, item.CurrentStock, item.AlertBelow, schedule).Scan(&medicationID)
+		if err != nil {
+			return EPrescription{}, err
+		}
 		const qi = `INSERT INTO e_prescription_items
-			(prescription_id, medication_id, name, form, dosage, frequency, days, units_per_day, unit)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
-		if _, err := ptx.ExecContext(ctx, qi, rx.ID, item.MedicationID, item.Name, item.Form, item.Dosage,
-			item.Frequency, item.Days, item.UnitsPerDay, item.Unit); err != nil {
+   (prescription_id, medication_id, name, form, dosage, frequency, days, units_per_day, unit, schedule, current_stock, alert_below)
+   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`
+		if _, err := ptx.ExecContext(ctx, qi, rx.ID, medicationID, item.Name, item.Form, item.Dosage, item.Frequency, item.Days, item.UnitsPerDay, item.Unit, schedule, item.CurrentStock, item.AlertBelow); err != nil {
 			return EPrescription{}, err
 		}
 	}
-
 	if err := ptx.Commit(); err != nil {
 		return EPrescription{}, err
 	}
-	_ = s.AddAuditLog(ctx, rx.ProfessionalID, rx.PatientID, "eprescription.issued", "e_prescriptions", rx.ID,
-		map[string]any{"items_count": len(items)})
-	// Sinkronkan item resep ke tabel `medications` milik pasien.
-	//
-	// Dulu item resep hanya masuk ke `e_prescription_items`, sementara rekam
-	// medis pasien (GET /v1/medications, GET /v1/health-record) membaca tabel
-	// `medications`. Akibatnya obat yang diresepkan (mis. Lamictal) tidak
-	// pernah muncul di rekam medis maupun pemilih obat pada daily check-in.
-	//
-	// Sinkronisasi ini BEST-EFFORT: dijalankan SETELAH commit dan kegagalannya
-	// hanya dicatat sebagai warning. Resep yang sudah sah tidak boleh batal
-	// hanya karena pencatatan obat gagal.
-	s.syncPrescriptionItemsToMedications(ctx, rx.PatientID, items)
+	_ = s.AddAuditLog(ctx, rx.ProfessionalID, rx.PatientID, "eprescription.issued", "e_prescriptions", rx.ID, map[string]any{"items_count": len(items)})
 	return rx, nil
-}
-
-// syncPrescriptionItemsToMedications menyalin item e-resep ke tabel
-// `medications` pasien agar tampil di rekam medis & pemilih obat check-in.
-//
-// Aturan:
-//   - Idempoten: item dilewati bila sudah ada obat AKTIF dengan nama
-//     (case-insensitive) dan dosis yang sama untuk pasien tersebut.
-//   - `source` diisi 'prescription' agar bisa dibedakan dari input pasien.
-//   - `form` & `dosage` wajib NOT NULL di skema, jadi dipakai nilai default
-//     yang sama dengan UpsertMedication bila item resep mengosongkannya.
-//   - Semua kegagalan hanya di-log (best-effort), tidak mengembalikan error.
-func (s *Store) syncPrescriptionItemsToMedications(ctx context.Context, patientID string, items []EPrescriptionItem) {
-	if strings.TrimSpace(patientID) == "" || len(items) == 0 {
-		return
-	}
-	for _, item := range items {
-		name := strings.TrimSpace(item.Name)
-		if name == "" {
-			continue
-		}
-		dosage := strings.TrimSpace(item.Dosage)
-		if dosage == "" {
-			dosage = "0 mg"
-		}
-		form := strings.TrimSpace(item.Form)
-		if form == "" {
-			form = "Tablet"
-		}
-		// Satu statement per item: insert hanya bila belum ada obat aktif
-		// dengan nama (case-insensitive) + dosis yang sama.
-		const q = `INSERT INTO medications
-			(patient_id, name, dosage, form, reminder_time, relation_to_meal,
-			 current_stock, alert_below, source, active)
-			SELECT $1, $2, $3, $4, '', '', 0, 0, 'prescription', true
-			WHERE NOT EXISTS (
-				SELECT 1 FROM medications
-				WHERE patient_id = $1 AND active
-				  AND lower(name) = lower($2) AND dosage = $3
-			)`
-		if _, err := s.db.ExecContext(ctx, q, patientID, name, dosage, form); err != nil {
-			slog.Warn("sinkronisasi obat dari e-resep gagal",
-				"error", err, "patient", patientID, "medication", name)
-		}
-	}
 }
 
 func (s *Store) GetEPrescriptionByQR(ctx context.Context, qrToken string) (EPrescriptionFull, error) {
@@ -146,7 +108,7 @@ func (s *Store) GetEPrescriptionByQR(ctx context.Context, qrToken string) (EPres
 	}
 	_ = json.Unmarshal(sig, &rx.SignatureData)
 
-	const qi = `SELECT id, prescription_id, medication_id, name, form, dosage, frequency, days, units_per_day, unit
+	const qi = `SELECT id, prescription_id, medication_id, name, form, dosage, frequency, days, units_per_day, unit, schedule, current_stock, alert_below
 		FROM e_prescription_items WHERE prescription_id = $1 ORDER BY name`
 	rows, err := s.db.QueryContext(ctx, qi, rx.ID)
 	if err != nil {
@@ -156,7 +118,7 @@ func (s *Store) GetEPrescriptionByQR(ctx context.Context, qrToken string) (EPres
 	for rows.Next() {
 		var item EPrescriptionItem
 		if err := rows.Scan(&item.ID, &item.PrescriptionID, &item.MedicationID, &item.Name, &item.Form, &item.Dosage,
-			&item.Frequency, &item.Days, &item.UnitsPerDay, &item.Unit); err != nil {
+			&item.Frequency, &item.Days, &item.UnitsPerDay, &item.Unit, &item.Schedule, &item.CurrentStock, &item.AlertBelow); err != nil {
 			return EPrescriptionFull{}, err
 		}
 		rx.Items = append(rx.Items, item)
@@ -176,7 +138,7 @@ func (s *Store) GetEPrescription(ctx context.Context, rxID string) (EPrescriptio
 	}
 	_ = json.Unmarshal(sig, &rx.SignatureData)
 
-	const qi = `SELECT id, prescription_id, medication_id, name, form, dosage, frequency, days, units_per_day, unit
+	const qi = `SELECT id, prescription_id, medication_id, name, form, dosage, frequency, days, units_per_day, unit, schedule, current_stock, alert_below
 		FROM e_prescription_items WHERE prescription_id = $1 ORDER BY name`
 	rows, err := s.db.QueryContext(ctx, qi, rxID)
 	if err != nil {
@@ -186,7 +148,7 @@ func (s *Store) GetEPrescription(ctx context.Context, rxID string) (EPrescriptio
 	for rows.Next() {
 		var item EPrescriptionItem
 		if err := rows.Scan(&item.ID, &item.PrescriptionID, &item.MedicationID, &item.Name, &item.Form, &item.Dosage,
-			&item.Frequency, &item.Days, &item.UnitsPerDay, &item.Unit); err != nil {
+			&item.Frequency, &item.Days, &item.UnitsPerDay, &item.Unit, &item.Schedule, &item.CurrentStock, &item.AlertBelow); err != nil {
 			return EPrescriptionFull{}, err
 		}
 		rx.Items = append(rx.Items, item)
@@ -247,7 +209,7 @@ func (s *Store) ListEPrescriptionsForUser(ctx context.Context, userID, role stri
 		itemArgs[i] = out[i].ID
 		positions[out[i].ID] = i
 	}
-	itemQuery := fmt.Sprintf(`SELECT prescription_id, id, medication_id, name, form, dosage, frequency, days, units_per_day, unit
+	itemQuery := fmt.Sprintf(`SELECT prescription_id, id, medication_id, name, form, dosage, frequency, days, units_per_day, unit, schedule, current_stock, alert_below
 		FROM e_prescription_items WHERE prescription_id IN (%s) ORDER BY name`,
 		strings.Join(holders, ","))
 	itemRows, err := s.db.QueryContext(ctx, itemQuery, itemArgs...)
@@ -258,7 +220,7 @@ func (s *Store) ListEPrescriptionsForUser(ctx context.Context, userID, role stri
 	for itemRows.Next() {
 		var item EPrescriptionItem
 		if err := itemRows.Scan(&item.PrescriptionID, &item.ID, &item.MedicationID, &item.Name, &item.Form,
-			&item.Dosage, &item.Frequency, &item.Days, &item.UnitsPerDay, &item.Unit); err != nil {
+			&item.Dosage, &item.Frequency, &item.Days, &item.UnitsPerDay, &item.Unit, &item.Schedule, &item.CurrentStock, &item.AlertBelow); err != nil {
 			return nil, err
 		}
 		if idx, ok := positions[item.PrescriptionID]; ok {

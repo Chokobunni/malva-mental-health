@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:malva_mental_health/src/models.dart';
+import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/widgets/shared_record_detail.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
 
@@ -39,6 +40,34 @@ void main() {
                         kind: kind,
                         metadata: metadata))))));
   }
+
+  testWidgets(
+      'saved screening uses the shared record presentation and stored CF',
+      (tester) async {
+    final screening = BackendScreeningSession.fromJson({
+      'id': 'saved',
+      'patient_id': 'patient',
+      'created_at': '2026-10-09T09:26:00+07:00',
+      'crisis_flag': true,
+      'bundle': {
+        'phq9': {'score': 23, 'max_score': 27, 'cf': 0.95},
+        'gad7': {'score': 21, 'max_score': 21, 'cf': 0.95},
+      }
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: SharedRecordDetail.screening(screening: screening)))));
+    expect(find.text('Detail Record'), findsOneWidget);
+    expect(find.text('09/10/2026'), findsOneWidget);
+    expect(find.text('09:26'), findsOneWidget);
+    expect(find.text('KRISIS'), findsOneWidget);
+    expect(find.text('INDIKATOR KESELAMATAN: YA'), findsOneWidget);
+    expect(
+        find.text('Assessment · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.textContaining('0.95', findRichText: true), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('legacy summary keeps period and metrics without repeated quote',
       (tester) async {

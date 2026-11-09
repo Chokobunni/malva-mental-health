@@ -100,6 +100,12 @@ type PayoutInfo struct {
 }
 
 func (s *Store) CreateBooking(ctx context.Context, b Booking) (Booking, error) {
+	if b.DurationMinutes == 0 {
+		b.DurationMinutes = 60
+	}
+	if b.DurationMinutes < 60 || b.DurationMinutes > 180 {
+		return Booking{}, errors.New("duration_minutes harus 60-180 menit")
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Booking{}, err
@@ -140,6 +146,12 @@ func (s *Store) CreateBooking(ctx context.Context, b Booking) (Booking, error) {
 // CreatePackageBooking binds a care package to its payment booking; package_id
 // on bookings remains reserved for the legacy service_packages table.
 func (s *Store) CreatePackageBooking(ctx context.Context, packageID string, b Booking) (Booking, error) {
+	if b.DurationMinutes == 0 {
+		b.DurationMinutes = 60
+	}
+	if b.DurationMinutes < 60 || b.DurationMinutes > 180 {
+		return Booking{}, errors.New("duration_minutes harus 60-180 menit")
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Booking{}, err
@@ -208,6 +220,37 @@ func (s *Store) CreatePackageBooking(ctx context.Context, packageID string, b Bo
 		return Booking{}, err
 	}
 	return b, nil
+}
+
+// PendingBookingForCarePackage preserves an already chosen legacy appointment
+// when a patient resumes payment; new appointments always choose video.
+func (s *Store) PendingBookingForCarePackage(ctx context.Context, packageID string) (Booking, bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT b.id FROM care_packages cp JOIN bookings b
+		ON b.patient_id=cp.patient_id AND b.professional_id=cp.professional_id
+		WHERE cp.id=$1 AND b.status='pending' AND b.service_type='package_session'
+		AND (b.id=cp.booking_id OR (cp.booking_id IS NULL AND NOT EXISTS(SELECT 1 FROM care_packages bound WHERE bound.booking_id=b.id))) LIMIT 2`, packageID)
+	if err != nil {
+		return Booking{}, false, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return Booking{}, false, err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return Booking{}, false, err
+	}
+	if len(ids) != 1 {
+		return Booking{}, false, nil
+	}
+	b, err := s.GetBooking(ctx, ids[0])
+	return b, err == nil, err
 }
 
 func (s *Store) ListBookingsForUser(ctx context.Context, userID, role string, limit int) ([]Booking, error) {

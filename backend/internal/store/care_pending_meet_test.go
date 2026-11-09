@@ -32,7 +32,7 @@ func TestCreateCareSessionVideoWithoutLinkRejectedByDefault(t *testing.T) {
 		ProfessionalID:  "00000000-0000-0000-0000-000000000002",
 		SessionType:     "video",
 		ScheduledAt:     clock.Now().Add(2 * time.Hour),
-		DurationMinutes: 30,
+		DurationMinutes: 60,
 	})
 	if err == nil {
 		t.Fatal("sesi video tanpa link harus ditolak tanpa AllowPendingMeet")
@@ -78,7 +78,7 @@ func TestCreateCareSessionAllowPendingMeetReachesFutureCheck(t *testing.T) {
 		ProfessionalID:   "00000000-0000-0000-0000-000000000002",
 		SessionType:      "video",
 		ScheduledAt:      clock.Now().Add(-2 * time.Hour),
-		DurationMinutes:  30,
+		DurationMinutes:  60,
 		AllowPendingMeet: true,
 	})
 	if err == nil {

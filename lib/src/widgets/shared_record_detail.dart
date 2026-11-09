@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import '../models.dart';
+import '../services/malva_api_client.dart';
 import '../assessment_engine.dart';
 import '../time/wib.dart';
 
@@ -10,7 +11,42 @@ class SharedRecordDetail extends StatelessWidget {
       {super.key,
       required this.message,
       this.detail,
-      this.showClinicalAudit = false});
+      this.showClinicalAudit = false,
+      this.timestampAvailable = true});
+  factory SharedRecordDetail.screening({
+    Key? key,
+    required BackendScreeningSession screening,
+  }) {
+    Map<String, dynamic> instrument(BackendAssessmentSummary value) => {
+          'score': value.score,
+          'max_score': value.maxScore,
+          'level': value.level,
+          if (value.summary.isNotEmpty) 'summary': value.summary,
+          'crisis_flag': value.crisisFlag,
+          'cf': value.certaintyFactor,
+        };
+    return SharedRecordDetail(
+      key: key,
+      showClinicalAudit: true,
+      timestampAvailable: screening.createdAt != null,
+      message: ChatMessage(
+        id: screening.id,
+        senderId: screening.patientId,
+        senderName: '',
+        text: '',
+        timestamp: screening.createdAt ?? wibFromParts(1970, 1, 1),
+        isMine: false,
+        kind: 'screening',
+        metadata: {
+          'crisis_flag': screening.crisisFlag,
+          'phq9': instrument(screening.phq9),
+          'gad7': instrument(screening.gad7),
+        },
+      ),
+    );
+  }
+
+  final bool timestampAvailable;
   final ChatMessage message;
   final Widget? detail;
   final bool showClinicalAudit;
@@ -428,14 +464,6 @@ class SharedRecordDetail extends StatelessWidget {
         _ => value.toString(),
       };
 
-  bool _isScreeningExplanation(dynamic value) {
-    final summary = value?.toString().toLowerCase() ?? '';
-    return (summary.contains('skor phq-9') &&
-            summary.contains('menunjukkan gejala depresi')) ||
-        (summary.contains('skor gad-7') &&
-            summary.contains('menunjukkan gejala kecemasan'));
-  }
-
   Widget _scoreCard(String instrument, Map data, Color color) => _card(
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -459,17 +487,9 @@ class SharedRecordDetail extends StatelessWidget {
               style: TextStyle(
                   fontSize: 38, fontWeight: FontWeight.w900, color: color))
         else
-          Text.rich(TextSpan(children: [
-            TextSpan(
-                text: _value(data, 'score', '—'),
-                style: TextStyle(
-                    fontSize: 38, fontWeight: FontWeight.w900, color: color)),
-            TextSpan(
-                text:
-                    '/${data['max_score'] ?? (instrument == 'PHQ-9' ? 27 : 21)}',
-                style: const TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.w800, color: _muted)),
-          ])),
+          Text(_value(data, 'score', '—'),
+              style: TextStyle(
+                  fontSize: 38, fontWeight: FontWeight.w900, color: color)),
         const SizedBox(height: 12),
         _pill(_level(data['level']), color),
       ]),
@@ -530,7 +550,9 @@ class SharedRecordDetail extends StatelessWidget {
         .any((value) => value['crisis_flag'] == true);
     final hasSafety = [meta, data, rawPhq, rawGad]
         .any((value) => value['crisis_flag'] is bool);
-    final summary = meta['summary']?.toString();
+    final sharedCF = meta['cf'] ??
+        meta['certainty_factor'] ??
+        (phq['cf'] is num && phq['cf'] == gad['cf'] ? phq['cf'] : null);
     final overall = crisis
         ? 'crisis'
         : phqLevel != null && gadLevel != null
@@ -604,24 +626,13 @@ class SharedRecordDetail extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(child: _scoreCard('GAD-7', gad, Colors.orange.shade800)),
       ]),
-      if (showClinicalAudit &&
-          (meta['cf'] is num || meta['certainty_factor'] is num))
-        _cfCard('Assessment', meta['cf'] ?? meta['certainty_factor']),
+      if (showClinicalAudit && sharedCF is num) _cfCard('Assessment', sharedCF),
       for (final item in [('PHQ-9', phq), ('GAD-7', gad)]) ...[
-        if (item.$2['summary'] != null &&
-            !_isScreeningExplanation(item.$2['summary']))
-          Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: Text(_value(item.$2, 'summary'))),
-        if (showClinicalAudit && item.$2['cf'] != null)
+        if (showClinicalAudit && sharedCF == null && item.$2['cf'] != null)
           Padding(
               padding: const EdgeInsets.only(top: 12),
               child: _cfCard(item.$1, item.$2['cf'])),
       ],
-      if (summary != null && !_isScreeningExplanation(summary))
-        Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: SelectableText(summary)),
     ];
   }
 
@@ -681,7 +692,10 @@ class SharedRecordDetail extends StatelessWidget {
                       size: 16, color: _purple),
                   const SizedBox(width: 6),
                   Flexible(
-                      child: Text(formatWibDate(message.timestamp),
+                      child: Text(
+                          timestampAvailable
+                              ? formatWibDate(message.timestamp)
+                              : 'Tanggal tidak tercatat',
                           style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -691,7 +705,10 @@ class SharedRecordDetail extends StatelessWidget {
                 Row(mainAxisSize: MainAxisSize.min, children: [
                   const Icon(Icons.schedule, size: 16, color: _purple),
                   const SizedBox(width: 6),
-                  Text(formatWibBubbleTime(message.timestamp),
+                  Text(
+                      timestampAvailable
+                          ? formatWibBubbleTime(message.timestamp)
+                          : '—',
                       style: const TextStyle(fontSize: 13, color: _muted))
                 ]),
               ]);

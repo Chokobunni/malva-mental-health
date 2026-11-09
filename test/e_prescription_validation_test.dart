@@ -70,6 +70,10 @@ void main() {
   testWidgets(
       'isi nama obat lalu submit tidak memunculkan '
       '"Nama obat tidak boleh kosong"', (tester) async {
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final api = MalvaApiClient(
       baseUrl: 'http://backend.test',
       httpClient: _FakeClient((request) async {
@@ -110,7 +114,9 @@ void main() {
     await tester.enterText(nameField, 'Quetiapine');
     await tester.pump();
 
-    final submit = find.text('Issue & Send Prescription');
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Dosis per minum'), '10');
+    final submit = find.text('Atur Jadwal Minum Obat Pasien');
     await tester.ensureVisible(submit);
     await tester.tap(submit);
     await tester.pumpAndSettle();

@@ -9,6 +9,7 @@ import 'package:http/testing.dart';
 import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/providers/providers.dart';
 import 'package:malva_mental_health/src/screens/home_screen.dart';
+import 'package:malva_mental_health/src/screens/chat_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
@@ -97,6 +98,20 @@ Future<void> _pumpHome(WidgetTester tester, MalvaApiClient api,
 
 void main() {
   setUpAll(initializeWib);
+
+  testWidgets('future session Chat opens peer before the live window',
+      (tester) async {
+    await _pumpHome(tester, _api(), providerOnly: true);
+    final chat = find.widgetWithText(FilledButton, 'Chat');
+    await tester.scrollUntilVisible(chat.last, 250,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    await tester.tap(chat.last);
+    await tester.pumpAndSettle();
+    expect(find.byType(ChatScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets(
       'patient home shows ongoing and upcoming video with professional photos',

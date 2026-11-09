@@ -60,7 +60,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   bool _specialityExpanded = true;
   // 'quick' | 'continuous'
   String _selectedPlan = 'quick';
-  String _serviceType = 'chat';
+  final String _serviceType = 'video';
 
   @override
   void initState() {
@@ -73,7 +73,8 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   Future<void> _load({bool silent = false}) async {
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
-    final rawToken = widget.session?.accessToken;
+    final rawToken =
+        (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
     final accessToken =
         (rawToken == null || rawToken.isEmpty) ? null : rawToken;
     if (!silent) {
@@ -251,7 +252,6 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                           ],
 
                           // ===== HARGA PER SESI + FASKES + JADWAL =====
-                          _PriceRow(label: 'Chat session', price: _chatPrice()),
                           _PriceRow(
                               label: 'Video session', price: _videoPrice()),
                           _PriceRow(
@@ -470,10 +470,14 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             apiClient:
                                 widget.apiClient ?? ref.read(apiClientProvider),
                             professionalId: widget.doctorUserId,
-                            accessToken:
-                                widget.session?.role == UserRole.patient
-                                    ? widget.session?.accessToken
-                                    : null,
+                            accessToken: (widget.session ??
+                                            ref.read(currentSessionProvider))
+                                        ?.role ==
+                                    UserRole.patient
+                                ? (widget.session ??
+                                        ref.read(currentSessionProvider))
+                                    ?.accessToken
+                                : null,
                             onSubmitted: () {
                               ref
                                   .read(professionalProfileRevisionProvider
@@ -484,7 +488,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                           ),
                           if (_activePackage != null)
                             SoftCard(
-                              color: MalvaColors.mint.withValues(alpha: 0.10),
+                              color: Colors.white,
                               child: Row(
                                 children: [
                                   const Icon(Icons.card_membership_rounded,
@@ -527,9 +531,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             onSelect: () =>
                                 setState(() => _selectedPlan = 'quick'),
                             title: 'Quick Consult (One-Time)',
-                            subtitle: _serviceType == 'video'
-                                ? 'Sesi video sekali pertemuan'
-                                : 'Sesi chat sekali pertemuan',
+                            subtitle: 'Sesi video satu jam, sekali pertemuan',
                             price: _chatPrice() <= 0 && _videoPrice() <= 0
                                 ? 'Harga belum diatur'
                                 : 'Rp. ${_rupiah(_serviceType == 'video' ? _videoPrice() : _chatPrice())} / sesi',
@@ -546,13 +548,11 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                                 Icons.event_available_rounded
                               ),
                               (
-                                'Tanpa data sharing & tanpa follow-up',
-                                Icons.cancel_rounded
+                                'Berbagi data selama durasi sesi',
+                                Icons.folder_shared_rounded
                               ),
                             ],
-                            scheduleChips: const ['Chat', 'Video'],
-                            onChipSelect: (chip) => setState(
-                                () => _serviceType = chip.toLowerCase()),
+                            scheduleChips: const ['Video'],
                             selectedChip:
                                 _serviceType == 'video' ? 'Video' : 'Chat',
                             scheduleLines: _scheduleLines(),
@@ -581,7 +581,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             featureIcon: Icons.bar_chart_rounded,
                             features: const [
                               (
-                                '4 sesi chat/video terjadwal',
+                                '4 sesi video terjadwal • 1 jam per sesi',
                                 Icons.event_available_rounded
                               ),
                               (
@@ -713,7 +713,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
             doctorName: _displayName,
             price: _packagePrice(),
             doctorPhotoUrl: cred.photoIntroUrl,
-            session: widget.session,
+            session: widget.session ?? ref.read(currentSessionProvider),
             apiClient: widget.apiClient,
           ),
         ),
@@ -768,7 +768,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
           serviceType: _serviceType,
           expectedPrice: price,
           doctorPhotoUrl: _profile?.credential.photoIntroUrl ?? '',
-          session: widget.session,
+          session: widget.session ?? ref.read(currentSessionProvider),
           apiClient: widget.apiClient,
         ),
       ),
@@ -1107,7 +1107,6 @@ class _SupportPlanCard extends StatelessWidget {
     this.quota,
     this.scheduleChips,
     this.selectedChip,
-    this.onChipSelect,
     this.scheduleLines,
   });
 
@@ -1123,7 +1122,6 @@ class _SupportPlanCard extends StatelessWidget {
   final String? quota;
   final List<String>? scheduleChips;
   final String? selectedChip;
-  final ValueChanged<String>? onChipSelect;
   final List<String>? scheduleLines;
 
   @override
@@ -1236,9 +1234,7 @@ class _SupportPlanCard extends StatelessWidget {
                 children: [
                   for (final chip in scheduleChips!)
                     InkWell(
-                      onTap: onChipSelect == null
-                          ? null
-                          : () => onChipSelect!(chip),
+                      onTap: null,
                       borderRadius: BorderRadius.circular(999),
                       child: Container(
                         padding: const EdgeInsets.symmetric(

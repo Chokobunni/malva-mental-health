@@ -194,6 +194,69 @@ String medicationSourceLabel(String source) {
   }
 }
 
+/// Persisted psychiatrist routine. Weekdays use Dart's Monday=1 convention.
+class MedicationSchedule {
+  const MedicationSchedule(
+      {required this.times,
+      required this.weekdays,
+      required this.startAt,
+      this.intervalHours = 0,
+      this.intervalDays = 0,
+      this.unitsPerDose = 1,
+      this.refillEnabled = true});
+  factory MedicationSchedule.fromJson(Map<String, dynamic> json) =>
+      MedicationSchedule(
+        times:
+            (json['times'] as List? ?? const []).whereType<String>().toList(),
+        weekdays: (json['weekdays'] as List? ?? const [1, 2, 3, 4, 5, 6, 7])
+            .whereType<num>()
+            .map((v) => v.toInt())
+            .toList(),
+        startAt: parseWibStored(json['start_at']?.toString()) ?? wibNow(),
+        intervalHours: (json['interval_hours'] as num?)?.toInt() ?? 0,
+        intervalDays: (json['interval_days'] as num?)?.toInt() ?? 0,
+        unitsPerDose:
+            ((json['units_per_dose'] as num?)?.toInt() ?? 1).clamp(1, 1000),
+        refillEnabled: json['refill_enabled'] != false,
+      );
+  final List<String> times;
+  final List<int> weekdays;
+  final DateTime startAt;
+  final int intervalHours;
+  final int intervalDays;
+  final int unitsPerDose;
+  final bool refillEnabled;
+  Map<String, dynamic> toJson() => {
+        'times': times,
+        'weekdays': weekdays,
+        'start_at': wibIso(startAt),
+        'interval_hours': intervalHours,
+        'interval_days': intervalDays,
+        'units_per_dose': unitsPerDose,
+        'refill_enabled': refillEnabled
+      };
+  List<MedicationReminder> reminders(String instructions) => [
+        for (final t in times)
+          if (RegExp(r'^([01]\d|2[0-3]):[0-5]\d$').hasMatch(t))
+            MedicationReminder(
+                time: TimeOfDay(
+                    hour: int.parse(t.substring(0, 2)),
+                    minute: int.parse(t.substring(3))),
+                relationToMeal: instructions)
+      ];
+  String get label {
+    if (intervalHours > 0) return 'Setiap $intervalHours jam';
+    final days = weekdays.length == 7
+        ? 'Setiap hari'
+        : weekdays
+            .where((d) => d >= 1 && d <= 7)
+            .map((d) =>
+                const ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'][d - 1])
+            .join(', ');
+    return '${intervalDays > 1 ? 'Setiap $intervalDays hari • ' : ''}$days • ${times.join(', ')} WIB';
+  }
+}
+
 class Medication {
   const Medication({
     required this.id,
@@ -205,6 +268,7 @@ class Medication {
     required this.alertBelow,
     required this.source,
     this.lastTakenAt,
+    this.schedule,
   });
 
   final String id;
@@ -216,8 +280,11 @@ class Medication {
   final int alertBelow;
   final String source;
   final DateTime? lastTakenAt;
+  final MedicationSchedule? schedule;
+  int get unitsPerDose => schedule?.unitsPerDose ?? 1;
 
-  bool get needsRefill => currentStock <= alertBelow;
+  bool get needsRefill =>
+      (schedule?.refillEnabled ?? true) && currentStock <= alertBelow;
 
   /// Label sumber obat yang ramah pengguna (lihat [medicationSourceLabel]).
   String get sourceLabel => medicationSourceLabel(source);
@@ -245,6 +312,7 @@ class Medication {
     int? alertBelow,
     String? source,
     DateTime? lastTakenAt,
+    MedicationSchedule? schedule,
   }) {
     return Medication(
       id: id ?? this.id,
@@ -256,6 +324,7 @@ class Medication {
       alertBelow: alertBelow ?? this.alertBelow,
       source: source ?? this.source,
       lastTakenAt: lastTakenAt ?? this.lastTakenAt,
+      schedule: schedule ?? this.schedule,
     );
   }
 }

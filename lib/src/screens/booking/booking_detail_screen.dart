@@ -9,6 +9,7 @@ import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 import '../../widgets/professional_avatar.dart';
 import 'payment_screen.dart';
+import 'consent_request_sheet.dart';
 import '../../time/wib.dart';
 
 // ============================================================
@@ -66,7 +67,8 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
   Future<void> _loadDays() async {
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
-    final rawToken = widget.session?.accessToken;
+    final rawToken =
+        (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
     final accessToken =
         (rawToken == null || rawToken.isEmpty) ? null : rawToken;
     setState(() {
@@ -114,7 +116,8 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
     try {
       final MalvaApiClient apiClient =
           widget.apiClient ?? ref.read(apiClientProvider);
-      final rawToken = widget.session?.accessToken;
+      final rawToken =
+          (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
       final accessToken =
           (rawToken == null || rawToken.isEmpty) ? null : rawToken;
       final slots = await apiClient.getDoctorAvailableSlots(
@@ -319,7 +322,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Chat aktif saat sesi berjalan. Tanpa data sharing & tanpa follow-up.',
+            'Video, chat, berkas, dan berbagi data tersedia selama sesi satu jam.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: Colors.black54),
           ),
@@ -334,13 +337,20 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
     // bisa dikirim ke server.
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
-    final accessToken = widget.session?.accessToken;
+    final accessToken =
+        (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
     if (accessToken == null || accessToken.isEmpty) {
       setState(() => _error = 'Mode offline aktif. '
           'Hubungkan ke server untuk membuat booking.');
       return;
     }
     if (_selectedDate == null || _selectedSlot == null) return;
+    final granted = await showConsentRequestSheet(
+      context: context,
+      professionalId: widget.doctorUserId,
+      oneTime: true,
+    );
+    if (!granted || !mounted) return;
     setState(() {
       _isSubmitting = true;
       _error = null;
@@ -349,13 +359,11 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
       final booking = await apiClient.createBooking(
         accessToken: accessToken,
         professionalId: widget.doctorUserId,
-        serviceType: widget.serviceType == 'video'
-            ? 'quick_consult_video'
-            : 'quick_consult',
-        sessionType: widget.serviceType,
+        serviceType: 'quick_consult_video',
+        sessionType: 'video',
         bookingDate: _selectedDate!,
         slotTime: _selectedSlot,
-        durationMinutes: 30,
+        durationMinutes: 60,
         price: widget.expectedPrice,
       );
       if (!mounted) return;
@@ -365,7 +373,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
           builder: (_) => PaymentScreen(
             booking: booking,
             doctorName: widget.doctorName,
-            session: widget.session,
+            session: widget.session ?? ref.read(currentSessionProvider),
             apiClient: widget.apiClient,
           ),
         ),

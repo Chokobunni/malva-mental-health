@@ -113,3 +113,35 @@ func TestFonnteSenderNil(t *testing.T) {
 		t.Fatal("sender nil harus error, bukan panic")
 	}
 }
+
+func TestFonnteSendResponseVariants(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, wantID string
+		code               int
+		wantError          bool
+	}{
+		{"numeric ids", `{"status":true,"id":[80367170],"requestid":2937124}`, "80367170", 200, false},
+		{"string request id", `{"status":true,"id":["message-1"],"requestid":"2937124"}`, "message-1", 200, false},
+		{"numeric scalar id", `{"status":true,"id":80367170}`, "80367170", 200, false},
+		{"string scalar id", `{"status":true,"id":"message-1"}`, "message-1", 200, false},
+		{"accepted without id", `{"status":true,"process":"pending"}`, "", 200, false},
+		{"http error despite status", `{"status":true,"id":["message-1"]}`, "", 503, true},
+		{"explicit rejection", `{"status":false,"reason":"target invalid"}`, "", 200, true},
+		{"unknown status", `{"status":"true","id":["message-1"]}`, "", 200, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.code)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+			id, err := NewFonnteSender("test", srv.URL).Send(context.Background(), "081234567890", "synthetic test")
+			if (err != nil) != tc.wantError {
+				t.Fatalf("Send error = %v, wantError = %v", err, tc.wantError)
+			}
+			if id != tc.wantID {
+				t.Fatalf("Send id = %q, want %q", id, tc.wantID)
+			}
+		})
+	}
+}

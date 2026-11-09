@@ -171,7 +171,8 @@ void main() {
         await tester.pumpAndSettle();
         expect(openedWhileRefreshing, 0);
         expect(find.byKey(const Key('pick-chat-file')), findsNothing);
-        expect(find.byTooltip('Lampirkan berkas'), findsNothing);
+        expect(find.byTooltip('Lampirkan berkas'), findsOneWidget,
+            reason: 'attachment entry stays discoverable outside live session');
         await tester.pumpWidget(const SizedBox());
       });
     }

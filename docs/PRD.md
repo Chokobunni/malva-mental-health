@@ -398,3 +398,30 @@ Rujukan implementasi: [desain koreksi](superpowers/specs/2026-11-08-patient-prof
   DASS tidak tampil. Aturan klinis, otorisasi, sesi dan SOS tetap berlaku.
 
 Rujukan: [spesifikasi](superpowers/specs/2026-11-09-clinical-experience-design.md).
+
+## Kriteria sesi dan resep — 10 November 2026
+
+- Booking/jadwal baru pasien otomatis Video; sesi satu kali dan paket default
+  60 menit. Durasi dan slot praktik minimum 60, maksimum 180 menit. Rentang
+  praktik harus memuat satu slot penuh. Jenis Chat historis serta resume
+  pembayaran lama tetap dipertahankan.
+- Reschedule kedua peran menyimpan sesi dan booking asal atomik, menolak
+  irisan durasi dengan sesi lain, dan tidak menganggap sesi sendiri sebagai
+  konflik. Tampilan membaca jadwal hasil server. Sinkronisasi Meet sesudah
+  penyimpanan memberi warning bila gagal.
+- Consent dapat dipilih sebelum sesi. Tanpa paket aktif, record dibagikan dan
+  dibaca profesional hanya sejak jadwal hingga sebelum akhir sesi scheduled;
+  chat/Meet tetap dapat dibuka 10 menit lebih awal. Paket aktif mempertahankan
+  akses antarsesi sesuai consent. Worksheet satu kali memakai alur share yang
+  sama; lampiran profesional memerlukan verifikasi/relasi/sesi, tanpa switch
+  consent pasien. Messages menyertakan pasangan sesi mendatang tanpa pesan.
+- Pembatalan satu kali menghapus hubungan aktif jika tidak ada hak sesi,
+  paket atau pembelian lain; pembatalan historis dibersihkan konservatif.
+  Relasi manual tanpa bukti pembatalan tetap ada.
+- Wizard resep Sp.KJ memilih pasien, obat/bentuk/dosis/satuan, rutinitas WIB,
+  stok awal, batas dan toggle pengingat, kemudian menerbitkan resep serta
+  obat pasien atomik. Daily/periodic, hari pilihan dan jumlah per dosis
+  disimpan; checklist dan notifikasi membaca rutinitas tersebut.
+- Migrasi 036–038 masih menunggu penerapan produksi pada pekerjaan ini.
+  Normalisasi durasi lama di bawah 60 menit tidak mengubah jam mulai;
+  irisan antarsesi legacy harus diperiksa sebelum rilis.

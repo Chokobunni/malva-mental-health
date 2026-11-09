@@ -56,7 +56,7 @@ func TestActivatePackageLegacyNoSlotTimeIsTerminal(t *testing.T) {
 		SessionType:     "video",
 		BookingDate:     bookingDate,
 		SlotTime:        "",
-		DurationMinutes: 30,
+		DurationMinutes: 60,
 		Price:           100000,
 	})
 	if err != nil {

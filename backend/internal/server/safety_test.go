@@ -327,3 +327,39 @@ func TestResolveCrisisIncidentAuthorization(t *testing.T) {
 		t.Fatalf("insiden A tidak jadi resolved oleh pemiliknya: %q", s)
 	}
 }
+
+func TestBlastStatusOnlyIncidentOwner(t *testing.T) {
+	db, st := openOnboardingTestStore(t)
+	mgr := auth.NewManager("12345678901234567890123456789012")
+	handler := New(config.Config{}, mgr, st, nil, slog.New(slog.NewTextHandler(testWriter{}, nil))).Routes()
+	suffix := fmt.Sprint(time.Now().UnixNano())
+	owner := insertSafetyUser(t, db, "patient", "blast-owner", suffix)
+	stranger := insertSafetyUser(t, db, "patient", "blast-stranger", suffix)
+	incident := insertSafetyIncident(t, db, owner)
+	t.Cleanup(func() {
+		_, _ = db.Exec(`DELETE FROM crisis_incidents WHERE id=$1`, incident)
+		cleanupTestUsers(t, db, owner, stranger)
+	})
+	for _, tc := range []struct {
+		user, role string
+		want       int
+	}{
+		{owner, "patient", http.StatusOK},
+		{stranger, "patient", http.StatusForbidden},
+		{stranger, "professional", http.StatusForbidden},
+	} {
+		token, _ := mgr.Issue(tc.user, tc.role)
+		rec := doAuthed(t, handler, "GET", "/v1/sos-blast-status?incident_id="+incident, token, "")
+		if rec.Code != tc.want {
+			t.Fatalf("%s status = %d, want %d (%s)", tc.role, rec.Code, tc.want, rec.Body.String())
+		}
+	}
+}
+
+func TestBlastStatusRejectsNonPatients(t *testing.T) {
+	srv, _, proToken := newSafetyTestServer()
+	rec := doAuthed(t, srv.Routes(), "GET", "/v1/sos-blast-status?incident_id=synthetic", proToken, "")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
+	}
+}

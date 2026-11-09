@@ -61,7 +61,8 @@ class MalvaApp extends ConsumerStatefulWidget {
   ConsumerState<MalvaApp> createState() => _MalvaAppState();
 }
 
-class _MalvaAppState extends ConsumerState<MalvaApp> {
+class _MalvaAppState extends ConsumerState<MalvaApp>
+    with WidgetsBindingObserver {
   late final MalvaApiClient _tokenRefreshApi;
   late final void Function(String, String) _tokenRefreshHandler;
   void Function(String, String)? _previousTokenRefreshHandler;
@@ -85,6 +86,7 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _capabilities = ref.read(capabilitiesProvider);
     final apiClient = ref.read(apiClientProvider);
     _tokenRefreshApi = apiClient;
@@ -148,11 +150,17 @@ class _MalvaAppState extends ConsumerState<MalvaApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (identical(_tokenRefreshApi.onTokenRefreshed, _tokenRefreshHandler)) {
       _tokenRefreshApi.onTokenRefreshed = _previousTokenRefreshHandler;
     }
     _dashboardSyncService.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _scheduleAllMedicationReminders();
   }
 
   void _scheduleAllMedicationReminders() {

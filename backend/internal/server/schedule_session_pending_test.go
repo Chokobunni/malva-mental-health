@@ -65,7 +65,7 @@ func newScheduleFixture(t *testing.T, db *sql.DB, st *store.Store, cal meetCalen
 		DayOfWeek:           int(at.Weekday()),
 		StartTime:           "09:00",
 		EndTime:             "17:00",
-		SlotDurationMinutes: 30,
+		SlotDurationMinutes: 60,
 		IsActive:            true,
 	}}); err != nil {
 		t.Fatalf("simpan jadwal profesional: %v", err)
@@ -192,9 +192,8 @@ func TestScheduleSessionVideoPendingOnReauth(t *testing.T) {
 	}
 }
 
-// TestScheduleSessionChatDoesNotTouchCalendar: sesi chat tidak butuh ruang
-// pertemuan, sehingga kalender tidak boleh dipanggil dan meet_pending=false.
-func TestScheduleSessionChatDoesNotTouchCalendar(t *testing.T) {
+// Patient requests always schedule video, including legacy chat input.
+func TestPatientScheduleSessionChatInputBecomesVideo(t *testing.T) {
 	db, st := openOnboardingTestStore(t)
 	fake := &fakeMeetCalendar{createEventID: "evt-y", createMeetURL: "https://meet.google.com/y"}
 	f := newScheduleFixture(t, db, st, fake)
@@ -204,8 +203,8 @@ func TestScheduleSessionChatDoesNotTouchCalendar(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, mau %d (body: %s)", rec.Code, http.StatusCreated, rec.Body.String())
 	}
-	if payload["meet_pending"] != false {
-		t.Errorf("meet_pending = %v, mau false untuk sesi chat", payload["meet_pending"])
+	if payload["meet_pending"] != true {
+		t.Errorf("meet_pending = %v, mau true untuk sesi video yang menunggu link", payload["meet_pending"])
 	}
 	if fake.createCalls != 0 {
 		t.Errorf("sesi chat tidak boleh memanggil kalender, dapat %d", fake.createCalls)

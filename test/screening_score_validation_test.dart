@@ -56,8 +56,16 @@ void main() {
     expect(find.text('Belum tersedia'), findsWidgets);
     await tester.tap(find.text('7/21'));
     await tester.pumpAndSettle();
-    expect(find.text('PHQ-9 • Belum tersedia'), findsOneWidget);
-    expect(find.text('GAD-7 • 7/21'), findsOneWidget);
+    expect(find.text('Detail Record'), findsOneWidget);
+    expect(find.text('PHQ-9 Total Score'), findsOneWidget);
+    expect(find.text('GAD-7 Total Score'), findsOneWidget);
+    expect(find.text('7'), findsOneWidget);
+    expect(find.text('Ringan'), findsWidgets);
+    expect(find.text('Belum tersedia'), findsWidgets);
+    expect(find.text('-1'), findsNothing);
+    expect(find.text('0'), findsNothing);
+    expect(find.text('Minimal'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
   for (final malformed in [null, 'invalid', <Object>[]]) {
     test('malformed instrument object stays partial and unknown ($malformed)',

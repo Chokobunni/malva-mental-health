@@ -123,15 +123,16 @@ type diaryEntryRequest struct {
 }
 
 type medicationRequest struct {
-	Name           string `json:"name"`
-	Dosage         string `json:"dosage"`
-	Form           string `json:"form"`
-	ReminderTime   string `json:"reminder_time"`
-	RelationToMeal string `json:"relation_to_meal"`
-	CurrentStock   int    `json:"current_stock"`
-	AlertBelow     int    `json:"alert_below"`
-	Source         string `json:"source"`
-	PatientID      string `json:"patient_id"`
+	Schedule       json.RawMessage `json:"schedule,omitempty"`
+	Name           string          `json:"name"`
+	Dosage         string          `json:"dosage"`
+	Form           string          `json:"form"`
+	ReminderTime   string          `json:"reminder_time"`
+	RelationToMeal string          `json:"relation_to_meal"`
+	CurrentStock   int             `json:"current_stock"`
+	AlertBelow     int             `json:"alert_below"`
+	Source         string          `json:"source"`
+	PatientID      string          `json:"patient_id"`
 }
 
 type medicationLogRequest struct {
@@ -1361,6 +1362,7 @@ func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims
 		CurrentStock:   req.CurrentStock,
 		AlertBelow:     req.AlertBelow,
 		Source:         req.Source,
+		Schedule:       req.Schedule,
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -1454,6 +1456,7 @@ func (s *Server) updateMedication(w http.ResponseWriter, r *http.Request, claims
 		CurrentStock:   req.CurrentStock,
 		AlertBelow:     req.AlertBelow,
 		Source:         req.Source,
+		Schedule:       req.Schedule,
 	})
 	if err != nil {
 		if errors.Is(err, store.ErrMedicationNotFound) {
@@ -2025,6 +2028,10 @@ func (s *Server) authorizePatientAccess(r *http.Request, claims auth.Claims, req
 }
 
 func (s *Server) consentAllows(r *http.Request, patientID, professionalID, scope string) bool {
+	active, err := s.store.PatientDataAccessActive(r.Context(), patientID, professionalID)
+	if err != nil || !active {
+		return false
+	}
 	consent, err := s.store.GetPatientDataConsent(r.Context(), patientID, professionalID)
 	if err != nil {
 		s.logger.Warn("load patient consent failed", "error", err)

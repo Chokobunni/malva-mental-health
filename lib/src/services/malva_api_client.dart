@@ -1061,7 +1061,8 @@ class MalvaApiClient {
       ),
       accessToken: accessToken,
     );
-    return _expectList(payload['moods'], 'Respons mood tidak valid.')
+    return _expectNullableCollection(
+            payload, 'moods', 'Respons mood tidak valid.')
         .whereType<Map<String, dynamic>>()
         .map(BackendMoodCheckin.fromJson)
         .toList(growable: false);
@@ -1109,7 +1110,8 @@ class MalvaApiClient {
       ),
       accessToken: accessToken,
     );
-    return _expectList(payload['diaries'], 'Respons diary tidak valid.')
+    return _expectNullableCollection(
+            payload, 'diaries', 'Respons diary tidak valid.')
         .whereType<Map<String, dynamic>>()
         .map(BackendDiaryEntry.fromJson)
         .toList(growable: false);
@@ -1191,7 +1193,8 @@ class MalvaApiClient {
       ),
       accessToken: accessToken,
     );
-    return _expectList(payload['goals'], 'Respons goals tidak valid.')
+    return _expectNullableCollection(
+            payload, 'goals', 'Respons goals tidak valid.')
         .whereType<Map<String, dynamic>>()
         .map(BackendGoal.fromJson)
         .toList(growable: false);
@@ -1556,6 +1559,7 @@ class MalvaApiClient {
     required int currentStock,
     required int alertBelow,
     required String source,
+    MedicationSchedule? schedule,
     String? patientId,
     String? idempotencyKey,
   }) async {
@@ -1575,6 +1579,7 @@ class MalvaApiClient {
         'current_stock': currentStock,
         'alert_below': alertBelow,
         'source': source,
+        if (schedule != null) 'schedule': schedule.toJson(),
         if (patientId != null && patientId.trim().isNotEmpty)
           'patient_id': patientId.trim(),
       },
@@ -1600,6 +1605,7 @@ class MalvaApiClient {
     required int currentStock,
     required int alertBelow,
     required String source,
+    MedicationSchedule? schedule,
     String? patientId,
   }) async {
     final payload = await _send(
@@ -1615,6 +1621,7 @@ class MalvaApiClient {
         'current_stock': currentStock,
         'alert_below': alertBelow,
         'source': source,
+        if (schedule != null) 'schedule': schedule.toJson(),
         if (patientId != null && patientId.trim().isNotEmpty)
           'patient_id': patientId.trim(),
       },
@@ -1708,7 +1715,8 @@ class MalvaApiClient {
       ),
       accessToken: accessToken,
     );
-    return _expectList(payload['medications'], 'Respons obat tidak valid.')
+    return _expectNullableCollection(
+            payload, 'medications', 'Respons obat tidak valid.')
         .whereType<Map<String, dynamic>>()
         .map(BackendMedication.fromJson)
         .toList(growable: false);
@@ -1754,8 +1762,8 @@ class MalvaApiClient {
       ),
       accessToken: accessToken,
     );
-    return _expectList(
-            payload['medication_logs'], 'Respons log obat tidak valid.')
+    return _expectNullableCollection(
+            payload, 'medication_logs', 'Respons log obat tidak valid.')
         .whereType<Map<String, dynamic>>()
         .map(BackendMedicationLog.fromJson)
         .toList(growable: false);
@@ -1911,8 +1919,8 @@ class MalvaApiClient {
     required String accessToken,
     required String packageId,
     required String scheduledAt,
-    String sessionType = 'chat',
-    int durationMinutes = 30,
+    String sessionType = 'video',
+    int durationMinutes = 60,
     String meetingUrl = '',
   }) async {
     final payload = await _send('POST', '/v1/care-sessions',
@@ -1941,8 +1949,8 @@ class MalvaApiClient {
     required String packageId,
     required String bookingDate,
     required String slotTime,
-    String sessionType = 'chat',
-    int durationMinutes = 30,
+    String sessionType = 'video',
+    int durationMinutes = 60,
   }) async {
     final payload =
         await _send('POST', '/v1/bookings', accessToken: accessToken, body: {
@@ -2795,11 +2803,11 @@ class MalvaApiClient {
     String patientId = '',
     required String professionalId,
     String? packageId,
-    String serviceType = 'quick_consult',
-    String sessionType = 'chat',
+    String serviceType = 'quick_consult_video',
+    String sessionType = 'video',
     required String bookingDate,
     String? slotTime,
-    int durationMinutes = 30,
+    int durationMinutes = 60,
     required int price,
   }) async {
     final payload =
@@ -3190,6 +3198,17 @@ class MalvaApiClient {
   Map<String, dynamic> _expectMap(Object? value, String message) {
     if (value is Map<String, dynamic>) return value;
     throw MalvaApiException(message);
+  }
+
+  List<Object?> _expectNullableCollection(
+      Map<String, dynamic> payload, String key, String message) {
+    // Go nil slices serialize as null for a successful empty collection.
+    if (payload.containsKey(key) && payload[key] == null) return const [];
+    final values = _expectList(payload[key], message);
+    if (values.any((value) => value is! Map<String, dynamic>)) {
+      throw MalvaApiException(message);
+    }
+    return values;
   }
 
   List<Object?> _expectList(Object? value, String message) {
@@ -3612,10 +3631,15 @@ class BackendMedication {
     required this.reminderTime,
     this.source = '',
     this.relationToMeal = '',
+    this.schedule,
   });
 
   factory BackendMedication.fromJson(Map<String, dynamic> json) {
     return BackendMedication(
+      schedule: json['schedule'] is Map && (json['schedule'] as Map).isNotEmpty
+          ? MedicationSchedule.fromJson(
+              Map<String, dynamic>.from(json['schedule'] as Map))
+          : null,
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
       dosage: json['dosage']?.toString() ?? '',
@@ -3637,6 +3661,24 @@ class BackendMedication {
   final String reminderTime;
   final String source;
   final String relationToMeal;
+  final MedicationSchedule? schedule;
+  Medication toMedication() => Medication(
+      id: id,
+      name: name,
+      dosage: dosage,
+      form: form,
+      reminders: schedule?.reminders(relationToMeal) ??
+          (reminderTime.isEmpty
+              ? const []
+              : MedicationSchedule(
+                      times: [reminderTime],
+                      weekdays: const [1, 2, 3, 4, 5, 6, 7],
+                      startAt: wibNow())
+                  .reminders(relationToMeal)),
+      currentStock: currentStock,
+      alertBelow: alertBelow,
+      source: source,
+      schedule: schedule);
 
   bool get needsRefill => currentStock <= alertBelow;
 }
@@ -4669,7 +4711,7 @@ class BackendProfessionalSchedule {
       startTime: clock(json['start_time']),
       endTime: clock(json['end_time']),
       slotDurationMinutes:
-          (json['slot_duration_minutes'] as num?)?.toInt() ?? 30,
+          (json['slot_duration_minutes'] as num?)?.toInt() ?? 60,
       isActive: json['is_active'] != false,
     );
   }
@@ -4834,7 +4876,7 @@ class BackendCareSession {
     this.professionalName = '',
     this.sessionType = 'chat',
     this.scheduledAt,
-    this.durationMinutes = 30,
+    this.durationMinutes = 60,
     this.status = '',
     this.meetingUrl = '',
     this.summaryForPatient = '',
@@ -4861,7 +4903,7 @@ class BackendCareSession {
       professionalName: json['professional_name']?.toString() ?? '',
       sessionType: json['session_type']?.toString() ?? 'chat',
       scheduledAt: json['scheduled_at']?.toString(),
-      durationMinutes: (json['duration_minutes'] as num?)?.toInt() ?? 30,
+      durationMinutes: (json['duration_minutes'] as num?)?.toInt() ?? 60,
       status: json['status']?.toString() ?? '',
       meetingUrl: json['meeting_url']?.toString() ?? '',
       summaryForPatient: json['summary_for_patient']?.toString() ?? '',
@@ -5429,7 +5471,7 @@ class BackendBooking {
     this.packageId,
     this.sessionType = 'chat',
     this.slotTime = '',
-    this.durationMinutes = 30,
+    this.durationMinutes = 60,
   });
 
   factory BackendBooking.fromJson(Map<String, dynamic> json) {
@@ -5444,7 +5486,7 @@ class BackendBooking {
       packageId: json['package_id']?.toString(),
       sessionType: json['session_type']?.toString() ?? 'chat',
       slotTime: json['slot_time']?.toString() ?? '',
-      durationMinutes: (json['duration_minutes'] as num?)?.toInt() ?? 30,
+      durationMinutes: (json['duration_minutes'] as num?)?.toInt() ?? 60,
     );
   }
 
@@ -5676,6 +5718,11 @@ class BackendEarningsFull {
 class BackendEPrescriptionItem {
   const BackendEPrescriptionItem({
     this.medicationId,
+    this.form = 'Tablet',
+    this.unit = 'mg',
+    this.currentStock = 30,
+    this.alertBelow = 3,
+    this.schedule,
     required this.name,
     required this.dosage,
     required this.frequency,
@@ -5685,6 +5732,15 @@ class BackendEPrescriptionItem {
 
   BackendEPrescriptionItem.fromJson(Map<String, dynamic> json)
       : medicationId = json['medication_id']?.toString(),
+        form = json['form']?.toString() ?? 'Tablet',
+        unit = json['unit']?.toString() ?? 'mg',
+        currentStock = (json['current_stock'] as num?)?.toInt() ?? 0,
+        alertBelow = (json['alert_below'] as num?)?.toInt() ?? 3,
+        schedule =
+            json['schedule'] is Map && (json['schedule'] as Map).isNotEmpty
+                ? MedicationSchedule.fromJson(
+                    Map<String, dynamic>.from(json['schedule'] as Map))
+                : null,
         name = json['name']?.toString() ?? '',
         dosage = json['dosage']?.toString() ?? '',
         frequency = json['frequency']?.toString() ?? '',
@@ -5692,6 +5748,11 @@ class BackendEPrescriptionItem {
         unitsPerDay = (json['units_per_day'] as num?)?.toInt() ?? 1;
 
   final String? medicationId;
+  final String form;
+  final String unit;
+  final int currentStock;
+  final int alertBelow;
+  final MedicationSchedule? schedule;
   final String name;
   final String dosage;
   final String frequency;
@@ -5701,6 +5762,11 @@ class BackendEPrescriptionItem {
   Map<String, dynamic> toJson() => {
         if (medicationId != null) 'medication_id': medicationId,
         'name': name,
+        'form': form,
+        'unit': unit,
+        'current_stock': currentStock,
+        'alert_below': alertBelow,
+        if (schedule != null) 'schedule': schedule!.toJson(),
         'dosage': dosage,
         'frequency': frequency,
         'days': days,

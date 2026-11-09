@@ -51,3 +51,11 @@
   berubah. Pertahankan koordinat yang sudah ada dan praktik/alamat yang berubah.
 - Pengujian utama: mood_insights*, medication_checklist_ui, diary_separation,
   doctor_reviews_distance, health_export_server, health_pdf_report.
+
+## Resep dan rutinitas obat (2026-11-10)
+
+- Wizard E-Prescription hanya untuk Sp.KJ terverifikasi dan pasien terhubung. Alurnya memilih pasien, obat/bentuk/dosis/satuan, rutinitas WIB, lalu stok/pengingat dan penerbitan. Nama obat maupun diagnosis tidak boleh diisi dari contoh.
+- `schedule` menyimpan `times`, `weekdays` (Senin=1 sampai Minggu=7), `start_at` dengan offset WIB, `interval_hours` atau `interval_days`, `units_per_dose` dan `refill_enabled`. Interval jam/hari tidak boleh aktif bersamaan; rutinitas baru harus mempunyai jam/hari, dosis dan stok yang valid.
+- Server membuat resep, item dan obat pasien dalam satu transaksi. Jadwal, bentuk, dosis, stok dan batas pengingat harus pulang-pergi utuh; jangan menyamakan semua resep bernama sama atau mengarang jadwal dari frekuensi bebas.
+- Checklist mengurangi stok sesuai jumlah per dosis dengan hasil server. Pengingat lokal mengikuti rutinitas yang tersimpan; pengingat stok mematuhi toggle dan batas stok. Pengiriman notifikasi OS tetap bergantung pada izin/perangkat. Obat legacy dengan `schedule={}` mempertahankan kompatibilitas `reminder_time`.
+- Migrasi 037 menambah `medications.schedule`, `e_prescription_items.schedule`, `current_stock` dan `alert_below` pada item resep. Belum diterapkan produksi dalam pekerjaan ini; terapkan sebelum menjalankan backend baru. Rujukan: [kontrak API](../../../docs/API_DOCUMENTATION.md), [skema](../../../docs/DATABASE_SCHEMA.md).

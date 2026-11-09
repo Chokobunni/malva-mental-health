@@ -9,6 +9,7 @@ import '../../theme.dart';
 import '../../time/wib.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
+import '../../widgets/shared_record_detail.dart';
 
 // ============================================================
 // RIWAYAT ASESMEN (professional) — SATU PINTU dari dashboard.
@@ -395,57 +396,18 @@ class _ScreeningRow extends StatelessWidget {
   }
 
   void _showDetailSheet(BuildContext context) {
-    final phq9 = screening.phq9;
-    final gad7 = screening.gad7;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
+      backgroundColor: Colors.white,
       builder: (context) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                patientName,
-                style:
-                    const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-              ),
-              Text(
-                _screeningDateLabel(screening.createdAt),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 14),
-              _TraceBlock(
-                title: 'PHQ-9',
-                score: phq9.score,
-                maxScore: phq9.maxScore,
-                level: phq9.level,
-                certaintyFactor: phq9.certaintyFactor,
-                ruleTrace: phq9.ruleTrace,
-                summary: phq9.summary,
-              ),
-              const SizedBox(height: 12),
-              _TraceBlock(
-                title: 'GAD-7',
-                score: gad7.score,
-                maxScore: gad7.maxScore,
-                level: gad7.level,
-                certaintyFactor: gad7.certaintyFactor,
-                ruleTrace: gad7.ruleTrace,
-                summary: gad7.summary,
-              ),
-              if (screening.crisisFlag) ...[
-                const SizedBox(height: 12),
-                const StatusPill(
-                  label: 'Krisis — perlu tindak lanjut',
-                  color: MalvaColors.danger,
-                  icon: Icons.warning_amber_rounded,
-                ),
-              ],
-            ],
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * .85),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+            child: SharedRecordDetail.screening(screening: screening),
           ),
         ),
       ),
@@ -499,100 +461,6 @@ class _ScoreChip extends StatelessWidget {
             style: TextStyle(
                 fontWeight: FontWeight.w700, fontSize: 11, color: color),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TraceBlock extends StatelessWidget {
-  const _TraceBlock({
-    required this.title,
-    required this.score,
-    required this.maxScore,
-    required this.level,
-    required this.certaintyFactor,
-    required this.ruleTrace,
-    required this.summary,
-  });
-
-  final String title;
-  final int score;
-  final int maxScore;
-  final String level;
-  final double certaintyFactor;
-  final String ruleTrace;
-  final String summary;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _assessmentRiskColor(level);
-    final hasTrace = ruleTrace.trim().isNotEmpty;
-    final hasCf = certaintyFactor > 0;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  score < 0 || maxScore <= 0 || score > maxScore
-                      ? '$title • Belum tersedia'
-                      : '$title • $score/$maxScore',
-                  style: const TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-              StatusPill(label: _assessmentRiskLabel(level), color: color),
-            ],
-          ),
-          if (summary.trim().isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(summary,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: Colors.black54)),
-          ],
-          if (hasCf) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Text('Certainty Factor',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-                const SizedBox(width: 8),
-                StatusPill(
-                  label: certaintyFactor.toStringAsFixed(2),
-                  color: MalvaColors.seed,
-                ),
-              ],
-            ),
-          ],
-          if (hasTrace) ...[
-            const SizedBox(height: 8),
-            const Text('Jejak aturan (rule trace)',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-            const SizedBox(height: 4),
-            SelectableText(
-              ruleTrace,
-              style: const TextStyle(fontSize: 12, height: 1.4),
-            ),
-          ],
-          if (!hasCf && !hasTrace && summary.trim().isEmpty) ...[
-            const SizedBox(height: 6),
-            const Text(
-              'Detail aturan tidak tersedia untuk asesmen ini.',
-              style: TextStyle(fontSize: 12, color: Colors.black45),
-            ),
-          ],
         ],
       ),
     );

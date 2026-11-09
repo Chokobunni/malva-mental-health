@@ -45,12 +45,26 @@ func NewFonnteSender(token, baseURL string) *FonnteSender {
 // "id" (array) dan "process"; gagal memakai "status": false + "reason"
 // (mis. "token invalid", "target invalid", "insufficient quota").
 type fonnteResponse struct {
-	Status    bool     `json:"status"`
-	Reason    string   `json:"reason"`
-	Detail    string   `json:"detail"`
-	ID        []string `json:"id"`
-	Process   string   `json:"process"`
-	RequestID int64    `json:"requestid"`
+	Status bool            `json:"status"`
+	Reason string          `json:"reason"`
+	ID     json.RawMessage `json:"id"`
+}
+
+// Optional ID representation must not turn explicit gateway acceptance into failure.
+func fonnteMessageID(raw json.RawMessage) string {
+	var ids []json.RawMessage
+	if json.Unmarshal(raw, &ids) == nil && len(ids) > 0 {
+		raw = ids[0]
+	}
+	var id string
+	if json.Unmarshal(raw, &id) == nil {
+		return id
+	}
+	var number json.Number
+	if json.Unmarshal(raw, &number) == nil {
+		return number.String()
+	}
+	return ""
 }
 
 // Send mengirim satu pesan WhatsApp dan mengembalikan ID pesan dari gateway
@@ -94,17 +108,14 @@ func (f *FonnteSender) Send(ctx context.Context, phone, message string) (string,
 	if jerr := json.Unmarshal(body, &out); jerr != nil {
 		return "", fmt.Errorf("respons gateway tidak terbaca (HTTP %d)", res.StatusCode)
 	}
-	if !out.Status {
+	if res.StatusCode < 200 || res.StatusCode >= 300 || !out.Status {
 		reason := strings.TrimSpace(out.Reason)
 		if reason == "" {
 			reason = fmt.Sprintf("gateway menolak (HTTP %d)", res.StatusCode)
 		}
 		return "", errors.New(reason)
 	}
-	if len(out.ID) > 0 {
-		return out.ID[0], nil
-	}
-	return "", nil
+	return fonnteMessageID(out.ID), nil
 }
 
 // normalisasiNomorWA membuang spasi/tanda baca lalu menyesuaikan ke format

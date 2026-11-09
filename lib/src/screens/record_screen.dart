@@ -793,7 +793,7 @@ class _NoDiagnosisCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SoftCard(
-      color: MalvaColors.amber.withValues(alpha: 0.10),
+      color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

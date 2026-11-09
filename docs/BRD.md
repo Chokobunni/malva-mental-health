@@ -230,7 +230,7 @@ Malva menyediakan platform digital yang menghubungkan pasien dengan profesional 
 | Kategori | Tier | Deskripsi |
 |---|---|---|
 | **e-Counseling** | **Essential** | Chat asinkron dengan profesional, respons dalam 24 jam |
-| | **Professional** | Chat + 1 video call 30 menit per sesi |
+| | **Professional** | Sesi Video default 60 menit; chat dan berbagi record mengikuti hak sesi/paket |
 | | **Premium** | Chat + video call + akses penuh monitoring diary/mood/medication pasien |
 | **Counseling Corner** | Essential / Professional / Premium | Varian layanan paket dengan harga bertingkat |
 | **Couple e-Counseling** | Pre-Marriage / Marriage | Layanan pasangan — ekspansi segmen baru |
@@ -344,3 +344,25 @@ dibagikan. Mini Summary memakai tujuh tanggal WIB termasuk hari ini, tanpa last
 diary entry. Ekspor diary menghilangkan tanggapan profesional, dan ekspor mood
 menghilangkan kolom catatan. Diary asli, emoji dan chart mood tetap dipertahankan.
 Rujukan: [spesifikasi](superpowers/specs/2026-11-09-clinical-experience-design.md).
+
+## Sesi satu jam dan rutinitas resep — 10 November 2026
+
+Sesi satu kali dan paket menggunakan Video pada booking baru pasien, dengan
+durasi default 60 menit dan minimum 60 menit. Paket menambah jumlah pertemuan
+dan masa berlaku; sesi satu kali tetap memiliki chat, worksheet dan lampiran
+profesional pada waktu yang diizinkan. Pilihan Chat dan durasi lama tidak lagi
+ditawarkan untuk booking baru; riwayat dan pembayaran lama tetap dipertahankan.
+
+Pasien dapat menentukan consent sebelum sesi. Tanpa paket aktif, berbagi dan
+akses record profesional berlangsung hanya sepanjang durasi sesi; paket aktif
+mempertahankan akses sesuai consent antarsesi. Reschedule memperbarui semua
+informasi jadwal, dan pembatalan satu kali tidak menyisakan relasi tanpa hak
+perawatan lain. Messages juga menampilkan pasangan sesi mendatang yang belum
+bertukar pesan.
+
+Psikiater terverifikasi menerbitkan resep beserta rutinitas obat dan stok pasien
+melalui satu alur. Jadwal WIB, jumlah per dosis dan pengingat stok tersimpan
+bersama resep, sehingga pasien tidak perlu menyusun ulang instruksi dokter.
+Migrasi 036–038 tersedia dan diuji lokal; penerapan produksi belum dilakukan
+dalam pekerjaan ini. Perpanjangan sesi legacy mempertahankan jam mulai dan
+dapat menimbulkan irisan jadwal yang perlu direkonsiliasi sebelum rilis.

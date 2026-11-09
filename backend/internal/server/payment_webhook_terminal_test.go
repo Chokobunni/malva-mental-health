@@ -68,7 +68,7 @@ func createPendingBookingAt(t *testing.T, db *sql.DB, st *store.Store,
 		SessionType:     sessionType,
 		BookingDate:     start.In(wibLoc).Format("2006-01-02"),
 		SlotTime:        start.In(wibLoc).Format("15:04"),
-		DurationMinutes: 30,
+		DurationMinutes: 60,
 		Price:           100000,
 	})
 	if err != nil {
@@ -280,7 +280,7 @@ func TestPaymentWebhookSlotTakenKeepsPaidAndBlocksSecondPayment(t *testing.T) {
 		ProfessionalID:  prof.ID,
 		SessionType:     "chat",
 		ScheduledAt:     startAt,
-		DurationMinutes: 30,
+		DurationMinutes: 60,
 		Status:          "scheduled",
 	}); err != nil {
 		t.Fatalf("buat sesi penempat slot: %v", err)

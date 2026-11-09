@@ -184,19 +184,20 @@ type DiaryEntry struct {
 }
 
 type Medication struct {
-	ID             string    `json:"id"`
-	PatientID      string    `json:"patient_id"`
-	Name           string    `json:"name"`
-	Dosage         string    `json:"dosage"`
-	Form           string    `json:"form"`
-	ReminderTime   string    `json:"reminder_time"`
-	RelationToMeal string    `json:"relation_to_meal"`
-	CurrentStock   int       `json:"current_stock"`
-	AlertBelow     int       `json:"alert_below"`
-	Source         string    `json:"source"`
-	Active         bool      `json:"active"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	Schedule       json.RawMessage `json:"schedule"`
+	ID             string          `json:"id"`
+	PatientID      string          `json:"patient_id"`
+	Name           string          `json:"name"`
+	Dosage         string          `json:"dosage"`
+	Form           string          `json:"form"`
+	ReminderTime   string          `json:"reminder_time"`
+	RelationToMeal string          `json:"relation_to_meal"`
+	CurrentStock   int             `json:"current_stock"`
+	AlertBelow     int             `json:"alert_below"`
+	Source         string          `json:"source"`
+	Active         bool            `json:"active"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
 }
 
 type MedicationLog struct {
@@ -1544,28 +1545,34 @@ func (s *Store) UpsertMedication(ctx context.Context, input Medication) (Medicat
 	if input.Source == "" {
 		input.Source = "patient"
 	}
+	if err := ValidateMedicationSchedule(input.Schedule); err != nil {
+		return Medication{}, err
+	}
+	if len(input.Schedule) == 0 {
+		input.Schedule = json.RawMessage(`{}`)
+	}
 	var saved Medication
 	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO medications (
 			patient_id, name, dosage, form, reminder_time, relation_to_meal,
-			current_stock, alert_below, source, id
+			current_stock, alert_below, source, id, schedule
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE(NULLIF($10,'')::uuid,gen_random_uuid()))
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE(NULLIF($10,'')::uuid,gen_random_uuid()),$11)
 		ON CONFLICT (id) DO UPDATE SET id=medications.id
 		WHERE medications.patient_id=EXCLUDED.patient_id AND medications.name=EXCLUDED.name
 		 AND medications.dosage=EXCLUDED.dosage AND medications.form=EXCLUDED.form
 		 AND medications.reminder_time=EXCLUDED.reminder_time AND medications.relation_to_meal=EXCLUDED.relation_to_meal
 		 AND medications.current_stock=EXCLUDED.current_stock AND medications.alert_below=EXCLUDED.alert_below
-		 AND medications.source=EXCLUDED.source AND medications.active
+		 AND medications.source=EXCLUDED.source AND medications.schedule=EXCLUDED.schedule AND medications.active
 		RETURNING id, patient_id, name, dosage, form, reminder_time, relation_to_meal,
-		          current_stock, alert_below, source, active, created_at, updated_at
+		          current_stock, alert_below, source, active, created_at, updated_at, schedule
 	`, input.PatientID, input.Name, input.Dosage, input.Form,
 		input.ReminderTime, input.RelationToMeal, input.CurrentStock,
-		input.AlertBelow, input.Source, input.ID).
+		input.AlertBelow, input.Source, input.ID, input.Schedule).
 		Scan(&saved.ID, &saved.PatientID, &saved.Name, &saved.Dosage,
 			&saved.Form, &saved.ReminderTime, &saved.RelationToMeal,
 			&saved.CurrentStock, &saved.AlertBelow, &saved.Source,
-			&saved.Active, &saved.CreatedAt, &saved.UpdatedAt)
+			&saved.Active, &saved.CreatedAt, &saved.UpdatedAt, &saved.Schedule)
 	if err != nil {
 		return Medication{}, err
 	}
@@ -1592,22 +1599,28 @@ func (s *Store) UpdateMedication(ctx context.Context, patientID, medicationID st
 	if input.Form == "" {
 		input.Form = "Tablet"
 	}
+	if err := ValidateMedicationSchedule(input.Schedule); err != nil {
+		return Medication{}, err
+	}
+	if len(input.Schedule) == 0 {
+		input.Schedule = json.RawMessage(`{}`)
+	}
 	var saved Medication
 	err := s.db.QueryRowContext(ctx, `
 		UPDATE medications
 		SET name = $1, dosage = $2, form = $3, reminder_time = $4,
 		    relation_to_meal = $5, current_stock = $6, alert_below = $7,
-		    source = COALESCE(NULLIF($8, ''), source), updated_at = now()
+		    source = COALESCE(NULLIF($8, ''), source), schedule = CASE WHEN $11::jsonb = '{}'::jsonb THEN schedule ELSE $11::jsonb END, updated_at = now()
 		WHERE id = $9 AND patient_id = $10 AND active
 		RETURNING id, patient_id, name, dosage, form, reminder_time, relation_to_meal,
-		          current_stock, alert_below, source, active, created_at, updated_at
+		          current_stock, alert_below, source, active, created_at, updated_at, schedule
 	`, input.Name, input.Dosage, input.Form, input.ReminderTime,
 		input.RelationToMeal, input.CurrentStock, input.AlertBelow,
-		input.Source, medicationID, patientID).
+		input.Source, medicationID, patientID, input.Schedule).
 		Scan(&saved.ID, &saved.PatientID, &saved.Name, &saved.Dosage,
 			&saved.Form, &saved.ReminderTime, &saved.RelationToMeal,
 			&saved.CurrentStock, &saved.AlertBelow, &saved.Source,
-			&saved.Active, &saved.CreatedAt, &saved.UpdatedAt)
+			&saved.Active, &saved.CreatedAt, &saved.UpdatedAt, &saved.Schedule)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Medication{}, ErrMedicationNotFound
@@ -1648,7 +1661,7 @@ func (s *Store) ListMedications(ctx context.Context, patientID string, limit int
 	limit = normalizeLimit(limit, 50, 100)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, patient_id, name, dosage, form, reminder_time, relation_to_meal,
-		       current_stock, alert_below, source, active, created_at, updated_at
+		       current_stock, alert_below, source, active, created_at, updated_at, schedule
 		FROM medications
 		WHERE patient_id = $1 AND active
 		ORDER BY updated_at DESC
@@ -1664,7 +1677,7 @@ func (s *Store) ListMedications(ctx context.Context, patientID string, limit int
 		if err := rows.Scan(&item.ID, &item.PatientID, &item.Name,
 			&item.Dosage, &item.Form, &item.ReminderTime,
 			&item.RelationToMeal, &item.CurrentStock, &item.AlertBelow,
-			&item.Source, &item.Active, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			&item.Source, &item.Active, &item.CreatedAt, &item.UpdatedAt, &item.Schedule); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -1724,7 +1737,7 @@ func (s *Store) CreateMedicationLog(ctx context.Context, input MedicationLog) (M
 	if (input.Status == "taken" || input.Status == "partial") && input.MedicationID != "" {
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE medications
-			SET current_stock = GREATEST(current_stock - 1, 0), updated_at = now()
+			SET current_stock = GREATEST(current_stock - COALESCE((schedule->>'units_per_dose')::int,1), 0), updated_at = now()
 			WHERE id = $1 AND patient_id = $2 AND active
 		`, input.MedicationID, input.PatientID); err != nil {
 			return MedicationLog{}, err

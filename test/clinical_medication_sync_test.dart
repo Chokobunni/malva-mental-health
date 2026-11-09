@@ -55,4 +55,55 @@ void main() {
         'setelah makan');
     await Future<void>.delayed(Duration.zero);
   });
+  test(
+      'professional routine survives hydration and pending stock refresh consumes configured units',
+      () async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final store = MalvaStoreNotifier(null, null);
+    addTearDown(store.dispose);
+    store.applySession(const AuthSession(
+        role: UserRole.patient,
+        identifier: 'p1',
+        backendUserId: 'p1',
+        displayName: 'Pasien',
+        accessToken: 't1'));
+    var stock = 5;
+    final api = MalvaApiClient(
+        baseUrl: 'https://backend.test',
+        httpClient: MockClient((r) async => http.Response(
+            jsonEncode({
+              'medications': [
+                {
+                  'id': 'm1',
+                  'name': 'Aripiprazole',
+                  'dosage': '10 mg',
+                  'form': 'Tablet',
+                  'current_stock': stock,
+                  'alert_below': 3,
+                  'source': 'prescription',
+                  'schedule': {
+                    'times': ['08:00', '20:00'],
+                    'weekdays': [1, 2, 3, 4, 5, 6, 7],
+                    'start_at': '2026-11-10T08:00:00+07:00',
+                    'units_per_dose': 2,
+                    'refill_enabled': true
+                  }
+                }
+              ]
+            }),
+            200)));
+    await store.loadMedications(api, 't1');
+    expect(store.state.medications.single.reminders.map((r) => r.label),
+        ['08:00', '20:00']);
+    store.takeMedication('m1');
+    expect(store.state.medications.single.currentStock, 3);
+    expect(store.state.medications.single.needsRefill, isTrue);
+    await store.loadMedications(api, 't1');
+    expect(store.state.medications.single.currentStock, 3);
+    store.confirmDose('m1');
+    stock = 3;
+    await store.loadMedications(api, 't1');
+    expect(store.state.medications.single.currentStock, 3);
+    await Future<void>.delayed(Duration.zero);
+  });
 }

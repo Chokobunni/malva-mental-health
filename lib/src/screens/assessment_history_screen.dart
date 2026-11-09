@@ -8,6 +8,7 @@ import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/therapy_library.dart';
+import '../widgets/shared_record_detail.dart';
 import '../time/wib.dart';
 
 // ============================================================
@@ -340,6 +341,16 @@ class _AssessmentDetailBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     final screening = entry.screening;
+    if (screening != null) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SharedRecordDetail.screening(screening: screening),
+        const SizedBox(height: 14),
+        Text('Skor assessment adalah alat bantu screening, bukan diagnosis.',
+            style: TextStyle(fontSize: 11.5, color: onSurfaceVariant)),
+        const SizedBox(height: 12),
+        AssessmentRecordShareActions(entry: entry),
+      ]);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -376,43 +387,7 @@ class _AssessmentDetailBody extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 14),
-        if (screening != null) ...[
-          _ScreeningScoreCard(
-            title: 'PHQ-9 — Depresi',
-            summary: screening.phq9,
-            color: MalvaColors.seed,
-            itemCount: 9,
-          ),
-          const SizedBox(height: 10),
-          _ScreeningScoreCard(
-            title: 'GAD-7 — Kecemasan',
-            summary: screening.gad7,
-            color: MalvaColors.mint,
-            itemCount: 7,
-          ),
-          if (screening.crisisFlag) ...[
-            const SizedBox(height: 10),
-            SoftCard(
-              color: MalvaColors.danger.withValues(alpha: 0.08),
-              child: const Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.health_and_safety_rounded,
-                      color: MalvaColors.danger),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Screening ini menandai risiko krisis. Segera hubungi '
-                      'bantuan darurat atau profesional terdekat.',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w800, fontSize: 12.5),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ] else if (entry.module?.isAssessment == true)
+        if (entry.module?.isAssessment == true)
           AssessmentResultCard(
             moduleId: entry.moduleId,
             answers: entry.answers,
@@ -437,139 +412,6 @@ class _AssessmentDetailBody extends StatelessWidget {
           AssessmentRecordShareActions(entry: entry),
         ],
       ],
-    );
-  }
-}
-
-/// Kartu skor screening dengan rentang skor yang bisa dibuka pasien.
-class _ScreeningScoreCard extends StatelessWidget {
-  const _ScreeningScoreCard({
-    required this.title,
-    required this.summary,
-    required this.color,
-    required this.itemCount,
-  });
-
-  final String title;
-  final BackendAssessmentSummary summary;
-  final Color color;
-  final int itemCount;
-
-  @override
-  Widget build(BuildContext context) {
-    final available = summary.score >= 0 &&
-        summary.maxScore > 0 &&
-        summary.score <= summary.maxScore;
-    final level =
-        available ? _screeningLevelLabel(summary.level) : 'Belum tersedia';
-    final ranges = <(String, String)>[
-      ('0–4', 'Minimal'),
-      ('5–9', 'Ringan'),
-      ('10–14', 'Sedang'),
-      if (itemCount == 9) ...[
-        ('15–19', 'Cukup berat'),
-        ('20–27', 'Berat'),
-      ] else
-        ('15–21', 'Berat'),
-    ];
-    return SoftCard(
-      color: Colors.white,
-      padding: EdgeInsets.zero,
-      accent: color,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w900, fontSize: 14),
-                      ),
-                    ),
-                    Icon(
-                      title.startsWith('PHQ-9')
-                          ? Icons.psychology_alt_rounded
-                          : Icons.monitor_heart_outlined,
-                      color: color,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text.rich(TextSpan(children: [
-                  const TextSpan(
-                    text: 'Total Score: ',
-                    style: TextStyle(
-                        color: Color(0xFF707782),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800),
-                  ),
-                  TextSpan(
-                    text:
-                        available ? summary.score.toString() : 'Belum tersedia',
-                    style: TextStyle(
-                        color: color,
-                        fontSize: 30,
-                        fontWeight: FontWeight.w900),
-                  ),
-                  if (available)
-                    TextSpan(
-                      text: '/${summary.maxScore}',
-                      style: const TextStyle(
-                          color: Color(0xFF707782),
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800),
-                    ),
-                ])),
-                const SizedBox(height: 8),
-                if (level.isNotEmpty) StatusPill(label: level, color: color),
-                const SizedBox(height: 8),
-                Theme(
-                  data: Theme.of(context)
-                      .copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    childrenPadding: const EdgeInsets.only(bottom: 4),
-                    shape: const Border(),
-                    collapsedShape: const Border(),
-                    title: const Text(
-                      'Apa arti skormu?',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w900, fontSize: 12.5),
-                    ),
-                    children: [
-                      for (final range in ranges)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 64,
-                                child: Text(range.$1,
-                                    style: const TextStyle(fontSize: 12)),
-                              ),
-                              Expanded(
-                                child: Text(range.$2,
-                                    style: const TextStyle(fontSize: 12)),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(height: 4, color: color),
-        ],
-      ),
     );
   }
 }

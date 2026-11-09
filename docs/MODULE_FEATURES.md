@@ -49,13 +49,13 @@ Status `Aktif` berarti endpoint terdaftar di `Routes()` dan diimplementasikan di
 |---|---|---|---|---|
 | FEAT-030 | Cari dokter & ketersediaan slot | Pasien (publik) | `GET /v1/doctors/search`, `/v1/doctors/{user_id}/slots`, `/availability` | Aktif |
 | FEAT-031 | Profil dokter publik | Pasien (publik) | `GET /v1/doctors/{user_id}` | Aktif |
-| FEAT-032 | Buat booking konsultasi | Pasien, Profesional | `POST /v1/bookings` | Aktif |
+| FEAT-032 | Booking konsultasi; pasien otomatis Video, default 60 menit | Pasien, Profesional | `POST /v1/bookings` | Aktif |
 | FEAT-033 | Batalkan booking pending | Pasien | `POST /v1/bookings/{booking_id}/cancel` | Aktif |
 | FEAT-034 | Bayar konsultasi (simulasi/gateway) | Pasien | `POST /v1/payments`, `POST /v1/payments/mark-paid` | Aktif (Midtrans untuk gateway) |
 | FEAT-035 | Webhook pembayaran (signature) | Sistem | `POST /v1/webhooks/payment` | Aktif (Midtrans) |
 | FEAT-036 | Ulasan dokter | Pasien | `GET/POST /v1/doctors/{user_id}/reviews` | Aktif |
 | FEAT-037 | Pendapatan & pencairan (payout) | Profesional | `GET /v1/earnings`, `POST /v1/earnings/payout` | Aktif |
-| FEAT-038 | E-prescription (resep elektronik) | Profesional (Sp.KJ) | `POST/GET /v1/e-prescriptions`, `GET /v1/e-prescriptions/verify` | Aktif |
+| FEAT-038 | E-prescription, rutinitas WIB dan stok obat | Profesional (Sp.KJ) | `POST/GET /v1/e-prescriptions`, `GET /v1/e-prescriptions/verify` | Aktif; migrasi 037 sebelum rilis |
 
 ## 5. Care Package & Sesi
 
@@ -217,3 +217,25 @@ loading/log tampilannya dihapus, tanpa menghapus insiden atau alur SOS pasien.
 Jadwal dan Ringkasan Klinis menampilkan status/kuota aktual; PHQ/GAD, WHO dan DASS
 memiliki kartu skor, makna dan jawaban. Pemantauan harian tanpa Kiriman/Timeline.
 Ulasan memakai entitlement per sesi/pembelian di atas, termasuk renewal merged.
+
+## Kontrak sesi dan resep — 10 November 2026
+
+- Booking baru pasien otomatis Video, default 60 menit. Sesi satu kali/paket
+  dan slot praktik minimum 60 menit, maksimum 180. Jenis sesi historis serta
+  pembayaran Chat lama tetap dapat dibaca/dilanjutkan.
+- Reschedule menyimpan sesi dan booking asal atomik serta memblokir irisan
+  durasi sesi lain. Messages memuat pasangan sesi mendatang tanpa pesan.
+- Consent dapat dipilih sebelum sesi; tanpa paket aktif, akses record dan
+  berbagi hanya selama durasi sesi scheduled. Paket aktif mempertahankan
+  akses antarsesi sesuai consent. Worksheet satu kali memakai alur yang sama;
+  lampiran profesional tidak bergantung pada consent kategori pasien.
+- Pembatalan satu kali menghentikan link hanya jika tidak ada hak sesi/paket/
+  pembelian lain; migrasi 038 membenahi relasi historis secara konservatif.
+- Wizard E-Prescription Sp.KJ mengirim bentuk/dosis/satuan, rutinitas WIB,
+  jumlah per dosis, stok awal serta batas/toggle pengingat. Server menerbitkan
+  resep dan obat pasien atomik; checklist dan pengingat memakai jadwal tersimpan.
+- Migrasi 036–038 telah diuji lokal dan belum diterapkan produksi dalam pekerjaan
+  ini. Normalisasi durasi di bawah 60 tidak mengubah jam mulai; jadwal legacy
+  berdekatan perlu diperiksa terhadap irisan sebelum rilis.
+
+Rujukan: [kontrak API](API_DOCUMENTATION.md), [skema](DATABASE_SCHEMA.md).

@@ -103,6 +103,7 @@ func (f therapyConsentFixture) listForProfessional(t *testing.T, patientID strin
 // lama berlaku — profesional hanya melihat worksheet yang dibagikan ke dirinya.
 func TestTherapyRecordsConsentOffShowsOnlyShared(t *testing.T) {
 	f := newTherapyConsentFixture(t)
+	grantContinuousTherapyAccess(t, f)
 	shared, private := f.seedSubmissions(t)
 
 	got := f.listForProfessional(t, f.patient.ID)
@@ -120,6 +121,7 @@ func TestTherapyRecordsConsentOffShowsOnlyShared(t *testing.T) {
 // melihat SEMUA worksheet pasien, termasuk yang tidak dibagikan individual.
 func TestTherapyRecordsConsentOnShowsAll(t *testing.T) {
 	f := newTherapyConsentFixture(t)
+	grantContinuousTherapyAccess(t, f)
 	shared, private := f.seedSubmissions(t)
 	ctx := context.Background()
 
@@ -242,4 +244,12 @@ func TestTherapyRecordsUnlinkedProfessionalForbidden(t *testing.T) {
 	if bytes.Contains(rec.Body.Bytes(), []byte("cbt-abcde")) {
 		t.Errorf("body tidak boleh membocorkan worksheet: %s", rec.Body.String())
 	}
+}
+
+func grantContinuousTherapyAccess(t *testing.T, f therapyConsentFixture) {
+	t.Helper()
+	if _, err := f.db.Exec(`INSERT INTO care_packages(patient_id,professional_id,total_sessions,validity_days,price,status,expires_at) VALUES($1,$2,4,42,100000,'active',now()+interval '30 days')`, f.patient.ID, f.prof.ID); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { f.db.Exec(`DELETE FROM care_packages WHERE patient_id=$1`, f.patient.ID) })
 }

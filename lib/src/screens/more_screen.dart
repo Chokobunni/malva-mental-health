@@ -265,9 +265,8 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
           canShare: isCurrent);
     } catch (_) {
       if (isCurrent()) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(
-                'PDF belum dapat dibuat. Periksa koneksi lalu coba lagi.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('PDF belum dapat dibuat.')));
       }
     } finally {
       if (mounted) setState(() => _exporting = false);

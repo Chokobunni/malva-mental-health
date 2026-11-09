@@ -274,6 +274,9 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 	googleEventID := ""
 	meetPending := false
 	sessionType := strings.ToLower(strings.TrimSpace(req.SessionType))
+	if isPatient {
+		sessionType = "video"
+	}
 	if meetingURL != "" && !isGoogleMeetURL(meetingURL) {
 		writeError(w, http.StatusBadRequest, errors.New("link meeting harus berupa link Google Meet (meet.google.com). Kosongkan untuk membuat otomatis"))
 		return
@@ -303,7 +306,7 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 		PackageID:       &pkg.ID,
 		PatientID:       pkg.PatientID,
 		ProfessionalID:  pkg.ProfessionalID,
-		SessionType:     req.SessionType,
+		SessionType:     sessionType,
 		ScheduledAt:     at,
 		DurationMinutes: duration,
 		Status:          "scheduled",
@@ -572,11 +575,11 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 	// reschedule profesional sendiri meminta "pilih slot dalam jam praktikmu").
 	// Lead time 24 jam untuk jadwal BARU hanya diterapkan ke pasien.
 	if isProf {
-		if verr := s.validateSlotWindow(r.Context(), cs.ProfessionalID, at, cs.DurationMinutes); verr != nil {
+		if verr := s.validateSlotWindow(r.Context(), cs.ProfessionalID, at, max(60, cs.DurationMinutes), sessionID); verr != nil {
 			writeError(w, http.StatusBadRequest, verr)
 			return
 		}
-	} else if verr := s.validateSlot(r.Context(), cs.ProfessionalID, at, cs.DurationMinutes); verr != nil {
+	} else if verr := s.validateSlot(r.Context(), cs.ProfessionalID, at, max(60, cs.DurationMinutes), sessionID); verr != nil {
 		writeError(w, http.StatusBadRequest, verr)
 		return
 	}
@@ -589,9 +592,15 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 	// Pasien tidak boleh terblokir oleh kondisi akun Google profesional; link
 	// dibuat menyusul (sweeper pengingat atau manual oleh profesional).
 	// Kegagalan tetap TERLIHAT lewat warning di respons + notifikasi.
+	updated, err := s.store.RescheduleCareSession(r.Context(), sessionID, at)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	cs = updated
 	var warnings []string
 	if cs.SessionType == "video" && !isGoogleMeetURL(cs.MeetingURL) {
-		if _, cerr := s.createMeetLinkAt(r.Context(), cs, at); cerr != nil {
+		if linked, cerr := s.createMeetLinkAt(r.Context(), cs, at); cerr != nil {
 			if s.logger != nil {
 				s.logger.Warn("gagal menyiapkan link Meet saat reschedule; jadwal tetap dipindahkan",
 					"error", cerr, "session", sessionID)
@@ -601,12 +610,10 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 				"Buat link Google Meet untuk sesi ini",
 				"Jadwal sesi sudah dipindahkan, tetapi link Meet belum bisa dibuat. Buka detail sesi lalu tekan \"Buat link Meet\".",
 				map[string]string{"session_id": sessionID})
+		} else {
+			updated = linked
+			cs = linked
 		}
-	}
-	updated, err := s.store.RescheduleCareSession(r.Context(), sessionID, at)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
 	}
 	// Best-effort: perbarui event Google Calendar bila ada. Jadwal sudah
 	// tersimpan di DB, jadi kegagalan Google TIDAK menggagalkan reschedule —

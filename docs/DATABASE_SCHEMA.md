@@ -517,6 +517,7 @@ CREATE TYPE notification_status AS ENUM ('pending', 'sent', 'failed');
 | `dosage` | text | NOT NULL | Dosage (e.g., "50mg") |
 | `form` | text | NOT NULL | Form (tablet, syrup, etc.) |
 | `reminder_time` | text | NOT NULL, DEFAULT '' | Reminder time (HH:MM) |
+| `schedule` | jsonb | NOT NULL, DEFAULT '{}' (037) | Rutinitas WIB terstruktur; kosong mempertahankan reminder legacy |
 | `relation_to_meal` | text | NOT NULL, DEFAULT '' | before_meal / after_meal / with_meal |
 | `current_stock` | integer | NOT NULL, DEFAULT 0, CHECK (>= 0) | Current pill/unit count |
 | `alert_below` | integer | NOT NULL, DEFAULT 0, CHECK (>= 0) | Low-stock threshold |
@@ -652,7 +653,7 @@ Status pemakan kuota: scheduled, completed, no_show.
 | `patient_id` / `professional_id` | uuid | NOT NULL (tanpa FK) | Peserta |
 | `session_type` | text | chat/video | Media sesi |
 | `scheduled_at` | timestamptz | NOT NULL | Jadwal (WIB saat input) |
-| `duration_minutes` | integer | 10-180 | = durasi slot jadwal pro |
+| `duration_minutes` | integer | DEFAULT 60 (036); API/store 60-180; CHECK legacy 10-180 | Durasi slot pro; nilai lama di bawah 60 dinormalisasi 036 |
 | `status` | text | pending_payment/scheduled/completed/no_show/cancelled_by_professional/cancelled_by_patient/expired_unpaid | Status |
 | `meeting_url` | text | DEFAULT '' | Link meeting video |
 | `summary_for_patient` | text | DEFAULT '' | Ringkasan sesi (ganti follow-up) |
@@ -725,7 +726,7 @@ Booking pembayaran layanan. `service_type` membedakan quick consult dan paket;
 | `session_type` | varchar(10) | NOT NULL | chat / video |
 | `booking_date` | date | NOT NULL | Tanggal booking |
 | `slot_time` | time | NULLABLE (010) | Jam slot; NULL untuk layanan async |
-| `duration_minutes` | integer | NOT NULL, DEFAULT 30 | Durasi sesi |
+| `duration_minutes` | integer | NOT NULL, DEFAULT 60 (036) | Durasi sesi; API/store 60-180 |
 | `price` | bigint | NOT NULL | Harga saat booking |
 | `status` | varchar(20) | NOT NULL, DEFAULT 'pending' | pending / paid / cancelled / expired |
 | `created_at` | timestamptz | DEFAULT CURRENT_TIMESTAMP | Waktu dibuat |
@@ -841,7 +842,7 @@ Jadwal mingguan profesional.
 | `professional_id` | uuid | NOT NULL, FK → users(id) CASCADE | Profesional |
 | `day_of_week` | integer | NOT NULL | 1–7 |
 | `start_time` / `end_time` | time | NOT NULL | Rentang jam |
-| `slot_duration_minutes` | integer | NOT NULL, DEFAULT 30 | Durasi slot |
+| `slot_duration_minutes` | integer | NOT NULL, DEFAULT 60 (036) | Durasi slot; API/store 60-180, rentang praktik memuat satu slot penuh |
 | `is_active` | boolean | NOT NULL, DEFAULT true | Aktif |
 | `created_at` | timestamptz | DEFAULT CURRENT_TIMESTAMP | Waktu dibuat |
 
@@ -930,6 +931,9 @@ Item obat dalam resep elektronik.
 | `days` | integer | NOT NULL, DEFAULT 30 | Durasi |
 | `units_per_day` | integer | NOT NULL, DEFAULT 1 | Unit per hari |
 | `unit` | varchar(20) | NOT NULL, DEFAULT 'tablet' | Satuan |
+| `schedule` | jsonb | NOT NULL, DEFAULT '{}' (037) | Snapshot rutinitas obat WIB |
+| `current_stock` | integer | NOT NULL, DEFAULT 0, CHECK >= 0 (037) | Snapshot stok awal saat penerbitan |
+| `alert_below` | integer | NOT NULL, DEFAULT 3, CHECK >= 0 (037) | Batas pengingat stok pada resep |
 
 ### 3.37 emergency_contacts (migrasi 006)
 
@@ -1068,3 +1072,26 @@ Katalog tes psikologi berbayar.
 | `price` | bigint | NOT NULL, DEFAULT 0 | Harga |
 | `banner_image_url` | varchar(255) | NULLABLE | Banner |
 | `is_active` | boolean | NOT NULL, DEFAULT true | Aktif |
+
+## Migrasi sesi dan rutinitas — 10 November 2026
+
+Migrasi 036–038 tersedia dalam source dan sudah diuji pada PostgreSQL lokal;
+belum diterapkan produksi dalam pekerjaan ini. Backend baru harus dijalankan
+setelah migrasi diterapkan berurutan.
+
+| Migrasi | Perubahan | Sifat kompatibilitas |
+|---|---|---|
+| 036_session_hour_backfill | Durasi lama di bawah 60 pada `care_sessions`, `bookings`, `professional_schedules` menjadi 60; ketiga default menjadi 60 | Idempoten, mempertahankan jam mulai dan durasi kustom >=60; constraint DB lama tidak diganti |
+| 037_prescription_routine | `medications.schedule`; `e_prescription_items.schedule`, `current_stock`, `alert_below` | `ADD COLUMN IF NOT EXISTS`, default aman bagi data lama; kolom stok obat pasien sudah ada |
+| 038_cancelled_one_time_links | Link aktif dengan bukti pembatalan satu kali menjadi inactive bila tidak ada hak sesi/paket/pembelian lain | Data saja, idempoten; relasi manual tanpa bukti pembatalan tidak disentuh |
+
+`schedule` menyimpan `times`, `weekdays` (1–7, Senin–Minggu), `start_at`
+beroffset WIB, `interval_hours`, `interval_days`, `units_per_dose`, dan
+`refill_enabled`. Rutinitas baru divalidasi server; `{}` mempertahankan perilaku
+pengingat legacy. Resep/item/obat pasien dibuat dalam satu transaksi, sehingga
+`medication_id` menunjuk obat yang baru dibuat untuk resep tersebut. Stok pada
+item resep merupakan snapshot penerbitan; stok berjalan berada di `medications`.
+
+Normalisasi 036 tidak menggeser jadwal legacy yang berdekatan. Durasi lebih
+panjang dapat menghasilkan irisan yang perlu direkonsiliasi sebelum rilis;
+penjadwalan dan reschedule baru memblokir konflik berdasarkan seluruh durasi.

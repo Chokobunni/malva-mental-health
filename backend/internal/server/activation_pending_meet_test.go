@@ -92,7 +92,7 @@ func (f activationFixture) paidBooking(t *testing.T, serviceType, sessionType st
 		SessionType:     sessionType,
 		BookingDate:     dateStr,
 		SlotTime:        slotStr,
-		DurationMinutes: 30,
+		DurationMinutes: 60,
 		Price:           price,
 	})
 	if err != nil {
