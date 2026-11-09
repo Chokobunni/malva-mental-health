@@ -16,5 +16,10 @@
 - APK SHA-256: `c464445c29c05882c7bf3b80cc1e7b8e31ba8adf702e5ff627409e0d16f68928`.
 - Signing certificate SHA-256: `965f7430ec7f67a44b7a99e83f155e601116ff16c18fa8db57a4e79de4f2d300`.
 
-Widget tests were not run locally for this display-only follow-up. GitHub CI runs
-after the source push; emulator interaction was not performed.
+## Release verification
+
+- Flutter CI passed for commit `8d9ab6b0dce1c21e8930f6e8b38980c984d1c512`, including analyzer/lint, test suites in UTC and Asia/Jakarta, security scan, and Web/Windows builds: [run 42645412862](https://github.com/Chokobunni/malva-mental-health/actions/runs/42645412862).
+- Security Gates passed: [run 42645412982](https://github.com/Chokobunni/malva-mental-health/actions/runs/42645412982).
+- APK build and server deployment passed: [run 42645413032](https://github.com/Chokobunni/malva-mental-health/actions/runs/42645413032). The deployed arm64 APK is version `0.1.12+13`; its downloaded SHA-256 `48ef40ea33fd006ac5d3a7770a199a8fc4cd16a19b91b8a68e392d8ca4a4637e` matches the workflow artifact byte-for-byte.
+- Public download returned HTTP 200: <https://malva.web.id/downloads/malva-latest.apk>.
+- Local universal APK hash and signing certificate were checked above. Emulator interaction and local widget tests were not performed for this display-only follow-up.
