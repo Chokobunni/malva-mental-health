@@ -13,7 +13,7 @@
 - Signed universal APK built for ARM32, ARM64, and x86_64 with production API and Google configuration.
 - Package version: `0.1.12+13`.
 - APK: `C:/Users/user/Desktop/Malva-release-2026-11-09.apk` (74.4 MB).
-- APK SHA-256: `f865bb07e38766b5e22c0a195e2c3fcd1b8e59b703155b298da7a892c04507a6`.
+- APK SHA-256: `c464445c29c05882c7bf3b80cc1e7b8e31ba8adf702e5ff627409e0d16f68928`.
 - Signing certificate SHA-256: `965f7430ec7f67a44b7a99e83f155e601116ff16c18fa8db57a4e79de4f2d300`.
 
 Widget tests were not run locally for this display-only follow-up. GitHub CI runs

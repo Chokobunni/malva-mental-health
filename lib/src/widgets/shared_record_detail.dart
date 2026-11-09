@@ -428,6 +428,14 @@ class SharedRecordDetail extends StatelessWidget {
         _ => value.toString(),
       };
 
+  bool _isScreeningExplanation(dynamic value) {
+    final summary = value?.toString().toLowerCase() ?? '';
+    return (summary.contains('skor phq-9') &&
+            summary.contains('menunjukkan gejala depresi')) ||
+        (summary.contains('skor gad-7') &&
+            summary.contains('menunjukkan gejala kecemasan'));
+  }
+
   Widget _scoreCard(String instrument, Map data, Color color) => _card(
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -523,10 +531,6 @@ class SharedRecordDetail extends StatelessWidget {
     final hasSafety = [meta, data, rawPhq, rawGad]
         .any((value) => value['crisis_flag'] is bool);
     final summary = meta['summary']?.toString();
-    final summaryLower = summary?.toLowerCase() ?? '';
-    final isScreeningExplanation =
-        summaryLower.contains('menunjukkan gejala depresi') ||
-            summaryLower.contains('menunjukkan gejala kecemasan');
     final overall = crisis
         ? 'crisis'
         : phqLevel != null && gadLevel != null
@@ -603,12 +607,18 @@ class SharedRecordDetail extends StatelessWidget {
       if (showClinicalAudit &&
           (meta['cf'] is num || meta['certainty_factor'] is num))
         _cfCard('Assessment', meta['cf'] ?? meta['certainty_factor']),
-      for (final item in [('PHQ-9', phq), ('GAD-7', gad)])
+      for (final item in [('PHQ-9', phq), ('GAD-7', gad)]) ...[
+        if (item.$2['summary'] != null &&
+            !_isScreeningExplanation(item.$2['summary']))
+          Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Text(_value(item.$2, 'summary'))),
         if (showClinicalAudit && item.$2['cf'] != null)
           Padding(
               padding: const EdgeInsets.only(top: 12),
               child: _cfCard(item.$1, item.$2['cf'])),
-      if (summary != null && !isScreeningExplanation)
+      ],
+      if (summary != null && !_isScreeningExplanation(summary))
         Padding(
             padding: const EdgeInsets.only(top: 16),
             child: SelectableText(summary)),
