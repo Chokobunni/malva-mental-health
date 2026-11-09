@@ -446,9 +446,17 @@ class SharedRecordDetail extends StatelessWidget {
               size: 21),
         ]),
         const SizedBox(height: 16),
-        Text(_value(data, 'score', '—'),
-            style: TextStyle(
-                fontSize: 38, fontWeight: FontWeight.w900, color: color)),
+        Text.rich(TextSpan(children: [
+          TextSpan(
+              text: _value(data, 'score', '—'),
+              style: TextStyle(
+                  fontSize: 38, fontWeight: FontWeight.w900, color: color)),
+          TextSpan(
+              text:
+                  '/${data['max_score'] ?? (instrument == 'PHQ-9' ? 27 : 21)}',
+              style: const TextStyle(
+                  fontSize: 20, fontWeight: FontWeight.w800, color: _muted)),
+        ])),
         const SizedBox(height: 12),
         _pill(_level(data['level']), color),
       ]),
@@ -585,24 +593,11 @@ class SharedRecordDetail extends StatelessWidget {
       if (showClinicalAudit &&
           (meta['cf'] is num || meta['certainty_factor'] is num))
         _cfCard('Assessment', meta['cf'] ?? meta['certainty_factor']),
-      for (final item in [('PHQ-9', phq), ('GAD-7', gad)]) ...[
-        if (item.$2['summary'] != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: Text(_value(item.$2, 'summary'))),
+      for (final item in [('PHQ-9', phq), ('GAD-7', gad)])
         if (showClinicalAudit && item.$2['cf'] != null)
           Padding(
               padding: const EdgeInsets.only(top: 12),
               child: _cfCard(item.$1, item.$2['cf'])),
-        if (item.$2['answers'] is Map)
-          ExpansionTile(
-              title: Text('Jawaban ${item.$1}'),
-              children: _fields(item.$2['answers'] as Map)),
-      ],
-      if (meta['summary'] != null)
-        Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: SelectableText(_value(meta, 'summary'))),
     ];
   }
 

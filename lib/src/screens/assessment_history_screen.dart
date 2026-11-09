@@ -441,7 +441,7 @@ class _AssessmentDetailBody extends StatelessWidget {
   }
 }
 
-/// Kartu ringkas satu subskala screening (skor/maks + level + ringkasan).
+/// Kartu skor screening dengan rentang skor yang bisa dibuka pasien.
 class _ScreeningScoreCard extends StatelessWidget {
   const _ScreeningScoreCard({
     required this.title,
@@ -472,77 +472,101 @@ class _ScreeningScoreCard extends StatelessWidget {
       ] else
         ('15–21', 'Berat'),
     ];
-    return SoftCard(
-      color: Colors.white,
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE6E7E9)),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0C000000), blurRadius: 4, offset: Offset(0, 3)),
+        ],
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w900, fontSize: 14),
-                ),
-              ),
-              if (level.isNotEmpty) StatusPill(label: level, color: color),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            available
-                ? 'Total Score: ${summary.score}/${summary.maxScore}'
-                : 'Total Score: Belum tersedia',
-            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '$itemCount pertanyaan tentang gejala '
-            '${itemCount == 9 ? 'depresi' : 'kecemasan'} dalam 2 minggu terakhir. '
-            'Skor membantu memahami tingkat gejala yang kamu alami.',
-            style: const TextStyle(fontSize: 12.5),
-          ),
-          if (summary.summary.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              summary.summary,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-          const SizedBox(height: 8),
-          Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: const EdgeInsets.only(bottom: 4),
-              shape: const Border(),
-              collapsedShape: const Border(),
-              title: const Text(
-                'Apa arti skormu?',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12.5),
-              ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final range in ranges)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 64,
-                          child: Text(range.$1,
-                              style: const TextStyle(fontSize: 12)),
-                        ),
-                        Expanded(
-                          child: Text(range.$2,
-                              style: const TextStyle(fontSize: 12)),
-                        ),
-                      ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w900, fontSize: 14),
+                      ),
                     ),
+                    Icon(
+                      title.startsWith('PHQ-9')
+                          ? Icons.psychology_alt_rounded
+                          : Icons.monitor_heart_outlined,
+                      color: color,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text.rich(TextSpan(children: [
+                  TextSpan(
+                    text: available ? summary.score.toString() : '—',
+                    style: TextStyle(
+                        color: color,
+                        fontSize: 36,
+                        fontWeight: FontWeight.w900),
                   ),
+                  if (summary.maxScore > 0)
+                    TextSpan(
+                      text: '/${summary.maxScore}',
+                      style: const TextStyle(
+                          color: Color(0xFF707782),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800),
+                    ),
+                ])),
+                const SizedBox(height: 8),
+                StatusPill(label: level, color: color),
+                const SizedBox(height: 8),
+                Theme(
+                  data: Theme.of(context)
+                      .copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(bottom: 4),
+                    shape: const Border(),
+                    collapsedShape: const Border(),
+                    title: const Text(
+                      'Apa arti skormu?',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w900, fontSize: 12.5),
+                    ),
+                    children: [
+                      for (final range in ranges)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 64,
+                                child: Text(range.$1,
+                                    style: const TextStyle(fontSize: 12)),
+                              ),
+                              Expanded(
+                                child: Text(range.$2,
+                                    style: const TextStyle(fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
+          Container(height: 4, color: color),
         ],
       ),
     );
