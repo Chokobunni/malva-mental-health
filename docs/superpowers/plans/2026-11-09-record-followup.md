@@ -49,5 +49,5 @@ Files: `doctor_review_actions.dart`, `doctor_reviews_distance_test.dart`, associ
 
 - [x] Independently review integrated diff and check every requested screenshot/item.
 - [x] Run full Flutter suite/analyzer/format and mandatory backend gates, including lint if backend changes.
-- [ ] Update QA/domain/product docs, version and build signed universal APK; verify content/certificate/startup.
-- [ ] Commit/push, verify workflows/deployment, publish universal APK and verify public version/latest hashes.
+- [x] Update QA/domain/product docs, version and build signed universal APK; verify content/certificate/startup.
+- [x] Commit/push, verify workflows/deployment, publish universal APK and verify public version/latest hashes.
