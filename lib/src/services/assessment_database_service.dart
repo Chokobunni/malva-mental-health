@@ -81,35 +81,16 @@ class AssessmentDatabaseService {
         ],
       };
 
-  /// Level cadangan bila nama level tersimpan tidak dikenali (mis. data
-  /// ditulis versi aplikasi yang lebih baru). Diturunkan dari skor memakai
-  /// band baku — BUKAN default ke 'minimal', karena itu menurunkan derajat
-  /// pasien secara diam-diam.
-  static RiskLevel _levelFromScore(AssessmentType type, int score) {
-    if (type == AssessmentType.phq9) {
-      if (score >= 20) return RiskLevel.severe;
-      if (score >= 15) return RiskLevel.moderatelySevere;
-      if (score >= 10) return RiskLevel.moderate;
-      if (score >= 5) return RiskLevel.mild;
-      return RiskLevel.minimal;
-    }
-    if (score >= 15) return RiskLevel.severe;
-    if (score >= 10) return RiskLevel.moderate;
-    if (score >= 5) return RiskLevel.mild;
-    return RiskLevel.minimal;
-  }
-
   static AssessmentResult? _resultFromJson(Map<String, dynamic> json) {
     try {
       final type = AssessmentType.values.firstWhere(
         (t) => t.name == json['type'],
-        orElse: () => AssessmentType.phq9,
       );
-      final score = (json['score'] as num?)?.toInt() ?? 0;
-      final level = RiskLevel.values.firstWhere(
-        (l) => l.name == json['level'],
-        orElse: () => _levelFromScore(type, score),
-      );
+      final maximum = type == AssessmentType.phq9 ? 27 : 21;
+      final level = AssessmentEngine.levelFromScore(type, json['score'],
+          maxScore: json['maxScore']);
+      if (level == null) return null;
+      final score = (json['score'] as num).toInt();
       final rulesRaw = json['rulesFired'];
       final rules = <RuleTrace>[
         if (rulesRaw is List)
@@ -128,7 +109,7 @@ class AssessmentDatabaseService {
       return AssessmentResult(
         type: type,
         score: score,
-        maxScore: (json['maxScore'] as num?)?.toInt() ?? 0,
+        maxScore: maximum,
         level: level,
         summary: json['summary']?.toString() ?? '',
         crisisFlag: json['crisisFlag'] == true,

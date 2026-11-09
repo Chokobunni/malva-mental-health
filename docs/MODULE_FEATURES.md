@@ -141,8 +141,13 @@ menegakkan entitlement atomik termasuk klien lama. Pasien diminta mengulas setel
 refresh/resume/poll, sekali per unit/akun selama sesi aplikasi. Ulasan lama tetap
 terlihat tanpa backfill dugaan; unit historis pada/sebelum ulasan legacy terakhir
 ditekan konservatif. `GET /v1/review-entitlements` menampilkan hak tersedia. Agregat berasal dari
-ulasan nyata. Tiga contoh diberi label dan dikecualikan dari agregat. Discovery
+ulasan nyata; contoh/demo tidak ditampilkan. Discovery
 dan MyCare memakai jarak koordinat aktual dengan proteksi respons lokasi lama.
+Home profesional menempatkan Klinis sebelum Operasional; Earnings sebelum dropdown
+Ketersediaan & Harga yang membaca server dan dimuat ulang setelah Atur. Panel ini
+tidak lagi berada di Jadwal. Detail pasien menampilkan Mood Entries tanpa diary
+dan tanpa Catatan sesi; data tersimpan tetap ada. PHQ/GAD mempertahankan hasil
+klinis dan CF berlabel tanpa string aturan/penjelasan teknis.
 PDF obat/screening memakai tabel berkode warna; mood memakai emoji, combo/radar
 chart; diary memuat catatan lengkap dari server. Semua ekspor terikat akun aktif.
 

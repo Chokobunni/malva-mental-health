@@ -374,7 +374,7 @@ class _ScreeningRow extends StatelessWidget {
                 child: _ScoreChip(
                   label: 'PHQ-9',
                   score: phq9.score,
-                  maxScore: phq9.maxScore == 0 ? 27 : phq9.maxScore,
+                  maxScore: phq9.maxScore,
                   level: phq9.level,
                 ),
               ),
@@ -383,7 +383,7 @@ class _ScreeningRow extends StatelessWidget {
                 child: _ScoreChip(
                   label: 'GAD-7',
                   score: gad7.score,
-                  maxScore: gad7.maxScore == 0 ? 21 : gad7.maxScore,
+                  maxScore: gad7.maxScore,
                   level: gad7.level,
                 ),
               ),
@@ -421,7 +421,7 @@ class _ScreeningRow extends StatelessWidget {
               _TraceBlock(
                 title: 'PHQ-9',
                 score: phq9.score,
-                maxScore: phq9.maxScore == 0 ? 27 : phq9.maxScore,
+                maxScore: phq9.maxScore,
                 level: phq9.level,
                 certaintyFactor: phq9.certaintyFactor,
                 ruleTrace: phq9.ruleTrace,
@@ -431,7 +431,7 @@ class _ScreeningRow extends StatelessWidget {
               _TraceBlock(
                 title: 'GAD-7',
                 score: gad7.score,
-                maxScore: gad7.maxScore == 0 ? 21 : gad7.maxScore,
+                maxScore: gad7.maxScore,
                 level: gad7.level,
                 certaintyFactor: gad7.certaintyFactor,
                 ruleTrace: gad7.ruleTrace,
@@ -488,7 +488,9 @@ class _ScoreChip extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            '$score/$maxScore',
+            score < 0 || maxScore <= 0 || score > maxScore
+                ? 'Belum tersedia'
+                : '$score/$maxScore',
             style: TextStyle(
                 fontWeight: FontWeight.w900, fontSize: 15, color: color),
           ),
@@ -542,7 +544,9 @@ class _TraceBlock extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '$title • $score/$maxScore',
+                  score < 0 || maxScore <= 0 || score > maxScore
+                      ? '$title • Belum tersedia'
+                      : '$title • $score/$maxScore',
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
               ),
@@ -604,9 +608,7 @@ String _screeningDateLabel(DateTime? value) {
   return formatWibDate(value);
 }
 
-/// Label level risiko (Bahasa Indonesia). Fail-safe: level tak dikenal
-/// ditampilkan sebagai "Berat" — menurunkan derajat pasien secara diam-diam
-/// berbahaya secara klinis.
+/// Missing/invalid results do not imply a symptom severity.
 String _assessmentRiskLabel(String value) {
   return switch (value.toLowerCase()) {
     'minimal' => 'Minimal',
@@ -615,7 +617,7 @@ String _assessmentRiskLabel(String value) {
     'moderately_severe' => 'Cukup Berat',
     'severe' => 'Berat',
     'crisis' => 'Krisis',
-    _ => 'Berat',
+    _ => 'Belum tersedia',
   };
 }
 
@@ -627,6 +629,6 @@ Color _assessmentRiskColor(String value) {
     'moderately_severe' => const Color(0xFFE8873C),
     'severe' => MalvaColors.danger,
     'crisis' => MalvaColors.danger,
-    _ => MalvaColors.danger,
+    _ => Colors.grey,
   };
 }

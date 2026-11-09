@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import '../models.dart';
+import '../assessment_engine.dart';
 import '../time/wib.dart';
 
 /// Read the snapshot that was actually shared, including older message formats.
@@ -364,13 +365,6 @@ class SharedRecordDetail extends StatelessWidget {
     final days =
         RegExp(r'(\d+) hari').firstMatch(message.text)?.group(1) ?? '7';
     return [
-      _card(Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Icon(Icons.format_quote, color: Color(0xFFCCD0D5)),
-        const SizedBox(width: 10),
-        Expanded(
-            child: SelectableText(message.text,
-                style: const TextStyle(color: _ink, height: 1.5)))
-      ])),
       _heading('METRIK $days HARI TERAKHIR', Icons.pie_chart_rounded),
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(
@@ -455,10 +449,8 @@ class SharedRecordDetail extends StatelessWidget {
         Text(_value(data, 'score', '—'),
             style: TextStyle(
                 fontSize: 38, fontWeight: FontWeight.w900, color: color)),
-        if (_value(data, 'level').isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _pill(_level(data['level']), color)
-        ],
+        const SizedBox(height: 12),
+        _pill(_level(data['level']), color),
       ]),
       scoreAccent: color);
 
@@ -490,13 +482,38 @@ class SharedRecordDetail extends StatelessWidget {
       ]));
 
   List<Widget> _assessment(Map meta) {
-    final crisis = meta['crisis_flag'] == true;
-    final phq = meta['phq9'] is Map
-        ? meta['phq9'] as Map
-        : {'score': meta['phq9_score'], 'level': meta['phq9_level']};
-    final gad = meta['gad7'] is Map
-        ? meta['gad7'] as Map
-        : {'score': meta['gad7_score'], 'level': meta['gad7_level']};
+    final data =
+        meta['bundle'] is Map ? {...meta, ...meta['bundle'] as Map} : meta;
+    Map instrument(String id) => data[id] is Map
+        ? data[id] as Map
+        : {'score': data['${id}_score'], 'max_score': data['${id}_max_score']};
+    final rawPhq = instrument('phq9');
+    final rawGad = instrument('gad7');
+    final phqLevel = AssessmentEngine.levelFromScore(
+        AssessmentType.phq9, rawPhq['score'],
+        maxScore: rawPhq['max_score']);
+    final gadLevel = AssessmentEngine.levelFromScore(
+        AssessmentType.gad7, rawGad['score'],
+        maxScore: rawGad['max_score']);
+    final phq = {
+      ...rawPhq,
+      'score': phqLevel == null ? null : rawPhq['score'],
+      'level': phqLevel?.label
+    };
+    final gad = {
+      ...rawGad,
+      'score': gadLevel == null ? null : rawGad['score'],
+      'level': gadLevel?.label
+    };
+    final crisis = [meta, data, rawPhq, rawGad]
+        .any((value) => value['crisis_flag'] == true);
+    final hasSafety = [meta, data, rawPhq, rawGad]
+        .any((value) => value['crisis_flag'] is bool);
+    final overall = crisis
+        ? 'crisis'
+        : phqLevel != null && gadLevel != null
+            ? (phqLevel.index > gadLevel.index ? phqLevel : gadLevel).label
+            : null;
     return [
       _card(
           Stack(children: [
@@ -528,12 +545,12 @@ class SharedRecordDetail extends StatelessWidget {
                             letterSpacing: .6,
                             color: crisis ? Colors.red.shade600 : _muted)),
                     const SizedBox(height: 8),
-                    Text(_level(meta['overall_level']),
+                    Text(_level(overall),
                         style: TextStyle(
                             fontSize: 26,
                             fontWeight: FontWeight.w900,
                             color: crisis ? Colors.red.shade800 : _purple)),
-                    if (meta['crisis_flag'] is bool) ...[
+                    if (hasSafety) ...[
                       const SizedBox(height: 16),
                       Container(
                           padding: const EdgeInsets.all(10),
@@ -601,7 +618,14 @@ class SharedRecordDetail extends StatelessWidget {
       'diary' => _diary(meta),
       'summary' || 'progress' => _summary(meta),
       'assessment' ||
-      'screening' when meta['phq9_score'] != null || meta['phq9'] is Map =>
+      'screening'
+          when meta.containsKey('phq9_score') ||
+              meta.containsKey('gad7_score') ||
+              meta['phq9'] is Map ||
+              meta['gad7'] is Map ||
+              meta['bundle'] is Map ||
+              meta['source'] == 'screening' ||
+              message.kind == 'screening' =>
         _assessment(meta),
       _ => [SelectableText(message.text), ..._fields(meta)],
     };

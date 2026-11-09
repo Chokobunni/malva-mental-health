@@ -91,6 +91,11 @@ String formatAssessmentDate(DateTime? date) {
 
 /// Ringkasan skor satu subskala screening, mis. `PHQ-9 12/27 (Sedang)`.
 String _screeningScorePart(String label, BackendAssessmentSummary summary) {
+  if (summary.score < 0 ||
+      summary.maxScore <= 0 ||
+      summary.score > summary.maxScore) {
+    return '$label Belum tersedia';
+  }
   final score = '$label ${summary.score}/${summary.maxScore}';
   // Level bisa kosong pada data lama; jangan tampilkan "( )" yang membingungkan.
   return summary.level.isEmpty
@@ -452,7 +457,11 @@ class _ScreeningScoreCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final level = _screeningLevelLabel(summary.level);
+    final available = summary.score >= 0 &&
+        summary.maxScore > 0 &&
+        summary.score <= summary.maxScore;
+    final level =
+        available ? _screeningLevelLabel(summary.level) : 'Belum tersedia';
     final ranges = <(String, String)>[
       ('0–4', 'Minimal'),
       ('5–9', 'Ringan'),
@@ -482,7 +491,9 @@ class _ScreeningScoreCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Total Score: ${summary.score}/${summary.maxScore}',
+            available
+                ? 'Total Score: ${summary.score}/${summary.maxScore}'
+                : 'Total Score: Belum tersedia',
             style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
           ),
           const SizedBox(height: 6),

@@ -6,6 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:malva_mental_health/src/models.dart';
+import 'package:malva_mental_health/src/assessment_engine.dart';
+import 'package:malva_mental_health/src/providers/malva_store_provider.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 import 'package:malva_mental_health/src/providers/auth_providers.dart';
 import 'package:malva_mental_health/src/screens/chat_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
@@ -34,6 +37,7 @@ class _ChatBackend {
   bool failList = false;
   bool failHistoryAfterShare = false;
   bool shared = false;
+  bool noAssessments = false;
   String assessmentModule = 'who5';
   Map<String, dynamic> get assessment => {
         ..._record('assessment-1', assessmentModule,
@@ -87,7 +91,7 @@ class _ChatBackend {
             return _json({
               'submissions': [
                 if (!empty) therapy,
-                assessment,
+                if (!noAssessments) assessment,
               ]
             });
           case 'GET /v1/screenings':
@@ -147,7 +151,8 @@ class _ChatBackend {
           case 'POST /v1/messages':
             genericSendCalls++;
             final data = jsonDecode(request.body) as Map<String, dynamic>;
-            if (data['kind'] == 'diary') {
+            if (data['kind'] == 'diary' ||
+                (data['kind'] == 'assessment' && noAssessments)) {
               sentShare = data;
               return _json({
                 'message': {
@@ -186,7 +191,7 @@ class _ChatBackend {
 }
 
 Future<void> _open(WidgetTester tester, _ChatBackend backend,
-    {bool professional = false}) async {
+    {bool professional = false, AssessmentResult? localResult}) async {
   final api = MalvaApiClient(
       baseUrl: 'http://backend.test', httpClient: backend.client());
   final container = ProviderContainer(overrides: [
@@ -200,6 +205,8 @@ Future<void> _open(WidgetTester tester, _ChatBackend backend,
         accessToken: 'synthetic-token',
       ));
   addTearDown(container.dispose);
+  if (localResult != null)
+    container.read(malvaStoreProvider.notifier).saveAssessment(localResult);
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: MaterialApp(
@@ -222,6 +229,32 @@ Future<void> _chooseTherapy(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+      'single local screening share carries validated type score and safety',
+      (tester) async {
+    final backend = _ChatBackend()..noAssessments = true;
+    await _open(tester, backend,
+        localResult: AssessmentResult(
+          type: AssessmentType.phq9,
+          score: 23,
+          maxScore: 27,
+          level: RiskLevel.minimal,
+          summary: 'Stale minimal',
+          crisisFlag: true,
+          rulesFired: const [],
+          createdAt: wibFromParts(2026, 11, 9),
+          ruleVersion: 'legacy',
+        ));
+    await tester.tap(find.byIcon(Icons.add_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Assessment Record'));
+    await tester.pumpAndSettle();
+    expect(backend.sentShare?['metadata']['source'], 'screening');
+    expect(backend.sentShare?['metadata']['phq9']['score'], 23);
+    expect(backend.sentShare?['metadata']['phq9']['level'], 'Berat');
+    expect(backend.sentShare?['metadata']['crisis_flag'], true);
+    await tester.pumpWidget(const SizedBox());
+  });
   for (final kind in [
     'diary',
     'goals',

@@ -21,6 +21,7 @@ import '../widgets/malva_components.dart';
 import '../widgets/meet_join_button.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/professional_avatar.dart';
+import '../widgets/professional_availability_summary.dart';
 import 'booking/credential_screens.dart';
 import 'chat_screen.dart';
 import 'google_account_screen.dart';
@@ -349,7 +350,8 @@ class _ProfessionalDashboardScreenState
                                           widget.session?.backendUserId ??
                                               widget.session?.identifier),
                                       session: widget.session,
-                                      apiClient: widget.apiClient),
+                                      apiClient: widget.apiClient,
+                                      refreshToken: _lastSyncTime),
                                 if (_tabIndex == 2)
                                   // Teks label dipertahankan persis "Pasien terhubung"
                                   // (dipakai test widget). Jumlah pasien dipindah ke
@@ -1028,9 +1030,11 @@ class _ProfessionalHeader extends StatelessWidget {
 }
 
 class _ProfessionalToolsSection extends ConsumerStatefulWidget {
-  const _ProfessionalToolsSection({super.key, this.session, this.apiClient});
+  const _ProfessionalToolsSection(
+      {super.key, this.session, this.apiClient, this.refreshToken});
   final AuthSession? session;
   final MalvaApiClient? apiClient;
+  final Object? refreshToken;
 
   @override
   ConsumerState<_ProfessionalToolsSection> createState() =>
@@ -1039,43 +1043,48 @@ class _ProfessionalToolsSection extends ConsumerStatefulWidget {
 
 class _ProfessionalToolsSectionState
     extends ConsumerState<_ProfessionalToolsSection> {
-  late final Future<BackendProfessionalCredential?>? _credential;
+  Future<BackendProfessionalCredential?>? _credential;
+  Future<List<Object>>? _availability;
   AuthSession? get session => widget.session;
   MalvaApiClient? get apiClient => widget.apiClient;
 
   @override
   void initState() {
     super.initState();
+    _reload();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProfessionalToolsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.session?.accessToken != session?.accessToken ||
+        oldWidget.apiClient != apiClient ||
+        oldWidget.refreshToken != widget.refreshToken) {
+      _reload();
+    }
+  }
+
+  void _reload() {
     final MalvaApiClient client =
         widget.apiClient ?? ref.read(apiClientProvider);
     final token = session?.accessToken;
     _credential = token == null || token.isEmpty
         ? null
         : client.getMyCredentials(accessToken: token);
+    _availability = token == null || token.isEmpty
+        ? null
+        : Future.wait<Object>([
+            client.listMySchedules(accessToken: token),
+            client.getPricing(accessToken: token),
+            client.listTimeOff(accessToken: token),
+          ]);
   }
 
   @override
   Widget build(BuildContext context) {
-    void open(Widget page) =>
+    Future<void> open(Widget page) async =>
         Navigator.push(context, MaterialPageRoute(builder: (_) => page));
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const SectionLabel('Operasional', icon: Icons.work_outline_rounded),
-      ActionTile(
-          icon: Icons.edit_calendar_rounded,
-          title: 'Ketersediaan & harga',
-          subtitle: 'Jam praktik, hari libur dan harga layanan',
-          color: MalvaColors.seed,
-          onTap: () => open(
-              ProAvailabilityScreen(session: session, apiClient: apiClient))),
-      const SizedBox(height: 10),
-      ActionTile(
-          icon: Icons.account_balance_wallet_rounded,
-          title: 'Earnings',
-          subtitle: 'Pendapatan, fee platform, dan payout',
-          color: MalvaColors.amber,
-          onTap: () =>
-              open(EarningsScreen(session: session, apiClient: apiClient))),
-      const SizedBox(height: 22),
       const SectionLabel('Klinis', icon: Icons.medical_services_outlined),
       FutureBuilder<BackendProfessionalCredential?>(
         future: _credential,
@@ -1092,6 +1101,83 @@ class _ProfessionalToolsSectionState
                     color: Colors.white,
                     child: Text('Resep obat hanya untuk Psikiater (Sp.KJ).')),
       ),
+      const SizedBox(height: 22),
+      const SectionLabel('Operasional', icon: Icons.work_outline_rounded),
+      ActionTile(
+          icon: Icons.account_balance_wallet_rounded,
+          title: 'Earnings',
+          subtitle: 'Pendapatan, fee platform, dan payout',
+          color: MalvaColors.amber,
+          onTap: () =>
+              open(EarningsScreen(session: session, apiClient: apiClient))),
+      const SizedBox(height: 10),
+      FutureBuilder<List<Object>>(
+          future: _availability,
+          builder: (context, snapshot) => CollapsibleCard(
+                key: const ValueKey('home-availability'),
+                color: Colors.white,
+                semanticLabel: 'Ketersediaan & harga',
+                header: const Row(children: [
+                  Icon(Icons.edit_calendar_rounded, color: MalvaColors.seed),
+                  SizedBox(width: 10),
+                  Expanded(
+                      child: Text('Ketersediaan & harga',
+                          style: TextStyle(fontWeight: FontWeight.w800))),
+                ]),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(children: [
+                        const Expanded(
+                            child: Text('PENGATURAN',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.black54))),
+                        TextButton.icon(
+                          onPressed: () async {
+                            await open(ProAvailabilityScreen(
+                                session: session, apiClient: apiClient));
+                            if (mounted) setState(_reload);
+                          },
+                          icon:
+                              const Icon(Icons.edit_calendar_rounded, size: 18),
+                          label: const Text('Atur'),
+                        ),
+                      ]),
+                      const Divider(height: 18),
+                      Builder(
+                        builder: (context) {
+                          if (_availability == null) {
+                            return const Text(
+                                'Login dulu untuk melihat ketersediaan.');
+                          }
+                          if (snapshot.connectionState !=
+                              ConnectionState.done) {
+                            return const Center(
+                                child: CircularProgressIndicator());
+                          }
+                          if (snapshot.hasError || !snapshot.hasData) {
+                            return Column(children: [
+                              const Text(
+                                  'Ketersediaan & harga belum dapat dimuat.'),
+                              OutlinedButton.icon(
+                                onPressed: () => setState(_reload),
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: const Text('Coba Lagi'),
+                              ),
+                            ]);
+                          }
+                          final data = snapshot.requireData;
+                          return ProfessionalAvailabilitySummary(
+                            schedules:
+                                data[0] as List<BackendProfessionalSchedule>,
+                            pricing: data[1] as BackendProfessionalPricing,
+                            timeOff: data[2] as List<BackendTimeOff>,
+                          );
+                        },
+                      ),
+                    ]),
+              )),
     ]);
   }
 }
@@ -1121,7 +1207,7 @@ class _ProfessionalPatient {
   _ScreeningView? get latestScreening =>
       screenings.isEmpty ? null : screenings.first;
   bool get hasCrisis => screenings.any((screening) => screening.crisisFlag);
-  String get latestLevel => latestScreening?.overallLevel ?? 'minimal';
+  String get latestLevel => latestScreening?.overallLevel ?? 'unavailable';
   String get latestLevelLabel => _riskLabel(latestLevel);
   Color get latestColor => _riskColor(latestLevel);
 }
@@ -1147,13 +1233,22 @@ class _ScreeningView {
     return _ScreeningView(
       id: session.id,
       createdAt: toWibOrNull(session.createdAt),
-      overallLevel: session.overallLevel,
+      overallLevel: session.crisisFlag
+          ? 'crisis'
+          : session.phq9.maxScore > 0 &&
+                  session.phq9.score >= 0 &&
+                  session.phq9.score <= session.phq9.maxScore &&
+                  session.gad7.maxScore > 0 &&
+                  session.gad7.score >= 0 &&
+                  session.gad7.score <= session.gad7.maxScore
+              ? session.overallLevel
+              : 'unavailable',
       crisisFlag: session.crisisFlag,
       phq9Score: session.phq9.score,
-      phq9MaxScore: session.phq9.maxScore == 0 ? 27 : session.phq9.maxScore,
+      phq9MaxScore: session.phq9.maxScore,
       phq9Level: session.phq9.level,
       gad7Score: session.gad7.score,
-      gad7MaxScore: session.gad7.maxScore == 0 ? 21 : session.gad7.maxScore,
+      gad7MaxScore: session.gad7.maxScore,
       gad7Level: session.gad7.level,
       phq9CF: session.phq9.certaintyFactor,
       gad7CF: session.gad7.certaintyFactor,
@@ -1187,6 +1282,7 @@ class _ScreeningView {
 
 String _riskLabel(String value) {
   return switch (value.toLowerCase()) {
+    'unavailable' => 'Belum tersedia',
     'minimal' => 'Minimal',
     'mild' => 'Ringan',
     'moderate' => 'Sedang',
@@ -1202,6 +1298,7 @@ String _riskLabel(String value) {
 
 Color _riskColor(String value) {
   return switch (value.toLowerCase()) {
+    'unavailable' => Colors.grey,
     'minimal' => MalvaColors.seed,
     'mild' => MalvaColors.mint,
     'moderate' => const Color(0xFFFFBE55),

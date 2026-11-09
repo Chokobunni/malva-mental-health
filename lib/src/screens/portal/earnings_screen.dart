@@ -116,58 +116,6 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                 ),
               )
             else ...[
-              SoftCard(
-                bordered: true,
-                color: MalvaColors.plum,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Text('Total',
-                            style: TextStyle(
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w800)),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          // GET /v1/earnings menjumlahkan SELURUH earnings
-                          // profesional tanpa filter tanggal, jadi label ini
-                          // tidak boleh menyiratkan periode bulanan.
-                          child: const Text('All time',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Rp ${_rupiah(_summary?.netAmount ?? 0)}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 30,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    _MoneyLine(
-                        label: 'Session',
-                        value: 'Rp ${_rupiah(_summary?.grossAmount ?? 0)}'),
-                    _MoneyLine(
-                        label: 'Platform Fee',
-                        value:
-                            '-${_summary == null ? 0 : _feePct(_summary!)}%'),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
               const SectionLabel('Payout'),
               SoftCard(
                 bordered: true,
@@ -270,11 +218,6 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
     );
   }
 
-  int _feePct(BackendEarningsSummary s) {
-    if (s.grossAmount <= 0) return 0;
-    return ((s.platformFee / s.grossAmount) * 100).round();
-  }
-
   Future<void> _requestPayout(BuildContext context) async {
     final apiClient = widget.apiClient;
     final accessToken = widget.session?.accessToken;
@@ -335,29 +278,5 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
       if (pos > 1 && pos % 3 == 1) buf.write('.');
     }
     return buf.toString();
-  }
-}
-
-class _MoneyLine extends StatelessWidget {
-  const _MoneyLine({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 2),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(label, style: const TextStyle(color: Colors.white70)),
-          ),
-          Text(value,
-              style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.w800)),
-        ],
-      ),
-    );
   }
 }

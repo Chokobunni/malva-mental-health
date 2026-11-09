@@ -19,8 +19,8 @@ import 'assessment_history_screen.dart';
 // PRO PATIENT DETAIL — semua yang dibutuhkan profesional untuk
 // satu pasien, dari semua scope sisi pasien:
 //   Paket & sesi • Screening & review • Worksheet (DASS/WHO-5 +
-//   skor) • Goals & habits • Mood/diary (read-only, tanpa balas)
-//   • Health record & obat • Catatan sesi.
+//   skor) • Goals & habits • Mood (read-only, tanpa balas)
+//   Health record & obat.
 // ============================================================
 
 class ProPatientDetailScreen extends ConsumerStatefulWidget {
@@ -158,8 +158,6 @@ class _ProPatientDetailScreenState
   List<BackendTherapySubmission> _worksheets = const [];
   List<BackendGoal> _goals = const [];
   List<BackendMoodCheckin> _moods = const [];
-  List<BackendDiaryEntry> _diaries = const [];
-  List<BackendProfessionalNote> _notes = const [];
   List<BackendMedication> _medications = const [];
   BackendHealthRecord? _healthRecord;
   String? _restricted;
@@ -253,14 +251,6 @@ class _ProPatientDetailScreenState
                 accessToken: token, patientId: widget.patientId, limit: 0),
             'Mood'),
         safely(
-            () => _api.listDiaryEntries(
-                accessToken: token, patientId: widget.patientId, limit: 10),
-            'Diary'),
-        safely(
-            () => _api.listProfessionalNotes(
-                accessToken: token, patientId: widget.patientId, limit: 10),
-            'Catatan sesi'),
-        safely(
             () => _api.listMedications(
                 accessToken: token, patientId: widget.patientId, limit: 30),
             'Obat'),
@@ -298,9 +288,7 @@ class _ProPatientDetailScreenState
             .toList(growable: false);
         _goals = (results[4] as List<BackendGoal>?) ?? const [];
         _moods = (results[5] as List<BackendMoodCheckin>?) ?? const [];
-        _diaries = (results[6] as List<BackendDiaryEntry>?) ?? const [];
-        _notes = (results[7] as List<BackendProfessionalNote>?) ?? const [];
-        _medications = (results[8] as List<BackendMedication>?) ?? const [];
+        _medications = (results[6] as List<BackendMedication>?) ?? const [];
         _healthRecord = record;
         _isPsychiatrist =
             cred != null && isPsychiatristSpecialization(cred.specialization);
@@ -601,32 +589,28 @@ class _ProPatientDetailScreenState
                     ),
                   const SizedBox(height: 10),
                   if (_isUnavailable('Mood')) _sectionStatus('Mood'),
-                  if (_isUnavailable('Diary')) _sectionStatus('Diary'),
-                  if (_moods.isEmpty &&
-                      _diaries.isEmpty &&
-                      !_isUnavailable('Mood') &&
-                      !_isUnavailable('Diary'))
+                  if (_moods.isEmpty && !_isUnavailable('Mood'))
                     const EmptyState(
                       icon: Icons.menu_book_outlined,
                       title: 'Belum ada data / tidak dibagikan',
                       subtitle:
-                          'Mood & diary hanya dibaca — bahas saat sesi, tanpa balasan di luar sesi.',
+                          'Mood hanya dibaca — bahas saat sesi, tanpa balasan di luar sesi.',
                     )
-                  else if (_moods.isNotEmpty || _diaries.isNotEmpty)
+                  else if (_moods.isNotEmpty)
                     CollapsibleCard(
-                      key: const ValueKey('mood-diary-section'),
+                      key: const ValueKey('mood-section'),
                       color: Colors.white,
-                      semanticLabel: 'Mood & diary (read-only)',
+                      semanticLabel: 'Mood Entries',
                       header: Row(
                         children: [
                           const Expanded(
                             child: Text(
-                              'Mood & diary (read-only)',
+                              'Mood Entries',
                               style: TextStyle(fontWeight: FontWeight.w900),
                             ),
                           ),
                           StatusPill(
-                            label: '${_moods.length + _diaries.length}',
+                            label: '${_moods.length}',
                             color: MalvaColors.orchid,
                           ),
                         ],
@@ -640,22 +624,6 @@ class _ProPatientDetailScreenState
                                     .where((m) => m.occurredAt != null)
                                     .map(moodEntryFromBackend)
                                     .toList()),
-                          for (final d in _diaries.take(3)) ...[
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(d.title,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 12.5)),
-                                Text(d.note,
-                                    maxLines: 3,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 12.5)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                          ],
                         ],
                       ),
                     ),
@@ -676,47 +644,6 @@ class _ProPatientDetailScreenState
                   if (_isUnavailable('Screening PHQ-9 / GAD-7'))
                     _sectionStatus('Screening PHQ-9 / GAD-7'),
                   ..._clinicalAssessmentRecords(),
-                  const SectionLabel('Catatan sesi'),
-                  if (_isUnavailable('Catatan sesi'))
-                    _sectionStatus('Catatan sesi')
-                  else if (_notes.isEmpty)
-                    const EmptyState(
-                      icon: Icons.edit_note_outlined,
-                      title: 'Belum ada catatan',
-                      subtitle:
-                          'Catatan privat & ringkasan untuk pasien ditulis per sesi.',
-                    )
-                  else
-                    for (final n in _notes.take(5)) ...[
-                      SoftCard(
-                        color: Colors.white,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            StatusPill(
-                              label: n.visibility == 'shared_with_patient'
-                                  ? 'Dibagikan ke pasien'
-                                  : 'Privat',
-                              color: n.visibility == 'shared_with_patient'
-                                  ? MalvaColors.mint
-                                  : Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(n.body,
-                                style: const TextStyle(fontSize: 12.5)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  FilledButton.icon(
-                    onPressed: () => _openNote(context),
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Tulis catatan sesi'),
-                  ),
-                  const SizedBox(height: 14),
                   const SectionLabel('Worksheet terapi dibagikan'),
                   if (_isUnavailable('Assessment & worksheet'))
                     _sectionStatus('Assessment & worksheet')
@@ -781,74 +708,6 @@ class _ProPatientDetailScreenState
             ),
           ),
         ));
-  }
-
-  Future<void> _openNote(BuildContext context) async {
-    final bodyController = TextEditingController();
-    var shared = false;
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: const Text('Catatan sesi'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: bodyController,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                    labelText: 'Catatan',
-                    hintText: 'Hasil observasi sesi, rencana berikutnya…'),
-              ),
-              CheckboxListTile(
-                value: shared,
-                onChanged: (v) => setState(() => shared = v == true),
-                title: const Text('Bagikan ke pasien',
-                    style: TextStyle(fontSize: 13)),
-                contentPadding: EdgeInsets.zero,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Batal'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: compactFilledButtonStyle,
-              child: const Text('Simpan'),
-            ),
-          ],
-        ),
-      ),
-    );
-    final body = bodyController.text.trim();
-    bodyController.dispose();
-    if (saved != true || body.isEmpty) return;
-    final token = _token;
-    if (token == null) return;
-    try {
-      await _api.createProfessionalNote(
-        accessToken: token,
-        patientId: widget.patientId,
-        body: body,
-        visibility: shared ? 'shared_with_patient' : 'private',
-      );
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Catatan tersimpan.')),
-      );
-      await _load();
-    } on Object catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: MalvaColors.danger),
-      );
-    }
   }
 
   Future<void> _openPrescribeMedication(BuildContext context) async {
@@ -1155,17 +1014,8 @@ class _ScreeningInstrumentDetail extends StatelessWidget {
             certaintyFactor <= 1) ...[
           Text('Dukungan aturan (CF): ${(certaintyFactor * 100).round()}%',
               style: const TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          const Text(
-            'CF adalah dukungan aturan internal, bukan probabilitas diagnosis '
-            'atau tingkat keparahan. Skor dan kategori instrumen tetap terpisah.',
-            style: TextStyle(fontSize: 12),
-          ),
-          const SizedBox(height: 4),
-          Text(ruleTrace, style: const TextStyle(fontSize: 12)),
         ] else
-          const Text('CF dan jejak aturan belum tersedia.',
-              style: TextStyle(fontSize: 12)),
+          const Text('CF belum tersedia.', style: TextStyle(fontSize: 12)),
       ],
     );
   }

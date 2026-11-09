@@ -49,8 +49,8 @@ created_at NULL menutup seluruh unit pasangan itu sampai rekonsiliasi manual.
 Tidak ada backfill atau penghapusan ulasan. Aplikasi meminta ulasan setelah refresh,
 resume atau kembali ke layar pasien (poll 30 detik); pembatalan dialog menekan
 prompt otomatis unit itu selama sesi aplikasi, sementara aksi manual tetap ada.
-Contoh ulasan di aplikasi ditandai **Contoh/demo**, tidak ditulis ke tabel pasien,
-dan tidak termasuk rata-rata, jumlah ulasan, atau persentase terbantu.
+Profil profesional hanya menampilkan ulasan pasien yang tersimpan; contoh/demo
+tidak ditampilkan. Rata-rata, jumlah ulasan dan persentase terbantu memakai ulasan nyata.
 
 Jarak dihitung dari koordinat pasien terkini dan praktik yang diketahui; tanpa
 salah satunya aplikasi menampilkan alasan jarak belum tersedia. Urutan terdekat

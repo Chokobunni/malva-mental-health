@@ -73,7 +73,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Timer? _accessExpiry;
   int _accessRequest = 0;
   late final String _owner;
-  bool _accessLoading = false;
+  Future<void>? _accessLoading;
   bool _liveExpired = false;
   StreamSubscription<ChatState>? _stateSub;
   StreamSubscription<ChatMessage>? _messageSub;
@@ -130,15 +130,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   /// Muat izin chat: teks hanya saat sesi berjalan; share data milik
   /// pasien butuh paket aktif; profesional membahas saat sesi.
-  Future<void> _loadAccess() async {
-    if (_accessLoading || !_ownerMatches) return;
-    _accessLoading = true;
+  Future<void> _loadAccess() => _accessLoading ??=
+      _refreshAccess().whenComplete(() => _accessLoading = null);
+
+  Future<void> _refreshAccess() async {
+    if (!_ownerMatches) return;
     final request = ++_accessRequest;
     final session = ref.read(currentSessionProvider);
     final token = session?.accessToken;
     final myId = session?.backendUserId ?? session?.identifier;
     if (token == null || token.isEmpty || myId == null || myId.isEmpty) {
-      _accessLoading = false;
       return;
     }
     final isPatient = session?.role == UserRole.patient;
@@ -172,8 +173,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           _accessLoaded = true;
         });
       }
-    } finally {
-      _accessLoading = false;
     }
   }
 
@@ -508,7 +507,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _scrollToBottom();
   }
 
-  Future<void> _openProfessionalTools() async {
+  Future<void> _openProfessionalTools({bool openFiles = false}) async {
     await _loadAccess();
     if (!mounted || !_canUseProfessionalTools) return;
     final session = ref.read(currentSessionProvider)!;
@@ -522,6 +521,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   sessionId: _access.sessionId,
                   sessionEndsAt: _access.sessionEndsAt,
                   onMessage: _appendClinicalMessage,
+                  openFiles: openFiles,
                 )));
     if (mounted) unawaited(_loadAccess());
   }
@@ -1082,6 +1082,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         limit: 5,
       );
       for (final screening in screenings) {
+        if (screening.phq9.score < 0 || screening.gad7.score < 0) continue;
         final text = 'Hasil screening: PHQ-9 '
             '${screening.phq9.score}/${screening.phq9.maxScore} '
             '(${screening.phq9.level}), GAD-7 '
@@ -1147,12 +1148,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       final store = ref.read(malvaStoreProvider);
       final bundle =
           store.screeningBundles.isEmpty ? null : store.screeningBundles.last;
-      if (bundle != null) {
+      final phqLevel = AssessmentEngine.levelFromScore(
+          AssessmentType.phq9, bundle?.phq9.score,
+          maxScore: bundle?.phq9.maxScore);
+      final gadLevel = AssessmentEngine.levelFromScore(
+          AssessmentType.gad7, bundle?.gad7.score,
+          maxScore: bundle?.gad7.maxScore);
+      if (bundle != null && phqLevel != null && gadLevel != null) {
+        final overall = bundle.crisisFlag
+            ? RiskLevel.crisis
+            : phqLevel.index > gadLevel.index
+                ? phqLevel
+                : gadLevel;
         final text = 'Hasil screening: PHQ-9 ${bundle.phq9.score} '
-            '(${bundle.phq9.level.label}), GAD-7 ${bundle.gad7.score} '
-            '(${bundle.gad7.level.label}).';
+            '(${phqLevel.label}), GAD-7 ${bundle.gad7.score} '
+            '(${gadLevel.label}).';
         out.add(_ShareCandidate(
-          title: 'PHQ-9 & GAD-7 — ${bundle.overallLevel.label}',
+          title: 'PHQ-9 & GAD-7 — ${overall.label}',
           subtitle: _dateLabel(bundle.createdAt),
           text: text,
           icon: Icons.fact_check_rounded,
@@ -1160,7 +1172,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             'source': 'screening',
             'phq9_score': bundle.phq9.score,
             'gad7_score': bundle.gad7.score,
-            'overall_level': bundle.overallLevel.label,
+            'overall_level': overall.label,
             'crisis_flag': bundle.crisisFlag,
             'summary': text,
             'shared_at': wibIso(bundle.createdAt),
@@ -1168,17 +1180,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         ));
       }
       final result = store.assessments.isEmpty ? null : store.assessments.last;
-      if (result != null) {
+      final resultLevel = result == null
+          ? null
+          : AssessmentEngine.levelFromScore(result.type, result.score,
+              maxScore: result.maxScore);
+      if (result != null && resultLevel != null) {
         final text = 'Hasil ${result.type.title}: '
-            '${result.score}/${result.maxScore} (${result.level.label}).';
+            '${result.score}/${result.maxScore} (${resultLevel.label}).';
         out.add(_ShareCandidate(
           title: result.type.title,
           subtitle: _dateLabel(result.createdAt),
           text: text,
           icon: Icons.assignment_turned_in_rounded,
           metadata: {
-            'source': 'therapy',
+            'source': 'screening',
             'module_id': result.type.name,
+            result.type.name: {
+              'score': result.score,
+              'max_score': result.maxScore,
+              'level': resultLevel.label,
+            },
+            'crisis_flag': result.crisisFlag,
             'summary': text,
             'shared_at': wibIso(result.createdAt),
           },
@@ -1440,7 +1462,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _ConnectionStatusChip(state: _chatState),
+                      Flexible(child: _ConnectionStatusChip(state: _chatState)),
                       if (otherOnline) ...[
                         const SizedBox(width: 8),
                         Container(
@@ -1469,7 +1491,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           ],
         ),
         actions: [
-          MiniSummaryButton(patientId: _isPatient ? null : widget.otherUserId),
+          ConstrainedBox(
+              constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width * .42),
+              child: MiniSummaryButton(
+                  patientId: _isPatient ? null : widget.otherUserId)),
           _TypingIndicator(isTyping: _otherTyping),
         ],
       ),
@@ -1616,6 +1642,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   : _canUseProfessionalTools
                       ? _openProfessionalTools
                       : null,
+              onAttachTap: _canUseProfessionalTools
+                  ? () => _openProfessionalTools(openFiles: true)
+                  : null,
               disabledHint: _liveExpired
                   ? 'Sesi berakhir. Riwayat chat tetap tersedia.'
                   : _accessLoaded
@@ -1653,14 +1682,17 @@ class _ConnectionStatusChip extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 5),
-        Text(
+        Flexible(
+            child: Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.85),
             fontSize: 11,
             fontWeight: FontWeight.w700,
           ),
-        ),
+        )),
       ],
     );
   }
@@ -2083,6 +2115,7 @@ class _ChatInput extends StatelessWidget {
     required this.onChanged,
     required this.onSend,
     this.onShareTap,
+    this.onAttachTap,
     this.disabledHint,
   });
 
@@ -2095,6 +2128,7 @@ class _ChatInput extends StatelessWidget {
 
   /// Null = tombol share disembunyikan (profesional / tanpa paket).
   final VoidCallback? onShareTap;
+  final VoidCallback? onAttachTap;
   final String? disabledHint;
 
   @override
@@ -2120,6 +2154,12 @@ class _ChatInput extends StatelessWidget {
                 tooltip: 'Bagikan data',
                 onPressed: onShareTap,
                 icon: const Icon(Icons.add_rounded),
+              ),
+            if (onAttachTap != null)
+              IconButton(
+                tooltip: 'Lampirkan berkas',
+                onPressed: onAttachTap,
+                icon: const Icon(Icons.attach_file),
               ),
             Expanded(
               child: TextField(

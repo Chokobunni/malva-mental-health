@@ -496,12 +496,16 @@ WebAssessmentHistoryEntry webHistoryFromScreening(
   final cf = session.phq9.certaintyFactor >= session.gad7.certaintyFactor
       ? session.phq9.certaintyFactor
       : session.gad7.certaintyFactor;
+  String score(String label, BackendAssessmentSummary result) =>
+      result.score < 0 || result.maxScore <= 0 || result.score > result.maxScore
+          ? '$label Belum tersedia'
+          : '$label ${result.score}/${result.maxScore}';
   return WebAssessmentHistoryEntry(
     id: session.id,
     instrument: WebAssessmentInstrument.screening,
     createdAt: session.createdAt,
-    scoreText: 'PHQ-9 ${session.phq9.score}/${session.phq9.maxScore} · '
-        'GAD-7 ${session.gad7.score}/${session.gad7.maxScore}',
+    scoreText:
+        '${score('PHQ-9', session.phq9)} · ${score('GAD-7', session.gad7)}',
     level: webRiskLevelLabel(session.overallLevel),
     certaintyPercent: (cf.clamp(0.0, 1.0) * 100).round(),
     reasons: <String>[

@@ -89,7 +89,7 @@ Map<String, dynamic> _careSession(String patientId, String patientName) => {
 
 final _requestedPaths = <String>[];
 
-MalvaApiClient _api() {
+MalvaApiClient _api({bool invalidScore = false}) {
   return MalvaApiClient(
     baseUrl: 'http://backend.test',
     httpClient: _FakeClient((request) async {
@@ -103,7 +103,19 @@ MalvaApiClient _api() {
           });
         case '/v1/screenings':
           return _json({
-            'screenings': [_screening('patient_ami')],
+            'screenings': [
+              if (invalidScore)
+                {
+                  ..._screening('patient_ami'),
+                  'overall_level': 'minimal',
+                  'bundle': {
+                    'phq9': {'score': -1, 'max_score': 27, 'level': 'minimal'},
+                    'gad7': {'score': 0, 'max_score': 21, 'level': 'minimal'}
+                  }
+                }
+              else
+                _screening('patient_ami')
+            ],
           });
         case '/v1/professional-notes':
           return _json({'notes': <dynamic>[]});
@@ -135,7 +147,8 @@ http.Response _json(Object body, {int status = 200}) {
   );
 }
 
-Future<void> _pumpDashboard(WidgetTester tester) async {
+Future<void> _pumpDashboard(WidgetTester tester,
+    {bool invalidScore = false}) async {
   _requestedPaths.clear();
   final container = ProviderContainer();
   addTearDown(container.dispose);
@@ -148,7 +161,7 @@ Future<void> _pumpDashboard(WidgetTester tester) async {
         home: ProfessionalDashboardScreen(
           onLogout: () {},
           session: _session,
-          apiClient: _api(),
+          apiClient: _api(invalidScore: invalidScore),
         ),
       ),
     ),
@@ -165,6 +178,18 @@ void main() {
     // Sesi berjalan (video) menampilkan aksi "Gabung".
     expect(find.text('Gabung'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('invalid instrument total never labels patient screening normal',
+      (tester) async {
+    await _pumpDashboard(tester, invalidScore: true);
+    await tester.tap(find.text('Pasien'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Ami'), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Belum tersedia'), findsOneWidget);
+    expect(find.text('Minimal'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('home tools and shared data follow professional navigation',

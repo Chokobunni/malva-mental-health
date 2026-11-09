@@ -372,8 +372,8 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
   klien lama tanpa ID. Legacy tidak ditautkan secara dugaan; unit selesai sebelum/
   pada ulasan legacy terakhir ditekan konservatif, unit kemudian tetap tersedia.
   Prompt setelah refresh/resume pasien dijaga per akun/unit. Bintang 1-5
-  dan komentar maksimal 2000 karakter. Contoh diberi label dan tidak masuk agregat
-  ulasan nyata. `helpful` tidak mengubah bintang.
+  dan komentar maksimal 2000 karakter. Profil hanya menampilkan ulasan nyata,
+  tanpa contoh/demo. `helpful` tidak mengubah bintang.
 - Jarak dihitung dari koordinat profesional dan posisi pasien yang tersedia.
   Respons pencarian lama tidak boleh menimpa hasil lokasi/filter terbaru.
 - Tutup atau kosongkan detail privat saat pemilik akun berubah; refresh token
@@ -397,5 +397,5 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 
 ## Kontrak tampilan profesional (2026-11-09)
 
-- Home profesional mengutamakan tiga bagian sesi serta alat Operasional/Klinis; data dibagikan berada di Pasien. Lainnya memuat profil, portal/STR-SIP dan relasi. Crisis Incident Log profesional beserta pemuatannya dihapus, tanpa menghapus data insiden atau SOS pasien.
-- Jadwal memakai slot aktif/harga/hari libur server dan mempertahankan seluruh guard aksi. Detail klinis mengelompokkan sesi per paket; pemantauan harian tidak mengambil timeline/kiriman chat. Gejala PHQ/GAD hanya berasal dari jawaban aktual; scoring, CF dan ketidaktersediaan data tetap dipertahankan. Rujukan: [care session](skills/care_session_module.md), [screening](skills/screening_module.md).
+- Home profesional mengutamakan tiga bagian sesi lalu Klinis di atas Operasional; Earnings mendahului dropdown Ketersediaan & Harga. Dropdown membaca slot aktif, hari libur dan harga server, lalu memuat ulang setelah Atur. Jadwal tidak memuat panel/pengaturan tersebut dan mempertahankan seluruh guard aksi sesi. Data dibagikan berada di Pasien. Lainnya memuat profil, portal/STR-SIP dan relasi. Crisis Incident Log profesional beserta pemuatannya dihapus, tanpa menghapus data insiden atau SOS pasien.
+- Detail klinis mengelompokkan sesi per paket; pemantauan harian tidak mengambil timeline/kiriman chat, diary atau catatan sesi. Penghapusan tampilan tidak menghapus data tersimpan. Gejala PHQ/GAD hanya berasal dari jawaban aktual; skor, interpretasi, jawaban dan CF berlabel dipertahankan, tanpa string jejak aturan/penjelasan teknis pada panel pasien. Rujukan: [care session](skills/care_session_module.md), [screening](skills/screening_module.md).

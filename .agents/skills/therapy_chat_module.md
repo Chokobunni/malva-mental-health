@@ -10,6 +10,10 @@
   untuk kedua peserta. Worksheet assessment DASS/WHO memakai share endpoint yang
   sama, tanpa duplikasi pesan. Screening lama diselesaikan dari seluruh riwayat
   berizin; kartu portal Therapy juga membuka jawaban lengkap termasuk legacy.
+- Detail ringkasan tidak mengulang kutipan pesan lama; periode/metrik snapshot
+  tetap dipertahankan, termasuk record historis 14 hari. PHQ/GAD lama (flat atau
+  nested) dan kiriman baru memakai cutoff skor valid yang sama untuk tingkat
+  gejala. Skor kosong/invalid bukan nol; flag keselamatan tetap terpisah.
 
 ## Alat klinis profesional selama sesi
 
@@ -18,6 +22,8 @@
 - Simpan goal sebelum mengirim kartu. `POST /v1/goals` dan `POST /v1/medications` menerima `Idempotency-Key` opsional (maksimal 128 karakter ASCII tanpa spasi); REST/WS pesan menerima `client_message_id` UUID opsional. Retry dengan kunci/payload sama mengembalikan ID tersimpan, payload berbeda ditolak.
 - Server menambahkan snapshot otoritatif `goals:[{id,title,target_per_week}]` pada kartu goals/ringkasan, berdasarkan ID yang divalidasi. Klien tidak boleh mengirim field snapshot ini. Retry membandingkan field permintaan dan mempertahankan snapshot pertama walau judul goal berubah kemudian.
 - Lampiran profesional hanya melalui `POST /v1/chat-attachments` multipart `recipient_id`, `file`, dan `client_message_id` UUID opsional. JPEG/PNG/WebP/PDF maksimal 10 MiB divalidasi berdasarkan isi; handler membuat pesan `attachment` dan metadata `{session_id,attachment_id,filename,mime,size,content_sha256}`. Jangan lanjut mengirim pesan kedua atau menerima URL lampiran dari metadata klien.
+- Composer profesional menyediakan tombol lampiran langsung bagi psikolog dan
+  psikiater selama sesi berizin; tetap periksa ulang sesi/akun sebelum upload.
 - `GET /v1/chat-attachments/{attachment_id}` membutuhkan token Authorization dan peserta pasangan pesan; riwayat tetap dapat dibaca setelah sesi/link berakhir. Berkas disimpan di sibling `UploadDir + '-chat-private'`, tidak di static `/uploads/`; operator wajib memberi akses tulis privat kepada akun service dan melindungi backup. Lampiran resep manual bukan penerbitan E-Rx atau tanda tangan elektronik.
 - Mutasi goals/obat/diagnosis mengirim event realtime `clinical_data_changed` dengan `{patient_id,resource}` (`goals`, `medications`, `health_record`) agar klien memuat ulang store bersama. Event/kartu ini tidak menambah OS push; kebijakan push sesi-chat dan pengingat lokal pasien tetap berlaku.
 - Pengujian backend: `backend/internal/server/clinical_chat_test.go` mencakup REST/WS, izin, idempotensi, validasi/riwayat lampiran privat, dan refresh realtime tanpa outbox push.

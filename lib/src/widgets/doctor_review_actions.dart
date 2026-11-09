@@ -126,7 +126,7 @@ class _ReviewCompletionPromptState extends ConsumerState<ReviewCompletionPrompt>
   }
 }
 
-/// Examples are kept outside patient data and are never part of rating totals.
+/// Review submission is available for completed sessions or packages.
 class DoctorReviewActions extends ConsumerStatefulWidget {
   const DoctorReviewActions(
       {super.key,
@@ -232,27 +232,6 @@ class _DoctorReviewActionsState extends ConsumerState<DoctorReviewActions> {
               'Nama ditampilkan tersamar; hindari informasi kesehatan pribadi.',
               style: TextStyle(fontSize: 12)),
         ],
-        const ExpansionTile(
-          tilePadding: EdgeInsets.zero,
-          title: Text('Contoh ulasan (demo)', style: TextStyle(fontSize: 13)),
-          subtitle: Text(
-              'Bukan pengalaman pasien; tidak dihitung dalam rating.',
-              style: TextStyle(fontSize: 11)),
-          children: [
-            ListTile(
-                title: Text('Contoh A · 5 bintang · Membantu'),
-                subtitle: Text(
-                    'Penjelasan mudah dipahami dan langkah berikutnya jelas.')),
-            ListTile(
-                title: Text('Contoh B · 4 bintang · Membantu'),
-                subtitle: Text(
-                    'Saya merasa didengarkan, tetapi ingin waktu diskusi lebih panjang.')),
-            ListTile(
-                title: Text('Contoh C · 2 bintang · Belum membantu'),
-                subtitle: Text(
-                    'Pendekatannya belum sesuai kebutuhan saya; saya perlu membahas pilihan lain.')),
-          ],
-        ),
       ],
     );
   }

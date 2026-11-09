@@ -3288,12 +3288,22 @@ class BackendAssessmentSummary {
   });
 
   factory BackendAssessmentSummary.fromJson(Map<String, dynamic> json) {
+    final type =
+        json['type'] == 'gad7' ? AssessmentType.gad7 : AssessmentType.phq9;
+    final rawScore = json['score'];
+    final maximum = json['max_score'];
+    final level = maximum == null
+        ? null
+        : AssessmentEngine.levelFromScore(type, rawScore, maxScore: maximum);
+    final valid = level != null;
     return BackendAssessmentSummary(
       type: json['type']?.toString() ?? '',
-      score: (json['score'] as num?)?.toInt() ?? 0,
-      maxScore: (json['max_score'] as num?)?.toInt() ?? 0,
-      level: json['level']?.toString() ?? '',
-      summary: json['summary']?.toString() ?? '',
+      score: valid ? (rawScore as num).toInt() : -1,
+      maxScore: valid ? (maximum as num).toInt() : 0,
+      level: level == RiskLevel.moderatelySevere
+          ? 'moderately_severe'
+          : level?.name ?? '',
+      summary: valid ? json['summary']?.toString() ?? '' : '',
       crisisFlag: json['crisis_flag'] == true,
       certaintyFactor: (json['cf'] as num?)?.toDouble() ?? 0.0,
       ruleTrace: json['rule_trace']?.toString() ?? '',
@@ -3339,22 +3349,34 @@ class BackendScreeningSession {
     final bundle = json['bundle'] is Map<String, dynamic>
         ? json['bundle'] as Map<String, dynamic>
         : const <String, dynamic>{};
+    BackendAssessmentSummary result(String type) =>
+        BackendAssessmentSummary.fromJson({
+          if (bundle[type] is Map<String, dynamic>)
+            ...bundle[type] as Map<String, dynamic>,
+          'type': type,
+        });
+    final phq9 = result('phq9');
+    final gad7 = result('gad7');
+    final crisis =
+        json['crisis_flag'] == true || phq9.crisisFlag || gad7.crisisFlag;
+    final phqLevel = AssessmentEngine.levelFromScore(
+        AssessmentType.phq9, phq9.score,
+        maxScore: phq9.maxScore);
+    final gadLevel = AssessmentEngine.levelFromScore(
+        AssessmentType.gad7, gad7.score,
+        maxScore: gad7.maxScore);
     return BackendScreeningSession(
       id: json['id']?.toString() ?? '',
       patientId: json['patient_id']?.toString() ?? '',
-      overallLevel: json['overall_level']?.toString() ?? '',
-      crisisFlag: json['crisis_flag'] == true,
+      overallLevel: crisis
+          ? 'crisis'
+          : phqLevel != null && gadLevel != null
+              ? (phqLevel.index > gadLevel.index ? phq9.level : gad7.level)
+              : '',
+      crisisFlag: crisis,
       createdAt: parseWibStored(json['created_at']?.toString()),
-      phq9: BackendAssessmentSummary.fromJson(
-        bundle['phq9'] is Map<String, dynamic>
-            ? bundle['phq9'] as Map<String, dynamic>
-            : const <String, dynamic>{},
-      ),
-      gad7: BackendAssessmentSummary.fromJson(
-        bundle['gad7'] is Map<String, dynamic>
-            ? bundle['gad7'] as Map<String, dynamic>
-            : const <String, dynamic>{},
-      ),
+      phq9: phq9,
+      gad7: gad7,
     );
   }
 

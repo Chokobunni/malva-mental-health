@@ -26,6 +26,7 @@ class ProfessionalChatTools extends ConsumerStatefulWidget {
     required this.sessionId,
     this.sessionEndsAt,
     required this.onMessage,
+    this.openFiles = false,
   });
 
   final MalvaApiClient apiClient;
@@ -34,6 +35,7 @@ class ProfessionalChatTools extends ConsumerStatefulWidget {
   final String sessionId;
   final DateTime? sessionEndsAt;
   final ValueChanged<BackendChatMessage> onMessage;
+  final bool openFiles;
 
   @override
   ConsumerState<ProfessionalChatTools> createState() =>
@@ -90,6 +92,7 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
   @override
   void initState() {
     super.initState();
+    if (widget.openFiles) _section = 'files';
     _scheduleExpiry();
   }
 

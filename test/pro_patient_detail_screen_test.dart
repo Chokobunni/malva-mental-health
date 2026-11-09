@@ -210,6 +210,10 @@ void main() {
     await _pump(tester, responses);
     expect(responses.requested, isNot(contains('/v1/timeline')));
     expect(responses.requested, isNot(contains('/v1/messages')));
+    expect(responses.requested, isNot(contains('/v1/diary-entries')));
+    expect(responses.requested, isNot(contains('/v1/professional-notes')));
+    expect(find.text('Catatan sesi'), findsNothing);
+    expect(find.text('Tulis catatan sesi'), findsNothing);
     expect(find.byKey(const ValueKey('shares-section')), findsNothing);
     expect(find.byKey(const ValueKey('timeline-section')), findsNothing);
   });
@@ -241,7 +245,7 @@ void main() {
         'note': 'Catatan server'
       });
     await _pump(tester, responses);
-    await tester.tap(find.byKey(const ValueKey('mood-diary-section')));
+    await tester.tap(find.byKey(const ValueKey('mood-section')));
     await tester.pumpAndSettle();
     expect(find.byType(MoodInsights), findsOneWidget);
     expect(find.byType(MoodTrendChart), findsOneWidget);
@@ -275,20 +279,19 @@ void main() {
     expect(find.byKey(const ValueKey('screening-screening-1')), findsNothing);
     expect(find.text('DASS-21 dibagikan'), findsOneWidget);
   });
-  testWidgets('groups clinical data and shows real PHQ/GAD CF and rule trace',
+  testWidgets(
+      'groups clinical data and keeps CF without raw traces or technical prose',
       (tester) async {
     await _pump(tester, _Responses());
     final health = find.text('Health Record & Obat');
     final daily = find.text('Pemantauan harian');
     final screening = find.text('Screening');
-    final notes = find.text('Catatan sesi');
+    expect(find.text('Catatan sesi'), findsNothing);
     expect(health, findsOneWidget);
     expect(screening, findsOneWidget);
     expect(tester.getTopLeft(health).dy, lessThan(tester.getTopLeft(daily).dy));
     expect(
         tester.getTopLeft(daily).dy, lessThan(tester.getTopLeft(screening).dy));
-    expect(
-        tester.getTopLeft(screening).dy, lessThan(tester.getTopLeft(notes).dy));
     expect(find.text('WHO-5 dibagikan'), findsOneWidget);
     expect(find.text('DASS-21 dibagikan'), findsOneWidget);
     expect(find.text('Latihan ABCDE'), findsOneWidget);
@@ -298,8 +301,8 @@ void main() {
     expect(find.text('PHQ-9 Total Score: 7/27'), findsOneWidget);
     expect(find.text('GAD-7 Total Score: 6/21'), findsOneWidget);
     expect(find.text('Dukungan aturan (CF): 68%'), findsNWidgets(2));
-    expect(find.text('PHQ9_MILD: 0.72 × 0.95 = 0.684'), findsOneWidget);
-    expect(find.textContaining('bukan probabilitas diagnosis'), findsWidgets);
+    expect(find.text('PHQ9_MILD: 0.72 × 0.95 = 0.684'), findsNothing);
+    expect(find.textContaining('bukan probabilitas diagnosis'), findsNothing);
   });
 
   testWidgets('failed clinical section stays unavailable until retry succeeds',

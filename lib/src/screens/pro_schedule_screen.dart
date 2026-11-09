@@ -20,9 +20,7 @@ import '../time/wib.dart';
 // PRO SCHEDULE — tab "Jadwal" dashboard profesional:
 //   - Sesi hari ini & mendatang: join chat, tandai hadir/tidak,
 //     batal (kredit kembali), reschedule, meeting URL, ringkasan.
-//   - Ketersediaan: jadwal mingguan (hari available) — bisa
-//     diaktifkan/nonaktifkan per baris.
-//   - Harga layanan: quick chat / quick video / paket 4 sesi.
+// Pengaturan ketersediaan/harga dibuka dari Home profesional.
 // Semua dari server — tanpa data demo.
 // ============================================================
 
@@ -44,9 +42,6 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
   List<BackendCareSession> _today = const [];
   List<BackendCareSession> _upcoming = const [];
   List<BackendCareSession> _past = const [];
-  List<BackendProfessionalSchedule> _schedules = const [];
-  List<BackendTimeOff> _timeOff = const [];
-  BackendProfessionalPricing _pricing = const BackendProfessionalPricing();
   bool _isLoading = true;
   bool _loadInProgress = false;
   String? _error;
@@ -108,21 +103,15 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
         _api.listCareSessions(accessToken: token, scope: 'today'),
         _api.listCareSessions(accessToken: token, scope: 'upcoming'),
         _api.listCareSessions(accessToken: token, scope: 'past'),
-        _api.listMySchedules(accessToken: token),
-        _api.getPricing(accessToken: token),
-        _api.listTimeOff(accessToken: token),
       ]);
       if (!mounted) return;
       setState(() {
         _error = null;
-        _today = results[0] as List<BackendCareSession>;
-        _upcoming = (results[1] as List<BackendCareSession>)
+        _today = results[0];
+        _upcoming = results[1]
           ..sort(
               (a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
-        _past = (results[2] as List<BackendCareSession>);
-        _schedules = (results[3] as List<BackendProfessionalSchedule>);
-        _pricing = (results[4] as BackendProfessionalPricing);
-        _timeOff = (results[5] as List<BackendTimeOff>);
+        _past = results[2];
         _isLoading = false;
       });
       _sessionRefresh.update([..._today, ..._upcoming, ..._past]);
@@ -240,42 +229,6 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
                     const SizedBox(height: 10),
                   ],
                 const SizedBox(height: 10),
-                const SectionLabel('Ketersediaan & harga',
-                    icon: Icons.assignment_rounded),
-                SoftCard(
-                    color: Colors.white,
-                    child: Column(children: [
-                      Row(children: [
-                        const Expanded(
-                            child: Text('PENGATURAN',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 12,
-                                    color: Colors.black54))),
-                        TextButton.icon(
-                            style: TextButton.styleFrom(
-                                backgroundColor: const Color(0xFFF2E6FB),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 4),
-                                minimumSize: Size.zero,
-                                textStyle: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge
-                                    ?.copyWith(fontWeight: FontWeight.w700),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(20))),
-                            onPressed: () => _openAvailability(context),
-                            icon: const Icon(Icons.edit_calendar_rounded,
-                                size: 18),
-                            label: const Text('Atur')),
-                      ]),
-                      const Divider(height: 18),
-                      _AvailabilitySummary(
-                          schedules: _schedules,
-                          pricing: _pricing,
-                          timeOff: _timeOff),
-                    ])),
-                const SizedBox(height: 10),
                 const SectionLabel('Riwayat sesi', icon: Icons.history_rounded),
                 if (past.isEmpty)
                   const EmptyState(
@@ -295,19 +248,6 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
             ],
           ),
         ));
-  }
-
-  Future<void> _openAvailability(BuildContext context) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ProAvailabilityScreen(
-          session: widget.session,
-          apiClient: widget.apiClient,
-        ),
-      ),
-    );
-    await _load();
   }
 }
 
@@ -848,131 +788,6 @@ String _formatYmdId(String ymd) {
   return '${days[d.weekday - 1]}, ${d.day} ${_monthShort[d.month - 1]} ${d.year}';
 }
 
-class _AvailabilitySummary extends StatelessWidget {
-  const _AvailabilitySummary({
-    required this.schedules,
-    required this.pricing,
-    this.timeOff = const [],
-  });
-
-  final List<BackendProfessionalSchedule> schedules;
-  final BackendProfessionalPricing pricing;
-  final List<BackendTimeOff> timeOff;
-
-  static const _dayNames = [
-    'Min',
-    'Sen',
-    'Sel',
-    'Rab',
-    'Kam',
-    'Jum',
-    'Sab',
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final byDay = <int, List<BackendProfessionalSchedule>>{};
-    for (final s in schedules.where((s) => s.isActive)) {
-      (byDay[s.dayOfWeek] ??= []).add(s);
-    }
-    final todayYmd = _ymdFrom(wibNow());
-    final upcomingOff = timeOff
-        .where((t) => t.offDate.compareTo(todayYmd) >= 0)
-        .toList()
-      ..sort((a, b) => a.offDate.compareTo(b.offDate));
-    String rupiah(int v) {
-      if (v <= 0) return 'belum diatur';
-      final s = v.toString();
-      final buf = StringBuffer();
-      for (var i = 0; i < s.length; i++) {
-        final pos = s.length - i;
-        buf.write(s[i]);
-        if (pos > 1 && pos % 3 == 1) buf.write('.');
-      }
-      return 'Rp ${buf.toString()}';
-    }
-
-    Widget price(String label, int value, {bool package = false}) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 7),
-        child: Row(children: [
-          Expanded(
-              child: Text(label,
-                  style:
-                      const TextStyle(fontSize: 12.5, color: Colors.black54))),
-          Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              decoration: BoxDecoration(
-                  color: package
-                      ? const Color(0xFFF2E6FB)
-                      : const Color(0xFFF7F8FA),
-                  borderRadius: BorderRadius.circular(4)),
-              child: Text(rupiah(value),
-                  style: const TextStyle(
-                      fontSize: 12.5, fontWeight: FontWeight.w800))),
-        ]));
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const Text('Jam praktik mingguan',
-          style: TextStyle(fontWeight: FontWeight.w800)),
-      const SizedBox(height: 12),
-      if (byDay.isEmpty)
-        const Text('Belum diatur — pasien tidak bisa booking.',
-            style: TextStyle(color: MalvaColors.danger, fontSize: 12.5))
-      else
-        for (final day
-            in (byDay.keys.toList()
-              ..sort((a, b) => (a == 0 ? 7 : a).compareTo(b == 0 ? 7 : b))))
-          Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child:
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                SizedBox(
-                    width: 40,
-                    child: Text('${_dayNames[day]}:',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w800, fontSize: 12.5))),
-                Expanded(
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                      for (final slot
-                          in (byDay[day]!
-                            ..sort(
-                                (a, b) => a.startTime.compareTo(b.startTime))))
-                        Padding(
-                            padding: const EdgeInsets.only(bottom: 3),
-                            child: Text(
-                                '${slot.startTime}–${slot.endTime} (${slot.slotDurationMinutes} mnt)',
-                                style: const TextStyle(
-                                    color: Colors.black54, fontSize: 12.5))),
-                    ])),
-              ])),
-      const Divider(height: 24, color: Color(0xFFEDEFF2)),
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Hari libur:',
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
-        const SizedBox(width: 12),
-        Expanded(
-            child: Text(
-                upcomingOff.isEmpty
-                    ? 'belum ada'
-                    : upcomingOff
-                        .map((day) => _formatYmdId(day.offDate))
-                        .join('\n'),
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                    color: Colors.black54))),
-      ]),
-      const Divider(height: 24, color: Color(0xFFEDEFF2)),
-      price('Chat:', pricing.quickChatPrice),
-      price('Video:', pricing.quickVideoPrice),
-      price('Paket 4 sesi / 6 minggu:', pricing.packagePrice, package: true),
-    ]);
-  }
-}
-
-/// Layar ketersediaan & harga: jadwal mingguan + tarif.
 class ProAvailabilityScreen extends ConsumerStatefulWidget {
   const ProAvailabilityScreen({super.key, this.session, this.apiClient});
 

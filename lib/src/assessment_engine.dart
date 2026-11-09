@@ -118,6 +118,28 @@ class ScreeningBundle {
 }
 
 class AssessmentEngine {
+  /// Validate stored totals before applying the standard instrument bands.
+  /// A missing maximum is accepted for older shared snapshots.
+  static RiskLevel? levelFromScore(AssessmentType type, dynamic score,
+      {dynamic maxScore}) {
+    final maximum = type == AssessmentType.phq9 ? 27 : 21;
+    if (score is! num ||
+        !score.isFinite ||
+        score != score.roundToDouble() ||
+        score < 0 ||
+        score > maximum ||
+        (maxScore != null && maxScore != maximum)) return null;
+    if (type == AssessmentType.phq9) {
+      if (score >= 20) return RiskLevel.severe;
+      if (score >= 15) return RiskLevel.moderatelySevere;
+    } else if (score >= 15) {
+      return RiskLevel.severe;
+    }
+    if (score >= 10) return RiskLevel.moderate;
+    if (score >= 5) return RiskLevel.mild;
+    return RiskLevel.minimal;
+  }
+
   const AssessmentEngine._();
 
   static const ruleVersion = '2026.1.FC';

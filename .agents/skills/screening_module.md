@@ -56,6 +56,10 @@ Modul skrining kesehatan mental. Skoring dihitung **di server** (bukan hanya kli
 - Level instrumen mengikuti skor total. Item self-harm PHQ-9 q9 > 0 menyalakan `crisis_flag` terpisah tanpa mengubah level instrumen. `overall_level` = level tertinggi PHQ-9/GAD-7; `crisis` bila salah satu `crisis_flag`.
 - Server mem-publish realtime `screening.created`; flag krisis tampil di Crisis Incident Log. Tidak membuat notifikasi `screening_crisis` per profesional.
 - Hasil menyertakan `cf` (certainty factor) dan `rule_trace` (maks 5 rule yang menembak) untuk audit.
+- Lampiran historis tanpa label tingkat memakai cutoff total valid; total hilang,
+  pecahan, negatif atau di luar rentang tidak ditampilkan sebagai normal/nol.
+  Panel PHQ/GAD di detail pasien profesional mempertahankan CF berlabel tanpa
+  string jejak aturan dan paragraf teknis; skor, interpretasi dan jawaban tetap ada.
 
 ## Makna Certainty Factor
 - CF adalah **dukungan aturan dalam model**, bukan probabilitas diagnosis, persentase sakit, atau persentase keparahan. Bobot CF yang ada tidak memiliki bukti kalibrasi probabilitas klinis di repo; validitas instrumen tidak otomatis memvalidasi bobot ini.

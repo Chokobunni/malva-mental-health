@@ -23,6 +23,82 @@ void main() {
               .load('packages/cupertino_icons/assets/CupertinoIcons.ttf')))
         .load();
   });
+  Future<void> openRecord(WidgetTester tester, Map<String, dynamic> metadata,
+      {String kind = 'assessment', String text = 'Record dibagikan'}) async {
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: SharedRecordDetail(
+                    message: ChatMessage(
+                        id: 'legacy',
+                        senderId: 'patient',
+                        senderName: 'Pasien',
+                        text: text,
+                        timestamp: wibFromParts(2026, 11, 9),
+                        isMine: false,
+                        kind: kind,
+                        metadata: metadata))))));
+  }
+
+  testWidgets('legacy summary keeps period and metrics without repeated quote',
+      (tester) async {
+    const text = 'Ringkasan 14 hari: 9 mood check-in, tidur rata-rata 7.7 jam.';
+    await openRecord(tester,
+        {'mood_count': 9, 'avg_sleep_hours': 7.7, 'medication_adherence': 80},
+        kind: 'summary', text: text);
+    expect(find.text(text), findsNothing);
+    expect(find.text('METRIK 14 HARI TERAKHIR'), findsOneWidget);
+    expect(find.text('80%'), findsOneWidget);
+  });
+
+  for (final nested in [false, true]) {
+    testWidgets(
+        'legacy scores determine severity despite stale labels ($nested)',
+        (tester) async {
+      await openRecord(tester, {
+        'overall_level': 'minimal',
+        'crisis_flag': false,
+        if (nested) ...{
+          'phq9': {'score': 17, 'level': 'minimal'},
+          'gad7': {'score': 16, 'level': 'minimal'},
+        } else ...{
+          'phq9_score': 17,
+          'gad7_score': 16,
+          'phq9_level': 'minimal',
+          'gad7_level': 'minimal',
+        }
+      });
+      expect(find.text('Cukup Berat'), findsOneWidget);
+      expect(find.text('Berat'), findsNWidgets(2));
+      expect(find.text('Minimal'), findsNothing);
+      expect(find.text('INDIKATOR KESELAMATAN: TIDAK'), findsOneWidget);
+    });
+  }
+  testWidgets('nested safety flag is separate from mild symptom scores',
+      (tester) async {
+    await openRecord(tester, {
+      'phq9': {'score': 7, 'crisis_flag': true},
+      'gad7': {'score': 3},
+    });
+    expect(find.text('KRISIS'), findsOneWidget);
+    expect(find.text('Ringan'), findsOneWidget);
+    expect(find.text('Minimal'), findsOneWidget);
+    expect(find.text('INDIKATOR KESELAMATAN: YA'), findsOneWidget);
+  });
+  for (final invalid in [null, -1, 28, 2.5, '7']) {
+    testWidgets('invalid PHQ total is unavailable, never normal ($invalid)',
+        (tester) async {
+      await openRecord(tester, {
+        'phq9_score': invalid,
+        'gad7_score': 0,
+        'phq9_level': 'minimal',
+        'overall_level': 'minimal',
+      });
+      expect(find.text('Belum tersedia'), findsNWidgets(2));
+      expect(find.text('Minimal'), findsOneWidget);
+      expect(find.text('—'), findsOneWidget);
+    });
+  }
   for (final variant in [
     (width: 360.0, scale: 1.0, label: '360'),
     (width: 390.0, scale: 1.0, label: '390'),

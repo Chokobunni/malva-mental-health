@@ -45,8 +45,7 @@
   tetap tersedia setelah ditutup. Legacy tetap terlihat tanpa tautan dugaan;
   unit berakhir pada/sebelum ulasan legacy terakhir pasangan ditekan konservatif.
   completed_at memakai akhir jadwal terminal yang stabil, bukan updated_at detail.
-  Contoh ditandai jelas,
-  tidak disimpan sebagai ulasan pasien atau dihitung dalam agregat nyata.
+  Profil profesional hanya menampilkan ulasan pasien tersimpan, tanpa contoh/demo.
 - Backfill lokasi praktik lama mengikat UUID profesional dan alamat praktik
   yang diketahui, tanpa menggantungkan identitas pada email login yang dapat
   berubah. Pertahankan koordinat yang sudah ada dan praktik/alamat yang berubah.
