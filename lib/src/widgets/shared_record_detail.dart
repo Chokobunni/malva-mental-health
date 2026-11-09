@@ -446,17 +446,22 @@ class SharedRecordDetail extends StatelessWidget {
               size: 21),
         ]),
         const SizedBox(height: 16),
-        Text.rich(TextSpan(children: [
-          TextSpan(
-              text: _value(data, 'score', '—'),
+        if (data['score'] == null)
+          Text('—',
               style: TextStyle(
-                  fontSize: 38, fontWeight: FontWeight.w900, color: color)),
-          TextSpan(
-              text:
-                  '/${data['max_score'] ?? (instrument == 'PHQ-9' ? 27 : 21)}',
-              style: const TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.w800, color: _muted)),
-        ])),
+                  fontSize: 38, fontWeight: FontWeight.w900, color: color))
+        else
+          Text.rich(TextSpan(children: [
+            TextSpan(
+                text: _value(data, 'score', '—'),
+                style: TextStyle(
+                    fontSize: 38, fontWeight: FontWeight.w900, color: color)),
+            TextSpan(
+                text:
+                    '/${data['max_score'] ?? (instrument == 'PHQ-9' ? 27 : 21)}',
+                style: const TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.w800, color: _muted)),
+          ])),
         const SizedBox(height: 12),
         _pill(_level(data['level']), color),
       ]),
@@ -517,6 +522,11 @@ class SharedRecordDetail extends StatelessWidget {
         .any((value) => value['crisis_flag'] == true);
     final hasSafety = [meta, data, rawPhq, rawGad]
         .any((value) => value['crisis_flag'] is bool);
+    final summary = meta['summary']?.toString();
+    final summaryLower = summary?.toLowerCase() ?? '';
+    final isScreeningExplanation =
+        summaryLower.contains('menunjukkan gejala depresi') ||
+            summaryLower.contains('menunjukkan gejala kecemasan');
     final overall = crisis
         ? 'crisis'
         : phqLevel != null && gadLevel != null
@@ -598,6 +608,10 @@ class SharedRecordDetail extends StatelessWidget {
           Padding(
               padding: const EdgeInsets.only(top: 12),
               child: _cfCard(item.$1, item.$2['cf'])),
+      if (summary != null && !isScreeningExplanation)
+        Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: SelectableText(summary)),
     ];
   }
 

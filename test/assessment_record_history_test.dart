@@ -400,8 +400,9 @@ void main() {
     expect(find.textContaining('bukan probabilitas diagnosis'), findsNothing);
     expect(find.textContaining('Screening ini menandai risiko krisis'),
         findsOneWidget);
-    expect(find.textContaining('9 pertanyaan'), findsOneWidget);
-    expect(find.textContaining('7 pertanyaan'), findsOneWidget);
+    expect(find.textContaining('9 pertanyaan'), findsNothing);
+    expect(find.textContaining('7 pertanyaan'), findsNothing);
+    expect(find.text('Gejala depresi cukup berat.'), findsNothing);
 
     await tester.ensureVisible(find.text('Apa arti skormu?').first);
     await tester.tap(find.text('Apa arti skormu?').first);

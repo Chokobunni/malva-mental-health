@@ -472,17 +472,10 @@ class _ScreeningScoreCard extends StatelessWidget {
       ] else
         ('15–21', 'Berat'),
     ];
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE6E7E9)),
-        boxShadow: const [
-          BoxShadow(
-              color: Color(0x0C000000), blurRadius: 4, offset: Offset(0, 3)),
-        ],
-      ),
+    return SoftCard(
+      color: Colors.white,
+      padding: EdgeInsets.zero,
+      accent: color,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -510,14 +503,22 @@ class _ScreeningScoreCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text.rich(TextSpan(children: [
+                  const TextSpan(
+                    text: 'Total Score: ',
+                    style: TextStyle(
+                        color: Color(0xFF707782),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800),
+                  ),
                   TextSpan(
-                    text: available ? summary.score.toString() : '—',
+                    text:
+                        available ? summary.score.toString() : 'Belum tersedia',
                     style: TextStyle(
                         color: color,
-                        fontSize: 36,
+                        fontSize: 30,
                         fontWeight: FontWeight.w900),
                   ),
-                  if (summary.maxScore > 0)
+                  if (available)
                     TextSpan(
                       text: '/${summary.maxScore}',
                       style: const TextStyle(
@@ -527,7 +528,7 @@ class _ScreeningScoreCard extends StatelessWidget {
                     ),
                 ])),
                 const SizedBox(height: 8),
-                StatusPill(label: level, color: color),
+                if (level.isNotEmpty) StatusPill(label: level, color: color),
                 const SizedBox(height: 8),
                 Theme(
                   data: Theme.of(context)
