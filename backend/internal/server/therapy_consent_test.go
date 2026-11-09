@@ -251,5 +251,9 @@ func grantContinuousTherapyAccess(t *testing.T, f therapyConsentFixture) {
 	if _, err := f.db.Exec(`INSERT INTO care_packages(patient_id,professional_id,total_sessions,validity_days,price,status,expires_at) VALUES($1,$2,4,42,100000,'active',now()+interval '30 days')`, f.patient.ID, f.prof.ID); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { f.db.Exec(`DELETE FROM care_packages WHERE patient_id=$1`, f.patient.ID) })
+	t.Cleanup(func() {
+		if _, err := f.db.Exec(`DELETE FROM care_packages WHERE patient_id=$1`, f.patient.ID); err != nil {
+			t.Errorf("cleanup care packages: %v", err)
+		}
+	})
 }

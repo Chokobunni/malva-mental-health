@@ -1453,7 +1453,7 @@ func (s *Server) getEPrescription(w http.ResponseWriter, r *http.Request, claims
 		writeError(w, http.StatusNotFound, err)
 		return
 	}
-	if rx.Status != "issued" && !(claims.Role == "professional" && claims.Subject == rx.ProfessionalID) {
+	if rx.Status != "issued" && (claims.Role != "professional" || claims.Subject != rx.ProfessionalID) {
 		writeError(w, http.StatusNotFound, errors.New("resep tidak ditemukan"))
 		return
 	}

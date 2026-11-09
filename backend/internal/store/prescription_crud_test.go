@@ -12,7 +12,7 @@ func TestMigration040RepairsOnlyProvenUntouchedSupply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	for _, q := range []string{
 		`CREATE TEMP TABLE e_prescriptions(id text PRIMARY KEY,status text) ON COMMIT DROP`,
 		`CREATE TEMP TABLE e_prescription_items(id text,medication_id text,prescription_id text,current_stock integer) ON COMMIT DROP`,
@@ -39,13 +39,19 @@ func TestMigration040RepairsOnlyProvenUntouchedSupply(t *testing.T) {
 			t.Fatal(err)
 		}
 		if kind == "edited" {
-			tx.Exec(`UPDATE medications SET updated_at=created_at+interval '1 second' WHERE id=$1`, kind)
+			if _, err := tx.Exec(`UPDATE medications SET updated_at=created_at+interval '1 second' WHERE id=$1`, kind); err != nil {
+				t.Fatal(err)
+			}
 		}
 		if kind == "consumed" {
-			tx.Exec(`INSERT INTO medication_logs VALUES($1,'taken')`, kind)
+			if _, err := tx.Exec(`INSERT INTO medication_logs VALUES($1,'taken')`, kind); err != nil {
+				t.Fatal(err)
+			}
 		}
 		if kind == "ambiguous" {
-			tx.Exec(`INSERT INTO e_prescription_items VALUES('duplicate',$1,$1,30)`, kind)
+			if _, err := tx.Exec(`INSERT INTO e_prescription_items VALUES('duplicate',$1,$1,30)`, kind); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	ddl, err := os.ReadFile("../../migrations/039_prescription_crud.sql")
@@ -68,7 +74,11 @@ func TestMigration040RepairsOnlyProvenUntouchedSupply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.Errorf("close rows: %v", err)
+		}
+	}()
 	for rows.Next() {
 		var id string
 		var qty int

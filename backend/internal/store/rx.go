@@ -83,7 +83,7 @@ func (s *Store) saveEPrescription(ctx context.Context, rx EPrescription, items [
 	if err != nil {
 		return EPrescription{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	previous := map[string]EPrescriptionItem{}
 	var before json.RawMessage
 	if update {
@@ -105,14 +105,17 @@ func (s *Store) saveEPrescription(ctx context.Context, rx EPrescription, items [
 		for rows.Next() {
 			i, err := scanPrescriptionItem(rows)
 			if err != nil {
-				rows.Close()
+				_ = rows.Close()
 				return EPrescription{}, err
 			}
 			previous[i.ID] = i
 			oldItems = append(oldItems, i)
 		}
 		err = rows.Err()
-		rows.Close()
+		closeErr := rows.Close()
+		if err == nil {
+			err = closeErr
+		}
 		if err != nil {
 			return EPrescription{}, err
 		}
@@ -219,7 +222,7 @@ func (s *Store) DeleteEPrescription(ctx context.Context, rxID, authorID, newQR s
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	rx, err := scanPrescription(tx.QueryRowContext(ctx, `SELECT `+prescriptionColumns+` FROM e_prescriptions WHERE id=$1 AND professional_id=$2 FOR UPDATE`, rxID, authorID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrPrescriptionNotFound
@@ -249,7 +252,7 @@ func (s *Store) GetEPrescription(ctx context.Context, id string) (EPrescriptionF
 	if err != nil {
 		return EPrescriptionFull{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	rx, err := scanPrescription(tx.QueryRowContext(ctx, `SELECT `+prescriptionColumns+` FROM e_prescriptions WHERE id=$1 AND status<>'deleted'`, id))
 	if err != nil {
 		return EPrescriptionFull{}, err
@@ -259,7 +262,7 @@ func (s *Store) GetEPrescription(ctx context.Context, id string) (EPrescriptionF
 	if err != nil {
 		return EPrescriptionFull{}, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		item, err := scanPrescriptionItem(rows)
 		if err != nil {
@@ -270,7 +273,9 @@ func (s *Store) GetEPrescription(ctx context.Context, id string) (EPrescriptionF
 	if err := rows.Err(); err != nil {
 		return EPrescriptionFull{}, err
 	}
-	rows.Close()
+	if err := rows.Close(); err != nil {
+		return EPrescriptionFull{}, err
+	}
 	return out, tx.Commit()
 }
 func (s *Store) GetEPrescriptionByQR(ctx context.Context, token string) (EPrescriptionFull, error) {
@@ -290,7 +295,7 @@ func (s *Store) ListEPrescriptionsForUser(ctx context.Context, userID, role stri
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	filter := `patient_id=$1 AND status='issued'`
 	if role == "professional" {
 		filter = `professional_id=$1 AND status IN ('issued','draft')`
@@ -306,7 +311,7 @@ func (s *Store) ListEPrescriptionsForUser(ctx context.Context, userID, role stri
 	for rows.Next() {
 		rx, err := scanPrescription(rows)
 		if err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return nil, err
 		}
 		positions[rx.ID] = len(out)
@@ -315,7 +320,10 @@ func (s *Store) ListEPrescriptionsForUser(ctx context.Context, userID, role stri
 		holders = append(holders, fmt.Sprintf("$%d", len(args)))
 	}
 	err = rows.Err()
-	rows.Close()
+	closeErr := rows.Close()
+	if err == nil {
+		err = closeErr
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +334,7 @@ func (s *Store) ListEPrescriptionsForUser(ctx context.Context, userID, role stri
 	if err != nil {
 		return nil, err
 	}
-	defer itemRows.Close()
+	defer func() { _ = itemRows.Close() }()
 	for itemRows.Next() {
 		item, err := scanPrescriptionItem(itemRows)
 		if err != nil {
@@ -338,7 +346,9 @@ func (s *Store) ListEPrescriptionsForUser(ctx context.Context, userID, role stri
 	if err := itemRows.Err(); err != nil {
 		return nil, err
 	}
-	itemRows.Close()
+	if err := itemRows.Close(); err != nil {
+		return nil, err
+	}
 	return out, tx.Commit()
 }
 func (s *Store) ListActiveEPrescriptionsForProfessionalPatients(ctx context.Context, professionalID string) ([]EPrescription, error) {
@@ -346,7 +356,7 @@ func (s *Store) ListActiveEPrescriptionsForProfessionalPatients(ctx context.Cont
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []EPrescription
 	for rows.Next() {
 		rx, err := scanPrescription(rows)

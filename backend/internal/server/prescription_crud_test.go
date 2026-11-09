@@ -40,7 +40,11 @@ func TestPrescriptionReadNeverMixesIssuedHeaderWithDraftItems(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer readerDB.Close()
+			defer func() {
+				if err := readerDB.Close(); err != nil {
+					t.Errorf("close reader database: %v", err)
+				}
+			}()
 			readerDB.SetMaxOpenConns(1)
 			var pid int
 			if err := readerDB.QueryRowContext(ctx, `SELECT pg_backend_pid()`).Scan(&pid); err != nil {
@@ -51,7 +55,7 @@ func TestPrescriptionReadNeverMixesIssuedHeaderWithDraftItems(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer blocker.Rollback()
+			defer func() { _ = blocker.Rollback() }()
 			if _, err := blocker.ExecContext(ctx, `LOCK TABLE e_prescription_items IN ACCESS EXCLUSIVE MODE`); err != nil {
 				t.Fatal(err)
 			}

@@ -55,7 +55,35 @@ instruction sources. Backend, migrations and client must be deployed together.
   logs. A separate operational correction is pinned to private patient/Rx/item/
   medication/author UUIDs and guarded against changed stock or consumption.
 
-Deployment and signed APK evidence will be recorded after verification.
+## Production and APK verification
+
+- `4b1eee40966170c82d99f97be5a4f009c3c398e6` pushed to main/work branch.
+  Backend workflow 42717958672 succeeded; deployed binary embeds that exact
+  revision with `vcs.modified=false`. Service active; public `/healthz` returned
+  `{"status":"ok"}`. Binary SHA-256:
+  `ee3ae38088562223fa6608a14c2ed61c365c8c20f7d9f2a29332c15c31780d8f`.
+- Production ledger now includes **001–040**. All three below-60 counts are
+  **zero**, all three DB defaults are **60**, and scheduled overlaps remain zero.
+- Guarded stock correction passed a rollback dry run, then committed exactly
+  one pinned legacy link/supply correction with an audit record. Verified:
+  supplied **30**, remaining **30**, same patient, one linked item, no taken logs.
+  No generic name-based supply inference was applied.
+- Web deploy workflow 42717958693 succeeded; `/app/` returned HTTP 200.
+- Signed universal APK `0.1.14+15`: 78,639,632 bytes; all three Android ABIs.
+  SHA-256: `b8346f7b15e5d21d18286d90cde7741f913e1e0f2c617e837e7cebc3f0c21f48`.
+  Signature verified against the existing release certificate SHA-256
+  `965f7430ec7f67a44b7a99e83f155e601116ff16c18fa8db57a4e79de4f2d300`.
+  Production Google client ID confirmed in each ABI's `libapp.so`.
+- Installed APK on emulator-5554; cold launch reached the role chooser,
+  installed version/code verified, process stayed alive and sampled logcat had
+  no matching fatal startup error. Screenshot/XML archived with production QA.
+- Published versioned universal APK at
+  `https://malva.web.id/downloads/Malva-0.1.14-15-universal.apk` (HTTP 200).
+  Server file checksum matches the signed local build.
+- Initial Go CI caught unchecked close/rollback/test setup errors and a
+  boolean lint suggestion. Follow-up corrects those checks without changing
+  contracts; local golangci-lint v2.15.0 now reports zero issues. Final workflow
+  status will be recorded after that follow-up deploy.
 
 ## Evidence and limits
 

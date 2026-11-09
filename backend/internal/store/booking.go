@@ -236,15 +236,18 @@ func (s *Store) PendingBookingForCarePackage(ctx context.Context, packageID stri
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return Booking{}, false, err
 		}
 		ids = append(ids, id)
 	}
 	err = rows.Err()
-	rows.Close()
+	closeErr := rows.Close()
 	if err != nil {
 		return Booking{}, false, err
+	}
+	if closeErr != nil {
+		return Booking{}, false, closeErr
 	}
 	if len(ids) != 1 {
 		return Booking{}, false, nil

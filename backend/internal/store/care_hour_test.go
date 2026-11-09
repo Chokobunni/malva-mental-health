@@ -25,7 +25,7 @@ func TestMigration036BackfillsHoursIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	// Shadow only the duration tables, keeping the migration test isolated.
 	for _, query := range []string{
 		`CREATE TEMP TABLE care_sessions(duration_minutes integer DEFAULT 30) ON COMMIT DROP`,
@@ -87,7 +87,9 @@ func TestAvailabilityRecognizesPartialSessionOverlap(t *testing.T) {
 	patient := insertTestUser(t, db, ctx, "patient", "Partial patient", "partialp")
 	prof := insertTestUser(t, db, ctx, "professional", "Partial doctor", "partiald")
 	t.Cleanup(func() {
-		db.Exec(`DELETE FROM care_sessions WHERE patient_id=$1`, patient)
+		if _, err := db.Exec(`DELETE FROM care_sessions WHERE patient_id=$1`, patient); err != nil {
+			t.Errorf("cleanup fixture: %v", err)
+		}
 		cleanupTestUsers(t, db, patient, prof)
 	})
 	start := clock.Now().Add(96 * time.Hour).Truncate(time.Minute)
@@ -113,7 +115,9 @@ func TestRescheduleSynchronizesBookingAndRejectsOverlap(t *testing.T) {
 	patient := insertTestUser(t, db, ctx, "patient", "Hour patient", "hourpat")
 	prof := insertTestUser(t, db, ctx, "professional", "Hour doctor", "hourpro")
 	t.Cleanup(func() {
-		db.Exec(`DELETE FROM care_sessions WHERE patient_id=$1`, patient)
+		if _, err := db.Exec(`DELETE FROM care_sessions WHERE patient_id=$1`, patient); err != nil {
+			t.Errorf("cleanup fixture: %v", err)
+		}
 		cleanupTestUsers(t, db, patient, prof)
 	})
 	start := clock.Now().Add(96 * time.Hour).Truncate(time.Minute)
@@ -158,7 +162,9 @@ func TestCancelledOneTimeDisconnectsUnlessOtherCareActive(t *testing.T) {
 			patient := insertTestUser(t, db, ctx, "patient", "Cancel patient", "cancelp")
 			prof := insertTestUser(t, db, ctx, "professional", "Cancel doctor", "canceld")
 			t.Cleanup(func() {
-				db.Exec(`DELETE FROM care_sessions WHERE patient_id=$1`, patient)
+				if _, err := db.Exec(`DELETE FROM care_sessions WHERE patient_id=$1`, patient); err != nil {
+					t.Errorf("cleanup fixture: %v", err)
+				}
 				cleanupTestUsers(t, db, patient, prof)
 			})
 			if err := s.EnsurePatientProfessionalLink(ctx, patient, prof); err != nil {
@@ -204,8 +210,12 @@ func TestMigration038CancelsOnlyUnsupportedOneTimeLinks(t *testing.T) {
 		patient := insertTestUser(t, db, ctx, "patient", "Legacy cancellation", "legacyp")
 		prof := insertTestUser(t, db, ctx, "professional", "Legacy cancellation", "legacyd")
 		t.Cleanup(func() {
-			db.Exec(`DELETE FROM care_sessions WHERE patient_id=$1`, patient)
-			db.Exec(`DELETE FROM care_packages WHERE patient_id=$1`, patient)
+			if _, err := db.Exec(`DELETE FROM care_sessions WHERE patient_id=$1`, patient); err != nil {
+				t.Errorf("cleanup fixture: %v", err)
+			}
+			if _, err := db.Exec(`DELETE FROM care_packages WHERE patient_id=$1`, patient); err != nil {
+				t.Errorf("cleanup fixture: %v", err)
+			}
 			cleanupTestUsers(t, db, patient, prof)
 		})
 		if err := s.EnsurePatientProfessionalLink(ctx, patient, prof); err != nil {
@@ -252,7 +262,9 @@ func TestConcurrentOverlappingReschedulesHaveOneWinner(t *testing.T) {
 	patient := insertTestUser(t, db, ctx, "patient", "Concurrent reschedule", "concurrentp")
 	prof := insertTestUser(t, db, ctx, "professional", "Concurrent reschedule", "concurrentd")
 	t.Cleanup(func() {
-		db.Exec(`DELETE FROM care_sessions WHERE patient_id=$1`, patient)
+		if _, err := db.Exec(`DELETE FROM care_sessions WHERE patient_id=$1`, patient); err != nil {
+			t.Errorf("cleanup fixture: %v", err)
+		}
 		cleanupTestUsers(t, db, patient, prof)
 	})
 	initial := clock.Now().Add(96 * time.Hour).Truncate(time.Minute)
@@ -294,7 +306,9 @@ func TestProfessionalAbsenceDisconnectsOneTimeCare(t *testing.T) {
 	patient := insertTestUser(t, db, ctx, "patient", "Absent consultation", "absentp")
 	prof := insertTestUser(t, db, ctx, "professional", "Absent consultation", "absentd")
 	t.Cleanup(func() {
-		db.Exec(`DELETE FROM care_sessions WHERE patient_id=$1`, patient)
+		if _, err := db.Exec(`DELETE FROM care_sessions WHERE patient_id=$1`, patient); err != nil {
+			t.Errorf("cleanup fixture: %v", err)
+		}
 		cleanupTestUsers(t, db, patient, prof)
 	})
 	if err := s.EnsurePatientProfessionalLink(ctx, patient, prof); err != nil {
