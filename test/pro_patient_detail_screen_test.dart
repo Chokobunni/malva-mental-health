@@ -238,15 +238,17 @@ void main() {
   });
 
   testWidgets(
-      'screening identifies only symptoms supported by recorded answers',
+      'screening omits symptom summary and retains recorded answer details',
       (tester) async {
     await _pump(tester, _Responses());
     await tester.tap(find.byKey(const ValueKey('screening-screening-1')));
     await tester.pumpAndSettle();
-    expect(find.text('Pola tidur terganggu'), findsOneWidget);
+    expect(find.text('Gejala teridentifikasi'), findsNothing);
+    expect(find.text('Pola tidur terganggu'), findsNothing);
     expect(find.text('Risiko menyakiti diri'), findsNothing);
     await tester.tap(find.text('Lihat detail jawaban').first);
     await tester.pumpAndSettle();
+    expect(find.text('Pola tidur terganggu'), findsOneWidget);
     expect(find.textContaining('Lebih dari separuh hari'), findsWidgets);
   });
   testWidgets(
@@ -325,6 +327,13 @@ void main() {
     expect(find.textContaining('0.68', findRichText: true), findsNWidgets(2));
     expect(find.text('PHQ9_MILD: 0.72 × 0.95 = 0.684'), findsNothing);
     expect(find.textContaining('bukan probabilitas diagnosis'), findsNothing);
+    expect(find.text('Gejala teridentifikasi'), findsNothing);
+    expect(find.text('Pola tidur terganggu'), findsNothing);
+    expect(find.text('Indikator klinis'), findsNWidgets(2));
+    await tester.tap(find.text('Lihat detail jawaban').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Pola tidur terganggu'), findsOneWidget);
+    expect(find.textContaining('2 • Lebih dari separuh hari'), findsOneWidget);
   });
 
   testWidgets('failed clinical section stays unavailable until retry succeeds',

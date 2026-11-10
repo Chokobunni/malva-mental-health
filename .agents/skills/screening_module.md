@@ -80,7 +80,7 @@ Modul skrining kesehatan mental. Skoring dihitung **di server** (bukan hanya kli
 
 ## Detail profesional (2026-11-09)
 
-- PHQ/GAD menampilkan skor, kategori, indikator keselamatan, interpretasi dan detail jawaban; gejala teridentifikasi bersumber hanya dari jawaban positif pada `bundle.*.answers` yang sudah disediakan API. Jawaban hilang/invalid tetap tidak tersedia, tidak direkayasa menjadi jawaban nol atau gejala dari skor total. Skor/CF/jejak aturan dipertahankan.
+- PHQ/GAD menampilkan skor, kategori, indikator keselamatan, interpretasi dan detail jawaban tanpa panel “Gejala teridentifikasi”. Jawaban tersimpan tetap dapat dibuka; jawaban hilang/invalid tetap tidak tersedia, tidak direkayasa menjadi jawaban nol atau gejala dari skor total. Skor/CF/jejak aturan dipertahankan.
 - WHO-5 memakai panel mint dan DASS panel lavender dengan skor/subskala, kategori, arahan tindak lanjut serta penjelasan skor. Detail per item memakai jawaban tersimpan. Metadata `scale_min`/`scale_max`/`scale_version` tidak menjadi jawaban klinis yang ditampilkan.
 - Penghapusan Crisis Incident Log profesional tidak menghapus indikator keselamatan skrining atau data SOS global/pasien.
 
@@ -89,3 +89,4 @@ Modul skrining kesehatan mental. Skoring dihitung **di server** (bukan hanya kli
 - PHQ/GAD pada hasil langsung, riwayat pasien/profesional, detail klinis dan chat memakai `SharedRecordDetail`. Dua kartu CF instrumen selalu terpisah, termasuk saat nilainya sama. Nilai lama yang hilang/invalid tampil belum tersedia; CF gabungan historis tidak diduplikasi menjadi dua nilai instrumen.
 - WHO/DASS menampilkan CF triage dari `interpretDassWho5` yang sudah ada, termasuk kesimpulan WHO awal. Jawaban tidak lengkap tidak menghasilkan skor, interpretasi atau CF. Skor, bobot dan versi aturan tidak berubah.
 - Metadata berbagi PHQ/GAD mempertahankan CF instrumen aktual tanpa menambahkan jawaban privat. Pergantian akun menutup detail; refresh token pemilik yang sama tidak membuang hasil berizin yang sedang dimuat.
+- Data Pasien Dibagikan profesional memisahkan tab Screening (WHO-5, DASS-21, PHQ-9/GAD-7) dari Terapi. Kedua sumber riwayat dibatasi ke pasien terpilih dengan izin kategori masing-masing; sumber yang tersedia tetap tampil saat sumber lain ditolak. Detail memakai komponen assessment bersama, tanpa aksi berbagi pasien.

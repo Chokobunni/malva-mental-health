@@ -13,12 +13,13 @@ import '../../time/wib.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 import '../../widgets/therapy_library.dart';
+import '../assessment_history_screen.dart';
 
 // ============================================================
 // DATA PASIEN DIBAGIKAN (professional) — SATU PINTU dari dashboard.
 //
-// Menampilkan data yang dibagikan pasien terhubung dalam 6 kategori:
-// Mood, Diary, Obat, Health Record, Goals, Terapi. Semua READ-ONLY.
+// Menampilkan data yang dibagikan pasien terhubung dalam 7 kategori:
+// Mood, Diary, Obat, Health Record, Goals, Screening, Terapi. Semua READ-ONLY.
 //
 // PENTING:
 // - Pemilih pasien HANYA berisi pasien dari link aktif. Data pasien di luar
@@ -58,6 +59,7 @@ class _SharedPatientDataScreenState
     _TabSpec('Obat', Icons.medication_rounded),
     _TabSpec('Health Record', Icons.medical_information_rounded),
     _TabSpec('Goals', Icons.flag_rounded),
+    _TabSpec('Screening', Icons.fact_check_rounded),
     _TabSpec('Terapi', Icons.psychology_rounded),
   ];
 
@@ -224,6 +226,11 @@ class _SharedPatientDataScreenState
                   patientId: patientId),
               _GoalTab(
                   key: ValueKey('goal_$patientId'),
+                  session: widget.session,
+                  apiClient: widget.apiClient,
+                  patientId: patientId),
+              _ScreeningTab(
+                  key: ValueKey('screening_$patientId'),
                   session: widget.session,
                   apiClient: widget.apiClient,
                   patientId: patientId),
@@ -836,6 +843,55 @@ class _GoalTabState
   }
 }
 
+// ---------------- SCREENING ----------------
+
+class _ScreeningTab extends _PatientDataTabState<List<AssessmentHistoryEntry>> {
+  const _ScreeningTab({
+    super.key,
+    required super.session,
+    required super.apiClient,
+    required super.patientId,
+  });
+
+  @override
+  ConsumerState<_ScreeningTab> createState() => _ScreeningTabState();
+}
+
+class _ScreeningTabState extends _PatientDataTabStateBase<
+    List<AssessmentHistoryEntry>, _ScreeningTab> {
+  @override
+  String get categoryLabel => 'screening';
+
+  @override
+  IconData get emptyIcon => Icons.fact_check_outlined;
+
+  @override
+  String get emptyMessage => 'Belum ada hasil screening yang dibagikan.';
+
+  @override
+  bool isEmpty(List<AssessmentHistoryEntry> data) => data.isEmpty;
+
+  @override
+  Future<List<AssessmentHistoryEntry>> loadData(
+          MalvaApiClient apiClient, String accessToken) =>
+      loadAssessmentHistory(
+          api: apiClient,
+          accessToken: accessToken,
+          patientId: widget.patientId);
+
+  @override
+  Widget buildContent(
+          BuildContext context, List<AssessmentHistoryEntry> data) =>
+      Column(children: [
+        for (final entry in data) ...[
+          AssessmentHistoryCard(
+              entry: entry,
+              onTap: () => showAssessmentHistoryDetail(context, entry)),
+          const SizedBox(height: 8),
+        ],
+      ]);
+}
+
 // ---------------- TERAPI ----------------
 
 class _TherapyTab extends _PatientDataTabState<List<BackendTherapySubmission>> {
@@ -866,9 +922,10 @@ class _TherapyTabState extends _PatientDataTabStateBase<
 
   @override
   Future<List<BackendTherapySubmission>> loadData(
-      MalvaApiClient apiClient, String accessToken) {
-    return apiClient.listTherapySubmissions(
-        accessToken: accessToken, patientId: widget.patientId);
+      MalvaApiClient apiClient, String accessToken) async {
+    final submissions = await apiClient.listTherapySubmissions(
+        accessToken: accessToken, patientId: widget.patientId, limit: 0);
+    return submissions.where(isTherapyRecordSubmission).toList();
   }
 
   @override

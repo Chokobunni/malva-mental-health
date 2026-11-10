@@ -398,7 +398,7 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 ## Kontrak tampilan profesional (2026-11-09)
 
 - Home profesional mengutamakan tiga bagian sesi lalu Klinis di atas Operasional; Earnings mendahului dropdown Ketersediaan & Harga. Dropdown membaca slot aktif, hari libur dan harga server, lalu memuat ulang setelah Atur. Jadwal tidak memuat panel/pengaturan tersebut dan mempertahankan seluruh guard aksi sesi. Data dibagikan berada di Pasien. Lainnya memuat profil, portal/STR-SIP dan relasi. Crisis Incident Log profesional beserta pemuatannya dihapus, tanpa menghapus data insiden atau SOS pasien.
-- Detail klinis mengelompokkan sesi per paket; pemantauan harian tidak mengambil timeline/kiriman chat, diary atau catatan sesi. Penghapusan tampilan tidak menghapus data tersimpan. Gejala PHQ/GAD hanya berasal dari jawaban aktual; skor, interpretasi, jawaban dan CF berlabel dipertahankan, tanpa string jejak aturan/penjelasan teknis pada panel pasien. Rujukan: [care session](skills/care_session_module.md), [screening](skills/screening_module.md).
+- Detail klinis mengelompokkan sesi per paket; pemantauan harian tidak mengambil timeline/kiriman chat, diary atau catatan sesi. Penghapusan tampilan tidak menghapus data tersimpan. Screening PHQ/GAD tidak menampilkan panel “Gejala teridentifikasi”; skor, indikator klinis/keselamatan, interpretasi, detail jawaban dan CF berlabel dipertahankan, tanpa string jejak aturan/penjelasan teknis pada panel pasien. Rujukan: [care session](skills/care_session_module.md), [screening](skills/screening_module.md).
 
 ## Kontrak sesi dan rutinitas resep (2026-11-10)
 
@@ -422,6 +422,7 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 
 ## Kontrak detail screening (2026-11-10)
 
+- Data Pasien Dibagikan profesional memiliki tab Screening sebelum Terapi untuk WHO-5, DASS-21 dan PHQ-9/GAD-7. Terapi hanya worksheet non-assessment termasuk modul legacy. Kedua sumber screening selalu meminta pasien terpilih dan mempertahankan izin masing-masing; pergantian pasien/akun membuang respons lama. Tidak ada perubahan skoring atau kategori consent server.
 - Hasil PHQ/GAD langsung, riwayat pasien/profesional, detail klinis dan chat memakai tampilan detail record yang sama; dua kartu CF instrumen tetap terpisah saat nilainya sama. CF hilang/invalid bukan nol; CF gabungan historis tidak disalin ke kedua instrumen.
 - WHO/DASS menampilkan CF triage model yang sudah ada sebagai dukungan aturan, bukan peluang diagnosis/keparahan. Jawaban parsial tidak menghasilkan skor atau CF; skoring dan bobot tidak berubah.
 - GET detail therapy/assessment profesional menerima pembagian individual atau consent kategori `therapy_records` untuk pasangan yang sama, selaras daftar, dengan relasi dan jendela akses tetap wajib. Penolakan GET tidak dibypass fallback jawaban. Rujukan: [screening](skills/screening_module.md), [therapy/chat](skills/therapy_chat_module.md).

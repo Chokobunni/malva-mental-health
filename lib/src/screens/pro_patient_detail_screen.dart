@@ -815,8 +815,6 @@ class _ScreeningInstrumentDetail extends StatelessWidget {
     final questions = name == 'PHQ-9'
         ? AssessmentEngine.phq9Questions
         : AssessmentEngine.gad7Questions;
-    final identified =
-        questions.where((q) => (answers[q.id] ?? 0) > 0).toList();
     final complete = questions.every((q) => answers.containsKey(q.id));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -836,31 +834,6 @@ class _ScreeningInstrumentDetail extends StatelessWidget {
                 color: MalvaColors.danger,
                 icon: Icons.warning_rounded),
         ]),
-        const SizedBox(height: 12),
-        SoftCard(
-            color: const Color(0xFFF7F8FA),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Gejala teridentifikasi',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w800, color: Colors.black54)),
-              const SizedBox(height: 8),
-              if (identified.isNotEmpty)
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  for (final q in identified)
-                    Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8)),
-                        child: Text(q.label))
-                ])
-              else
-                Text(complete
-                    ? 'Tidak ada gejala dilaporkan pada jawaban ini.'
-                    : 'Jawaban rinci belum tersedia.'),
-            ])),
         if (summary.isNotEmpty) ...[
           const SizedBox(height: 12),
           SoftCard(

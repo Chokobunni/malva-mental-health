@@ -220,6 +220,12 @@ Ulasan memakai entitlement per sesi/pembelian di atas, termasuk renewal merged.
 
 ## Kontrak sesi dan resep — 10 November 2026
 
+- Data Pasien Dibagikan profesional memiliki tab Screening untuk WHO-5, DASS-21,
+  PHQ-9/GAD-7, terpisah dari worksheet Terapi. Riwayat dan detail mengikuti pasien
+  terpilih serta izin sumber masing-masing. Detail pasien tidak menampilkan panel
+  “Gejala teridentifikasi”; skor, CF, indikator klinis/keselamatan, interpretasi
+  dan detail jawaban tetap tersedia.
+
 - E-Prescription mendukung diagnosis/indikasi, draft, revisi penuh beberapa obat
   dengan ID stabil, dan soft-delete oleh penulis psikiater terverifikasi.
   Draft hanya terlihat penulis. `current_stock` item adalah pasokan;

@@ -10,6 +10,7 @@
   untuk kedua peserta. Worksheet assessment DASS/WHO memakai share endpoint yang
   sama, tanpa duplikasi pesan. Screening lama diselesaikan dari seluruh riwayat
   berizin; kartu portal Therapy juga membuka jawaban lengkap termasuk legacy.
+- Portal Data Pasien Dibagikan memisahkan WHO-5/DASS-21 ke tab Screening bersama PHQ-9/GAD-7; tab Terapi memakai `isTherapyRecordSubmission` dan tetap memuat worksheet legacy non-assessment. Pemisahan tampilan tidak mengubah endpoint maupun consent `therapy_records` WHO/DASS.
 - Detail ringkasan tidak mengulang kutipan pesan lama; periode/metrik snapshot
   tetap dipertahankan, termasuk record historis 14 hari. PHQ/GAD lama (flat atau
   nested) dan kiriman baru memakai cutoff skor valid yang sama untuk tingkat

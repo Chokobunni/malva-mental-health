@@ -251,8 +251,8 @@ Future<List<AssessmentHistoryEntry>> loadAssessmentHistory({
 
   // Sumber 1: worksheet asesmen DASS-21 / WHO-5.
   try {
-    final submissions =
-        await api.listTherapySubmissions(accessToken: accessToken, limit: 0);
+    final submissions = await api.listTherapySubmissions(
+        accessToken: accessToken, patientId: patientId, limit: 0);
     final seenIds = <String>{};
     for (final submission in submissions) {
       if (!isCompleteAssessmentAnswers(
