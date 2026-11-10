@@ -247,3 +247,5 @@ Ulasan memakai entitlement per sesi/pembelian di atas, termasuk renewal merged.
   berdekatan perlu diperiksa terhadap irisan sebelum rilis.
 
 Rujukan: [kontrak API](API_DOCUMENTATION.md), [skema](DATABASE_SCHEMA.md).
+
+- Tambah Resep memakai Detail Obat → Atur Rutinitas → pengingat konsumsi → pengingat isi ulang. Stok hanya di tahap terakhir. Fleksibel tanpa jam; pola khusus mendukung interval jam/hari/bulan kalender, jam presisi dan hari tertentu. Interval bulan adalah kalender, mendukung injeksi bulanan tanpa drift30hari.

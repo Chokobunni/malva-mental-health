@@ -1,15 +1,15 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../providers/providers.dart';
-import 'prescription_widgets.dart';
-
 import '../../models.dart';
+import '../../providers/providers.dart';
 import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../time/wib.dart';
 import '../../widgets/friendly_error.dart';
+import 'prescription_widgets.dart';
 
-/// One medicine, three steps: clinical detail, routine, and patient reminders.
+/// Clinical detail, routine, dose reminders and refill reminders share one draft.
 class EPrescriptionFormScreen extends ConsumerStatefulWidget {
   const EPrescriptionFormScreen(
       {super.key,
@@ -22,43 +22,54 @@ class EPrescriptionFormScreen extends ConsumerStatefulWidget {
   final AuthSession? session;
   final MalvaApiClient? apiClient;
   final List<BackendPatientProfessionalLink> links;
-  final String preselectedPatientId;
-  final String preselectedPatientName;
+  final String preselectedPatientId, preselectedPatientName;
   final VoidCallback? onCreated;
   @override
   ConsumerState<EPrescriptionFormScreen> createState() =>
       _PrescriptionWizardState();
 }
 
+enum _Routine { daily, flexible, periodic, precision, weekdays }
+
 class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
-  static const _purple = Color(0xff9346a4);
+  static const _purple = Color(0xff91479e);
+  static const _teal = Color(0xff39b49e);
+  static const _ink = Color(0xff222e3a);
+  static const _muted = Color(0xff8190a0);
+  static const _line = Color(0xffe6eaf0);
+  static const _pale = Color(0xfff8f9fc);
   late final PrescriptionAccountGuard _account;
-  final _diagnosis = TextEditingController();
-  String _status = 'issued';
-  AuthSession? get _session =>
-      _account.session(ref.read(authStateProvider).session);
   final _name = TextEditingController();
   final _dose = TextEditingController();
   final _notes = TextEditingController();
-  final _stock = TextEditingController(text: '30');
-  final _units = TextEditingController(text: '1');
-  final _threshold = TextEditingController(text: '3');
-  final _interval = TextEditingController(text: '8');
   final _scroll = ScrollController();
-  int _step = 0;
-  String? _patientId;
-  String _form = 'Tablet';
-  String _unit = 'mg';
-  String _frequency = '1x sehari';
-  String _intervalUnit = 'jam';
-  bool _periodic = false;
-  bool _refill = true;
-  bool _saving = false;
-  String? _error;
+  AuthSession? get _session =>
+      _account.session(ref.read(authStateProvider).session);
+  String? _patientId, _error;
+  String _form = 'Tablet', _unit = 'mg', _intervalUnit = 'jam';
+  _Routine _mode = _Routine.daily;
+  int _step = 0, _dailyCount = 1, _precisionCount = 4, _interval = 8;
+  int _stock = 30, _threshold = 3, _units = 1;
+  bool _refill = true, _saving = false;
   DateTime _start = wibNow();
-  TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 0);
-  final List<TimeOfDay> _times = [const TimeOfDay(hour: 8, minute: 0)];
-  final Set<int> _weekdays = {1, 2, 3, 4, 5, 6, 7};
+  final _times = <TimeOfDay>[const TimeOfDay(hour: 8, minute: 0)];
+  final _weekdays = <int>{1, 2, 3, 4, 5, 6, 7};
+  String get _stockUnit =>
+      switch (_form) { 'Sirup' => 'ml', 'Injeksi' => 'ampul', _ => 'pil' };
+  String get _frequency => switch (_mode) {
+        _Routine.flexible => 'Fleksibel',
+        _Routine.periodic => 'Setiap $_interval $_intervalUnit',
+        _Routine.precision => '$_precisionCount kali sehari',
+        _Routine.weekdays => 'Hari tertentu',
+        _Routine.daily => '${_dailyCount}x sehari'
+      };
+  String get _badge => switch (_mode) {
+        _Routine.periodic => 'Minum setiap $_interval $_intervalUnit',
+        _Routine.precision => 'Minum $_precisionCount kali sehari',
+        _Routine.weekdays => 'Minum di hari tertentu',
+        _ => _frequency
+      };
+
   @override
   void initState() {
     super.initState();
@@ -70,23 +81,15 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
 
   @override
   void dispose() {
-    for (final c in [
-      _diagnosis,
-      _name,
-      _dose,
-      _notes,
-      _stock,
-      _units,
-      _threshold,
-      _interval
-    ]) {
-      c.dispose();
-    }
+    _name.dispose();
+    _dose.dispose();
+    _notes.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
   void _go(int step) {
+    FocusScope.of(context).unfocus();
     setState(() {
       _step = step;
       _error = null;
@@ -94,201 +97,265 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
     if (_scroll.hasClients) _scroll.jumpTo(0);
   }
 
+  void _back() {
+    if (_saving) return;
+    if (_step == 0) {
+      Navigator.maybePop(context);
+      return;
+    }
+    _go(_step == 3 && _mode == _Routine.flexible ? 1 : _step - 1);
+  }
+
   String _timeLabel(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-  Widget _label(String s) => Padding(
-      padding: const EdgeInsets.only(top: 22, bottom: 10),
-      child: Text(s,
-          style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              color: Color(0xff56616d),
-              fontSize: 15)));
-  InputDecoration _decoration(String label, {String? hint}) => InputDecoration(
-      labelText: label,
-      hintText: hint,
-      filled: true,
-      fillColor: const Color(0xfff8f9fb),
-      border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: Color(0xffe4e5e8))),
-      enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: Color(0xffe4e5e8))),
-      contentPadding: const EdgeInsets.all(18));
-  Widget _number(TextEditingController controller, String label,
-          {bool decimal = false}) =>
-      TextField(
-          controller: controller,
-          keyboardType: TextInputType.numberWithOptions(decimal: decimal),
-          decoration: _decoration(label));
-  Widget _choice(String label, bool selected, VoidCallback onTap,
-          {IconData? icon}) =>
-      OutlinedButton.icon(
-          onPressed: onTap,
-          icon: Icon(
-              icon ??
-                  (selected
-                      ? Icons.check_circle_outline
-                      : Icons.circle_outlined),
-              size: 20),
-          label: Text(label),
-          style: OutlinedButton.styleFrom(
-              foregroundColor: selected ? _purple : const Color(0xff697480),
-              backgroundColor:
-                  selected ? const Color(0xfffcf5ff) : const Color(0xfff8f9fb),
-              side: BorderSide(
-                  color: selected ? _purple : const Color(0xffe9eaed),
-                  width: selected ? 2 : 1),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15))));
-  Widget _summary() => Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-          color: const Color(0xfffcf5ff),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: _purple.withValues(alpha: .25))),
-      child: Row(children: [
-        const Icon(Icons.medication_rounded, color: _purple, size: 32),
-        const SizedBox(width: 14),
-        Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(_name.text,
-              style:
-                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-          Text('${_dose.text} ${_unit.toUpperCase()} • $_form'),
-          if (_notes.text.isNotEmpty) Text(_notes.text)
-        ])),
-        IconButton(
-            onPressed: () => _go(0),
-            tooltip: 'Edit detail obat',
-            icon: const Icon(Icons.edit_outlined, color: _purple))
-      ]));
+  void _setCount(int count) {
+    _times.clear();
+    for (var i = 0; i < count; i++) {
+      _times.add(TimeOfDay(
+          hour: 8 + (count == 1 ? 0 : (i * 12 / (count - 1)).round()),
+          minute: 0));
+    }
+  }
+
+  void _select(_Routine mode, [int? count]) => setState(() {
+        _mode = mode;
+        _error = null;
+        if (count != null) _dailyCount = count;
+        if (mode == _Routine.flexible) {
+          _times.clear();
+        } else {
+          _setCount(mode == _Routine.daily
+              ? _dailyCount
+              : mode == _Routine.precision
+                  ? _precisionCount
+                  : 1);
+        }
+        if (mode != _Routine.weekdays) {
+          _weekdays.clear();
+          _weekdays.addAll([1, 2, 3, 4, 5, 6, 7]);
+        }
+      });
+
   @override
   Widget build(BuildContext context) {
-    if (!_account.current(ref.watch(authStateProvider).session))
+    if (!_account.current(ref.watch(authStateProvider).session)) {
       return const Scaffold(
           body: Center(
               child: Text('Sesi akun berubah. Buka kembali halaman resep.')));
-    final titles = ['Detail Obat', 'Atur Rutinitas', 'Atur Pengingat'];
-    return PopScope(
-        canPop: _step == 0 && !_saving,
-        onPopInvokedWithResult: (didPop, result) {
-          if (!didPop && !_saving && _step > 0) _go(_step - 1);
-        },
-        child: Scaffold(
-            backgroundColor: Colors.white,
+    }
+    final clinical = _step < 2;
+    return Theme(
+        data: Theme.of(context).copyWith(
+          textTheme: Theme.of(context)
+              .textTheme
+              .apply(bodyColor: _ink, displayColor: _ink),
+          appBarTheme: const AppBarTheme(
+              titleTextStyle: TextStyle(fontFamily: 'Roboto')),
+          filledButtonTheme: FilledButtonThemeData(
+              style: FilledButton.styleFrom(
+                  textStyle: const TextStyle(fontFamily: 'Roboto'))),
+          outlinedButtonTheme: OutlinedButtonThemeData(
+              style: OutlinedButton.styleFrom(
+                  textStyle: const TextStyle(fontFamily: 'Roboto'))),
+          textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                  textStyle: const TextStyle(fontFamily: 'Roboto'))),
+          dividerColor: _line,
+        ),
+        child: PopScope(
+          canPop: _step == 0 && !_saving,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop) _back();
+          },
+          child: Scaffold(
+            backgroundColor: clinical ? Colors.white : _pale,
             appBar: AppBar(
-                title: Text(titles[_step],
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontFamily: 'Roboto')),
-                centerTitle: true,
-                toolbarHeight: 88,
-                backgroundColor: _purple,
-                foregroundColor: Colors.white,
-                shape: const RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.vertical(bottom: Radius.circular(30))),
-                leading: IconButton(
-                    icon: const Icon(Icons.arrow_back_rounded),
-                    onPressed: _saving
-                        ? null
-                        : () {
-                            if (_step > 0) {
-                              _go(_step - 1);
-                            } else {
-                              Navigator.maybePop(context);
-                            }
-                          })),
+              title: Text(
+                  _step == 0
+                      ? 'Detail Obat'
+                      : _step == 1
+                          ? 'Atur Rutinitas'
+                          : 'Atur Pengingat',
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: clinical ? Colors.white : _ink)),
+              centerTitle: true,
+              toolbarHeight: _step == 0
+                  ? 88
+                  : _step == 1
+                      ? 66
+                      : 60,
+              backgroundColor: clinical ? _purple : Colors.white,
+              foregroundColor: clinical ? Colors.white : _muted,
+              surfaceTintColor: Colors.transparent,
+              elevation: clinical ? 3 : 0,
+              shadowColor: clinical ? Colors.black26 : Colors.transparent,
+              shape: clinical
+                  ? RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(
+                          bottom: Radius.circular(_step == 0 ? 38 : 12)))
+                  : const Border(bottom: BorderSide(color: _line)),
+              leading: IconButton(
+                  tooltip: 'Kembali',
+                  onPressed: _saving ? null : _back,
+                  icon: const Icon(Icons.arrow_back_rounded, size: 24)),
+            ),
             body: SafeArea(
-                child: ListView(
-                    controller: _scroll,
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 30),
-                    children: [
-                  Row(children: [
-                    for (var i = 0; i < 3; i++)
-                      Expanded(
-                          child: Container(
-                              height: 4,
-                              margin: const EdgeInsets.symmetric(horizontal: 3),
-                              decoration: BoxDecoration(
-                                  color: i <= _step
-                                      ? _purple
-                                      : const Color(0xffece8ef),
-                                  borderRadius: BorderRadius.circular(4))))
-                  ]),
-                  const SizedBox(height: 24),
-                  Text(
-                      [
-                        'Obat apa yang ingin kamu resepkan?',
-                        'Kapan pasien perlu minum obat?',
-                        'Siapkan pengingat untuk pasien'
-                      ][_step],
-                      style: const TextStyle(
-                          fontSize: 26,
-                          height: 1.25,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xff242f39))),
-                  if (_step == 0)
-                    ..._details()
-                  else if (_step == 1)
-                    ..._routine()
-                  else
-                    ..._reminders(),
-                  if (_error != null)
-                    Padding(
-                        padding: const EdgeInsets.only(top: 18),
-                        child: Text(_error!,
-                            style: const TextStyle(
-                                color: MalvaColors.danger,
-                                fontWeight: FontWeight.w700))),
-                  const SizedBox(height: 32),
-                  FilledButton(
-                      onPressed: _saving ? null : _next,
-                      style: FilledButton.styleFrom(
-                          backgroundColor: _purple,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 20),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16))),
-                      child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (_saving)
-                              const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white))
-                            else
-                              Flexible(
-                                  child: Text(
-                                      [
-                                        'Atur Jadwal Minum Obat Pasien',
-                                        'Lanjut Atur Pengingat',
-                                        'Simpan dan Kirim Resep'
-                                      ][_step],
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 16,
-                                          fontFamily: 'Roboto'))),
-                            if (!_saving) ...[
-                              const SizedBox(width: 8),
-                              const Icon(Icons.arrow_forward_rounded)
-                            ]
-                          ])),
-                ]))));
+                bottom: false,
+                child: LayoutBuilder(
+                    builder: (context, constraints) => SingleChildScrollView(
+                          controller: _scroll,
+                          padding: EdgeInsets.fromLTRB(_step == 0 ? 24 : 16, 22,
+                              _step == 0 ? 24 : 16, 24),
+                          child: Align(
+                              alignment: Alignment.topCenter,
+                              child: ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 620),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: switch (_step) {
+                                      0 => _details(),
+                                      1 => _routine(),
+                                      2 => _timing(),
+                                      _ => _refillSettings()
+                                    },
+                                  ))),
+                        ))),
+            bottomNavigationBar: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      _step == 0 ? 24 : 16,
+                      8,
+                      _step == 0 ? 24 : 16,
+                      12 + MediaQuery.viewInsetsOf(context).bottom),
+                  child: Align(
+                      heightFactor: 1,
+                      child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 620),
+                          child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (_error != null)
+                                  Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 12),
+                                      child: Text(_error!,
+                                          style: const TextStyle(
+                                              color: MalvaColors.danger,
+                                              fontWeight: FontWeight.w600))),
+                                Container(
+                                    decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(16),
+                                        boxShadow: [
+                                          BoxShadow(
+                                              color: _purple.withValues(
+                                                  alpha: .18),
+                                              blurRadius: 12,
+                                              offset: const Offset(0, 5))
+                                        ]),
+                                    child: FilledButton(
+                                      key: const Key('rx-next'),
+                                      onPressed: _saving ? null : _next,
+                                      style: FilledButton.styleFrom(
+                                          backgroundColor: _purple,
+                                          foregroundColor: Colors.white,
+                                          minimumSize:
+                                              const Size.fromHeight(56),
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 18, horizontal: 12),
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(16))),
+                                      child: _saving
+                                          ? const SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: Colors.white))
+                                          : Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                  Flexible(
+                                                      child: Text(
+                                                          switch (_step) {
+                                                            0 =>
+                                                              'Lanjut Atur Jadwal Resep',
+                                                            1 =>
+                                                              'Lanjutkan Kebiasaan',
+                                                            2 =>
+                                                              'Lanjut Atur Pengingat Stok',
+                                                            _ =>
+                                                              'Simpan dan Kirim Resep'
+                                                          },
+                                                          textAlign:
+                                                              TextAlign.center,
+                                                          style: const TextStyle(
+                                                              fontSize: 16,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700))),
+                                                  const SizedBox(width: 8),
+                                                  const Icon(
+                                                      Icons
+                                                          .arrow_forward_rounded,
+                                                      size: 23)
+                                                ]),
+                                    )),
+                              ]))),
+                )),
+          ),
+        ));
   }
 
+  Widget _heading(String text) => Text.rich(
+      TextSpan(children: [
+        TextSpan(text: '$text '),
+        WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Image.asset('assets/prescription/pill.png',
+                width: 27, height: 27))
+      ]),
+      style: const TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.w700,
+          height: 1.15,
+          letterSpacing: -.35));
+  Widget _label(String text, {double top = 22}) => Padding(
+      padding: EdgeInsets.only(top: top, bottom: 10),
+      child: Text(text,
+          style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Color(0xff626e79))));
+  InputDecoration _decoration(String hint, {Widget? prefix}) => InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Color(0xffa0a8b4), fontSize: 15),
+        filled: true,
+        fillColor: const Color(0xfff9fafc),
+        prefixIcon: prefix,
+        isDense: true,
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(17),
+            borderSide: const BorderSide(color: Color(0xffe6e7eb))),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(17),
+            borderSide: const BorderSide(color: Color(0xffe6e7eb))),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      );
   List<Widget> _details() {
     final patients = {
-      for (final link in widget.links)
-        link.patientId: link.patientDisplayName.isEmpty
+      for (final p in widget.links)
+        p.patientId: p.patientDisplayName.isEmpty
             ? 'Pasien terhubung'
-            : link.patientDisplayName
+            : p.patientDisplayName
     };
     if (widget.preselectedPatientId.isNotEmpty)
       patients.putIfAbsent(
@@ -297,261 +364,744 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
               ? 'Pasien terpilih'
               : widget.preselectedPatientName);
     return [
+      _heading('Obat apa yang ingin\nkamu resepkan?'),
       _label('Pasien'),
       DropdownButtonFormField<String>(
           initialValue: _patientId,
+          style: const TextStyle(
+              fontFamily: 'Roboto', fontSize: 16, height: 1.25, color: _ink),
+          isExpanded: true,
           decoration: _decoration('Pilih pasien'),
+          icon: const Icon(Icons.arrow_drop_down_rounded,
+              color: Color(0xff9ca5b2)),
           items: [
             for (final p in patients.entries)
               DropdownMenuItem(
                   value: p.key,
                   child: Text(p.value, overflow: TextOverflow.ellipsis))
           ],
-          onChanged: _saving ? null : (v) => setState(() => _patientId = v)),
-      if (patients.isEmpty) const Text('Belum ada pasien terhubung.'),
+          onChanged: (v) => setState(() => _patientId = v)),
+      if (patients.isEmpty)
+        const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text('Belum ada pasien terhubung.')),
       _label('Nama Obat'),
       TextField(
+          key: const Key('rx-name'),
           controller: _name,
-          decoration: _decoration('Nama obat',
-              hint: 'Contoh: Aripiprazole, Paracetamol')),
+          style: const TextStyle(fontSize: 16, height: 1.25),
+          decoration: _decoration('Contoh: Aripiprazole, Paracetamol',
+              prefix: Padding(
+                  padding: const EdgeInsets.all(15),
+                  child: Image.asset('assets/prescription/capsule.png',
+                      width: 20, height: 20, color: const Color(0xffa0a8b4)))),
+          textCapitalization: TextCapitalization.words),
       _label('Bentuk Obat'),
       LayoutBuilder(
-          builder: (context, c) => Wrap(spacing: 10, runSpacing: 10, children: [
+          builder: (context, c) => Wrap(spacing: 12, runSpacing: 12, children: [
                 for (final form in [
-                  ('Tablet', Icons.medication_rounded),
-                  ('Kapsul', Icons.medication_outlined),
-                  ('Sirup', Icons.medication_liquid_outlined),
-                  ('Injeksi', Icons.vaccines_outlined)
+                  ('Tablet', 'tablet'),
+                  ('Kapsul', 'capsule'),
+                  ('Sirup', 'syrup'),
+                  ('Injeksi', 'injection')
                 ])
                   SizedBox(
-                      width: (c.maxWidth - 10) / 2,
-                      child: _choice(form.$1, _form == form.$1,
-                          () => setState(() => _form = form.$1),
-                          icon: form.$2))
+                      width: (c.maxWidth - 12) / 2,
+                      child: OutlinedButton.icon(
+                          onPressed: () => setState(() => _form = form.$1),
+                          icon: Image.asset(
+                              'assets/prescription/${form.$2}.png',
+                              width: 21,
+                              height: 21,
+                              fit: BoxFit.contain,
+                              color: _form == form.$1
+                                  ? _purple
+                                  : const Color(0xff717d87)),
+                          label: Text(form.$1),
+                          style: OutlinedButton.styleFrom(
+                              foregroundColor: _form == form.$1
+                                  ? _purple
+                                  : const Color(0xff717d87),
+                              backgroundColor: _form == form.$1
+                                  ? const Color(0xfffbf5ff)
+                                  : const Color(0xfff9fafc),
+                              minimumSize: const Size(0, 54),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 14, horizontal: 8),
+                              side: BorderSide(
+                                  color: _form == form.$1
+                                      ? _purple
+                                      : const Color(0xfff0f1f4),
+                                  width: _form == form.$1 ? 1.8 : 1),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(13)),
+                              textStyle: const TextStyle(
+                                  fontFamily: 'Roboto',
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600))))
               ])),
-      _label('Dosis per minum'),
+      _label('Dosis per minum', top: 32),
       Row(children: [
         Expanded(
-            flex: 2, child: _number(_dose, 'Dosis per minum', decimal: true)),
+            flex: 2,
+            child: TextField(
+                key: const Key('rx-dose'),
+                controller: _dose,
+                style: const TextStyle(fontSize: 16, height: 1.25),
+                textAlign: TextAlign.center,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: _decoration('0'))),
         const SizedBox(width: 12),
         Expanded(
             child: DropdownButtonFormField<String>(
                 initialValue: _unit,
+                style: const TextStyle(
+                    fontFamily: 'Roboto',
+                    fontSize: 16,
+                    height: 1.25,
+                    color: _ink),
+                isExpanded: true,
                 decoration: _decoration('Satuan'),
+                icon: const Icon(Icons.arrow_drop_down_rounded,
+                    color: Color(0xff9ca5b2)),
                 items: [
                   for (final u in ['mg', 'mcg', 'g', 'ml', 'IU'])
-                    DropdownMenuItem(value: u, child: Text(u.toUpperCase()))
+                    DropdownMenuItem(
+                        value: u,
+                        child: Text(u.toUpperCase(),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 14)))
                 ],
                 onChanged: (v) => setState(() => _unit = v!)))
       ]),
-      _label('Diagnosis (opsional)'),
-      TextField(
-          controller: _diagnosis,
-          decoration: _decoration('Diagnosis ICD-10 / Indikasi')),
-      _label('Stok obat yang diberikan'),
-      _number(_stock, 'Jumlah stok'),
-      _label('Catatan (opsional)'),
+      _label('Catatan (opsional)', top: 32),
       TextField(
           controller: _notes,
+          style: const TextStyle(fontSize: 15, height: 1.3),
           maxLines: 3,
-          decoration:
-              _decoration('Catatan', hint: 'Contoh: Diminum sesudah makan...')),
+          decoration: _decoration('Contoh: Diminum sesudah makan...')),
     ];
   }
 
-  void _setCount(int count) {
-    final first = _times.first;
-    setState(() {
-      _times.clear();
-      for (var i = 0; i < count; i++)
-        _times.add(TimeOfDay(
-            hour: (first.hour +
-                    (count == 1 ? 0 : (i * 12 / (count - 1)).round())) %
-                24,
-            minute: first.minute));
-    });
+  Widget _summary() => Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+          gradient:
+              const LinearGradient(colors: [Color(0xfff3ebf6), Colors.white]),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xffe8dfed)),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x08000000), blurRadius: 3, offset: Offset(0, 2))
+          ]),
+      child: Row(children: [
+        SizedBox(
+            width: 48,
+            height: 48,
+            child: IconButton.filledTonal(
+                onPressed: () => _go(0),
+                style: IconButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(13))),
+                tooltip: 'Ubah obat',
+                icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                    color: _purple))),
+        const SizedBox(width: 16),
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(_name.text,
+              style:
+                  const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          const SizedBox(height: 7),
+          Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                  color: const Color(0xffdceeea),
+                  borderRadius: BorderRadius.circular(6)),
+              child: Text(
+                  '${_form.toUpperCase()} • ${_dose.text}${_unit.toUpperCase()}',
+                  style: const TextStyle(
+                      color: Color(0xff3e9c91),
+                      fontSize: 10,
+                      height: 1.15,
+                      fontWeight: FontWeight.w700)))
+        ])),
+        const SizedBox(width: 8),
+        SizedBox(
+            width: 34,
+            height: 34,
+            child: IconButton.outlined(
+                onPressed: () => _go(0),
+                tooltip: 'Edit detail obat',
+                style: IconButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    side: const BorderSide(color: _line),
+                    padding: EdgeInsets.zero),
+                icon: const Icon(Icons.edit_rounded,
+                    size: 16, color: Color(0xff9aa9b8))))
+      ]));
+  Widget _frequencyRow(String label, bool selected, VoidCallback tap) =>
+      Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Semantics(
+              selected: selected,
+              button: true,
+              child: Material(
+                  color: selected ? Colors.white : const Color(0xfff9f9ff),
+                  borderRadius: BorderRadius.circular(40),
+                  child: InkWell(
+                      onTap: tap,
+                      borderRadius: BorderRadius.circular(40),
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 56),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 14),
+                        decoration: BoxDecoration(
+                            border: Border.all(
+                                color: selected ? _purple : _line,
+                                width: selected ? 1.8 : 1.3),
+                            borderRadius: BorderRadius.circular(40),
+                            boxShadow: selected
+                                ? const [
+                                    BoxShadow(
+                                        color: Color(0x0791479e),
+                                        blurRadius: 7,
+                                        offset: Offset(0, 3))
+                                  ]
+                                : null),
+                        child: Row(children: [
+                          Expanded(
+                              child: Text(label,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15))),
+                          const SizedBox(width: 12),
+                          Icon(selected ? Icons.circle : Icons.circle_outlined,
+                              color:
+                                  selected ? _purple : const Color(0xffced7e3),
+                              size: 21)
+                        ]),
+                      )))));
+  Widget _pattern(_Routine mode, String title, String subtitle, IconData icon) {
+    final selected = _mode == mode;
+    return Expanded(
+        child: Semantics(
+            selected: selected,
+            button: true,
+            child: Material(
+                color: selected ? const Color(0xffeaf8f4) : Colors.white,
+                borderRadius: BorderRadius.circular(23),
+                child: InkWell(
+                    onTap: () => _select(mode),
+                    borderRadius: BorderRadius.circular(23),
+                    child: Container(
+                        constraints: const BoxConstraints(minHeight: 108),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 14),
+                        decoration: BoxDecoration(
+                            border: Border.all(
+                                color:
+                                    selected ? _teal : const Color(0xffedf2f7),
+                                width: selected ? 1.7 : 1.3),
+                            borderRadius: BorderRadius.circular(23)),
+                        child: Column(children: [
+                          Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                  color: selected
+                                      ? _teal
+                                      : const Color(0xfff8fafc),
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: selected
+                                      ? [
+                                          BoxShadow(
+                                              color:
+                                                  _teal.withValues(alpha: .2),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 4))
+                                        ]
+                                      : null),
+                              child: Icon(icon,
+                                  size: 20,
+                                  color: selected
+                                      ? Colors.white
+                                      : const Color(0xffa7b7c9))),
+                          const SizedBox(height: 10),
+                          Text(title,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: selected
+                                      ? const Color(0xff3c9e8f)
+                                      : _ink)),
+                          const SizedBox(height: 3),
+                          Text(subtitle,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  fontSize: 10, color: Color(0xff9baab8)))
+                        ]))))));
   }
 
   List<Widget> _routine() => [
-        const SizedBox(height: 22),
         _summary(),
-        _label('Frekuensi minum obat'),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          for (final f in ['1x sehari', '2x sehari', '3x sehari', 'Fleksibel'])
-            _choice(f, _frequency == f, () {
-              setState(() => _frequency = f);
-              if (f != 'Fleksibel') _setCount(int.parse(f.substring(0, 1)));
+        const SizedBox(height: 24),
+        _heading('Bagaimana rutinitas minum\nobat pasien?'),
+        const SizedBox(height: 24),
+        for (var n = 1; n <= 3; n++)
+          _frequencyRow(
+              '${n}x sehari',
+              _mode == _Routine.daily && _dailyCount == n,
+              () => _select(_Routine.daily, n)),
+        _frequencyRow('Fleksibel', _mode == _Routine.flexible,
+            () => _select(_Routine.flexible)),
+        const Padding(
+            padding: EdgeInsets.only(top: 18, bottom: 26),
+            child: Row(children: [
+              Expanded(child: Divider(color: _line)),
+              Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('POLA KHUSUS',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xff93a3b8),
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1))),
+              Expanded(child: Divider(color: _line))
+            ])),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _pattern(_Routine.periodic, 'Pola Berkala', 'Tiap X jam/hari',
+              CupertinoIcons.hourglass),
+          const SizedBox(width: 12),
+          _pattern(_Routine.precision, 'Jam Presisi', 'Jam spesifik',
+              CupertinoIcons.clock),
+          const SizedBox(width: 12),
+          _pattern(_Routine.weekdays, 'Pilih Hari', 'Hari tertentu',
+              CupertinoIcons.calendar),
+        ]),
+        if (_mode == _Routine.periodic)
+          _optionPanel(Column(children: [
+            SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: [
+                  for (final unit in ['jam', 'hari', 'bulan']) ...[
+                    SizedBox(
+                        width: unit == 'jam'
+                            ? 136
+                            : unit == 'hari'
+                                ? 118
+                                : 148,
+                        child: OutlinedButton(
+                            onPressed: () => setState(() {
+                                  _intervalUnit = unit;
+                                  _interval = unit == 'jam'
+                                      ? 8
+                                      : unit == 'hari'
+                                          ? 2
+                                          : 1;
+                                }),
+                            style: OutlinedButton.styleFrom(
+                                backgroundColor: _intervalUnit == unit
+                                    ? const Color(0xffe2f4f1)
+                                    : Colors.white,
+                                foregroundColor: _intervalUnit == unit
+                                    ? const Color(0xff3b9c90)
+                                    : _muted,
+                                side: BorderSide(
+                                    color: _intervalUnit == unit
+                                        ? const Color(0xffb8dfda)
+                                        : _line),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12, horizontal: 4),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(13))),
+                            child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (_intervalUnit == unit) ...[
+                                    const Icon(Icons.check_rounded, size: 16),
+                                    const SizedBox(width: 4)
+                                  ],
+                                  Flexible(
+                                      child: Text('Tiap X $unit',
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600)))
+                                ]))),
+                    if (unit != 'bulan') const SizedBox(width: 8)
+                  ]
+                ])),
+            const SizedBox(height: 14),
+            _settingsCard([
+              _setting('Ingatkan setiap', '$_interval $_intervalUnit',
+                  () async {
+                final n = await _pickNumber(
+                    'Ingatkan setiap ($_intervalUnit)', _interval,
+                    max: _intervalUnit == 'jam'
+                        ? 168
+                        : _intervalUnit == 'bulan'
+                            ? 12
+                            : 365);
+                if (n != null && mounted) setState(() => _interval = n);
+              })
+            ])
+          ])),
+        if (_mode == _Routine.precision)
+          _optionPanel(_settingsCard([
+            _setting('Jumlah konsumsi', '$_precisionCount kali sehari',
+                () async {
+              final n = await _pickNumber(
+                  'Jumlah konsumsi per hari', _precisionCount,
+                  max: 10);
+              if (n != null && mounted)
+                setState(() {
+                  _precisionCount = n;
+                  _setCount(n);
+                });
             })
-        ]),
-        SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            activeTrackColor: _purple,
-            title: const Text('Jadwal berkala khusus',
-                style: TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: const Text('Setiap beberapa jam atau hari'),
-            value: _periodic,
-            onChanged: (v) => setState(() => _periodic = v)),
-        if (_periodic) ...[
-          Row(children: [
-            Expanded(child: _number(_interval, 'Setiap')),
-            const SizedBox(width: 12),
-            Expanded(
-                child: DropdownButtonFormField<String>(
-                    initialValue: _intervalUnit,
-                    decoration: _decoration('Interval'),
-                    items: [
-                      for (final u in ['jam', 'hari'])
-                        DropdownMenuItem(value: u, child: Text(u))
-                    ],
-                    onChanged: (v) => setState(() => _intervalUnit = v!)))
+          ])),
+        if (_mode == _Routine.weekdays)
+          _optionPanel(Row(children: [
+            for (var day = 1; day <= 7; day++) ...[
+              Expanded(
+                  child: Semantics(
+                      selected: _weekdays.contains(day),
+                      button: true,
+                      child: Material(
+                          color: _weekdays.contains(day) ? _teal : Colors.white,
+                          borderRadius: BorderRadius.circular(11),
+                          child: InkWell(
+                              onTap: () => setState(() {
+                                    if (!_weekdays.add(day))
+                                      _weekdays.remove(day);
+                                  }),
+                              borderRadius: BorderRadius.circular(11),
+                              child: Container(
+                                  constraints:
+                                      const BoxConstraints(minHeight: 50),
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                      border: Border.all(
+                                          color: _weekdays.contains(day)
+                                              ? _teal
+                                              : _line),
+                                      borderRadius: BorderRadius.circular(11)),
+                                  child: Text(
+                                      const [
+                                        'Sen',
+                                        'Sel',
+                                        'Rab',
+                                        'Kam',
+                                        'Jum',
+                                        'Sab',
+                                        'Min'
+                                      ][day - 1],
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: _weekdays.contains(day)
+                                              ? Colors.white
+                                              : _muted,
+                                          fontWeight: FontWeight.w600))))))),
+              if (day < 7) const SizedBox(width: 7)
+            ]
+          ])),
+      ];
+
+  Widget _optionPanel(Widget child) => Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+          color: _pale,
+          border: Border.all(color: _line),
+          borderRadius: BorderRadius.circular(24)),
+      child: child);
+  Widget _settingsCard(List<Widget> children) => Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(17),
+          border: Border.all(color: _line),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x04000000), blurRadius: 2, offset: Offset(0, 1))
           ]),
-          const SizedBox(height: 12),
-          const Text(
-              'Interval dihitung dari tanggal dan jam mulai. Hari yang tidak dipilih dilewati.')
-        ],
-        if (_frequency == 'Fleksibel' &&
-            !(_periodic && _intervalUnit == 'jam')) ...[
-          _label('Jumlah waktu minum per hari'),
-          DropdownButtonFormField<int>(
-              initialValue: _times.length,
-              decoration: _decoration('Jumlah waktu'),
-              items: [
-                for (var i = 1; i <= 10; i++)
-                  DropdownMenuItem(value: i, child: Text('$i kali'))
-              ],
-              onChanged: (v) => _setCount(v!))
-        ],
-        _label(_periodic && _intervalUnit == 'jam'
-            ? 'Jam pertama diatur pada langkah berikutnya'
-            : 'Jam minum obat (WIB)'),
-        if (!(_periodic && _intervalUnit == 'jam'))
-          for (var i = 0; i < _times.length; i++)
-            Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: OutlinedButton.icon(
-                    icon: const Icon(Icons.access_time),
-                    label:
-                        Text('Minum ${i + 1} • ${_timeLabel(_times[i])} WIB'),
-                    onPressed: () async {
-                      final t = await showTimePicker(
-                          context: context,
-                          initialTime: _times[i],
-                          builder: (context, child) => MediaQuery(
-                              data: MediaQuery.of(context)
-                                  .copyWith(alwaysUse24HourFormat: true),
-                              child: child!));
-                      if (t != null && mounted) setState(() => _times[i] = t);
-                    })),
-        _label('Hari minum obat'),
-        Wrap(spacing: 6, runSpacing: 6, children: [
-          for (var d = 1; d <= 7; d++)
-            FilterChip(
-                label: Text(const [
-                  'Sen',
-                  'Sel',
-                  'Rab',
-                  'Kam',
-                  'Jum',
-                  'Sab',
-                  'Min'
-                ][d - 1]),
-                selected: _weekdays.contains(d),
-                selectedColor: _purple.withValues(alpha: .15),
-                onSelected: (v) => setState(() {
-                      if (v) {
-                        _weekdays.add(d);
-                      } else {
-                        _weekdays.remove(d);
-                      }
-                    }))
+      child: Column(children: [
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0)
+            const Divider(height: 1, thickness: 1, color: Color(0xfff1f3f6)),
+          children[i]
+        ]
+      ]));
+  Widget _value(String text) => Row(mainAxisSize: MainAxisSize.min, children: [
+        Flexible(
+            child: Text(text,
+                style:
+                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                textAlign: TextAlign.end)),
+        const SizedBox(width: 4),
+        const Icon(Icons.keyboard_arrow_down_rounded,
+            size: 17, color: Color(0xffacb9c8))
+      ]);
+  Widget _setting(String label, String value, VoidCallback tap,
+          {Key? key, bool enabled = true}) =>
+      InkWell(
+          key: key,
+          onTap: enabled ? tap : null,
+          child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: Row(children: [
+                Expanded(
+                    child: Text(label,
+                        style: TextStyle(
+                            fontSize: 14,
+                            color:
+                                enabled ? const Color(0xff526173) : _muted))),
+                const SizedBox(width: 12),
+                ConstrainedBox(
+                    constraints: BoxConstraints(
+                        maxWidth: MediaQuery.sizeOf(context).width * .45),
+                    child: _value(value))
+              ])));
+  List<Widget> _reminderHeading(String title) => [
+        Text('${_name.text} $_form',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                fontSize: 13, color: _muted, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 4),
+        Text(title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                fontSize: 22,
+                height: 1.2,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -.25)),
+      ];
+  Future<void> _pickDate() async {
+    final now = wibNow();
+    final date = await showDatePicker(
+        context: context,
+        initialDate: _start,
+        firstDate: wibFromParts(now.year, now.month, now.day),
+        lastDate: wibFromParts(now.year + 5, 12, 31));
+    if (date != null && mounted)
+      setState(() => _start = wibFromParts(date.year, date.month, date.day));
+  }
+
+  Future<void> _pickTime(int index) async {
+    final time = await showTimePicker(
+        context: context,
+        initialTime: _times[index],
+        builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+            child: child!));
+    if (time != null && mounted) setState(() => _times[index] = time);
+  }
+
+  Future<void> _pickDose() async {
+    final n = await _pickNumber('Dosis per konsumsi ($_stockUnit)', _units,
+        max: 1000, help: 'Berlaku untuk setiap waktu minum obat ini.');
+    if (n != null && mounted) setState(() => _units = n);
+  }
+
+  List<Widget> _timing() => [
+        ..._reminderHeading('Kapan pasien perlu diingatkan?'),
+        const SizedBox(height: 12),
+        Center(
+            child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                    color: const Color(0xffe5f4f3),
+                    border: Border.all(color: const Color(0xffc6e7e3)),
+                    borderRadius: BorderRadius.circular(8)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(CupertinoIcons.clock,
+                      size: 15, color: Color(0xff45a698)),
+                  const SizedBox(width: 6),
+                  Flexible(
+                      child: Text(_badge,
+                          style: const TextStyle(
+                              color: Color(0xff45a698),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13)))
+                ]))),
+        const SizedBox(height: 24),
+        _settingsCard([
+          _setting(
+              'Mulai tanggal',
+              formatWibDate(_start) == formatWibDate(wibNow())
+                  ? 'Hari ini'
+                  : formatWibDate(_start),
+              _pickDate),
+          if (_times.length == 1 && _mode != _Routine.weekdays) ...[
+            _setting(
+                'Dimulai pada', _timeLabel(_times.first), () => _pickTime(0),
+                key: const Key('rx-time-0')),
+            _setting('Dosis', '$_units $_stockUnit', _pickDose)
+          ] else
+            for (var i = 0; i < _times.length; i++)
+              Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Row(children: [
+                    Expanded(
+                        child: InkWell(
+                            key: Key('rx-time-$i'),
+                            onTap: () => _pickTime(i),
+                            child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 14),
+                                child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: _value(_timeLabel(_times[i])))))),
+                    Expanded(
+                        child: InkWell(
+                            onTap: _pickDose,
+                            child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 14),
+                                child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: _value('$_units $_stockUnit'))))),
+                    if (_mode == _Routine.weekdays && _times.length > 1)
+                      IconButton(
+                          tooltip: 'Hapus waktu ${i + 1}',
+                          onPressed: () => setState(() => _times.removeAt(i)),
+                          icon:
+                              const Icon(Icons.close, size: 17, color: _muted))
+                  ])),
+          if (_mode == _Routine.weekdays && _times.length < 10)
+            Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                    onPressed: () => setState(() {
+                          var hour = _times.length == 1 ? 20 : 8;
+                          while (_times
+                              .any((t) => t.hour == hour && t.minute == 0)) {
+                            hour = (hour + 1) % 24;
+                          }
+                          _times.add(TimeOfDay(hour: hour, minute: 0));
+                        }),
+                    style: TextButton.styleFrom(
+                        foregroundColor: _purple,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14)),
+                    child: const Text('+ Tambah waktu pengingat',
+                        style: TextStyle(fontSize: 14))))
         ]),
       ];
-  List<Widget> _reminders() => [
-        const SizedBox(height: 22),
-        _summary(),
-        _label('Status Penerbitan'),
-        DropdownButtonFormField<String>(
-            initialValue: _status,
-            decoration: _decoration('Status'),
-            items: const [
-              DropdownMenuItem(
-                  value: 'issued', child: Text('Issued • kirim ke pasien')),
-              DropdownMenuItem(
-                  value: 'draft', child: Text('Draft • simpan dahulu'))
-            ],
-            onChanged: (v) => setState(() => _status = v!)),
-        _label('Mulai pengingat'),
-        OutlinedButton.icon(
-            icon: const Icon(Icons.calendar_today_outlined),
-            label: Text(formatWibDate(_start)),
-            onPressed: () async {
-              final now = wibNow();
-              final date = await showDatePicker(
-                  context: context,
-                  initialDate: _start,
-                  firstDate: wibFromParts(now.year, now.month, now.day),
-                  lastDate: wibFromParts(now.year + 5, 12, 31));
-              if (date != null && mounted)
-                setState(() =>
-                    _start = wibFromParts(date.year, date.month, date.day));
-            }),
-        OutlinedButton.icon(
-            icon: const Icon(Icons.access_time),
-            label: Text('${_timeLabel(_startTime)} WIB'),
-            onPressed: () async {
-              final time = await showTimePicker(
-                  context: context,
-                  initialTime: _startTime,
-                  builder: (context, child) => MediaQuery(
-                      data: MediaQuery.of(context)
-                          .copyWith(alwaysUse24HourFormat: true),
-                      child: child!));
-              if (time != null && mounted) setState(() => _startTime = time);
-            }),
-        _label('Jumlah yang diminum setiap dosis'),
-        _number(_units, 'Unit per dosis'),
-        const SizedBox(height: 6),
-        Text(
-            'Dalam satuan ${_form == 'Sirup' ? 'ml' : _form.toLowerCase()}. Dosis klinis: ${_dose.text} ${_unit.toUpperCase()}.'),
-        SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            activeTrackColor: _purple,
-            title: const Text('Pengingat isi ulang',
-                style: TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: const Text('Notifikasi ketika sisa stok mencapai batas'),
-            value: _refill,
-            onChanged: (v) => setState(() => _refill = v)),
-        if (_refill) ...[
-          _label('Stok dan batas pengingat'),
-          _number(_stock, 'Jumlah stok'),
-          const SizedBox(height: 12),
-          _number(_threshold, 'Ingatkan jika sisa stok ≤'),
-          const SizedBox(height: 8),
-          const Text(
-              'Batas awal: 3 unit. Stok berkurang saat pasien mencatat obat diminum.')
-        ],
-        if (_periodic)
-          const Padding(
-              padding: EdgeInsets.only(top: 16),
-              child: Text(
-                  'Pengingat berkala menyiapkan 60 waktu berikutnya dan diperbarui otomatis ketika Malva dibuka.')),
-        const SizedBox(height: 18),
-        const Text(
-            'Resep dan rutinitas tersimpan pada akun pasien. Pengingat perangkat memerlukan izin notifikasi pasien.'),
+  List<Widget> _refillSettings() => [
+        ..._reminderHeading(
+            'Apakah perlu pengingat isi ulang obat untuk pasien?'),
+        const SizedBox(height: 24),
+        _settingsCard([
+          Padding(
+              padding: const EdgeInsets.fromLTRB(16, 2, 12, 2),
+              child: Row(children: [
+                const Expanded(
+                    child: Text('Ingatkan pasien',
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w700))),
+                Transform.scale(
+                    scale: .85,
+                    child: Switch(
+                        value: _refill,
+                        activeThumbColor: Colors.white,
+                        activeTrackColor: _teal,
+                        inactiveTrackColor: const Color(0xffd8dfe8),
+                        inactiveThumbColor: Colors.white,
+                        trackOutlineColor:
+                            const WidgetStatePropertyAll(Colors.transparent),
+                        onChanged: (v) => setState(() => _refill = v)))
+              ]))
+        ]),
+        const Padding(
+            padding: EdgeInsets.only(top: 18, bottom: 10),
+            child: Text('Stok saat ini',
+                style: TextStyle(fontSize: 13, height: 1.2, color: _muted))),
+        _settingsCard([
+          _setting('Jumlah', '$_stock $_stockUnit', () async {
+            final n = await _pickNumber('Stok saat ini ($_stockUnit)', _stock,
+                min: 0, max: 1000000000);
+            if (n != null && mounted) setState(() => _stock = n);
+          }, key: const Key('rx-stock'))
+        ]),
+        const Padding(
+            padding: EdgeInsets.only(top: 18, bottom: 10),
+            child: Text('Ingatkan ketika:',
+                style: TextStyle(fontSize: 13, height: 1.2, color: _muted))),
+        _settingsCard([
+          _setting('Batas minimum', '$_threshold $_stockUnit', () async {
+            final n = await _pickNumber(
+                'Batas minimum ($_stockUnit)', _threshold,
+                min: 0, max: 1000000000);
+            if (n != null && mounted) setState(() => _threshold = n);
+          }, enabled: _refill)
+        ]),
       ];
+  Future<int?> _pickNumber(String title, int current,
+      {int min = 1, int max = 1000, String? help}) async {
+    final input = TextEditingController(text: '$current');
+    final form = GlobalKey<FormState>();
+    final result = await showDialog<int>(
+        context: context,
+        builder: (context) => AlertDialog(
+                title: Text(title),
+                content: Form(
+                    key: form,
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      if (help != null)
+                        Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Text(help)),
+                      TextFormField(
+                          controller: input,
+                          autofocus: true,
+                          keyboardType: TextInputType.number,
+                          decoration:
+                              const InputDecoration(labelText: 'Jumlah'),
+                          validator: (v) {
+                            final n = int.tryParse(v ?? '');
+                            return n == null || n < min || n > max
+                                ? 'Masukkan angka $min–$max.'
+                                : null;
+                          },
+                          onFieldSubmitted: (_) {
+                            if (form.currentState!.validate())
+                              Navigator.pop(context, int.parse(input.text));
+                          })
+                    ])),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Batal')),
+                  FilledButton(
+                      onPressed: () {
+                        if (form.currentState!.validate())
+                          Navigator.pop(context, int.parse(input.text));
+                      },
+                      child: const Text('Simpan'))
+                ]));
+    // The closing route animates with its text field after the result completes.
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    input.dispose();
+    return result;
+  }
+
   void _next() {
     if (_step == 0) {
       final dose = double.tryParse(_dose.text.replaceAll(',', '.'));
-      String? error;
-      if (_patientId == null || _patientId!.isEmpty) {
-        error = 'Pilih pasien terlebih dahulu.';
-      } else if (_name.text.trim().isEmpty) {
-        error = 'Nama obat tidak boleh kosong.';
-      } else if (dose == null || !dose.isFinite || dose <= 0) {
-        error = 'Dosis harus lebih dari 0.';
-      } else if ((int.tryParse(_stock.text) ?? -1) <= 0) {
-        error = 'Stok yang diberikan harus lebih dari 0.';
-      }
+      final error = _patientId == null || _patientId!.isEmpty
+          ? 'Pilih pasien terlebih dahulu.'
+          : _name.text.trim().isEmpty
+              ? 'Nama obat tidak boleh kosong.'
+              : dose == null || !dose.isFinite || dose <= 0
+                  ? 'Dosis harus lebih dari 0.'
+                  : null;
       if (error != null) {
         setState(() => _error = error);
         return;
@@ -560,36 +1110,27 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
       return;
     }
     if (_step == 1) {
-      if (_weekdays.isEmpty) {
+      if (_mode == _Routine.weekdays && _weekdays.isEmpty) {
         setState(() => _error = 'Pilih minimal satu hari.');
         return;
       }
-      if (_periodic) {
-        final n = int.tryParse(_interval.text) ?? 0;
-        if (n < 1 || n > (_intervalUnit == 'jam' ? 168 : 365)) {
-          setState(() => _error =
-              'Interval harus 1–${_intervalUnit == 'jam' ? 168 : 365} $_intervalUnit.');
-          return;
-        }
-      }
+      _go(_mode == _Routine.flexible ? 3 : 2);
+      return;
+    }
+    if (_step == 2) {
       if (_times.map(_timeLabel).toSet().length != _times.length) {
         setState(() => _error = 'Jam minum obat tidak boleh sama.');
         return;
       }
-      _startTime = _times.first;
-      _go(2);
+      _go(3);
       return;
     }
     _submit();
   }
 
   Future<void> _submit() async {
-    final units = int.tryParse(_units.text) ?? 0;
-    final stock = int.tryParse(_stock.text) ?? -1;
-    final threshold = int.tryParse(_threshold.text) ?? -1;
-    if (units < 1 || units > 1000 || stock <= 0 || threshold < 0) {
-      setState(() =>
-          _error = 'Jumlah per dosis, stok, dan batas pengingat harus valid.');
+    if (_stock < 1) {
+      setState(() => _error = 'Stok yang diberikan harus lebih dari 0.');
       return;
     }
     final api = widget.apiClient;
@@ -598,23 +1139,30 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
       setState(() => _error = 'Hubungkan ke server untuk menerbitkan resep.');
       return;
     }
-    final times = (_periodic && _intervalUnit == 'jam'
-        ? [_timeLabel(_startTime)]
-        : _times.map(_timeLabel).toList())
-      ..sort();
+    final times = _mode == _Routine.flexible
+        ? <String>[]
+        : (_times.map(_timeLabel).toList()..sort());
+    final first = times.isEmpty ? null : times.first.split(':');
     final schedule = MedicationSchedule(
-        times: times,
-        weekdays: _weekdays.toList()..sort(),
-        startAt: wibFromParts(_start.year, _start.month, _start.day,
-            _startTime.hour, _startTime.minute),
-        intervalHours:
-            _periodic && _intervalUnit == 'jam' ? int.parse(_interval.text) : 0,
-        intervalDays: _periodic && _intervalUnit == 'hari'
-            ? int.parse(_interval.text)
-            : 0,
-        unitsPerDose: units,
-        refillEnabled: _refill,
-        instructions: _notes.text.trim());
+      times: times,
+      weekdays: _weekdays.toList()..sort(),
+      startAt: wibFromParts(
+          _start.year,
+          _start.month,
+          _start.day,
+          first == null ? 0 : int.parse(first[0]),
+          first == null ? 0 : int.parse(first[1])),
+      intervalHours:
+          _mode == _Routine.periodic && _intervalUnit == 'jam' ? _interval : 0,
+      intervalDays:
+          _mode == _Routine.periodic && _intervalUnit == 'hari' ? _interval : 0,
+      intervalMonths: _mode == _Routine.periodic && _intervalUnit == 'bulan'
+          ? _interval
+          : 0,
+      unitsPerDose: _units,
+      refillEnabled: _refill,
+      instructions: _notes.text.trim(),
+    );
     setState(() {
       _saving = true;
       _error = null;
@@ -623,8 +1171,7 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
       await api.createEPrescription(
           accessToken: token,
           patientId: _patientId!,
-          diagnosis: _diagnosis.text.trim(),
-          status: _status,
+          status: 'issued',
           instructions: _notes.text.trim(),
           notes: _notes.text.trim(),
           items: [
@@ -633,20 +1180,16 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                 dosage: '${_dose.text.trim()} $_unit',
                 form: _form,
                 unit: _unit,
-                frequency: _periodic
-                    ? 'Setiap ${_interval.text} $_intervalUnit'
-                    : _frequency,
-                unitsPerDay: units * times.length,
-                currentStock: stock,
-                alertBelow: threshold,
+                frequency: _frequency,
+                unitsPerDay: _units * (times.isEmpty ? 1 : times.length),
+                currentStock: _stock,
+                alertBelow: _threshold,
                 schedule: schedule)
           ]);
       if (!mounted || _session == null) return;
       widget.onCreated?.call();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(_status == 'draft'
-              ? 'Draft resep disimpan.'
-              : 'Resep dan rutinitas obat dikirim ke pasien.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Resep dan rutinitas obat dikirim ke pasien.')));
       Navigator.pop(context);
     } on Object catch (e) {
       if (mounted && _session != null)

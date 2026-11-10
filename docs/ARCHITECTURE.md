@@ -483,3 +483,9 @@ sebelumnya. Migrasi 039 menambah diagnosis/item active, sedangkan backfill 040
 terpisah hanya memakai bukti pasokan positif yang belum diedit/dikonsumsi.
 Detail, daftar dan verifikasi QR membaca header/item dalam snapshot repeatable
 read, sehingga revisi draft paralel tidak bercampur dengan header issued lama.
+
+### Tambah Resep dan interval bulan kalender
+
+Wizard profesional mengikuti empat tahap referensi; stok hanya pada pengingat isi ulang. Fleksibel melewati pengingat konsumsi, memakai explicit times[] dan interval0; tidak ada fallback jam. Key opsional schedule.interval_months0–12 mendukung injeksi tiapXbulan, eksklusif dengan interval jam/hari. Scheduler menghitung bulan kalender dari tanggal anchor asli, clamp ke hari terakhir bulan pendek lalu kembali ke tanggal anchor pada bulan berikutnya. Pengingat berkala mengantre60kejadian dan diisi ulang saat refresh/resume. Tidak ada migrasi tabel/kolom.
+
+Pada batas respons HTTP, jadwal bulanan mengembalikan times[] dan monthly_times berisi jam aktual; reminder_time obat dikosongkan. Klien lama tidak akan menurunkan jadwal menjadi harian setelah refresh. Klien baru memulihkan monthly_times hanya untuk interval bulan positif dan mengirim request kanonis memakai times. Penyimpanan serta audit tetap kanonis tanpa proyeksi; edit bulanan membutuhkan versi baru. Seluruh delapan respons obat/resep termasuk verifikasi QR memakai proyeksi yang sama.

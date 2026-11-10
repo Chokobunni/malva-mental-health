@@ -412,6 +412,14 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Migrasi 036 (durasi/default), 037 (jadwal/stok resep) dan 038 (relasi pembatalan lama) wajib diterapkan sebelum rilis backend ini; sudah diterapkan dan diverifikasi di produksi pada rilis 0.1.14+15. Memanjangkan sesi legacy tidak menggeser waktu mulainya: jadwal berdekatan perlu diperiksa karena dapat menjadi tumpang tindih.
 - Rujukan: [sesi](skills/care_session_module.md), [obat/check-in](skills/health_checkin_module.md), [skema](../docs/DATABASE_SCHEMA.md).
 
+## Kontrak Tambah Resep sesuai referensi (2026-11-10)
+
+- Empat tahap: Detail Obat → Atur Rutinitas → pengingat konsumsi → pengingat isi ulang. Stok hanya di pengingat isi ulang; toggle isi ulang tidak membuang stok. Frekuensi harian dan pola khusus saling menggantikan.
+- Fleksibel melewati pengingat konsumsi: `times: []`, semua interval0, tanggal mulai tengah malam WIB. Editor, obat pasien dan scheduler mempertahankan tanpa jam; pengingat stok tetap terpisah.
+- Pola berkala mendukung jam/hari/bulan. `schedule.interval_months` opsional integer0–12, default0 untuk data lama, eksklusif dengan interval jam/hari. User menegaskan bulan untuk injeksi, bukan minggu atau30hari. Scheduler memakai tanggal anchor asli, clamp ke akhir bulan pendek lalu kembali ke tanggal asli pada bulan berikutnya. Tidak ada perubahan tabel/kolom atau migrasi.
+- Respons bulanan memproyeksikan `times: []`, `monthly_times` berisi jam aktual dan `reminder_time` obat kosong agar klien lama tidak membuat alarm harian. Klien baru memulihkan jam bulanan; request, DB dan audit tetap memakai `times` kanonis tanpa `monthly_times`. Klien lama perlu refresh untuk membatalkan alarm lokal; edit bulanan memerlukan aplikasi baru.
+- Rujukan: [obat/check-in](skills/health_checkin_module.md), [rencana](../docs/superpowers/plans/2026-11-10-prescription-reference-wizard.md).
+
 ## Kontrak detail screening (2026-11-10)
 
 - Hasil PHQ/GAD langsung, riwayat pasien/profesional, detail klinis dan chat memakai tampilan detail record yang sama; dua kartu CF instrumen tetap terpisah saat nilainya sama. CF hilang/invalid bukan nol; CF gabungan historis tidak disalin ke kedua instrumen.

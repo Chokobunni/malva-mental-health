@@ -303,7 +303,9 @@ class MedicationReminderService {
 
   Future<void> _scheduleRoutine(Medication med) async {
     final routine = med.schedule!;
-    final periodic = routine.intervalHours > 0 || routine.intervalDays > 1;
+    final periodic = routine.intervalHours > 0 ||
+        routine.intervalDays > 1 ||
+        routine.intervalMonths > 0;
     final occurrences = routineOccurrences(routine, limit: periodic ? 60 : 70);
     final seen = <String>{};
     var index = 0;
@@ -347,6 +349,31 @@ class MedicationReminderService {
     final base = toWib(now ?? wibNow());
     final start = toWib(routine.startAt);
     final result = <tz.TZDateTime>[];
+    if (routine.intervalMonths > 0) {
+      final elapsed = (base.year - start.year) * 12 + base.month - start.month;
+      var cycle = elapsed < 0 ? 0 : elapsed ~/ routine.intervalMonths;
+      final times = [...routine.times]..sort();
+      for (var i = 0;
+          i < limit * 7 + 7 && result.length < limit;
+          i++, cycle++) {
+        final month = wibFromParts(
+            start.year, start.month + cycle * routine.intervalMonths, 1);
+        final lastDay = wibFromParts(month.year, month.month + 1, 0).day;
+        // Clamp each month from the original day, so Jan31→Feb28→Mar31.
+        final day = start.day > lastDay ? lastDay : start.day;
+        for (final time in times) {
+          final parts = time.split(':');
+          final candidate = wibFromParts(month.year, month.month, day,
+              int.parse(parts[0]), int.parse(parts[1]));
+          if (!candidate.isBefore(start) &&
+              candidate.isAfter(base) &&
+              routine.weekdays.contains(candidate.weekday))
+            result.add(candidate);
+          if (result.length == limit) break;
+        }
+      }
+      return result;
+    }
     if (routine.intervalHours > 0) {
       final interval = Duration(hours: routine.intervalHours);
       var candidate = tz.TZDateTime.from(start, wibLocation);

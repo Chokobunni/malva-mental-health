@@ -3719,7 +3719,8 @@ class BackendMedication {
       source: source,
       schedule: schedule);
 
-  bool get needsRefill => currentStock <= alertBelow;
+  bool get needsRefill =>
+      (schedule?.refillEnabled ?? true) && currentStock <= alertBelow;
 }
 
 /// Health record pasien (diagnosis summary yang diisi profesional).

@@ -171,7 +171,7 @@ void main() {
     expect(find.text('Detail Obat'), findsWidgets);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('Pasien'), findsWidgets);
-    expect(find.text('Atur Jadwal Minum Obat Pasien'), findsOneWidget);
+    expect(find.text('Lanjut Atur Jadwal Resep'), findsOneWidget);
   });
   testWidgets(
       'package sessions remain grouped with real progress and no-show date',

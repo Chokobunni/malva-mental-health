@@ -59,6 +59,107 @@ Map<String, dynamic> rx(String id, String status) => {
       'items': [item()]
     };
 void main() {
+  testWidgets('editor shows and preserves calendar monthly injection interval',
+      (tester) async {
+    tester.view.physicalSize = const Size(430, 2600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final record = rx('monthly', 'issued');
+    final drug = (record['items'] as List).single as Map;
+    drug['form'] = 'Injeksi';
+    (drug['schedule'] as Map)['interval_months'] = 1;
+    Map<String, dynamic>? saved;
+    final api = MalvaApiClient(
+        baseUrl: 'https://test.invalid',
+        httpClient: MockClient((r) async {
+          if (r.method == 'PUT')
+            saved = jsonDecode(r.body) as Map<String, dynamic>;
+          return http.Response(jsonEncode({'prescription': record}), 200);
+        }));
+    await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
+            theme: buildMalvaTheme(),
+            home: EPrescriptionEditorScreen(
+                session: pro,
+                apiClient: api,
+                prescription: BackendEPrescription.fromJson(record)))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rutinitas & Pengingat Pasien'));
+    await tester.pumpAndSettle();
+    expect(find.text('Setiap beberapa bulan'), findsOneWidget);
+    expect(find.text('Interval bulan'), findsOneWidget);
+    await tester.tap(find.text('Simpan Perubahan'));
+    await tester.pumpAndSettle();
+    final schedule =
+        ((saved!['items'] as List).single as Map)['schedule'] as Map;
+    expect(schedule['interval_months'], 1);
+    expect(schedule['interval_days'], 0);
+  });
+  for (final initiallyFlexible in [true, false]) {
+    testWidgets(
+        'editing a flexible prescription keeps empty times and refill stock, initiallyFlexible=$initiallyFlexible',
+        (tester) async {
+      tester.view.physicalSize = const Size(430, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final record = rx('flex', 'issued');
+      final drug = (record['items'] as List).single as Map<String, dynamic>;
+      if (initiallyFlexible) {
+        drug['frequency'] = 'Fleksibel';
+        (drug['schedule'] as Map)['times'] = <String>[];
+      }
+      Map<String, dynamic>? saved;
+      final api = MalvaApiClient(
+          baseUrl: 'https://test.invalid',
+          httpClient: MockClient((r) async {
+            if (r.method == 'PUT')
+              saved = jsonDecode(r.body) as Map<String, dynamic>;
+            return http.Response(jsonEncode({'prescription': record}), 200);
+          }));
+      await tester.pumpWidget(ProviderScope(
+          child: MaterialApp(
+              theme: buildMalvaTheme(),
+              home: EPrescriptionEditorScreen(
+                  session: pro,
+                  apiClient: api,
+                  prescription: BackendEPrescription.fromJson(record)))));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final routine = find.text('Rutinitas & Pengingat Pasien');
+      await tester.ensureVisible(routine);
+      await tester.pumpAndSettle();
+      await tester.tap(routine);
+      await tester.pumpAndSettle();
+      if (!initiallyFlexible) {
+        for (final day in ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']) {
+          await tester.ensureVisible(find.text(day));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(day));
+          await tester.pumpAndSettle();
+        }
+        final count = find.byWidgetPredicate((w) =>
+            w is DropdownButtonFormField<int> &&
+            w.decoration.labelText == 'Jumlah waktu minum');
+        await tester.ensureVisible(count);
+        await tester.pumpAndSettle();
+        await tester.tap(count);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Fleksibel (tanpa jam)').last);
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('Fleksibel • tanpa jam minum'), findsOneWidget);
+      expect(find.text('Pola pengulangan'), findsNothing);
+      final save = find.text('Simpan Perubahan');
+      await tester.ensureVisible(save);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      final item = (saved!['items'] as List).single as Map;
+      expect((item['schedule'] as Map)['times'], isEmpty);
+      expect((item['schedule'] as Map)['weekdays'], [1, 2, 3, 4, 5, 6, 7]);
+      expect(item['current_stock'], 30);
+      expect(tester.takeException(), isNull);
+    });
+  }
   test('provider-only account is valid, logout and another account are denied',
       () {
     final guard = PrescriptionAccountGuard(null, pro);

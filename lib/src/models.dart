@@ -202,6 +202,7 @@ class MedicationSchedule {
       required this.startAt,
       this.intervalHours = 0,
       this.intervalDays = 0,
+      this.intervalMonths = 0,
       this.unitsPerDose = 1,
       this.refillEnabled = true,
       this.relationToMeal = '',
@@ -209,8 +210,13 @@ class MedicationSchedule {
       this.additional = const {}});
   factory MedicationSchedule.fromJson(Map<String, dynamic> json) =>
       MedicationSchedule(
-        times:
-            (json['times'] as List? ?? const []).whereType<String>().toList(),
+        // Old clients receive no times for monthly routines to avoid daily alarms.
+        times: ((((json['interval_months'] as num?)?.toInt() ?? 0) > 0
+                    ? json['monthly_times'] ?? json['times']
+                    : json['times']) as List? ??
+                const [])
+            .whereType<String>()
+            .toList(),
         weekdays: (json['weekdays'] as List? ?? const [1, 2, 3, 4, 5, 6, 7])
             .whereType<num>()
             .map((v) => v.toInt())
@@ -218,18 +224,20 @@ class MedicationSchedule {
         startAt: parseWibStored(json['start_at']?.toString()) ?? wibNow(),
         intervalHours: (json['interval_hours'] as num?)?.toInt() ?? 0,
         intervalDays: (json['interval_days'] as num?)?.toInt() ?? 0,
+        intervalMonths: (json['interval_months'] as num?)?.toInt() ?? 0,
         unitsPerDose:
             ((json['units_per_dose'] as num?)?.toInt() ?? 1).clamp(1, 1000),
         refillEnabled: json['refill_enabled'] != false,
         relationToMeal: json['relation_to_meal']?.toString() ?? '',
         instructions: json['instructions']?.toString() ?? '',
-        additional: Map<String, dynamic>.from(json),
+        additional: Map<String, dynamic>.from(json)..remove('monthly_times'),
       );
   final List<String> times;
   final List<int> weekdays;
   final DateTime startAt;
   final int intervalHours;
   final int intervalDays;
+  final int intervalMonths;
   final int unitsPerDose;
   final bool refillEnabled;
   final String relationToMeal;
@@ -244,6 +252,7 @@ class MedicationSchedule {
         'start_at': wibIso(startAt),
         'interval_hours': intervalHours,
         'interval_days': intervalDays,
+        'interval_months': intervalMonths,
         'units_per_dose': unitsPerDose,
         'refill_enabled': refillEnabled
       };
@@ -257,6 +266,8 @@ class MedicationSchedule {
                 relationToMeal: instructions)
       ];
   String get label {
+    if (times.isEmpty) return 'Fleksibel • tanpa jam minum';
+    if (intervalMonths > 0) return 'Setiap $intervalMonths bulan';
     if (intervalHours > 0) return 'Setiap $intervalHours jam';
     final days = weekdays.length == 7
         ? 'Setiap hari'

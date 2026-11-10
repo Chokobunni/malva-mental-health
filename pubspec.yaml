@@ -1,7 +1,7 @@
 name: malva_mental_health
 description: Flutter MVP for a mental health patient and professional app.
 publish_to: "none"
-version: 0.1.14+15
+version: 0.1.15+16
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -47,3 +47,4 @@ flutter:
   assets:
     - assets/fonts/
     - assets/mood_emojis/
+    - assets/prescription/

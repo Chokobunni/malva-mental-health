@@ -86,7 +86,9 @@ class _DrugDraft {
       form: form,
       days: original?.days ?? 30,
       unitsPerDay: routineEnabled
-          ? (routine['times'] as List).length *
+          ? ((routine['times'] as List).isEmpty
+                  ? 1
+                  : (routine['times'] as List).length) *
               (routine['units_per_dose'] as num).toInt()
           : original?.unitsPerDay ?? 1,
       schedule: !routineEnabled
@@ -439,6 +441,16 @@ class _DrugEditorState extends State<_DrugEditor> {
   @override
   Widget build(BuildContext context) {
     final start = parseWibStored(d.routine['start_at']?.toString()) ?? wibNow();
+    final intervalKey = (d.routine['interval_hours'] as num? ?? 0) > 0
+        ? 'interval_hours'
+        : (d.routine['interval_months'] as num? ?? 0) > 0
+            ? 'interval_months'
+            : 'interval_days';
+    final intervalMax = intervalKey == 'interval_hours'
+        ? 168
+        : intervalKey == 'interval_months'
+            ? 12
+            : 365;
     return PrescriptionPanel(
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -586,6 +598,8 @@ class _DrugEditorState extends State<_DrugEditor> {
                   isExpanded: true,
                   decoration: _dec('Jumlah waktu minum'),
                   items: [
+                    const DropdownMenuItem(
+                        value: 0, child: Text('Fleksibel (tanpa jam)')),
                     for (var c = 1; c <= 10; c++)
                       DropdownMenuItem(value: c, child: Text('$c kali'))
                   ],
@@ -603,6 +617,15 @@ class _DrugEditorState extends State<_DrugEditor> {
                           times.add('${hour.toString().padLeft(2, '0')}:00');
                         }
                         d.routine['times'] = times;
+                        if (n == 0) {
+                          d.routine['interval_hours'] = 0;
+                          d.routine['interval_days'] = 0;
+                          d.routine['interval_months'] = 0;
+                          d.routine['weekdays'] = [1, 2, 3, 4, 5, 6, 7];
+                          d.frequency.text = 'Fleksibel';
+                        } else {
+                          d.frequency.text = '${n}x sehari';
+                        }
                       })),
               const SizedBox(height: 12),
               for (var i = 0; i < _times.length; i++)
@@ -612,107 +635,104 @@ class _DrugEditorState extends State<_DrugEditor> {
                         onPressed: () => _pickTime(i),
                         icon: const Icon(Icons.schedule),
                         label: Text('${_times[i]} WIB'))),
-              Wrap(spacing: 5, children: [
-                for (var day = 1; day <= 7; day++)
-                  FilterChip(
-                      label: Text(const [
-                        'Sen',
-                        'Sel',
-                        'Rab',
-                        'Kam',
-                        'Jum',
-                        'Sab',
-                        'Min'
-                      ][day - 1]),
-                      selected: _days.contains(day),
-                      onSelected: (v) => setState(() {
-                            final days = [..._days];
-                            if (v) {
-                              days.add(day);
-                            } else {
-                              days.remove(day);
-                            }
-                            d.routine['weekdays'] = days..sort();
-                          }))
-              ]),
-              const SizedBox(height: 14),
-              DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: (d.routine['interval_hours'] as num? ?? 0) > 0
-                      ? 'hours'
-                      : (d.routine['interval_days'] as num? ?? 0) > 1
-                          ? 'days'
-                          : 'daily',
-                  decoration: _dec('Pola pengulangan'),
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'daily', child: Text('Hari terpilih')),
-                    DropdownMenuItem(
-                        value: 'hours', child: Text('Setiap beberapa jam')),
-                    DropdownMenuItem(
-                        value: 'days', child: Text('Setiap beberapa hari'))
-                  ],
-                  onChanged: (v) => setState(() {
-                        d.routine['interval_hours'] = v == 'hours' ? 8 : 0;
-                        d.routine['interval_days'] = v == 'days' ? 2 : 0;
-                      })),
-              if ((d.routine['interval_hours'] as num? ?? 0) > 0 ||
-                  (d.routine['interval_days'] as num? ?? 0) > 1)
-                Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: TextFormField(
-                        key: ValueKey(
-                            'interval-${d.routine['interval_hours']}-${d.routine['interval_days']}'),
-                        initialValue:
-                            ((d.routine['interval_hours'] as num? ?? 0) > 0
-                                    ? d.routine['interval_hours']
-                                    : d.routine['interval_days'])
-                                .toString(),
-                        keyboardType: TextInputType.number,
-                        decoration: _dec(
-                            (d.routine['interval_hours'] as num? ?? 0) > 0
-                                ? 'Interval jam'
-                                : 'Interval hari'),
-                        validator: (v) {
-                          final n = int.tryParse(v ?? '') ?? 0;
-                          return n < 1 ||
-                                  n >
-                                      ((d.routine['interval_hours'] as num? ??
-                                                  0) >
-                                              0
-                                          ? 168
-                                          : 365)
-                              ? 'Interval tidak valid'
-                              : null;
-                        },
-                        onChanged: (v) {
-                          d.routine[
-                              (d.routine['interval_hours'] as num? ?? 0) > 0
-                                  ? 'interval_hours'
-                                  : 'interval_days'] = int.tryParse(v) ?? 0;
+              if (_times.isNotEmpty) ...[
+                Wrap(spacing: 5, children: [
+                  for (var day = 1; day <= 7; day++)
+                    FilterChip(
+                        label: Text(const [
+                          'Sen',
+                          'Sel',
+                          'Rab',
+                          'Kam',
+                          'Jum',
+                          'Sab',
+                          'Min'
+                        ][day - 1]),
+                        selected: _days.contains(day),
+                        onSelected: (v) => setState(() {
+                              final days = [..._days];
+                              if (v) {
+                                days.add(day);
+                              } else {
+                                days.remove(day);
+                              }
+                              d.routine['weekdays'] = days..sort();
+                            }))
+                ]),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: (d.routine['interval_hours'] as num? ?? 0) > 0
+                        ? 'hours'
+                        : (d.routine['interval_months'] as num? ?? 0) > 0
+                            ? 'months'
+                            : (d.routine['interval_days'] as num? ?? 0) > 1
+                                ? 'days'
+                                : 'daily',
+                    decoration: _dec('Pola pengulangan'),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'daily', child: Text('Hari terpilih')),
+                      DropdownMenuItem(
+                          value: 'hours', child: Text('Setiap beberapa jam')),
+                      DropdownMenuItem(
+                          value: 'months',
+                          child: Text('Setiap beberapa bulan')),
+                      DropdownMenuItem(
+                          value: 'days', child: Text('Setiap beberapa hari'))
+                    ],
+                    onChanged: (v) => setState(() {
+                          d.routine['interval_hours'] = v == 'hours' ? 8 : 0;
+                          d.routine['interval_days'] = v == 'days' ? 2 : 0;
+                          d.routine['interval_months'] = v == 'months' ? 1 : 0;
                         })),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                  icon: const Icon(Icons.calendar_today_outlined),
-                  label: Text('Mulai ${formatWibDateTime(start)} WIB'),
-                  onPressed: () async {
-                    final now = wibNow();
-                    final date = await showDatePicker(
-                        context: context,
-                        initialDate: start,
-                        firstDate: wibFromParts(2000, 1, 1),
-                        lastDate: wibFromParts(now.year + 5, 12, 31));
-                    if (date == null || !context.mounted) return;
-                    final time = await showTimePicker(
-                        context: context,
-                        initialTime:
-                            TimeOfDay(hour: start.hour, minute: start.minute));
-                    if (time != null && mounted)
-                      setState(() => d.routine['start_at'] = wibIso(
-                          wibFromParts(date.year, date.month, date.day,
-                              time.hour, time.minute)));
-                  }),
-              const SizedBox(height: 12),
+                if ((d.routine['interval_hours'] as num? ?? 0) > 0 ||
+                    (d.routine['interval_days'] as num? ?? 0) > 1 ||
+                    (d.routine['interval_months'] as num? ?? 0) > 0)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: TextFormField(
+                          key: ValueKey(
+                              'interval-$intervalKey-${d.routine[intervalKey]}'),
+                          initialValue: d.routine[intervalKey].toString(),
+                          keyboardType: TextInputType.number,
+                          decoration: _dec(intervalKey == 'interval_hours'
+                              ? 'Interval jam'
+                              : intervalKey == 'interval_months'
+                                  ? 'Interval bulan'
+                                  : 'Interval hari'),
+                          validator: (v) {
+                            final n = int.tryParse(v ?? '') ?? 0;
+                            return n < 1 || n > intervalMax
+                                ? 'Interval tidak valid'
+                                : null;
+                          },
+                          onChanged: (v) {
+                            d.routine[intervalKey] = int.tryParse(v) ?? 0;
+                          })),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                    icon: const Icon(Icons.calendar_today_outlined),
+                    label: Text('Mulai ${formatWibDateTime(start)} WIB'),
+                    onPressed: () async {
+                      final now = wibNow();
+                      final date = await showDatePicker(
+                          context: context,
+                          initialDate: start,
+                          firstDate: wibFromParts(2000, 1, 1),
+                          lastDate: wibFromParts(now.year + 5, 12, 31));
+                      if (date == null || !context.mounted) return;
+                      final time = await showTimePicker(
+                          context: context,
+                          initialTime: TimeOfDay(
+                              hour: start.hour, minute: start.minute));
+                      if (time != null && mounted)
+                        setState(() => d.routine['start_at'] = wibIso(
+                            wibFromParts(date.year, date.month, date.day,
+                                time.hour, time.minute)));
+                    }),
+                const SizedBox(height: 12),
+              ],
               TextFormField(
                   initialValue: (d.routine['units_per_dose'] ?? 1).toString(),
                   keyboardType: TextInputType.number,

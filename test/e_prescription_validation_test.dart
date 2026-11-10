@@ -114,9 +114,8 @@ void main() {
     await tester.enterText(nameField, 'Quetiapine');
     await tester.pump();
 
-    await tester.enterText(
-        find.widgetWithText(TextField, 'Dosis per minum'), '10');
-    final submit = find.text('Atur Jadwal Minum Obat Pasien');
+    await tester.enterText(find.byKey(const Key('rx-dose')), '10');
+    final submit = find.text('Lanjut Atur Jadwal Resep');
     await tester.ensureVisible(submit);
     await tester.tap(submit);
     await tester.pumpAndSettle();
@@ -124,5 +123,6 @@ void main() {
     expect(find.text('Nama obat tidak boleh kosong.'), findsNothing,
         reason: 'nama sudah diisi; validasi tidak boleh gagal karena draft '
             'belum tersinkron dari controller');
+    expect(find.text('Atur Rutinitas'), findsOneWidget);
   });
 }
