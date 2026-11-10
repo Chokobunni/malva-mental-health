@@ -122,7 +122,7 @@ func (s *Server) updateEPrescription(w http.ResponseWriter, r *http.Request, cla
 		return
 	}
 	s.publishClinicalChange(old.PatientID, "medications")
-	writeJSON(w, http.StatusOK, map[string]any{"prescription": full})
+	writeJSON(w, http.StatusOK, map[string]any{"prescription": prescriptionForResponse(full)})
 }
 func (s *Server) deleteEPrescription(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if !s.prescribingAuthor(w, r, claims) {

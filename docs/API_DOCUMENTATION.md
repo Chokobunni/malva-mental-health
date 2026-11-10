@@ -1501,6 +1501,16 @@ tarik izin berbagi bila `professional_id` dikirim kosong.
   intervals; they require at least one dose time. Older schedules omitting the
   field remain valid. The key lives in existing schedule JSON; no migration or
   top-level request field is added.
+- Monthly response compatibility: medication POST/PUT/list and prescription
+  POST/PUT/detail/list/public QR responses expose `schedule.times: []` and
+  `schedule.monthly_times` containing the canonical dose times when
+  `interval_months > 0`. Medication responses also clear `reminder_time`.
+  This prevents older clients from turning monthly injections into daily alarms.
+  Updated clients restore `monthly_times` only for monthly schedules and send
+  canonical nonempty `times` on writes, omitting the response-only key.
+  Storage and audit snapshots keep canonical `times`; daily/flexible responses
+  are unchanged. Previously installed alarms clear when the old client next
+  refreshes medication data; the server cannot cancel offline device alarms.
 
 Example daily routine:
 

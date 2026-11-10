@@ -1404,7 +1404,7 @@ func (s *Server) createEPrescription(w http.ResponseWriter, r *http.Request, cla
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]interface{}{"prescription": full})
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"prescription": prescriptionForResponse(full)})
 }
 
 func rxItemsFromRequest(items []eRxItemRequest) []store.EPrescriptionItem {
@@ -1467,7 +1467,7 @@ func (s *Server) getEPrescription(w http.ResponseWriter, r *http.Request, claims
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"prescription": rx})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"prescription": prescriptionForResponse(rx)})
 }
 
 func (s *Server) listEPrescriptions(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -1476,7 +1476,7 @@ func (s *Server) listEPrescriptions(w http.ResponseWriter, r *http.Request, clai
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"prescriptions": rx})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"prescriptions": prescriptionsForResponse(rx)})
 }
 
 func (s *Server) verifyEPrescriptionQR(w http.ResponseWriter, r *http.Request) {
@@ -1492,7 +1492,7 @@ func (s *Server) verifyEPrescriptionQR(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"valid":        true,
-		"prescription": rx,
+		"prescription": prescriptionForResponse(rx),
 		"verified_by":  "Malva QR Verification",
 	})
 }

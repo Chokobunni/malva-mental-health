@@ -1377,7 +1377,7 @@ func (s *Server) createMedication(w http.ResponseWriter, r *http.Request, claims
 			"Profesional menambahkan obat baru ke rencana pengobatanmu.",
 			map[string]string{"medication_id": item.ID})
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"medication": item})
+	writeJSON(w, http.StatusCreated, map[string]any{"medication": medicationForResponse(item)})
 }
 
 // resolveMedicationPatient menentukan patient_id yang sah untuk operasi
@@ -1469,7 +1469,7 @@ func (s *Server) updateMedication(w http.ResponseWriter, r *http.Request, claims
 		return
 	}
 	s.publishClinicalChange(patientID, "medications")
-	writeJSON(w, http.StatusOK, map[string]any{"medication": item})
+	writeJSON(w, http.StatusOK, map[string]any{"medication": medicationForResponse(item)})
 }
 
 // deleteMedication melakukan soft delete agar riwayat log tetap terkait.
@@ -1513,7 +1513,7 @@ func (s *Server) listMedications(w http.ResponseWriter, r *http.Request, claims 
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"medications": items})
+	writeJSON(w, http.StatusOK, map[string]any{"medications": medicationsForResponse(items)})
 }
 
 func (s *Server) createMedicationLog(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
