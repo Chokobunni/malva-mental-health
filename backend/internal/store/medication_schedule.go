@@ -14,18 +14,31 @@ func ValidateMedicationSchedule(raw json.RawMessage) error {
 		return nil
 	}
 	var v struct {
-		Times         []string `json:"times"`
-		Weekdays      []int    `json:"weekdays"`
-		StartAt       string   `json:"start_at"`
-		IntervalHours int      `json:"interval_hours"`
-		IntervalDays  int      `json:"interval_days"`
-		UnitsPerDose  int      `json:"units_per_dose"`
-		RefillEnabled bool     `json:"refill_enabled"`
+		Times          []string        `json:"times"`
+		Weekdays       []int           `json:"weekdays"`
+		StartAt        string          `json:"start_at"`
+		IntervalHours  int             `json:"interval_hours"`
+		IntervalDays   int             `json:"interval_days"`
+		IntervalMonths json.RawMessage `json:"interval_months"`
+		UnitsPerDose   int             `json:"units_per_dose"`
+		RefillEnabled  bool            `json:"refill_enabled"`
 	}
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return errors.New("jadwal obat tidak valid")
 	}
-	if len(v.Times) < 1 || len(v.Times) > 10 || len(v.Weekdays) < 1 || v.UnitsPerDose < 1 || v.UnitsPerDose > 1000 || v.IntervalHours < 0 || v.IntervalHours > 168 || v.IntervalDays < 0 || v.IntervalDays > 365 || (v.IntervalHours > 0 && v.IntervalDays > 0) {
+	months := 0
+	if len(v.IntervalMonths) > 0 {
+		var parsed *int
+		if err := json.Unmarshal(v.IntervalMonths, &parsed); err != nil || parsed == nil {
+			return errors.New("interval bulan obat wajib bilangan bulat")
+		}
+		months = *parsed
+	}
+	// An explicit empty array is a flexible routine with no dose-time reminder.
+	// Missing/null times remain invalid, and intervals still require dose times.
+	hasInterval := v.IntervalHours != 0 || v.IntervalDays != 0 || months != 0
+	conflictingIntervals := (v.IntervalHours > 0 && (v.IntervalDays > 0 || months > 0)) || (v.IntervalDays > 0 && months > 0)
+	if v.Times == nil || len(v.Times) > 10 || (len(v.Times) == 0 && hasInterval) || len(v.Weekdays) < 1 || v.UnitsPerDose < 1 || v.UnitsPerDose > 1000 || v.IntervalHours < 0 || v.IntervalHours > 168 || v.IntervalDays < 0 || v.IntervalDays > 365 || months < 0 || months > 12 || conflictingIntervals {
 		return errors.New("jadwal, hari, dan jumlah per dosis wajib valid")
 	}
 	seen := map[string]bool{}

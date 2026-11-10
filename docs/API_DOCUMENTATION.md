@@ -1478,14 +1478,29 @@ tarik izin berbagi bila `professional_id` dikirim kosong.
 - `POST /v1/e-prescriptions` item fields add `form`, `unit`, `current_stock`,
   `alert_below` and optional `schedule`; reads return them alongside the
   generated `medication_id`. New routines require positive dosage/stock, valid
-  form/unit, selected days/times and positive `units_per_dose`. The verified
+  form/unit, selected days and positive `units_per_dose`. Scheduled routines
+  require dose times; flexible routines use an explicit empty array. The verified
   psychiatrist and linked-patient authorization remains in force. Prescription,
   items and patient medications persist in one transaction.
 - `schedule` uses `times` (`HH:mm`, WIB), `weekdays` (Monday=1, Sunday=7),
   `start_at` (RFC3339 with `+07:00`), `interval_hours`, `interval_days`,
-  `units_per_dose` and `refill_enabled`. Hour/day intervals are mutually
+  optional `interval_months` (integer, omitted/default 0, positive range 1–12),
+  `units_per_dose` and `refill_enabled`. Hour/day/month intervals are mutually
   exclusive; zero means no interval of that kind. Legacy medication routines
   may be `{}` and keep their existing `reminder_time` behavior.
+- Flexible routines use `times: []`, `interval_hours: 0`, `interval_days: 0`, `interval_months: 0`,
+  valid `weekdays` and positive `units_per_dose`; `start_at` may represent the
+  selected date at WIB midnight. Missing/null `times` and empty times with a
+  nonzero interval are invalid. The patient medication keeps an empty
+  `reminder_time`; no dose time is invented. Stock/refill settings and dose
+  consumption continue to use the existing fields. Flexible mode requires no migration.
+- Monthly routines (including psychiatric injections) retain the selected
+  `start_at` and dose times with `interval_months: 1` through `12`. They represent
+  calendar-month recurrence, not a fixed 30-day interval. Month intervals cannot
+  be negative, null, fractional, strings, above 12 or combined with hour/day
+  intervals; they require at least one dose time. Older schedules omitting the
+  field remain valid. The key lives in existing schedule JSON; no migration or
+  top-level request field is added.
 
 Example daily routine:
 
