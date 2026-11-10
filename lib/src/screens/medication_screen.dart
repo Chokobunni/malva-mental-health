@@ -13,6 +13,7 @@ import '../theme.dart';
 import '../time/wib.dart';
 import '../widgets/home_personalization.dart';
 import '../widgets/malva_components.dart';
+import 'medication_history_screen.dart';
 
 class MedicationScreen extends ConsumerStatefulWidget {
   const MedicationScreen({
@@ -43,6 +44,7 @@ class MedicationScreen extends ConsumerStatefulWidget {
 class _MedicationScreenState extends ConsumerState<MedicationScreen> {
   /// Status izin notifikasi: null = belum selesai diperiksa.
   bool? _notificationsEnabled;
+  bool _historyAccountInvalid = false;
 
   /// Sedang memeriksa/meminta izin (tombol dinonaktifkan sementara).
   bool _isCheckingPermission = false;
@@ -128,6 +130,12 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(authStateProvider, (previous, next) {
+      if (previous?.session != null &&
+          _owner(previous?.session) != _owner(next.session)) {
+        setState(() => _historyAccountInvalid = true);
+      }
+    });
     final storeState = ref.watch(malvaStoreProvider);
     final store = ref.read(malvaStoreProvider.notifier);
     final content = RefreshIndicator(
@@ -287,42 +295,18 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                const SizedBox(height: 70),
                 const SizedBox(height: 22),
-                const SectionLabel('Riwayat Minum Obat'),
-                if (storeState.medicationLogs.isEmpty)
-                  const SoftCard(
-                    child: Text('Belum ada riwayat minum obat.'),
-                  )
-                else
-                  for (final log in storeState.medicationLogs.take(10))
-                    SoftCard(
-                      child: Row(
-                        children: [
-                          Icon(
-                            _logIcon(log.status),
-                            color: _logColor(log.status),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  log.medicationName,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w800),
-                                ),
-                                Text(
-                                  '${log.status.toUpperCase()} — ${MedicationScreen.formatLogTime(log.takenAt)}',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                OutlinedButton.icon(
+                    key: const Key('open-medication-history'),
+                    onPressed: _historyAccountInvalid || _session == null
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => MedicationHistoryScreen(
+                                    session: _session, apiClient: _apiClient))),
+                    icon: const Icon(Icons.history_rounded),
+                    label: const Text('Riwayat minum obat')),
               ],
             ),
           ),
@@ -465,22 +449,6 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
       ),
     );
   }
-
-  /// Ikon status log obat. 'partial' (sebagian diminum) punya ikon sendiri;
-  /// sebelumnya status ini jatuh ke ikon "dibatalkan" seperti missed.
-  static IconData _logIcon(String status) => switch (status) {
-        'taken' => Icons.check_circle_rounded,
-        'partial' => Icons.hourglass_bottom_rounded,
-        'skipped' => Icons.skip_next_rounded,
-        _ => Icons.cancel_rounded,
-      };
-
-  static Color _logColor(String status) => switch (status) {
-        'taken' => MalvaColors.mint,
-        'partial' => MalvaColors.orchid,
-        'skipped' => MalvaColors.amber,
-        _ => MalvaColors.danger,
-      };
 
   void _openMedicationForm(BuildContext context, [Medication? medication]) {
     showModalBottomSheet<void>(

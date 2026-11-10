@@ -1,5 +1,12 @@
 # Check-in, diary, review dan PDF
 
+## Home dan halaman check-in referensi (2026-11-11)
+
+- Home memiliki lima tahap: mood → obat → tidur → energi → kecemasan/iritabilitas. Total selalu5, termasuk obat tahap2; user telah mengonfirmasi. Pilihan balik dipertahankan dan nilai0 sah. Semua metrik dikirim sesuai pilihan, tanpa substitusi nilai tetap.
+- `MoodEntryScreen` adalah route penuh, memakai waktu WIB aktual dan refresh pemanggil setelah save. `MedicationHistoryScreen` meminta seluruh log server dengan limit0, urutan terbaru dan kelompok tanggal WIB. Checklist hanya menyediakan tombol riwayat, tanpa list inline.
+- Dosis memakai ID server dan stok/dosis nyata. Pending/temp ID dikunci. Jika antrean gagal ditulis, hapus insert yang belum durable; retry tidak mengirim ulang mood atau mengurangi stok lagi. Sinkronisasi log yang diterima server mengonfirmasi pending pada akun/generasi sama. Satu sync run membekukan owner/generasi dan berhenti sebelum item berikutnya setelah pergantian akun; finally melepas lock meski persist gagal.
+- Sumber visual ada pada [rencana](../../../docs/superpowers/plans/2026-11-10-home-checkin-reference.md). Asset bunga/mood/baterai berasal dari referensi, bukan emoji font perangkat. Data orang, tanggal dan stok pada screenshot tidak menjadi data produksi.
+
 - Mood tersimpan melalui `/v1/mood-checkins`; diary terpisah melalui
   `/v1/diary-entries`. Jangan menghapus mood lama saat membersihkan tampilan diary.
 - `services/mood_insights.dart` menghitung streak per tanggal WIB, rata-rata

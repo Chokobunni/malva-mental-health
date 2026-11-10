@@ -33,6 +33,8 @@ Status `Aktif` berarti endpoint terdaftar di `Routes()` dan diimplementasikan di
 
 ## 3. Mood / Diary / Obat / Terapi
 
+Home pasien mengikuti referensi dengan check-in5langkah (mood, obat, tidur, energi, kecemasan/iritabilitas), banner tracker, Self-care dan Professional Care. Add Mood Entry dan Riwayat Minum Obat menjadi halaman tersendiri; history memuat seluruh log server per tanggal WIB. Home profesional memakai header/kartu baru dan dropdown ketersediaan yang sama fungsinya. Chat hanya menampilkan satu presence untuk peer terpilih. Retry offline mempertahankan stok dan isolasi akun; lihat [rencana dan kontrak](superpowers/plans/2026-11-10-home-checkin-reference.md).
+
 | FEAT-ID | Fitur | Role | Endpoint utama | Status |
 |---|---|---|---|---|
 | FEAT-020 | Mood check-in harian | Pasien | `GET /v1/mood-checkins`, `POST /v1/mood-checkins` | Aktif |

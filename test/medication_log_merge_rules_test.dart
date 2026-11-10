@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/providers/providers.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
+import 'package:malva_mental_health/src/services/server_clock.dart';
 
 // ============================================================
 // QA — T6 ROUND 2: UJI INDEPENDEN ATURAN MERGE BARU
@@ -185,10 +186,12 @@ void main() {
     await pumpEventQueue();
     expect(store.state.medications, hasLength(2));
 
-    final t = DateTime.now();
-    store.replaceMedicationLogs([_log('uuid-a', 'ObatA', t, 'partial')]);
+    final t = ServerClock.now();
     store.replaceMedicationLogs([
-      _log('uuid-a', 'ObatA', t.add(const Duration(minutes: 1)), 'taken'),
+      _log('uuid-a', 'ObatA', t.subtract(const Duration(minutes: 1)), 'partial')
+    ]);
+    store.replaceMedicationLogs([
+      _log('uuid-a', 'ObatA', t, 'taken'),
     ]);
 
     // Status berbeda → dua entri (bukan dosis sama).

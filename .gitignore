@@ -12,6 +12,7 @@ build/
 # Development screenshots (root level)
 *.png
 !assets/prescription/*.png
+!assets/checkin/*.png
 !docs/*.png
 !web/icons/*.png
 !android/app/src/main/res/**/*.png

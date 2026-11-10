@@ -31,5 +31,7 @@
 
 ## Kompatibilitas detail assessment (2026-11-10)
 
+- Presence chat hanya satu label/dot untuk peer terpilih. Filter event menurut ID peer, abaikan ID diri/pengguna lain. Connected socket bukan peer Online; disconnect/reconnect membersihkan status lama. Header/patient cards tanpa sumber presence menampilkan unknown, bukan hijau buatan. Semua guard composer, lampiran, sesi dan riwayat tetap berlaku.
+
 - ID submission WHO/DASS/worksheet dibuka melalui GET berotorisasi; 403/404 tidak membuka fallback jawaban snapshot. Snapshot inline legacy tanpa ID tetap dapat ditampilkan dari pesan chat berizin.
 - WHO/DASS mempertahankan hasil dari jawaban lengkap yang tersimpan beserta CF triage aktual. PHQ/GAD memakai dua kartu CF terpisah. Kesalahan membuka assessment memakai label assessment, dan respons tertunda tidak boleh tampil setelah pergantian pemilik akun.

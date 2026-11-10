@@ -208,7 +208,15 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    final api = _api();
+    final api = _api(logs: [
+      {
+        'id': 'log',
+        'medication_id': _serverMedId,
+        'medication_name': 'Sertraline',
+        'status': 'taken',
+        'taken_at': '2026-10-29T20:20:00Z'
+      }
+    ]);
     final container = _container(api);
     final store = container.read(malvaStoreProvider.notifier);
     store.replaceMedications([_med(_serverMedId, 'Sertraline')]);
@@ -219,7 +227,10 @@ void main() {
     await tester.pumpWidget(_screenApp(container, api));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('30/10/2026 03:20'), findsOneWidget,
+    await tester.tap(find.text('Riwayat minum obat'));
+    await tester.pumpAndSettle();
+    expect(find.text('30 Oktober 2026'), findsOneWidget);
+    expect(find.textContaining('03:20'), findsOneWidget,
         reason: 'riwayat harus memakai jam lokal');
     expect(find.textContaining('29/10/2026 20:20'), findsNothing,
         reason: 'jam UTC mentah tidak boleh tampil');

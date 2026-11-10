@@ -140,58 +140,51 @@ class _ProfessionalDashboardScreenState
   @override
   Widget build(BuildContext context) {
     final patients = _patientsForDashboard();
+    final header = _ProfessionalHeader(
+      displayName: widget.session?.displayName ??
+          ref.watch(currentSessionProvider)?.displayName ??
+          '',
+      online: _lastSyncTime != null && _onlineError == null,
+      syncing: _syncStatus == SyncStatus.syncing,
+      onRefresh: _manualRefresh,
+      onProfile: () => setState(() => _tabIndex = 4),
+      onNotifications: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => NotificationsScreen(
+                  session: widget.session, apiClient: widget.apiClient))),
+    );
     return Theme(
         data: Theme.of(context).copyWith(
-            cardTheme: Theme.of(context).cardTheme.copyWith(elevation: .35)),
+            cardTheme: Theme.of(context)
+                .cardTheme
+                .copyWith(elevation: 0, color: Colors.white),
+            navigationBarTheme: NavigationBarThemeData(
+              height: 64,
+              backgroundColor: Colors.white,
+              indicatorColor: const Color(0xFFF3E6F7),
+              iconTheme: WidgetStateProperty.resolveWith((states) =>
+                  IconThemeData(
+                      size: 20,
+                      color: states.contains(WidgetState.selected)
+                          ? _dashboardPurple
+                          : const Color(0xFF9AA7B1))),
+              labelTextStyle: WidgetStateProperty.resolveWith((states) =>
+                  TextStyle(
+                      fontSize: 11,
+                      fontWeight:
+                          states.contains(WidgetState.selected)
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                      color: states.contains(WidgetState.selected)
+                          ? _dashboardPurple
+                          : const Color(0xFF9AA7B1))),
+            )),
         child: Scaffold(
+          backgroundColor: const Color(0xFFF9F5FC),
           body: Column(
             children: [
-              _ProfessionalHeader(
-                actions: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _SyncStatusIndicator(
-                      status: _syncStatus,
-                      lastSyncTime: _lastSyncTime,
-                    ),
-                    IconButton(
-                      tooltip: 'Notifikasi',
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => NotificationsScreen(
-                            session: widget.session,
-                            apiClient: widget.apiClient,
-                          ),
-                        ),
-                      ),
-                      icon: const Icon(Icons.notifications_rounded,
-                          color: Colors.white),
-                    ),
-                    IconButton(
-                      tooltip: 'Refresh manual',
-                      onPressed: _manualRefresh,
-                      icon: _syncStatus == SyncStatus.syncing
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.refresh_rounded,
-                              color: Colors.white),
-                    ),
-                    IconButton(
-                      tooltip: 'Keluar',
-                      onPressed: widget.onLogout,
-                      icon:
-                          const Icon(Icons.logout_rounded, color: Colors.white),
-                    ),
-                  ],
-                ),
-              ),
+              if (_tabIndex != 0) header,
               Expanded(
                 child: _tabIndex == 3
                     ? MessagesListScreen(
@@ -211,228 +204,289 @@ class _ProfessionalDashboardScreenState
                         : RefreshIndicator(
                             onRefresh: _loadOnlineProfessionalData,
                             child: ListView(
-                              padding: const EdgeInsets.all(18),
+                              padding: EdgeInsets.zero,
                               children: [
-                                // Banner error ringkas (hanya bila pemuatan gagal).
-                                // Bukan "section" konten — sekadar pemberitahuan status
-                                // agar kegagalan server tidak senyap, dengan pesan
-                                // Indonesia yang ramah.
-                                if (_tabIndex == 0 && _onlineError != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 14),
-                                    child: SoftCard(
-                                      bordered: false,
-                                      color: MalvaColors.danger
-                                          .withValues(alpha: 0.08),
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.cloud_off_rounded,
-                                              color: MalvaColors.danger),
-                                          const SizedBox(width: 10),
-                                          Expanded(child: Text(_onlineError!)),
-                                          TextButton(
-                                            onPressed:
-                                                _loadOnlineProfessionalData,
-                                            child: const Text('Coba lagi'),
+                                if (_tabIndex == 0) header,
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(16, 14, 16, 40),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      // Banner error ringkas (hanya bila pemuatan gagal).
+                                      // Bukan "section" konten — sekadar pemberitahuan status
+                                      // agar kegagalan server tidak senyap, dengan pesan
+                                      // Indonesia yang ramah.
+                                      if (_tabIndex == 0 &&
+                                          _onlineError != null)
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(bottom: 14),
+                                          child: SoftCard(
+                                            bordered: false,
+                                            color: MalvaColors.danger
+                                                .withValues(alpha: 0.08),
+                                            child: Row(
+                                              children: [
+                                                const Icon(
+                                                    Icons.cloud_off_rounded,
+                                                    color: MalvaColors.danger),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                    child: Text(_onlineError!)),
+                                                TextButton(
+                                                  onPressed:
+                                                      _loadOnlineProfessionalData,
+                                                  child:
+                                                      const Text('Coba lagi'),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                // ---- TAB 0 §0: Sesi berjalan (video & chat) ----
-                                if (_tabIndex == 0)
-                                  const SectionLabel('Sesi berjalan',
-                                      icon: Icons.play_circle_rounded),
-                                if (_tabIndex == 0)
-                                  _OngoingSessionsSection(
-                                    onChanged: _loadOnlineProfessionalData,
-                                    sessions: _ongoingSessions,
-                                    isLoading: _isLoadingOnlineData,
-                                  ),
-                                if (_tabIndex == 0) const SizedBox(height: 22),
-                                // ---- TAB 0 §1: Video call mendatang ----
-                                if (_tabIndex == 0)
-                                  SectionLabel('Video call mendatang',
-                                      icon: Icons.videocam_rounded,
-                                      action: _upcomingVideoSessions.length > 1
-                                          ? IconButton(
-                                              tooltip: _showAllUpcomingVideos
-                                                  ? 'Tampilkan lebih sedikit sesi video'
-                                                  : 'Tampilkan semua sesi video',
-                                              onPressed: () => setState(() =>
-                                                  _showAllUpcomingVideos =
-                                                      !_showAllUpcomingVideos),
-                                              icon: Icon(_showAllUpcomingVideos
-                                                  ? Icons.expand_less_rounded
-                                                  : Icons.expand_more_rounded))
-                                          : null),
-                                if (_tabIndex == 0)
-                                  _UpcomingSessionsSection(
-                                    sessions: _showAllUpcomingVideos
-                                        ? _upcomingVideoSessions
-                                        : _upcomingVideoSessions
-                                            .take(1)
-                                            .toList(),
-                                    video: true,
-                                    accessToken:
-                                        widget.session?.accessToken ?? '',
-                                    onChanged: _loadOnlineProfessionalData,
-                                    isLoading: _isLoadingOnlineData,
-                                  ),
-                                if (_tabIndex == 0) const SizedBox(height: 22),
-                                if (_tabIndex == 0)
-                                  SectionLabel('Sesi chat mendatang',
-                                      icon: Icons.chat_bubble_rounded,
-                                      action: _upcomingChatSessions.length > 1
-                                          ? IconButton(
-                                              tooltip: _showAllUpcomingChats
-                                                  ? 'Tampilkan lebih sedikit sesi chat'
-                                                  : 'Tampilkan semua sesi chat',
-                                              onPressed: () => setState(() =>
-                                                  _showAllUpcomingChats =
-                                                      !_showAllUpcomingChats),
-                                              icon: Icon(_showAllUpcomingChats
-                                                  ? Icons.expand_less_rounded
-                                                  : Icons.expand_more_rounded))
-                                          : null),
-                                if (_tabIndex == 0)
-                                  _UpcomingSessionsSection(
-                                    sessions: _showAllUpcomingChats
-                                        ? _upcomingChatSessions
-                                        : _upcomingChatSessions
-                                            .take(1)
-                                            .toList(),
-                                    video: false,
-                                    accessToken:
-                                        widget.session?.accessToken ?? '',
-                                    onChanged: _loadOnlineProfessionalData,
-                                    isLoading: _isLoadingOnlineData,
-                                  ),
-                                if (_tabIndex == 0) const SizedBox(height: 22),
-                                // ---- TAB 2: PASIEN ----
-                                if (_tabIndex == 2)
-                                  const SectionLabel('Cari & filter pasien',
-                                      icon: Icons.search_rounded),
-                                if (_tabIndex == 2)
-                                  _PatientSearch(
-                                    query: _searchQuery,
-                                    onChanged: (value) =>
-                                        setState(() => _searchQuery = value),
-                                  ),
-                                if (_tabIndex == 2) const SizedBox(height: 14),
-                                // Shared records are available with the patient list.
-                                if (_tabIndex == 2) ...[
-                                  const SizedBox(height: 22),
-                                  const SectionLabel('Data Pasien Dibagikan',
-                                      icon: Icons.folder_shared_rounded),
-                                  _PortalDoorCard(
-                                    icon: Icons.folder_shared_rounded,
-                                    color: MalvaColors.mint,
-                                    title: 'Data pasien dibagikan',
-                                    subtitle:
-                                        'Mood, diary, obat, health record, goals, '
-                                        'terapi • $_connectedPatientCount pasien',
-                                    onTap: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => SharedPatientDataScreen(
-                                          session: widget.session,
-                                          apiClient: widget.apiClient,
                                         ),
-                                      ),
-                                    ).then(
-                                        (_) => _loadOnlineProfessionalData()),
-                                  ),
-                                ],
-                                if (_tabIndex == 0)
-                                  _ProfessionalToolsSection(
-                                      key: ValueKey(
-                                          widget.session?.backendUserId ??
-                                              widget.session?.identifier),
-                                      session: widget.session,
-                                      apiClient: widget.apiClient,
-                                      refreshToken: _lastSyncTime),
-                                if (_tabIndex == 2)
-                                  // Teks label dipertahankan persis "Pasien terhubung"
-                                  // (dipakai test widget). Jumlah pasien dipindah ke
-                                  // `action` supaya tidak mengubah string label.
-                                  SectionLabel(
-                                    'Pasien terhubung',
-                                    icon: Icons.people_alt_rounded,
-                                    action: Text('${patients.length} pasien'),
-                                  ),
-                                if (_tabIndex == 2)
-                                  _ConnectedPatientList(
-                                    patients: _filterPatients(patients),
-                                    onOpen: (patient) {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              ProPatientDetailScreen(
-                                            patientId: patient.patientId,
-                                            patientName: patient.displayName,
+                                      // ---- TAB 0 §0: Sesi berjalan (video & chat) ----
+                                      if (_tabIndex == 0)
+                                        const _DashboardSectionLabel(
+                                            'Sesi berjalan',
+                                            icon: Icons.play_arrow_rounded),
+                                      if (_tabIndex == 0)
+                                        _OngoingSessionsSection(
+                                          onChanged:
+                                              _loadOnlineProfessionalData,
+                                          sessions: _ongoingSessions,
+                                          isLoading: _isLoadingOnlineData,
+                                        ),
+                                      if (_tabIndex == 0)
+                                        const SizedBox(height: 14),
+                                      // ---- TAB 0 §1: Video call mendatang ----
+                                      if (_tabIndex ==
+                                          0)
+                                        _DashboardSectionLabel(
+                                            'Video call mendatang',
+                                            icon: Icons.videocam_rounded,
+                                            action: _upcomingVideoSessions
+                                                        .length >
+                                                    1
+                                                ? IconButton(
+                                                    tooltip: _showAllUpcomingVideos
+                                                        ? 'Tampilkan lebih sedikit sesi video'
+                                                        : 'Tampilkan semua sesi video',
+                                                    onPressed: () => setState(() =>
+                                                        _showAllUpcomingVideos =
+                                                            !_showAllUpcomingVideos),
+                                                    icon: Icon(_showAllUpcomingVideos
+                                                        ? Icons
+                                                            .expand_less_rounded
+                                                        : Icons
+                                                            .expand_more_rounded))
+                                                : const Icon(
+                                                    Icons.expand_more_rounded,
+                                                    color: Color(0xFF7F8993),
+                                                    size: 18)),
+                                      if (_tabIndex == 0)
+                                        _UpcomingSessionsSection(
+                                          sessions: _showAllUpcomingVideos
+                                              ? _upcomingVideoSessions
+                                              : _upcomingVideoSessions
+                                                  .take(1)
+                                                  .toList(),
+                                          video: true,
+                                          accessToken:
+                                              widget.session?.accessToken ?? '',
+                                          apiClient: widget.apiClient,
+                                          onChanged:
+                                              _loadOnlineProfessionalData,
+                                          isLoading: _isLoadingOnlineData,
+                                        ),
+                                      if (_tabIndex == 0)
+                                        const SizedBox(height: 14),
+                                      if (_tabIndex == 0)
+                                        _DashboardSectionLabel(
+                                            'Sesi chat mendatang',
+                                            icon: Icons.chat_bubble_rounded,
+                                            action: _upcomingChatSessions
+                                                        .length >
+                                                    1
+                                                ? IconButton(
+                                                    tooltip: _showAllUpcomingChats
+                                                        ? 'Tampilkan lebih sedikit sesi chat'
+                                                        : 'Tampilkan semua sesi chat',
+                                                    onPressed: () => setState(() =>
+                                                        _showAllUpcomingChats =
+                                                            !_showAllUpcomingChats),
+                                                    icon: Icon(_showAllUpcomingChats
+                                                        ? Icons
+                                                            .expand_less_rounded
+                                                        : Icons
+                                                            .expand_more_rounded))
+                                                : const Icon(
+                                                    Icons.expand_more_rounded,
+                                                    color: Color(0xFF7F8993),
+                                                    size: 18)),
+                                      if (_tabIndex == 0)
+                                        _UpcomingSessionsSection(
+                                          sessions: _showAllUpcomingChats
+                                              ? _upcomingChatSessions
+                                              : _upcomingChatSessions
+                                                  .take(1)
+                                                  .toList(),
+                                          video: false,
+                                          accessToken:
+                                              widget.session?.accessToken ?? '',
+                                          apiClient: widget.apiClient,
+                                          onChanged:
+                                              _loadOnlineProfessionalData,
+                                          isLoading: _isLoadingOnlineData,
+                                        ),
+                                      if (_tabIndex == 0)
+                                        const SizedBox(height: 14),
+                                      // ---- TAB 2: PASIEN ----
+                                      if (_tabIndex == 2)
+                                        const SectionLabel(
+                                            'Cari & filter pasien',
+                                            icon: Icons.search_rounded),
+                                      if (_tabIndex == 2)
+                                        _PatientSearch(
+                                          query: _searchQuery,
+                                          onChanged: (value) => setState(
+                                              () => _searchQuery = value),
+                                        ),
+                                      if (_tabIndex == 2)
+                                        const SizedBox(height: 14),
+                                      // Shared records are available with the patient list.
+                                      if (_tabIndex == 2) ...[
+                                        const SizedBox(height: 22),
+                                        const SectionLabel(
+                                            'Data Pasien Dibagikan',
+                                            icon: Icons.folder_shared_rounded),
+                                        _PortalDoorCard(
+                                          icon: Icons.folder_shared_rounded,
+                                          color: MalvaColors.mint,
+                                          title: 'Data pasien dibagikan',
+                                          subtitle:
+                                              'Mood, diary, obat, health record, goals, '
+                                              'terapi • $_connectedPatientCount pasien',
+                                          onTap: () => Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  SharedPatientDataScreen(
+                                                session: widget.session,
+                                                apiClient: widget.apiClient,
+                                              ),
+                                            ),
+                                          ).then((_) =>
+                                              _loadOnlineProfessionalData()),
+                                        ),
+                                      ],
+                                      if (_tabIndex == 0)
+                                        _ProfessionalToolsSection(
+                                            key: ValueKey(
+                                                widget.session?.backendUserId ??
+                                                    widget.session?.identifier),
                                             session: widget.session,
                                             apiClient: widget.apiClient,
-                                          ),
+                                            refreshToken: _lastSyncTime),
+                                      if (_tabIndex == 2)
+                                        // Teks label dipertahankan persis "Pasien terhubung"
+                                        // (dipakai test widget). Jumlah pasien dipindah ke
+                                        // `action` supaya tidak mengubah string label.
+                                        SectionLabel(
+                                          'Pasien terhubung',
+                                          icon: Icons.people_alt_rounded,
+                                          action:
+                                              Text('${patients.length} pasien'),
                                         ),
-                                      ).then(
-                                          (_) => _loadOnlineProfessionalData());
-                                    },
+                                      if (_tabIndex == 2)
+                                        _ConnectedPatientList(
+                                          patients: _filterPatients(patients),
+                                          onOpen: (patient) {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    ProPatientDetailScreen(
+                                                  patientId: patient.patientId,
+                                                  patientName:
+                                                      patient.displayName,
+                                                  session: widget.session,
+                                                  apiClient: widget.apiClient,
+                                                ),
+                                              ),
+                                            ).then((_) =>
+                                                _loadOnlineProfessionalData());
+                                          },
+                                        ),
+                                      if (_tabIndex == 2 && patients.isEmpty)
+                                        const EmptyState(
+                                          icon: Icons.people_outline_rounded,
+                                          title: 'Belum ada pasien terhubung',
+                                          subtitle:
+                                              'Pasien terhubung setelah membeli paket atau booking sesi denganmu.',
+                                        ),
+                                      // More follows Messages in the navigation bar.
+                                      if (_tabIndex == 4) ...[
+                                        _ProfessionalPortalSection(
+                                          session: widget.session,
+                                          apiClient: widget.apiClient,
+                                          onRefresh:
+                                              _loadOnlineProfessionalData,
+                                        ),
+                                        const SizedBox(height: 22),
+                                        _RelationshipManagementSection(
+                                          patients: patients,
+                                          professionalCode:
+                                              widget.session?.identifier,
+                                          onRefresh:
+                                              _loadOnlineProfessionalData,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        OutlinedButton.icon(
+                                          onPressed: widget.onLogout,
+                                          icon:
+                                              const Icon(Icons.logout_rounded),
+                                          label: const Text('Keluar'),
+                                        ),
+                                      ],
+                                    ],
                                   ),
-                                if (_tabIndex == 2 && patients.isEmpty)
-                                  const EmptyState(
-                                    icon: Icons.people_outline_rounded,
-                                    title: 'Belum ada pasien terhubung',
-                                    subtitle:
-                                        'Pasien terhubung setelah membeli paket atau booking sesi denganmu.',
-                                  ),
-                                // More follows Messages in the navigation bar.
-                                if (_tabIndex == 4) ...[
-                                  _ProfessionalPortalSection(
-                                    session: widget.session,
-                                    apiClient: widget.apiClient,
-                                    onRefresh: _loadOnlineProfessionalData,
-                                  ),
-                                  const SizedBox(height: 22),
-                                  _RelationshipManagementSection(
-                                    patients: patients,
-                                    professionalCode:
-                                        widget.session?.identifier,
-                                    onRefresh: _loadOnlineProfessionalData,
-                                  ),
-                                ],
+                                ),
                               ],
                             ),
                           ),
               ),
             ],
           ),
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: _tabIndex,
-            onDestinationSelected: (value) => setState(() => _tabIndex = value),
-            destinations: const [
-              NavigationDestination(
-                  icon: Icon(Icons.dashboard_outlined),
-                  selectedIcon: Icon(Icons.dashboard_rounded),
-                  label: 'Dashboard'),
-              NavigationDestination(
-                  icon: Icon(Icons.calendar_month_outlined),
-                  selectedIcon: Icon(Icons.calendar_month_rounded),
-                  label: 'Jadwal'),
-              NavigationDestination(
-                  icon: Icon(Icons.people_outline_rounded),
-                  selectedIcon: Icon(Icons.people_rounded),
-                  label: 'Pasien'),
-              NavigationDestination(
-                  icon: Icon(Icons.chat_bubble_outline_rounded),
-                  selectedIcon: Icon(Icons.chat_bubble_rounded),
-                  label: 'Messages'),
-              NavigationDestination(
-                  icon: Icon(Icons.grid_view_outlined),
-                  selectedIcon: Icon(Icons.grid_view_rounded),
-                  label: 'Lainnya'),
-            ],
+          bottomNavigationBar: MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.1,
+            child: NavigationBar(
+              selectedIndex: _tabIndex,
+              onDestinationSelected: (value) =>
+                  setState(() => _tabIndex = value),
+              destinations: const [
+                NavigationDestination(
+                    icon: Icon(Icons.dashboard_outlined),
+                    selectedIcon: Icon(Icons.dashboard_rounded),
+                    label: 'Dashboard'),
+                NavigationDestination(
+                    icon: Icon(Icons.calendar_month_outlined),
+                    selectedIcon: Icon(Icons.calendar_month_rounded),
+                    label: 'Jadwal'),
+                NavigationDestination(
+                    icon: Icon(Icons.people_outline_rounded),
+                    selectedIcon: Icon(Icons.people_rounded),
+                    label: 'Pasien'),
+                NavigationDestination(
+                    icon: Icon(Icons.chat_bubble_outline_rounded),
+                    selectedIcon: Icon(Icons.chat_bubble_rounded),
+                    label: 'Messages'),
+                NavigationDestination(
+                    icon: Icon(Icons.grid_view_outlined),
+                    selectedIcon: Icon(Icons.grid_view_rounded),
+                    label: 'Lainnya'),
+              ],
+            ),
           ),
         ));
   }
@@ -989,44 +1043,201 @@ class _ProfessionalPortalSectionState
   }
 }
 
+const _dashboardPurple = Color(0xFF9950AE);
+
 class _ProfessionalHeader extends StatelessWidget {
-  const _ProfessionalHeader({required this.actions});
-  final Widget actions;
+  const _ProfessionalHeader({
+    required this.displayName,
+    required this.online,
+    required this.syncing,
+    required this.onRefresh,
+    required this.onProfile,
+    required this.onNotifications,
+  });
+  final String displayName;
+  final bool online;
+  final bool syncing;
+  final VoidCallback onRefresh;
+  final VoidCallback onProfile;
+  final VoidCallback onNotifications;
 
   @override
   Widget build(BuildContext context) => Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-              colors: [Color(0xFF7D20CA), Color(0xFFBD7CF3)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight),
-          borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+              colors: [Color(0xFF54206F), Color(0xFF8A3AA2), Color(0xFFC97BCC)],
+              stops: [0, .45, 1],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter),
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+          boxShadow: [
+            BoxShadow(
+                color: Color(0x24562470), blurRadius: 18, offset: Offset(0, 8))
+          ],
         ),
         child: SafeArea(
             bottom: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 12, 20),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      const Icon(Icons.medical_information_rounded,
-                          color: Colors.white, size: 28),
-                      const Spacer(),
-                      actions
-                    ]),
-                    const SizedBox(height: 10),
-                    const Text('Professional',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 23,
-                            fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 4),
-                    const Text('Prioritas pasien, screening, sesi, dan paket',
-                        style: TextStyle(color: Colors.white, fontSize: 14)),
-                  ]),
-            )),
+                padding: const EdgeInsets.fromLTRB(21, 8, 16, 26),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Image.asset('assets/checkin/flower-white.png',
+                            width: 26, height: 30),
+                        const SizedBox(width: 16),
+                        Flexible(
+                            child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                        color:
+                                            Colors.white.withValues(alpha: .16),
+                                        borderRadius: BorderRadius.circular(24),
+                                        border: Border.all(
+                                            color: Colors.white
+                                                .withValues(alpha: .2))),
+                                    child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.circle,
+                                              size: 8,
+                                              color: online
+                                                  ? MalvaColors.mint
+                                                  : const Color(0xFFCFBED6)),
+                                          const SizedBox(width: 6),
+                                          Text(online ? 'Online' : 'Offline',
+                                              style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12)),
+                                        ])))),
+                        const Spacer(),
+                        _headerAction(
+                            'Refresh manual',
+                            onRefresh,
+                            syncing
+                                ? const SizedBox.square(
+                                    dimension: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.refresh_rounded, size: 19)),
+                        const SizedBox(width: 8),
+                        _headerAction('Notifikasi', onNotifications,
+                            const Icon(Icons.notifications_outlined, size: 19)),
+                        const SizedBox(width: 10),
+                        Tooltip(
+                            message: 'Profil Profesional',
+                            child: InkWell(
+                                onTap: onProfile,
+                                borderRadius: BorderRadius.circular(24),
+                                child: Container(
+                                    width: 42,
+                                    height: 42,
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                            color: Colors.white
+                                                .withValues(alpha: .6),
+                                            width: 2)),
+                                    child: Stack(children: [
+                                      Center(
+                                          child: Text(_initials(displayName),
+                                              style: const TextStyle(
+                                                  fontSize: 15,
+                                                  color: Colors.white,
+                                                  fontWeight:
+                                                      FontWeight.w600))),
+                                      if (online)
+                                        const Positioned(
+                                            right: 0,
+                                            bottom: 0,
+                                            child: Icon(Icons.circle,
+                                                color: MalvaColors.mint,
+                                                size: 8)),
+                                    ]))))
+                      ]),
+                      const SizedBox(height: 24),
+                      const Text('Professional',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 26,
+                              height: 1.2,
+                              fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 6),
+                      Text('Prioritas pasien, screening, sesi, dan paket',
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: .72),
+                              fontSize: 13)),
+                    ]))),
       );
+
+  Widget _headerAction(String tooltip, VoidCallback onTap, Widget icon) =>
+      IconButton.filledTonal(
+          tooltip: tooltip,
+          onPressed: onTap,
+          style: IconButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: .13),
+              foregroundColor: Colors.white,
+              minimumSize: const Size(34, 34),
+              padding: const EdgeInsets.all(7),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+          icon: icon);
+
+  String _initials(String name) {
+    final parts =
+        name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    return parts.take(2).map((p) => p[0]).join().toUpperCase();
+  }
+}
+
+class _DashboardSectionLabel extends StatelessWidget {
+  const _DashboardSectionLabel(this.text, {required this.icon, this.action});
+  final String text;
+  final IconData icon;
+  final Widget? action;
+  @override
+  Widget build(BuildContext context) => Padding(
+      padding: const EdgeInsets.only(bottom: 12, top: 8),
+      child: Row(children: [
+        Container(
+            width: 6,
+            height: 17,
+            decoration: BoxDecoration(
+                color: _dashboardPurple,
+                borderRadius: BorderRadius.circular(8))),
+        const SizedBox(width: 8),
+        Icon(icon, color: _dashboardPurple, size: 16),
+        const SizedBox(width: 8),
+        Expanded(
+            child: Text(text,
+                style: const TextStyle(
+                    color: _dashboardPurple,
+                    fontSize: 15,
+                    height: 1.2,
+                    fontWeight: FontWeight.w700))),
+        if (action != null) action!,
+      ]));
+}
+
+class _DashboardCard extends StatelessWidget {
+  const _DashboardCard(
+      {required this.child, this.padding = const EdgeInsets.all(17)});
+  final Widget child;
+  final EdgeInsets padding;
+  @override
+  Widget build(BuildContext context) => Container(
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x0D9B52B6), blurRadius: 24, offset: Offset(0, 8))
+          ]),
+      child: Padding(padding: padding, child: child));
 }
 
 class _ProfessionalToolsSection extends ConsumerStatefulWidget {
@@ -1045,6 +1256,7 @@ class _ProfessionalToolsSectionState
     extends ConsumerState<_ProfessionalToolsSection> {
   Future<BackendProfessionalCredential?>? _credential;
   Future<List<Object>>? _availability;
+  bool _availabilityExpanded = false;
   AuthSession? get session => widget.session;
   MalvaApiClient? get apiClient => widget.apiClient;
 
@@ -1085,13 +1297,14 @@ class _ProfessionalToolsSectionState
     Future<void> open(Widget page) async =>
         Navigator.push(context, MaterialPageRoute(builder: (_) => page));
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const SectionLabel('Klinis', icon: Icons.medical_services_outlined),
+      const _DashboardSectionLabel('Klinis',
+          icon: Icons.medical_services_outlined),
       FutureBuilder<BackendProfessionalCredential?>(
         future: _credential,
         builder: (context, snapshot) =>
             isPsychiatristSpecialization(snapshot.data?.specialization ?? '')
-                ? ActionTile(
-                    icon: Icons.medication_liquid_rounded,
+                ? _PortalDoorCard(
+                    icon: Icons.medication_rounded,
                     title: 'E-Prescription',
                     subtitle: 'Terbitkan resep dengan digital signature + QR',
                     color: MalvaColors.mint,
@@ -1101,83 +1314,130 @@ class _ProfessionalToolsSectionState
                     color: Colors.white,
                     child: Text('Resep obat hanya untuk Psikiater (Sp.KJ).')),
       ),
-      const SizedBox(height: 22),
-      const SectionLabel('Operasional', icon: Icons.work_outline_rounded),
-      ActionTile(
+      const SizedBox(height: 14),
+      const _DashboardSectionLabel('Operasional',
+          icon: Icons.work_outline_rounded),
+      _PortalDoorCard(
           icon: Icons.account_balance_wallet_rounded,
           title: 'Earnings',
           subtitle: 'Pendapatan, fee platform, dan payout',
           color: MalvaColors.amber,
           onTap: () =>
               open(EarningsScreen(session: session, apiClient: apiClient))),
-      const SizedBox(height: 10),
+      const SizedBox(height: 18),
       FutureBuilder<List<Object>>(
           future: _availability,
-          builder: (context, snapshot) => CollapsibleCard(
-                key: const ValueKey('home-availability'),
-                color: Colors.white,
-                semanticLabel: 'Ketersediaan & harga',
-                header: const Row(children: [
-                  Icon(Icons.edit_calendar_rounded, color: MalvaColors.seed),
-                  SizedBox(width: 10),
-                  Expanded(
-                      child: Text('Ketersediaan & harga',
-                          style: TextStyle(fontWeight: FontWeight.w800))),
-                ]),
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(children: [
-                        const Expanded(
-                            child: Text('PENGATURAN',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.black54))),
-                        TextButton.icon(
-                          onPressed: () async {
-                            await open(ProAvailabilityScreen(
-                                session: session, apiClient: apiClient));
-                            if (mounted) setState(_reload);
-                          },
-                          icon:
-                              const Icon(Icons.edit_calendar_rounded, size: 18),
-                          label: const Text('Atur'),
-                        ),
-                      ]),
-                      const Divider(height: 18),
-                      Builder(
-                        builder: (context) {
-                          if (_availability == null) {
-                            return const Text(
-                                'Login dulu untuk melihat ketersediaan.');
-                          }
-                          if (snapshot.connectionState !=
-                              ConnectionState.done) {
-                            return const Center(
-                                child: CircularProgressIndicator());
-                          }
-                          if (snapshot.hasError || !snapshot.hasData) {
-                            return Column(children: [
-                              const Text(
-                                  'Ketersediaan & harga belum dapat dimuat.'),
-                              OutlinedButton.icon(
-                                onPressed: () => setState(_reload),
-                                icon: const Icon(Icons.refresh_rounded),
-                                label: const Text('Coba Lagi'),
+          builder: (context, snapshot) => _DashboardCard(
+              padding: EdgeInsets.zero,
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Semantics(
+                        button: true,
+                        expanded: _availabilityExpanded,
+                        child: InkWell(
+                            key: const ValueKey('home-availability'),
+                            borderRadius: BorderRadius.circular(24),
+                            onTap: () => setState(() =>
+                                _availabilityExpanded = !_availabilityExpanded),
+                            child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(children: [
+                                  const CircleAvatar(
+                                      backgroundColor: Color(0xFFF5EDFA),
+                                      radius: 22,
+                                      child: Icon(Icons.event_available_rounded,
+                                          color: _dashboardPurple)),
+                                  const SizedBox(width: 12),
+                                  const Expanded(
+                                      child: Text('Ketersediaan & harga',
+                                          style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xFF252E38)))),
+                                  CircleAvatar(
+                                      radius: 14,
+                                      backgroundColor: const Color(0xFFF7F8FA),
+                                      child: Icon(
+                                          _availabilityExpanded
+                                              ? Icons.expand_less_rounded
+                                              : Icons.expand_more_rounded,
+                                          color: const Color(0xFF9AA7B1),
+                                          size: 20)),
+                                ])))),
+                    if (_availabilityExpanded) ...[
+                      const Divider(height: 1, color: Color(0xFFF2F2F5)),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(17, 16, 17, 17),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(children: [
+                                const Expanded(
+                                    child: Text('PENGATURAN',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 11.5,
+                                            color: Color(0xFF9AA7B1)))),
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    await open(ProAvailabilityScreen(
+                                        session: session,
+                                        apiClient: apiClient));
+                                    if (mounted) setState(_reload);
+                                  },
+                                  icon: const Icon(Icons.edit_calendar_rounded,
+                                      size: 18),
+                                  style: TextButton.styleFrom(
+                                      foregroundColor: _dashboardPurple,
+                                      minimumSize: Size.zero,
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 4, horizontal: 2),
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap),
+                                  label: const Text('Atur',
+                                      style: TextStyle(
+                                          fontFamily: 'Roboto', fontSize: 13)),
+                                ),
+                              ]),
+                              const Divider(
+                                  height: 18, color: Color(0xFFEDEFF2)),
+                              Builder(
+                                builder: (context) {
+                                  if (_availability == null) {
+                                    return const Text(
+                                        'Login dulu untuk melihat ketersediaan.');
+                                  }
+                                  if (snapshot.connectionState !=
+                                      ConnectionState.done) {
+                                    return const Center(
+                                        child: CircularProgressIndicator());
+                                  }
+                                  if (snapshot.hasError || !snapshot.hasData) {
+                                    return Column(children: [
+                                      const Text(
+                                          'Ketersediaan & harga belum dapat dimuat.'),
+                                      OutlinedButton.icon(
+                                        onPressed: () => setState(_reload),
+                                        icon: const Icon(Icons.refresh_rounded),
+                                        label: const Text('Coba Lagi'),
+                                      ),
+                                    ]);
+                                  }
+                                  final data = snapshot.requireData;
+                                  return ProfessionalAvailabilitySummary(
+                                    schedules: data[0]
+                                        as List<BackendProfessionalSchedule>,
+                                    pricing:
+                                        data[1] as BackendProfessionalPricing,
+                                    timeOff: data[2] as List<BackendTimeOff>,
+                                  );
+                                },
                               ),
-                            ]);
-                          }
-                          final data = snapshot.requireData;
-                          return ProfessionalAvailabilitySummary(
-                            schedules:
-                                data[0] as List<BackendProfessionalSchedule>,
-                            pricing: data[1] as BackendProfessionalPricing,
-                            timeOff: data[2] as List<BackendTimeOff>,
-                          );
-                        },
+                            ]),
                       ),
-                    ]),
-              )),
+                    ],
+                  ]))),
     ]);
   }
 }
@@ -1319,62 +1579,6 @@ Color _riskColor(String value) {
 String formatScreeningDate(DateTime? value) {
   if (value == null) return 'Belum ada tanggal';
   return formatWibDate(value);
-}
-
-class _SyncStatusIndicator extends StatelessWidget {
-  const _SyncStatusIndicator({
-    required this.status,
-    this.lastSyncTime,
-  });
-
-  final SyncStatus status;
-  final DateTime? lastSyncTime;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (status) {
-      SyncStatus.syncing => MalvaColors.mint,
-      SyncStatus.error => MalvaColors.danger,
-      SyncStatus.idle => _stalenessColor,
-    };
-
-    final tooltip = switch (status) {
-      SyncStatus.syncing => 'Syncing...',
-      SyncStatus.error => 'Sync error',
-      SyncStatus.idle => lastSyncTime != null
-          ? 'Last synced: ${_formatTimeAgo(lastSyncTime!)}'
-          : 'Not synced yet',
-    };
-
-    return Tooltip(
-      message: tooltip,
-      child: Container(
-        width: 10,
-        height: 10,
-        margin: const EdgeInsets.only(right: 8),
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-        ),
-      ),
-    );
-  }
-
-  Color get _stalenessColor {
-    if (lastSyncTime == null) return Colors.grey;
-    final diff = wibNow().difference(lastSyncTime!);
-    if (diff.inMinutes < 5) return MalvaColors.mint;
-    if (diff.inMinutes < 30) return MalvaColors.amber;
-    return MalvaColors.danger;
-  }
-
-  String _formatTimeAgo(DateTime time) {
-    final diff = wibNow().difference(time);
-    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
 }
 
 /// Tombol "Create Meeting" di dashboard profesional. Membuat Google Meet instan
@@ -1600,131 +1804,292 @@ class _CreateMeetingButtonState extends ConsumerState<_CreateMeetingButton> {
 }
 
 /// Sesi mendatang dengan identitas, jadwal WIB, dan aksi sesuai jendela sesi.
-class _UpcomingSessionsSection extends StatelessWidget {
-  const _UpcomingSessionsSection({
-    required this.sessions,
-    required this.isLoading,
-    required this.video,
-    required this.accessToken,
-    required this.onChanged,
-  });
-
+class _UpcomingSessionsSection extends ConsumerStatefulWidget {
+  const _UpcomingSessionsSection(
+      {required this.sessions,
+      required this.isLoading,
+      required this.video,
+      required this.accessToken,
+      required this.onChanged,
+      this.apiClient});
   final List<BackendCareSession> sessions;
   final bool isLoading;
   final bool video;
   final String accessToken;
   final Future<void> Function() onChanged;
+  final MalvaApiClient? apiClient;
+  @override
+  ConsumerState<_UpcomingSessionsSection> createState() =>
+      _UpcomingSessionsSectionState();
+}
+
+class _UpcomingSessionsSectionState
+    extends ConsumerState<_UpcomingSessionsSection> {
+  final _cancelling = <String>{};
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
+    if (widget.isLoading) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: Center(child: CircularProgressIndicator()),
-      );
+          padding: EdgeInsets.symmetric(vertical: 12),
+          child: Center(child: CircularProgressIndicator()));
     }
-    if (sessions.isEmpty) {
-      return SoftCard(
-        bordered: false,
-        child: Row(
-          children: [
-            Icon(
-                video
-                    ? Icons.videocam_off_rounded
-                    : Icons.chat_bubble_outline_rounded,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                video
+    if (widget.sessions.isEmpty) {
+      return _DashboardCard(
+          child: Row(children: [
+        Icon(
+            widget.video
+                ? Icons.videocam_off_rounded
+                : Icons.chat_bubble_outline_rounded,
+            color: const Color(0xFF98A4AD)),
+        const SizedBox(width: 10),
+        Expanded(
+            child: Text(
+                widget.video
                     ? 'Belum ada video call terjadwal.'
                     : 'Belum ada sesi chat mendatang.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ),
-          ],
-        ),
-      );
+                style:
+                    const TextStyle(color: Color(0xFF7D8993), fontSize: 13))),
+      ]));
     }
-    return Column(
-      children: [
-        for (final s in sessions) ...[
-          SoftCard(
-            bordered: false,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    InitialAvatar(
-                      name: s.patientName.isEmpty ? 'Pasien' : s.patientName,
-                      radius: 18,
-                      color: MalvaColors.seed,
-                    ),
-                    const SizedBox(width: 12),
+    return Column(children: [
+      for (final s in widget.sessions) ...[
+        _DashboardCard(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Stack(children: [
+              CircleAvatar(
+                  radius: 25,
+                  backgroundColor: const Color(0xFFF3E6F8),
+                  child: Text(_initials(s.patientName),
+                      style: const TextStyle(
+                          color: _dashboardPurple,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700))),
+              const Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Tooltip(
+                      message: 'Status online belum diketahui',
+                      child: DecoratedBox(
+                          decoration: BoxDecoration(
+                              color: Color(0xFFB7BEC5),
+                              shape: BoxShape.circle,
+                              border: Border.fromBorderSide(
+                                  BorderSide(color: Colors.white, width: 2))),
+                          child: SizedBox.square(dimension: 13)))),
+            ]),
+            const SizedBox(width: 14),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(s.patientName.isEmpty ? 'Pasien' : s.patientName,
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF252E38))),
+                  const SizedBox(height: 3),
+                  Row(children: [
+                    Icon(
+                        s.isVideo
+                            ? Icons.videocam_rounded
+                            : Icons.forum_rounded,
+                        size: 16,
+                        color: _dashboardPurple),
+                    const SizedBox(width: 5),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            s.patientName.isEmpty ? 'Pasien' : s.patientName,
-                            style: const TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                          Text(
-                            _whenLabel(s.scheduledAt),
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant),
-                          ),
-                          Text(
-                              '${s.isVideo ? 'Video' : 'Chat'} • ${s.durationMinutes} menit',
-                              style: Theme.of(context).textTheme.bodySmall),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                if (s.isVideo)
-                  MeetJoinButton(
-                    session: s,
-                    accessToken: accessToken,
-                    expanded: true,
-                    onSessionChanged: (_) => unawaited(onChanged()),
-                  )
-                else
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      style: _compactOutlinedButtonStyle,
-                      onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => ChatScreen(
-                                  otherUserId: s.patientId,
-                                  otherUserName: s.patientName))),
-                      icon: const Icon(Icons.chat_bubble_rounded, size: 18),
-                      label: const Text('Buka chat'),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
+                        child: Text(
+                            s.isVideo
+                                ? 'Video Session, ${s.durationMinutes} menit'
+                                : 'Chat • ${s.durationMinutes} menit',
+                            style: const TextStyle(
+                                fontSize: 13, color: Color(0xFF7D8993)))),
+                  ]),
+                ])),
+          ]),
+          const SizedBox(height: 14),
+          Text(_whenLabel(s),
+              style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.2,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF303A45))),
+          const SizedBox(height: 12),
+          if (s.isVideo && (s.canJoinNow || s.meetingUrl.trim().isEmpty))
+            MeetJoinButton(
+                session: s,
+                accessToken: widget.accessToken,
+                expanded: true,
+                onSessionChanged: (_) => unawaited(widget.onChanged()))
+          else
+            Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
+                decoration: BoxDecoration(
+                    color: const Color(0xFFF6EFFA),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(color: const Color(0xFFF0E7F5))),
+                child:
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const Icon(Icons.schedule_rounded,
+                      size: 16, color: _dashboardPurple),
+                  const SizedBox(width: 7),
+                  Flexible(
+                      child: Text(_countdown(s),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              fontSize: 13,
+                              height: 1.2,
+                              color: _dashboardPurple,
+                              fontWeight: FontWeight.w500))),
+                ])),
+          const SizedBox(height: 14),
+          Row(children: [
+            Expanded(
+                child: FilledButton.icon(
+                    onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                                otherUserId: s.patientId,
+                                otherUserName: s.patientName))),
+                    style: FilledButton.styleFrom(
+                        backgroundColor: _dashboardPurple,
+                        minimumSize: const Size.fromHeight(40),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        textStyle: const TextStyle(
+                            fontSize: 14,
+                            fontFamily: 'Roboto',
+                            fontWeight: FontWeight.w500),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(13))),
+                    icon: const Icon(Icons.chat_bubble_rounded, size: 15),
+                    label: const Text('Chat'))),
+            const SizedBox(width: 12),
+            Expanded(
+                child: OutlinedButton(
+                    onPressed: _canCancel(s) && !_cancelling.contains(s.id)
+                        ? () => _cancel(s)
+                        : null,
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: _dashboardPurple,
+                        minimumSize: const Size.fromHeight(40),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        side: const BorderSide(color: Color(0xFFE5E7EB)),
+                        textStyle: const TextStyle(
+                            fontSize: 14,
+                            fontFamily: 'Roboto',
+                            fontWeight: FontWeight.w500),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(13))),
+                    child: Text(_cancelling.contains(s.id)
+                        ? 'Membatalkan...'
+                        : 'Cancel'))),
+          ]),
+        ])),
+        if (s != widget.sessions.last) const SizedBox(height: 12),
       ],
-    );
+    ]);
   }
 
-  String _whenLabel(String? raw) {
-    final dt = parseWibStored(raw);
-    if (dt == null) return 'Jadwal belum tersedia';
-    return '${formatWibDateTime(dt)} WIB';
+  bool _canCancel(BackendCareSession s) =>
+      s.isScheduled &&
+      s.scheduledDateTime != null &&
+      ServerClock.now().isBefore(s.scheduledDateTime!);
+
+  Future<void> _cancel(BackendCareSession s) async {
+    if (!_canCancel(s) || _cancelling.contains(s.id)) return;
+    final token = widget.accessToken;
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+                title: const Text('Batalkan sesi?'),
+                content: const Text(
+                    'Kredit sesi pasien otomatis kembali dan bisa dijadwalkan ulang.'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Kembali')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      style: compactFilledButtonStyle,
+                      child: const Text('Batalkan')),
+                ]));
+    if (!mounted ||
+        confirmed != true ||
+        widget.accessToken != token ||
+        token.isEmpty ||
+        !_canCancel(s)) return;
+    setState(() => _cancelling.add(s.id));
+    try {
+      final MalvaApiClient api =
+          widget.apiClient ?? ref.read(apiClientProvider);
+      await api.updateCareSession(
+          accessToken: token,
+          sessionId: s.id,
+          status: 'cancelled_by_professional');
+      if (!mounted || widget.accessToken != token) return;
+      await widget.onChanged();
+    } on Object catch (error) {
+      if (!mounted || widget.accessToken != token) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(error))));
+    } finally {
+      if (mounted) setState(() => _cancelling.remove(s.id));
+    }
+  }
+
+  String _initials(String name) => name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((s) => s.isNotEmpty)
+      .take(2)
+      .map((s) => s[0])
+      .join()
+      .toUpperCase();
+
+  String _countdown(BackendCareSession s) {
+    final at = s.scheduledDateTime;
+    if (at == null) return 'Jadwal belum tersedia';
+    final diff = at.difference(ServerClock.now());
+    if (diff <= Duration.zero) return 'Sesi berlangsung';
+    final minutes = (diff.inSeconds / 60).ceil();
+    final hours = minutes ~/ 60;
+    return 'Mulai dalam ${hours > 0 ? '$hours jam ' : ''}${minutes % 60} mnt';
+  }
+
+  String _whenLabel(BackendCareSession s) {
+    final at = s.scheduledDateTime;
+    if (at == null) return 'Jadwal belum tersedia';
+    if (!s.isVideo) return '${formatWibDateTime(at)} WIB';
+    const days = [
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu'
+    ];
+    const months = [
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember'
+    ];
+    return '${days[at.weekday - 1]}, ${at.day} ${months[at.month - 1]} ${at.year} • ${formatWibBubbleTime(at)}';
   }
 }
 
@@ -1754,37 +2119,43 @@ class _PortalDoorCard extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    return SoftCard(
-      bordered: false,
-      onTap: onTap,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: color.withValues(alpha: 0.12),
-            child: Icon(icon, color: color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: const TextStyle(fontWeight: FontWeight.w900)),
-                Text(
-                  subtitle,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right_rounded),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: _DashboardCard(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+              child: Row(children: [
+                Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                        color: color.withValues(alpha: .09),
+                        borderRadius: BorderRadius.circular(17)),
+                    child: Icon(icon, color: color, size: 21)),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text(title,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: Color(0xFF252E38))),
+                      const SizedBox(height: 3),
+                      Text(subtitle,
+                          style: const TextStyle(
+                              fontSize: 11, color: Color(0xFF9AA7B1))),
+                    ])),
+                const SizedBox(width: 4),
+                const CircleAvatar(
+                    radius: 14,
+                    backgroundColor: Color(0xFFF7F8FA),
+                    child: Icon(Icons.chevron_right_rounded,
+                        size: 19, color: Color(0xFF9AA7B1))),
+              ]))));
 }
 
 /// Section "Sesi berjalan" untuk tab Dashboard: sesi (video/chat) yang jendela
@@ -1809,17 +2180,20 @@ class _OngoingSessionsSection extends StatelessWidget {
       );
     }
     if (sessions.isEmpty) {
-      return const SoftCard(
-        bordered: false,
+      return const _DashboardCard(
+        padding: EdgeInsets.symmetric(horizontal: 17, vertical: 16),
         child: Row(
           children: [
-            Icon(Icons.play_circle_outline_rounded, color: Colors.black38),
+            Icon(Icons.play_circle_outline_rounded,
+                color: Color(0xFF9AA7B1), size: 18),
             SizedBox(width: 10),
             Expanded(
               child: Text(
                 'Tidak ada sesi berjalan saat ini.',
                 style: TextStyle(
-                    color: Colors.black54, fontWeight: FontWeight.w600),
+                    color: Color(0xFF7D8993),
+                    fontWeight: FontWeight.w400,
+                    fontSize: 13),
               ),
             ),
           ],
@@ -1850,8 +2224,7 @@ class _OngoingSessionCard extends StatelessWidget {
         session.patientName.isEmpty ? 'Pasien' : session.patientName;
     final timeRange = _timeRangeLabel(session);
     final badgeColor = isVideo ? MalvaColors.seed : MalvaColors.mint;
-    return SoftCard(
-      bordered: false,
+    return _DashboardCard(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

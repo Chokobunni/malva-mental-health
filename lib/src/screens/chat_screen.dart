@@ -328,7 +328,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     _stateSub = _chatService!.stateStream.listen((state) {
       if (mounted && _ownerMatches) {
-        setState(() => _chatState = state);
+        setState(() {
+          _chatState = state;
+          if (state != ChatState.connected) _onlineUsers.clear();
+        });
         if (state == ChatState.connected) unawaited(_loadAccess());
       }
     });
@@ -1419,7 +1422,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           body: const Center(
               child: Text(
                   'Sesi akun telah berubah. Buka kembali percakapan dari akun aktif.')));
-    final otherOnline = _onlineUsers.values.any((online) => online);
+    final otherOnline = _onlineUsers[widget.otherUserId];
     return Scaffold(
       appBar: AppBar(
         // AppBar global bertema transparan + teks putih; di layar chat latar
@@ -1455,34 +1458,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       color: Colors.white,
                       fontWeight: FontWeight.w800,
                       fontSize: 15,
+                      fontFamily: 'Roboto',
                     ),
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(child: _ConnectionStatusChip(state: _chatState)),
-                      if (otherOnline) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          width: 7,
-                          height: 7,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: MalvaColors.mint,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Online',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+                  _ConnectionStatusChip(
+                      state: _chatState,
+                      peerOnline: otherOnline,
+                      reconnecting: _chatService != null),
                 ],
               ),
             ),
@@ -1656,16 +1638,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 }
 
 class _ConnectionStatusChip extends StatelessWidget {
-  const _ConnectionStatusChip({required this.state});
+  const _ConnectionStatusChip(
+      {required this.state,
+      required this.peerOnline,
+      required this.reconnecting});
 
   final ChatState state;
+  final bool? peerOnline;
+  final bool reconnecting;
 
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (state) {
       ChatState.connecting => ('Menyambungkan...', MalvaColors.amber),
-      ChatState.connected => ('Online', MalvaColors.mint),
-      ChatState.disconnected => ('Offline', MalvaColors.danger),
+      ChatState.connected => switch (peerOnline) {
+          true => ('Online', MalvaColors.mint),
+          false => ('Offline', const Color(0xFFC8B6CF)),
+          null => ('Status belum diketahui', const Color(0xFFC8B6CF)),
+        },
+      ChatState.disconnected => (
+          reconnecting ? 'Menghubungkan ulang...' : 'Tidak tersambung',
+          MalvaColors.amber
+        ),
     };
 
     return Row(
@@ -1688,6 +1682,7 @@ class _ConnectionStatusChip extends StatelessWidget {
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.85),
             fontSize: 11,
+            fontFamily: 'Roboto',
             fontWeight: FontWeight.w700,
           ),
         )),

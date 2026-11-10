@@ -126,6 +126,8 @@ Malva adalah aplikasi mental health yang menghubungkan pasien dengan profesional
 
 ### 4.6 Mood & Daily Check-In
 
+Revisi referensi 2026-11-11: Home pasien menjalankan5langkah: mood → obat → tidur → energi → kecemasan/iritabilitas. User mengonfirmasi total5untuk semua indikator. Energi0valid. Add Mood Entry membuka halaman penuh dengan metrik aktual, waktu WIB dan save; Riwayat Minum Obat membuka route khusus berisi seluruh log server per tanggal WIB. Identitas akun/pending dosis tetap dijaga pada save/retry/sinkronisasi. Dashboard profesional dan presence chat mengikuti referensi tanpa menampilkan pengguna lain sebagai peer Online.
+
 | ID | Feature | Priority | Status |
 |---|---|---|---|
 | D-CI-01 | Daily mood check-in (5 mood) + streak | P0 | ✅ Done |
@@ -430,6 +432,6 @@ Rujukan: [spesifikasi](superpowers/specs/2026-11-09-clinical-experience-design.m
   stok awal, batas dan toggle pengingat, kemudian menerbitkan resep serta
   obat pasien atomik. Daily/periodic, hari pilihan dan jumlah per dosis
   disimpan; checklist dan notifikasi membaca rutinitas tersebut.
-- Migrasi 036–038 masih menunggu penerapan produksi pada pekerjaan ini.
+- Migrasi 036–040 telah diterapkan di produksi dan diverifikasi ulang pada rilis0.1.17+18.
   Normalisasi durasi lama di bawah 60 menit tidak mengubah jam mulai;
   irisan antarsesi legacy harus diperiksa sebelum rilis.

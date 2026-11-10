@@ -106,11 +106,16 @@ class OfflineSyncService {
     String? Function()? accessTokenReader,
     String? Function()? activeUserIdReader,
     SecureStore? secureStore,
+    this.onMedicationLogSynced,
+    this.accountGenerationReader,
   })  : _readAccessToken = accessTokenReader,
         _readActiveUserId = activeUserIdReader,
         _secureStore = secureStore ?? createSecureStore();
 
   final MalvaApiClient apiClient;
+  final void Function(String medicationId, String ownerId)?
+      onMedicationLogSynced;
+  final int Function()? accountGenerationReader;
 
   /// Membaca access token aktif saat dibutuhkan — bukan disalin sekali saat
   /// service dibuat — supaya token hasil refresh langsung terpakai.
@@ -257,6 +262,7 @@ class OfflineSyncService {
 
     final owner = _activeUserId;
     final token = accessToken ?? _readAccessToken?.call();
+    final generation = accountGenerationReader?.call();
 
     // Tanpa akun aktif atau tanpa token, antrean tidak boleh disentuh sama
     // sekali. Sebelumnya timer periodik memanggil syncNow() tanpa token,
@@ -276,41 +282,47 @@ class OfflineSyncService {
             (item) => item.status == SyncStatus.pending && item.userId == owner)
         .toList();
 
-    for (final item in pending) {
-      if (!item.canRetry) {
-        _updateItem(item.copyWith(status: SyncStatus.failed));
-        continue;
+    try {
+      for (final item in pending) {
+        if (owner != _activeUserId ||
+            generation != accountGenerationReader?.call()) break;
+        if (!item.canRetry) {
+          _updateItem(item.copyWith(status: SyncStatus.failed));
+          continue;
+        }
+
+        _updateItem(item.copyWith(status: SyncStatus.inProgress));
+
+        try {
+          // WAJIB token hasil resolusi, bukan parameter mentah: pemanggil dari
+          // timer/connectivity tidak mengirim accessToken, sehingga dulu setiap
+          // item langsung gagal dengan "No access token available".
+          await _executeItem(item, token, generation);
+          _updateItem(item.copyWith(status: SyncStatus.completed));
+        } catch (e) {
+          _updateItem(item.copyWith(
+            status: SyncStatus.pending,
+            retryCount: item.retryCount + 1,
+            lastError: e.toString(),
+          ));
+        }
       }
 
-      _updateItem(item.copyWith(status: SyncStatus.inProgress));
+      // Remove completed items older than 24h
+      final now = wibNow();
+      _queue.removeWhere((item) =>
+          item.status == SyncStatus.completed &&
+          now.difference(item.createdAt).inHours > 24);
 
-      try {
-        // WAJIB token hasil resolusi, bukan parameter mentah: pemanggil dari
-        // timer/connectivity tidak mengirim accessToken, sehingga dulu setiap
-        // item langsung gagal dengan "No access token available".
-        await _executeItem(item, token);
-        _updateItem(item.copyWith(status: SyncStatus.completed));
-      } catch (e) {
-        _updateItem(item.copyWith(
-          status: SyncStatus.pending,
-          retryCount: item.retryCount + 1,
-          lastError: e.toString(),
-        ));
-      }
+      await _saveQueue();
+    } finally {
+      _isSyncing = false;
+      _notifyQueue();
     }
-
-    // Remove completed items older than 24h
-    final now = wibNow();
-    _queue.removeWhere((item) =>
-        item.status == SyncStatus.completed &&
-        now.difference(item.createdAt).inHours > 24);
-
-    await _saveQueue();
-    _isSyncing = false;
-    _notifyQueue();
   }
 
-  Future<void> _executeItem(SyncItem item, String? accessToken) async {
+  Future<void> _executeItem(
+      SyncItem item, String? accessToken, int? generation) async {
     if (accessToken == null || accessToken.isEmpty) {
       throw Exception('No access token available for sync');
     }
@@ -371,6 +383,13 @@ class OfflineSyncService {
           takenAt: parseWibStored(item.payload['taken_at'] as String?) ??
               ServerClock.now(),
         );
+        if (generation == accountGenerationReader?.call() &&
+            item.userId == _activeUserId &&
+            (item.payload['status'] == 'taken' ||
+                item.payload['status'] == 'partial')) {
+          onMedicationLogSynced?.call(
+              item.payload['medication_id'] as String, item.userId!);
+        }
       case SyncOperation.diaryEntry:
         // Harus sama dengan jalur online (diary_history_screen):
         //   - sharedWithProfessionals:true — entri yang ditulis online
@@ -404,12 +423,17 @@ class OfflineSyncService {
     if (item.userId == null) return;
 
     _queue.add(item);
-    await _saveQueue();
+    try {
+      await _saveQueue();
+    } on Object {
+      _queue.remove(item);
+      rethrow;
+    }
     _notifyQueue();
 
     // Try immediate sync if online
     final connectivity = await Connectivity().checkConnectivity();
-    if (connectivity != ConnectivityResult.none) {
+    if (!connectivity.contains(ConnectivityResult.none)) {
       unawaited(syncNow());
     }
   }
@@ -432,7 +456,7 @@ class OfflineSyncService {
       // (yang akan menambah retryCount) saat tidak ada koneksi, supaya jatah
       // retry tidak habis hanya karena aplikasi lama terbuka tanpa internet.
       final connectivity = await Connectivity().checkConnectivity();
-      if (connectivity == ConnectivityResult.none) return;
+      if (connectivity.contains(ConnectivityResult.none)) return;
       unawaited(syncNow());
     });
   }

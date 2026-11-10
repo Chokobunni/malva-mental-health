@@ -14,6 +14,7 @@ import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/services/server_clock.dart';
 import 'package:malva_mental_health/src/theme.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
+import 'package:malva_mental_health/src/widgets/meet_join_button.dart';
 
 const _patient = AuthSession(
     role: UserRole.patient,
@@ -118,6 +119,8 @@ Future<void> _tapDisclosure(WidgetTester tester, String tooltip) async {
   final button = find.byTooltip(tooltip);
   await tester.scrollUntilVisible(button, 250,
       scrollable: find.byType(Scrollable).first);
+  await tester.ensureVisible(button);
+  await tester.pumpAndSettle();
   await tester.tap(button);
   await tester.pumpAndSettle();
 }
@@ -271,14 +274,24 @@ void main() {
     await _mount(tester, professional: true);
     await tester.scrollUntilVisible(find.text('Pasien video 1'), 250,
         scrollable: find.byType(Scrollable).first);
-    expect(find.text('Video • 30 menit'), findsOneWidget);
-    expect(find.text('01/01/2099 15:30 WIB'), findsOneWidget);
-    expect(find.textContaining('Mulai dalam'), findsOneWidget);
-    final enabledJoins = tester
-        .widgetList<FilledButton>(find.byType(FilledButton))
-        .where((button) => button.onPressed != null);
-    expect(enabledJoins, isEmpty,
+    expect(find.text('Video Session, 30 menit'), findsOneWidget);
+    expect(find.text('Kamis, 1 Januari 2099 • 15:30'), findsOneWidget);
+    final videoCard = find
+        .ancestor(
+            of: find.text('Pasien video 1'), matching: find.byType(Container))
+        .first;
+    expect(
+        find.descendant(
+            of: videoCard, matching: find.textContaining('Mulai dalam')),
+        findsOneWidget);
+    expect(find.byType(MeetJoinButton), findsNothing,
         reason: 'a saved Meet URL must not bypass the session opening window');
+    expect(find.text('Gabung video call'), findsNothing);
+    final chat = tester.widget<FilledButton>(find.descendant(
+        of: videoCard, matching: find.widgetWithText(FilledButton, 'Chat')));
+    expect(chat.onPressed, isNotNull,
+        reason:
+            'chat history stays accessible before the video opening window');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
@@ -309,7 +322,7 @@ void main() {
     await _mount(tester, professional: true, textScale: 1.3);
     await tester.scrollUntilVisible(find.text('Pasien video 1'), 250,
         scrollable: find.byType(Scrollable).first);
-    expect(find.text('01/01/2099 15:30 WIB'), findsOneWidget);
+    expect(find.text('Kamis, 1 Januari 2099 • 15:30'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.tap(find.descendant(
         of: find.byType(NavigationBar), matching: find.text('Messages')));

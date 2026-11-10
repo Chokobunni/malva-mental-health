@@ -6,24 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../providers/providers.dart';
 import '../services/server_clock.dart';
-import '../theme.dart';
-import 'malva_components.dart';
 import '../time/wib.dart';
 
-// ============================================================
-// DAILY CHECK-IN (Home paling atas) — alur interaktif bertahap:
-//   1. Emoticon lucu (mood) — Figma "How are you today?"
-//   2. List obat yang perlu diminum (checklist)
-//   3. "How long did you sleep?" — jam (1-12) + menit
-//   4. "How is your energy?" — baterai penuh / setengah / habis
-//   5. Popup "Good job!" + streak total hari
-// Semua tersimpan via MalvaStore (MoodEntry + MedicationLog lokal).
-// ============================================================
+// Five-step daily check-in with account-scoped persistence.
 
 /// Cek apakah hari ini sudah check-in lengkap (ada mood dengan sleep).
 ///
-/// `MoodEntry.date` berasal dari server (UTC) saat riwayat dimuat ulang,
-/// jadi perbandingan WAJIB lewat hari kalender lokal — kalau tidak, check-in
+/// `MoodEntry.date` berasal dari server saat riwayat dimuat ulang,
+/// jadi perbandingan WAJIB lewat hari kalender WIB — kalau tidak, check-in
 /// pukul 22:00 WIB terbaca sebagai kemarin dan pasien diminta check-in lagi.
 bool hasCheckedInToday(List<MoodEntry> moods) {
   final now = ServerClock.now();
@@ -59,591 +49,663 @@ int checkInStreak(List<MoodEntry> moods) {
 }
 
 class DailyCheckInFlow extends ConsumerStatefulWidget {
-  const DailyCheckInFlow({super.key, required this.onSaved});
-
+  const DailyCheckInFlow(
+      {super.key, required this.onSaved, this.onProfile, this.trailing});
   final VoidCallback onSaved;
-
+  final VoidCallback? onProfile;
+  final Widget? trailing;
   @override
   ConsumerState<DailyCheckInFlow> createState() => _DailyCheckInFlowState();
 }
 
 class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
+  static const purple = Color(0xff9755ad);
   MoodValue? _mood;
-  int _step = 0; // 0 mood, 1 meds, 2 sleep, 3 energy, 4 done
-  final Set<String> _takenMeds = {};
-  int _sleepHours = 7;
-  int _sleepMinutes = 30;
-  int _energyLevel = 2; // 0 habis, 1 setengah, 2 penuh
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final store = ref.read(malvaStoreProvider);
-      if (hasCheckedInToday(store.moodEntries)) {
-        setState(() => _step = 4);
-      }
-    });
+  int _step = 0,
+      _hours = 7,
+      _minutes = 30,
+      _energy = 5,
+      _anxiety = 3,
+      _irritability = 2;
+  bool _saving = false, _done = false;
+  int _generation = 0;
+  MoodEntry? _savedMood;
+  final Set<String> _startedDoses = {}, _finishedDoses = {};
+  bool _pending = false;
+  final Map<String, String> _doses = {};
+  String? _error;
+  String? _owner(AuthSession? s) =>
+      s == null ? null : '${s.role.name}|${s.backendUserId ?? s.identifier}';
+  void _reset() {
+    _generation++;
+    _savedMood = null;
+    _startedDoses.clear();
+    _finishedDoses.clear();
+    _pending = false;
+    _step = 0;
+    _mood = null;
+    _hours = 7;
+    _minutes = 30;
+    _energy = 5;
+    _anxiety = 3;
+    _irritability = 2;
+    _doses.clear();
+    _saving = false;
+    _done = false;
+    _error = null;
   }
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(currentSessionProvider);
+    ref.listen<AuthSession?>(currentSessionProvider, (before, after) {
+      if (_owner(before) != _owner(after)) setState(_reset);
+    });
     final store = ref.watch(malvaStoreProvider);
-    final done = _step == 4;
-    return SoftCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Daily Check-in',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-                ),
-              ),
-              if (done)
-                const Icon(Icons.check_circle_rounded, color: MalvaColors.mint),
+    final name = session?.displayName.trim().isNotEmpty == true
+        ? session!.displayName
+        : store.patient.name;
+    final initials = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .take(2)
+        .map((p) => p[0])
+        .join()
+        .toUpperCase();
+    final done = _done || (_step == 0 && hasCheckedInToday(store.moodEntries));
+    return Container(
+        decoration: const BoxDecoration(
+            gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xff4e266a),
+                  Color(0xff86509f),
+                  Color(0xffe4a0d5)
+                ]),
+            borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+            boxShadow: [
+              BoxShadow(
+                  color: Color(0x18000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 6))
+            ]),
+        padding: const EdgeInsets.fromLTRB(23, 42, 23, 26),
+        child: DefaultTextStyle(
+            style: const TextStyle(fontFamily: 'Roboto', color: Colors.white),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(children: [
+                    Image.asset('assets/checkin/flower-white.png',
+                        width: 29, height: 34),
+                    const Expanded(
+                        child: Text('Home',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 19, fontWeight: FontWeight.w500))),
+                    if (widget.trailing != null) widget.trailing!,
+                    InkWell(
+                        onTap: widget.onProfile,
+                        borderRadius: BorderRadius.circular(24),
+                        child: Container(
+                            width: 40,
+                            height: 40,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0xff810091),
+                                border: Border.all(
+                                    color: Colors.white54, width: 2)),
+                            child: Text(initials,
+                                style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700))))
+                  ]),
+                  const SizedBox(height: 24),
+                  if (_step == 0 || done) ...[
+                    Text('Selamat datang, $name!',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 23, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 12),
+                    Text(
+                        done
+                            ? 'Check-in hari ini selesai. Streak ${checkInStreak(store.moodEntries)} hari!'
+                            : 'Bagaimana kabarmu hari ini?',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 16, color: Color(0xfff3e7f5))),
+                    const SizedBox(height: 32),
+                    Row(children: [
+                      for (final m in MoodValue.values)
+                        Expanded(
+                            child: InkWell(
+                                onTap: done
+                                    ? null
+                                    : () => setState(() {
+                                          _mood = m;
+                                          _step = 1;
+                                        }),
+                                child: Column(children: [
+                                  Image.asset('assets/checkin/${m.name}.png',
+                                      width: 40, height: 40),
+                                  const SizedBox(height: 14),
+                                  Text(m.label,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500))
+                                ])))
+                    ]),
+                  ] else ...[
+                    Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _pill(
+                              child: InkWell(
+                                  onTap: _saving || _savedMood != null
+                                      ? null
+                                      : () => setState(() => _step--),
+                                  child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.arrow_back_rounded,
+                                            size: 15, color: Colors.white),
+                                        Text('Kembali',
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600))
+                                      ]))),
+                          _pill(
+                              child: Text('Langkah ${_step + 1} dari 5',
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600)))
+                        ]),
+                    SizedBox(height: _step >= 3 ? 8 : 17),
+                    Text(
+                        switch (_step) {
+                          1 => 'Apakah kamu sudah minum obat\nhari ini?',
+                          2 => 'Berapa lama kamu tidur?',
+                          3 => 'Bagaimana tingkat energimu?',
+                          _ => 'Bagaimana tingkat kecemasan & iritabilitasmu?'
+                        },
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 20,
+                            height: 1.3,
+                            fontWeight: FontWeight.w700)),
+                    if (_step == 2) ...[
+                      const SizedBox(height: 3),
+                      const Text('Catat durasi tidur malammu',
+                          textAlign: TextAlign.center,
+                          style:
+                              TextStyle(fontSize: 13, color: Color(0xfff3e7f5)))
+                    ],
+                    SizedBox(height: _step >= 3 ? 14 : 20),
+                    if (_step == 1) ...[
+                      if (store.medications.isEmpty)
+                        _card(const Text('Tidak ada jadwal obat hari ini.',
+                            style: TextStyle(color: Color(0xff6b7280)))),
+                      for (final med in store.medications)
+                        Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _medication(med)),
+                      const SizedBox(height: 8),
+                      _next(outlined: true),
+                    ],
+                    if (_step == 2)
+                      _card(Column(children: [
+                        Row(children: [
+                          Expanded(
+                              child: _counter('sleep-hours', _hours, 'jam', 0,
+                                  23, (n) => setState(() => _hours = n))),
+                          const SizedBox(width: 12),
+                          Expanded(
+                              child: _counter(
+                                  'sleep-minutes',
+                                  _minutes,
+                                  'menit',
+                                  0,
+                                  59,
+                                  (n) => setState(() => _minutes = n)))
+                        ]),
+                        const SizedBox(height: 16),
+                        _next()
+                      ])),
+                    if (_step == 3) ...[
+                      Center(
+                          child: Container(
+                              width: 76,
+                              height: 76,
+                              decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(17),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                        color: Color(0x18000000),
+                                        blurRadius: 12,
+                                        offset: Offset(0, 8))
+                                  ]),
+                              child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Image.asset(
+                                        'assets/checkin/battery-${_energy == 0 ? 0 : _energy < 5 ? 1 : _energy == 5 ? 5 : _energy < 10 ? 6 : 10}.png',
+                                        width: 34,
+                                        height: 23),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                        _energy == 0
+                                            ? 'Habis'
+                                            : _energy < 5
+                                                ? 'Rendah'
+                                                : _energy == 5
+                                                    ? 'Sedang'
+                                                    : _energy < 10
+                                                        ? 'Tinggi'
+                                                        : 'Sangat Tinggi',
+                                        style: const TextStyle(
+                                            color: Color(0xff4b5563),
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700))
+                                  ]))),
+                      const SizedBox(height: 16),
+                      _card(Column(children: [
+                        Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Flexible(
+                                  child: Text('0 (Habis)',
+                                      style: TextStyle(
+                                          color: Color(0xff707780),
+                                          fontSize: 12))),
+                              Text('$_energy / 10',
+                                  style: const TextStyle(
+                                      color: purple,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w800)),
+                              const Flexible(
+                                  child: Text('10 (Penuh)',
+                                      style: TextStyle(
+                                          color: Color(0xff707780),
+                                          fontSize: 12)))
+                            ]),
+                        const SizedBox(height: 18),
+                        GridView.count(
+                            crossAxisCount: 6,
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            mainAxisSpacing: 6,
+                            crossAxisSpacing: 6,
+                            childAspectRatio: 1.35,
+                            children: [
+                              for (var n = 0; n <= 10; n++)
+                                InkWell(
+                                    key: ValueKey('energy-$n'),
+                                    onTap: () => setState(() => _energy = n),
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                            color: n == _energy
+                                                ? purple
+                                                : const Color(0xfff7f8fa),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            border: Border.all(
+                                                color:
+                                                    const Color(0xfff1f1f3))),
+                                        child: Text('$n',
+                                            style: TextStyle(
+                                                color: n == _energy
+                                                    ? Colors.white
+                                                    : const Color(0xff374151),
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 15))))
+                            ]),
+                        const SizedBox(height: 12),
+                        _next()
+                      ])),
+                    ],
+                    if (_step == 4)
+                      _card(Column(children: [
+                        Row(children: [
+                          Expanded(
+                              child: _counter(
+                                  'anxiety',
+                                  _anxiety,
+                                  'Skala 0 - 10',
+                                  0,
+                                  10,
+                                  (n) => setState(() => _anxiety = n),
+                                  title: 'Kecemasan')),
+                          const SizedBox(width: 12),
+                          Expanded(
+                              child: _counter(
+                                  'irritability',
+                                  _irritability,
+                                  'Skala 0 - 10',
+                                  0,
+                                  10,
+                                  (n) => setState(() => _irritability = n),
+                                  title: 'Iritabilitas'))
+                        ]),
+                        const SizedBox(height: 16),
+                        FilledButton.icon(
+                            onPressed: _saving ? null : _save,
+                            style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xff0eb689),
+                                disabledBackgroundColor:
+                                    const Color(0xff7dcbba),
+                                minimumSize: const Size.fromHeight(47),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16))),
+                            icon: _saving
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.check_circle, size: 17),
+                            label: const Text('Selesai Check-in',
+                                style: TextStyle(
+                                    fontFamily: 'Roboto',
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700)))
+                      ])),
+                    if (_error != null)
+                      Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(_error!, textAlign: TextAlign.center)),
+                  ]
+                ])));
+  }
+
+  Widget _pill({required Widget child}) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: .19),
+          borderRadius: BorderRadius.circular(30)),
+      child: child);
+  Widget _card(Widget child) => Container(
+      padding: EdgeInsets.all(_step >= 3 ? 15 : 19),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(27),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x15000000), blurRadius: 10, offset: Offset(0, 6))
+          ]),
+      child: child);
+  Widget _next({bool outlined = false}) => SizedBox(
+      width: double.infinity,
+      child: FilledButton(
+          onPressed: () => setState(() => _step++),
+          style: FilledButton.styleFrom(
+              backgroundColor:
+                  outlined ? Colors.white.withValues(alpha: .13) : purple,
+              minimumSize: const Size.fromHeight(47),
+              side: outlined
+                  ? const BorderSide(color: Colors.white54)
+                  : BorderSide.none,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16))),
+          child: const Text('Lanjut',
+              style: TextStyle(
+                  fontFamily: 'Roboto',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700))));
+  Widget _counter(String id, int value, String label, int min, int max,
+          ValueChanged<int> change, {String? title}) =>
+      Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+          decoration: BoxDecoration(
+              color: const Color(0xfff8f5fa),
+              borderRadius: BorderRadius.circular(17)),
+          child: Column(children: [
+            if (title != null) ...[
+              Text(title,
+                  style: const TextStyle(
+                      color: purple,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 10)
             ],
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Mood • Obat • Tidur • Energi',
-            style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-                color: Colors.black54),
-          ),
-          const SizedBox(height: 10),
-          _StepIndicator(current: _step),
-          const SizedBox(height: 12),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: switch (_step) {
-              0 => _MoodPicker(
-                  key: const ValueKey('mood'),
-                  selected: _mood,
-                  onSelect: (m) => setState(() {
-                    _mood = m;
-                    _step = 1;
-                  }),
-                ),
-              1 => _MedicationPicker(
-                  key: const ValueKey('meds'),
-                  meds: store.medications,
-                  taken: _takenMeds,
-                  onToggle: (id) => setState(() {
-                    if (_takenMeds.contains(id)) {
-                      _takenMeds.remove(id);
-                    } else {
-                      _takenMeds.add(id);
-                    }
-                  }),
-                  onNext: () => setState(() => _step = 2),
-                ),
-              2 => _SleepPicker(
-                  key: const ValueKey('sleep'),
-                  hours: _sleepHours,
-                  minutes: _sleepMinutes,
-                  onHours: (h) => setState(() => _sleepHours = h),
-                  onMinutes: (m) => setState(() => _sleepMinutes = m),
-                  onNext: () => setState(() => _step = 3),
-                ),
-              3 => _EnergyPicker(
-                  key: const ValueKey('energy'),
-                  level: _energyLevel,
-                  onSelect: (l) => setState(() {
-                    _energyLevel = l;
-                    _save(store);
-                  }),
-                ),
-              _ => _DoneCard(
-                  key: const ValueKey('done'),
-                  streak: checkInStreak(store.moodEntries),
-                ),
-            },
-          ),
-        ],
-      ),
-    );
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              _counterButton(
+                  '$id-minus',
+                  Icons.remove_rounded,
+                  value > min && !_saving && _savedMood == null
+                      ? () => change(value - 1)
+                      : null),
+              Flexible(
+                  child: Text('$value',
+                      style: const TextStyle(
+                          fontSize: 24,
+                          color: Color(0xff111827),
+                          fontWeight: FontWeight.w700))),
+              _counterButton(
+                  '$id-plus',
+                  Icons.add_rounded,
+                  value < max && !_saving && _savedMood == null
+                      ? () => change(value + 1)
+                      : null)
+            ]),
+            const SizedBox(height: 7),
+            Text(label,
+                style: const TextStyle(fontSize: 12, color: Color(0xff8e949e)))
+          ]));
+  Widget _counterButton(
+          String id, IconData icon, VoidCallback? action) =>
+      SizedBox(
+          width: 34,
+          height: 34,
+          child: IconButton(
+              key: ValueKey(id),
+              padding: EdgeInsets.zero,
+              onPressed: action,
+              style: IconButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: purple,
+                  side: const BorderSide(color: Color(0xffeee8f3))),
+              icon: Icon(icon, size: 21)));
+  Widget _medication(Medication m) {
+    final enabled = !isTemporaryMedicationId(m.id) &&
+        ref.read(malvaStoreProvider.notifier).pendingDosesFor(m.id) == 0;
+    return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(17)),
+        child: Row(children: [
+          Container(
+              width: 6,
+              height: 39,
+              decoration: BoxDecoration(
+                  color: const Color(0xff2ac7b5),
+                  borderRadius: BorderRadius.circular(6))),
+          const SizedBox(width: 11),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text('${m.name} ${m.dosage}',
+                    style: const TextStyle(
+                        color: Color(0xff111827),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 3),
+                Text(
+                    '${m.reminders.isEmpty ? 'Fleksibel' : m.reminders.map((r) => r.label).join(', ')} • ${m.form} • ${m.sourceLabel}',
+                    style:
+                        const TextStyle(color: Color(0xff6b7280), fontSize: 11))
+              ])),
+          const SizedBox(width: 6),
+          Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+              decoration: BoxDecoration(
+                  color: const Color(0xfff3ebf8),
+                  borderRadius: BorderRadius.circular(16)),
+              child: Text('${m.currentStock} tersisa',
+                  style: const TextStyle(
+                      color: purple,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700))),
+          const SizedBox(width: 7),
+          for (final status in ['taken', 'skipped'])
+            Padding(
+                padding: const EdgeInsets.only(left: 5),
+                child: SizedBox(
+                    width: 31,
+                    height: 31,
+                    child: IconButton(
+                        key: ValueKey('${m.id}-$status'),
+                        tooltip:
+                            status == 'taken' ? 'Sudah diminum' : 'Dilewati',
+                        onPressed: enabled
+                            ? () => setState(() {
+                                  if (_doses[m.id] == status) {
+                                    _doses.remove(m.id);
+                                  } else {
+                                    _doses[m.id] = status;
+                                  }
+                                })
+                            : null,
+                        style: IconButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(7)),
+                            backgroundColor: status == 'taken'
+                                ? const Color(0xffd1fae5)
+                                : const Color(0xfffce4e8),
+                            foregroundColor: status == 'taken'
+                                ? const Color(0xff159d80)
+                                : const Color(0xffd32b51),
+                            side: _doses[m.id] == status
+                                ? BorderSide(
+                                    color: status == 'taken'
+                                        ? const Color(0xff159d80)
+                                        : const Color(0xffd32b51),
+                                    width: 2)
+                                : BorderSide.none),
+                        icon: Icon(
+                            status == 'taken'
+                                ? Icons.check_rounded
+                                : Icons.close_rounded,
+                            size: 22))))
+        ]));
   }
 
-  void _save(MalvaStoreState store) {
-    final mood = _mood ?? MoodValue.okay;
-    final energy = switch (_energyLevel) { 0 => 2, 1 => 5, _ => 9 };
-    final sleep = _sleepHours + _sleepMinutes / 60.0;
-    final entry = MoodEntry(
-      date: wibNow(),
-      mood: mood,
-      sleepHours: sleep,
-      energy: energy,
-      anxiety: 5,
-      irritability: 5,
-      note: 'Daily check-in',
-    );
-    ref.read(malvaStoreProvider.notifier).addMood(entry);
-    // Simpan ke server agar riwayat tidak hilang saat aplikasi ditutup.
-    _syncToServer(entry, medicationTaken: _takenMeds.isNotEmpty);
-    // Tandai obat yang dicentang sudah diminum hari ini.
-    final notifier = ref.read(malvaStoreProvider.notifier);
-    for (final id in _takenMeds) {
-      notifier.takeMedication(id);
-    }
-    widget.onSaved();
-    setState(() => _step = 4);
-    _showStreakPopup();
-  }
-
-  /// Kirim check-in ke server (online) atau antre untuk sync (offline).
-  void _syncToServer(MoodEntry entry, {required bool medicationTaken}) {
+  Future<void> _save() async {
+    if (_saving) return;
     final session = ref.read(currentSessionProvider);
-    final accessToken = session?.accessToken;
-    final apiClient = ref.read(apiClientProvider);
-    if (accessToken == null || accessToken.isEmpty) return;
-    final isOnline = ref.read(isOnlineProvider);
-    if (!isOnline) {
-      unawaited(ref.read(offlineSyncServiceProvider).enqueueMood(entry));
+    final owner = _owner(session);
+    final generation = _generation;
+    final token = session?.accessToken;
+    if (owner == null || token == null || token.isEmpty) {
+      setState(() => _error = 'Masuk ke akun untuk menyimpan check-in.');
       return;
     }
-    unawaited(() async {
+    bool current() =>
+        mounted &&
+        generation == _generation &&
+        _owner(ref.read(currentSessionProvider)) == owner;
+    final entry = MoodEntry(
+        date: ServerClock.now(),
+        mood: _mood!,
+        sleepHours: _hours + _minutes / 60,
+        energy: _energy,
+        anxiety: _anxiety,
+        irritability: _irritability,
+        note: 'Daily check-in');
+    final api = ref.read(apiClientProvider);
+    final queue = ref.read(offlineSyncServiceProvider);
+    final notifier = ref.read(malvaStoreProvider.notifier);
+    final meds = List<Medication>.of(ref.read(malvaStoreProvider).medications);
+    final doses = Map<String, String>.of(_doses);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    if (_savedMood == null) {
       try {
-        await apiClient.createMoodCheckin(
-          accessToken: accessToken,
-          mood: entry.mood.name,
-          sleepHours: entry.sleepHours,
-          energy: entry.energy,
-          anxiety: entry.anxiety,
-          irritability: entry.irritability,
-          note: entry.note,
-          medicationTaken: medicationTaken,
-          occurredAt: entry.date,
-        );
+        await api.createMoodCheckin(
+            accessToken: token,
+            mood: entry.mood.name,
+            sleepHours: entry.sleepHours,
+            energy: entry.energy,
+            anxiety: entry.anxiety,
+            irritability: entry.irritability,
+            note: entry.note,
+            medicationTaken: doses.containsValue('taken'),
+            occurredAt: entry.date);
       } on Object {
-        // Gagal (offline mendadak): antre agar tidak hilang.
-        unawaited(ref.read(offlineSyncServiceProvider).enqueueMood(entry));
+        if (!current()) return;
+        try {
+          await queue.enqueueMood(entry);
+          _pending = true;
+        } on Object {
+          if (current())
+            setState(() {
+              _saving = false;
+              _error = 'Check-in belum tersimpan. Coba lagi.';
+            });
+          return;
+        }
       }
-    }());
-  }
-
-  void _showStreakPopup() {
-    final streak = checkInStreak(ref.read(malvaStoreProvider).moodEntries);
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('🎉', style: TextStyle(fontSize: 52)),
-            const SizedBox(height: 10),
-            const Text('Good job!',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
-            const SizedBox(height: 6),
-            Text(
-              streak > 0
-                  ? 'Streak check-in kamu: $streak hari berturut-turut!'
-                  : 'Check-in pertamamu tercatat. Mulai streak-mu sekarang!',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ],
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(46),
-            ),
-            child: const Text('Lanjut'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------- Step widgets ----------------
-
-/// Indikator langkah check-in: 1 Mood, 2 Obat, 3 Tidur, 4 Energi.
-class _StepIndicator extends StatelessWidget {
-  const _StepIndicator({required this.current});
-
-  /// 0=mood, 1=meds, 2=sleep, 3=energy, 4=done.
-  final int current;
-
-  static const _labels = ['Mood', 'Obat', 'Tidur', 'Energi'];
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        for (var i = 0; i < _labels.length; i++) ...[
-          if (i > 0)
-            Expanded(
-              child: Container(
-                height: 2,
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                color: i <= current
-                    ? MalvaColors.seed
-                    : Colors.black.withValues(alpha: 0.10),
-              ),
-            ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircleAvatar(
-                radius: 11,
-                backgroundColor: i <= current || current == 4
-                    ? MalvaColors.seed
-                    : Colors.black.withValues(alpha: 0.08),
-                child: current == 4 || i < current
-                    ? const Icon(Icons.check_rounded,
-                        size: 13, color: Colors.white)
-                    : Text(
-                        '${i + 1}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          color: i <= current ? Colors.white : Colors.black45,
-                        ),
-                      ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                _labels[i],
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w800,
-                  color: i <= current || current == 4
-                      ? MalvaColors.plum
-                      : Colors.black45,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _MoodPicker extends StatelessWidget {
-  const _MoodPicker(
-      {super.key, required this.selected, required this.onSelect});
-
-  final MoodValue? selected;
-  final ValueChanged<MoodValue> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        const Text('How are you today?',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
-        const Text('Bagaimana perasaanmu hari ini?',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: Colors.black54)),
-        const SizedBox(height: 10),
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 4,
-          runSpacing: 8,
-          children: [
-            for (final mood in MoodValue.values)
-              InkWell(
-                onTap: () => onSelect(mood),
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: selected == mood
-                        ? MalvaColors.seed.withValues(alpha: 0.14)
-                        : Colors.transparent,
-                  ),
-                  child: Column(
-                    children: [
-                      Text(mood.emoji, style: const TextStyle(fontSize: 30)),
-                      const SizedBox(height: 2),
-                      Text(
-                        mood.label,
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                          color: selected == mood
-                              ? MalvaColors.seed
-                              : Colors.black54,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _MedicationPicker extends StatelessWidget {
-  const _MedicationPicker({
-    super.key,
-    required this.meds,
-    required this.taken,
-    required this.onToggle,
-    required this.onNext,
-  });
-
-  final List<Medication> meds;
-  final Set<String> taken;
-  final ValueChanged<String> onToggle;
-  final VoidCallback onNext;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text('Obat yang perlu diminum hari ini',
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
-        const SizedBox(height: 8),
-        if (meds.isEmpty)
-          const Text('Tidak ada jadwal obat hari ini. 👍',
-              style: TextStyle(color: Colors.black54)),
-        for (final med in meds)
-          CheckboxListTile(
-            value: taken.contains(med.id),
-            onChanged: (_) => onToggle(med.id),
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            controlAffinity: ListTileControlAffinity.leading,
-            activeColor: MalvaColors.mint,
-            title: Text(med.name,
-                style: const TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: Text(
-                '${med.dosage}${med.reminders.isNotEmpty ? ' • ${med.reminders.map((r) => r.time).join(', ')}' : ''}',
-                style: const TextStyle(fontSize: 12)),
-            secondary:
-                const Icon(Icons.medication_rounded, color: MalvaColors.seed),
-          ),
-        const SizedBox(height: 8),
-        FilledButton(
-          onPressed: onNext,
-          child: const Text('Lanjut'),
-        ),
-      ],
-    );
-  }
-}
-
-class _SleepPicker extends StatelessWidget {
-  const _SleepPicker({
-    super.key,
-    required this.hours,
-    required this.minutes,
-    required this.onHours,
-    required this.onMinutes,
-    required this.onNext,
-  });
-
-  final int hours;
-  final int minutes;
-  final ValueChanged<int> onHours;
-  final ValueChanged<int> onMinutes;
-  final VoidCallback onNext;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text('How long did you sleep?',
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
-        const Text('Berapa lama kamu tidur?',
-            style: TextStyle(fontSize: 12, color: Colors.black54)),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _NumberWheel(
-                label: 'jam',
-                value: hours,
-                min: 1,
-                max: 12,
-                onChanged: onHours,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _NumberWheel(
-                label: 'menit',
-                value: minutes,
-                min: 0,
-                max: 59,
-                step: 15,
-                onChanged: onMinutes,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        FilledButton(onPressed: onNext, child: const Text('Lanjut')),
-      ],
-    );
-  }
-}
-
-/// Dropdown angka dengan tombol +/- (jam 1-12, menit langkah 15).
-class _NumberWheel extends StatelessWidget {
-  const _NumberWheel({
-    required this.label,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.onChanged,
-    this.step = 1,
-  });
-
-  final String label;
-  final int value;
-  final int min;
-  final int max;
-  final int step;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: MalvaColors.seed.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            onPressed:
-                value - step >= min ? () => onChanged(value - step) : null,
-            icon: const Icon(Icons.remove_circle_outline_rounded),
-          ),
-          Expanded(
-            child: Column(
-              children: [
-                Text('$value',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w900, fontSize: 18)),
-                Text(label,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: Colors.black54)),
-              ],
-            ),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            onPressed:
-                value + step <= max ? () => onChanged(value + step) : null,
-            icon: const Icon(Icons.add_circle_outline_rounded),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EnergyPicker extends StatelessWidget {
-  const _EnergyPicker({
-    super.key,
-    required this.level,
-    required this.onSelect,
-  });
-
-  final int level;
-  final ValueChanged<int> onSelect;
-
-  static const _options = [
-    (0, Icons.battery_1_bar_rounded, 'Habis', MalvaColors.danger),
-    (1, Icons.battery_3_bar_rounded, 'Setengah', MalvaColors.amber),
-    (2, Icons.battery_full_rounded, 'Penuh', MalvaColors.mint),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text('How is your energy?',
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
-        const Text('Bagaimana energimu hari ini?',
-            style: TextStyle(fontSize: 12, color: Colors.black54)),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            for (final (value, icon, label, color) in _options)
-              InkWell(
-                onTap: () => onSelect(value),
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: level == value
-                        ? color.withValues(alpha: 0.14)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: level == value
-                          ? color
-                          : Colors.black.withValues(alpha: 0.08),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(icon, size: 30, color: color),
-                      const SizedBox(height: 4),
-                      Text(label,
-                          style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                              color: level == value ? color : Colors.black54)),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _DoneCard extends StatelessWidget {
-  const _DoneCard({super.key, required this.streak});
-
-  final int streak;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Text('🎉', style: TextStyle(fontSize: 30)),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            streak > 0
-                ? 'Check-in hari ini selesai. Streak $streak hari! 🔥'
-                : 'Check-in hari ini selesai. 👏',
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-        ),
-      ],
-    );
+      if (!current()) return;
+      _savedMood = entry;
+      notifier.addMood(entry);
+    }
+    for (final med in meds) {
+      final status = doses[med.id];
+      if (status == null ||
+          isTemporaryMedicationId(med.id) ||
+          _finishedDoses.contains(med.id) ||
+          (!_startedDoses.contains(med.id) &&
+              notifier.pendingDosesFor(med.id) > 0)) continue;
+      if (!current()) return;
+      if (_startedDoses.add(med.id))
+        notifier.takeMedication(med.id, status: status);
+      try {
+        await api.createMedicationLog(
+            accessToken: ref.read(currentSessionProvider)!.accessToken!,
+            medicationId: med.id,
+            medicationName: med.name,
+            status: status,
+            takenAt: _savedMood!.date);
+        if (!current()) return;
+        if (status == 'taken') notifier.confirmDose(med.id);
+      } on Object {
+        if (!current()) return;
+        try {
+          await queue.enqueueMedicationLog(
+              medicationId: med.id, medicationName: med.name, status: status);
+          _pending = true;
+        } on Object {
+          if (current())
+            setState(() {
+              _saving = false;
+              _error =
+                  'Mood tersimpan. Log obat belum tersimpan; tekan Selesai Check-in untuk mencoba lagi.';
+            });
+          return;
+        }
+      }
+      if (!current()) return;
+      _finishedDoses.add(med.id);
+    }
+    if (!current()) return;
+    setState(() {
+      _done = true;
+      _saving = false;
+    });
+    if (_pending)
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:
+              Text('Check-in disimpan di perangkat, menunggu sinkronisasi.')));
+    widget.onSaved();
   }
 }

@@ -15,6 +15,7 @@ import 'consent_management_screen.dart';
 import 'admin/admin_panel_screen.dart';
 import 'safety/emergency_contacts_screen.dart';
 import 'settings_screens.dart';
+import 'notifications_screen.dart';
 
 class MoreScreen extends ConsumerStatefulWidget {
   const MoreScreen({
@@ -56,6 +57,18 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
             padding: const EdgeInsets.all(18),
             child: Column(
               children: [
+                ActionTile(
+                    icon: Icons.notifications_rounded,
+                    title: 'Notifikasi',
+                    subtitle: 'Lihat notifikasi Malva',
+                    color: MalvaColors.seed,
+                    onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => NotificationsScreen(
+                                session: widget.session,
+                                apiClient: widget.apiClient)))),
+                const SizedBox(height: 10),
                 ActionTile(
                   icon: Icons.contact_emergency_rounded,
                   title: 'Kontak Darurat',

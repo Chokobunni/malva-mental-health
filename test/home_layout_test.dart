@@ -24,21 +24,21 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('home menampilkan layout Figma: Find Professionals + 2 grid',
+  testWidgets('home menampilkan layout Figma: Cari Profesional + 2 grid',
       (tester) async {
     await pumpHome(tester);
 
     // Header + sambutan (via mood check-in).
     expect(find.text('Home'), findsOneWidget);
 
-    // Figma Group 242: tile Find Professionals.
-    expect(find.text('Find Professionals'), findsOneWidget);
+    // Figma Group 242: tile Cari Profesional.
+    expect(find.text('Cari Profesional'), findsOneWidget);
 
     // Figma section labels.
-    expect(find.text('Self Care'), findsOneWidget);
+    expect(find.text('Self-care'), findsOneWidget);
     expect(find.text('Professional Care'), findsOneWidget);
 
-    // Figma grid Self Care: Goals & Habits / Diary History /
+    // Figma grid Self-care: Goals & Habits / Diary History /
     // Psychological Therapy / Health Record.
     expect(find.text('Goals & Habits'), findsOneWidget);
     expect(find.textContaining('Diary'), findsOneWidget);
@@ -49,9 +49,12 @@ void main() {
     expect(find.text('Assessment'), findsOneWidget);
     expect(find.text('History Log'), findsOneWidget);
 
-    // Tombol Find Professionals.
-    expect(find.text('Find Professionals'), findsOneWidget);
+    // Tombol Cari Profesional.
+    expect(find.text('Cari Profesional'), findsOneWidget);
 
+    // The reference places the tracker above the four Self-care tiles.
+    expect(tester.getTopLeft(find.text('Mood Medication Check-in')).dy,
+        lessThan(tester.getTopLeft(find.text('Goals & Habits')).dy));
     // Banner Mood Medication Check-in.
     expect(find.text('Mood Medication Check-in'), findsOneWidget);
     expect(tester.getTopLeft(find.text('Mood Medication Check-in')).dy,

@@ -388,6 +388,13 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Body multi-line berisi **bullet perubahan per modul/file**.
 - Contoh:
   ```
+
+## Kontrak Home dan check-in sesuai referensi (2026-11-11)
+
+- Check-in Home memakai lima langkah: mood, obat, tidur, energi, kecemasan/iritabilitas. Semua indikator memakai total5, sesuai konfirmasi user. Nilai energi0 sah dan nilai pilihan aktual disimpan; kembali mempertahankan pilihan. Identitas akun serta generasi request wajib diperiksa, termasuk A→B→A.
+- Add Mood Entry adalah halaman penuh. Riwayat minum obat adalah halaman tersendiri dengan seluruh log server (`limit=0`), terbaru dahulu dan kelompok tanggal WIB; layar checklist hanya memuat tombol menuju riwayat.
+- Aksi obat menggunakan ID server dan jumlah per dosis. Pending tidak boleh dikonsumsi ulang; kegagalan penyimpanan antrean harus bisa dicoba ulang tanpa mengulang mood/stok. Konfirmasi dosis offline hanya setelah server menerima log pada generasi akun yang sama; pergantian akun menghentikan item berikutnya pada sync run lama. Lock sinkronisasi selalu dilepas melalui finally.
+- Home kedua peran memakai header/kartu sesuai referensi dengan identitas, stok, jadwal dan harga nyata. Guard sesi/Meet tetap sama. Status Online chat hanya satu untuk peer terpilih; koneksi socket sendiri atau pengguna lain bukan bukti peer online. Disconnect/reconnect menghapus presence lama. Rujukan: [check-in](skills/health_checkin_module.md), [therapy/chat](skills/therapy_chat_module.md), [rencana](../docs/superpowers/plans/2026-11-10-home-checkin-reference.md).
   feat(care): tambah endpoint refund sesi
 
   - handlers_care.go: tambah refundCareSession

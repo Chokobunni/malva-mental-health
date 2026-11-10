@@ -5,7 +5,7 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/mood_insights.dart';
-import '../services/server_clock.dart';
+import 'mood_entry_screen.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/mood_insights.dart';
 
@@ -53,7 +53,7 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
   @override
   void didUpdateWidget(covariant MoodScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.session?.accessToken != widget.session?.accessToken) {
+    if (_owner(oldWidget.session) != _owner(widget.session)) {
       _generation++;
       _entries = [];
       _loading = true;
@@ -164,144 +164,28 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
   }
 
   Future<void> _openEntry() async {
-    var mood = MoodValue.okay;
-    var sleep = 7.0;
-    var energy = 5.0;
-    var anxiety = 4.0;
-    var irritability = 2.0;
-    var busy = false;
-    String? saveError;
+    if (_saving) return;
     final startedSession = _session;
     final startedAuth = ref.read(authStateProvider).session;
     final startedGeneration = _generation;
-    await showModalBottomSheet<void>(
-        context: context,
-        showDragHandle: true,
-        isScrollControlled: true,
-        builder: (sheetContext) => StatefulBuilder(builder: (context, update) {
-              Widget slider(String label, double value, double max,
-                      ValueChanged<double> onChanged) =>
-                  Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                            '$label: ${label == 'Tidur' ? '${value.toStringAsFixed(1)} jam' : '${value.round()}/10'}',
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w700)),
-                        Slider(
-                            value: value,
-                            min: 0,
-                            max: max,
-                            divisions: label == 'Tidur' ? 24 : 10,
-                            onChanged: busy ? null : onChanged),
-                      ]);
-              return SafeArea(
-                  child: SingleChildScrollView(
-                      padding: EdgeInsets.fromLTRB(18, 0, 18,
-                          MediaQuery.viewInsetsOf(context).bottom + 18),
-                      child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const Text('Bagaimana perasaanmu?',
-                                style: TextStyle(
-                                    fontSize: 20, fontWeight: FontWeight.w900)),
-                            const SizedBox(height: 12),
-                            Wrap(spacing: 8, runSpacing: 8, children: [
-                              for (final value in MoodValue.values)
-                                ChoiceChip(
-                                    label:
-                                        Text('${value.emoji} ${value.label}'),
-                                    selected: mood == value,
-                                    onSelected: busy
-                                        ? null
-                                        : (_) => update(() => mood = value))
-                            ]),
-                            const SizedBox(height: 18),
-                            slider('Tidur', sleep, 12,
-                                (v) => update(() => sleep = v)),
-                            slider('Energi', energy, 10,
-                                (v) => update(() => energy = v)),
-                            slider('Kecemasan', anxiety, 10,
-                                (v) => update(() => anxiety = v)),
-                            slider('Iritabilitas', irritability, 10,
-                                (v) => update(() => irritability = v)),
-                            if (saveError != null)
-                              Text(saveError!,
-                                  style: TextStyle(
-                                      color:
-                                          Theme.of(context).colorScheme.error)),
-                            FilledButton.icon(
-                                onPressed: busy
-                                    ? null
-                                    : () async {
-                                        if (!_current(startedGeneration,
-                                                startedAuth) ||
-                                            _owner(_session) !=
-                                                _owner(startedSession)) {
-                                          update(() => saveError =
-                                              'Akun berubah. Tutup formulir dan buka kembali.');
-                                          return;
-                                        }
-                                        final token = _session?.accessToken;
-                                        if (token == null || token.isEmpty) {
-                                          update(() => saveError =
-                                              'Masuk ke akun untuk menyimpan mood.');
-                                          return;
-                                        }
-                                        update(() {
-                                          busy = true;
-                                          saveError = null;
-                                        });
-                                        setState(() => _saving = true);
-                                        try {
-                                          await _api.createMoodCheckin(
-                                              accessToken: token,
-                                              mood: mood.name,
-                                              sleepHours: sleep,
-                                              energy: energy.round(),
-                                              anxiety: anxiety.round(),
-                                              irritability:
-                                                  irritability.round(),
-                                              note: '',
-                                              occurredAt: ServerClock.now());
-                                          if (!_current(
-                                              startedGeneration, startedAuth))
-                                            return;
-                                          if (sheetContext.mounted)
-                                            Navigator.pop(sheetContext);
-                                          setState(() => _saving = false);
-                                          await _refreshData();
-                                          if (mounted &&
-                                              _owner(ref
-                                                      .read(authStateProvider)
-                                                      .session) ==
-                                                  _owner(startedAuth))
-                                            ScaffoldMessenger.of(this.context)
-                                                .showSnackBar(const SnackBar(
-                                                    content: Text(
-                                                        'Mood entry tersimpan.')));
-                                        } on Object {
-                                          if (!_current(
-                                              startedGeneration, startedAuth))
-                                            return;
-                                          setState(() => _saving = false);
-                                          if (sheetContext.mounted)
-                                            update(() {
-                                              busy = false;
-                                              saveError =
-                                                  'Mood belum tersimpan. Periksa koneksi lalu coba lagi.';
-                                            });
-                                        }
-                                      },
-                                icon: busy
-                                    ? const SizedBox.square(
-                                        dimension: 18,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2))
-                                    : const Icon(Icons.save_rounded),
-                                label: const Text('Simpan Mood Entry')),
-                          ])));
-            }));
+    if (startedSession == null) return;
+    setState(() => _saving = true);
+    final saved = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+            builder: (_) =>
+                MoodEntryScreen(session: startedSession, apiClient: _api)));
+    if (mounted && _current(startedGeneration, startedAuth)) {
+      setState(() => _saving = false);
+    }
+    if (saved != true ||
+        !_current(startedGeneration, startedAuth) ||
+        _owner(_session) != _owner(startedSession)) return;
+    await _refreshData();
+    if (mounted &&
+        _owner(ref.read(authStateProvider).session) == _owner(startedAuth)) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Mood entry tersimpan.')));
+    }
   }
 }

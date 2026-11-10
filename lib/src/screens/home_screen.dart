@@ -25,7 +25,6 @@ import 'diary_history_screen.dart';
 import 'goals_screen.dart';
 import 'history_log_screen.dart';
 import 'mood_medication_checkin_screen.dart';
-import 'notifications_screen.dart';
 import 'record_screen.dart';
 
 // ============================================================
@@ -214,7 +213,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         unawaited(_loadUpcomingSession());
       }
     });
-    final storeState = ref.watch(malvaStoreProvider);
     final auth = _session;
     final ongoingSessions =
         _ongoingSessions.where((s) => s.canJoinNow).toList();
@@ -229,10 +227,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         !s.isAfterJoinWindow &&
         !s.isVideo &&
         !ongoingIds.contains(s.id));
-    // Nama sapaan diambil dari sesi login asli, fallback ke store.
-    final displayName = (auth?.displayName.trim().isNotEmpty ?? false)
-        ? auth!.displayName
-        : storeState.patient.name;
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: _refreshAll,
@@ -240,41 +234,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           padding: EdgeInsets.zero,
           children: [
             if (_isInitialLoading) const LinearProgressIndicator(),
-            GradientHeader(
-              title: 'Home',
-              subtitle: 'Halo, $displayName',
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _NotificationBell(
-                    session: auth,
-                    apiClient: _api,
-                  ),
-                  IconButton(
-                    tooltip: 'Profil',
-                    onPressed: widget.onOpenMore,
-                    icon: const CircleAvatar(
-                      backgroundColor: Colors.white,
-                      child:
-                          Icon(Icons.person_rounded, color: MalvaColors.seed),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            DailyCheckInFlow(
+                onSaved: () => setState(() {}), onProfile: widget.onOpenMore),
             const CrisisHotlineBanner(),
             const OfflineBanner(),
             Padding(
-              padding: const EdgeInsets.all(18),
+              padding: const EdgeInsets.all(23),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SectionLabel('Sesi berjalan',
+                  const _HomeSectionLabel('Sesi berjalan',
                       icon: Icons.play_circle_rounded),
                   if (_ongoingLoadFailed)
                     const Text('Sesi berjalan belum dapat dimuat.')
                   else if (ongoingSessions.isEmpty)
-                    const SoftCard(
+                    const _HomeCard(
                         child: Text('Tidak ada sesi berjalan saat ini.'))
                   else
                     for (final s in ongoingSessions)
@@ -287,7 +261,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                             onChanged: _loadUpcomingSession,
                           )),
                   const SizedBox(height: 18),
-                  SectionLabel('Video call mendatang',
+                  _HomeSectionLabel('Video call mendatang',
                       icon: Icons.videocam_rounded,
                       action: upcomingVideos.length > 1
                           ? IconButton(
@@ -304,7 +278,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   if (_upcomingLoadFailed)
                     const Text('Video call mendatang belum dapat dimuat.')
                   else if (upcomingVideos.isEmpty)
-                    const SoftCard(
+                    const _HomeCard(
                         child: Text('Tidak ada video call mendatang.'))
                   else
                     for (final s in _showAllUpcomingVideos
@@ -325,7 +299,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         child: const Text('Coba lagi')),
                   if (upcomingChats.isNotEmpty) ...[
                     const SizedBox(height: 18),
-                    SectionLabel('Sesi chat mendatang',
+                    _HomeSectionLabel('Sesi chat mendatang',
                         icon: Icons.chat_bubble_rounded,
                         action: upcomingChats.length > 1
                             ? IconButton(
@@ -354,27 +328,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   ],
                   const SizedBox(height: 18),
 
-                  // === 2. DAILY CHECK-IN interaktif ===
-                  // emoji -> obat -> tidur -> energi -> popup streak
-                  DailyCheckInFlow(
-                    onSaved: () => setState(() {}),
-                  ),
-                  const SizedBox(height: 22),
-
-                  // === 3. SELF CARE ===
-                  const SectionLabel('Self Care', center: true),
+                  const _HomeSectionLabel('Self-care', center: true),
+                  _MoodMedicationBanner(
+                      onTap: () => _push(MoodMedicationCheckinScreen(
+                          session: widget.session,
+                          apiClient: widget.apiClient,
+                          medicationReminderService:
+                              widget.medicationReminderService))),
+                  const SizedBox(height: 20),
                   _HomeSectionGrid(
                     items: [
                       _GridItem(
                         icon: Icons.flag_rounded,
                         label: 'Goals & Habits',
-                        color: MalvaColors.seed,
+                        color: const Color(0xff5985c6),
                         onTap: () => _push(const GoalsScreen()),
                       ),
                       _GridItem(
-                        icon: Icons.edit_note_rounded,
+                        icon: Icons.menu_book_rounded,
                         label: 'Diary History',
-                        color: MalvaColors.orchid,
+                        color: const Color(0xffd49949),
                         onTap: () => _push(DiaryHistoryScreen(
                           session: widget.session,
                           apiClient: widget.apiClient,
@@ -383,13 +356,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       _GridItem(
                         icon: Icons.psychology_rounded,
                         label: 'Psychological Therapy',
-                        color: MalvaColors.pink,
+                        color: const Color(0xff46a68e),
                         onTap: () => _push(const TherapyCatalogScreen()),
                       ),
                       _GridItem(
-                        icon: Icons.folder_shared_rounded,
+                        icon: Icons.note_add_rounded,
                         label: 'Health Record',
-                        color: MalvaColors.mint,
+                        color: const Color(0xff469dcd),
                         onTap: () => _push(RecordScreen(
                           session: widget.session,
                           apiClient: widget.apiClient,
@@ -399,37 +372,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   ),
                   const SizedBox(height: 22),
 
-                  // Mood and medication belong to Self Care.
-                  _MoodMedicationBanner(
-                    onTap: () => _push(
-                      MoodMedicationCheckinScreen(
-                        session: widget.session,
-                        apiClient: widget.apiClient,
-                        medicationReminderService:
-                            widget.medicationReminderService,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 22),
-
                   // === 4. PROFESSIONAL CARE ===
-                  const SectionLabel('Professional Care', center: true),
+                  const _HomeSectionLabel('Professional Care', center: true),
                   _FindProfessionalsButton(
                     onTap: () => _openDoctorDiscovery(context),
                   ),
                   const SizedBox(height: 12),
                   _HomeSectionGrid(
+                    compact: true,
                     items: [
                       _GridItem(
                         icon: Icons.fact_check_rounded,
                         label: 'Assessment',
-                        color: MalvaColors.seed,
+                        color: const Color(0xffcf7c68),
                         onTap: widget.onOpenAssessment,
                       ),
                       _GridItem(
-                        icon: Icons.timeline_rounded,
+                        icon: Icons.show_chart_rounded,
                         label: 'History Log',
-                        color: MalvaColors.amber,
+                        color: const Color(0xff46a68e),
                         onTap: () => _push(HistoryLogScreen(
                           session: widget.session,
                           apiClient: widget.apiClient,
@@ -541,6 +502,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
 /// Kartu sesi mendatang: nama profesional riil, tipe & durasi riil,
 /// tanggal, tombol Join / Cancel.
+Widget _homeAvatar(String name, String? photo) {
+  if (photo?.trim().isNotEmpty == true)
+    return ProfessionalAvatar(displayName: name, radius: 27, photoUrl: photo);
+  final words = name
+      .replaceAll(RegExp(r'^(dr\.?|dokter)\s+', caseSensitive: false), '')
+      .trim()
+      .split(RegExp(r'\s+'));
+  final initials = words
+      .where((v) => v.isNotEmpty)
+      .take(2)
+      .map((v) => v.characters.first)
+      .join()
+      .toUpperCase();
+  return CircleAvatar(
+      radius: 27,
+      backgroundColor: const Color(0xfff2e7fc),
+      child: Text(initials,
+          style: const TextStyle(
+              fontSize: 23,
+              color: Color(0xffb05cd1),
+              fontWeight: FontWeight.w700)));
+}
+
+class _HomeCard extends StatelessWidget {
+  const _HomeCard(
+      {required this.child,
+      this.padding = const EdgeInsets.all(20),
+      this.color,
+      this.accent,
+      this.bordered = false});
+  final Widget child;
+  final EdgeInsets padding;
+  final Color? color, accent;
+  final bool bordered;
+  @override
+  Widget build(BuildContext context) => Container(
+      padding: padding,
+      decoration: BoxDecoration(
+          color: color ?? Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: accent == null
+              ? null
+              : Border(left: BorderSide(color: accent!, width: 3))),
+      child: child);
+}
+
 class _UpcomingSessionCard extends StatelessWidget {
   const _UpcomingSessionCard({
     required this.session,
@@ -592,19 +599,15 @@ class _UpcomingSessionCard extends StatelessWidget {
     final name = session.professionalName.isEmpty
         ? 'Profesional'
         : session.professionalName;
-    return SoftCard(
-      bordered: true,
-      color: MalvaColors.seed.withValues(alpha: 0.06),
+    return _HomeCard(
+      color: Colors.white,
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              ProfessionalAvatar(
-                displayName: name,
-                radius: 22,
-                photoUrl: session.photoIntroUrl,
-              ),
+              _homeAvatar(name, session.photoIntroUrl),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -612,7 +615,8 @@ class _UpcomingSessionCard extends StatelessWidget {
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 16),
                     ),
                     const SizedBox(height: 2),
                     Row(
@@ -640,35 +644,63 @@ class _UpcomingSessionCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
           Text(
             dateLabel,
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           if (isVideo) ...[
-            MeetJoinButton(
-                session: session,
-                accessToken: accessToken,
-                expanded: true,
-                canCreateLink: false,
-                onSessionChanged: (_) => onChanged()),
-            const SizedBox(height: 8),
+            Theme(
+                data: Theme.of(context).copyWith(
+                    outlinedButtonTheme: OutlinedButtonThemeData(
+                        style: OutlinedButton.styleFrom(
+                            disabledForegroundColor: const Color(0xff9755ad),
+                            disabledBackgroundColor: const Color(0xfff8f1fc),
+                            minimumSize: const Size.fromHeight(44),
+                            side: const BorderSide(color: Color(0xffeee4f4)),
+                            textStyle: const TextStyle(
+                                fontFamily: 'Roboto',
+                                fontWeight: FontWeight.w600),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12))))),
+                child: MeetJoinButton(
+                    session: session,
+                    accessToken: accessToken,
+                    expanded: true,
+                    canCreateLink: false,
+                    onSessionChanged: (_) => onChanged())),
+            const SizedBox(height: 18),
           ],
           Row(
             children: [
               Expanded(
                 child: FilledButton.icon(
                   onPressed: onJoin,
+                  style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xff9755ad),
+                      minimumSize: const Size.fromHeight(47),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(13))),
                   icon: const Icon(Icons.chat_bubble_rounded, size: 18),
-                  label: const Text('Chat'),
+                  label: const Text('Chat',
+                      style: TextStyle(
+                          fontFamily: 'Roboto', fontWeight: FontWeight.w700)),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: OutlinedButton(
                   onPressed: onCancel,
-                  child: const Text('Cancel'),
+                  style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xff9755ad),
+                      minimumSize: const Size.fromHeight(47),
+                      side: const BorderSide(color: Color(0xffeeebf0)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(13))),
+                  child: const Text('Cancel',
+                      style: TextStyle(
+                          fontFamily: 'Roboto', fontWeight: FontWeight.w700)),
                 ),
               ),
             ],
@@ -690,10 +722,13 @@ class _FindProfessionalsButton extends StatelessWidget {
     return FilledButton.icon(
       onPressed: onTap,
       style: FilledButton.styleFrom(
-        minimumSize: const Size.fromHeight(50),
+        minimumSize: const Size.fromHeight(53),
+        backgroundColor: const Color(0xff9755ad),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(19)),
       ),
       icon: const Icon(Icons.search_rounded),
-      label: const Text('Find Professionals'),
+      label: const Text('Cari Profesional',
+          style: TextStyle(fontFamily: 'Roboto', fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -701,65 +736,119 @@ class _FindProfessionalsButton extends StatelessWidget {
 /// Banner Mood Medication Check-in (Mood + Medication Tracker).
 class _MoodMedicationBanner extends StatelessWidget {
   const _MoodMedicationBanner({required this.onTap});
-
   final VoidCallback onTap;
-
   @override
-  Widget build(BuildContext context) {
-    return SoftCard(
-      bordered: true,
+  Widget build(BuildContext context) => InkWell(
       onTap: onTap,
-      color: MalvaColors.orchid.withValues(alpha: 0.10),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: MalvaColors.orchid.withValues(alpha: 0.18),
-            child: const Icon(Icons.monitor_heart_rounded,
-                color: MalvaColors.orchid),
-          ),
-          const SizedBox(width: 14),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Mood Medication Check-in',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
-                ),
-                Text(
-                  'Mood Tracker & Medication Tracker',
-                  style: TextStyle(color: Colors.black54, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right_rounded, color: MalvaColors.orchid),
-        ],
-      ),
-    );
-  }
+      borderRadius: BorderRadius.circular(19),
+      child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 14),
+          decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(19),
+              gradient: const LinearGradient(
+                  colors: [Color(0xff9755ad), Color(0xffae65bf)]),
+              boxShadow: const [
+                BoxShadow(
+                    color: Color(0x159755ad),
+                    blurRadius: 12,
+                    offset: Offset(0, 6))
+              ]),
+          child: Row(children: [
+            Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.monitor_heart_rounded,
+                    color: Colors.white)),
+            const SizedBox(width: 13),
+            const Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text('Mood Medication Check-in',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14)),
+                  Text('Mood Tracker & Medication Tracker',
+                      style: TextStyle(color: Color(0xfff0dff5), fontSize: 11))
+                ])),
+            const CircleAvatar(
+                radius: 17,
+                backgroundColor: Colors.white24,
+                child: Icon(Icons.chevron_right_rounded, color: Colors.white))
+          ])));
 }
 
-/// Grid 2 kolom: ikon + label.
 class _HomeSectionGrid extends StatelessWidget {
-  const _HomeSectionGrid({required this.items});
-
+  const _HomeSectionGrid({required this.items, this.compact = false});
   final List<_GridItem> items;
-
+  final bool compact;
   @override
-  Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 2.6,
-      padding: EdgeInsets.zero,
-      children: [for (final item in items) _HomeGridTile(item: item)],
-    );
-  }
+  Widget build(BuildContext context) => Column(children: [
+        for (var i = 0; i < items.length; i += 2) ...[
+          if (i > 0) const SizedBox(height: 18),
+          IntrinsicHeight(
+              child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                for (var j = i; j < items.length && j < i + 2; j++) ...[
+                  if (j > i) const SizedBox(width: 18),
+                  Expanded(
+                      child: ConstrainedBox(
+                          constraints:
+                              BoxConstraints(minHeight: compact ? 74 : 116),
+                          child:
+                              _HomeGridTile(item: items[j], compact: compact)))
+                ]
+              ]))
+        ]
+      ]);
+}
+
+class _HomeSectionLabel extends StatelessWidget {
+  const _HomeSectionLabel(this.text,
+      {this.icon, this.action, this.center = false});
+  final String text;
+  final IconData? icon;
+  final Widget? action;
+  final bool center;
+  @override
+  Widget build(BuildContext context) => Padding(
+      padding: const EdgeInsets.fromLTRB(3, 8, 3, 17),
+      child: Row(
+          mainAxisAlignment:
+              center ? MainAxisAlignment.center : MainAxisAlignment.start,
+          children: [
+            if (icon != null) ...[
+              Container(
+                  width: 4,
+                  height: 16,
+                  decoration: BoxDecoration(
+                      color: const Color(0xff9755ad),
+                      borderRadius: BorderRadius.circular(9))),
+              const SizedBox(width: 8),
+              Icon(icon, size: 18, color: const Color(0xff9755ad)),
+              const SizedBox(width: 8)
+            ],
+            if (center)
+              Flexible(
+                  child: Text(text,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: Color(0xff9755ad),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 18)))
+            else
+              Expanded(
+                  child: Text(text,
+                      style: const TextStyle(
+                          color: Color(0xff9755ad),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 17))),
+            if (action != null) action!
+          ]));
 }
 
 class _GridItem {
@@ -777,117 +866,40 @@ class _GridItem {
 }
 
 class _HomeGridTile extends StatelessWidget {
-  const _HomeGridTile({required this.item});
-
+  const _HomeGridTile({required this.item, this.compact = false});
   final _GridItem item;
-
+  final bool compact;
   @override
   Widget build(BuildContext context) {
-    return SoftCard(
-      bordered: true,
-      onTap: item.onTap,
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 21,
-            backgroundColor: item.color.withValues(alpha: 0.12),
-            child: Icon(item.icon, color: item.color),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              item.label,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NotificationBell extends StatefulWidget {
-  const _NotificationBell({this.session, this.apiClient});
-
-  final AuthSession? session;
-  final MalvaApiClient? apiClient;
-
-  @override
-  State<_NotificationBell> createState() => _NotificationBellState();
-}
-
-class _NotificationBellState extends State<_NotificationBell> {
-  int _unread = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final apiClient = widget.apiClient;
-    final accessToken = widget.session?.accessToken;
-    if (apiClient == null || accessToken == null || accessToken.isEmpty) {
-      return;
-    }
-    try {
-      final items = await apiClient.listNotifications(accessToken: accessToken);
-      if (!mounted) return;
-      setState(() {
-        _unread = items.where((n) => !n.isRead).length;
-      });
-    } on Object catch (_) {
-      // Badge opsional - jangan ganggu home bila gagal.
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        IconButton(
-          tooltip: 'Notifikasi',
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => NotificationsScreen(
-                  session: widget.session,
-                  apiClient: widget.apiClient,
-                ),
-              ),
-            ).then((_) => _load());
-          },
-          icon: const Icon(Icons.notifications_rounded, color: Colors.white),
-        ),
-        if (_unread > 0)
-          Positioned(
-            right: 6,
-            top: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: MalvaColors.danger,
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: Colors.white, width: 1.5),
-              ),
-              child: Text(
-                _unread > 9 ? '9+' : '$_unread',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
+    final icon = Container(
+        padding: EdgeInsets.all(compact ? 10 : 11),
+        decoration: BoxDecoration(
+            color: item.color.withValues(alpha: .13),
+            borderRadius: BorderRadius.circular(16)),
+        child: Icon(item.icon, color: item.color, size: 24));
+    final label = Text(item.label,
+        textAlign: compact ? TextAlign.start : TextAlign.center,
+        style: const TextStyle(
+            fontSize: 13,
+            color: Color(0xff9755ad),
+            fontWeight: FontWeight.w700));
+    return Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        child: InkWell(
+            onTap: item.onTap,
+            borderRadius: BorderRadius.circular(24),
+            child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: compact
+                    ? Row(children: [
+                        icon,
+                        const SizedBox(width: 10),
+                        Expanded(child: label)
+                      ])
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [icon, const SizedBox(height: 13), label]))));
   }
 }
 
@@ -914,7 +926,7 @@ class _OngoingSessionCard extends StatelessWidget {
         ? '-'
         : '${at.day}/${at.month}/${at.year} '
             '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
-    return SoftCard(
+    return _HomeCard(
       bordered: true,
       accent: MalvaColors.mint,
       child: Column(
@@ -940,7 +952,7 @@ class _OngoingSessionCard extends StatelessWidget {
                       session.professionalName.isEmpty
                           ? 'Sesi ${session.isVideo ? 'Video' : 'Chat'}'
                           : session.professionalName,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     Text(
                       '${session.isVideo ? 'Video' : 'Chat'} • $dateLabel',
@@ -969,7 +981,9 @@ class _OngoingSessionCard extends StatelessWidget {
               onPressed: onChat,
               style: compactFilledButtonStyle,
               icon: const Icon(Icons.chat_bubble_rounded, size: 16),
-              label: const Text('Chat'),
+              label: const Text('Chat',
+                  style: TextStyle(
+                      fontFamily: 'Roboto', fontWeight: FontWeight.w700)),
             ),
           ),
           const SizedBox(height: 10),

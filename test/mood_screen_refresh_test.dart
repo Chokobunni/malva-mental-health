@@ -158,8 +158,9 @@ void main() {
     await tester.tap(find.text('Add Mood Entry'));
     await tester.pumpAndSettle();
     expect(find.text('Catatan singkat'), findsNothing);
-    await tester.ensureVisible(find.text('Simpan Mood Entry'));
-    await tester.tap(find.text('Simpan Mood Entry'));
+    await tester.ensureVisible(find.byKey(const Key('save-mood-entry')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('save-mood-entry')));
     await tester.pumpAndSettle();
     expect(saved, isTrue);
     expect(loads, 2);

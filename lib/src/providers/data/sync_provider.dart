@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../platform/platform_providers.dart';
 import '../../services/offline_sync_service.dart';
 import '../auth_providers.dart';
+import '../malva_store_provider.dart';
 
 // ============================================================
 // OFFLINE SYNC PROVIDERS
@@ -18,7 +19,21 @@ final offlineSyncServiceProvider = Provider<OfflineSyncService>((ref) {
   // akun kapan saja, dan antrean offline tidak boleh memakai token/pemilik
   // yang sudah tidak berlaku.
   final container = ref.container;
+  var generation = 0;
+  ref.listen(authStateProvider, (before, after) {
+    final old = before?.session;
+    final next = after.session;
+    if (old?.role != next?.role ||
+        (old?.backendUserId ?? old?.identifier) !=
+            (next?.backendUserId ?? next?.identifier)) generation++;
+  });
   final service = OfflineSyncService(
+    accountGenerationReader: () => generation,
+    onMedicationLogSynced: (id, owner) {
+      if (container.read(authStateProvider).session?.backendUserId == owner) {
+        container.read(malvaStoreProvider.notifier).confirmDose(id);
+      }
+    },
     apiClient: apiClient,
     accessTokenReader: () =>
         container.read(authStateProvider).session?.accessToken,

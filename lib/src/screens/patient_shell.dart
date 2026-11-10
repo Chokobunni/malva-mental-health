@@ -218,34 +218,47 @@ class _PatientShellState extends ConsumerState<PatientShell>
       body: IndexedStack(index: _index, children: pages),
       // SOS hanya di Home.
       floatingActionButton: _index == 0 ? const SosFab() : null,
-      bottomNavigationBar: NavigationBar(
-        height: 64,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
-        selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: '',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.event_note_outlined),
-            selectedIcon: Icon(Icons.event_note_rounded),
-            label: '',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline_rounded),
-            selectedIcon: Icon(Icons.chat_bubble_rounded),
-            label: '',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.sentiment_satisfied_alt_outlined),
-            selectedIcon: Icon(Icons.sentiment_satisfied_alt_rounded),
-            label: '',
-          ),
-        ],
-      ),
+      bottomNavigationBar: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: NavigationBarTheme(
+              data: NavigationBarThemeData(
+                  iconTheme: WidgetStateProperty.resolveWith((states) =>
+                      IconThemeData(
+                          color: states.contains(WidgetState.selected)
+                              ? const Color(0xff9755ad)
+                              : const Color(0xff9ca3af)))),
+              child: NavigationBar(
+                backgroundColor: Colors.white,
+                indicatorColor: const Color(0xfff8f1fc),
+                indicatorShape: const CircleBorder(),
+                height: 64,
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
+                selectedIndex: _index,
+                onDestinationSelected: (value) =>
+                    setState(() => _index = value),
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home_rounded),
+                    label: 'Home',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.event_note_outlined),
+                    selectedIcon: Icon(Icons.event_note_rounded),
+                    label: 'MyCare',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.chat_bubble_outline_rounded),
+                    selectedIcon: Icon(Icons.chat_bubble_rounded),
+                    label: 'Messages',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.sentiment_satisfied_alt_outlined),
+                    selectedIcon: Icon(Icons.sentiment_satisfied_alt_rounded),
+                    label: 'Lainnya',
+                  ),
+                ],
+              ))),
     );
     return ReviewCompletionPrompt(
         apiClient: widget.apiClient ?? ref.read(apiClientProvider),
