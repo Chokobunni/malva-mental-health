@@ -469,8 +469,8 @@ Transaksi `CreateEPrescription` menulis resep, item dan obat pasien bersama,
 sehingga kegagalan salah satunya membatalkan seluruh penerbitan. Rutinitas JSON
 dipakai kembali untuk checklist dan notifikasi lokal, bukan diparsing dari label
 frekuensi. Migrasi 037 menambah penyimpanan jadwal/stok tanpa menghapus reminder
-legacy. Migrasi 036–038 belum diterapkan produksi dalam pekerjaan ini;
-perpanjangan jadwal legacy perlu pemeriksaan irisan karena jam mulai dipertahankan.
+legacy. Migrasi 036–040 telah diterapkan di produksi dan diverifikasi ulang pada rilis
+0.1.15+16. Durasi/default ketiga tabel telah60menit; jam mulai legacy dipertahankan.
 
 CRUD resep memakai satu transaksi untuk header, item, medication dan audit.
 Update mengunci header milik penulis; ID item/medication tetap, item yang tidak

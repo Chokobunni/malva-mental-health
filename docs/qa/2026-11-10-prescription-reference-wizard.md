@@ -64,7 +64,37 @@ with no matching fatal startup error in sampled logcat. Capture:
 Local artifact:
 `D:/Project/Malva/2026-07-09/deliverables/2026-11-10-prescription-reference/Malva-0.1.15-16-universal.apk`.
 
-Production publication and workflow results are appended after verification.
+Backend28fc3fd deployed successfully via workflow42760535021. Public health
+returned `{"status":"ok"}`, service active, downloaded production binary embeds
+that exact revision with `vcs.modified=false`. Binary SHA-256:
+`8f147894e97a619eaf3838a702e57981602e60ebe2242db11080134d48d954b1`.
+Frontend implementation commit:c1e22e3.
+
+Published universal APK:
+`https://malva.web.id/downloads/Malva-0.1.15-16-universal.apk`.
+Server file and fresh public download both match the signed local artifact hash;
+downloaded version/code,3ABIs and release signature independently verified.
+The isolated QA PostgreSQL cluster on55441 is stopped; default5432was untouched.
+
+Web deploy42760878206 passed; production `/app/` returned200 and
+`/app/version.json` reports0.1.15/build16. Backend Go CI42760535127 and
+Security Gates42760535137/42760876585 passed.
+
+Read-only production recheck:40ledger entries including036–040; counts below60
+for care_sessions/bookings/professional_schedules are all0, with all3defaults60.
+Evidence:`_qa_2026_11_10_wizard/duration-production.txt`.
+
+APK workflow42760876833 passed signed build, publication and download health
+check. Fresh `malva-latest.apk` matches its workflow artifact, reports0.1.15+16
+and verifies with the existing release certificate. SHA-256:
+`88065dad4fa66f28dc7f1961964aabd807cc85dd48f0c502f4fa8c6a8219f1a0`.
+Its app library targets ARM64 (31,611,105bytes); the versioned universal link
+above includes all3app ABIs and remains independently verified.
+
+Flutter CI42760876586 passed completely: analyzer, both device-timezone test
+runs, security stage, web build and Windows build. No failing runtime-release
+workflow remains. All implementation and deployment checks above refer to the
+immutable runtime commits, before the documentation-only verification commit.
 
 ## Limits
 

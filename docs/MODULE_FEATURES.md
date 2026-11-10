@@ -242,9 +242,9 @@ Ulasan memakai entitlement per sesi/pembelian di atas, termasuk renewal merged.
 - Wizard E-Prescription Sp.KJ mengirim bentuk/dosis/satuan, rutinitas WIB,
   jumlah per dosis, stok awal serta batas/toggle pengingat. Server menerbitkan
   resep dan obat pasien atomik; checklist dan pengingat memakai jadwal tersimpan.
-- Migrasi 036–038 telah diuji lokal dan belum diterapkan produksi dalam pekerjaan
-  ini. Normalisasi durasi di bawah 60 tidak mengubah jam mulai; jadwal legacy
-  berdekatan perlu diperiksa terhadap irisan sebelum rilis.
+- Migrasi 036–040 telah diterapkan di produksi. Verifikasi ulang rilis0.1.15+16:
+  tidak ada sesi/booking/slot di bawah60menit, ketiga default60. Normalisasi
+  mempertahankan jam mulai legacy.
 
 Rujukan: [kontrak API](API_DOCUMENTATION.md), [skema](DATABASE_SCHEMA.md).
 

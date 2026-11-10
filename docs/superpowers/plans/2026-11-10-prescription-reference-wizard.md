@@ -70,7 +70,7 @@ All references are in `C:/Users/user/AppData/Local/Temp/codex-clipboard-<id>.png
 
 - [x] Render all distinct states using real Flutter widgets/fonts at normalized reference sizes, compare paired screenshots, iterate and save `design-qa.md`.
 - [x] Run Dart format/analyze/full tests and project gates; request fresh review; fix important findings and recheck.
-- [ ] Build signed release, deploy already-authorized continuation, verify workflows/service/version and report evidence and any device delivery test gap.
+- [x] Build signed release, deploy already-authorized continuation, verify workflows/service/version and report evidence and any device delivery test gap.
 
 ## Execution ledger
 
@@ -86,4 +86,6 @@ All references are in `C:/Users/user/AppData/Local/Temp/codex-clipboard-<id>.png
 - Design QA: all21paired screenshots plus focused regions and narrow/large-text captures inspected. `design-qa.md` reports passed with minorP3typographic/icon/shadow differences and no physical-device alarm-delivery claim.
 
 - Final verification:1,036Flutter tests pass, full analyzer clean,10Dart files formatted with no changes, WIB/platform/diff gates pass. Signed universal APK0.1.15+16 built and verified across3ABIs, installed/cold-started on emulator to role chooser without sampled fatal errors.
-- Backend response compatibility28fc3fd pushed separately before frontend publication; all local backend gates and fresh coverage pass. Deployment and final public artifact verification pending.
+- Backend response compatibility28fc3fd pushed separately before frontend publication; all local backend gates and fresh coverage pass. Deployment and final public artifact verification completed; see release QA record.
+
+- Production complete:backend28fc3fd verified by embedded revision/cleanVCS metadata and health; frontendc1e22e3 released as0.1.15+16. BackendGo42760535127, deploy42760535021, Security42760535137/42760876585, Flutter42760876586, web42760878206 and APK42760876833 all passed. Public universal download matches the signed local3ABI build; latest ARM64 download matches its CI artifact. Production database recheck confirms40migrations, no under60durations and all3defaults60. Isolated QA PostgreSQL stopped; default service untouched. Limits documented in design/release QA.
