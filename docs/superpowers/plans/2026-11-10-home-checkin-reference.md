@@ -35,11 +35,13 @@ Sources in C:/Users/user/AppData/Local/Temp/codex-clipboard-*.png, in user order
 - [x] RED→GREEN standalone mood entry and medication history routes. Verify save/refresh and grouped real logs with account isolation.
 - [x] RED→GREEN professional reference dashboard and single peer presence. Verify independent peers, disconnected/connecting states and existing session gates.
 - [x] Inspect all source images, measure/capture references and rendered screens, fix P0/P1/P2 differences, archive prior design-qa.md and write current report with evidence.
-- [ ] Run focused/full tests, analyzer, format/WIB/platform/backend required gates; independent review; build signed next release and deploy under existing user authorization; verify public artifacts and CI.
+- [x] Run focused/full tests, analyzer, format/WIB/platform/backend required gates; independent review; build signed next release and deploy under existing user authorization; verify public artifacts and CI.
 
 ## Ledger
 
 - Planning: existing API already supports all mood metrics; daily flow currently substitutes energy levels and constant anxiety/irritability, so final-step submission must use actual choices. Chat duplicates connected socket chip with peer presence, and currently tests any online user instead of the selected peer.
 
 - Implementation: all five steps persist selected values, both new standalone routes use existing endpoints, dashboard/presence updated. Code review findings for durable queue rollback and cross-account sync-run were reproduced RED and fixed GREEN.
-- Verification: final full Flutter suite1071passed; analyzer clean; tracked/new Dart format, WIB/platform and diff checks passed. Design QA pass5 accepted with documented P3 native/font/data differences. Signed universal0.1.17+18 built; production preflight confirms40migrations,0durations/slots below60and all3defaults60. Release publication/CI follow-through remains.
+- Verification: final full Flutter suite1071passed; analyzer clean; tracked/new Dart format, WIB/platform and diff checks passed. Design QA pass5 accepted with documented P3 native/font/data differences. Signed universal0.1.17+18 built; production preflight confirms40migrations,0durations/slots below60and all3defaults60. Release publication and all runtime CI checks are complete.
+
+- Release: runtime63c436a pushed to main/work branch. Signed universal and public download match SHA256 2fa9d643f3cbeb127e091caceaaefc6f1c9c2b326cf9166beee02d941e0046a3, version0.1.17+18. APK42862571479, web42862571523, Security42862571432 and complete Flutter CI42862571360 all succeeded. Latest public APK matches signed CI artifact; production /app version0.1.17/build18. Backend hash matches deployed28fc3fd and source is unchanged; duration/migration audit confirmed. QA: docs/qa/2026-11-11-home-checkin-reference.md.
