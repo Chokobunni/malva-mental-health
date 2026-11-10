@@ -27,7 +27,7 @@ Small frontend change: shared patient tabs, common assessment loader, profession
 - [x] Add and observe failing widget regressions for category split, patient-scoped loading, independent consent, detail opening and patient switching; extend clinical-panel regression for hidden symptom chips and retained answers.
 - [x] Add Screening tab using common assessment components, scope the shared loader's worksheet request, filter Terapi, and remove symptom-only rendering.
 - [x] Run focused tests, full analyzer/suite, format/WIB/platform gates; review the diff independently.
-- [ ] Update domain docs and QA, build signed next release, deploy the already-authorized continuation, and verify production version/downloads/workflows.
+- [x] Update domain docs and QA, build signed next release, deploy the already-authorized continuation, and verify production version/downloads/workflows.
 
 ## Execution ledger
 
@@ -35,3 +35,4 @@ Small frontend change: shared patient tabs, common assessment loader, profession
 - Root cause: _TherapyTab loads all authorized therapy submissions without isTherapyRecordSubmission; no screening tab exists. loadAssessmentHistory already merges the two sources but its worksheet request needs patientId before professional reuse. _ScreeningInstrumentDetail renders the identified-symptom panel separately from retained answer details.
 - RED recorded in the QA directory before implementation; the stale symptom-chip expectation was replaced with hidden-summary/retained-answer assertions. Focused suite:27passed. Full Flutter suite:1041passed; analyzer clean. Tracked Dart format, WIB, platform isolation and diff checks passed. Backend build/vet/tests, apidoc and convention/env/migration gates passed without backend edits; no local integration DB was configured for this frontend-only continuation.
 - Independent read-only reviewer found no actionable issues. Widget captures at393px cover Screening, Terapi and clinical indicators/CF without the symptom panel. No physical two-account test performed.
+- Runtime2ad19e4 published as0.1.16+17. Web deploy42767286449, signed APK42767286438, Security42767286547 and complete Flutter CI42767286425 passed, including both timezone suites plus web/Windows builds. Versioned universal and CI latest public downloads match their verified artifacts. Web uses a separate desktop shell without the referenced mobile clinical screens; no new desktop portal was added. Release evidence is in [QA](../../qa/2026-11-10-shared-patient-screening.md).

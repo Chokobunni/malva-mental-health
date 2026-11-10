@@ -40,7 +40,7 @@ Local logs and renders:
 
 ## Release
 
-Target0.1.16+17; verification and production results are recorded after publication.
+Release0.1.16+17, runtime commit `2ad19e419861e88688cb0784d73cbd9939d3651f`.
 
 Local signed universal APK built successfully:78,838,359bytes, version0.1.16,
 code17, ARM32/ARM64/x86_64. Production API and Google client ID were verified
@@ -52,6 +52,36 @@ Installed over the prior release on emulator-5554 and cold-started to the role
 chooser; app process remained alive, with no matching fatal startup error in the
 sampled logcat. Local artifact:
 `D:/Project/Malva/2026-07-09/deliverables/2026-11-10-shared-screening/Malva-0.1.16-17-universal.apk`.
+
+Web deploy42767286449 and Security Gates42767286547 passed. Production `/app/`
+returned200 and `/app/version.json` reports0.1.16/build17. API `/healthz` returned
+`{"status":"ok"}`; this continuation does not redeploy or modify the backend.
+The production web entrypoint uses its separate desktop shell; it does not yet
+include the mobile Data Pasien Dibagikan or clinical-detail screens shown in the
+request. Their category/panel changes are delivered in the mobile APK. A bundle
+marker check was rejected because that mobile screen is not compiled into this
+web entrypoint; inspection of `main_web.dart`, web routes and professional patient
+summary confirmed that distinction. No new desktop clinical portal was added.
+
+Published universal:
+`https://malva.web.id/downloads/Malva-0.1.16-17-universal.apk`.
+Uploaded and server-installed files plus a fresh public download match the local
+signed artifact SHA-256 above. Downloaded version/code and release signature
+were checked independently.
+
+APK workflow42767286438 passed signed build, upload and download health. Its
+downloaded workflow artifact reports0.1.16/code17 and verifies with the same
+release certificate. Artifact SHA-256:
+`81045151c96591858255a226b1d09ccd5f7a4ca87550806f8c7aa29e839e2104`.
+Fresh public `malva-latest.apk` matches that workflow artifact hash exactly.
+The versioned universal link above remains the three-ABI release; CI publishes
+its ARM64 build through `malva-latest.apk`.
+
+Flutter CI42767286425 passed completely: analyzer/format/policy gates, both
+device-timezone suites, security stage, web build and Windows build. Android
+validation/publication was completed by the separate signed APK workflow above.
+No failing or pending runtime-release workflow remains. These checks refer to
+the immutable runtime commit, before the documentation-only verification commit.
 
 ## Limits
 
