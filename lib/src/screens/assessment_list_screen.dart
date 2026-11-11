@@ -170,17 +170,6 @@ class AssessmentListScreen extends ConsumerWidget {
                   ),
                 ),
                 const AssessmentHistoryPreview(),
-                const SizedBox(height: 20),
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const TherapyCatalogScreen(),
-                    ),
-                  ),
-                  icon: const Icon(Icons.psychology_rounded),
-                  label: const Text('Lihat Semua Therapy & Worksheet'),
-                ),
               ],
             ),
           ),

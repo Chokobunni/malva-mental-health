@@ -1,47 +1,51 @@
-# Home/check-in reference design QA — 2026-11-11
+# Record corrections design QA — 2026-11-11
 
 final result: passed
 
-No actionable P0/P1/P2 visual findings remain in the compared states. Native Flutter captures were compared together with the source, including focused hero/navigation regions. This is not a claim of identical physical-device rasterization.
+No actionable P0/P1/P2 visual differences remain in the requested changed states. The previous six-image implementation report is preserved in [the archive](docs/qa/2026-11-11-chat-mycare-design-qa.md). This pass covers the four new correction images and the medication icon.
 
-## Source and implementation
+## Source and native evidence
 
-Source truth is the 15 user clipboard screenshots in the order recorded in [the plan](docs/superpowers/plans/2026-11-10-home-checkin-reference.md). Full IDs and paths remain in that inventory and the user request. Source13 and15 repeat the professional dashboard; source14 shows the duplicate Online problem.
+Evidence root: `D:/Project/Malva/2026-07-09/_qa_2026_11_11_record_corrections/`.
+Source root: `C:/Users/user/AppData/Local/Temp/`.
 
-Evidence root: `D:/Project/Malva/2026-07-09/_qa_2026_11_10_home_reference/`.
+| Surface | Source | Native state and normalization | Combined comparison |
+|---|---|---|---|
+| Missing chat CF | `codex-clipboard-282ac5cb-710d-4590-b999-d5a6ad69451d.png` (576×1280) | `screening-cf-{patient,professional}.png` (780×2848):390px phone wrapper, .70-width cards,2x capture. Source and native downsample proportionally to390px. Source shows PHQ/GAD; native additionally verifies WHO/DASS. | `cf-comparison.png` |
+| Assessment Record | `codex-clipboard-fdf720fc-dac1-408f-94e1-ba93a07766f6.png` (576×1280) | `assessment-preview.png` and `assessment-popup.png` (780×1688),390×844 at2x. Source screenshot was already scrolled, native scrolls to show all3 records. | `assessment-comparison.png` |
+| Therapy Record | `codex-clipboard-d71cb8e8-e506-4e7f-a8b0-e53581ade3b5.png` (576×1280) | `therapy-preview.png` and `therapy-popup.png` (780×1688),390×844 at2x. Same-title distinct IDs deliberately prove selected-record behavior. | `therapy-comparison.png` |
+| Inline session summary | `codex-clipboard-0b2eda45-01b1-42bd-b695-d2fb281383ab.png` (991×1280) | `session-summary.png` (716×950),358px actual chat content width at2x; source normalized358×462, native358×475. Both roles also tested at300px with1.6x text. | `session-summary-final-comparison.png` |
+| Medication icon | Existing dot in `medication-before.png` | `medication-after.png`, same native strip780×4370 at2x; exact prescription bounds335.4×482 remain unchanged. | `medication-focus-comparison.png` |
 
-- Patient captures: `native-patient/{home,mood,medication,sleep,energy-10,energy-6,energy-5,energy-1,energy-0,anxiety}.png`. Native viewport390x1536 logical pixels, exported780x3072 at2x; hero crop height in matching JSON. Source hero/full Home app content is cropped and proportionally normalized to390px. Combined same-state views are `comparisons/*-pass5.png` (792px including12px gutter and24px caption). Full Home source650x2560 normalizes to390x1536. Focus: `comparisons/navigation-focus.png`; other combined hero views are already focused regions with readable labels.
-- Standalone mood entry: source866x1815, crop(10,85)-(856,1807) removes bezel/status bar →846x1722. Native viewport423x861, captured2x. `entry-history/mood-comparison-normalized.png` combines equal846x1722 app areas. `entry-history/reference-comparison.md` records measured white form bounds and gradient samples.
-- Medication history: source/native1080x2443, logical540x1221.5 at2x. `entry-history/history-comparison.png` includes both views at equal density.
-- Professional dashboard: `professional/professional-comparison.png` includes source and real Flutter render normalized to390px logical width. `professional/professional-narrow-large-text.png` and `professional-narrow-availability.png` verify320px/text1.4. `professional/chat-peer-online.png` is a native chat capture after local WebSocket selected-peer events; exactly one Online status. Details: `professional/professional-chat-qa.md`.
+All combined boards and native popup images were opened and inspected. The summary/medication boards are focused readable component comparisons. Preview and CF boards are readable at their normalized phone width; separate enlargement was unnecessary. Gray board padding is not app content. These are native Flutter widget renders, using bundled Roboto and standard icon fonts, rather than browser screenshots.
 
-Test fixture names/dates/countdowns are comparison content; production uses actual account, stocks, times, sessions, availability and prices. Screenshot stock and people are not seeded. OS chrome is omitted from app content. Medication uses total5steps rather than screenshot2's total3, explicitly confirmed by the user.
+## Findings and comparison history
+
+1. **P2, fixed:** initial summary target pills wrapped at normal phone size and header/grid/insight were too tall. The first board `session-summary-comparison.png` records the density mismatch. Local font sizes, icon sizes and spacing were reduced; final target pills fit one line and the complete summary is475px versus462px reference at358px width. Long real text remains free to wrap.
+2. **P2, fixed:** standalone390px rendering hid the production .85-width wrapper's one-column breakpoint. Summary-only chat width now fills the available list content; final tests use358px at390px screen width and268px on300px. Normal phone layout retains2columns; large text/narrow layout uses1column without overflow.
+3. Assessment/Therapy previews retain the existing visual hierarchy, three entries and header history action. The assessment-only therapy footer is absent. Native bottom-sheet captures and exact-ID assertions prove that individual entries open their own saved detail directly. Different fixture dates, summaries and shared statuses are expected data differences. Fixture WHO summaries are empty and therefore intentionally omitted, matching existing saved-data behavior.
+4. CF cards preserve the existing palette, score/severity sections and safety indicators. PHQ23/GAD21 without saved CF display recovered canonical support; WHO/DASS use complete saved answers. Snapshot IDs denied by the server remain unavailable. The original screenshot's unavailable label is a bug example, not text to reproduce.
+5. Medication cards replace the dot with a diagonal standard capsule glyph. Before/after card bounds are identical; spacing and all patient medication fields remain unchanged.
 
 ## Required fidelity surfaces
 
-| Surface | Evaluation |
+| Surface | Result |
 |---|---|
-| Fonts/typography | Native Roboto loaded in render tests; heading/body/button hierarchy, title wrapping, step pills and metric labels compared. Screenshot does not supply its font file; minor weight/antialiasing differences remain P3. Full-page mood title/form hierarchy and readable history names/times match. |
-| Spacing/layout | Gradient header, white rounded metric panels, sleep steppers,6-column energy choices, green final action and Home section order match. Mood form white bounds differ by about1-2source pixels after normalization. Cards/navigation remain visible; intrinsic-height grids preserve wrapping and larger text. |
-| Colors/tokens | Purple/pink gradients, white cards, pale lavender controls, teal dose status and green final Save match reference. Mood entry five gradient samples differed by at most4RGB channel levels. Countdown now uses local lavender styling while retaining the guarded Meet widget. |
-| Images/icons | Actual transparent supplied flower, two mood sets and battery images are declared assets. No screenshot UI raster used as functional screen. Existing Material icons are used for standard controls; small glyph differences remain P3. |
-| Copy/content | All five prompts, step totals, status/time labels, navigation, Self-care/Professional Care and medicine-history title compared. Real data replaces screenshot examples. Unknown peer presence does not fabricate green online status; history retains an explicit back affordance. |
+| Fonts/typography | Bundled Roboto hierarchy and native icon fonts checked. Summary target pills fit at normal size, full insight stays readable, both-role narrow/large-text regressions pass. Source font file is unavailable; rasterization/weight differences are P3. |
+| Spacing/layout | Inline summary uses source sections, rounded frame/header,2-column goal tiles and full insight. Initial density and actual-wrapper issues were recaptured after repair. Previews retain three records and header action; footer removed. |
+| Colors/tokens | Pink summary header, light blue body, mint/lavender goal targets, lavender insight, screening panels and capsule blue compared together with sources/before captures. |
+| Images/icons | Existing native library icons represent bed, bicycle, swimming, walking, record, calendar, clock, insight and capsule. Small glyph/stroke differences from reference artwork are P3. Real profile photos/status continue to use existing sources; no example identity is embedded. |
+| Copy/content | Detail Record, Dibagikan, Rangkuman Sesi, Catatan & Target Konseling, Goals & Habits and Insight checked. Actual saved targets/insight and WIB timestamps are used. Invalid/missing target does not become a default3. CF values are rule support, with existing instrument/safety semantics. |
 
-## Comparison history
+## Interaction evidence and limits
 
-1. Pass1/2 identified P2: missing async-decoded batteries; inherited test button glyphs; medication rendering TimeOfDay debug text; overly strong Home shadows; incorrect banner/tile order; oversized energy padding. Fixes: precache images/fonts for capture, explicit button font, reminder.label, local white cards, corrected order and compact metric panels. Evidence: `comparisons/*-pass1.png`, `*-pass2.png`.
-2. Pass3 identified P2: default outlined gray Meet countdown, medication action buttons circular, counter/prompt gaps too tall. Fixes: local OutlinedButtonTheme around existing MeetJoinButton, rounded rectangular dose actions, counter spacing and header gaps. Evidence: `comparisons/*-pass3.png` → `*-pass4.png`.
-3. Pass4 navigation differed from source (dark icons and broad indicator). Local NavigationBarTheme now uses selected purple/gray inactive icons and pale circular indicator. Final capture/pass5 inspected source and implementation together, including navigation focus. No further visual fix made after pass5.
-4. Mood entry independently normalized bezel/OS crop, corrected gradient and white form proportions, re-rendered and measured. History compared all visible date groups/cards. Professional dashboard compared full content, controls and availability disclosure; narrow large-text states separately captured.
+Direct-record popup, duplicate-title selection, account-switch stale responses, retained full-history header, absent footer, full inline summary/no action and authorized/denied detail regressions are covered. Presence is verified through local real WebSocket/PostgreSQL integration and client lifecycle tests, not inferred from a static header image. No authenticated two-account production or physical-device flow was performed. The backend change remains local until a separate deployment.
 
-## Interactions and correctness
+## Checklist
 
-- Five-step real payloads, back-preserved values, zero energy, actual sleep/anxiety/irritability, server-ID medication selection, units-per-dose stock, skip and pending guards are tested.
-- Full-page mood Save/return/refresh, API failure/retry, selected owner changes and all-history date grouping are tested.
-- Own/unrelated presence ignored; selected-peer Online appears once; offline/disconnect clears stale presence via actual local WebSocket tests.
-- Pending/offline retries are tested for durable queue failure, partial save, no repeated mood/stock deduction, account generation A→B→A, stop-before-next-item and lock release after storage error.
-- Physical two-account login/session/notification delivery was not tested. Native widget renders provide the visual evidence; signed release startup is recorded separately.
+- [x] Opened source/native combined evidence and both record popups.
+- [x] Fixed and recaptured P2 summary density and actual-width layout.
+- [x] Evaluated typography, spacing, colors, icons and actual-content behavior.
+- [x] Preserved previous design report and separated final binary/test evidence into the dated QA report.
 
-## Follow-up polish
-
-P3 only: OS/font antialiasing and standard icon glyphs can differ slightly from screenshots; native navigation has no decorative selected dot. Actual dates/countdowns/data and unknown peer state intentionally differ from fixture graphics. These do not hide controls or change the requested journey.
+P3 follow-up: standard icon artwork, native font antialiasing and OS safe-area padding can differ from the supplied screenshots. No pixel-identical physical-device claim is made.

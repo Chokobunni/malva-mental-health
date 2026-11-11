@@ -24,7 +24,7 @@ class SharedRecordDetail extends StatelessWidget {
           'level': value.level,
           if (value.summary.isNotEmpty) 'summary': value.summary,
           'crisis_flag': value.crisisFlag,
-          if (value.hasCertaintyFactor) 'cf': value.certaintyFactor,
+          'cf': value.hasCertaintyFactor ? value.certaintyFactor : double.nan,
         };
     return SharedRecordDetail(
       key: key,
@@ -578,12 +578,26 @@ class SharedRecordDetail extends StatelessWidget {
     final phq = {
       ...rawPhq,
       'score': phqLevel == null ? null : rawPhq['score'],
-      'level': phqLevel?.label
+      'level': phqLevel?.label,
+      'cf': AssessmentEngine.savedCertaintyFactor(
+          type: AssessmentType.phq9,
+          score: rawPhq['score'],
+          maxScore: rawPhq['max_score'],
+          cf: rawPhq['cf'],
+          answers: AssessmentEngine.savedAnswers(rawPhq['answers']),
+          crisisFlag: rawPhq['crisis_flag'] == true),
     };
     final gad = {
       ...rawGad,
       'score': gadLevel == null ? null : rawGad['score'],
-      'level': gadLevel?.label
+      'level': gadLevel?.label,
+      'cf': AssessmentEngine.savedCertaintyFactor(
+          type: AssessmentType.gad7,
+          score: rawGad['score'],
+          maxScore: rawGad['max_score'],
+          cf: rawGad['cf'],
+          answers: AssessmentEngine.savedAnswers(rawGad['answers']),
+          crisisFlag: rawGad['crisis_flag'] == true),
     };
     final crisis = [meta, data, rawPhq, rawGad]
         .any((value) => value['crisis_flag'] == true);

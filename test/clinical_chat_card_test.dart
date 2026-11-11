@@ -23,7 +23,8 @@ void main() {
     ))));
     expect(tester.takeException(), isNull);
   });
-  testWidgets('summary shows real homework and insight with detail action',
+  testWidgets(
+      'summary shows complete saved content inline without detail action',
       (tester) async {
     var opened = false;
     await tester.pumpWidget(MaterialApp(
@@ -34,7 +35,7 @@ void main() {
           senderId: 'pro1',
           senderName: 'Dokter',
           text: 'Rangkuman sesi',
-          timestamp: wibNow(),
+          timestamp: wibFromParts(2026, 11, 6, 13, 8),
           isMine: false,
           kind: 'session_summary',
           metadata: {
@@ -49,8 +50,16 @@ void main() {
     ))));
     expect(find.text('Latihan napas'), findsOneWidget);
     expect(find.text('Praktikkan perlahan.'), findsOneWidget);
-    await tester.tap(find.text('Lihat detail'));
-    expect(opened, isTrue);
+    expect(find.text('Detail Record'), findsOneWidget);
+    expect(find.text('Rangkuman Sesi'), findsOneWidget);
+    expect(find.text('Catatan & Target Konseling'), findsOneWidget);
+    expect(find.text('Target: 4x / minggu'), findsOneWidget);
+    expect(find.text('06/11/2026'), findsOneWidget);
+    expect(find.text('13:08'), findsOneWidget);
+    expect(find.text('Lihat detail'), findsNothing);
+    expect(find.byType(TextButton), findsNothing);
+    await tester.tap(find.text('Latihan napas'));
+    expect(opened, isFalse);
   });
   testWidgets('assessment action is available only to receiving patient',
       (tester) async {

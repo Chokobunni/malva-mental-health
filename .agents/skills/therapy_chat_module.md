@@ -6,15 +6,22 @@
 - Kartu dibuka lewat `GET /v1/therapy-submissions/{submission_id}`. Profesional membaca record yang dibagikan individual kepadanya atau melalui consent kategori `therapy_records` untuk pasangan pasien/profesional yang sama; pasien hanya miliknya sendiri. Detail dan daftar memakai pilihan izin yang sama, tetap dengan relasi serta jendela akses sesi/paket aktif. Jangan mengirim jawaban privat ke push atau metadata chat.
 - Pemilihan dapat dibatalkan; daftar kosong dan gangguan jaringan harus memiliki umpan balik. Kunci aksi selama request dan periksa kembali akun setelah operasi async.
 - Pengujian: `test/chat_therapy_share_test.dart`, `backend/internal/server/therapy_chat_flow_test.go` dan test consent yang ada.
-- Semua kartu mood, diary, obat, screening, assessment dan therapy membuka detail
-  untuk kedua peserta. Worksheet assessment DASS/WHO memakai share endpoint yang
-  sama, tanpa duplikasi pesan. Screening lama diselesaikan dari seluruh riwayat
-  berizin; kartu portal Therapy juga membuka jawaban lengkap termasuk legacy.
+- Chat kedua peserta menampilkan diary lengkap, obat, goals/habits, ringkasan,
+  screening dan assessment langsung di percakapan, tanpa popup/dropdown detail.
+  Worksheet terapi non-assessment tetap membuka detail. DASS/WHO memakai share
+  endpoint yang sama tanpa duplikasi pesan; detail berizin dibaca otomatis untuk
+  kartu inline, dan penolakan ID submission tidak boleh memakai fallback jawaban.
 - Portal Data Pasien Dibagikan memisahkan WHO-5/DASS-21 ke tab Screening bersama PHQ-9/GAD-7; tab Terapi memakai `isTherapyRecordSubmission` dan tetap memuat worksheet legacy non-assessment. Pemisahan tampilan tidak mengubah endpoint maupun consent `therapy_records` WHO/DASS.
-- Detail ringkasan tidak mengulang kutipan pesan lama; periode/metrik snapshot
-  tetap dipertahankan, termasuk record historis 14 hari. PHQ/GAD lama (flat atau
-  nested) dan kiriman baru memakai cutoff skor valid yang sama untuk tingkat
-  gejala. Skor kosong/invalid bukan nol; flag keselamatan tetap terpisah.
+- Semua ringkasan chat dan Mini Summary memakai tujuh hari kalender WIB. Snapshot
+  historis 14 hari dihitung ulang dari data berizin untuk tujuh hari berakhir pada
+  tanggal pesan; angka 14 hari tidak boleh hanya diganti labelnya. PHQ/GAD lama
+  (flat/nested/bundle) memakai cutoff valid yang sama; CF hilang dipulihkan dari
+  fakta tersimpan melalui aturan kanonis bila memungkinkan. Skor/CF invalid tetap
+  belum tersedia, dan indikator keselamatan positif tetap terpisah.
+- Kartu PHQ/GAD/WHO/DASS memakai pola nama, skor/maksimum, tingkat gejala dan CF
+  aktual tanpa penjelasan atau jawaban per item. DASS mempertahankan tiga subskala
+  /42 dan satu CF triage instrumen. Foto berbentuk persegi membulat; tanggapan
+  profesional memakai foto dan peran Psikiater/Psikolog dari kredensial aktual.
 
 ## Alat klinis profesional selama sesi
 
@@ -35,3 +42,10 @@
 
 - ID submission WHO/DASS/worksheet dibuka melalui GET berotorisasi; 403/404 tidak membuka fallback jawaban snapshot. Snapshot inline legacy tanpa ID tetap dapat ditampilkan dari pesan chat berizin.
 - WHO/DASS mempertahankan hasil dari jawaban lengkap yang tersimpan beserta CF triage aktual. PHQ/GAD memakai dua kartu CF terpisah. Kesalahan membuka assessment memakai label assessment, dan respons tertunda tidak boleh tampil setelah pergantian pemilik akun.
+
+## Koreksi record/presence (2026-11-11)
+
+- Snapshot awal presence mengirim true/false untuk seluruh peer berelasi aktif. Penutupan salah satu socket pemilik tidak mengirim Offline bila socket lain masih aktif; status dibaca menurut membership saat dikirim. Klien menunggu handshake, memfilter boolean peer terpilih dan membuang callback channel lama. Refresh token pemilik sama mengganti transport dan menghapus presence lama.
+- Preview tiga record memakai presenter detail berizin dengan objek record tepat yang dipilih; judul sama bukan ID sama. Header Lihat semua mempertahankan halaman riwayat. Pergantian akun membuang respons/popup lama. Halaman Asesmen tidak memuat footer therapy/worksheet.
+- Kartu Rangkuman Sesi memakai snapshot goal dan insight penuh secara inline, tanpa aksi detail. Target hanya integer1–7 yang tersimpan; kosong/invalid tampil belum tercatat. Goal IDs historis tanpa snapshot hanya menunjukkan jumlah yang diketahui.
+- ID screening PHQ/GAD juga memerlukan detail berizin; penolakan/missing ID tidak membuka fallback snapshot, sama seperti WHO/DASS.

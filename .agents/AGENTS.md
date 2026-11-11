@@ -286,6 +286,24 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 4. **Konfirmasi perubahan skema** — setiap perubahan tabel/kolom PostgreSQL butuh persetujuan (R7.6, R1.3).
 5. **Verifikasi** — jalankan `go build ./...`, `go vet ./...`, `go test ./...`, dan `go run ./cmd/apidoc -check` sebelum menyatakan selesai.
 
+### Preferensi rilis user (2026-11-11)
+
+- Setelah perubahan Malva selesai dan gate wajib lolos, langsung commit/push ke GitHub, deploy komponen yang berubah, serta publikasikan APK release terbaru ke website. Instruksi user ini merupakan otorisasi berkelanjutan; tidak perlu meminta konfirmasi ulang untuk rilis rutin tersebut. Instruksi khusus berikutnya seperti hanya lokal/draft atau jangan deploy tetap mengesampingkan default ini.
+- Verifikasi workflow pada commit rilis, health API/web dan APK yang benar-benar tersedia di tautan unduh (versi, tanda tangan, checksum). Kegagalan deployment harus ditangani dan dilaporkan; jangan menyatakan rilis selesai hanya karena push berhasil.
+
+## Kontrak referensi chat/MyCare (2026-11-11)
+
+- Chat kedua peran menampilkan ringkasan tujuh hari, goals/habits, seluruh screening,
+  obat dan diary langsung tanpa popup/dropdown. Screening hanya nama, skor, tingkat
+  dan CF aktual, dengan indikator keselamatan positif tetap ada. Rincian pada
+  [therapy/chat](skills/therapy_chat_module.md).
+- MyCare memakai Terhubung/Jadwal/Riwayat; kuota, expiry, rating, foto dan status
+  berasal dari server. Paket pending/terminal tetap dapat diakses. Penjadwalan
+  video tetap 60 menit, hanya hari/slot praktik dan sebelum expiry aktual.
+- Mood pilihan di Home hilang setelah check-in lengkap tersimpan di server atau
+  antrean durable akun aktif, termasuk tidur nol. Retry obat yang belum selesai
+  tetap tersedia; hari WIB/akun baru mereset tampilan, bukan data akun lain.
+
 ## Kontrak alur pasien (perbaikan 2026-11-05)
 
 - Retry pembelian pending memakai paket/booking/payment yang sama untuk intent yang sama. Relasi yang tepat adalah `care_packages.booking_id`; `bookings.package_id` merujuk service package legacy. Aktivasi/cancel wajib menargetkan relasi tepat dan menjaga idempotensi.
@@ -360,8 +378,9 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Mood memakai hari WIB unik untuk streak, kalender dan total hari. Chart mingguan
   tidak mengisi tanggal kosong dengan data buatan. Radar memakai seluruh data pada
   rentang yang dipilih; pasien/profesional memakai kalkulasi yang sama.
-- Semua kartu record chat dapat dibuka. Therapy dan DASS/WHO memakai endpoint
-  share/detail berotorisasi; endpoint share tidak diikuti pesan duplikat.
+- Record chat mengikuti format inline pada kontrak referensi 2026-11-11;
+  worksheet non-assessment tetap dapat dibuka. Therapy dan DASS/WHO memakai
+  endpoint share/detail berotorisasi; share tidak diikuti pesan duplikat.
 - `limit=0` eksplisit pada mood/diary/log obat/screening meminta seluruh riwayat
   milik/berizin. Default tetap 20, positif maksimum 100. Isolasi pasien dan consent
   tetap wajib. Ekspor berhenti bila satu sumber yang diminta gagal.
@@ -430,6 +449,13 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 ## Kontrak detail screening (2026-11-10)
 
 - Data Pasien Dibagikan profesional memiliki tab Screening sebelum Terapi untuk WHO-5, DASS-21 dan PHQ-9/GAD-7. Terapi hanya worksheet non-assessment termasuk modul legacy. Kedua sumber screening selalu meminta pasien terpilih dan mempertahankan izin masing-masing; pergantian pasien/akun membuang respons lama. Tidak ada perubahan skoring atau kategori consent server.
-- Hasil PHQ/GAD langsung, riwayat pasien/profesional, detail klinis dan chat memakai tampilan detail record yang sama; dua kartu CF instrumen tetap terpisah saat nilainya sama. CF hilang/invalid bukan nol; CF gabungan historis tidak disalin ke kedua instrumen.
+- Hasil PHQ/GAD langsung, riwayat pasien/profesional dan detail klinis memakai tampilan detail record yang sama; chat mengikuti kartu inline pada kontrak referensi 2026-11-11. Dua kartu CF instrumen tetap terpisah saat nilainya sama. CF hilang/invalid bukan nol; CF gabungan historis tidak disalin ke kedua instrumen.
 - WHO/DASS menampilkan CF triage model yang sudah ada sebagai dukungan aturan, bukan peluang diagnosis/keparahan. Jawaban parsial tidak menghasilkan skor atau CF; skoring dan bobot tidak berubah.
 - GET detail therapy/assessment profesional menerima pembagian individual atau consent kategori `therapy_records` untuk pasangan yang sama, selaras daftar, dengan relasi dan jendela akses tetap wajib. Penolakan GET tidak dibypass fallback jawaban. Rujukan: [screening](skills/screening_module.md), [therapy/chat](skills/therapy_chat_module.md).
+
+## Koreksi presence dan record (2026-11-11)
+
+- Snapshot presence awal menyertakan status online/offline setiap peer terhubung; offline hanya setelah socket terakhir pemilik ditutup. Klien menunggu handshake, mengabaikan event peer lain/channel lama, serta membuat ulang transport saat token pemilik yang sama berubah. Koneksi sendiri bukan bukti peer online.
+- CF PHQ/GAD yang hilang dipulihkan melalui aturan kanonis dari total/jawaban valid tersimpan. CF valid tersimpan tetap utama; invalid bukan nol, CF gabungan bukan dua CF instrumen. WHO/DASS memerlukan jawaban lengkap berizin. Penolakan detail ID tidak boleh membuka fallback snapshot.
+- Tiga preview Assessment/Therapy Record langsung membuka popup record yang dipilih, termasuk judul berulang; header Lihat semua tetap membuka riwayat. Halaman Asesmen tidak memuat tombol seluruh therapy/worksheet. Respons akun lama dibuang.
+- Rangkuman Sesi chat tampil penuh inline dari snapshot goals/insight tersimpan, tanpa dropdown/detail popup. Target mingguan valid 1–7; detail hilang tidak diganti target buatan. Rujukan: [rencana](../docs/superpowers/plans/2026-11-11-record-presence-corrections.md), [screening](skills/screening_module.md), [therapy/chat](skills/therapy_chat_module.md).

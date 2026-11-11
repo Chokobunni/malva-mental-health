@@ -279,10 +279,15 @@ void main() {
                 apiClient: MalvaApiClient(
                     baseUrl: 'http://test', httpClient: client)))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Professionals'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
     await tester.pumpAndSettle();
     expect(find.textContaining('4.5 / 5'), findsOneWidget);
-    expect(find.textContaining('Lokasi pasien belum tersedia'), findsOneWidget);
+    expect(
+        client.requests
+            .where((request) => request.url.path == '/v1/doctors/doctor'),
+        isNotEmpty,
+        reason:
+            'linked professional details must load beyond the directory page');
   });
   testWidgets('discovery shows real stars and honest unknown distance',
       (tester) async {
@@ -299,18 +304,26 @@ void main() {
 
   testWidgets('MyCare professional cards use the same live rating and profile',
       (tester) async {
+    final client = _Client();
     await tester.pumpWidget(ProviderScope(
         child: MaterialApp(
             home: MyCareScreen(
                 session: _session,
                 apiClient: MalvaApiClient(
-                    baseUrl: 'http://test', httpClient: _Client())))));
+                    baseUrl: 'http://test', httpClient: client)))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Professionals'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
     await tester.pumpAndSettle();
     expect(find.textContaining('4.5 / 5'), findsOneWidget);
-    expect(find.textContaining('Lokasi pasien belum tersedia'), findsOneWidget);
-    expect(find.text('Lihat profil'), findsOneWidget);
+    expect(find.text('Lihat profil ›'), findsOneWidget);
+    await tester.tap(find.text('Lihat profil ›'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DoctorProfileScreen), findsOneWidget);
+    expect(
+        client.requests
+            .where((request) => request.url.path == '/v1/doctors/doctor')
+            .length,
+        greaterThanOrEqualTo(2));
   });
 
   testWidgets('location changes refresh search and replace old server distance',

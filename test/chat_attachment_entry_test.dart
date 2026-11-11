@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,12 @@ import 'package:malva_mental_health/src/providers/providers.dart';
 import 'package:malva_mental_health/src/screens/chat_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
+
+class _NetworkOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) =>
+      super.createHttpClient(context);
+}
 
 class _Picker implements FilePickerPort {
   Completer<PickedFile?>? pending;
@@ -30,6 +37,10 @@ class _Picker implements FilePickerPort {
 }
 
 void main() {
+  setUpAll(() {
+    HttpOverrides.runWithHttpOverrides(
+        () => WebSocket.userAgent, _NetworkOverrides());
+  });
   for (final specialization in ['M.Psi', 'Sp.KJ']) {
     for (final scale in [1.0, 1.4]) {
       testWidgets(
@@ -40,11 +51,27 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         final requests = <http.Request>[];
+        final server = (await tester
+            .runAsync(() => HttpServer.bind(InternetAddress.loopbackIPv4, 0)))!;
+        final sockets = <WebSocket>[];
+        await tester.runAsync(() async {
+          server.listen((request) async {
+            final socket = await WebSocketTransformer.upgrade(request);
+            sockets.add(socket);
+            socket.listen((_) {});
+          });
+        });
+        addTearDown(() async {
+          for (final socket in sockets) {
+            await socket.close();
+          }
+          await server.close(force: true);
+        });
         var permitted = true;
         Completer<http.Response>? permissionResponse;
         final end = wibNow().add(const Duration(minutes: 20));
         final api = MalvaApiClient(
-            baseUrl: 'http://backend.test',
+            baseUrl: 'http://127.0.0.1:${server.port}',
             httpClient: MockClient((request) async {
               requests.add(request);
               Object body = {};
@@ -126,7 +153,7 @@ void main() {
             displayName: 'Profesional',
             accessToken: 'synthetic-token');
         container.read(authStateProvider.notifier).setSession(session);
-        await tester.pumpWidget(UncontrolledProviderScope(
+        await tester.runAsync(() => tester.pumpWidget(UncontrolledProviderScope(
             container: container,
             child: MaterialApp(
                 builder: (context, child) => MediaQuery(
@@ -134,7 +161,18 @@ void main() {
                         .copyWith(textScaler: TextScaler.linear(scale)),
                     child: child!),
                 home: const ChatScreen(
-                    otherUserId: 'patient-1', otherUserName: 'Pasien'))));
+                    otherUserId: 'patient-1', otherUserName: 'Pasien')))));
+        // A real handshake needs I/O progress outside the widget fake clock.
+        for (var attempt = 0;
+            attempt < 100 &&
+                find.text('Status belum diketahui').evaluate().isEmpty;
+            attempt++) {
+          await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 20)));
+          await tester.pump();
+        }
+        expect(sockets, hasLength(1));
+        expect(find.text('Status belum diketahui'), findsOneWidget);
         await tester.pumpAndSettle();
         expect(find.byTooltip('Lampirkan berkas'), findsOneWidget);
         await tester.tap(find.byTooltip('Lampirkan berkas'));

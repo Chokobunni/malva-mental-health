@@ -3209,8 +3209,7 @@ class _TherapySubmissionsScreenState
 /// Memuat datanya sendiri (pola sama dengan `AssessmentHistoryPreview`):
 /// sengaja TIDAK menampilkan spinner besar agar halaman katalog tidak
 /// tertahan menunggu endpoint ini. Menampilkan maksimal 3 kartu read-only
-/// (tanpa tombol Bagikan/Hapus). Tap kartu membuka halaman Therapy Record
-/// lengkap.
+/// (tanpa tombol Bagikan/Hapus). Tap kartu membuka detail record yang dipilih.
 class TherapyRecordPreview extends ConsumerStatefulWidget {
   const TherapyRecordPreview({super.key});
 
@@ -3223,6 +3222,7 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
   List<BackendTherapySubmission> _items = const [];
   bool _isLoading = true;
   String? _error;
+  int _loadGeneration = 0;
 
   /// Batas kartu yang ditampilkan di halaman induk.
   static const int _maxPreview = 3;
@@ -3234,7 +3234,9 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
   }
 
   Future<void> _load() async {
-    final token = ref.read(currentSessionProvider)?.accessToken;
+    final generation = ++_loadGeneration;
+    final session = ref.read(currentSessionProvider);
+    final token = session?.accessToken;
     if (token == null || token.isEmpty) {
       if (!mounted) return;
       setState(() {
@@ -3258,14 +3260,18 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
         if (bd == null) return -1;
         return bd.compareTo(ad);
       });
-      if (!mounted) return;
+      if (!mounted ||
+          generation != _loadGeneration ||
+          ref.read(currentSessionProvider) != session) return;
       setState(() {
         _items = therapy;
         _isLoading = false;
         _error = null;
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted ||
+          generation != _loadGeneration ||
+          ref.read(currentSessionProvider) != session) return;
       setState(() {
         _isLoading = false;
         _error = friendlyErrorMessage(e);
@@ -3273,15 +3279,17 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
     }
   }
 
-  void _openAll() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const TherapySubmissionsScreen()),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    ref.listen(currentSessionProvider, (previous, next) {
+      if (previous == next) return;
+      setState(() {
+        _items = const [];
+        _isLoading = true;
+        _error = null;
+      });
+      _load();
+    });
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     // Placeholder ringkas: baris teks + indikator kecil, bukan spinner besar.
     if (_isLoading) {
@@ -3344,7 +3352,10 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final item in preview) ...[
-          _TherapyRecordPreviewCard(item: item, onTap: _openAll),
+          _TherapyRecordPreviewCard(
+            item: item,
+            onTap: () => showTherapyRecordDetail(context, item),
+          ),
           const SizedBox(height: 10),
         ],
       ],
@@ -3355,7 +3366,7 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
 /// Kartu read-only satu therapy record di halaman pratinjau.
 ///
 /// Tanpa tombol Bagikan/Hapus — aksi itu hanya ada di halaman Therapy Record
-/// lengkap yang dibuka lewat tap kartu atau tombol "Lihat semua".
+/// lengkap yang dibuka lewat tombol "Lihat semua".
 class _TherapyRecordPreviewCard extends StatelessWidget {
   const _TherapyRecordPreviewCard({required this.item, this.onTap});
 

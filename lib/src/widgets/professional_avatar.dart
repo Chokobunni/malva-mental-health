@@ -18,6 +18,7 @@ class ProfessionalAvatar extends StatelessWidget {
     required this.displayName,
     this.radius = 30,
     this.photoUrl,
+    this.borderRadius,
   });
 
   final String displayName;
@@ -25,6 +26,7 @@ class ProfessionalAvatar extends StatelessWidget {
 
   /// URL foto profil profesional. Bila kosong/null, pakai gradien + inisial.
   final String? photoUrl;
+  final BorderRadius? borderRadius;
 
   static const _gradients = [
     [MalvaColors.plum, MalvaColors.orchid],
@@ -49,6 +51,23 @@ class ProfessionalAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (borderRadius != null) {
+      return ClipRRect(
+        borderRadius: borderRadius!,
+        child: SizedBox(
+          width: radius * 2,
+          height: radius * 2,
+          child: photoUrl != null && photoUrl!.isNotEmpty
+              ? ProfessionalPhoto(
+                  key: ValueKey(photoUrl),
+                  photoUrl: photoUrl!,
+                  fit: BoxFit.cover,
+                  fallback: _gradientTile(),
+                )
+              : _gradientTile(),
+        ),
+      );
+    }
     // Jika ada URL foto, tampilkan gambar jaringan dengan fallback ke gradien.
     if (photoUrl != null && photoUrl!.isNotEmpty) {
       return CircleAvatar(
@@ -56,6 +75,7 @@ class ProfessionalAvatar extends StatelessWidget {
         backgroundColor: Colors.transparent,
         child: ClipOval(
           child: ProfessionalPhoto(
+            key: ValueKey(photoUrl),
             photoUrl: photoUrl!,
             width: radius * 2,
             height: radius * 2,
@@ -67,6 +87,23 @@ class ProfessionalAvatar extends StatelessWidget {
     }
     return _gradientFallback();
   }
+
+  Widget _gradientTile() => Container(
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: _gradients[displayName.hashCode.abs() % _gradients.length],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Text(_initials,
+            style: TextStyle(
+                fontFamily: 'Roboto',
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: radius * .7)),
+      );
 
   Widget _gradientFallback() {
     final hash = displayName.hashCode.abs();
@@ -87,6 +124,7 @@ class ProfessionalAvatar extends StatelessWidget {
         child: Text(
           _initials,
           style: TextStyle(
+            fontFamily: 'Roboto',
             color: Colors.white,
             fontWeight: FontWeight.w900,
             fontSize: radius * 0.7,

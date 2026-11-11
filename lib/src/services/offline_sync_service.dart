@@ -159,6 +159,7 @@ class OfflineSyncService {
 
   Future<void> initialize() async {
     await _loadQueue();
+    _notifyQueue();
     _startPeriodicSync();
     _listenConnectivity();
   }

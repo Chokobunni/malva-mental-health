@@ -11,6 +11,8 @@ import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
 import 'package:malva_mental_health/src/widgets/therapy_library.dart';
 
+import 'record_render_capture.dart';
+
 // ============================================================
 // QA — T2: SEKSI "THERAPY RECORD" DI HALAMAN KATALOG TERAPI + UJI TEPI
 //
@@ -21,7 +23,7 @@ import 'package:malva_mental_health/src/widgets/therapy_library.dart';
 //   - modul tak dikenal tetap dianggap terapi (data pasien tidak hilang).
 //   - hasil asesmen (WHO-5) tersaring keluar.
 //   - kartu read-only (tanpa tombol Bagikan/Hapus) & maks 3 kartu terbaru.
-//   - tap "Lihat semua"/kartu membuka TherapySubmissionsScreen.
+//   - tap kartu membuka detail record yang dipilih; header membuka riwayat.
 // ============================================================
 
 const _session = AuthSession(
@@ -38,12 +40,13 @@ Map<String, dynamic> _submission({
   required String title,
   required String createdAt,
   String summary = '',
+  Map<String, dynamic> answers = const {},
 }) {
   return {
     'id': id,
     'module_id': moduleId,
     'title': title,
-    'answers': const <String, dynamic>{},
+    'answers': answers,
     'summary': summary,
     'shared_with_professional_id': '',
     'shared_at': null,
@@ -72,7 +75,7 @@ MalvaApiClient _apiWith(
 }
 
 Widget _app(MalvaApiClient api,
-    {required Widget home, bool withSession = true}) {
+    {required Widget home, bool withSession = true, GlobalKey? boundary}) {
   return ProviderScope(
     overrides: [
       apiClientProvider.overrideWithValue(api),
@@ -82,7 +85,12 @@ Widget _app(MalvaApiClient api,
         return notifier;
       }),
     ],
-    child: MaterialApp(theme: buildMalvaTheme(), home: home),
+    child: RepaintBoundary(
+        key: boundary,
+        child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: recordCaptureTheme(buildMalvaTheme()),
+            home: home)),
   );
 }
 
@@ -94,6 +102,7 @@ void _tallViewport(WidgetTester tester) {
 }
 
 void main() {
+  setUpAll(loadRecordCaptureFonts);
   testWidgets('T2: empty state saat 0 submission, katalog tetap tampil',
       (tester) async {
     _tallViewport(tester);
@@ -233,28 +242,138 @@ void main() {
     expect(find.text('Terapi #1'), findsNothing);
   });
 
-  testWidgets('T2: tap kartu pratinjau membuka TherapySubmissionsScreen',
+  testWidgets('three therapy previews open their own record popup directly',
       (tester) async {
+    final capture = recordCaptureEnabled;
+    if (capture) enableRecordCaptureRendering();
+    final boundary = GlobalKey();
+    if (capture) {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+    }
     final api = _apiWith([
-      _submission(
-        id: 'sub_1',
-        moduleId: 'abcde',
-        title: 'Terapi ABCDE',
-        createdAt: '2026-10-19T09:00:00.000Z',
-      ),
+      for (var i = 1; i <= 4; i++)
+        _submission(
+          id: 'sub_$i',
+          moduleId: 'abcde',
+          title: 'Restrukturisasi Kognitif (ABCDE)',
+          createdAt: '2026-11-0${i}T09:00:00+07:00',
+          answers: {
+            'activating': 'Kejadian pribadi $i',
+            'belief': 'Saya khawatir melakukan kesalahan.',
+            'consequence_physical': 'Bahu terasa tegang.',
+            'consequence_emotional': 'Merasa cemas dan ingin menghindar.',
+            'dispute': 'Saya dapat belajar dan meminta bantuan.',
+            'effective': 'Mencoba kembali secara bertahap.',
+          },
+        ),
     ]);
     await tester.pumpWidget(
       _app(
         api,
-        home: const Scaffold(
-            body: SingleChildScrollView(child: TherapyRecordPreview())),
+        boundary: boundary,
+        home: capture
+            ? const TherapyCatalogScreen()
+            : const Scaffold(
+                body: SingleChildScrollView(child: TherapyRecordPreview())),
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Terapi ABCDE'));
+    if (capture) {
+      await tester.scrollUntilVisible(find.byType(TherapyRecordPreview), 400);
+      await tester.pumpAndSettle();
+    }
+
+    final entries = find.descendant(
+        of: find.byType(TherapyRecordPreview),
+        matching: find.text('Restrukturisasi Kognitif (ABCDE)'));
+    expect(entries, findsNWidgets(3));
+    if (capture) {
+      await tester.ensureVisible(entries.last);
+      await tester.pumpAndSettle();
+      await captureRecord(tester, boundary, 'therapy-preview.png');
+    }
+    for (var index = 0; index < 3; index++) {
+      if (capture) await tester.ensureVisible(entries.at(index));
+      await tester.tap(entries.at(index));
+      await tester.pumpAndSettle();
+      expect(find.byType(TherapySubmissionsScreen), findsNothing);
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(find.text('Kejadian pribadi ${4 - index}'), findsOneWidget);
+      final detail = tester
+          .widget<TherapySubmissionView>(find.byType(TherapySubmissionView));
+      expect(detail.answers['activating'], 'Kejadian pribadi ${4 - index}');
+      if (capture && index == 0) {
+        await captureRecord(tester, boundary, 'therapy-popup.png');
+      }
+      Navigator.of(tester.element(find.byType(TherapySubmissionView))).pop();
+      await tester.pumpAndSettle();
+    }
+    if (capture) resetRecordCaptureRendering();
+  });
+
+  testWidgets('therapy preview discards another account response and popup',
+      (tester) async {
+    final oldResponse = Completer<http.Response>();
+    final api = MalvaApiClient(
+      baseUrl: 'http://backend.test',
+      httpClient: _FakeClient((request) async {
+        if (request.headers['authorization'] == 'Bearer token_test') {
+          return oldResponse.future;
+        }
+        return http.Response(
+            jsonEncode({
+              'submissions': [
+                _submission(
+                    id: 'new-record',
+                    moduleId: 'abcde',
+                    title: 'Akun baru',
+                    createdAt: '2026-11-11T09:00:00+07:00',
+                    answers: {'a': 'Jawaban akun baru'}),
+              ]
+            }),
+            200);
+      }),
+    );
+    await tester.pumpWidget(_app(api,
+        home: const Scaffold(
+            body: SingleChildScrollView(child: TherapyRecordPreview()))));
+    await tester.pump();
+    final container = ProviderScope.containerOf(
+        tester.element(find.byType(TherapyRecordPreview)),
+        listen: false);
+    container.read(authStateProvider.notifier).setSession(const AuthSession(
+          role: UserRole.patient,
+          identifier: 'baru@example.test',
+          displayName: 'Baru',
+          backendUserId: 'patient-new',
+          accessToken: 'token-new',
+        ));
+    await tester.pump();
+    oldResponse.complete(http.Response(
+        jsonEncode({
+          'submissions': [
+            _submission(
+                id: 'old-record',
+                moduleId: 'abcde',
+                title: 'Akun lama',
+                createdAt: '2026-11-11T08:00:00+07:00'),
+          ]
+        }),
+        200));
     await tester.pumpAndSettle();
-    expect(find.byType(TherapySubmissionsScreen), findsOneWidget);
+    expect(find.text('Akun lama'), findsNothing);
+    expect(find.text('Akun baru'), findsOneWidget);
+    await tester.tap(find.text('Akun baru'));
+    await tester.pumpAndSettle();
+    expect(find.text('Jawaban akun baru'), findsOneWidget);
+    container.read(authStateProvider.notifier).setSession(_session);
+    await tester.pumpAndSettle();
+    expect(find.byType(TherapySubmissionView), findsNothing);
+    expect(find.text('Jawaban akun baru'), findsNothing);
+    expect(find.text('Sesi akun telah berubah.'), findsOneWidget);
   });
 }
 

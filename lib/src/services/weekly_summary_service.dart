@@ -73,15 +73,17 @@ class WeeklySummaryMetrics {
 /// Ambil metrik 7 hari: server lebih dulu, fallback ke data lokal per metrik.
 ///
 /// [localMoods]/[localLogs] diisi pemanggil dari store perangkat (boleh kosong).
+/// [asOf] anchors historical cards to their original WIB calendar date.
 /// Mengembalikan null hanya bila TIDAK ADA satu pun sumber data.
 Future<WeeklySummaryMetrics?> loadWeeklySummary({
   required MalvaApiClient api,
   required String accessToken,
   String? patientId,
+  DateTime? asOf,
   List<LocalMoodPoint> localMoods = const [],
   List<LocalMedicationLog> localLogs = const [],
 }) async {
-  final now = wibNow();
+  final now = toWib(asOf ?? wibNow());
   final end =
       wibFromParts(now.year, now.month, now.day).add(const Duration(days: 1));
   final cutoff = end.subtract(const Duration(days: 7));

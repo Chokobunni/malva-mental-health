@@ -82,6 +82,7 @@ void main() {
           ))));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Lanjut Bayar'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Lanjut Bayar'));
       await tester.pumpAndSettle();
       if (boundElsewhere) {

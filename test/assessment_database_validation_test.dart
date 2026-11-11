@@ -29,14 +29,18 @@ void main() {
     'level': 'unknown',
     'createdAt': '2026-11-09T12:00:00+07:00'
   };
-  test('missing local CF stays unavailable after restore and save', () async {
+  test(
+      'missing local CF recovers canonical rule support after restore and save',
+      () async {
     final result = (await restore(base)).single;
-    expect(result.hasCertaintyFactor, isFalse);
+    expect(result.hasCertaintyFactor, isTrue);
+    expect(result.certaintyFactor, closeTo(.9025, 1e-9));
     final store = _MemoryStore();
     final database = AssessmentDatabaseService(store: store);
     await database.saveAll('acc', [result]);
     final again = (await database.loadAll('acc')).single;
-    expect(again.hasCertaintyFactor, isFalse);
+    expect(again.hasCertaintyFactor, isTrue);
+    expect(again.certaintyFactor, closeTo(.9025, 1e-9));
   });
   test('real zero local CF remains available', () async {
     final result = (await restore({...base, 'certaintyFactor': 0})).single;

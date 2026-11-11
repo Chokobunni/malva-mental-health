@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../assessment_engine.dart';
 import '../models.dart';
+import '../professional_role.dart';
 import '../providers/providers.dart';
 import '../services/chat_service.dart';
 import '../services/malva_api_client.dart';
@@ -21,6 +23,7 @@ import '../services/server_clock.dart';
 import '../platform/platform_providers.dart';
 import 'chat/professional_chat_tools.dart';
 import 'chat/clinical_chat_card.dart';
+import 'chat/chat_shared_record_card.dart';
 import 'assessment_screen.dart';
 import 'goals_screen.dart';
 import 'booking/doctor_profile_screen.dart';
@@ -67,6 +70,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   bool _otherTyping = false;
   bool _isLoadingHistory = false;
   bool _sharingData = false;
+  bool _noticeDismissed = false;
   BackendChatAccess _access = const BackendChatAccess();
   bool _accessLoaded = false;
   Timer? _accessPoll;
@@ -84,6 +88,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   /// Foto lawan bicara; diisi dari parameter atau diambil dari server.
   String _photoUrl = '';
+  String _professionalPhotoUrl = '';
+  String _professionalRole = 'Profesional';
 
   @override
   void initState() {
@@ -110,19 +116,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   /// Tidak memblokir UI: bila gagal, avatar tetap tampil dengan gradien +
   /// inisial. Dijalankan sekali saat layar dibuka.
   Future<void> _loadProfessionalPhoto() async {
-    if (_photoUrl.isNotEmpty) return;
     final session = ref.read(currentSessionProvider);
     final token = session?.accessToken;
-    if (session?.role != UserRole.patient) return;
     if (token == null || token.isEmpty) return;
     try {
-      final profile = await ref.read(apiClientProvider).getDoctorProfile(
-            accessToken: token,
-            userId: widget.otherUserId,
-          );
-      final photo = profile.credential.photoIntroUrl;
-      if (!mounted || !_ownerMatches || photo.isEmpty) return;
-      setState(() => _photoUrl = photo);
+      final api = ref.read(apiClientProvider);
+      final credential = session?.role == UserRole.patient
+          ? (await api.getDoctorProfile(
+                  accessToken: token, userId: widget.otherUserId))
+              .credential
+          : await api.getMyCredentials(accessToken: token);
+      if (!mounted || !_ownerMatches || credential == null) return;
+      setState(() {
+        _professionalRole = professionalRoleLabel(credential.specialization);
+        _professionalPhotoUrl = credential.photoIntroUrl;
+        if (_isPatient && _professionalPhotoUrl.isNotEmpty) {
+          _photoUrl = _professionalPhotoUrl;
+        }
+      });
     } on Object {
       // Abaikan: foto hanya pelengkap tampilan.
     }
@@ -309,6 +320,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _initChat() {
+    _disposeChat();
     final session = ref.read(currentSessionProvider);
     final apiClient = ref.read(apiClientProvider);
     if (session?.accessToken == null || session!.accessToken!.isEmpty) return;
@@ -345,7 +357,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
 
     _typingSub = _chatService!.typingStream.listen((isTyping) {
-      if (mounted) setState(() => _otherTyping = isTyping);
+      if (mounted && _ownerMatches) {
+        setState(() => _otherTyping = isTyping);
+      }
     });
 
     _presenceSub = _chatService!.presenceStream.listen((presence) {
@@ -355,6 +369,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
 
     _chatService!.connect();
+  }
+
+  void _disposeChat() {
+    _stateSub?.cancel();
+    _messageSub?.cancel();
+    _typingSub?.cancel();
+    _presenceSub?.cancel();
+    _chatService?.dispose();
+    _chatService = null;
   }
 
   @override
@@ -372,11 +395,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
     _inputController.dispose();
     _scrollController.dispose();
-    _stateSub?.cancel();
-    _messageSub?.cancel();
-    _typingSub?.cancel();
-    _presenceSub?.cancel();
-    _chatService?.dispose();
+    _disposeChat();
     super.dispose();
   }
 
@@ -1406,13 +1425,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   @override
   Widget build(BuildContext context) {
     ref.watch(currentSessionProvider);
-    ref.listen<AuthSession?>(currentSessionProvider, (_, next) {
-      if (_ownerKey(next) == _owner) return;
+    ref.listen<AuthSession?>(currentSessionProvider, (previous, next) {
+      if (_ownerKey(next) == _owner) {
+        if (previous?.accessToken != next?.accessToken) {
+          setState(() {
+            _onlineUsers.clear();
+            _otherTyping = false;
+            _chatState = ChatState.disconnected;
+          });
+          _initChat();
+        }
+        return;
+      }
       _accessRequest++;
       _accessPoll?.cancel();
       _accessExpiry?.cancel();
-      _chatService?.dispose();
-      _chatService = null;
+      _disposeChat();
       _messages.clear();
       _inputController.clear();
     });
@@ -1424,11 +1452,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   'Sesi akun telah berubah. Buka kembali percakapan dari akun aktif.')));
     final otherOnline = _onlineUsers[widget.otherUserId];
     return Scaffold(
+      backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
+        toolbarHeight: 72,
         // AppBar global bertema transparan + teks putih; di layar chat latar
         // terang membuat nama profesional putih tidak terbaca. Jadi warna
         // di-set eksplisit di sini (ungu Malva) dan teksnya tetap putih.
         backgroundColor: MalvaColors.seed,
+        flexibleSpace: Container(
+            decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                    colors: [Color(0xFF55216C), Color(0xFFA43CA5)]))),
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: false,
@@ -1443,6 +1477,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               displayName: widget.otherUserName,
               photoUrl: _photoUrl,
               radius: 18,
+              borderRadius: BorderRadius.circular(11),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -1461,6 +1496,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       fontFamily: 'Roboto',
                     ),
                   ),
+                  if (_isPatient)
+                    Text(_professionalRole,
+                        style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 11,
+                            fontFamily: 'Roboto')),
                   _ConnectionStatusChip(
                       state: _chatState,
                       peerOnline: otherOnline,
@@ -1475,6 +1516,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               constraints: BoxConstraints(
                   maxWidth: MediaQuery.sizeOf(context).width * .42),
               child: MiniSummaryButton(
+                  iconOnly: true,
                   patientId: _isPatient ? null : widget.otherUserId)),
           _TypingIndicator(isTyping: _otherTyping),
         ],
@@ -1482,22 +1524,44 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       body: Column(
         children: [
           if (_accessLoaded &&
+              !_noticeDismissed &&
               !_liveSession &&
               !(_isDeadConversation && _isPatient))
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              color: MalvaColors.amber.withValues(alpha: 0.15),
-              child: Text(
-                _liveExpired
-                    ? 'Sesi berakhir. Riwayat chat tetap tersedia.'
-                    : _access.reason.isEmpty
-                        ? 'Chat teks aktif saat sesi berjalan.'
-                        : _access.reason,
-                textAlign: TextAlign.center,
-                style:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-              ),
+              padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+              color: const Color(0xFFFFF9EB),
+              child:
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Padding(
+                    padding: EdgeInsets.only(top: 5, right: 9),
+                    child: Icon(Icons.info_outline_rounded,
+                        size: 18, color: Color(0xFFD6A34B))),
+                Expanded(
+                    child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Text(
+                          _liveExpired
+                              ? 'Sesi berakhir. Riwayat chat tetap tersedia.'
+                              : _isPatient && _access.hasActivePackage
+                                  ? 'Di Luar Jam Sesi: Kamu tetap dapat memperbarui data diary, goals, dan worksheet. Chat interaktif aktif saat sesi konseling berlangsung.'
+                                  : _access.reason.isEmpty
+                                      ? 'Chat teks aktif saat sesi berjalan.'
+                                      : _access.reason,
+                          style: const TextStyle(
+                              fontSize: 12,
+                              height: 1.5,
+                              color: Color(0xFF8E6F46)),
+                        ))),
+                IconButton(
+                    tooltip: 'Tutup informasi sesi',
+                    visualDensity: VisualDensity.compact,
+                    constraints:
+                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    onPressed: () => setState(() => _noticeDismissed = true),
+                    icon: const Icon(Icons.close,
+                        size: 15, color: Color(0xFFB8A28D))),
+              ]),
             ),
           if (_accessLoaded && _liveSession)
             Container(
@@ -1534,17 +1598,49 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     itemBuilder: (context, index) {
                       final msg = _messages[index];
                       final showTimestamp = index == 0 ||
-                          _messages[index - 1]
-                                  .timestamp
-                                  .difference(msg.timestamp)
-                                  .inMinutes >
-                              5;
+                          formatWibDate(_messages[index - 1].timestamp) !=
+                              formatWibDate(msg.timestamp);
                       return Column(
                         children: [
                           if (showTimestamp)
                             _TimestampLabel(date: msg.timestamp),
                           const SizedBox(height: 6),
                           if (const [
+                                'summary',
+                                'progress',
+                                'goals',
+                                'habits',
+                                'assessment',
+                                'screening',
+                                'prescription',
+                                'medication',
+                                'diary'
+                              ].contains(msg.kind) ||
+                              (msg.kind == 'worksheet' &&
+                                  const ['who5', 'dass21']
+                                      .contains(msg.metadata?['module_id'])))
+                            Align(
+                                alignment: msg.isMine
+                                    ? Alignment.centerRight
+                                    : Alignment.centerLeft,
+                                child: Container(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    constraints: BoxConstraints(
+                                        maxWidth:
+                                            MediaQuery.sizeOf(context).width *
+                                                (const ['goals', 'habits']
+                                                        .contains(msg.kind)
+                                                    ? .50
+                                                    : const [
+                                                        'medication',
+                                                        'prescription',
+                                                        'diary'
+                                                      ].contains(msg.kind)
+                                                        ? .86
+                                                        : .70)),
+                                    child: ChatSharedRecordCard(
+                                        key: ValueKey(msg.id), message: msg)))
+                          else if (const [
                                 'assessment_request',
                                 'session_summary',
                                 'attachment'
@@ -1569,7 +1665,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                     constraints: BoxConstraints(
                                         maxWidth:
                                             MediaQuery.of(context).size.width *
-                                                .85),
+                                                (msg.kind == 'session_summary'
+                                                    ? .95
+                                                    : .85)),
                                     child: ClinicalChatCard(
                                         message: msg,
                                         isPatient: _isPatient,
@@ -1578,18 +1676,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                           else
                             _ChatBubble(
                               message: msg,
-                              onOpenRecord: const [
-                                'worksheet',
-                                'assessment',
-                                'screening',
-                                'prescription',
-                                'medication',
-                                'diary',
-                                'goals',
-                                'habits',
-                                'summary',
-                                'progress'
-                              ].contains(msg.kind)
+                              isProfessional: _isPatient != msg.isMine,
+                              senderPhotoUrl:
+                                  _professionalPhotoUrl.isEmpty && _isPatient
+                                      ? _photoUrl
+                                      : _professionalPhotoUrl,
+                              senderRole: _professionalRole,
+                              onOpenRecord: msg.kind == 'worksheet'
                                   ? () => _openSharedRecord(msg)
                                   : null,
                             ),
@@ -1627,9 +1720,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   : null,
               disabledHint: _liveExpired
                   ? 'Sesi berakhir. Riwayat chat tetap tersedia.'
-                  : _accessLoaded
-                      ? (_access.reason.isEmpty ? null : _access.reason)
-                      : null,
+                  : _isPatient && _canShare
+                      ? 'Di luar sesi: kamu bisa mengirim data (diary, goals, '
+                          'assessment, dll). Chat aktif saat sesi berjalan.'
+                      : _accessLoaded
+                          ? (_access.reason.isEmpty ? null : _access.reason)
+                          : null,
             ),
         ],
       ),
@@ -1828,24 +1924,61 @@ class _TimestampLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final day = toWib(date);
+    const weekdays = [
+      'SENIN',
+      'SELASA',
+      'RABU',
+      'KAMIS',
+      'JUMAT',
+      'SABTU',
+      'MINGGU'
+    ];
+    const months = [
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MEI',
+      'JUN',
+      'JUL',
+      'AGU',
+      'SEP',
+      'OKT',
+      'NOV',
+      'DES'
+    ];
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Text(
-        ChatScreen.formatMessageDate(date),
-        style: Theme.of(context)
-            .textTheme
-            .bodySmall
-            ?.copyWith(color: Colors.black38, fontWeight: FontWeight.w700),
-      ),
+      child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+              color: const Color(0xFFE7EDF3),
+              borderRadius: BorderRadius.circular(24)),
+          child: Text(
+            '${weekdays[day.weekday - 1]}, ${day.day} ${months[day.month - 1]} ${day.year}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.black38,
+                fontWeight: FontWeight.w700,
+                fontSize: 10),
+          )),
     );
   }
 }
 
 class _ChatBubble extends StatelessWidget {
-  const _ChatBubble({required this.message, this.onOpenRecord});
+  const _ChatBubble(
+      {required this.message,
+      this.onOpenRecord,
+      this.isProfessional = false,
+      this.senderPhotoUrl = '',
+      this.senderRole = 'Profesional'});
 
   final ChatMessage message;
   final VoidCallback? onOpenRecord;
+  final bool isProfessional;
+  final String senderPhotoUrl;
+  final String senderRole;
 
   @override
   Widget build(BuildContext context) {
@@ -1855,27 +1988,54 @@ class _ChatBubble extends StatelessWidget {
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.78,
+          maxWidth: MediaQuery.of(context).size.width * 0.88,
         ),
         margin: const EdgeInsets.only(bottom: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: isMine
-              ? MalvaColors.seed
-              : MalvaColors.seed.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(isMine ? 18 : 4),
-            bottomRight: Radius.circular(isMine ? 4 : 18),
-          ),
+          color: isProfessional ? Colors.white : const Color(0xFFF9F5FF),
+          border: Border.all(color: const Color(0xFFECE4F5)),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x05000000), blurRadius: 10, offset: Offset(0, 3))
+          ],
         ),
         child: InkWell(
           onTap: onOpenRecord,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (!isMine)
+              if (isProfessional)
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Row(children: [
+                      ProfessionalAvatar(
+                          displayName: message.senderName,
+                          photoUrl: senderPhotoUrl,
+                          radius: 14,
+                          borderRadius: BorderRadius.circular(9)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: Text(message.senderName,
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: MalvaColors.ink))),
+                      const SizedBox(width: 6),
+                      Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                              color: const Color(0xFFF5EBFF),
+                              borderRadius: BorderRadius.circular(5)),
+                          child: Text(senderRole,
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: MalvaColors.seed))),
+                    ]))
+              else if (!isMine)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Text(
@@ -1891,31 +2051,33 @@ class _ChatBubble extends StatelessWidget {
                   ),
                 ),
               if (message.kind == 'file') ...[
-                _FileBubble(message: message, isMine: isMine),
+                _FileBubble(message: message, isMine: false),
                 const SizedBox(height: 6),
               ] else if (message.kind == 'voice') ...[
-                _VoiceBubble(message: message, isMine: isMine),
+                _VoiceBubble(message: message, isMine: false),
                 const SizedBox(height: 6),
               ] else if (message.kind != 'text') ...[
-                _SharedCardBubble(message: message, isMine: isMine),
+                _SharedCardBubble(message: message, isMine: false),
                 const SizedBox(height: 6),
               ],
               Text(
                 message.text,
-                style: TextStyle(
-                  color: isMine ? Colors.white : MalvaColors.ink,
+                style: const TextStyle(
+                  color: Color(0xFF707782),
+                  height: 1.6,
+                  fontSize: 12,
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                ChatScreen.formatMessageTime(message.timestamp),
-                style: TextStyle(
-                  fontSize: 10,
-                  color: isMine
-                      ? Colors.white.withValues(alpha: 0.6)
-                      : Colors.black38,
-                ),
-              ),
+              Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    ChatScreen.formatMessageTime(message.timestamp),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Colors.black38,
+                    ),
+                  )),
             ],
           ),
         ),
@@ -2141,11 +2303,14 @@ class _ChatInput extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             if (onShareTap != null)
               IconButton(
                 tooltip: 'Bagikan data',
                 onPressed: onShareTap,
+                style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFFF1F5F9)),
                 icon: const Icon(Icons.add_rounded),
               ),
             if (onAttachTap != null)
@@ -2161,12 +2326,24 @@ class _ChatInput extends StatelessWidget {
                 onChanged: onChanged,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => onSend(),
-                minLines: 1,
+                minLines: enabled ? 1 : 3,
                 maxLines: 4,
                 decoration: InputDecoration(
                   hintText: enabled
                       ? 'Ketik pesan...'
                       : (disabledHint ?? 'Chat aktif saat sesi berjalan'),
+                  hintMaxLines: 4,
+                  hintStyle: const TextStyle(
+                      fontSize: 12, height: 1.5, color: Color(0xFF9CA8B7)),
+                  isDense: true,
+                  filled: true,
+                  fillColor: const Color(0xFFF1F5F9),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none),
+                  disabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none),
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
@@ -2174,8 +2351,12 @@ class _ChatInput extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             IconButton.filled(
+              style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFF8D40DB),
+                  disabledBackgroundColor: const Color(0xFF8D40DB),
+                  disabledForegroundColor: Colors.white70),
               onPressed: enabled ? onSend : null,
-              icon: const Icon(Icons.send_rounded, size: 20),
+              icon: const Icon(CupertinoIcons.paperplane, size: 20),
             ),
           ],
         ),

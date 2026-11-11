@@ -69,7 +69,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('missing saved CF remains unavailable instead of becoming zero',
+  testWidgets(
+      'missing saved CF recovers while explicit zero stays authoritative',
       (tester) async {
     final screening = BackendScreeningSession.fromJson({
       'id': 'legacy',
@@ -83,7 +84,7 @@ void main() {
         home: Scaffold(
             body: SingleChildScrollView(
                 child: SharedRecordDetail.screening(screening: screening)))));
-    expect(find.text('CF belum tersedia.'), findsOneWidget);
+    expect(find.textContaining('0.68', findRichText: true), findsOneWidget);
     expect(find.textContaining('0.00', findRichText: true), findsOneWidget);
   });
 
@@ -115,20 +116,13 @@ void main() {
     expect(find.textContaining('0.95', findRichText: true), findsOneWidget);
     expect(find.textContaining('0.68', findRichText: true), findsOneWidget);
     await show({'cf': 0.95});
-    expect(
-        find.text('CF belum tersedia.', findRichText: true), findsNWidgets(2));
-    expect(find.textContaining('CF gabungan historis: 0.95'), findsOneWidget);
+    expect(find.textContaining('0.90', findRichText: true), findsOneWidget);
+    expect(find.textContaining('0.68', findRichText: true), findsOneWidget);
+    expect(find.textContaining('0.95', findRichText: true), findsNothing);
   });
 
-  for (final invalid in [
-    null,
-    -0.1,
-    1.1,
-    '0.95',
-    double.nan,
-    double.infinity
-  ]) {
-    test('stored CF availability rejects missing or invalid values ($invalid)',
+  for (final invalid in [-0.1, 1.1, '0.95', double.nan, double.infinity]) {
+    test('stored CF availability rejects explicit invalid values ($invalid)',
         () {
       final summary = BackendAssessmentSummary.fromJson(
           {'type': 'phq9', 'score': 7, 'max_score': 27, 'cf': invalid});

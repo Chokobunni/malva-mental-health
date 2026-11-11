@@ -87,6 +87,30 @@ class ForwardChainingEngine {
     _calculateTotalScores(workingMemory, questionIds, 'phq9', 'phq_');
     _calculateTotalScores(workingMemory, questionIds, 'gad7', 'gad_');
 
+    return _inferFacts(workingMemory, rules);
+  }
+
+  /// Restore rule support from recorded facts without inventing item answers.
+  InferenceResult inferSavedTotal({
+    required String instrument,
+    required int total,
+    required List<ScreeningRule> rules,
+    bool positiveSafety = false,
+  }) {
+    final totalId = '${instrument}_total_score';
+    return _inferFacts({
+      totalId: ClinicalFact(
+          factId: totalId, value: total, certaintyFactor: _instrumentCF),
+      if (positiveSafety && instrument == 'phq9')
+        'crisis_flag': const ClinicalFact(
+            factId: 'crisis_flag',
+            value: true,
+            certaintyFactor: _safetyEvidenceCF),
+    }, rules);
+  }
+
+  InferenceResult _inferFacts(
+      Map<String, ClinicalFact> workingMemory, List<ScreeningRule> rules) {
     // Run forward chaining
     final trace = <RuleFiredTrace>[];
     final firedRuleIds = <String>{};

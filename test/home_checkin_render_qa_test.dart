@@ -55,6 +55,13 @@ void main() {
     final api = MalvaApiClient(
         baseUrl: 'https://fixture.invalid',
         httpClient: MockClient((r) async {
+          if (r.method == 'POST' && r.url.path == '/v1/mood-checkins') {
+            return http.Response(
+                jsonEncode({
+                  'mood': {'id': 'checkin-qa', ...jsonDecode(r.body)}
+                }),
+                200);
+          }
           final body = r.url.path == '/v1/care-sessions'
               ? {
                   'sessions': r.url.queryParameters['scope'] == 'upcoming'
@@ -177,6 +184,14 @@ void main() {
     await tester.tap(find.text('Lanjut'));
     await tester.pumpAndSettle();
     await capture('anxiety');
+    await tester.tap(find.text('Selesai Check-in'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Check-in hari ini selesai. Streak 1 hari!'),
+        findsOneWidget);
+    for (final mood in MoodValue.values) {
+      expect(find.text(mood.label), findsNothing);
+    }
+    await capture('home-completed');
     debugDisableShadows = true;
     await tester.pumpWidget(const SizedBox());
     await tester.pump();

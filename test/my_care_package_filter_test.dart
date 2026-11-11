@@ -71,6 +71,7 @@ void main() {
                     accessToken: 'test')))));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Lanjut Bayar'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Lanjut Bayar'));
     await tester.pumpAndSettle();
     final screen = tester.widget<PaymentScreen>(find.byType(PaymentScreen));

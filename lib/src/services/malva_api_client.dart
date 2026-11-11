@@ -3349,6 +3349,16 @@ class BackendAssessmentSummary {
         ? null
         : AssessmentEngine.levelFromScore(type, rawScore, maxScore: maximum);
     final valid = level != null;
+    final answers = AssessmentEngine.savedAnswers(json['answers']);
+    final crisis = json['crisis_flag'] == true ||
+        (type == AssessmentType.phq9 && (answers['phq_self_harm'] ?? 0) > 0);
+    final cf = AssessmentEngine.savedCertaintyFactor(
+        type: type,
+        score: rawScore,
+        maxScore: maximum,
+        cf: json['cf'],
+        answers: answers,
+        crisisFlag: crisis);
     return BackendAssessmentSummary(
       type: json['type']?.toString() ?? '',
       score: valid ? (rawScore as num).toInt() : -1,
@@ -3357,22 +3367,11 @@ class BackendAssessmentSummary {
           ? 'moderately_severe'
           : level?.name ?? '',
       summary: valid ? json['summary']?.toString() ?? '' : '',
-      crisisFlag: json['crisis_flag'] == true,
-      certaintyFactor: json['cf'] is num ? (json['cf'] as num).toDouble() : 0.0,
-      hasCertaintyFactor: json['cf'] is num &&
-          (json['cf'] as num).isFinite &&
-          (json['cf'] as num) >= 0 &&
-          (json['cf'] as num) <= 1,
+      crisisFlag: crisis,
+      certaintyFactor: cf ?? 0.0,
+      hasCertaintyFactor: cf != null,
       ruleTrace: json['rule_trace']?.toString() ?? '',
-      answers: {
-        for (final answer in (json['answers'] as List? ?? const []))
-          if (answer is Map &&
-              answer['question_id'] is String &&
-              answer['score'] is int &&
-              (answer['score'] as int) >= 0 &&
-              (answer['score'] as int) <= 3)
-            answer['question_id'] as String: answer['score'] as int
-      },
+      answers: answers,
     );
   }
 

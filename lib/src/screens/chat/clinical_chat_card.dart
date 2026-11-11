@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models.dart';
 import '../../theme.dart';
+import 'session_summary_chat_card.dart';
 
 /// Only server-validated clinical messages use this card. File actions fetch
 /// authenticated bytes; no public URL is embedded in the message.
@@ -16,6 +17,9 @@ class ClinicalChatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (message.kind == 'session_summary') {
+      return SessionSummaryChatCard(message: message);
+    }
     final meta = message.metadata ?? const <String, dynamic>{};
     final summary = message.kind == 'session_summary';
     final assessment = message.kind == 'assessment_request';

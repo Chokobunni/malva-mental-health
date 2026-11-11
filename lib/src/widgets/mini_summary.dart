@@ -19,11 +19,35 @@ import 'malva_components.dart';
 // ============================================================
 
 class MiniSummaryButton extends ConsumerWidget {
-  const MiniSummaryButton({super.key, this.patientId});
+  const MiniSummaryButton({super.key, this.patientId, this.iconOnly = false});
   final String? patientId;
+  final bool iconOnly;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    void openSummary() => showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+          ),
+          builder: (_) => _MiniSummarySheet(patientId: patientId),
+        );
+    if (iconOnly) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 12),
+        child: IconButton.filledTonal(
+          tooltip: 'Mini Summary (7 hari)',
+          style: IconButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: .16),
+              foregroundColor: const Color(0xFFF2D6A2),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24))),
+          icon: const Icon(Icons.auto_awesome_rounded, size: 20),
+          onPressed: openSummary,
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: ActionChip(
@@ -39,14 +63,7 @@ class MiniSummaryButton extends ConsumerWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(999),
         ),
-        onPressed: () => showModalBottomSheet<void>(
-          context: context,
-          isScrollControlled: true,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-          ),
-          builder: (_) => _MiniSummarySheet(patientId: patientId),
-        ),
+        onPressed: openSummary,
       ),
     );
   }

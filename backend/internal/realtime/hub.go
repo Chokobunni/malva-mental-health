@@ -118,48 +118,57 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request, userID, role strin
 	h.register(c)
 	go c.writePump()
 	go c.readPump()
-	h.Publish(userID, Event{Type: "realtime.connected", Data: map[string]string{"status": "ok"}})
-	h.sendPresenceToLinkedUsers(userID, true)
-	h.sendExistingPresence(c)
+	h.sendPresenceToLinkedUsers(userID)
 }
 
-func (h *Hub) sendExistingPresence(c *client) {
+// sendExistingPresence runs only in writePump, before queued live events. Write
+// each snapshot directly so linked peers cannot overflow the live-event queue.
+func (h *Hub) sendExistingPresence(c *client) error {
 	ctx := context.Background()
 	linkedUsers, err := h.store.ListLinkedUsers(ctx, c.userID)
 	if err != nil {
 		h.logger.Warn("failed to list linked users for presence init", "error", err)
-		return
+		return err
 	}
 	for _, uid := range linkedUsers {
 		h.mu.RLock()
 		online := len(h.clients[uid]) > 0
 		h.mu.RUnlock()
-		if online {
-			payload, _ := json.Marshal(Event{
-				Type: "presence",
-				Data: map[string]any{"user_id": uid, "online": true},
-			})
-			select {
-			case c.send <- payload:
-			default:
-			}
+		payload, _ := json.Marshal(Event{
+			Type: "presence",
+			Data: map[string]any{"user_id": uid, "online": online},
+		})
+		_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+		if err := c.conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
-func (h *Hub) sendPresenceToLinkedUsers(userID string, online bool) {
+func (h *Hub) sendPresenceToLinkedUsers(userID string) {
 	ctx := context.Background()
 	linkedUsers, err := h.store.ListLinkedUsers(ctx, userID)
 	if err != nil {
 		h.logger.Warn("failed to list linked users for presence", "error", err)
 		return
 	}
-	event := Event{
+	// Read membership and enqueue its status under the same lock so a delayed
+	// disconnect cannot overwrite a newer reconnect's presence.
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	payload, _ := json.Marshal(Event{
 		Type: "presence",
-		Data: map[string]any{"user_id": userID, "online": online},
-	}
+		Data: map[string]any{"user_id": userID, "online": len(h.clients[userID]) > 0},
+	})
 	for _, uid := range linkedUsers {
-		h.Publish(uid, event)
+		for c := range h.clients[uid] {
+			select {
+			case c.send <- payload:
+			default:
+				go h.unregister(c)
+			}
+		}
 	}
 }
 
@@ -209,22 +218,24 @@ func (h *Hub) register(c *client) {
 
 func (h *Hub) unregister(c *client) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
+	lastConnection := false
 	if _, ok := h.clients[c.userID][c]; ok {
 		delete(h.clients[c.userID], c)
 		close(c.send)
+		if len(h.clients[c.userID]) == 0 {
+			delete(h.clients, c.userID)
+			lastConnection = true
+		}
 	}
-	if len(h.clients[c.userID]) == 0 {
-		delete(h.clients, c.userID)
-	}
+	h.mu.Unlock()
 	_ = c.conn.Close()
+	if lastConnection {
+		h.sendPresenceToLinkedUsers(c.userID)
+	}
 }
 
 func (c *client) readPump() {
-	defer func() {
-		c.hub.sendPresenceToLinkedUsers(c.userID, false)
-		c.hub.unregister(c)
-	}()
+	defer c.hub.unregister(c)
 	c.conn.SetReadLimit(8192)
 	_ = c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error {
@@ -412,6 +423,13 @@ func (c *client) writePump() {
 		ticker.Stop()
 		c.hub.unregister(c)
 	}()
+	_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+	if err := c.conn.WriteJSON(Event{Type: "realtime.connected", Data: map[string]string{"status": "ok"}}); err != nil {
+		return
+	}
+	if err := c.hub.sendExistingPresence(c); err != nil {
+		return
+	}
 	for {
 		select {
 		case message, ok := <-c.send:

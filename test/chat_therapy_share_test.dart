@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,10 +13,20 @@ import 'package:malva_mental_health/src/providers/malva_store_provider.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
 import 'package:malva_mental_health/src/providers/auth_providers.dart';
 import 'package:malva_mental_health/src/screens/chat_screen.dart';
+import 'package:malva_mental_health/src/screens/chat/chat_shared_record_card.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
 import 'package:malva_mental_health/src/widgets/therapy_library.dart';
 import 'package:malva_mental_health/src/widgets/shared_record_detail.dart';
+
+class _NetworkOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) =>
+      super.createHttpClient(context);
+}
+
+late HttpServer _socketServer;
+final _sockets = <WebSocket>[];
 
 Map<String, dynamic> _record(String id, String module, String title) => {
       'id': id,
@@ -200,7 +211,8 @@ class _ChatBackend {
 Future<void> _open(WidgetTester tester, _ChatBackend backend,
     {bool professional = false, AssessmentResult? localResult}) async {
   final api = MalvaApiClient(
-      baseUrl: 'http://backend.test', httpClient: backend.client());
+      baseUrl: 'http://127.0.0.1:${_socketServer.port}',
+      httpClient: backend.client());
   final container = ProviderContainer(overrides: [
     apiClientProvider.overrideWithValue(api),
   ]);
@@ -214,17 +226,37 @@ Future<void> _open(WidgetTester tester, _ChatBackend backend,
   addTearDown(container.dispose);
   if (localResult != null)
     container.read(malvaStoreProvider.notifier).saveAssessment(localResult);
-  await tester.pumpWidget(UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp(
-      theme: buildMalvaTheme(),
-      home: ChatScreen(
-        otherUserName: professional ? 'Pasien' : 'Profesional',
-        otherUserId: professional ? 'patient-1' : 'pro-1',
-      ),
-    ),
-  ));
+  await tester.runAsync(() => tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildMalvaTheme(),
+          home: ChatScreen(
+            otherUserName: professional ? 'Pasien' : 'Profesional',
+            otherUserId: professional ? 'patient-1' : 'pro-1',
+          ),
+        ),
+      )));
+  await _waitForConnection(tester);
   await tester.pumpAndSettle();
+}
+
+Future<void> _waitForConnection(WidgetTester tester) async {
+  for (var attempt = 0;
+      attempt < 100 && find.text('Status belum diketahui').evaluate().isEmpty;
+      attempt++) {
+    await tester
+        .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await tester.pump();
+  }
+  expect(find.text('Status belum diketahui'), findsOneWidget,
+      reason: 'Record fixtures wait for the real local WebSocket handshake.');
+}
+
+Future<void> _close(WidgetTester tester) async {
+  await tester.runAsync(() => tester.pumpWidget(const SizedBox()));
+  // Token refresh can create dart:io's five-second close grace timer in the
+  // widget clock. Dispose first, then finish that transport cleanup.
+  await tester.pump(const Duration(seconds: 5));
 }
 
 Future<void> _chooseTherapy(WidgetTester tester) async {
@@ -236,6 +268,22 @@ Future<void> _chooseTherapy(WidgetTester tester) async {
 }
 
 void main() {
+  setUpAll(() async {
+    HttpOverrides.runWithHttpOverrides(
+        () => WebSocket.userAgent, _NetworkOverrides());
+    _socketServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    _socketServer.listen((request) async {
+      final socket = await WebSocketTransformer.upgrade(request);
+      _sockets.add(socket);
+      socket.listen((_) {});
+    });
+  });
+  tearDownAll(() async {
+    for (final socket in _sockets) {
+      await socket.close();
+    }
+    await _socketServer.close(force: true);
+  });
   testWidgets(
       'single local screening share carries validated type score and safety',
       (tester) async {
@@ -260,7 +308,7 @@ void main() {
     expect(backend.sentShare?['metadata']['phq9']['score'], 23);
     expect(backend.sentShare?['metadata']['phq9']['level'], 'Berat');
     expect(backend.sentShare?['metadata']['crisis_flag'], true);
-    await tester.pumpWidget(const SizedBox());
+    await _close(tester);
   });
   for (final kind in [
     'diary',
@@ -272,9 +320,8 @@ void main() {
     'progress',
     'assessment',
     'screening',
-    'worksheet'
   ]) {
-    testWidgets('professional opens $kind by tapping the message body',
+    testWidgets('professional reads $kind inline without a popup',
         (tester) async {
       final backend = _ChatBackend()
         ..shared = true
@@ -284,10 +331,12 @@ void main() {
           'note': 'Isi snapshot pasien'
         };
       await _open(tester, backend, professional: true);
-      await tester.tap(find.text('Worksheet Latihan ABCDE dibagikan.'));
+      expect(find.byType(ChatSharedRecordCard), findsOneWidget);
+      await tester.tap(find.byType(ChatSharedRecordCard));
       await tester.pumpAndSettle();
-      expect(find.byType(SharedRecordDetail), findsOneWidget);
-      await tester.pumpWidget(const SizedBox());
+      expect(find.byType(SharedRecordDetail), findsNothing);
+      expect(find.byType(BottomSheet), findsNothing);
+      await _close(tester);
     });
   }
   testWidgets('patient selects an older diary from full history before sharing',
@@ -303,7 +352,7 @@ void main() {
     await tester.tap(find.text('Diary lama'));
     await tester.pumpAndSettle();
     expect(backend.sentShare?['metadata']['note'], 'Isi lama lengkap');
-    await tester.pumpWidget(const SizedBox());
+    await _close(tester);
   });
 
   for (final professional in [false, true]) {
@@ -318,15 +367,12 @@ void main() {
           'title': 'Skrining lama'
         };
       await _open(tester, backend, professional: professional);
-      await tester.tap(find.text('Worksheet Latihan ABCDE dibagikan.'));
-      await tester.pumpAndSettle();
       expect(find.text('Detail skrining lama terverifikasi'), findsNothing);
-      expect(find.text('12'), findsOneWidget);
-      expect(find.text('7'), findsOneWidget);
-      expect(find.text('01/01/2025'), findsOneWidget);
-      expect(find.text('Detail Record'), findsOneWidget);
-      expect(find.textContaining('Total Score'), findsWidgets);
-      await tester.pumpWidget(const SizedBox());
+      expect(find.text('12 / 27'), findsOneWidget);
+      expect(find.text('7 / 21'), findsOneWidget);
+      expect(find.text('Hasil Screening Klinis'), findsOneWidget);
+      expect(find.byType(SharedRecordDetail), findsNothing);
+      await _close(tester);
     });
   }
   testWidgets('patient shares selected therapy via authorized endpoint once',
@@ -342,7 +388,7 @@ void main() {
     expect(backend.genericSendCalls, 0,
         reason: 'server share already creates the persisted chat message');
     expect(find.text('Worksheet Latihan ABCDE dibagikan.'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
+    await _close(tester);
   });
 
   testWidgets('assessment entries do not count as a therapy record',
@@ -353,7 +399,7 @@ void main() {
     expect(
         find.text('Belum ada therapy record untuk dibagikan.'), findsOneWidget);
     expect(backend.shareCalls, 0);
-    await tester.pumpWidget(const SizedBox());
+    await _close(tester);
   });
 
   testWidgets('therapy load error is visible and never sends an empty record',
@@ -363,7 +409,7 @@ void main() {
     await _chooseTherapy(tester);
     expect(find.textContaining('Gagal memuat therapy record'), findsOneWidget);
     expect(backend.shareCalls, 0);
-    await tester.pumpWidget(const SizedBox());
+    await _close(tester);
   });
 
   testWidgets('professional opens the authorized shared worksheet from chat',
@@ -383,19 +429,22 @@ void main() {
     expect(find.text('Situasi latihan'), findsOneWidget);
     final container =
         ProviderScope.containerOf(tester.element(find.byType(ChatScreen)));
-    container.read(authStateProvider.notifier).setSession(const AuthSession(
-        role: UserRole.professional,
-        identifier: 'another-pro',
-        backendUserId: 'another-pro',
-        displayName: 'Akun lain',
-        accessToken: 'other-token'));
+    await tester.runAsync(() async {
+      container.read(authStateProvider.notifier).setSession(const AuthSession(
+          role: UserRole.professional,
+          identifier: 'another-pro',
+          backendUserId: 'another-pro',
+          displayName: 'Akun lain',
+          accessToken: 'other-token'));
+    });
     await tester.pumpAndSettle();
     expect(find.text('Situasi latihan'), findsNothing);
-    await tester.pumpWidget(const SizedBox());
+    await _close(tester);
   });
 
   for (final professional in [false, true]) {
-    testWidgets('both roles open full shared diary and legacy metadata',
+    testWidgets(
+        'both roles read full shared diary inline and reject account switch',
         (tester) async {
       final backend = _ChatBackend()
         ..shared = true
@@ -406,19 +455,22 @@ void main() {
           'mood': 'good'
         };
       await _open(tester, backend, professional: professional);
-      await tester.tap(find.textContaining('Diary:').first);
+      await tester.tap(find.text('Catatan lengkap'));
       await tester.pumpAndSettle();
       expect(find.text('Isi diary lengkap yang disimpan'), findsOneWidget);
+      expect(find.byType(BottomSheet), findsNothing);
       final container =
           ProviderScope.containerOf(tester.element(find.byType(ChatScreen)));
-      container.read(authStateProvider.notifier).setSession(const AuthSession(
-          role: UserRole.patient,
-          identifier: 'other',
-          displayName: 'Other',
-          accessToken: 'other-token'));
+      await tester.runAsync(() async {
+        container.read(authStateProvider.notifier).setSession(const AuthSession(
+            role: UserRole.patient,
+            identifier: 'other',
+            displayName: 'Other',
+            accessToken: 'other-token'));
+      });
       await tester.pumpAndSettle();
       expect(find.text('Isi diary lengkap yang disimpan'), findsNothing);
-      await tester.pumpWidget(const SizedBox());
+      await _close(tester);
     });
   }
 
@@ -436,24 +488,19 @@ void main() {
       expect(backend.genericSendCalls, 0);
       for (final professional in [false, true]) {
         if (professional) {
-          await tester.pumpWidget(const SizedBox());
+          await _close(tester);
           await _open(tester, backend, professional: true);
         }
-        await tester.tap(find.textContaining('Assessment:').first);
-        await tester.pumpAndSettle();
-        final viewer = tester
-            .widget<TherapySubmissionView>(find.byType(TherapySubmissionView));
-        expect(viewer.answers['q1'], 2);
-        await tester.tap(find.text('$module hasil asesmen'));
-        await tester.pumpAndSettle();
-        expect(find.text('Jawaban assessment dibagikan'), findsOneWidget);
-        if (!professional) {
-          Navigator.of(tester.element(find.byType(TherapySubmissionView)))
-              .pop();
-          await tester.pumpAndSettle();
-        }
+        expect(find.byType(ChatSharedRecordCard), findsOneWidget);
+        expect(find.byType(TherapySubmissionView), findsNothing);
+        expect(find.byType(BottomSheet), findsNothing);
+        expect(find.text(module == 'who5' ? '10 / 25' : '28 / 42'),
+            module == 'who5' ? findsOneWidget : findsNWidgets(3));
+        expect(
+            find.textContaining('Dukungan aturan triage (CF)'), findsOneWidget);
+        expect(find.text('Jawaban assessment dibagikan'), findsNothing);
       }
-      await tester.pumpWidget(const SizedBox());
+      await _close(tester);
     });
   }
 
@@ -471,15 +518,13 @@ void main() {
           'answers': backend.assessment['answers']
         };
         await _open(tester, backend, professional: professional);
-        await tester.tap(find.textContaining('Assessment:').first);
-        await tester.pumpAndSettle();
-        expect(find.byType(TherapySubmissionView), findsOneWidget);
-        await tester.tap(find.text('Hasil lama'));
-        await tester.pumpAndSettle();
+        expect(find.byType(TherapySubmissionView), findsNothing);
+        expect(find.text(module == 'who5' ? '10 / 25' : '28 / 42'),
+            module == 'who5' ? findsOneWidget : findsNWidgets(3));
         expect(
             find.textContaining('Dukungan aturan triage (CF)'), findsOneWidget);
         expect(tester.takeException(), isNull);
-        await tester.pumpWidget(const SizedBox());
+        await _close(tester);
       });
     }
     for (final status in [403, 404]) {
@@ -498,12 +543,11 @@ void main() {
           'answers': backend.assessment['answers']
         };
         await _open(tester, backend, professional: true);
-        await tester.tap(find.textContaining('Assessment:').first);
-        await tester.pumpAndSettle();
         expect(find.byType(TherapySubmissionView), findsNothing);
-        expect(find.textContaining('Gagal membuka assessment record:'),
-            findsOneWidget);
-        await tester.pumpWidget(const SizedBox());
+        expect(find.text('Assessment belum tersedia'), findsOneWidget);
+        expect(
+            find.text(module == 'who5' ? '10 / 25' : '28 / 42'), findsNothing);
+        await _close(tester);
       });
     }
   }
@@ -518,24 +562,25 @@ void main() {
         ..pendingDetail = Completer<http.Response>()
         ..metadata = {'submission_id': 'assessment-1', 'module_id': 'who5'};
       await _open(tester, backend);
-      await tester.tap(find.textContaining('Assessment:').first);
-      await tester.pump();
       final container =
           ProviderScope.containerOf(tester.element(find.byType(ChatScreen)));
-      container.read(authStateProvider.notifier).setSession(AuthSession(
-          role: UserRole.patient,
-          identifier: changeOwner ? 'another' : 'patient-1',
-          backendUserId: changeOwner ? 'another' : 'patient-1',
-          displayName: 'Pasien',
-          accessToken: 'refreshed-token'));
+      await tester.runAsync(() async {
+        container.read(authStateProvider.notifier).setSession(AuthSession(
+            role: UserRole.patient,
+            identifier: changeOwner ? 'another' : 'patient-1',
+            backendUserId: changeOwner ? 'another' : 'patient-1',
+            displayName: 'Pasien',
+            accessToken: 'refreshed-token'));
+      });
       await tester.pump();
+      if (!changeOwner) await _waitForConnection(tester);
       backend.pendingDetail!
           .complete(_json({'submission': backend.assessment}));
       await tester.pumpAndSettle();
-      expect(find.byType(TherapySubmissionView),
-          changeOwner ? findsNothing : findsOneWidget);
+      expect(find.text('10 / 25'), changeOwner ? findsNothing : findsOneWidget);
+      expect(find.byType(TherapySubmissionView), findsNothing);
       expect(find.textContaining('Gagal membuka'), findsNothing);
-      await tester.pumpWidget(const SizedBox());
+      await _close(tester);
     });
   }
 
@@ -551,6 +596,6 @@ void main() {
     expect(find.text('Therapy Record dibagikan ke profesional.'), findsNothing);
     expect(backend.shareCalls, 1);
     expect(backend.genericSendCalls, 0);
-    await tester.pumpWidget(const SizedBox());
+    await _close(tester);
   });
 }

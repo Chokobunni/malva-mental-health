@@ -17,8 +17,8 @@ import 'package:malva_mental_health/src/theme.dart';
 // Yang dikunci:
 //   - Chip filter status di atas daftar SESI, dijalankan di klien atas data
 //     yang sudah dimuat (tanpa round-trip tambahan).
-//   - Chip PER TAB: tab Jadwal hanya memuat sesi `scheduled` sehingga hanya
-//     punya "Semua"+"Aktif"; tab Riwayat punya Selesai/Dibatalkan/Tidak hadir
+//   - Chip PER TAB: tab Jadwal punya Semua/Aktif/Dibatalkan dengan jumlah
+//     yang nyata; tab Riwayat punya Selesai/Dibatalkan/Tidak hadir
 //     (plus "Aktif" bila ada sesi `pending_payment`, yang juga masuk _past).
 //   - State filter DIPISAH per tab: pilihan "Dibatalkan" di Riwayat tidak
 //     boleh membawa empty state yang salah ke tab Jadwal.
@@ -123,6 +123,12 @@ Widget _wrap(MalvaApiClient api) {
 }
 
 Future<void> _openTab(WidgetTester tester, String tab) async {
+  // These filter assertions compare every card at once in the new roomy layout.
+  tester.view.physicalSize = const Size(800, 1400);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpAndSettle();
   await tester.tap(find.widgetWithText(ChoiceChip, tab));
   await tester.pumpAndSettle();
 }
@@ -255,7 +261,7 @@ void main() {
   // Chip PER TAB + state filter terpisah
   // ------------------------------------------------------------------
 
-  testWidgets('tab Jadwal hanya punya chip yang relevan (tanpa Dibatalkan)',
+  testWidgets('tab Jadwal keeps cancelled filter with truthful zero count',
       (tester) async {
     final api = MalvaApiClient(
         baseUrl: 'http://backend.test',
@@ -267,13 +273,16 @@ void main() {
 
     expect(find.widgetWithText(ChoiceChip, 'Semua 1'), findsOneWidget);
     expect(find.widgetWithText(ChoiceChip, 'Aktif 1'), findsOneWidget);
-    // Chip mustahil terisi tidak boleh muncul di tab ini.
-    expect(find.widgetWithText(ChoiceChip, 'Dibatalkan'), findsNothing,
-        reason: 'tab Jadwal tidak pernah memuat sesi dibatalkan');
+    expect(find.widgetWithText(ChoiceChip, 'Dibatalkan 0'), findsOneWidget);
     expect(find.widgetWithText(ChoiceChip, 'Tidak hadir'), findsNothing,
         reason: 'tab Jadwal tidak pernah memuat sesi tidak hadir');
     expect(find.widgetWithText(ChoiceChip, 'Selesai'), findsNothing,
         reason: 'tab Jadwal tidak pernah memuat sesi selesai');
+    await _tapFilter(tester, 'Dibatalkan 0');
+    expect(find.text('Belum ada sesi yang dibatalkan'), findsOneWidget);
+    expect(find.text('dr. Batal'), findsNothing);
+    await _openTab(tester, 'Riwayat');
+    expect(find.text('dr. Batal'), findsOneWidget);
   });
 
   testWidgets('pilihan "Dibatalkan" di Riwayat tidak bocor ke tab Jadwal',

@@ -86,7 +86,13 @@ Modul skrining kesehatan mental. Skoring dihitung **di server** (bukan hanya kli
 
 ## Keseragaman detail dan CF (2026-11-10)
 
-- PHQ/GAD pada hasil langsung, riwayat pasien/profesional, detail klinis dan chat memakai `SharedRecordDetail`. Dua kartu CF instrumen selalu terpisah, termasuk saat nilainya sama. Nilai lama yang hilang/invalid tampil belum tersedia; CF gabungan historis tidak diduplikasi menjadi dua nilai instrumen.
+- PHQ/GAD pada hasil langsung, riwayat pasien/profesional dan detail klinis memakai `SharedRecordDetail`; chat memakai kartu inline ringkas. Dua kartu CF instrumen selalu terpisah, termasuk saat nilainya sama. CF hilang dapat dipulihkan dari fakta valid tersimpan melalui aturan kanonis; CF invalid tetap belum tersedia. CF gabungan historis tidak diduplikasi menjadi dua nilai instrumen.
 - WHO/DASS menampilkan CF triage dari `interpretDassWho5` yang sudah ada, termasuk kesimpulan WHO awal. Jawaban tidak lengkap tidak menghasilkan skor, interpretasi atau CF. Skor, bobot dan versi aturan tidak berubah.
 - Metadata berbagi PHQ/GAD mempertahankan CF instrumen aktual tanpa menambahkan jawaban privat. Pergantian akun menutup detail; refresh token pemilik yang sama tidak membuang hasil berizin yang sedang dimuat.
 - Data Pasien Dibagikan profesional memisahkan tab Screening (WHO-5, DASS-21, PHQ-9/GAD-7) dari Terapi. Kedua sumber riwayat dibatasi ke pasien terpilih dengan izin kategori masing-masing; sumber yang tersedia tetap tampil saat sumber lain ditolak. Detail memakai komponen assessment bersama, tanpa aksi berbagi pasien.
+
+## Pemulihan CF dan preview record (2026-11-11)
+
+- CF per instrumen valid tersimpan (termasuk0) tetap utama. Bila hilang, PHQ/GAD memakai `AssessmentEngine.savedCertaintyFactor` dan mesin/rule base yang sama pada total/jawaban valid. Jawaban atau fakta keselamatan negatif tidak direkayasa; fakta keselamatan positif yang tersimpan tetap dipertahankan. Tidak ada perubahan bobot, skor, DTO atau versi aturan.
+- WHO/DASS memakai interpretasi kanonis dari jawaban lengkap/scale marker tersimpan. Total saja atau jawaban parsial tidak cukup untuk menebak CF WHO, karena item rendah dapat mengubah triage.
+- Detail ber-ID yang ditolak/hilang tidak memakai snapshot sebagai pengganti otorisasi. Preview tiga assessment membuka popup entri tepat yang diklik, termasuk retake instrumen sama. Header Lihat semua tetap membuka riwayat lengkap.

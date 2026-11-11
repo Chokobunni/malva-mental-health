@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,14 +24,38 @@ const _patient = AuthSession(
     displayName: 'Pasien',
     accessToken: 'patient-token');
 
+class _NetworkOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) =>
+      super.createHttpClient(context);
+}
+
 void main() {
+  setUpAll(() => HttpOverrides.runWithHttpOverrides(
+      () => WebSocket.userAgent, _NetworkOverrides()));
   for (final package in [false, true]) {
     testWidgets(
         '${package ? 'continuous' : 'one-time'} shows all sharing choices',
         (tester) async {
       initializeWib();
+      final server = (await tester
+          .runAsync(() => HttpServer.bind(InternetAddress.loopbackIPv4, 0)))!;
+      final sockets = <WebSocket>[];
+      await tester.runAsync(() async {
+        server.listen((request) async {
+          final socket = await WebSocketTransformer.upgrade(request);
+          sockets.add(socket);
+          socket.listen((_) {});
+        });
+      });
+      addTearDown(() async {
+        for (final socket in sockets) {
+          await socket.close();
+        }
+        await server.close(force: true);
+      });
       final api = MalvaApiClient(
-          baseUrl: 'https://backend.test',
+          baseUrl: 'http://127.0.0.1:${server.port}',
           httpClient: MockClient((request) async {
             Object body = {};
             if (request.url.path == '/v1/chat-permission') {
@@ -55,10 +80,21 @@ void main() {
           overrides: [apiClientProvider.overrideWithValue(api)]);
       addTearDown(container.dispose);
       container.read(authStateProvider.notifier).setSession(_patient);
-      await tester.pumpWidget(UncontrolledProviderScope(
+      await tester.runAsync(() => tester.pumpWidget(UncontrolledProviderScope(
           container: container,
           child: const MaterialApp(
-              home: ChatScreen(otherUserId: 'pro', otherUserName: 'Dokter'))));
+              home: ChatScreen(otherUserId: 'pro', otherUserName: 'Dokter')))));
+      // Let the real socket handshake resolve before settling the widget clock.
+      for (var attempt = 0;
+          attempt < 100 &&
+              find.text('Status belum diketahui').evaluate().isEmpty;
+          attempt++) {
+        await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await tester.pump();
+      }
+      expect(sockets, hasLength(1));
+      expect(find.text('Status belum diketahui'), findsOneWidget);
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Bagikan data'));
       await tester.pumpAndSettle();
@@ -73,7 +109,7 @@ void main() {
         expect(find.text(label), findsOneWidget);
       }
       expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(() => tester.pumpWidget(const SizedBox()));
     });
   }
 

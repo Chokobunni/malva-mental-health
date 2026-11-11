@@ -14,6 +14,8 @@ import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
 import 'package:malva_mental_health/src/widgets/therapy_library.dart';
 
+import 'record_render_capture.dart';
+
 // ============================================================
 // ASSESSMENT RECORD — riwayat skrining & asesmen pasien.
 //
@@ -136,7 +138,8 @@ MalvaApiClient _api({
 }
 
 /// Bungkus layar dengan provider palsu (klien HTTP uji + sesi pasien).
-Widget _buildApp(MalvaApiClient api, {required Widget home}) {
+Widget _buildApp(MalvaApiClient api,
+    {required Widget home, GlobalKey? boundary}) {
   return ProviderScope(
     overrides: [
       apiClientProvider.overrideWithValue(api),
@@ -146,14 +149,18 @@ Widget _buildApp(MalvaApiClient api, {required Widget home}) {
         return notifier;
       }),
     ],
-    child: MaterialApp(
-      theme: buildMalvaTheme(),
-      home: home,
-    ),
+    child: RepaintBoundary(
+        key: boundary,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: recordCaptureTheme(buildMalvaTheme()),
+          home: home,
+        )),
   );
 }
 
 void main() {
+  setUpAll(loadRecordCaptureFonts);
   test('full assessment export retains older assessments behind 100 worksheets',
       () async {
     final api = MalvaApiClient(
@@ -513,6 +520,7 @@ void main() {
     // Hanya SATU tombol "Lihat semua" — aksi pada SectionLabel Assessment
     // Record. Footer di dalam preview sudah dihapus.
     expect(find.text('Lihat semua'), findsOneWidget);
+    expect(find.text('Lihat Semua Therapy & Worksheet'), findsNothing);
 
     // Disclaimer berada DI ATAS judul 'Assessment Record'.
     final disclaimerTop =
@@ -526,6 +534,95 @@ void main() {
     expect(find.byType(AssessmentHistoryScreen), findsOneWidget);
     expect(find.text('WHO-5 (Well-Being Index)'), findsOneWidget);
   });
+
+  for (final repeatWho in [false, true]) {
+    testWidgets(
+        'assessment preview opens exact screening, WHO and ${repeatWho ? 'WHO retake' : 'DASS'} popups',
+        (tester) async {
+      final capture = recordCaptureEnabled && repeatWho;
+      if (capture) enableRecordCaptureRendering();
+      final boundary = GlobalKey();
+      tester.view.physicalSize =
+          capture ? const Size(390, 844) : const Size(1200, 3200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final api = _api(submissions: [
+        _submission(
+          id: 'who-new',
+          moduleId: 'who5',
+          title: 'WHO-5 (Well-Being Index)',
+          createdAt: '2026-11-10T09:00:00+07:00',
+          answers: {..._who5Answers(), 'q1': 1},
+        ),
+        _submission(
+          id: 'assessment-older',
+          moduleId: repeatWho ? 'who5' : 'dass21',
+          title: repeatWho ? 'WHO-5 (Well-Being Index)' : 'DASS-21',
+          createdAt: '2026-11-09T09:00:00+07:00',
+          answers: repeatWho
+              ? {..._who5Answers(), 'q1': 4}
+              : {for (var i = 1; i <= 21; i++) 'q$i': 2, 'scale_version': 2},
+        ),
+        _submission(
+          id: 'therapy-excluded',
+          moduleId: 'abcde',
+          title: 'Terapi privat',
+          createdAt: '2026-11-11T09:00:00+07:00',
+        ),
+      ], screenings: [
+        _screening(
+            id: 'screening-selected', createdAt: '2026-11-11T08:00:00+07:00'),
+      ]);
+      await tester.pumpWidget(_buildApp(api,
+          home: const AssessmentListScreen(), boundary: boundary));
+      await tester.pumpAndSettle();
+      expect(find.byType(AssessmentHistoryCard), findsNWidgets(3));
+      expect(find.text('Terapi privat'), findsNothing);
+      expect(find.text('Lihat Semua Therapy & Worksheet'), findsNothing);
+      if (capture) {
+        await tester.ensureVisible(find.byType(AssessmentHistoryCard).last);
+        await tester.pumpAndSettle();
+        await captureRecord(tester, boundary, 'assessment-preview.png');
+      }
+      for (var index = 0; index < 3; index++) {
+        if (capture) {
+          await tester
+              .ensureVisible(find.byType(AssessmentHistoryCard).at(index));
+        }
+        await tester.tap(find.byType(AssessmentHistoryCard).at(index));
+        await tester.pumpAndSettle();
+        expect(find.byType(AssessmentHistoryScreen), findsNothing);
+        expect(find.byType(BottomSheet), findsOneWidget);
+        final sheet = find.byType(BottomSheet);
+        if (index == 0) {
+          expect(
+              find.descendant(
+                  of: sheet, matching: find.text('PHQ-9 Total Score')),
+              findsOneWidget);
+          expect(
+              find.descendant(
+                  of: sheet, matching: find.text('GAD-7 Total Score')),
+              findsOneWidget);
+          expect(find.descendant(of: sheet, matching: find.text('12')),
+              findsOneWidget);
+          expect(find.descendant(of: sheet, matching: find.text('9')),
+              findsOneWidget);
+        } else {
+          final result = tester.widget<AssessmentResultCard>(find.descendant(
+              of: sheet, matching: find.byType(AssessmentResultCard)));
+          expect(result.moduleId, index == 1 || repeatWho ? 'who5' : 'dass21');
+          expect(result.answers['q1'], index == 1 ? 1 : (repeatWho ? 4 : 2));
+        }
+        if (capture && index == 0) {
+          await captureRecord(tester, boundary, 'assessment-popup.png');
+        }
+        Navigator.of(tester.element(sheet)).pop();
+        await tester.pumpAndSettle();
+      }
+      if (capture) resetRecordCaptureRendering();
+    });
+  }
 
   testWidgets(
       'tap entri asesmen -> bottom sheet berisi AssessmentResultCard + disclaimer',

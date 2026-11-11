@@ -7,6 +7,70 @@ import 'package:malva_mental_health/src/services/weekly_summary_service.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
 
 void main() {
+  for (final fromApi in [true, false]) {
+    test(
+        'historical seven-day window uses WIB asOf boundaries (${fromApi ? 'API' : 'fallback'})',
+        () async {
+      final start = wibFromParts(2025, 1, 5);
+      final end = wibFromParts(2025, 1, 12);
+      final times = [
+        start.subtract(const Duration(minutes: 1)),
+        start,
+        end.subtract(const Duration(minutes: 1)),
+        end,
+        wibNow(),
+      ];
+      final api = MalvaApiClient(
+          baseUrl: 'http://backend.test',
+          httpClient: MockClient((request) async {
+            if (!fromApi) return http.Response('{}', 403);
+            expect(request.url.queryParameters['patient_id'], 'patient');
+            return http.Response(
+                jsonEncode(request.url.path == '/v1/mood-checkins'
+                    ? {
+                        'moods': [
+                          for (var i = 0; i < times.length; i++)
+                            {
+                              'id': '$i',
+                              'mood': 'good',
+                              'sleep_hours': i == 1 ? 6 : 8,
+                              'occurred_at': wibIso(times[i])
+                            }
+                        ]
+                      }
+                    : {
+                        'medication_logs': [
+                          for (var i = 0; i < times.length; i++)
+                            {
+                              'id': '$i',
+                              'status': i == 2 ? 'missed' : 'taken',
+                              'taken_at': wibIso(times[i])
+                            }
+                        ]
+                      }),
+                200);
+          }));
+      final result = await loadWeeklySummary(
+          api: api,
+          accessToken: 'token',
+          patientId: 'patient',
+          // This instant is January 11 in WIB; device/input offset must not choose January 10.
+          asOf: DateTime.parse('2025-01-10T18:30:00-05:00'),
+          localMoods: [
+            for (var i = 0; i < times.length; i++)
+              (at: times[i], sleepHours: i == 1 ? 6.0 : 8.0, moodScore: 4)
+          ],
+          localLogs: [
+            for (var i = 0; i < times.length; i++)
+              (at: times[i], status: i == 2 ? 'missed' : 'taken')
+          ]);
+      expect(result!.moodCount, 2);
+      expect(result.avgSleepHours, 7);
+      expect(result.totalLogs, 2);
+      expect(result.adherencePercent, 50);
+      expect(result.source, fromApi ? 'api' : 'local');
+    });
+  }
   test(
       'summary includes exactly seven WIB calendar days and excludes future records',
       () async {

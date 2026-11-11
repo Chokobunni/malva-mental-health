@@ -40,18 +40,20 @@ Map<String, dynamic> _link() => {
           'https://api.malva.web.id/uploads/foto_profesional.png',
     };
 
-MalvaApiClient _apiWith(Map<String, dynamic> link) {
+MalvaApiClient _apiWith(Map<String, dynamic> link,
+    {List<Map<String, dynamic>>? links,
+    List<Map<String, dynamic>> packages = const []}) {
   return MalvaApiClient(
     baseUrl: 'http://backend.test',
     httpClient: _FakeClient((request) async {
       switch (request.url.path) {
         case '/v1/care-packages':
-          return _json({'packages': <dynamic>[]});
+          return _json({'packages': packages});
         case '/v1/care-sessions':
           return _json({'sessions': <dynamic>[]});
         case '/v1/patient-professional-links':
           return _json({
-            'links': [link]
+            'links': links ?? [link]
           });
         default:
           return _json(<String, dynamic>{});
@@ -85,7 +87,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Pindah ke tab Professionals.
-    await tester.tap(find.text('Professionals'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
     await tester.pumpAndSettle();
 
     // Nama profesional tampil dan avatar memakai ProfessionalAvatar.
@@ -94,6 +96,51 @@ void main() {
 
     // Tidak ada lagi ikon orang generik di kartu profesional.
     expect(find.byIcon(Icons.person_rounded), findsNothing);
+  });
+
+  testWidgets(
+      'connected filters retain inactive links and use real package quota',
+      (tester) async {
+    final active = _link()..['professional_photo_url'] = '';
+    final inactive = {
+      ...active,
+      'professional_user_id': 'inactive-pro',
+      'professional_display_name': 'Profesional berhenti',
+      'status': 'inactive'
+    };
+    final api = _apiWith(active, links: [
+      active,
+      inactive
+    ], packages: [
+      {
+        'id': 'package',
+        'patient_id': 'user_pasien_1',
+        'professional_id': 'pro_user_1',
+        'status': 'active',
+        'total_sessions': 8,
+        'used_sessions': 2,
+        'remaining_sessions': 6,
+        'expires_at': '2099-12-18T10:00:00+07:00',
+      }
+    ]);
+    await tester.pumpWidget(_buildApp(api));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ChoiceChip, 'Semua 2'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Aktif 1'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Tidak aktif 1'), findsOneWidget);
+    expect(find.textContaining('6/8 sesi tersisa'), findsOneWidget);
+    expect(
+        tester
+            .widget<LinearProgressIndicator>(
+                find.byType(LinearProgressIndicator).first)
+            .value,
+        .75);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Tidak aktif 1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Profesional berhenti'), findsOneWidget);
+    expect(find.text('Dr. Sinta'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
   });
 }
 

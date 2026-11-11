@@ -61,11 +61,15 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await HttpOverrides.runWithHttpOverrides(() async {
       final connected = Completer<WebSocket>();
+      final sockets = <WebSocket>[];
+      final tokens = <String?>[];
       final server = await tester
           .runAsync(() => HttpServer.bind(InternetAddress.loopbackIPv4, 0));
       await tester.runAsync(() async {
         server!.listen((request) async {
           final socket = await WebSocketTransformer.upgrade(request);
+          sockets.add(socket);
+          tokens.add(request.uri.queryParameters['access_token']);
           if (!connected.isCompleted) connected.complete(socket);
         });
       });
@@ -103,7 +107,7 @@ void main() {
       }
       expect(connected.isCompleted, isTrue,
           reason: 'The real local WebSocket handshake must complete.');
-      final socket = await connected.future;
+      var socket = await connected.future;
       socket.listen((_) {});
       await tester.pump();
 
@@ -167,10 +171,47 @@ void main() {
         expect(find.text('Offline'), findsOneWidget);
         await presence('peer', true);
         expect(find.text('Online'), findsOneWidget);
+        container.read(authStateProvider.notifier).setSession(const AuthSession(
+            role: UserRole.professional,
+            identifier: 'me',
+            backendUserId: 'me',
+            displayName: 'Dokter',
+            accessToken: 'refreshed-token'));
+        for (var attempt = 0;
+            attempt < 100 && !tokens.contains('refreshed-token');
+            attempt++) {
+          await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 20)));
+          await tester.pump();
+        }
+        expect(tokens, contains('refreshed-token'),
+            reason: 'Same-owner refresh reconnects with current credentials.');
+        expect(find.text('Online'), findsNothing,
+            reason: 'A new socket must await its own peer snapshot.');
+        socket = sockets.last;
+        socket.listen((_) {});
+        await presence('peer', true);
+        expect(find.text('Online'), findsOneWidget);
         unawaited(socket.close());
         await waitFor(find.text('Menghubungkan ulang...'));
         expect(find.text('Online'), findsNothing);
         expect(find.text('Menghubungkan ulang...'), findsOneWidget);
+        for (var attempt = 0; attempt < 100 && sockets.length < 3; attempt++) {
+          await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 20)));
+          await tester.pump(const Duration(milliseconds: 20));
+        }
+        expect(sockets, hasLength(3),
+            reason: 'A broken socket reconnects with the refreshed token.');
+        expect(tokens.last, 'refreshed-token');
+        expect(find.text('Online'), findsNothing);
+        expect(find.text('Status belum diketahui'), findsOneWidget);
+        socket = sockets.last;
+        socket.listen((_) {});
+        await presence('peer', false);
+        expect(find.text('Offline'), findsOneWidget);
+        unawaited(socket.close());
+        await waitFor(find.text('Menghubungkan ulang...'));
       } finally {
         await tester.pumpWidget(const SizedBox());
         container.dispose();

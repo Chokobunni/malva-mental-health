@@ -125,6 +125,62 @@ class ScreeningBundle {
 }
 
 class AssessmentEngine {
+  /// Stored CF wins. Legacy totals restore only supported rule facts; missing
+  /// item answers never become symptoms or a negative safety assertion.
+  static double? savedCertaintyFactor({
+    required AssessmentType type,
+    required dynamic score,
+    dynamic maxScore,
+    dynamic cf,
+    Map<String, int> answers = const {},
+    bool crisisFlag = false,
+  }) {
+    if (cf != null) {
+      return cf is num && cf.isFinite && cf >= 0 && cf <= 1
+          ? cf.toDouble()
+          : null;
+    }
+    if (levelFromScore(type, score, maxScore: maxScore) == null) return null;
+    final questions = questionsFor(type);
+    final complete = questions.every((q) => answers.containsKey(q.id)) &&
+        questions.every((q) => answers[q.id]! >= 0 && answers[q.id]! <= 3);
+    if (complete &&
+        questions.fold<int>(0, (s, q) => s + answers[q.id]!) == score) {
+      final result = AssessmentEngine.score(
+          type: type, answers: [for (final q in questions) answers[q.id]!]);
+      if (!crisisFlag || type != AssessmentType.phq9 || result.crisisFlag) {
+        return result.certaintyFactor;
+      }
+    }
+    return ai.ForwardChainingEngine()
+        .inferSavedTotal(
+          instrument: type.name,
+          total: (score as num).toInt(),
+          rules: type == AssessmentType.phq9
+              ? ai.KnowledgeBase.phq9Rules
+              : ai.KnowledgeBase.gad7Rules,
+          positiveSafety: crisisFlag || (answers['phq_self_harm'] ?? 0) > 0,
+        )
+        .certaintyFactor;
+  }
+
+  static Map<String, int> savedAnswers(dynamic raw) => {
+        if (raw is Map)
+          for (final entry in raw.entries)
+            if (entry.key is String &&
+                entry.value is int &&
+                entry.value >= 0 &&
+                entry.value <= 3)
+              entry.key as String: entry.value as int,
+        if (raw is List)
+          for (final value in raw.whereType<Map>())
+            if (value['question_id'] is String &&
+                value['score'] is int &&
+                value['score'] >= 0 &&
+                value['score'] <= 3)
+              value['question_id'] as String: value['score'] as int,
+      };
+
   /// Validate stored totals before applying the standard instrument bands.
   /// A missing maximum is accepted for older shared snapshots.
   static RiskLevel? levelFromScore(AssessmentType type, dynamic score,

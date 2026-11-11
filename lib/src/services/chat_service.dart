@@ -22,6 +22,7 @@ class ChatService {
   final String senderName;
 
   WebSocketChannel? _channel;
+  StreamSubscription<dynamic>? _subscription;
   ChatState _state = ChatState.disconnected;
   int _reconnectAttempt = 0;
   Timer? _reconnectTimer;
@@ -44,28 +45,44 @@ class ChatService {
   ChatState get currentState => _state;
 
   void connect() {
-    if (_disposed) return;
+    if (_disposed || _channel != null) return;
+    _reconnectTimer?.cancel();
     _updateState(ChatState.connecting);
+    unawaited(_openConnection());
+  }
 
+  Future<void> _openConnection() async {
+    WebSocketChannel? channel;
     try {
       final wsScheme = baseUrl.startsWith('https') ? 'wss' : 'ws';
       final base = baseUrl.replaceFirst(RegExp(r'^https?'), wsScheme);
       final uri = Uri.parse('$base/v1/realtime/ws?access_token=$accessToken');
 
-      _channel = WebSocketChannel.connect(uri);
+      channel = WebSocketChannel.connect(uri);
+      _channel = channel;
 
-      _channel!.stream.listen(
-        _onData,
-        onError: _onError,
-        onDone: _onDone,
+      _subscription = channel.stream.listen(
+        (data) {
+          if (_channel == channel) _onData(data);
+        },
+        onError: (_) => _handleDisconnect(channel!),
+        onDone: () => _handleDisconnect(channel!),
+        cancelOnError: true,
       );
 
+      await channel.ready;
+      if (_disposed || _channel != channel) return;
       _updateState(ChatState.connected);
       _reconnectAttempt = 0;
       _startPing();
       _flushPendingMessages();
     } on Object catch (_) {
-      _scheduleReconnect();
+      if (channel != null) {
+        _handleDisconnect(channel);
+      } else {
+        _updateState(ChatState.disconnected);
+        _scheduleReconnect();
+      }
     }
   }
 
@@ -101,8 +118,10 @@ class ChatService {
           break;
         case 'presence':
           if (eventData is Map<String, dynamic>) {
+            if (eventData['user_id'] != recipientId ||
+                eventData['online'] is! bool) break;
             final presence = ChatPresence(
-              userId: eventData['user_id']?.toString() ?? '',
+              userId: recipientId,
               isOnline: eventData['online'] == true,
             );
             _presenceController.add(presence);
@@ -116,13 +135,11 @@ class ChatService {
     }
   }
 
-  void _onError(Object error) {
-    _updateState(ChatState.disconnected);
-    _stopPing();
-    _scheduleReconnect();
-  }
-
-  void _onDone() {
+  void _handleDisconnect(WebSocketChannel channel) {
+    if (_disposed || _channel != channel) return;
+    _channel = null;
+    unawaited(_subscription?.cancel());
+    _subscription = null;
     _updateState(ChatState.disconnected);
     _stopPing();
     _scheduleReconnect();
@@ -235,8 +252,11 @@ class ChatService {
     _reconnectTimer = null;
     _stopPing();
     _typingDebounceTimer?.cancel();
-    _channel?.sink.close();
+    final channel = _channel;
     _channel = null;
+    unawaited(_subscription?.cancel());
+    _subscription = null;
+    unawaited(channel?.sink.close());
     _updateState(ChatState.disconnected);
   }
 

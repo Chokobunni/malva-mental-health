@@ -184,7 +184,7 @@ void main() {
     await tester.pumpWidget(_careApp(
         _careApi('https://api.malva.web.id/uploads/foto_profesional.png')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Professionals'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
     await tester.pumpAndSettle();
 
     expect(find.text('Dr. Sinta'), findsOneWidget);
@@ -197,7 +197,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(_careApp(_careApi('')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Professionals'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
     await tester.pumpAndSettle();
 
     expect(find.text('Dr. Sinta'), findsOneWidget);

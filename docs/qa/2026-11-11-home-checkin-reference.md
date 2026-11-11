@@ -17,7 +17,7 @@ Evidence root: `D:/Project/Malva/2026-07-09/_qa_2026_11_10_home_reference/`.
 - Full analyzer: no issues, `analyze-final-release.log`. All tracked/new Dart files format cleanly. WIB/platform/diff gates pass; platform retains9 existing allowlisted exceptions.
 - Backend build/vet/tests,146-route apidoc, conventions,19-env,40-migration and9 coverage floors pass. Fresh coverage was normalized from PowerShell's extensionless output to coverage.out before checking floors. Local PostgreSQL tests requiring MALVA_TEST_DATABASE_URL were skipped; backend source is unchanged.
 - Independent review found queue-write and cross-account sync-run issues; RED→GREEN regressions verify both fixes. New sync tests plus daily/pending regressions:10 passed.
-- Native visual comparison passed: [current design QA](../../design-qa.md), [archived prescription QA](2026-11-10-prescription-reference-design-qa.md). Combined source/native images cover all hero states, both standalone pages, dashboard and single presence; narrow/large-text states also exercised. Generated images/logs stay outside the source commit.
+- Native visual comparison passed: [archived Home design QA](2026-11-11-home-checkin-design-qa.md), [archived prescription QA](2026-11-10-prescription-reference-design-qa.md). Combined source/native images cover all hero states, both standalone pages, dashboard and single presence; narrow/large-text states also exercised. Generated images/logs stay outside the source commit.
 
 ## Signed artifact and production
 

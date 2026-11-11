@@ -5,24 +5,31 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
 import '../providers/providers.dart';
+import '../services/offline_sync_service.dart';
 import '../services/server_clock.dart';
 import '../time/wib.dart';
 
 // Five-step daily check-in with account-scoped persistence.
 
-/// Cek apakah hari ini sudah check-in lengkap (ada mood dengan sleep).
+const _dailyCheckInNote = 'Daily check-in';
+
+/// Check-in lengkap memakai marker alur; data lama dikenali dari durasi tidur.
 ///
 /// `MoodEntry.date` berasal dari server saat riwayat dimuat ulang,
 /// jadi perbandingan WAJIB lewat hari kalender WIB — kalau tidak, check-in
 /// pukul 22:00 WIB terbaca sebagai kemarin dan pasien diminta check-in lagi.
 bool hasCheckedInToday(List<MoodEntry> moods) {
   final now = ServerClock.now();
-  return moods.any((m) => isSameLocalDay(m.date, now) && m.sleepHours > 0);
+  return moods.any((m) =>
+      isSameLocalDay(m.date, now) &&
+      (m.sleepHours > 0 || m.note == _dailyCheckInNote));
 }
 
 /// Streak hari beruntun check-in (mood tersimpan > 0 hari berturut-turut).
-int checkInStreak(List<MoodEntry> moods) {
-  if (moods.isEmpty) return 0;
+int checkInStreak(List<MoodEntry> moods) =>
+    _checkInDateStreak(moods.map((m) => m.date));
+
+int _checkInDateStreak(Iterable<DateTime> dates) {
   // Hari kalender WIB, dibekukan sebagai WIB tengah malam supaya selisih hari
   // dihitung bersih. Dibangun lewat `wibFromParts` (zona WIB), BUKAN
   // `DateTime(...)` yang memakai zona perangkat: selain bergeser di perangkat
@@ -32,7 +39,7 @@ int checkInStreak(List<MoodEntry> moods) {
     return wibFromParts(wib.year, wib.month, wib.day);
   }
 
-  final days = moods.map((m) => dayOnly(m.date)).toSet().toList()
+  final days = dates.map(dayOnly).toSet().toList()
     ..sort((a, b) => b.compareTo(a));
   var streak = 0;
   var cursor = dayOnly(ServerClock.now());
@@ -68,6 +75,7 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
       _anxiety = 3,
       _irritability = 2;
   bool _saving = false, _done = false;
+  String _day = wibDateKey(ServerClock.now());
   int _generation = 0;
   MoodEntry? _savedMood;
   final Set<String> _startedDoses = {}, _finishedDoses = {};
@@ -78,6 +86,7 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
       s == null ? null : '${s.role.name}|${s.backendUserId ?? s.identifier}';
   void _reset() {
     _generation++;
+    _day = wibDateKey(ServerClock.now());
     _savedMood = null;
     _startedDoses.clear();
     _finishedDoses.clear();
@@ -97,11 +106,25 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
 
   @override
   Widget build(BuildContext context) {
+    if (_day != wibDateKey(ServerClock.now())) _reset();
     final session = ref.watch(currentSessionProvider);
     ref.listen<AuthSession?>(currentSessionProvider, (before, after) {
       if (_owner(before) != _owner(after)) setState(_reset);
     });
     final store = ref.watch(malvaStoreProvider);
+    ref.watch(syncQueueProvider);
+    final queuedDates = <DateTime>[];
+    var queuedToday = false;
+    for (final item in ref.watch(offlineSyncServiceProvider).queue) {
+      if (item.operation != SyncOperation.moodEntry ||
+          item.userId != session?.backendUserId) continue;
+      final date = parseWibStored(item.payload['date']?.toString());
+      if (date == null) continue;
+      queuedDates.add(date);
+      if (isSameLocalDay(date, ServerClock.now()) &&
+          ((item.payload['sleepHours'] as num? ?? 0) > 0 ||
+              item.payload['note'] == _dailyCheckInNote)) queuedToday = true;
+    }
     final name = session?.displayName.trim().isNotEmpty == true
         ? session!.displayName
         : store.patient.name;
@@ -113,7 +136,12 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
         .map((p) => p[0])
         .join()
         .toUpperCase();
-    final done = _done || (_step == 0 && hasCheckedInToday(store.moodEntries));
+    final done = _done ||
+        (_step == 0 && (hasCheckedInToday(store.moodEntries) || queuedToday));
+    final streak = _checkInDateStreak([
+      ...store.moodEntries.map((m) => m.date),
+      ...queuedDates,
+    ]);
     return Container(
         decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -172,33 +200,33 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
                     const SizedBox(height: 12),
                     Text(
                         done
-                            ? 'Check-in hari ini selesai. Streak ${checkInStreak(store.moodEntries)} hari!'
+                            ? 'Check-in hari ini selesai. Streak $streak hari!'
                             : 'Bagaimana kabarmu hari ini?',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                             fontSize: 16, color: Color(0xfff3e7f5))),
-                    const SizedBox(height: 32),
-                    Row(children: [
-                      for (final m in MoodValue.values)
-                        Expanded(
-                            child: InkWell(
-                                onTap: done
-                                    ? null
-                                    : () => setState(() {
-                                          _mood = m;
-                                          _step = 1;
-                                        }),
-                                child: Column(children: [
-                                  Image.asset('assets/checkin/${m.name}.png',
-                                      width: 40, height: 40),
-                                  const SizedBox(height: 14),
-                                  Text(m.label,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w500))
-                                ])))
-                    ]),
+                    if (!done) ...[
+                      const SizedBox(height: 32),
+                      Row(children: [
+                        for (final m in MoodValue.values)
+                          Expanded(
+                              child: InkWell(
+                                  onTap: () => setState(() {
+                                        _mood = m;
+                                        _step = 1;
+                                      }),
+                                  child: Column(children: [
+                                    Image.asset('assets/checkin/${m.name}.png',
+                                        width: 40, height: 40),
+                                    const SizedBox(height: 14),
+                                    Text(m.label,
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500))
+                                  ])))
+                      ]),
+                    ],
                   ] else ...[
                     Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -619,7 +647,7 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
         energy: _energy,
         anxiety: _anxiety,
         irritability: _irritability,
-        note: 'Daily check-in');
+        note: _dailyCheckInNote);
     final api = ref.read(apiClientProvider);
     final queue = ref.read(offlineSyncServiceProvider);
     final notifier = ref.read(malvaStoreProvider.notifier);

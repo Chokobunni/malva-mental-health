@@ -116,9 +116,12 @@ class AssessmentDatabaseService {
         rulesFired: rules,
         createdAt: parseWibStored(json['createdAt']?.toString()) ?? wibNow(),
         ruleVersion: json['ruleVersion']?.toString() ?? '',
-        certaintyFactor: json['certaintyFactor'] is num
-            ? (json['certaintyFactor'] as num).toDouble()
-            : null,
+        certaintyFactor: AssessmentEngine.savedCertaintyFactor(
+            type: type,
+            score: score,
+            maxScore: maximum,
+            cf: json['certaintyFactor'],
+            crisisFlag: json['crisisFlag'] == true),
       );
     } on Object {
       return null;

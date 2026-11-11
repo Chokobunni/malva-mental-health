@@ -4,14 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../professional_role.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
+import '../services/care_session_refresh.dart';
+import '../services/server_clock.dart';
 import '../theme.dart';
+import '../time/wib.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/meet_join_button.dart';
+import '../widgets/professional_avatar.dart';
 import 'booking/payment_screen.dart';
 import 'chat_screen.dart';
+import 'notifications_screen.dart';
 
 // ============================================================
 // CARE PACKAGE — status paket 4 sesi / 6 minggu + daftar sesi.
@@ -55,12 +61,26 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
   bool _isLoading = true;
   bool _continuingPayment = false;
   String? _error;
+  BackendDoctorProfile? _professional;
+  late final CareSessionRefresh _sessionRefresh;
 
   @override
   void initState() {
     super.initState();
     _package = widget.package;
+    _sessionRefresh = CareSessionRefresh(() {
+      if (mounted) {
+        setState(() {});
+        unawaited(_load(silent: true));
+      }
+    });
     _load();
+  }
+
+  @override
+  void dispose() {
+    _sessionRefresh.dispose();
+    super.dispose();
   }
 
   /// Memuat ulang paket & sesi. [silent] dipakai saat penyegaran otomatis
@@ -89,6 +109,14 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
       final results = await Future.wait([
         apiClient.listCarePackages(accessToken: token),
         apiClient.listCareSessions(accessToken: token, scope: 'all'),
+        () async {
+          try {
+            return await apiClient.getDoctorProfile(
+                accessToken: token, userId: _package.professionalId);
+          } on Object {
+            return null;
+          }
+        }(),
       ]);
       if (!mounted) return;
       final pkgs = results[0] as List<BackendCarePackage>;
@@ -102,6 +130,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
       }
       setState(() {
         if (mine != null) _package = mine;
+        _professional = results[2] as BackendDoctorProfile?;
         _otherPackageBookingIds = {
           for (final p in pkgs)
             if (p.id != _package.id && p.bookingId != null) p.bookingId!
@@ -113,6 +142,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
               (a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
         _isLoading = false;
       });
+      _sessionRefresh.update(_sessions);
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
@@ -137,234 +167,311 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
       }
     });
     final expires = _package.expiresDateTime;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Paket Saya'),
-        backgroundColor: MalvaColors.seed,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            tooltip: 'Muat ulang',
-            onPressed: _isLoading ? null : _load,
-            icon: const Icon(Icons.refresh_rounded),
+    return Theme(
+        data: Theme.of(context).copyWith(
+            cardTheme: Theme.of(context).cardTheme.copyWith(
+                elevation: .3,
+                shadowColor: const Color(0x148E44AD),
+                surfaceTintColor: Colors.white)),
+        child: Scaffold(
+          backgroundColor: const Color(0xFFFBF6FF),
+          appBar: AppBar(
+            title: const Text('Paket Saya',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            centerTitle: false,
+            toolbarHeight: 70,
+            backgroundColor: MalvaColors.seed,
+            foregroundColor: Colors.white,
+            actions: [
+              Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: IconButton.filledTonal(
+                    tooltip: 'Notifikasi',
+                    style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.18),
+                        foregroundColor: Colors.white),
+                    onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => NotificationsScreen(
+                                session: widget.session,
+                                apiClient: widget.apiClient))),
+                    icon: const Icon(Icons.notifications_none_rounded),
+                  )),
+            ],
           ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.all(18),
-          children: [
-            SoftCard(
-              color: Colors.white,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _package.professionalName.isEmpty
-                              ? 'Paket Continuous'
-                              : _package.professionalName,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w900, fontSize: 16),
-                        ),
-                      ),
-                      StatusPill(
-                        label: _package.status,
-                        color: _package.isActive
-                            ? MalvaColors.mint
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ProgressStrip(
-                    value: _package.totalSessions == 0
-                        ? 0
-                        : _package.usedSessions / _package.totalSessions,
-                    color: MalvaColors.seed,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${_package.remainingSessions}/${_package.totalSessions} sesi tersisa',
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  if (expires != null)
-                    Text(
-                      'Berlaku s/d ${expires.day}/${expires.month}/${expires.year} — sisa hangus setelah itu.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant),
-                    ),
-                  if (_package.refundedAmount > 0)
-                    Text(
-                      'Total refund uang: ${_rupiah(_package.refundedAmount)}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w700, color: MalvaColors.mint),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            const SoftCard(
-              color: Colors.white,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Aturan paket',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
-                  SizedBox(height: 6),
-                  Text(
-                    '• Tidak hadir = sesi hangus.\n'
-                    '• Profesional batal = kredit kembali, bisa dijadwalkan ulang.\n'
-                    '• Batal/reschedule olehmu minimal 24 jam sebelum sesi.\n'
-                    '• Chat teks aktif saat sesi berjalan; kiriman data dibahas saat sesi.',
-                    style: TextStyle(fontSize: 12.5),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            if (_isLoading)
-              const Center(child: CircularProgressIndicator())
-            else if (_error != null)
-              SoftCard(
-                child: Column(
-                  children: [
-                    Text(_error!,
-                        style: const TextStyle(
-                            color: MalvaColors.danger,
-                            fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 10),
-                    OutlinedButton.icon(
-                      onPressed: _load,
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Coba Lagi'),
-                    ),
-                  ],
-                ),
-              )
-            else ...[
-              // Paket pending_payment: tampilkan tombol Lanjutkan Pembayaran
-              // dan Batalkan. Sebelumnya pasien hanya melihat status
-              // "pending_payment" tanpa aksi — tidak bisa bayar atau batal.
-              if (_package.status == 'pending_payment') ...[
+          body: RefreshIndicator(
+            onRefresh: _load,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(15, 30, 15, 18),
+              children: [
                 SoftCard(
-                  color: MalvaColors.amber.withValues(alpha: 0.10),
+                  color: Colors.white,
+                  radius: 26,
+                  padding: const EdgeInsets.all(18),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.payment_rounded, color: MalvaColors.amber),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Pembayaran belum selesai',
-                              style: TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Lanjutkan pembayaran untuk mengaktifkan paket, atau batalkan bila tidak jadi.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant),
-                      ),
-                      const SizedBox(height: 10),
                       Row(
                         children: [
+                          ProfessionalAvatar(
+                              displayName: _package.professionalName,
+                              radius: 22,
+                              photoUrl: _package.photoIntroUrl.isEmpty
+                                  ? _professional?.credential.photoIntroUrl
+                                  : _package.photoIntroUrl),
+                          const SizedBox(width: 12),
                           Expanded(
-                            child: FilledButton.icon(
-                              onPressed:
-                                  _continuingPayment ? null : _continuePayment,
-                              icon: const Icon(Icons.payment_rounded, size: 16),
-                              label: const Text('Lanjut Bayar'),
-                            ),
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _package.professionalName.isEmpty
+                                        ? 'Paket Continuous'
+                                        : _package.professionalName,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 14),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                      professionalRoleLabel(_professional
+                                              ?.credential.specialization ??
+                                          ''),
+                                      style: const TextStyle(
+                                          color: Color(0xFF989DA6),
+                                          fontSize: 11)),
+                                ]),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () => _cancelPendingPackage(context),
-                              icon: const Icon(Icons.close_rounded, size: 16),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: MalvaColors.danger,
-                              ),
-                              label: const Text('Batalkan'),
-                            ),
+                          StatusPill(
+                            label: _package.status,
+                            color: _package.isActive
+                                ? MalvaColors.mint
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 16),
+                      ProgressStrip(
+                        value: _package.totalSessions == 0
+                            ? 0
+                            : (_package.remainingSessions /
+                                    _package.totalSessions)
+                                .clamp(0.0, 1.0),
+                        color: MalvaColors.seed,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${_package.remainingSessions}/${_package.totalSessions} sesi tersisa',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 12),
+                      ),
+                      if (expires != null)
+                        Text(
+                          'Berlaku s/d ${expires.day}/${expires.month}/${expires.year} — sisa hangus setelah itu.',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                  fontSize: 11),
+                        ),
+                      if (_package.refundedAmount > 0)
+                        Text(
+                          'Total refund uang: ${_rupiah(_package.refundedAmount)}',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: MalvaColors.mint),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const SoftCard(
+                  color: Colors.white,
+                  radius: 26,
+                  padding: EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('ATURAN PAKET',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 11)),
+                      SizedBox(height: 10),
+                      Text(
+                        '• Tidak hadir = sesi hangus.\n\n'
+                        '• Profesional batal = kredit kembali, bisa dijadwalkan ulang.\n\n'
+                        '• Batal/reschedule olehmu minimal 24 jam sebelum sesi.\n\n'
+                        '• Chat teks aktif saat sesi berjalan; kiriman data dibahas saat sesi.',
+                        style: TextStyle(
+                            fontSize: 12,
+                            height: 1.35,
+                            color: Color(0xFF626975)),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 14),
-              ],
-              if (_package.isActive && _package.remainingSessions > 0) ...[
-                FilledButton.icon(
-                  onPressed: () => _openScheduler(context),
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Jadwalkan Sesi'),
-                ),
-                const SizedBox(height: 14),
-              ],
-              const SectionLabel('Sesi Mendatang'),
-              if (_upcoming.isEmpty)
-                const EmptyState(
-                  icon: Icons.event_available_outlined,
-                  title: 'Belum ada sesi terjadwal',
-                  subtitle:
-                      'Jadwalkan sesi dari sisa paketmu sebelum kedaluwarsa.',
-                )
-              else
-                for (final s in _upcoming) ...[
-                  _PackageSessionCard(
-                    session: s,
-                    onOpenChat: () => _openChat(s),
-                    onReschedule: () => _openScheduler(context, existing: s),
-                    onCancel: () => _cancelSession(s),
-                    accessToken:
-                        (widget.session ?? ref.read(currentSessionProvider))
-                                ?.accessToken ??
-                            '',
-                    onSessionChanged: (_) => _load(silent: true),
-                  ),
-                  const SizedBox(height: 10),
+                if (_isLoading)
+                  const Center(child: CircularProgressIndicator())
+                else if (_error != null)
+                  SoftCard(
+                    child: Column(
+                      children: [
+                        Text(_error!,
+                            style: const TextStyle(
+                                color: MalvaColors.danger,
+                                fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: _load,
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Coba Lagi'),
+                        ),
+                      ],
+                    ),
+                  )
+                else ...[
+                  // Paket pending_payment: tampilkan tombol Lanjutkan Pembayaran
+                  // dan Batalkan. Sebelumnya pasien hanya melihat status
+                  // "pending_payment" tanpa aksi — tidak bisa bayar atau batal.
+                  if (_package.status == 'pending_payment') ...[
+                    SoftCard(
+                      color: MalvaColors.amber.withValues(alpha: 0.10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.payment_rounded,
+                                  color: MalvaColors.amber),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Pembayaran belum selesai',
+                                  style: TextStyle(fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Lanjutkan pembayaran untuk mengaktifkan paket, atau batalkan bila tidak jadi.',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: _continuingPayment
+                                      ? null
+                                      : _continuePayment,
+                                  icon: const Icon(Icons.payment_rounded,
+                                      size: 16),
+                                  label: const Text('Lanjut Bayar'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () =>
+                                      _cancelPendingPackage(context),
+                                  icon:
+                                      const Icon(Icons.close_rounded, size: 16),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: MalvaColors.danger,
+                                  ),
+                                  label: const Text('Batalkan'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  if (_package.isActive && _package.remainingSessions > 0) ...[
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(45),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18))),
+                      onPressed: () => _openScheduler(context),
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Jadwalkan Sesi',
+                          style: TextStyle(fontSize: 13)),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  const Padding(
+                      padding: EdgeInsets.fromLTRB(4, 12, 4, 16),
+                      child: Text('SESI MENDATANG',
+                          style: TextStyle(
+                              color: MalvaColors.seed,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12))),
+                  if (_upcoming.isEmpty)
+                    const EmptyState(
+                      icon: Icons.event_available_outlined,
+                      title: 'Belum ada sesi terjadwal',
+                      subtitle:
+                          'Jadwalkan sesi dari sisa paketmu sebelum kedaluwarsa.',
+                    )
+                  else
+                    for (final s in _upcoming) ...[
+                      _PackageSessionCard(
+                        session: s,
+                        onOpenChat: () => _openChat(s),
+                        onReschedule: () =>
+                            _openScheduler(context, existing: s),
+                        onCancel: () => _cancelSession(s),
+                        accessToken:
+                            (widget.session ?? ref.read(currentSessionProvider))
+                                    ?.accessToken ??
+                                '',
+                        onSessionChanged: (_) => _load(silent: true),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                  if (_past.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    const SectionLabel('Riwayat Sesi'),
+                    for (final s in _past) ...[
+                      _PackageSessionCard(
+                        session: s,
+                        past: true,
+                        // Sesi yang dibatalkan profesional: boleh reschedule
+                        // (pakai kredit) atau minta refund uang.
+                        onReschedule: s.cancelledByProfessional
+                            ? () => _openScheduler(context, existing: s)
+                            : null,
+                        onRequestRefund: s.cancelledByProfessional
+                            ? () => _requestRefund(s)
+                            : null,
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                  ],
                 ],
-              const SizedBox(height: 8),
-              const SectionLabel('Riwayat Sesi'),
-              if (_past.isEmpty)
-                const EmptyState(
-                  icon: Icons.history_rounded,
-                  title: 'Belum ada riwayat',
-                  subtitle: 'Sesi yang selesai tercatat di sini.',
-                )
-              else
-                for (final s in _past) ...[
-                  _PackageSessionCard(
-                    session: s,
-                    past: true,
-                    // Sesi yang dibatalkan profesional: boleh reschedule
-                    // (pakai kredit) atau minta refund uang.
-                    onReschedule: s.cancelledByProfessional
-                        ? () => _openScheduler(context, existing: s)
-                        : null,
-                    onRequestRefund: s.cancelledByProfessional
-                        ? () => _requestRefund(s)
-                        : null,
-                  ),
-                  const SizedBox(height: 10),
-                ],
-            ],
-          ],
-        ),
-      ),
-    );
+              ],
+            ),
+          ),
+        ));
   }
 
   /// Tampilkan hasil reschedule: sukses saja, ATAU hanya peringatan server.
@@ -402,6 +509,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
     final picked = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
+      backgroundColor: const Color(0xFFFBF6FF),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
       ),
@@ -858,9 +966,9 @@ class _SessionSchedulerSheetState extends State<_SessionSchedulerSheet> {
       final filtered = days.where((d) {
         if (!d.bookable) return false;
         if (exp == null) return true;
-        final dt = DateTime.tryParse(d.date);
-        if (dt == null) return true;
-        return dt.isBefore(exp.add(const Duration(days: 1)));
+        final dt = parseWibStored(d.date);
+        if (dt == null) return false;
+        return d.date.compareTo(wibDateKey(exp)) <= 0;
       }).toList(growable: false);
       setState(() {
         _days = filtered;
@@ -880,113 +988,147 @@ class _SessionSchedulerSheetState extends State<_SessionSchedulerSheet> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 12,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 44,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text('Jadwalkan sesi',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
-            const SizedBox(height: 4),
-            Text(
-              'Hanya hari praktik profesional & sebelum paket kedaluwarsa.',
-              style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 12.5),
-            ),
-            const SizedBox(height: 12),
-            const Text('Video • 1 jam per sesi',
-                style: TextStyle(fontWeight: FontWeight.w700)),
-            // Catatan info (bukan error) bila Google Meet profesional belum
-            // aktif: sesi video tetap bisa dijadwalkan, link dibuat menyusul.
-            if (_type == 'video' && _meetReady == false) ...[
-              const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.info_outline_rounded,
-                      size: 18, color: MalvaColors.amber),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Video tetap bisa dijadwalkan; link Meet dibuat setelah '
-                      'profesional mengaktifkan Google Calendar.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                    ),
-                  ),
+      child: ConstrainedBox(
+        constraints:
+            BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .88),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+              22, 12, 22, MediaQuery.viewInsetsOf(context).bottom + 24),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                    child: Container(
+                        width: 44,
+                        height: 5,
+                        decoration: BoxDecoration(
+                            color: const Color(0xFFD9D9DF),
+                            borderRadius: BorderRadius.circular(30)))),
+                const SizedBox(height: 14),
+                Row(children: [
+                  const Expanded(
+                      child: Text('Jadwalkan sesi',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 18))),
+                  IconButton.filledTonal(
+                      onPressed: () => Navigator.pop(context),
+                      tooltip: 'Tutup',
+                      style: IconButton.styleFrom(
+                          backgroundColor: const Color(0xFFF0EDF4),
+                          minimumSize: const Size(32, 32),
+                          padding: EdgeInsets.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                      icon: const Icon(Icons.close_rounded, size: 20)),
+                ]),
+                const SizedBox(height: 4),
+                const Text(
+                    'Hanya hari praktik profesional & sebelum paket kedaluwarsa.',
+                    style: TextStyle(
+                        color: Color(0xFF7E818D), fontSize: 11, height: 1.5)),
+                const SizedBox(height: 10),
+                const Row(children: [
+                  Icon(Icons.videocam_rounded,
+                      color: MalvaColors.seed, size: 16),
+                  SizedBox(width: 8),
+                  Flexible(
+                      child: Text('Video • 1 jam per sesi',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: MalvaColors.seed,
+                              fontSize: 11))),
+                ]),
+                if (_type == 'video' && _meetReady == false) ...[
+                  const SizedBox(height: 10),
+                  const Text(
+                      'Video tetap bisa dijadwalkan; link Meet dibuat setelah profesional mengaktifkan Google Calendar.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF7E818D))),
                 ],
-              ),
-            ],
-            const SizedBox(height: 12),
-            if (_loadingDays)
-              const Center(child: CircularProgressIndicator())
-            else if (_days.isEmpty)
-              const Text('Tidak ada hari tersedia sebelum paket kedaluwarsa.')
-            else
-              SizedBox(
-                height: 78,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    for (final d in _days)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: Text(_shortDay(d.date)),
-                          selected: _date == d.date,
-                          onSelected: (_) => setState(() {
-                            _date = d.date;
-                            _slot = null;
-                          }),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 12),
-            if (_date != null)
-              _FirstSessionSlots(
-                apiClient: widget.apiClient,
-                accessToken: widget.accessToken,
-                professionalId: widget.professionalId,
-                date: _date!,
-                selected: _slot,
-                onSelect: (t) => setState(() => _slot = t),
-              ),
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!,
-                  style: const TextStyle(
-                      color: MalvaColors.danger, fontWeight: FontWeight.w700)),
-            ],
-            const SizedBox(height: 14),
-            FilledButton(
-              onPressed: (_date == null || _slot == null)
-                  ? null
-                  : () => Navigator.pop(context, '${_date}T$_slot|$_type'),
-              child: const Text('Pilih Jadwal'),
-            ),
-          ],
+                const SizedBox(height: 20),
+                const Text('PILIH HARI & TANGGAL',
+                    style: TextStyle(
+                        color: Color(0xFF999DA8),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: .4)),
+                const SizedBox(height: 10),
+                if (_loadingDays)
+                  const Center(child: CircularProgressIndicator())
+                else if (_days.isEmpty)
+                  const Text(
+                      'Tidak ada hari tersedia sebelum paket kedaluwarsa.')
+                else
+                  SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(children: [
+                        for (final d in _days)
+                          Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.compact,
+                                label: Text(_shortDay(d.date)),
+                                selected: _date == d.date,
+                                selectedColor: MalvaColors.seed,
+                                backgroundColor: Colors.white,
+                                checkmarkColor: Colors.white,
+                                labelStyle: TextStyle(
+                                    color: _date == d.date
+                                        ? Colors.white
+                                        : const Color(0xFF535964),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 10),
+                                side:
+                                    const BorderSide(color: Color(0xFFF0E7F7)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(18)),
+                                onSelected: (_) => setState(() {
+                                  _date = d.date;
+                                  _slot = null;
+                                }),
+                              )),
+                      ])),
+                const SizedBox(height: 20),
+                if (_date != null) ...[
+                  const Text('PILIH JAM KONSULTASI',
+                      style: TextStyle(
+                          color: Color(0xFF999DA8),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: .4)),
+                  const SizedBox(height: 10),
+                  _FirstSessionSlots(
+                      apiClient: widget.apiClient,
+                      accessToken: widget.accessToken,
+                      professionalId: widget.professionalId,
+                      date: _date!,
+                      expiresAt: widget.expiresAt,
+                      selected: _slot,
+                      onSelect: (time) => setState(() => _slot = time)),
+                ],
+                if (_error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(_error!,
+                      style: const TextStyle(
+                          color: MalvaColors.danger,
+                          fontWeight: FontWeight.w700)),
+                ],
+                const SizedBox(height: 20),
+                FilledButton(
+                    onPressed: (_date == null || _slot == null)
+                        ? null
+                        : () =>
+                            Navigator.pop(context, '${_date}T$_slot|$_type'),
+                    style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(44),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18))),
+                    child: const Text('Pilih Jadwal',
+                        style: TextStyle(fontSize: 12))),
+              ]),
         ),
       ),
     );
@@ -1167,6 +1309,7 @@ class _FirstSessionSlots extends StatefulWidget {
     required this.date,
     required this.selected,
     required this.onSelect,
+    this.expiresAt,
   });
 
   final MalvaApiClient apiClient;
@@ -1175,6 +1318,7 @@ class _FirstSessionSlots extends StatefulWidget {
   final String date;
   final String? selected;
   final ValueChanged<String> onSelect;
+  final DateTime? expiresAt;
 
   @override
   State<_FirstSessionSlots> createState() => _FirstSessionSlotsState();
@@ -1230,24 +1374,48 @@ class _FirstSessionSlotsState extends State<_FirstSessionSlots> {
           style: const TextStyle(
               color: MalvaColors.danger, fontWeight: FontWeight.w700));
     }
-    final free = _slots.where((s) => s.available).toList(growable: false);
+    final free = _slots.where((s) {
+      if (!s.available) return false;
+      final expires = widget.expiresAt;
+      if (expires == null) return true;
+      final starts = parseWibStored('${widget.date}T${s.time}');
+      return starts != null && starts.isBefore(expires);
+    }).toList(growable: false);
     if (free.isEmpty) {
       return Text('Slot hari ini penuh. Pilih hari lain.',
           style:
               TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant));
     }
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
+    return LayoutBuilder(builder: (context, constraints) {
+      final columns = constraints.maxWidth >= 300 ? 4 : 3;
+      final width = (constraints.maxWidth - 8 * (columns - 1)) / columns;
+      return Wrap(spacing: 8, runSpacing: 8, children: [
         for (final slot in free)
-          ChoiceChip(
-            label: Text(slot.time),
-            selected: widget.selected == slot.time,
-            onSelected: (_) => widget.onSelect(slot.time),
-          ),
-      ],
-    );
+          SizedBox(
+              width: width,
+              child: ChoiceChip(
+                label: Text(slot.time, textAlign: TextAlign.center),
+                selected: widget.selected == slot.time,
+                showCheckmark: false,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+                selectedColor: MalvaColors.seed,
+                backgroundColor: Colors.white,
+                labelStyle: TextStyle(
+                    color: widget.selected == slot.time
+                        ? Colors.white
+                        : const Color(0xFF535964),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                side: const BorderSide(color: Color(0xFFF0E7F7)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18)),
+                onSelected: (_) => widget.onSelect(slot.time),
+              )),
+      ]);
+    });
   }
 }
 
@@ -1298,19 +1466,35 @@ class _PackageSessionCard extends StatelessWidget {
       'cancelled_by_patient' => 'Dibatalkan',
       _ => session.status,
     };
+    final untilStart = at?.difference(ServerClock.now());
+    final countdown = untilStart != null && untilStart > Duration.zero
+        ? untilStart.inMinutes >= 60
+            ? 'Mulai dalam ${untilStart.inHours} jam ${untilStart.inMinutes % 60} mnt'
+            : 'Mulai dalam ${(untilStart.inSeconds + 59) ~/ 60} mnt'
+        : session.isAfterJoinWindow
+            ? 'Waktu sesi berakhir'
+            : 'Sesi sedang berlangsung';
     return SoftCard(
+      color: Colors.white,
+      radius: 26,
+      padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              CircleAvatar(
-                backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                    color: const Color(0xFFF5ECFD),
+                    borderRadius: BorderRadius.circular(13)),
                 child: Icon(
                     session.isVideo
                         ? Icons.videocam_rounded
                         : Icons.chat_bubble_rounded,
-                    color: MalvaColors.seed),
+                    color: MalvaColors.seed,
+                    size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1319,7 +1503,8 @@ class _PackageSessionCard extends StatelessWidget {
                   children: [
                     Text(
                       '${session.isVideo ? 'Video' : 'Chat'} • ${session.durationMinutes} mnt',
-                      style: const TextStyle(fontWeight: FontWeight.w900),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 12),
                     ),
                     Text(
                       dateLabel,
@@ -1332,12 +1517,33 @@ class _PackageSessionCard extends StatelessWidget {
             ],
           ),
           if (!past) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
+            Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                    color: const Color(0xFFFAF4FD),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFF1E8F8))),
+                child:
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const Icon(Icons.schedule_rounded,
+                      color: MalvaColors.seed, size: 18),
+                  const SizedBox(width: 8),
+                  Flexible(
+                      child: Text(countdown,
+                          style: const TextStyle(
+                              color: MalvaColors.seed,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12))),
+                ])),
+            const SizedBox(height: 12),
             // Sesi video: tombol gabung Google Meet dengan jendela waktu.
             // Bila link belum ada, pasien melihat "Menunggu link video" —
             // link dibuat profesional (pasien tidak bisa memperbaiki akun
             // Google orang lain).
-            if (session.isVideo) ...[
+            if (session.isVideo && session.canJoinNow) ...[
               MeetJoinButton(
                 session: session,
                 accessToken: accessToken,
@@ -1352,9 +1558,13 @@ class _PackageSessionCard extends StatelessWidget {
                 Expanded(
                   child: FilledButton.icon(
                     onPressed: onOpenChat,
-                    style: compactFilledButtonStyle,
+                    style: compactFilledButtonStyle.copyWith(
+                        minimumSize: const WidgetStatePropertyAll(Size(0, 32)),
+                        padding: const WidgetStatePropertyAll(
+                            EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                     icon: const Icon(Icons.chat_bubble_rounded, size: 16),
-                    label: const Text('Chat'),
+                    label: const Text('Chat', style: TextStyle(fontSize: 12)),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1362,17 +1572,30 @@ class _PackageSessionCard extends StatelessWidget {
                   child: OutlinedButton(
                     onPressed: onReschedule,
                     style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8)),
-                    child: const FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text('Reschedule', maxLines: 1)),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        side: const BorderSide(color: Color(0xFFEADCF3)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14))),
+                    child: const Text('Reschedule',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12)),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton(
                     onPressed: onCancel,
-                    child: const Text('Batal'),
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 32),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 6),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        side: const BorderSide(color: Color(0xFFEADCF3)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14))),
+                    child: const Text('Batal', style: TextStyle(fontSize: 12)),
                   ),
                 ),
               ],
@@ -1393,7 +1616,9 @@ class _PackageSessionCard extends StatelessWidget {
                 Expanded(
                   child: FilledButton.icon(
                     onPressed: onRequestRefund,
-                    style: compactFilledButtonStyle,
+                    style: compactFilledButtonStyle.copyWith(
+                        minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                     icon: const Icon(Icons.currency_exchange_rounded, size: 16),
                     label: const Text('Minta refund'),
                   ),

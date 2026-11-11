@@ -11,6 +11,7 @@ import 'package:http/testing.dart';
 import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/providers/providers.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
+import 'package:malva_mental_health/src/services/server_clock.dart';
 import 'package:malva_mental_health/src/theme.dart';
 import 'package:malva_mental_health/src/services/offline_sync_service.dart';
 import 'package:malva_mental_health/src/platform/contracts/ports.dart';
@@ -34,14 +35,51 @@ class _FailStorage implements SecureStore {
   Future<void> delete(String key) async {}
 }
 
+class _MemoryStorage implements SecureStore {
+  final Map<String, String> values = {};
+  @override
+  Future<String?> read(String key) async => values[key];
+  @override
+  Future<void> write(String key, String value) async => values[key] = value;
+  @override
+  Future<void> delete(String key) async => values.remove(key);
+}
+
 void main() {
-  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
+    ServerClock.reset();
+  });
+  tearDown(ServerClock.reset);
+
+  Future<void> pumpFlow(WidgetTester tester, ProviderContainer c,
+      {Key? key}) async {
+    await tester.pumpWidget(UncontrolledProviderScope(
+        container: c,
+        child: MaterialApp(
+            theme: buildMalvaTheme(),
+            home: Scaffold(
+                body: SingleChildScrollView(
+                    child: DailyCheckInFlow(key: key, onSaved: () {}))))));
+    await tester.pumpAndSettle();
+  }
+
+  void expectCompleted() {
+    expect(find.textContaining('Check-in hari ini selesai. Streak'),
+        findsOneWidget);
+    for (final mood in MoodValue.values) {
+      expect(find.text(mood.label), findsNothing);
+    }
+    expect(find.text('Selesai Check-in'), findsNothing);
+  }
 
   Future<ProviderContainer> mount(
       WidgetTester tester, List<Map<String, dynamic>> requests,
       {Future<void>? holdMood,
+      List<Map<String, dynamic>> serverMoods = const [],
       List<Medication> meds = const [],
       SecureStore? queueStorage,
+      int moodFailures = 0,
       int medicationFailures = 0}) async {
     tester.view.physicalSize = const Size(390, 950);
     tester.view.devicePixelRatio = 1;
@@ -54,6 +92,8 @@ void main() {
             requests.add(body);
             if (r.url.path == '/v1/mood-checkins' && holdMood != null)
               await holdMood;
+            if (r.url.path == '/v1/mood-checkins' && moodFailures-- > 0)
+              return http.Response(jsonEncode({'error': 'offline'}), 503);
             if (r.url.path == '/v1/medication-logs' && medicationFailures-- > 0)
               return http.Response(jsonEncode({'error': 'offline'}), 503);
             if (r.url.path == '/v1/medication-logs')
@@ -69,31 +109,30 @@ void main() {
                 200);
           }
           return http.Response(
-              jsonEncode(
-                  {'medications': [], 'medication_logs': [], 'moods': []}),
+              jsonEncode({
+                'medications': [],
+                'medication_logs': [],
+                'moods': serverMoods
+              }),
               200);
         }));
-    final c = ProviderContainer(overrides: [
-      apiClientProvider.overrideWithValue(api),
-      if (queueStorage != null)
-        offlineSyncServiceProvider.overrideWithValue(OfflineSyncService(
+    final queue = queueStorage == null
+        ? null
+        : OfflineSyncService(
             apiClient: api,
             activeUserIdReader: () => 'patient',
-            secureStore: queueStorage))
+            secureStore: queueStorage);
+    if (queue != null) addTearDown(queue.dispose);
+    final c = ProviderContainer(overrides: [
+      apiClientProvider.overrideWithValue(api),
+      if (queue != null) offlineSyncServiceProvider.overrideWithValue(queue)
     ]);
     addTearDown(c.dispose);
     c.read(authStateProvider.notifier).setSession(_session);
     for (final med in meds) {
       c.read(malvaStoreProvider.notifier).upsertMedication(med);
     }
-    await tester.pumpWidget(UncontrolledProviderScope(
-        container: c,
-        child: MaterialApp(
-            theme: buildMalvaTheme(),
-            home: Scaffold(
-                body: SingleChildScrollView(
-                    child: DailyCheckInFlow(onSaved: () {}))))));
-    await tester.pumpAndSettle();
+    await pumpFlow(tester, c);
     return c;
   }
 
@@ -108,7 +147,7 @@ void main() {
       'five stages persist exact zero energy and chosen anxiety/irritability',
       (tester) async {
     final requests = <Map<String, dynamic>>[];
-    await mount(tester, requests);
+    final c = await mount(tester, requests);
     expect(find.text('Selamat datang, Emilie R!'), findsOneWidget);
     await tester.tap(find.text('Baik'));
     await tester.pumpAndSettle();
@@ -133,6 +172,147 @@ void main() {
     expect(requests.single, containsPair('irritability', 1));
     expect(requests.single, containsPair('sleep_hours', 7.5));
     expect(requests.single, containsPair('mood', 'good'));
+    expectCompleted();
+    await pumpFlow(tester, c, key: const ValueKey('reopened-home'));
+    expectCompleted();
+  });
+
+  for (final sleepHours in [7.5, 0.0]) {
+    testWidgets(
+        'server-restored check-in ($sleepHours sleep) hides choices for its account and WIB day',
+        (tester) async {
+      final c = await mount(tester, [], serverMoods: [
+        {
+          'id': 'saved-mood',
+          'mood': 'good',
+          'sleep_hours': sleepHours,
+          'energy': 5,
+          'anxiety': 3,
+          'irritability': 2,
+          'note': 'Daily check-in',
+          'occurred_at': wibIso(ServerClock.now()),
+        }
+      ]);
+      c.read(malvaStoreProvider.notifier).applySession(_session);
+      await tester.pumpAndSettle();
+      expectCompleted();
+      await pumpFlow(tester, c, key: const ValueKey('restored-home'));
+      expectCompleted();
+      c.read(malvaStoreProvider.notifier).resetForAccount();
+      c.read(authStateProvider.notifier).setSession(const AuthSession(
+          role: UserRole.patient,
+          identifier: 'other',
+          backendUserId: 'other',
+          displayName: 'Dina',
+          accessToken: 'other-token'));
+      await tester.pumpAndSettle();
+      expect(find.text('Selamat datang, Dina!'), findsOneWidget);
+      expect(find.text('Bagaimana kabarmu hari ini?'), findsOneWidget);
+      expect(find.text('Baik'), findsOneWidget);
+    });
+  }
+
+  testWidgets('manual mood without sleep keeps the daily check-in available',
+      (tester) async {
+    final c = await mount(tester, []);
+    c.read(malvaStoreProvider.notifier).addMood(MoodEntry(
+        date: ServerClock.now(),
+        mood: MoodValue.good,
+        sleepHours: 0,
+        energy: 0,
+        anxiety: 0,
+        irritability: 0,
+        note: 'Catatan mood'));
+    await tester.pumpAndSettle();
+    expect(find.text('Baik'), findsOneWidget);
+    expect(find.text('Bagaimana kabarmu hari ini?'), findsOneWidget);
+  });
+
+  testWidgets('completed local flow opens fresh choices on the next WIB day',
+      (tester) async {
+    final c = await mount(tester, []);
+    await tester.tap(find.text('Baik'));
+    await tester.pumpAndSettle();
+    await next(tester);
+    await next(tester);
+    await next(tester);
+    await tester.tap(find.text('Selesai Check-in'));
+    await tester.pumpAndSettle();
+    expectCompleted();
+    FlutterSecureStorage.setMockInitialValues({
+      ServerClock.offsetStorageKey: '86400000',
+    });
+    ServerClock.reset();
+    await ServerClock.loadPersisted();
+    // Home rebuilds on resume; keep the same widget state across that rebuild.
+    await pumpFlow(tester, c);
+    expect(find.text('Bagaimana kabarmu hari ini?'), findsOneWidget);
+    expect(find.text('Baik'), findsOneWidget);
+    await tester.tap(find.text('Baik'));
+    await tester.pumpAndSettle();
+    expect(find.text('Langkah 2 dari 5'), findsOneWidget);
+  });
+
+  testWidgets(
+      'durable offline check-in stays completed after a fresh app mount',
+      (tester) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+            const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+            (_) async => ['none']);
+    final storage = _MemoryStorage();
+    final first =
+        await mount(tester, [], moodFailures: 1, queueStorage: storage);
+    await tester.tap(find.text('Baik'));
+    await tester.pumpAndSettle();
+    await next(tester);
+    for (final (key, count) in [
+      ('sleep-hours-minus', 7),
+      ('sleep-minutes-minus', 30)
+    ]) {
+      for (var i = 0; i < count; i++) {
+        await tester.tap(find.byKey(ValueKey(key)));
+        await tester.pump();
+      }
+    }
+    await next(tester);
+    await next(tester);
+    await tester.tap(find.text('Selesai Check-in'));
+    await tester.pumpAndSettle();
+    expectCompleted();
+    expect(first.read(malvaStoreProvider).moodEntries.single.sleepHours, 0);
+    expect(first.read(offlineSyncServiceProvider).pendingCount, 1);
+
+    // Fresh providers have no in-memory mood or completion flag.
+    final restored = await mount(tester, [], queueStorage: storage);
+    await pumpFlow(tester, restored, key: const ValueKey('offline-restored'));
+    expect(find.text('Baik'), findsOneWidget);
+    // Secure storage may finish loading after Home has already mounted.
+    await restored.read(offlineSyncServiceProvider).initialize();
+    await tester.pumpAndSettle();
+    expect(restored.read(malvaStoreProvider).moodEntries, isEmpty);
+    expectCompleted();
+    expect(find.textContaining('Streak 1 hari!'), findsOneWidget);
+    restored.read(authStateProvider.notifier).setSession(const AuthSession(
+        role: UserRole.patient,
+        identifier: 'other',
+        backendUserId: 'other',
+        displayName: 'Dina',
+        accessToken: 'other-token'));
+    await tester.pumpAndSettle();
+    expect(find.text('Baik'), findsOneWidget);
+    restored.read(authStateProvider.notifier).setSession(_session);
+    await tester.pumpAndSettle();
+    expectCompleted();
+    FlutterSecureStorage.setMockInitialValues({
+      ServerClock.offsetStorageKey: '86400000',
+    });
+    ServerClock.reset();
+    await ServerClock.loadPersisted();
+    await pumpFlow(tester, restored, key: const ValueKey('offline-restored'));
+    expect(find.text('Baik'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    restored.read(offlineSyncServiceProvider).dispose();
   });
 
   testWidgets(
@@ -284,6 +464,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.textContaining('Log obat belum tersimpan'), findsOneWidget);
+    expect(find.text('Selesai Check-in'), findsOneWidget);
     expect(c.read(malvaStoreProvider).medications.single.currentStock, 29);
     await tester.tap(find.text('Selesai Check-in'));
     await tester.pumpAndSettle();
@@ -292,6 +473,7 @@ void main() {
     expect(c.read(malvaStoreProvider).medications.single.currentStock, 29);
     expect(c.read(malvaStoreProvider.notifier).pendingDosesFor('m'), 0);
     expect(find.textContaining('Log obat belum tersimpan'), findsNothing);
+    expectCompleted();
   });
   testWidgets(
       'offline dose stays queued then clears pending exactly once after sync',
@@ -323,6 +505,7 @@ void main() {
     await tester.pumpAndSettle();
     final queue = c.read(offlineSyncServiceProvider);
     expect(queue.pendingCount, 1);
+    expectCompleted();
     expect(c.read(malvaStoreProvider.notifier).pendingDosesFor('m'), 1);
     await tester.runAsync(() => queue.syncNow());
     await tester.pumpAndSettle();
