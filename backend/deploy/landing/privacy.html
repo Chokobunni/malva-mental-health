@@ -39,12 +39,12 @@
   <main>
     <a class="back" href="/">&larr; Kembali ke beranda</a>
     <h1>Kebijakan Privasi Malva</h1>
-    <p class="updated">Terakhir diperbarui: 20 Oktober 2026</p>
+    <p class="updated">Terakhir diperbarui: 11 November 2026</p>
 
     <p>Malva adalah aplikasi kesehatan mental. Privasi pengguna — khususnya data kesehatan mental — adalah prioritas utama kami. Kebijakan ini menjelaskan data apa yang kami proses, mengapa, siapa yang dapat mengaksesnya, dan bagaimana kamu dapat mengendalikannya. Ketentuan penggunaan layanan diatur terpisah pada <a href="/terms.html">Syarat &amp; Ketentuan</a>.</p>
 
     <div class="note">
-      Data kesehatan mental hanya dapat diakses oleh kamu dan profesional yang kamu izinkan sendiri.
+      Akses profesional pada data kesehatan mengikuti hubungan layanan, izin berbagi, dan masa akses yang berlaku.
       Kami tidak menjual, menyewakan, atau memakai datamu untuk iklan.
     </div>
 
@@ -52,19 +52,19 @@
     <ul>
       <li><strong>Data akun:</strong> nama tampilan, email, nomor telepon, tanggal lahir, gender.</li>
       <li><strong>Data hasil asesmen:</strong> jawaban dan skor PHQ-9, GAD-7, DASS-21, serta WHO-5 beserta riwayatnya.</li>
-      <li><strong>Data harian yang kamu isi sendiri:</strong> mood check-in (mood, tidur, energi), kepatuhan obat, catatan obat dan sisa stok, isi diary, goals &amp; kebiasaan, serta catatan penyelesaian hariannya.</li>
-      <li><strong>Worksheet terapi:</strong> jawaban modul ABCDE, Identifikasi Distorsi Kognitif, Behavioral Activation, Grounding 5-4-3-2-1, dan Psikoedukasi yang kamu isi dan/atau bagikan.</li>
-      <li><strong>Data layanan profesional:</strong> jadwal dan siklus pendampingan (4 sesi dalam 6 minggu), catatan sesi, dan pesan di dalam aplikasi.</li>
+      <li><strong>Data harian yang kamu isi sendiri:</strong> check-in (mood, obat, tidur, energi, kecemasan dan iritabilitas), kepatuhan obat, catatan obat dan sisa stok, isi diary, goals &amp; kebiasaan, serta catatan penyelesaian hariannya.</li>
+      <li><strong>Worksheet terapi:</strong> jawaban delapan modul CBT, DBT, pernapasan, relaksasi otot dan psikoedukasi yang kamu isi dan/atau bagikan.</li>
+      <li><strong>Data layanan profesional:</strong> pemesanan satu kali atau paket 4 sesi dalam 6 minggu, jadwal, kehadiran, catatan sesi, resep sesuai kewenangan psikiater, pesan dan lampiran percakapan.</li>
       <li><strong>Data kontak darurat:</strong> nama dan nomor kontak yang kamu simpan sendiri.</li>
-      <li><strong>Data pemesanan:</strong> metode pembayaran tanpa menyimpan nomor kartu — pembayaran diproses pihak ketiga.</li>
-      <li><strong>Data teknis:</strong> token notifikasi (FCM) untuk pengiriman pengingat, serta log keamanan standar server.</li>
-      <li><strong>Google (bila login dengan Google):</strong> ID akun Google, email, dan nama tampilan — Malva tidak menerima password Google-mu.</li>
+      <li><strong>Data pemesanan:</strong> pemesanan, nominal, status transaksi dan referensi pembayaran. Checkout pembayaran diproses melalui Midtrans.</li>
+      <li><strong>Data teknis:</strong> token notifikasi (FCM) untuk pesan chat pada sesi yang memenuhi syarat, serta log operasional dan keamanan. Pengingat obat dan goals dijadwalkan secara lokal pada perangkat.</li>
+      <li><strong>Google (bila login dengan Google):</strong> ID akun Google, email dan nama tampilan. Integrasi Google untuk penjadwalan profesional dapat memproses data Calendar dan tautan Meet sesuai izin yang diberikan. Malva tidak menerima password Google-mu.</li>
     </ul>
 
     <h2>2. Cara Kami Menggunakan Data</h2>
     <ul>
       <li>Menyediakan fitur inti: perhitungan skor asesmen, tren hasil, catatan harian, worksheet, dan pendampingan profesional.</li>
-      <li>Mengirim pengingat check-in, jadwal sesi, pengingat obat, dan notifikasi keselamatan.</li>
+      <li>Menampilkan informasi sesi dan status layanan, mengirim notifikasi chat yang memenuhi syarat, serta menjadwalkan pengingat obat dan goals pada perangkat. SOS memproses kontak yang dipilih melalui layanan pengiriman.</li>
       <li>Menghubungkanmu dengan profesional yang kamu pilih sendiri — profesional hanya melihat data yang kamu bagikan/izinkan.</li>
       <li>Keamanan: deteksi penyalahgunaan, perlindungan akun, dan pencatatan akses untuk audit.</li>
     </ul>
@@ -78,21 +78,22 @@
 
     <h2>4. Penyimpanan &amp; Keamanan</h2>
     <ul>
-      <li>Data tersimpan di server PostgreSQL di Indonesia (Azure region Indonesia Central) dengan enkripsi in-transit (TLS).</li>
+      <li>Data akun dan layanan disimpan di server; koneksi ke layanan publik memakai HTTPS. Perangkat juga menyimpan data lokal untuk sesi akun, cache dan pengingat.</li>
       <li>Password di-hash (bcrypt), token sesi dikelola dengan rotasi, dan akses administratif dibatasi.</li>
-      <li>Setiap akses data pasien oleh profesional tercatat pada audit log.</li>
-      <li>Backup harian dienkripsi dan disimpan terpisah.</li>
+      <li>Akses data pasien diperiksa melalui autentikasi, hubungan layanan dan izin yang sesuai; aktivitas tertentu dicatat untuk audit.</li>
       <li>Kebocoran atau insiden keamanan material akan kami informasikan segera melalui aplikasi dan email.</li>
     </ul>
 
     <h2>5. Berbagi dengan Profesional</h2>
-    <p>Hasil asesmen, skor DASS-21/WHO-5, hasil worksheet, catatan harian, dan timeline hanya terlihat oleh profesional yang kamu hubungkan secara eksplisit, dan hanya bagian yang kamu pilih untuk dibagikan. Kamu dapat memutus tautan atau menarik persetujuan kapan saja; penarikan persetujuan berlaku sejak saat diproses, tanpa mengubah riwayat audit.</p>
+    <p>Consent Management mengatur kategori screening, mood dan diary, obat, timeline, health record, goals serta Therapy Record untuk profesional terhubung. Record tertentu juga dapat dibagikan melalui percakapan. Akses data mengikuti masa paket atau sesi dan izin yang berlaku. Penarikan izin kategori membatasi akses berikutnya, tetapi tidak menghapus pesan, lampiran atau salinan yang sudah dibagikan. Ekspor atau kirim file hanya kepada penerima yang kamu pilih.</p>
+
+    <p>Penyedia layanan yang mendukung fitur mencakup Midtrans untuk pembayaran, Google untuk login serta Calendar/Meet, Firebase Cloud Messaging untuk notifikasi, dan layanan pengiriman WhatsApp untuk SOS. Data yang diproses mengikuti fitur yang digunakan; nomor kontak darurat digunakan ketika kamu meminta pengiriman SOS.</p>
 
     <h2>6. Hak-Hakmu</h2>
     <ul>
       <li>Melihat, memperbaiki, dan mengunduh data pribadimu.</li>
       <li>Menarik persetujuan berbagi data ke profesional kapan saja.</li>
-      <li>Meminta penghapusan akun beserta datanya — hubungi <a href="mailto:halo@malva.web.id">halo@malva.web.id</a>. Riwayat audit keamanan kami simpan untuk memenuhi kepatuhan, dan data medis inti dianonimkan sesuai kebijakan retensi Malva.</li>
+      <li>Meminta penghapusan akun beserta datanya — hubungi <a href="mailto:halo@malva.web.id">halo@malva.web.id</a>. Permintaan ditinjau berdasarkan jenis data dan kewajiban penyimpanan yang berlaku; penghapusan akun bukan tombol otomatis di aplikasi.</li>
       <li>Meminta salinan data dalam format yang dapat dibaca mesin.</li>
     </ul>
 

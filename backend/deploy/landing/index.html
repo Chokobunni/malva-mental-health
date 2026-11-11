@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Malva — Aplikasi Kesehatan Mental: Screening, Diary, Terapi &amp; Konsultasi Psikolog</title>
+  <title>Malva — Screening, Catatan Harian dan Konsultasi Kesehatan Mental</title>
   <meta name="description" content="Malva membantu kamu merawat kesehatan mental: screening PHQ-9, GAD-7, DASS-21 &amp; WHO-5, diary harian, worksheet terapi, dan konsultasi dengan psikolog &amp; psikiater terverifikasi.">
   <link rel="canonical" href="https://malva.web.id/">
   <meta name="robots" content="index, follow">
@@ -16,15 +16,11 @@
   <meta property="og:title" content="Malva — Aplikasi Kesehatan Mental">
   <meta property="og:description" content="Screening PHQ-9, GAD-7, DASS-21 &amp; WHO-5, diary harian, worksheet terapi, dan konsultasi dengan psikolog &amp; psikiater terverifikasi.">
   <meta property="og:url" content="https://malva.web.id/">
-  <meta property="og:image" content="https://malva.web.id/og-image.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
   <meta property="og:locale" content="id_ID">
   <!-- Twitter -->
-  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Malva — Aplikasi Kesehatan Mental">
   <meta name="twitter:description" content="Screening, diary, terapi, dan konsultasi psikolog &amp; psikiater terverifikasi dalam satu aplikasi.">
-  <meta name="twitter:image" content="https://malva.web.id/og-image.png">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
   <script type="application/ld+json">
   {
@@ -48,17 +44,17 @@
         "name": "Malva",
         "operatingSystem": "ANDROID",
         "applicationCategory": "HealthApplication",
-        "applicationSubCategory": "Mental Health Screening &amp; Therapy",
+        "applicationSubCategory": "Mental Health Screening and Support",
         "inLanguage": "id",
         "featureList": [
           "Screening PHQ-9 dan GAD-7",
           "Asesmen DASS-21 dan WHO-5",
-          "Daily check-in mood, tidur, energi, dan kepatuhan obat",
+          "Check-in mood, obat, tidur, energi, serta kecemasan dan iritabilitas",
           "Diary, goals dan habits",
-          "Worksheet terapi CBT: ABCDE, Thinking Traps, Behavioral Activation, Grounding 5-4-3-2-1, Psikoedukasi",
+          "Delapan worksheet CBT, DBT, relaksasi dan psikoedukasi",
           "Booking dan konsultasi profesional terverifikasi",
           "Paket Continuous Support 4 sesi dalam 6 minggu",
-          "Kontak darurat dan protokol keselamatan"
+          "Kontak darurat pribadi, SOS dan panduan grounding"
         ],
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "IDR" },
         "url": "https://malva.web.id/"
@@ -108,9 +104,12 @@
       align-items: center;
       text-align: center;
       padding: 3rem 1.5rem;
-      background: linear-gradient(160deg, #3F205B 0%, #B75ECB 60%, #EFA0EC 100%);
+      background: linear-gradient(160deg, #3F205B 0%, #7D3A96 60%, #9950A5 100%);
       color: white;
     }
+    .section-nav { display:flex; flex-wrap:wrap; justify-content:center; gap:0.6rem 1.4rem; padding:1rem 1.25rem; background:white; border-bottom:1px solid #e7dced; }
+    .section-nav a { color:var(--plum); font-weight:700; text-decoration:none; }
+    section[id] { scroll-margin-top:1.5rem; }
     .logo { font-size: 3.2rem; margin-bottom: 0.8rem; }
     h1 { font-size: 2.6rem; font-weight: 900; letter-spacing: -0.5px; }
     .tagline { font-size: 1.15rem; opacity: 0.92; max-width: 36rem; margin-top: 0.75rem; }
@@ -119,7 +118,7 @@
       margin-top: 1.4rem;
       padding: 0.5rem 1.1rem;
       border-radius: 999px;
-      background: rgba(255,255,255,0.16);
+      background: rgba(32,27,36,0.20);
       border: 1px solid rgba(255,255,255,0.35);
       font-weight: 700;
       font-size: 0.9rem;
@@ -151,7 +150,7 @@
       box-shadow: 0 8px 26px rgba(32,27,36,0.18);
     }
     .btn-ghost {
-      background: rgba(255,255,255,0.12);
+      background: rgba(32,27,36,0.14);
       color: white;
       border-color: rgba(255,255,255,0.45);
     }
@@ -159,7 +158,7 @@
     h2 { color: var(--plum); font-size: 1.5rem; margin-bottom: 1.25rem; }
     h2 + .lede { margin-top: -0.9rem; margin-bottom: 1.4rem; color: #4c4354; font-size: 0.95rem; }
     section { margin-bottom: 3rem; }
-    .grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+    .grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
     .card {
       background: white;
       border: 1px solid rgba(93,46,126,0.10);
@@ -181,7 +180,7 @@
       color: var(--plum);
       background: rgba(182,90,203,0.14);
     }
-    .card .tag.tag-mint { color: #1e8f76; background: rgba(54,199,166,0.16); }
+    .card .tag.tag-mint { color: #146b58; background: rgba(54,199,166,0.16); }
     .steps { counter-reset: step; }
     .step { display: flex; gap: 1rem; align-items: flex-start; margin-bottom: 1rem; }
     .step::before {
@@ -220,7 +219,7 @@
     .split {
       display: grid;
       gap: 1.25rem;
-      grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
     }
     .pro-panel {
       border: 1px solid rgba(93,46,126,0.12);
@@ -239,7 +238,7 @@
       border: 1px solid rgba(54,199,166,0.35);
       font-size: 0.94rem;
     }
-    .status strong { color: #1e8f76; }
+    .status strong { color: #146b58; }
     .download {
       display: flex;
       flex-wrap: wrap;
@@ -316,165 +315,95 @@
 </head>
 <body>
   <a class="skip" href="#konten">Lewati ke konten utama</a>
-  <section class="hero">
-    <div class="logo">🌿</div>
+  <header class="hero">
+    <div class="logo" aria-hidden="true">🌿</div>
     <h1>Malva</h1>
-    <p class="tagline">Aplikasi kesehatan mental Indonesia — screening mandiri, worksheet terapi, diary harian, dan pendampingan oleh psikolog &amp; psikiater terverifikasi.</p>
-    <div class="badge">Aplikasi Android • Bahasa Indonesia</div>
+    <p class="tagline">Kenali kondisi emosimu, catat keseharian, dan jalani konsultasi bersama psikolog atau psikiater. Mulai dari screening hingga tindak lanjut dalam satu aplikasi.</p>
+    <div class="badge">Aplikasi Android • Bahasa Indonesia • Jadwal dalam WIB</div>
     <div class="cta-row">
-      <!--
-        CATATAN: arahkan href ini ke berkas APK rilis terbaru bila sudah diunggah
-        ke folder /downloads/ di server. Bila belum, halaman ini tetap valid —
-        tombol akan mengarah ke berkas yang harus disediakan lebih dulu.
-      -->
       <a class="btn btn-primary" href="/downloads/malva-latest.apk">Unduh Aplikasi Android</a>
       <a class="btn btn-ghost" href="#profesional">Untuk Profesional</a>
     </div>
-  </section>
+  </header>
+  <nav class="section-nav" aria-label="Bagian halaman">
+    <a href="#fitur">Fitur Pasien</a><a href="#alur">Cara Memulai</a><a href="#profesional">Profesional</a><a href="#kepercayaan">Skor dan Privasi</a><a href="#faq">Pertanyaan Umum</a>
+  </nav>
   <main id="konten">
-    <section>
-      <h2>Fitur Utama</h2>
-      <p class="lede">Semua fitur mandiri tersedia gratis. Konsultasi dengan profesional memiliki tarif yang tercantum jelas sebelum pemesanan.</p>
+    <section id="fitur">
+      <h2>Fitur untuk Keseharian dan Konsultasimu</h2>
+      <p class="lede">Gunakan fitur mandiri tanpa biaya. Tarif konsultasi satu kali dan paket pendampingan ditampilkan sebelum kamu melakukan pembayaran.</p>
       <div class="grid">
-        <div class="card"><span class="tag">Screening</span><h3>PHQ-9 &amp; GAD-7</h3><p>Deteksi dini gejala depresi &amp; kecemasan dengan metode Forward Chaining + Certainty Factor berbasis 18 rule pakar. Jawaban berupa skala angka 0–3 sesuai instrumen asli.</p></div>
-        <div class="card"><span class="tag">Asesmen lanjutan</span><h3>DASS-21 &amp; WHO-5</h3><p>DASS-21 mengukur tiga aspek sekaligus — depresi, kecemasan, dan stres — dengan skala angka 1–3. WHO-5 mengukur kesejahteraan psikologis dua minggu terakhir dengan skala 1–5. Skor dihitung otomatis per kategori.</p></div>
-        <div class="card"><span class="tag">Harian</span><h3>Daily Check-in</h3><p>Catat mood, kualitas tidur, energi, dan kepatuhan obat setiap hari — tersimpan aman di server dan menambah streak harianmu.</p></div>
-        <div class="card"><span class="tag">Harian</span><h3>Diary, Goals &amp; Habits</h3><p>Tulis riwayat harian, bangun kebiasaan, dan kejar target mingguan. Persentase penyelesaian dihitung dari centang hari ini, dan hasilnya bisa dibagikan ke profesional pendampingmu.</p></div>
-        <div class="card"><span class="tag">Terapi</span><h3>Worksheet CBT, DBT &amp; Psikoedukasi</h3><p>Modul ABCDE (Restrukturisasi Kognitif), Identifikasi Distorsi Kognitif (Thinking Traps), Behavioral Activation, Grounding 5-4-3-2-1, dan Psikoedukasi Terstruktur. Worksheet dapat diisi, disimpan, diunduh, dan dibagikan ke profesional.</p></div>
-        <div class="card"><span class="tag">Konsultasi</span><h3>Booking &amp; Discovery Profesional</h3><p>Cari psikolog atau psikiater terverifikasi, bandingkan spesialisasi, tarif, jarak, ulasan, dan dukungan BPJS, lalu pesan jadwal sesuai ketersediaan.</p></div>
-        <div class="card"><span class="tag tag-mint">Pendampingan</span><h3>Continuous Support — 4 sesi / 6 minggu</h3><p>Paket pendampingan profesional dalam satu siklus 4 sesi selama 6 minggu, dengan chat asinkron dan berbagi ringkasan serta hasil asesmen.</p></div>
-        <div class="card"><span class="tag">Keselamatan</span><h3>Kontak Darurat &amp; SOS</h3><p>Hotline 119 ext 8, daftar kontak darurat pribadi, dan protokol keselamatan yang aktif bila hasil screening menandakan risiko.</p></div>
-        <div class="card"><span class="tag tag-mint">Kontrol data</span><h3>Riwayat &amp; Persetujuan</h3><p>Riwayat asesmen dan worksheet tersimpan di akunmu. Skor DASS-21 &amp; WHO-5 yang kamu bagikan tampil sebagai tren pada profesional pendamping — dan kamu sendiri yang menentukan data apa yang dibagikan, bisa dicabut kapan saja.</p></div>
+        <div class="card"><span class="tag">Screening</span><h3>WHO-5, PHQ-9, GAD-7 dan DASS-21</h3><p>WHO-5 mencatat kesejahteraan psikologis, PHQ-9 gejala depresi, GAD-7 gejala kecemasan, dan DASS-21 depresi, kecemasan serta stres. Lihat skor, kategori hasil, dan riwayat masing-masing instrumen.</p></div>
+        <div class="card"><span class="tag">Harian</span><h3>Daily Check-in dan Mood</h3><p>Isi lima langkah: mood, obat, tidur, energi, serta kecemasan dan iritabilitas. Ajakan check-in di Home hilang setelah pengisian hari itu selesai. Tambahkan mood entry dan lihat kalender serta grafik riwayatmu.</p></div>
+        <div class="card"><span class="tag">Catatan pribadi</span><h3>Diary</h3><p>Tulis judul dan catatan harian secara terpisah dari mood. Buka kembali riwayatnya dan pilih catatan yang ingin kamu bagikan saat berdiskusi dengan profesional.</p></div>
+        <div class="card"><span class="tag">Kebiasaan</span><h3>Goals &amp; Habits</h3><p>Buat target dan kebiasaan, tentukan target mingguan, lalu catat penyelesaiannya. Kamu dapat mengubah atau menghapus goal sendiri, melihat progres, dan mengatur pengingat harian.</p></div>
+        <div class="card"><span class="tag">Latihan mandiri</span><h3>Delapan Worksheet Terapi</h3><p>ABCDE, Thinking Traps, Behavioral Activation, Grounding 5-4-3-2-1, TIPP, latihan pernapasan, relaksasi otot progresif, dan psikoedukasi. Isi worksheet, simpan Therapy Record, lalu bagikan hasil yang relevan kepada profesional.</p></div>
+        <div class="card"><span class="tag">Obat</span><h3>Catatan Obat dan Pengingat</h3><p>Kelola daftar obat, aturan konsumsi, stok dan riwayat minum obat. Pengingat mengikuti jadwal yang kamu atur pada perangkat. Resep dari psikiater dapat menjadi acuan rutinitas obatmu.</p></div>
+        <div class="card"><span class="tag">Konsultasi</span><h3>Temukan Psikolog atau Psikiater</h3><p>Telusuri profil, keahlian, tarif, jadwal dan ulasan profesional. Filter informasi BPJS tersedia sebagai keterangan layanan profesional; klaim BPJS belum diproses melalui Malva.</p></div>
+        <div class="card"><span class="tag tag-mint">MyCare</span><h3>Sesi Satu Kali atau Paket</h3><p>Pilih konsultasi satu kali atau paket Continuous Support berisi 4 sesi yang berlaku 6 minggu sejak pembayaran. Sesi video baru berdurasi 1 jam per sesi. Kelola jadwal, sisa sesi dan riwayat melalui MyCare.</p></div>
+        <div class="card"><span class="tag">Pembayaran</span><h3>Pembayaran melalui Midtrans</h3><p>Pilih metode yang tersedia di halaman pembayaran Midtrans. Status pemesanan mengikuti verifikasi pembayaran. Transaksi yang masih pending dapat dilanjutkan dari aplikasi.</p></div>
+        <div class="card"><span class="tag">Komunikasi</span><h3>Chat Sesi dan Ringkasan 7 Hari</h3><p>Chat dan akses video mengikuti waktu serta status sesi. Bagikan screening, progres goal, obat, diary, dan ringkasan 7 hari melalui kartu dalam percakapan. Riwayat chat tetap dapat dibaca setelah sesi berakhir.</p></div>
+        <div class="card"><span class="tag tag-mint">Kontrol data</span><h3>Record dan Consent Management</h3><p>Pilih kategori data yang boleh dilihat profesional terhubung, atau bagikan record tertentu. Akses mengikuti izin dan masa layanan. Riwayat screening dapat dibagikan sebagai PDF, dan izin kategori dapat kamu ubah kembali.</p></div>
+        <div class="card"><span class="tag">Bantuan</span><h3>Kontak Darurat dan SOS</h3><p>Simpan hingga 5 kontak darurat, buka panduan grounding, dan kirim permintaan SOS. Status pengiriman dapat diperiksa; pesan yang diterima layanan pengirim belum berarti sudah diterima atau ditanggapi kontak.</p></div>
       </div>
     </section>
-    <section>
-      <h2>Bagaimana Malva Bekerja</h2>
+    <section id="alur">
+      <h2>Mulai dari Kondisimu Hari Ini</h2>
       <div class="steps">
-        <div class="step"><div><h3>Isi profil &amp; screening awal</h3><p>Jawab PHQ-9 dan GAD-7 untuk memetakan kondisimu dua minggu terakhir. Hasil langsung ditampilkan beserta tingkat risikonya.</p></div></div>
-        <div class="step"><div><h3>Perdalam dengan asesmen lanjutan &amp; worksheet</h3><p>Lanjutkan ke DASS-21 dan WHO-5 untuk gambaran lebih rinci, lalu kerjakan modul terapi yang paling relevan kondisimu.</p></div></div>
-        <div class="step"><div><h3>Rawat kebiasaan harian</h3><p>Check-in mood, tulis diary, dan kejar target mingguan. Pola harian ini menjadi bahan diskusi bersama profesional.</p></div></div>
-        <div class="step"><div><h3>Hubungkan dengan profesional</h3><p>Pilih psikolog atau psikiater terverifikasi (STR/SIP), pesan siklus pendampingan, dan lanjutkan perawatanmu.</p></div></div>
+        <div class="step"><div><h3>Buat akun dan lengkapi profil</h3><p>Daftar atau masuk menggunakan email maupun Google. Pasien yang baru mendaftar mendapat tawaran Symptoms Assessment; akun lama masuk ke Home tanpa mengulang tawaran awal.</p></div></div>
+        <div class="step"><div><h3>Awali screening dengan WHO-5</h3><p>Isi lima pertanyaan tentang dua minggu terakhir. Jika hasil di bawah 50% atau ada jawaban 0–1, alur awal mengarahkanmu ke PHQ-9 dan GAD-7. DASS-21 tersedia terpisah di menu Screening.</p></div></div>
+        <div class="step"><div><h3>Catat keseharian dan kerjakan latihan</h3><p>Gunakan check-in, mood, diary, goals, catatan obat dan worksheet sesuai kebutuhan. Data yang kamu simpan membantu melihat pola untuk dibicarakan saat konsultasi.</p></div></div>
+        <div class="step"><div><h3>Atur konsultasi melalui MyCare</h3><p>Pilih profesional dan slot yang tersedia, periksa tarif, lalu selesaikan pembayaran. Tentukan izin berbagi data dan buka chat atau video ketika akses sesinya tersedia.</p></div></div>
       </div>
     </section>
     <section id="profesional">
-      <h2>Untuk Profesional Kesehatan Mental</h2>
-      <p class="lede">Malva juga dirancang sebagai alat bantu praktik bagi psikolog dan psikiater yang menangani pasien mandiri.</p>
+      <h2>Ruang Praktik untuk Psikolog dan Psikiater</h2>
+      <p class="lede">Kelola layanan dan tinjau catatan pasien yang dibagikan sesuai hubungan layanan, persetujuan, dan kewenangan profesimu.</p>
       <div class="split">
-        <div class="pro-panel">
-          <h3>Verifikasi &amp; profil praktik</h3>
-          <ul>
-            <li>Verifikasi STR/SIMP dan STR/SIP sebelum profil tampil ke pasien.</li>
-            <li>Profil praktik: pendidikan, topik keahlian, pengalaman, tarif, dan paket sesi.</li>
-            <li>Jadwal praktik dan kuota sesi yang dapat kamu atur sendiri.</li>
-          </ul>
-        </div>
-        <div class="pro-panel">
-          <h3>Pemantauan pasien</h3>
-          <ul>
-            <li>Hasil screening PHQ-9/GAD-7 serta skor dan tren DASS-21/WHO-5.</li>
-            <li>Worksheet terapi yang diisi dan dibagikan pasien.</li>
-            <li>Mood, diary, kepatuhan obat, dan goals &amp; habits pasien — sesuai izin yang diberikan pasien.</li>
-          </ul>
-        </div>
-        <div class="pro-panel">
-          <h3>Alur penanganan</h3>
-          <ul>
-            <li>Catatan sesi, follow-up, dan timeline pasien untuk menilai perkembangan.</li>
-            <li>Paket pendampingan berkelanjutan (4 sesi / 6 minggu) dengan chat asinkron.</li>
-            <li>Ekspor data pasien untuk kebutuhan dokumentasi praktik.</li>
-          </ul>
-        </div>
+        <div class="pro-panel"><h3>Profil dan Jadwal Praktik</h3><ul><li>Lengkapi kredensial dan ikuti verifikasi profesional.</li><li>Atur profil, keahlian, tarif, slot praktik dan waktu tidak tersedia.</li><li>Pantau sesi mendatang, kehadiran dan sesi yang perlu diselesaikan.</li></ul></div>
+        <div class="pro-panel"><h3>Data Pasien yang Dibagikan</h3><ul><li>Tinjau hasil WHO-5, PHQ-9, GAD-7 dan tiga subskala DASS-21.</li><li>Buka Assessment Record dan Therapy Record yang diizinkan.</li><li>Lihat mood, diary, obat, health record dan goals sesuai akses yang diberikan.</li></ul></div>
+        <div class="pro-panel"><h3>Konsultasi dan Tindak Lanjut</h3><ul><li>Gunakan chat dan tautan video sesuai jendela akses sesi.</li><li>Kirim permintaan screening, goals, lampiran dan rangkuman sesi melalui alat chat klinis.</li><li>Simpan catatan dan tindak lanjut; kelola pendapatan serta pencairan melalui portal profesional.</li></ul></div>
+        <div class="pro-panel"><h3>Resep sesuai Kewenangan</h3><ul><li>Psikiater terverifikasi dapat mengelola resep dan instruksi obat.</li><li>Psikolog mendampingi asesmen serta intervensi psikologis dan tidak menerbitkan resep obat.</li><li>Catatan resep di Malva tidak berarti obat sudah ditebus atau dikirim oleh apotek.</li></ul></div>
       </div>
-      <p class="note" style="margin-top:1.25rem;">Masih dalam pengembangan rilis berikutnya: e-prescription digital, klaim/pembayaran BPJS di dalam aplikasi, dan pembayaran digital. Fitur tersebut tidak ditawarkan terlebih dahulu di website ini.</p>
     </section>
-    <section>
-      <h2>Unduh Aplikasi</h2>
-      <div class="download">
-        <div style="flex:1 1 16rem;">
-          <div class="meta"><strong>Malva untuk Android</strong> — versi terbaru, Bahasa Indonesia.</div>
-          <div class="meta">Telusuri instalasi dari sumber tak dikenal saat pertama kali memasang, sesuai kebijakan Android.</div>
-        </div>
-        <a class="btn btn-download" href="/downloads/malva-latest.apk">Unduh APK terbaru</a>
-      </div>
+    <section id="unduh">
+      <h2>Unduh Malva untuk Android</h2>
+      <div class="download"><div style="flex:1 1 16rem;"><div class="meta"><strong>APK Malva terbaru</strong> • Bahasa Indonesia</div><div class="meta">Unduh berkas, buka di perangkat Android, lalu izinkan pemasangan dari sumber ini jika Android memintanya.</div></div><a class="btn btn-download" href="/downloads/malva-latest.apk">Unduh APK terbaru</a></div>
     </section>
     <section id="kepercayaan">
-      <h2>Kenapa Malva Bisa Dipercaya</h2>
-      <p class="lede">Kami tidak memasang testimoni anonim yang tidak dapat diverifikasi. Sebagai gantinya, inilah hal-hal yang bisa kamu periksa sendiri di dalam aplikasi.</p>
+      <h2>Pahami Hasil dan Atur Akses Datamu</h2>
+      <p class="lede">Skor screening, dukungan aturan model, dan keputusan klinis memiliki peran yang berbeda.</p>
       <div class="trust">
-        <div class="card"><h3>Instrumen terstandar, bukan buatan sendiri</h3><p>PHQ-9 dan GAD-7 untuk depresi &amp; kecemasan, DASS-21 untuk depresi–kecemasan–stres, dan WHO-5 untuk kesejahteraan psikologis. Butir pertanyaan memakai penilaian baku masing-masing instrumen.</p></div>
-        <div class="card"><h3>Jawaban berupa angka, bukan teka-teki</h3><p>Pilihan jawaban tampil sebagai skala angka — 0–3 untuk PHQ-9 &amp; GAD-7, 1–3 untuk DASS-21, 1–5 untuk WHO-5 — sama seperti kertas kuesioner aslinya, sehingga skor dapat dihitung otomatis.</p></div>
-        <div class="card"><h3>Penilaian berbasis 18 rule pakar</h3><p>Hasil PHQ-9 dan GAD-7 diturunkan dengan metode Forward Chaining dan Certainty Factor atas 18 rule pakar, bukan ambang skor tunggal.</p></div>
-        <div class="card"><h3>Kamu yang memegang kendali izin</h3><p>Profesional hanya melihat data yang kamu bagikan secara eksplisit, dan persetujuan itu dapat ditarik kapan saja dari aplikasi.</p></div>
-        <div class="card"><h3>Server di Indonesia, akses tercatat</h3><p>Data disimpan di server Indonesia (Azure region Indonesia Central) dengan TLS, password di-hash bcrypt, dan setiap akses profesional ditulis ke audit log.</p></div>
-        <div class="card"><h3>Keselamatan diperlakukan lebih dulu</h3><p>Bila hasil screening menandakan risiko, protokol keselamatan, kontak darurat, dan hotline 119 ext 8 disajikan lebih dulu sebelum fitur lain.</p></div>
+        <div class="card"><h3>Skala Jawaban yang Digunakan</h3><p>PHQ-9 dan GAD-7 memakai 0–3 untuk dua minggu terakhir. WHO-5 memakai 0–5 untuk dua minggu terakhir. DASS-21 memakai 0–3 untuk satu minggu terakhir.</p></div>
+        <div class="card"><h3>Skor dan CF Dibaca Terpisah</h3><p>Skor mengikuti penjumlahan dan ambang instrumen. Certainty Factor (CF) menunjukkan dukungan aturan internal Malva; angka ini bukan persentase peluang diagnosis dan tidak mengubah skor screening.</p></div>
+        <div class="card"><h3>Screening sebagai Bahan Diskusi</h3><p>Hasil membantu mengenali kondisi yang kamu laporkan dan kebutuhan penilaian lanjutan. Diagnosis serta rencana penanganan memerlukan pemeriksaan oleh profesional yang berwenang.</p></div>
+        <div class="card"><h3>Persetujuan menurut Kategori</h3><p>Atur izin screening, mood dan diary, obat, timeline, health record, goals serta Therapy Record melalui Consent Management. Record yang sudah dikirim ke chat tetap menjadi bagian riwayat percakapan.</p></div>
+        <div class="card"><h3>Akses sesuai Hubungan Layanan</h3><p>Profesional memerlukan hubungan layanan dan izin yang sesuai untuk membuka data. Masa aktif paket atau sesi turut menentukan akses. Keterangan lengkap ada pada Kebijakan Privasi.</p></div>
+        <div class="card"><h3>Bantuan Darurat Memerlukan Respons Nyata</h3><p>SOS membantu menghubungi kontak yang kamu simpan, tetapi tidak menjamin respons segera. Saat berada dalam bahaya, hubungi layanan darurat atau fasilitas kesehatan terdekat tanpa menunggu balasan aplikasi.</p></div>
       </div>
       <div class="figures">
-        <figure>
-          <img src="/assets/illustration-screening.svg" alt="Ilustrasi layar screening Malva dengan pilihan jawaban angka 0 sampai 3" width="380" height="720" loading="lazy">
-          <figcaption>Screening awal<span>Pertanyaan PHQ-9/GAD-7 dengan pilihan angka 0–3</span></figcaption>
-        </figure>
-        <figure>
-          <img src="/assets/illustration-worksheet.svg" alt="Ilustrasi worksheet Identifikasi Distorsi Kognitif dengan baris bukti nyata yang dapat diisi" width="380" height="720" loading="lazy">
-          <figcaption>Worksheet terapi<span>Jebakan pikiran, bukti nyata, dan pikiran seimbang</span></figcaption>
-        </figure>
-        <figure>
-          <img src="/assets/illustration-professional.svg" alt="Ilustrasi panel profesional dengan skor DASS-21 dan tren WHO-5 pasien" width="380" height="720" loading="lazy">
-          <figcaption>Panel profesional<span>Skor subskala dan tren pasien yang dibagikan</span></figcaption>
-        </figure>
+        <figure><img src="/assets/illustration-screening.svg" alt="Ilustrasi pertanyaan PHQ-9 dengan pilihan jawaban 0 sampai 3" width="380" height="720" loading="lazy"><figcaption>Screening PHQ-9<span>Ilustrasi pilihan jawaban, bukan hasil pasien</span></figcaption></figure>
+        <figure><img src="/assets/illustration-worksheet.svg" alt="Ilustrasi worksheet Thinking Traps untuk mencatat pikiran dan bukti" width="380" height="720" loading="lazy"><figcaption>Worksheet Thinking Traps<span>Ilustrasi latihan, bukan catatan pasien</span></figcaption></figure>
+        <figure><img src="/assets/illustration-professional.svg" alt="Ilustrasi ringkasan hasil DASS-21 dan WHO-5 yang dibagikan" width="380" height="720" loading="lazy"><figcaption>Hasil yang Dibagikan<span>Contoh data ilustrasi, bukan hasil pasien</span></figcaption></figure>
       </div>
     </section>
-    <section>
+    <section id="faq">
       <h2>Pertanyaan Umum</h2>
-      <details open>
-        <summary>Apa itu Malva?</summary>
-        <p>Malva adalah aplikasi kesehatan mental yang menghubungkan pengguna dengan profesional kesehatan mental terverifikasi (psikolog dan psikiater), dilengkapi screening mandiri, asesmen lanjutan, worksheet terapi, diary, dan modul terapi dalam Bahasa Indonesia.</p>
-      </details>
-      <details>
-        <summary>Apakah screening di Malva adalah diagnosis?</summary>
-        <p>Tidak. Screening PHQ-9, GAD-7, DASS-21, dan WHO-5 adalah alat bantu deteksi dini berbasis instrumen terstandar, bukan diagnosis medis. Untuk diagnosis dan penanganan, konsultasikan dengan psikolog atau psikiater.</p>
-      </details>
-      <details>
-        <summary>Apa bedanya PHQ-9/GAD-7 dengan DASS-21 dan WHO-5?</summary>
-        <p>PHQ-9 memetakan gejala depresi dan GAD-7 gejala kecemasan dalam dua minggu terakhir. DASS-21 lebih rinci karena mengukur tiga aspek sekaligus: depresi, kecemasan, dan stres. WHO-5 arahnya sebaliknya — ia mengukur kesejahteraan psikologis, bukan gejala, sehingga skor rendah menjadi penanda untuk memeriksa lebih lanjut.</p>
-      </details>
-      <details>
-        <summary>Bolehkah saya mengerjakan worksheet terapi sendiri?</summary>
-        <p>Boleh. Modul seperti ABCDE, Thinking Traps, Behavioral Activation, Grounding 5-4-3-2-1, dan Psikoedukasi dirancang untuk dikerjakan mandiri. Setiap worksheet bisa disimpan di folder therapy, diunduh, atau dibagikan ke profesional pendampingmu.</p>
-      </details>
-      <details>
-        <summary>Apakah konsultasi bisa memakai BPJS?</summary>
-        <p>Malva sudah menandai profesional yang mendukung BPJS, dan kamu bisa memfilternya saat mencari. Namun klaim atau pembayaran BPJS di dalam aplikasi belum tersedia — untuk rincian biaya dan alur faskes/rujukan, tanyakan langsung kepada profesional yang kamu pilih.</p>
-      </details>
-      <details>
-        <summary>Apakah Malva gratis? Berapa biaya pendampingan?</summary>
-        <p>Mengunduh dan menggunakan fitur mandiri (screening, asesmen, diary, check-in, worksheet) gratis. Pendampingan profesional memakai paket 4 sesi dalam 6 minggu dengan tarif yang tercantum jelas sebelum pemesanan.</p>
-      </details>
-      <details>
-        <summary>Siapa yang bisa melihat data saya?</summary>
-        <p>Hanya kamu dan profesional yang kamu izinkan secara eksplisit — dan hanya bagian yang kamu pilih untuk dibagikan. Kami tidak menjual data, tidak menampilkan iklan, dan tidak memakai data untuk profil iklan. Baca <a href="/privacy.html">Kebijakan Privasi</a>.</p>
-      </details>
-      <details>
-        <summary>Bagaimana cara memasang aplikasinya?</summary>
-        <p>Unduh berkas APK dari halaman ini, lalu izinkan pemasangan dari sumber tak dikenal saat diminta. Setelah terpasang, buat akun dan mulai dari screening awal PHQ-9 dan GAD-7.</p>
-      </details>
+      <details open><summary>Apa itu Malva?</summary><p>Malva adalah aplikasi kesehatan mental dengan screening, pencatatan keseharian, worksheet latihan dan layanan konsultasi bersama psikolog atau psikiater. Fitur mandiri dan MyCare membantu menyiapkan bahan diskusi serta mencatat tindak lanjut.</p></details>
+      <details><summary>Apakah hasil screening merupakan diagnosis?</summary><p>Hasil WHO-5, PHQ-9, GAD-7 dan DASS-21 adalah informasi screening. Kategori skor dan CF tidak menetapkan diagnosis. Diskusikan hasil dan konteks kondisimu dengan profesional.</p></details>
+      <details><summary>Mengapa screening awal dimulai dari WHO-5?</summary><p>WHO-5 mencatat kesejahteraan psikologis. Pada alur awal pasien baru, hasil di bawah 50% atau satu jawaban 0–1 mengaktifkan PHQ-9 dan GAD-7. Skor total WHO-5 tinggi tidak membatalkan kebutuhan tindak lanjut jika ada jawaban 0–1.</p></details>
+      <details><summary>Apa perbedaan keempat screening?</summary><p>PHQ-9 berisi 9 item gejala depresi, GAD-7 berisi 7 item gejala kecemasan, dan WHO-5 berisi 5 item kesejahteraan selama dua minggu terakhir. DASS-21 berisi 21 item selama satu minggu terakhir dengan skor depresi, kecemasan dan stres yang dihitung terpisah. Skor WHO-5 yang lebih tinggi berarti kesejahteraan yang dilaporkan lebih baik.</p></details>
+      <details><summary>Apakah worksheet menggantikan terapi dengan profesional?</summary><p>Worksheet dapat digunakan untuk latihan dan refleksi mandiri, lalu disimpan sebagai Therapy Record. Pemilihan latihan dan penanganan kondisi yang membutuhkan bantuan sebaiknya dibicarakan bersama profesional.</p></details>
+      <details><summary>Berapa lama sesi dan masa berlaku paket?</summary><p>Sesi video baru berdurasi 1 jam. Kamu dapat membeli sesi satu kali atau paket 4 sesi dengan masa berlaku 6 minggu sejak pembayaran. Lihat jadwal, sisa kuota dan tanggal berakhir yang tercantum pada paketmu.</p></details>
+      <details><summary>Apakah chat tersedia sepanjang masa paket?</summary><p>Pengiriman pesan dan akses video mengikuti jendela waktu serta status sesi; paket tidak menyediakan chat bebas sepanjang hari. Riwayat percakapan tetap dapat dibaca. Berbagi record dan akses data sesuai consent dapat tersedia antarsesi selama paket aktif.</p></details>
+      <details><summary>Bagaimana pembayaran dan BPJS?</summary><p>Konsultasi berbayar diproses melalui Midtrans dengan metode yang tersedia saat checkout. Status lunas mengikuti verifikasi pembayaran. Informasi dukungan BPJS pada profil profesional tidak berarti klaim atau pembayaran BPJS dapat dilakukan melalui Malva.</p></details>
+      <details><summary>Apakah psikolog dapat memberikan resep obat?</summary><p>Fitur pengelolaan resep diperuntukkan bagi psikiater terverifikasi. Pasien dapat melihat resep dan mencatat rutinitas obat. Perubahan pengobatan perlu mengikuti arahan tenaga medis yang berwenang.</p></details>
+      <details><summary>Siapa yang dapat melihat data saya?</summary><p>Profesional mengakses data berdasarkan hubungan layanan, izin kategori atau record yang kamu bagikan, dan masa akses yang berlaku. Kamu dapat mengubah izin pada Consent Management. Penarikan izin tidak menghapus pesan atau lampiran yang sebelumnya sudah dikirim. Baca <a href="/privacy.html">Kebijakan Privasi</a>.</p></details>
+      <details><summary>Apa yang perlu diketahui tentang pengingat dan SOS?</summary><p>Pengingat obat dan goals dijadwalkan pada perangkat; penerimaannya bergantung pada izin notifikasi dan pengaturan Android. SOS bergantung pada koneksi, layanan pengiriman dan kesiapan kontak. Status diterima layanan pengirim tidak menjamin kontak sudah membaca atau merespons.</p></details>
+      <details><summary>Bagaimana cara memasang dan memulai?</summary><p>Unduh APK melalui tombol di halaman ini dan ikuti petunjuk pemasangan Android. Buat akun, lengkapi profil dan ikuti tawaran screening awal jika diperlukan. Fitur mandiri tersedia tanpa biaya; tarif layanan profesional ditampilkan sebelum pembayaran.</p></details>
     </section>
-    <div class="status">
-      <strong>Status layanan:</strong> API backend aktif di
-      <a href="https://api.malva.web.id/healthz">api.malva.web.id</a>.
-      Data pasien tersimpan pada server PostgreSQL terenkripsi.
-    </div>
+    <div class="status"><strong>Status layanan:</strong> lihat <a href="/status.html">hasil pemeriksaan layanan Malva</a> beserta waktu pemeriksaannya.</div>
   </main>
-  <footer>
-    <nav>
-      <a href="/">Beranda</a>
-      <a href="/#profesional">Untuk Profesional</a>
-      <a href="/#kepercayaan">Kepercayaan</a>
-      <a href="/status.html">Status Layanan</a>
-      <a href="/privacy.html">Kebijakan Privasi</a>
-      <a href="/terms.html">Syarat &amp; Ketentuan</a>
-      <a href="mailto:halo@malva.web.id">halo@malva.web.id</a>
-    </nav>
-    © 2026 Malva Mental Health
-  </footer>
+  <footer><nav aria-label="Tautan informasi"><a href="/">Beranda</a><a href="/#profesional">Untuk Profesional</a><a href="/#kepercayaan">Skor dan Privasi</a><a href="/status.html">Status Layanan</a><a href="/privacy.html">Kebijakan Privasi</a><a href="/terms.html">Syarat &amp; Ketentuan</a><a href="mailto:halo@malva.web.id">halo@malva.web.id</a></nav>© 2026 Malva Mental Health</footer>
 </body>
 </html>

@@ -80,7 +80,7 @@
         <tr>
           <td>Database</td>
           <td class="value" id="db-status">tidak diperiksa</td>
-          <td>Tidak ada pemeriksaan langsung dari website agar koneksi tidak dibuka publik. Kesehatan database tercermin pada status API.</td>
+          <td>Tidak ada pemeriksaan langsung dari website agar koneksi tidak dibuka publik. Pemeriksaan API tidak membuktikan seluruh fitur atau database berfungsi.</td>
         </tr>
         <tr>
           <td>Aplikasi Android</td>
@@ -99,7 +99,7 @@
     <ul>
       <li>Bila kebijakan lintas-origin mengizinkan, halaman ini memeriksa <code>https://api.malva.web.id/healthz</code> langsung dari perambanmu.</li>
       <li>Bila tidak, halaman ini membaca berkas <code>/status.json</code> — potretan yang ditulis dari sisi server sehingga tetap dapat dibaca meski lintas-origin diblokir.</li>
-      <li>Berkas <code>status.json</code> diperbarui berkala oleh skrip <code>backend/deploy/scripts/status_snapshot.sh</code>, biasanya setiap menit melalui cron.</li>
+      <li>Berkas <code>status.json</code> diperbarui berkala oleh skrip <code>backend/deploy/scripts/status_snapshot.sh</code>, bila penjadwal server diaktifkan. Periksa cap waktu untuk mengetahui umur data.</li>
       <li>Karena itu angka di sini adalah <strong>kondisi saat pemeriksaan terakhir</strong>, bukan waktu nyata ke detik.</li>
     </ul>
 
@@ -147,9 +147,9 @@
         var d = new Date(iso);
         if (isNaN(d.getTime())) return iso;
         try {
-          return d.toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'medium' });
+          return d.toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'medium', timeZone: 'Asia/Jakarta' });
         } catch (e) {
-          return d.toString();
+          return new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(d) + ' WIB';
         }
       }
 
@@ -168,9 +168,9 @@
         dbStatus.textContent = 'Tidak diperiksa';
 
         if (state === 'operational') {
-          setBanner('ok', 'Seluruh layanan beroperasi', source + ' • diperiksa ' + stamp(whenIso));
+          setBanner('ok', 'Endpoint API merespons normal', source + ' • diperiksa ' + stamp(whenIso));
         } else if (state === 'degraded') {
-          setBanner('warning', 'Sebagian layanan terganggu', source + ' • diperiksa ' + stamp(whenIso));
+          setBanner('warning', 'Respons API perlu diperiksa', source + ' • diperiksa ' + stamp(whenIso));
         } else {
           setBanner('error', 'API tidak dapat dijangkau', source + ' • diperiksa ' + stamp(whenIso));
         }
@@ -211,9 +211,9 @@
             return x.r.text().then(function (body) {
               snapNote.hidden = true;
               var ok = /"status"\s*:\s*"ok"/.test(body);
-              apply(ok ? 'operational' : 'degraded', 'Pemeriksaan langsung', new Date().toISOString());
+              apply(ok ? 'operational' : 'degraded', 'Pemeriksaan langsung', new Date());
               apiNote.textContent = 'Endpoint /healthz di api.malva.web.id • ' + x.r.status + ' dalam ' + x.ms + ' ms.';
-              lastCheck.textContent = 'Pemeriksaan langsung: kode HTTP ' + x.r.status + ' dalam ' + x.ms + ' ms pada ' + stamp(new Date().toISOString()) + '.';
+              lastCheck.textContent = 'Pemeriksaan langsung: kode HTTP ' + x.r.status + ' dalam ' + x.ms + ' ms pada ' + stamp(new Date()) + '.';
               return true;
             });
           })
