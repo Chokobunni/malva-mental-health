@@ -1,5 +1,7 @@
 # Therapy Record di chat
 
+- Katalog Psychological Therapy memakai panel pengantar worksheet putih dan kartu nama terapi tanpa deskripsi; ikon dan navigasi detail tetap tersedia. Deskripsi pada detail modul tetap ada. Panel Tentang Consent Management juga putih; pilihan dan penyimpanan consent tidak berubah.
+
 - UI pasien: `lib/src/screens/chat_screen.dart` → “Therapy Record” → pilih satu worksheet dari `isTherapyRecordSubmission`. DASS-21 dan WHO-5 tetap di Assessment Record.
 - `POST /v1/therapy-submissions/{submission_id}/share` memakai `professional_id` yang dipilih. Server memeriksa pemilik worksheet dan paket aktif; izin kategori tidak otomatis diaktifkan oleh UI ini.
 - Endpoint share sudah membuat pesan `worksheet`; jangan lanjut `POST /v1/messages` untuk record yang sama. Muat riwayat untuk menampilkan pesan tersimpan dan bedakan sukses share dari kegagalan konfirmasi chat.

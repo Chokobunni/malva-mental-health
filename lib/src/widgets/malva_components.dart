@@ -360,7 +360,7 @@ class ActionTile extends StatelessWidget {
     super.key,
     required this.icon,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
     required this.onTap,
     this.color = MalvaColors.seed,
     this.maxSubtitleLines,
@@ -368,7 +368,7 @@ class ActionTile extends StatelessWidget {
 
   final IconData icon;
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final VoidCallback onTap;
   final Color color;
 
@@ -393,17 +393,19 @@ class ActionTile extends StatelessWidget {
               children: [
                 Text(title,
                     style: const TextStyle(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  maxLines: maxSubtitleLines,
-                  overflow:
-                      maxSubtitleLines != null ? TextOverflow.ellipsis : null,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Colors.black54),
-                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle!,
+                    maxLines: maxSubtitleLines,
+                    overflow:
+                        maxSubtitleLines != null ? TextOverflow.ellipsis : null,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.black54),
+                  ),
+                ],
               ],
             ),
           ),

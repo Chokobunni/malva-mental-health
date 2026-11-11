@@ -343,9 +343,9 @@ class _ConsentManagementScreenState
                   label: const Text('Simpan Pengaturan'),
                 ),
                 const SizedBox(height: 16),
-                SoftCard(
-                  color: MalvaColors.seed.withValues(alpha: 0.08),
-                  child: const Column(
+                const SoftCard(
+                  color: Colors.white,
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(

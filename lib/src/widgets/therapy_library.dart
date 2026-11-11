@@ -3433,7 +3433,7 @@ class TherapyCatalogScreen extends StatelessWidget {
         padding: const EdgeInsets.all(18),
         children: [
           SoftCard(
-            color: MalvaColors.mint.withValues(alpha: 0.10),
+            color: Colors.white,
             child: Row(
               children: [
                 const Icon(Icons.folder_copy_rounded, color: MalvaColors.mint),
@@ -3469,9 +3469,7 @@ class TherapyCatalogScreen extends StatelessWidget {
                 child: ActionTile(
                   icon: module.icon ?? Icons.self_improvement_rounded,
                   title: module.title,
-                  subtitle: module.description,
                   color: module.color ?? MalvaColors.seed,
-                  maxSubtitleLines: 2,
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(

@@ -459,3 +459,7 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - CF PHQ/GAD yang hilang dipulihkan melalui aturan kanonis dari total/jawaban valid tersimpan. CF valid tersimpan tetap utama; invalid bukan nol, CF gabungan bukan dua CF instrumen. WHO/DASS memerlukan jawaban lengkap berizin. Penolakan detail ID tidak boleh membuka fallback snapshot.
 - Tiga preview Assessment/Therapy Record langsung membuka popup record yang dipilih, termasuk judul berulang; header Lihat semua tetap membuka riwayat. Halaman Asesmen tidak memuat tombol seluruh therapy/worksheet. Respons akun lama dibuang.
 - Rangkuman Sesi chat tampil penuh inline dari snapshot goals/insight tersimpan, tanpa dropdown/detail popup. Target mingguan valid 1–7; detail hilang tidak diganti target buatan. Rujukan: [rencana](../docs/superpowers/plans/2026-11-11-record-presence-corrections.md), [screening](skills/screening_module.md), [therapy/chat](skills/therapy_chat_module.md).
+
+## Tampilan katalog terapi dan consent (2026-11-11)
+
+- Panel pengantar worksheet Psychological Therapy dan panel Tentang Consent Management memakai latar putih. Kartu katalog terapi menampilkan nama tanpa subteks; ikon, navigasi, deskripsi detail modul dan pengaturan consent tetap dipertahankan. Rujukan: [therapy/chat](skills/therapy_chat_module.md), [rencana](../docs/superpowers/plans/2026-11-11-therapy-consent-polish.md).
