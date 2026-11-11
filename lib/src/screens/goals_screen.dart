@@ -27,9 +27,16 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
   String? _error;
   int _loadRequest = 0;
   late final String _screenOwner;
+  bool _ownerChanged = false;
+  bool _mutating = false;
 
   String _ownerKey(AuthSession? session) =>
       '${session?.role.name}:${session?.backendUserId ?? session?.identifier ?? ''}';
+
+  bool get _isCurrentOwner =>
+      mounted &&
+      !_ownerChanged &&
+      _screenOwner == _ownerKey(ref.read(currentSessionProvider));
 
   /// Pengingat goals harian (notifikasi lokal, bukan push).
   late final GoalReminderService _goalReminder = GoalReminderService(
@@ -41,6 +48,12 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
   void initState() {
     super.initState();
     _screenOwner = _ownerKey(ref.read(currentSessionProvider));
+    ref.listenManual<AuthSession?>(currentSessionProvider, (_, session) {
+      if (_ownerKey(session) != _screenOwner) {
+        _ownerChanged = true;
+        _loadRequest++;
+      }
+    });
     _loadFromServer();
     unawaited(_loadReminderSettings());
   }
@@ -158,11 +171,9 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
 
   /// Goals tersimpan di server sehingga tidak hilang saat aplikasi ditutup.
   Future<void> _loadFromServer() async {
+    if (!_isCurrentOwner) return;
     final request = ++_loadRequest;
-    bool isCurrent() =>
-        mounted &&
-        request == _loadRequest &&
-        _screenOwner == _ownerKey(ref.read(currentSessionProvider));
+    bool isCurrent() => _isCurrentOwner && request == _loadRequest;
     final token = ref.read(currentSessionProvider)?.accessToken;
     if (token == null || token.isEmpty) {
       if (isCurrent()) setState(() => _isLoading = false);
@@ -198,7 +209,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
   @override
   Widget build(BuildContext context) {
     ref.watch(currentSessionProvider);
-    if (_screenOwner != _ownerKey(ref.read(currentSessionProvider))) {
+    if (!_isCurrentOwner) {
       return const Scaffold(
           body: Center(
               child: Text('Sesi akun telah berubah. Buka kembali Goals.')));
@@ -218,7 +229,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
     return Scaffold(
       floatingActionButton: FloatingActionButton(
         heroTag: 'goals_add_fab',
-        onPressed: () => _openGoalForm(context, ref),
+        onPressed: _mutating ? null : () => _openGoalForm(context, ref),
         child: const Icon(Icons.add_rounded),
       ),
       body: ListView(
@@ -399,9 +410,15 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
                       for (final goal in _serverGoals) ...[
                         _ServerGoalCard(
                           goal: goal,
-                          onToggle: () => _toggleServerGoal(goal),
-                          onEdit: () =>
-                              _openGoalForm(context, ref, serverGoal: goal),
+                          onToggle:
+                              _mutating ? null : () => _toggleServerGoal(goal),
+                          onEdit: _mutating
+                              ? null
+                              : () =>
+                                  _openGoalForm(context, ref, serverGoal: goal),
+                          onDelete: _mutating
+                              ? null
+                              : () => _deleteGoalFromCard(serverGoal: goal),
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -409,8 +426,14 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
                     for (final goal in localGoals) ...[
                       _GoalCard(
                         goal: goal,
-                        onToggle: () => store.toggleGoal(goal.id),
-                        onEdit: () => _openGoalForm(context, ref, goal: goal),
+                        onToggle:
+                            _mutating ? null : () => store.toggleGoal(goal.id),
+                        onEdit: _mutating
+                            ? null
+                            : () => _openGoalForm(context, ref, goal: goal),
+                        onDelete: _mutating
+                            ? null
+                            : () => _deleteGoalFromCard(goal: goal),
                       ),
                       const SizedBox(height: 12),
                     ],
@@ -463,78 +486,107 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
 
   void _openGoalForm(BuildContext context, WidgetRef ref,
       {GoalItem? goal, BackendGoal? serverGoal}) {
+    if (!_isCurrentOwner || _mutating) return;
     final useServer = serverGoal != null || _hasServer;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => _GoalFormSheet(
-        initialGoal: goal,
-        initialServerGoal: serverGoal,
-        serverMode: useServer,
-        onSave: (savedGoal, serverForm) async {
-          if (serverGoal != null || (_hasServer && serverForm != null)) {
-            await _saveServerGoal(serverGoal, serverForm!);
-          } else {
+      builder: (context) => Consumer(builder: (context, ref, _) {
+        ref.watch(currentSessionProvider);
+        if (!_isCurrentOwner) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Text('Sesi akun telah berubah. Buka kembali Goals.'),
+          );
+        }
+        return _GoalFormSheet(
+          initialGoal: goal,
+          initialServerGoal: serverGoal,
+          serverMode: useServer,
+          onSave: (savedGoal, serverForm) async {
+            if (!_isCurrentOwner) return false;
+            if (useServer) return _saveServerGoal(serverGoal, serverForm!);
             ref.read(malvaStoreProvider.notifier).upsertGoal(savedGoal);
-          }
-          if (context.mounted) Navigator.pop(context);
-        },
-        onDelete: (goal == null && serverGoal == null)
-            ? null
-            : () async {
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    icon: const Icon(Icons.delete_rounded,
-                        color: MalvaColors.danger),
-                    title: const Text('Hapus Goal?'),
-                    content: const Text(
-                        'Tindakan ini tidak dapat dibatalkan. Apakah Anda yakin ingin menghapus goal ini?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Batal'),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        style: compactFilledButtonStyle.copyWith(
-                          backgroundColor:
-                              const WidgetStatePropertyAll(MalvaColors.danger),
-                        ),
-                        child: const Text('Hapus'),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirmed == true) {
-                  if (serverGoal != null) {
-                    await _deleteServerGoal(serverGoal);
-                  } else if (goal != null) {
-                    ref.read(malvaStoreProvider.notifier).deleteGoal(goal.id);
-                  }
-                  if (context.mounted) Navigator.pop(context);
-                }
-              },
-      ),
+            return true;
+          },
+          onDelete: (goal == null && serverGoal == null)
+              ? null
+              : () => _confirmDeleteGoal(goal: goal, serverGoal: serverGoal),
+        );
+      }),
     );
   }
 
-  Future<void> _saveServerGoal(
-      BackendGoal? existing, _ServerGoalForm form) async {
-    final token = ref.read(currentSessionProvider)?.accessToken;
-    if (token == null || token.isEmpty) return;
-    final api = ref.read(apiClientProvider);
+  Future<void> _deleteGoalFromCard(
+      {GoalItem? goal, BackendGoal? serverGoal}) async {
     try {
+      await _confirmDeleteGoal(goal: goal, serverGoal: serverGoal);
+    } on Object catch (error) {
+      if (!_isCurrentOwner) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(friendlyErrorMessage(error)),
+        backgroundColor: MalvaColors.danger,
+      ));
+    }
+  }
+
+  Future<bool> _confirmDeleteGoal(
+      {GoalItem? goal, BackendGoal? serverGoal}) async {
+    if (!_isCurrentOwner || _mutating) return false;
+    setState(() => _mutating = true);
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          icon: const Icon(Icons.delete_rounded, color: MalvaColors.danger),
+          title: const Text('Hapus Goal?'),
+          content: const Text(
+              'Tindakan ini tidak dapat dibatalkan. Apakah Anda yakin ingin menghapus goal ini?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Batal'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: compactFilledButtonStyle.copyWith(
+                backgroundColor:
+                    const WidgetStatePropertyAll(MalvaColors.danger),
+              ),
+              child: const Text('Hapus'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !_isCurrentOwner) return false;
+      if (serverGoal != null) return await _deleteServerGoal(serverGoal);
+      if (goal == null) return false;
+      ref.read(malvaStoreProvider.notifier).deleteGoal(goal.id);
+      return true;
+    } finally {
+      if (mounted) setState(() => _mutating = false);
+    }
+  }
+
+  Future<bool> _saveServerGoal(
+      BackendGoal? existing, _ServerGoalForm form) async {
+    if (!_isCurrentOwner || _mutating) return false;
+    final token = ref.read(currentSessionProvider)?.accessToken;
+    if (token == null || token.isEmpty) return false;
+    final api = ref.read(apiClientProvider);
+    setState(() => _mutating = true);
+    try {
+      final BackendGoal saved;
       if (existing == null) {
-        await api.createGoal(
+        saved = await api.createGoal(
           accessToken: token,
           title: form.title,
           category: form.category,
           targetPerWeek: form.targetPerWeek,
         );
       } else {
-        await api.updateGoal(
+        saved = await api.updateGoal(
           accessToken: token,
           goalId: existing.id,
           title: form.title,
@@ -542,8 +594,16 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
           targetPerWeek: form.targetPerWeek,
         );
       }
+      if (!_isCurrentOwner) return false;
+      setState(() => _serverGoals = [
+            if (existing == null) ..._serverGoals,
+            if (existing == null) saved,
+            if (existing != null)
+              for (final goal in _serverGoals)
+                goal.id == existing.id ? saved : goal,
+          ]);
       await _loadFromServer();
-      if (mounted) {
+      if (_isCurrentOwner) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Goal tersimpan di server.'),
@@ -551,32 +611,24 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
           ),
         );
       }
-    } on Object catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: MalvaColors.danger),
-      );
+      return _isCurrentOwner;
+    } finally {
+      if (mounted) setState(() => _mutating = false);
     }
   }
 
-  Future<void> _deleteServerGoal(BackendGoal goal) async {
+  Future<bool> _deleteServerGoal(BackendGoal goal) async {
+    if (!_isCurrentOwner) return false;
     final token = ref.read(currentSessionProvider)?.accessToken;
-    if (token == null || token.isEmpty) return;
-    try {
-      await ref
-          .read(apiClientProvider)
-          .deleteGoal(accessToken: token, goalId: goal.id);
-      await _loadFromServer();
-    } on Object catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: MalvaColors.danger),
-      );
-    }
+    if (token == null || token.isEmpty) return false;
+    await ref
+        .read(apiClientProvider)
+        .deleteGoal(accessToken: token, goalId: goal.id);
+    if (!_isCurrentOwner) return false;
+    setState(() =>
+        _serverGoals = _serverGoals.where((g) => g.id != goal.id).toList());
+    await _loadFromServer();
+    return _isCurrentOwner;
   }
 }
 
@@ -599,11 +651,13 @@ class _ServerGoalCard extends StatelessWidget {
     required this.goal,
     required this.onToggle,
     required this.onEdit,
+    required this.onDelete,
   });
 
   final BackendGoal goal;
-  final VoidCallback onToggle;
-  final VoidCallback onEdit;
+  final VoidCallback? onToggle;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -647,12 +701,11 @@ class _ServerGoalCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 5,
+                Row(
                   children: [
-                    for (var i = 0; i < 7; i++)
-                      Container(
-                        width: 22,
+                    for (var i = 0; i < 7; i++) ...[
+                      Expanded(
+                          child: Container(
                         height: 8,
                         decoration: BoxDecoration(
                           color: i < goal.doneThisWeek.clamp(0, 7)
@@ -660,7 +713,9 @@ class _ServerGoalCard extends StatelessWidget {
                               : Colors.black12,
                           borderRadius: BorderRadius.circular(999),
                         ),
-                      ),
+                      )),
+                      if (i < 6) const SizedBox(width: 5),
+                    ],
                   ],
                 ),
               ],
@@ -670,6 +725,12 @@ class _ServerGoalCard extends StatelessWidget {
             tooltip: 'Edit goal',
             onPressed: onEdit,
             icon: const Icon(Icons.edit_rounded),
+          ),
+          IconButton(
+            tooltip: 'Hapus goal',
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline_rounded,
+                color: MalvaColors.danger),
           ),
         ],
       ),
@@ -682,11 +743,13 @@ class _GoalCard extends StatelessWidget {
     required this.goal,
     required this.onToggle,
     required this.onEdit,
+    required this.onDelete,
   });
 
   final GoalItem goal;
-  final VoidCallback onToggle;
-  final VoidCallback onEdit;
+  final VoidCallback? onToggle;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -728,12 +791,11 @@ class _GoalCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text('${goal.frequency} - reminder $time'),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 5,
+                Row(
                   children: [
-                    for (var i = 0; i < 7; i++)
-                      Container(
-                        width: 22,
+                    for (var i = 0; i < 7; i++) ...[
+                      Expanded(
+                          child: Container(
                         height: 8,
                         decoration: BoxDecoration(
                           color: i < goal.streakDays.clamp(0, 7).toInt()
@@ -741,7 +803,9 @@ class _GoalCard extends StatelessWidget {
                               : Colors.black12,
                           borderRadius: BorderRadius.circular(999),
                         ),
-                      ),
+                      )),
+                      if (i < 6) const SizedBox(width: 5),
+                    ],
                   ],
                 ),
               ],
@@ -751,6 +815,12 @@ class _GoalCard extends StatelessWidget {
             tooltip: 'Edit goal',
             onPressed: onEdit,
             icon: const Icon(Icons.edit_rounded),
+          ),
+          IconButton(
+            tooltip: 'Hapus goal',
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline_rounded,
+                color: MalvaColors.danger),
           ),
         ],
       ),
@@ -772,8 +842,8 @@ class _GoalFormSheet extends StatefulWidget {
   final bool serverMode;
 
   /// Callback: (goal lokal, form server). Salah satu terisi sesuai mode.
-  final void Function(GoalItem, _ServerGoalForm?) onSave;
-  final VoidCallback? onDelete;
+  final Future<bool> Function(GoalItem, _ServerGoalForm?) onSave;
+  final Future<bool> Function()? onDelete;
 
   @override
   State<_GoalFormSheet> createState() => _GoalFormSheetState();
@@ -786,6 +856,9 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
   late TimeOfDay _reminder;
   late int _targetPerWeek;
   late String _category;
+  bool _busy = false;
+  String? _error;
+  String? _titleError;
 
   bool get _isEditing =>
       widget.initialGoal != null || widget.initialServerGoal != null;
@@ -838,9 +911,14 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
             ),
             const SizedBox(height: 14),
             TextField(
+              enabled: !_busy,
               controller: _title,
               textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: 'Goal title'),
+              onChanged: (_) {
+                if (_titleError != null) setState(() => _titleError = null);
+              },
+              decoration: InputDecoration(
+                  labelText: 'Goal title', errorText: _titleError),
             ),
             const SizedBox(height: 10),
             if (widget.serverMode) ...[
@@ -850,9 +928,12 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
                 items: [
                   for (final (value, label) in _categories)
                     DropdownMenuItem(value: value, child: Text(label)),
+                  if (!_categories.any((item) => item.$1 == _category))
+                    DropdownMenuItem(value: _category, child: Text(_category)),
                 ],
-                onChanged: (value) =>
-                    setState(() => _category = value ?? _category),
+                onChanged: _busy
+                    ? null
+                    : (value) => setState(() => _category = value ?? _category),
               ),
               const SizedBox(height: 10),
               Row(
@@ -862,7 +943,7 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
                         style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
                   IconButton(
-                    onPressed: _targetPerWeek > 1
+                    onPressed: !_busy && _targetPerWeek > 1
                         ? () => setState(() => _targetPerWeek--)
                         : null,
                     icon: const Icon(Icons.remove_circle_outline_rounded),
@@ -871,7 +952,7 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
                       style: const TextStyle(
                           fontWeight: FontWeight.w900, fontSize: 18)),
                   IconButton(
-                    onPressed: _targetPerWeek < 7
+                    onPressed: !_busy && _targetPerWeek < 7
                         ? () => setState(() => _targetPerWeek++)
                         : null,
                     icon: const Icon(Icons.add_circle_outline_rounded),
@@ -889,12 +970,14 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
                   DropdownMenuItem(
                       value: 'Sesuai sesi', child: Text('Sesuai sesi')),
                 ],
-                onChanged: (value) =>
-                    setState(() => _frequency = value ?? _frequency),
+                onChanged: _busy
+                    ? null
+                    : (value) =>
+                        setState(() => _frequency = value ?? _frequency),
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
-                onPressed: _pickTime,
+                onPressed: _busy ? null : _pickTime,
                 icon: const Icon(Icons.schedule_rounded),
                 label: Text(
                   'Reminder ${_reminder.hour.toString().padLeft(2, '0')}:${_reminder.minute.toString().padLeft(2, '0')}',
@@ -902,6 +985,7 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
               ),
               const SizedBox(height: 10),
               TextField(
+                enabled: !_busy,
                 controller: _note,
                 minLines: 2,
                 maxLines: 4,
@@ -909,14 +993,19 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
               ),
             ],
             const SizedBox(height: 16),
+            if (_error != null) ...[
+              Text(_error!, style: const TextStyle(color: MalvaColors.danger)),
+              const SizedBox(height: 8),
+            ],
+            if (_busy) const Text('Memproses...', textAlign: TextAlign.center),
             FilledButton(
-              onPressed: _save,
+              onPressed: _busy ? null : _save,
               child: Text(_isEditing ? 'Save Goal' : 'Create Goal'),
             ),
             if (widget.onDelete != null) ...[
               const SizedBox(height: 8),
               TextButton.icon(
-                onPressed: widget.onDelete,
+                onPressed: _busy ? null : () => _submit(widget.onDelete!),
                 icon: const Icon(Icons.delete_rounded),
                 label: const Text('Delete Goal'),
                 style:
@@ -935,26 +1024,46 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
     if (picked != null) setState(() => _reminder = picked);
   }
 
-  void _save() {
+  Future<void> _submit(Future<bool> Function() action) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final success = await action();
+      if (mounted && success) Navigator.of(context).pop();
+    } on Object catch (error) {
+      if (mounted) setState(() => _error = friendlyErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _save() async {
+    final title = _title.text.trim();
+    if (title.isEmpty) {
+      setState(() => _titleError = 'Judul goal wajib diisi.');
+      return;
+    }
     final existingGoal = widget.initialGoal;
-    final title = _title.text.trim().isEmpty ? 'Goal baru' : _title.text.trim();
-    widget.onSave(
-      GoalItem(
-        id: existingGoal?.id ?? 'goal_${wibNow().millisecondsSinceEpoch}',
-        title: title,
-        frequency: _frequency,
-        streakDays: existingGoal?.streakDays ?? 0,
-        completedToday: existingGoal?.completedToday ?? false,
-        reminder: _reminder,
-        note: _note.text.trim(),
-      ),
-      widget.serverMode
-          ? _ServerGoalForm(
-              title: title,
-              category: _category,
-              targetPerWeek: _targetPerWeek,
-            )
-          : null,
-    );
+    await _submit(() => widget.onSave(
+          GoalItem(
+            id: existingGoal?.id ?? 'goal_${wibNow().millisecondsSinceEpoch}',
+            title: title,
+            frequency: _frequency,
+            streakDays: existingGoal?.streakDays ?? 0,
+            completedToday: existingGoal?.completedToday ?? false,
+            reminder: _reminder,
+            note: _note.text.trim(),
+          ),
+          widget.serverMode
+              ? _ServerGoalForm(
+                  title: title,
+                  category: _category,
+                  targetPerWeek: _targetPerWeek,
+                )
+              : null,
+        ));
   }
 }

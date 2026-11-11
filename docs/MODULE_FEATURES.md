@@ -41,7 +41,7 @@ Home pasien mengikuti referensi dengan check-in5langkah (mood, obat, tidur, ener
 | FEAT-021 | Diary (CRUD + feedback) | Pasien | `/v1/diary-entries` (GET/POST/PUT/DELETE/PATCH) | Aktif |
 | FEAT-022 | Manajemen obat | Pasien | `/v1/medications` (GET/POST/PUT/DELETE) | Aktif |
 | FEAT-023 | Log minum obat | Pasien | `GET /v1/medication-logs`, `POST /v1/medication-logs` | Aktif |
-| FEAT-024 | Goals & habit | Pasien | `/v1/goals`, `/v1/habit-logs` | Aktif |
+| FEAT-024 | Goals & habit: tambah, edit, hapus dengan konfirmasi dan retry | Pasien | `/v1/goals`, `/v1/habit-logs` | Aktif |
 | FEAT-025 | Therapy worksheet (simpan/bagikan) | Pasien, Profesional | `/v1/therapy-submissions` | Aktif |
 | FEAT-026 | Timeline aktivitas | Semua | `GET /v1/timeline` | Aktif |
 

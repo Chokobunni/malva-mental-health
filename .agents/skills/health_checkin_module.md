@@ -1,5 +1,11 @@
 # Check-in, diary, review dan PDF
 
+## CRUD Goals & Habits pasien (2026-11-11)
+
+- Tambah, edit dan hapus memakai `/v1/goals` dan PATCH/DELETE ID milik pasien yang diperiksa server. Kartu menyediakan edit/hapus; hapus dari kartu/form selalu dikonfirmasi. Mode lokal tetap kompatibel.
+- Form menunggu hasil dan mengunci submit selama request, menampilkan error serta mempertahankan input untuk retry. Judul wajib terisi; kategori tersimpan di luar opsi bawaan dipertahankan. Respons sukses menjadi sumber tampilan sebelum refresh sehingga kegagalan reload tidak mengembalikan goal yang sudah dihapus/diubah. Perubahan akun membuang editor lama dan menolak mutasi/hasil async lama, termasuk A→B→A; rotasi token pemilik sama tidak membuang input.
+- Uji: `test/patient_goals_crud_test.dart`, `clinical_sync_revision_test.dart`, `malva_store_edit_test.dart`, `goal_reminder_test.dart`.
+
 ## Home dan halaman check-in referensi (2026-11-11)
 
 - Home memiliki lima tahap: mood → obat → tidur → energi → kecemasan/iritabilitas. Total selalu5, termasuk obat tahap2; user telah mengonfirmasi. Pilihan balik dipertahankan dan nilai0 sah. Semua metrik dikirim sesuai pilihan, tanpa substitusi nilai tetap.

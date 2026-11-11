@@ -463,3 +463,7 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 ## Tampilan katalog terapi dan consent (2026-11-11)
 
 - Panel pengantar worksheet Psychological Therapy dan panel Tentang Consent Management memakai latar putih. Kartu katalog terapi menampilkan nama tanpa subteks; ikon, navigasi, deskripsi detail modul dan pengaturan consent tetap dipertahankan. Rujukan: [therapy/chat](skills/therapy_chat_module.md), [rencana](../docs/superpowers/plans/2026-11-11-therapy-consent-polish.md).
+
+## CRUD goals pasien (2026-11-11)
+
+- Kartu Goals & Habits pasien menyediakan edit dan hapus langsung, memakai API ownership yang sudah ada dan konfirmasi sebelum hapus. Form menunggu hasil, mencegah submit ganda, mempertahankan input saat gagal dan menolak judul kosong. Kategori tersimpan di luar pilihan bawaan tetap kompatibel. Pergantian akun, termasuk A→B→A, menonaktifkan layar/editor lama; refresh token pemilik sama tetap sah. Rujukan: [check-in](skills/health_checkin_module.md), [rencana](../docs/superpowers/plans/2026-11-11-patient-goals-crud.md).
