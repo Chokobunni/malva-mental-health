@@ -37,4 +37,18 @@ Independent read-only review found two UAT ambiguities, both corrected: an obser
 
 Before landing deployment, `/app/version.json` reports version 0.1.21/build 22. Public APK: 31,994,087 bytes, SHA-256 `d56c1b2210764ad7d93f5c7d1c845a3804f67c3e4a5dbbdef0fdf44dc8ee3ccb`.
 
-`Deploy Website` synchronizes only `backend/deploy/landing/` and excludes `downloads/`. Flutter web is served from separate `/var/www/malva-app`. Backend, APK and Flutter web deployment workflows do not match this change's paths. Production verification and workflow results will be recorded after push.
+`Deploy Website` synchronizes only `backend/deploy/landing/` and excludes `downloads/`. Flutter web is served from separate `/var/www/malva-app`. Backend, APK and Flutter web deployment workflows do not match this change's paths.
+
+Release commit `c2ab8f861b03328be9ac1ec8dea30c30215c47a7` was pushed atomically to `main` and `codex/chat-mycare-reference`.
+
+| Workflow | Result | Evidence |
+|---|---|---|
+| Deploy Website | Success | [43058008717](https://github.com/Chokobunni/malva-mental-health/actions/runs/43058008717) |
+| Security Gates | Success | [43058009045](https://github.com/Chokobunni/malva-mental-health/actions/runs/43058009045) |
+| Go Backend CI | Failure in one unchanged booking test; later jobs skipped | [43058008874](https://github.com/Chokobunni/malva-mental-health/actions/runs/43058008874) |
+
+Production HTTP checks matched the committed bytes for homepage, privacy, terms, status, sitemap and both changed illustrations. Browser refresh showed the new homepage, FAQ expanded correctly, and the status page returned API HTTP 200 with the check time in WIB. Temporary viewport overrides were reset. Public `/app/version.json` remains 0.1.21/build 22. APK size and SHA-256 match the baseline above exactly. API `/healthz` returned `{"status":"ok"}`. No API, APK or Flutter web deployment was triggered.
+
+### CI limitation investigated
+
+At 23:27 WIB, `TestLegacyResumeBindsSelectedPackageAmongDuplicatePendingPurchases` failed with HTTP 400 `slot di luar jam praktik profesional`. Its fixture at `backend/internal/server/booking_payment_retry_test.go` uses `clock.Now().AddDate(0, 0, 4)` and a practice window 00:00–23:59. `createPendingBookingAt` preserves that time and creates a 60-minute booking; `validateSlotWindow` correctly rejects a session ending after that day's 23:59. Thus runs after 22:59 WIB can fail independently of landing content. The test's owning file last changed in `11a01e0` and is unchanged by this release. No test or application code was modified to mask this result or expand the website-only deployment scope. Local Go test success therefore must not be represented as full CI success.

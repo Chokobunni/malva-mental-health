@@ -15,7 +15,7 @@
 - [x] Create printable UAT questionnaire PDF. Separate functional task outcomes and subjective ratings; distinguish nine patient forms from one psychologist form; blank recap and explicit denominators. An optional Word draft is excluded from delivery because its native renderer is unavailable.
 - [x] Create scoring PDF from current code: item scales, cutoffs, DASS mapping, WHO entry gate, PHQ/GAD rule and safety CF, WHO/DASS triage weights, examples, legacy handling and source references.
 - [x] Render and inspect every page, verify calculations and obtain independent content review. Run required relevant gates.
-- [ ] Commit/push landing and documents; follow landing deployment. Verify public content and unchanged /app version and APK hash.
+- [x] Commit/push landing and documents; follow landing deployment. Verify public content and unchanged /app version and APK hash. Landing deployment and Security Gates succeeded. Backend CI exposed an unchanged time-dependent booking test failure; evidence and scope decision are recorded in QA.
 
 ## Review focus
 
