@@ -37,3 +37,10 @@ Red evidence: a completed active legacy goal produced no daily registration. Gre
 - git diff --check — passed.
 
 The tests exercise real UI, API client, app coordination and reminder rules; HTTP and OS/storage boundaries are replaced. Existing retry, mutation-lock, legacy, account A→B→A and lifecycle regressions remain passing. No physical OS-delivery claim is made. No push, deployment or release was performed in this fix wave; final re-review/release belongs to the root task.
+
+## Independent scoped re-review
+
+Base 2d53ffe to 4ed6d1e: all three findings ADDRESSED, no new Critical/Important
+breakage and no out-of-scope observations. Reviewer approved the fix round.
+The root subsequently reran the full suite:1199 passed. Final web and signed
+universal APK builds passed, and Android startup reached role selection.

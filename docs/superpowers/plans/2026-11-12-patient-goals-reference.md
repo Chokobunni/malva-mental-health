@@ -43,6 +43,6 @@
 - [x] Add failing tests for next due reminders and account cleanup; implement bounded schedule replacement.
 - [x] Render seven screens and narrow/large text; combine normalized references and captures.
 - [x] Correct visible mismatches, repeat capture and classify residual differences.
-- [ ] Independent code review; fix confirmed findings.
+- [x] Independent code review; fix confirmed findings.
 - [x] Run full Flutter tests/analyzer and required policy/backend gates once after final changes.
-- [ ] Commit verified changes, release and report exact verification limits.
+- [x] Commit verified changes, release and report exact verification limits.
