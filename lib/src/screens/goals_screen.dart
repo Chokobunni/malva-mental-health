@@ -543,7 +543,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                   configured.reminders.isNotEmpty)
                 Tooltip(
                     message:
-                        'Pengingat pukul ${configured.time.replaceAll(':', '.')} WIB',
+                        'Pengingat aktif • jadwal pukul ${configured.time.replaceAll(':', '.')} WIB',
                     child: const Icon(Icons.notifications_active_outlined,
                         color: goalPurple, size: 17)),
               if (goal.streakDays > 0)

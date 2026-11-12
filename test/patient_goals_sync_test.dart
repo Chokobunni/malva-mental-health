@@ -295,7 +295,7 @@ void main() {
             'time': value == 2 ? '' : '06:30',
             'reminders': value == 0 ? [] : [0]
           }));
-      expect(find.byTooltip('Pengingat pukul 06.30 WIB'),
+      expect(find.byTooltip('Pengingat aktif • jadwal pukul 06.30 WIB'),
           value == 1 ? findsOneWidget : findsNothing);
     });
   }
