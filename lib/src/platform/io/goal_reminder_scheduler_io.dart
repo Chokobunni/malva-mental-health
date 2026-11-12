@@ -119,6 +119,24 @@ class LocalNotificationGoalReminderScheduler implements GoalReminderScheduler {
   }
 
   @override
+  Future<void> scheduleOnce(
+      {required int id,
+      required String title,
+      required String body,
+      required DateTime scheduledAt,
+      required String payload}) async {
+    await _plugin.zonedSchedule(
+      id: id,
+      title: title,
+      body: body,
+      scheduledDate: tz.TZDateTime.from(scheduledAt, wibLocation),
+      notificationDetails: _notificationDetails(),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: payload,
+    );
+  }
+
+  @override
   Future<void> cancel(int id) async {
     try {
       await _plugin.cancel(id: id);

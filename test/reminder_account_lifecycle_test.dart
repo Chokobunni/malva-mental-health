@@ -65,12 +65,28 @@ class _MedicationScheduler extends MedicationReminderService {
 
 class _GoalScheduler extends GoalReminderService {
   final List<bool> scheduled = [];
+  final List<List<String>> snapshots = [];
   int cancellations = 0;
   @override
   Future<void> initialize() async {}
   @override
   Future<GoalReminderSettings> loadSettings() async =>
       const GoalReminderSettings();
+  @override
+  Future<void> syncGoals(
+      {required List<BackendGoal> goals,
+      required GoalReminderSettings settings,
+      DateTime? now,
+      bool Function()? isCurrent}) async {
+    if (!(isCurrent?.call() ?? true)) return;
+    snapshots.add(goals.map((goal) => goal.id).toList());
+    await sync(
+        hasActiveGoals: goals.any((goal) => goal.isActive),
+        enabled: settings.enabled,
+        hour: settings.hour,
+        minute: settings.minute);
+  }
+
   @override
   Future<void> sync(
       {required bool hasActiveGoals,
@@ -234,6 +250,56 @@ void main() {
     await _flush(tester);
     expect(goals.scheduled, isEmpty);
     expect(goals.cancellations, greaterThan(0));
+    await tester.pumpWidget(const SizedBox());
+    container.dispose();
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('clinical revisions and resume refresh the goal schedule',
+      (tester) async {
+    var fetches = 0;
+    final goals = _GoalScheduler();
+    final container =
+        await mount(tester, _MedicationScheduler(), goals, () async {
+      fetches++;
+      return _goals();
+    });
+    container.read(authStateProvider.notifier).setSession(_patient);
+    await _flush(tester);
+    expect(fetches, 1);
+    container.read(clinicalDataRevisionProvider.notifier).state++;
+    await _flush(tester);
+    expect(fetches, 2);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _flush(tester);
+    expect(fetches, 3);
+    expect(goals.snapshots, [
+      ['g'],
+      ['g'],
+      ['g']
+    ]);
+    await tester.pumpWidget(const SizedBox());
+    container.dispose();
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('older goal fetch cannot replace a newer revised schedule',
+      (tester) async {
+    final first = Completer<http.Response>();
+    var fetches = 0;
+    final goals = _GoalScheduler();
+    final container =
+        await mount(tester, _MedicationScheduler(), goals, () async {
+      fetches++;
+      return fetches == 1 ? first.future : http.Response('{"goals":[]}', 200);
+    });
+    container.read(authStateProvider.notifier).setSession(_patient);
+    await _flush(tester);
+    container.read(clinicalDataRevisionProvider.notifier).state++;
+    await _flush(tester);
+    first.complete(_goals());
+    await _flush(tester);
+    expect(goals.snapshots, [<String>[]]);
     await tester.pumpWidget(const SizedBox());
     container.dispose();
     await tester.pump(const Duration(seconds: 2));

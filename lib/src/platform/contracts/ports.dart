@@ -83,7 +83,7 @@ abstract interface class ReminderScheduler {
   Stream<String> get inAppDueReminders;
 }
 
-/// Penjadwal notifikasi LOKAL untuk pengingat goals harian.
+/// Penjadwal notifikasi LOKAL untuk goals terkonfigurasi dan goal lama harian.
 ///
 /// Kenapa port: kode yang menyentuh `flutter_local_notifications` wajib
 /// berada di `lib/src/platform/` (gate isolasi platform). Implementasi io
@@ -95,6 +95,15 @@ abstract interface class GoalReminderScheduler {
   /// Jadwalkan satu notifikasi harian berulang pada jam [scheduledAt]
   /// (komponen jam/menit dipakai berulang setiap hari, zona WIB).
   Future<void> scheduleDaily({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime scheduledAt,
+    required String payload,
+  });
+
+  /// Jadwalkan satu pengingat pada instant WIB, tanpa pengulangan OS.
+  Future<void> scheduleOnce({
     required int id,
     required String title,
     required String body,

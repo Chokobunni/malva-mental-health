@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:timezone/timezone.dart' as tz;
 
@@ -5,6 +7,7 @@ import '../platform/contracts/ports.dart';
 import '../platform/platform_factory.dart';
 import '../time/wib.dart';
 import 'local_notification_router.dart';
+import 'malva_api_client.dart';
 
 /// Preferensi pengingat goals harian milik satu pasien.
 class GoalReminderSettings {
@@ -36,7 +39,7 @@ class GoalReminderSettings {
       '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
 }
 
-/// Pengingat harian untuk mencatat progres goals (notifikasi LOKAL).
+/// Pengingat terjadwal goals serta pengingat harian untuk goal lama (LOKAL).
 ///
 /// KENAPA LOKAL: kebijakan push hanya mengizinkan FCM untuk chat. Pengingat
 /// goals (dan obat) dijadwalkan di perangkat agar tidak menambah push dari
@@ -62,8 +65,131 @@ class GoalReminderService {
   final SecureStore _store;
   final GoalReminderScheduler _scheduler;
 
-  /// Id tetap: hanya ada SATU pengingat goals per perangkat/pasien, sehingga
-  /// menjadwalkan ulang selalu menimpa jadwal sebelumnya (tidak menumpuk).
+  Future<void> _work = Future<void>.value();
+  Future<void>? _initialization;
+  int _generation = 0;
+  static const int maxScheduledReminders = 48;
+  static const int firstConfiguredId = 930000;
+  static const String scheduledIdsStorageKey = 'malva_goal_scheduled_ids';
+
+  /// Earliest future alarms, bounded to one year of upcoming occurrences.
+  /// Offsets may cross midnight; completion applies to the occurrence's day.
+  static List<DateTime> upcomingReminders(BackendGoal goal,
+      {DateTime? now, int limit = maxScheduledReminders}) {
+    final details = goal.details;
+    if (!goal.isActive || details == null || limit < 1) return [];
+    final time = RegExp(r'^(\d{2}):(\d{2})$').firstMatch(details.time);
+    if (time == null) return [];
+    final hour = int.parse(time[1]!);
+    final minute = int.parse(time[2]!);
+    if (hour > 23 || minute > 59) return [];
+    final base = toWib(now ?? wibNow());
+    final offsets =
+        details.reminders.where((n) => n >= 0 && n <= 10080).toSet();
+    final alarms = <int, DateTime>{};
+    for (var day = 0; day <= 370; day++) {
+      final date = wibFromParts(base.year, base.month, base.day + day);
+      if (!details.isDueOn(date) || (day == 0 && goal.doneToday == true)) {
+        continue;
+      }
+      final occurrence =
+          wibFromParts(date.year, date.month, date.day, hour, minute);
+      for (final offset in offsets) {
+        final alarm = occurrence.subtract(Duration(minutes: offset));
+        if (alarm.isAfter(base)) alarms[alarm.millisecondsSinceEpoch] = alarm;
+      }
+    }
+    final sorted = alarms.values.toList()..sort();
+    return sorted.take(limit).toList(growable: false);
+  }
+
+  /// Replace the local snapshot. Generation checks surround asynchronous OS
+  /// work so logout/account changes cannot leave a late alarm behind.
+  Future<void> syncGoals(
+      {required List<BackendGoal> goals,
+      required GoalReminderSettings settings,
+      DateTime? now,
+      bool Function()? isCurrent}) {
+    if (!_enabled) return Future<void>.value();
+    final generation = ++_generation;
+    bool current() => generation == _generation && (isCurrent?.call() ?? true);
+    final base = now ?? wibNow();
+    _work = _work.then((_) async {
+      if (!current()) return;
+      await initialize();
+      if (!current()) return;
+      await _cancelConfigured();
+      if (!current()) return;
+      final alarms = goals
+          .expand((goal) => upcomingReminders(goal, now: base))
+          .toList()
+        ..sort();
+      final bounded = alarms.take(maxScheduledReminders).toList();
+      // Persist before OS writes: process death must not orphan an alarm.
+      await _store.write(
+          scheduledIdsStorageKey,
+          jsonEncode(
+              List.generate(bounded.length, (i) => firstConfiguredId + i)));
+      for (var i = 0; i < bounded.length; i++) {
+        if (!current()) break;
+        await _scheduler.scheduleOnce(
+            id: firstConfiguredId + i,
+            title: title,
+            body: body,
+            scheduledAt: bounded[i],
+            payload: payload);
+      }
+      if (!current()) {
+        await _cancelConfigured();
+        await _scheduler.cancel(notificationId);
+        return;
+      }
+      await sync(
+          hasActiveGoals: goals.any(
+              (g) => g.isActive && g.details == null && g.doneToday != true),
+          enabled: settings.enabled,
+          hour: settings.hour,
+          minute: settings.minute);
+      if (!current()) {
+        await _cancelConfigured();
+        await _scheduler.cancel(notificationId);
+      }
+    }).catchError((Object _) {
+      // OS permission/network-independent storage failures must not block boot.
+      if (kDebugMode) debugPrint('Gagal menyinkronkan pengingat goals');
+    });
+    return _work;
+  }
+
+  Future<void> _cancelConfigured() async {
+    // A reserved bounded ID range also recovers schedules when storage was
+    // lost/corrupted. Only this service uses these IDs.
+    final ids =
+        List.generate(maxScheduledReminders, (i) => firstConfiguredId + i)
+            .toSet();
+    try {
+      final raw = await _store.read(scheduledIdsStorageKey);
+      if (raw != null) {
+        final stored = jsonDecode(raw);
+        if (stored is List) {
+          ids.addAll(stored.whereType<int>().where((id) =>
+              id >= firstConfiguredId &&
+              id < firstConfiguredId + maxScheduledReminders));
+        }
+      }
+    } on Object {/* Reserved range remains authoritative. */}
+    for (final id in ids) {
+      await _scheduler.cancel(id);
+    }
+    try {
+      await _store.delete(scheduledIdsStorageKey);
+    } on Object {
+      // The bounded ID range remains cancellable on the next run even when
+      // storage is unavailable. Continue cancelling the legacy OS alarm.
+    }
+  }
+
+  /// Id tetap untuk satu pengingat harian goal lama tanpa konfigurasi.
   static const int notificationId = 920001;
 
   /// Kunci penyimpanan preferensi (SecureStore).
@@ -83,15 +209,19 @@ class GoalReminderService {
       'Catat progres goals-mu sebentar saja — konsistensi kecil berarti besar.';
 
   /// Siapkan kanal notifikasi, izin, dan handler tap (sekali per proses).
-  Future<void> initialize() async {
-    if (!_enabled) return;
+  Future<void> initialize() {
+    if (!_enabled) return Future<void>.value();
+    return _initialization ??= _initialize();
+  }
+
+  Future<void> _initialize() async {
     // WAJIB lewat initializeWib(): memaksa zona lokal proses ke Asia/Jakarta.
     initializeWib();
     try {
       await _scheduler.initialize();
-    } on Object catch (error) {
+    } on Object {
       // Izin/kanal gagal tidak boleh menggagalkan boot aplikasi.
-      if (kDebugMode) debugPrint('Gagal menyiapkan pengingat goals: $error');
+      if (kDebugMode) debugPrint('Gagal menyiapkan pengingat goals');
     }
   }
 
@@ -108,7 +238,7 @@ class GoalReminderService {
   }) async {
     if (!_enabled) return;
     if (!shouldSchedule(hasActiveGoals: hasActiveGoals, enabled: enabled)) {
-      await cancel();
+      await _scheduler.cancel(notificationId);
       return;
     }
 
@@ -127,13 +257,17 @@ class GoalReminderService {
   }
 
   /// Batalkan pengingat goals.
-  Future<void> cancel() async {
-    if (!_enabled) return;
-    try {
+  Future<void> cancel() {
+    if (!_enabled) return Future<void>.value();
+    _generation++;
+    _work = _work.then((_) async {
+      await initialize();
+      await _cancelConfigured();
       await _scheduler.cancel(notificationId);
-    } on Object catch (error) {
-      if (kDebugMode) debugPrint('Gagal membatalkan pengingat goals: $error');
-    }
+    }).catchError((Object _) {
+      if (kDebugMode) debugPrint('Gagal membatalkan pengingat goals');
+    });
+    return _work;
   }
 
   /// Aturan murni: pengingat hanya dijadwalkan bila diaktifkan DAN ada goal
