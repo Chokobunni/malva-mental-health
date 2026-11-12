@@ -98,7 +98,7 @@ func summarizeGoal(g *Goal, logs []HabitLog, on, today time.Time) {
 	}
 	sort.Ints(g.CompletedWeekdays)
 	if g.IsDue {
-		g.FailedToday = (found && !g.DoneToday) || (!found && g.Details != nil && g.Details.AutoFail && !(g.Details.Recurrence == "weekly" && g.Details.WeeklyTarget != nil) && on.Before(goalDay(today)))
+		g.FailedToday = (found && !g.DoneToday) || (!found && g.Details != nil && g.Details.AutoFail && (g.Details.Recurrence != "weekly" || g.Details.WeeklyTarget == nil) && on.Before(goalDay(today)))
 	}
 	g.StreakDays = goalStreak(g.Details, logs, on, today)
 }

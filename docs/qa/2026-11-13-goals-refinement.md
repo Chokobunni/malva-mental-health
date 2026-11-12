@@ -75,3 +75,14 @@ Release workflow results and public APK verification will be recorded below.
 - Local APK: `D:/Project/Malva/2026-07-09/deliverables/2026-11-13-goals-refinement/Malva-0.1.23-24-universal.apk`.
 - This refinement has not been launched in an emulator or physical device;
   reference screens were rendered and inspected through native Flutter tests.
+
+
+## PR gate correction
+
+Initial PR CI found staticcheck QF1001 in the new flexible-week failure guard.
+Applied De Morgan's law without changing behavior. Local golangci-lint2.15.0:
+0 issues. Real-PostgreSQL store/server suites reran successfully after that change.
+Initial Security Gates passed. The advisory Code Review Graph completed analysis
+and rendering, then failed parsing a403 response from the authenticated-user API
+while preparing its sticky comment; it is explicitly advisory in the workflow.
+No permissions or gates were weakened.
