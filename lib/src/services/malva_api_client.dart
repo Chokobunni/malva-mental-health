@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import '../models/goal_details.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -1180,6 +1182,7 @@ class MalvaApiClient {
     required String accessToken,
     String? patientId,
     bool includeInactive = false,
+    String? on,
   }) async {
     final payload = await _sendUri(
       'GET',
@@ -1189,6 +1192,7 @@ class MalvaApiClient {
           if (patientId != null && patientId.trim().isNotEmpty)
             'patient_id': patientId.trim(),
           if (includeInactive) 'include_inactive': 'true',
+          if (on != null) 'on': on,
         },
       ),
       accessToken: accessToken,
@@ -1207,6 +1211,7 @@ class MalvaApiClient {
     int targetPerWeek = 3,
     String? patientId,
     String? idempotencyKey,
+    GoalDetails? details,
   }) async {
     final payload = await _send(
       'POST',
@@ -1220,6 +1225,7 @@ class MalvaApiClient {
         'category': category,
         'target_per_week': targetPerWeek,
         if (patientId != null) 'patient_id': patientId,
+        if (details != null) 'details': details.toJson(),
       },
     );
     return BackendGoal.fromJson(
@@ -1234,6 +1240,7 @@ class MalvaApiClient {
     String? category,
     int? targetPerWeek,
     bool? isActive,
+    GoalDetails? details,
   }) async {
     final payload = await _send(
       'PATCH',
@@ -1244,6 +1251,7 @@ class MalvaApiClient {
         if (category != null) 'category': category,
         if (targetPerWeek != null) 'target_per_week': targetPerWeek,
         if (isActive != null) 'is_active': isActive,
+        if (details != null) 'details': details.toJson(),
       },
     );
     return BackendGoal.fromJson(
@@ -1288,6 +1296,8 @@ class MalvaApiClient {
     required String goalId,
     String? loggedOn,
     bool done = true,
+    int? value,
+    List<String>? completedStepIds,
   }) async {
     final payload = await _send(
       'POST',
@@ -1297,6 +1307,8 @@ class MalvaApiClient {
         'goal_id': goalId,
         if (loggedOn != null) 'logged_on': loggedOn,
         'done': done,
+        if (value != null) 'value': value,
+        if (completedStepIds != null) 'completed_step_ids': completedStepIds,
       },
     );
     return BackendHabitLog.fromJson(
@@ -5306,6 +5318,14 @@ class BackendGoal {
     required this.isActive,
     this.doneThisWeek = 0,
     this.lastLoggedOn,
+    this.details,
+    this.doneToday,
+    this.todayValue = 0,
+    this.todayCompletedStepIds = const [],
+    this.streakDays = 0,
+    this.isDue = true,
+    this.failedToday = false,
+    this.createdAt,
   });
 
   factory BackendGoal.fromJson(Map<String, dynamic> json) {
@@ -5317,6 +5337,21 @@ class BackendGoal {
       isActive: json['is_active'] != false,
       doneThisWeek: (json['done_this_week'] as num?)?.toInt() ?? 0,
       lastLoggedOn: json['last_logged_on']?.toString(),
+      details: json['details'] is Map
+          ? GoalDetails.fromJson(
+              (json['details'] as Map).cast<String, dynamic>())
+          : null,
+      doneToday: json['done_today'] as bool?,
+      todayValue: (json['today_value'] as num?)?.toInt() ?? 0,
+      todayCompletedStepIds: (json['today_completed_step_ids'] as List? ?? [])
+          .whereType<String>()
+          .toList(growable: false),
+      streakDays: (json['streak_days'] as num?)?.toInt() ?? 0,
+      isDue: json['is_due'] != false,
+      failedToday: json['failed_today'] == true,
+      createdAt: json['created_at'] is String
+          ? DateTime.tryParse(json['created_at'] as String)
+          : null,
     );
   }
 
@@ -5327,6 +5362,59 @@ class BackendGoal {
   final bool isActive;
   final int doneThisWeek;
   final String? lastLoggedOn;
+  final GoalDetails? details;
+  final bool? doneToday;
+  final int todayValue, streakDays;
+  final List<String> todayCompletedStepIds;
+  final bool isDue, failedToday;
+  final DateTime? createdAt;
+
+  // Update responses summarize today. Keep the selected day's log when the
+  // user edits from history, including when the subsequent refresh fails.
+  BackendGoal withDefinition(BackendGoal saved, {required DateTime on}) {
+    final d = saved.details;
+    final completed = switch (d?.method) {
+      'numeric' => todayValue >= d!.target,
+      'checklist' =>
+        d!.steps.every((s) => todayCompletedStepIds.contains(s.id)),
+      _ => doneToday,
+    };
+    return BackendGoal(
+      id: saved.id,
+      title: saved.title,
+      category: saved.category,
+      targetPerWeek: saved.targetPerWeek,
+      isActive: saved.isActive,
+      createdAt: saved.createdAt,
+      details: d,
+      doneThisWeek: doneThisWeek,
+      lastLoggedOn: lastLoggedOn,
+      doneToday: completed,
+      todayValue: todayValue,
+      todayCompletedStepIds: todayCompletedStepIds,
+      streakDays: streakDays,
+      isDue: d?.isDueOn(on) ?? true,
+      failedToday: failedToday && completed != true,
+    );
+  }
+
+  BackendGoal withProgress(BackendHabitLog log) => BackendGoal(
+        id: id,
+        title: title,
+        category: category,
+        targetPerWeek: targetPerWeek,
+        isActive: isActive,
+        doneThisWeek: doneThisWeek,
+        lastLoggedOn: lastLoggedOn,
+        details: details,
+        doneToday: log.done,
+        todayValue: log.value,
+        todayCompletedStepIds: log.completedStepIds,
+        streakDays: streakDays,
+        isDue: isDue,
+        failedToday: !log.done,
+        createdAt: createdAt,
+      );
 }
 
 /// Log habit (centang) dari POST/GET /v1/habit-logs.
@@ -5336,6 +5424,8 @@ class BackendHabitLog {
     required this.goalId,
     required this.loggedOn,
     required this.done,
+    this.value = 0,
+    this.completedStepIds = const [],
   });
 
   factory BackendHabitLog.fromJson(Map<String, dynamic> json) {
@@ -5344,6 +5434,10 @@ class BackendHabitLog {
       goalId: json['goal_id']?.toString() ?? '',
       loggedOn: json['logged_on']?.toString() ?? '',
       done: json['done'] == true,
+      value: (json['value'] as num?)?.toInt() ?? 0,
+      completedStepIds: (json['completed_step_ids'] as List? ?? [])
+          .whereType<String>()
+          .toList(growable: false),
     );
   }
 
@@ -5351,6 +5445,8 @@ class BackendHabitLog {
   final String goalId;
   final String loggedOn;
   final bool done;
+  final int value;
+  final List<String> completedStepIds;
 }
 
 /// Worksheet terapi yang tersimpan (GET/POST /v1/therapy-submissions).

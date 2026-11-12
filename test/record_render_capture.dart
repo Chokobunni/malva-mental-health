@@ -15,6 +15,10 @@ Future<void> loadRecordCaptureFonts() async {
         ..addFont(rootBundle.load('assets/fonts/roboto-regular.ttf'))
         ..addFont(rootBundle.load('assets/fonts/roboto-bold.ttf')))
       .load();
+  await (FontLoader('PlusJakartaSans')
+        ..addFont(rootBundle.load('assets/fonts/plus-jakarta-sans-regular.ttf'))
+        ..addFont(rootBundle.load('assets/fonts/plus-jakarta-sans-bold.ttf')))
+      .load();
   await (FontLoader('MaterialIcons')
         ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf')))
       .load();

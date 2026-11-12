@@ -80,7 +80,9 @@ class _MalvaAppState extends ConsumerState<MalvaApp>
   bool _showSplash = true;
   int _reminderGeneration = 0;
   Future<void> _medicationReminderWork = Future<void>.value();
-  Future<void> _goalReminderWork = Future<void>.value();
+  int _goalReminderRequest = 0;
+  int _goalReminderSnapshotRevision = 0;
+  List<BackendGoal> _goalReminderGoals = const [];
   final Set<String> _scheduledMedicationIds = {};
 
   @override
@@ -135,6 +137,8 @@ class _MalvaAppState extends ConsumerState<MalvaApp>
     // Ditunda ke post-frame agar tidak setState saat build/tes.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(ref.read(patientLocationProvider.notifier).resolveOnStartup());
+      final session = ref.read(authStateProvider).session;
+      if (session != null) unawaited(_syncGoalReminder(session));
     });
 
     // Hide splash after delay
@@ -160,7 +164,11 @@ class _MalvaAppState extends ConsumerState<MalvaApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _scheduleAllMedicationReminders();
+    if (state == AppLifecycleState.resumed) {
+      _scheduleAllMedicationReminders();
+      final session = ref.read(authStateProvider).session;
+      if (session != null) unawaited(_syncGoalReminder(session));
+    }
   }
 
   void _scheduleAllMedicationReminders() {
@@ -203,42 +211,73 @@ class _MalvaAppState extends ConsumerState<MalvaApp>
       _scheduledMedicationIds.clear();
       await _medicationReminderService.cancelObsoleteReminders(const []);
     }).catchError((_) {});
-    _goalReminderWork = _goalReminderWork
-        .then((_) => _goalReminderService.cancel())
-        .catchError((_) {});
+    _goalReminderRequest++;
+    _goalReminderSnapshotRevision++;
+    _goalReminderGoals = const [];
+    // cancel invalidates its generation synchronously, including an OS write
+    // already in flight. Do not put this behind an app-level scheduling queue.
+    unawaited(_goalReminderService.cancel().catchError((_) {}));
   }
 
-  /// Sinkronkan pengingat goals harian dengan kondisi akun.
+  /// Sinkronkan pengingat goals dengan kondisi akun dan konfigurasi terbaru.
   ///
-  /// Preferensi (aktif/jam) dibaca dari SecureStore; jumlah goal aktif dari
+  /// Preferensi lama dibaca dari SecureStore; konfigurasi dan progres dari
   /// server. Semua kegagalan (jaringan/izin) diabaikan: pengingat tidak boleh
   /// mengganggu boot aplikasi.
   Future<void> _syncGoalReminder(AuthSession session) async {
     if (!_capabilities.canScheduleOsReminders ||
         session.role != UserRole.patient) return;
     final generation = _reminderGeneration;
+    final request = ++_goalReminderRequest;
+    bool current() =>
+        request == _goalReminderRequest &&
+        _isCurrentReminderSession(session, generation);
     final token = session.accessToken;
     if (token == null || token.isEmpty) return;
     try {
-      final settings = await _goalReminderService.loadSettings();
       final goals = await ref.read(apiClientProvider).listGoals(
             accessToken: token,
             includeInactive: true,
           );
-      final hasActiveGoals = goals.any((goal) => goal.isActive);
-      if (!_isCurrentReminderSession(session, generation)) return;
-      _goalReminderWork = _goalReminderWork.then((_) async {
-        if (!_isCurrentReminderSession(session, generation)) return;
-        await _goalReminderService.sync(
-          hasActiveGoals: hasActiveGoals,
-          enabled: settings.enabled,
-          hour: settings.hour,
-          minute: settings.minute,
-        );
-      }).catchError((_) {});
-      await _goalReminderWork;
+      if (!current()) return;
+      _goalReminderGoals = goals;
+      await _scheduleGoalReminderSnapshot(session);
     } on Object {
       // Offline / izin ditolak: pengingat lama tetap dipakai.
+    }
+  }
+
+  void _applyGoalReminderMutation(GoalReminderMutation mutation) {
+    if (!_capabilities.canScheduleOsReminders ||
+        !_isCurrentReminderSession(mutation.session, _reminderGeneration))
+      return;
+    // Invalidate reads started before the accepted write. Keep other known
+    // goals, so a failed reconciliation cannot discard their valid reminders.
+    _goalReminderRequest++;
+    final saved = mutation.goal;
+    _goalReminderGoals = [
+      for (final goal in _goalReminderGoals)
+        if (goal.id != mutation.deletedId && goal.id != saved?.id) goal,
+      if (saved != null) saved,
+    ];
+    unawaited(_scheduleGoalReminderSnapshot(mutation.session));
+  }
+
+  Future<void> _scheduleGoalReminderSnapshot(AuthSession session) async {
+    final generation = _reminderGeneration;
+    final revision = ++_goalReminderSnapshotRevision;
+    final goals = _goalReminderGoals;
+    bool current() =>
+        revision == _goalReminderSnapshotRevision &&
+        _isCurrentReminderSession(session, generation);
+    try {
+      final settings = await _goalReminderService.loadSettings();
+      if (!current()) return;
+      await _goalReminderService.syncGoals(
+          goals: goals, settings: settings, isCurrent: current);
+    } on Object {
+      // Notification/storage failures do not turn an accepted goal write into
+      // an error in the editor. A later resume/revision retries reconciliation.
     }
   }
 
@@ -396,6 +435,17 @@ class _MalvaAppState extends ConsumerState<MalvaApp>
       if (!identical(previous?.medications, next.medications)) {
         _scheduleAllMedicationReminders();
       }
+    });
+
+    ref.listen<GoalReminderMutation?>(acceptedGoalMutationProvider,
+        (_, mutation) {
+      if (mutation != null) _applyGoalReminderMutation(mutation);
+    });
+
+    ref.listen<int>(clinicalDataRevisionProvider, (_, __) {
+      final session = ref.read(authStateProvider).session;
+      if (session == null || session.role != UserRole.patient) return;
+      unawaited(_syncGoalReminder(session));
     });
 
     // Session expiry auto-redirect

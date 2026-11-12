@@ -108,8 +108,8 @@ Future<ProviderContainer> _open(WidgetTester tester, _GoalServer server,
   return container;
 }
 
-Finder get _title => find.widgetWithText(TextField, 'Goal title');
-Finder get _save => find.widgetWithText(FilledButton, 'Save Goal');
+Finder get _title => find.byKey(const Key('goal-title'));
+Finder get _save => find.widgetWithText(FilledButton, 'Simpan Perubahan');
 
 Future<void> _edit(WidgetTester tester) async {
   await tester.tap(find.byTooltip('Edit goal').first);
@@ -161,8 +161,7 @@ void main() {
       (tester) async {
     final server = _GoalServer();
     final container = await _open(tester, server);
-    await _edit(tester);
-    await _tap(tester, find.text('Delete Goal'));
+    await _tap(tester, find.byTooltip('Hapus goal').first);
     container.read(authStateProvider.notifier).setSession(_nextPatient);
     await tester.pumpAndSettle();
     container.read(authStateProvider.notifier).setSession(_patient);
@@ -227,25 +226,22 @@ void main() {
       (tester) async {
     final server = _GoalServer();
     await _open(tester, server);
-    await tester.tap(find.byIcon(Icons.add_rounded));
+    await _tap(tester, find.text('Baru'));
     await tester.pumpAndSettle();
     await tester.enterText(_title, 'Baca buku');
-    await _tap(tester, find.widgetWithText(FilledButton, 'Create Goal'));
+    await _tap(tester, find.widgetWithText(FilledButton, 'Simpan Target'));
     expect(find.text('Baca buku'), findsOneWidget);
     await _edit(tester);
     await tester.enterText(_title, 'Jalan sore');
-    await _tap(tester, find.byType(DropdownButtonFormField<String>));
-    await _tap(tester, find.text('Kesehatan').last);
-    await tester.tap(find.byIcon(Icons.add_circle_outline_rounded));
     await _tap(tester, _save);
     expect(find.text('Jalan pagi'), findsNothing);
     expect(find.text('Jalan sore'), findsOneWidget);
-    expect(find.text('health • target 4x/minggu'), findsOneWidget);
+    expect(server.goals.first['category'], 'general');
     expect(server.goals.first['done_this_week'], 2);
     await _edit(tester);
     expect(tester.widget<TextField>(_title).controller!.text, 'Jalan sore');
-    expect(find.text('Kesehatan'), findsOneWidget);
-    expect(find.text('4'), findsOneWidget);
+    expect(server.goals.first['category'], 'general');
+    expect(server.goals.first['target_per_week'], 3);
   });
 
   testWidgets('failed edit preserves input for successful retry',
@@ -269,9 +265,11 @@ void main() {
     await _open(tester, server);
     await _edit(tester);
     await tester.enterText(_title, 'Jalan sore');
+    await tester.ensureVisible(_save);
     await tester.tap(_save);
     await tester.pump();
-    await tester.tap(_save);
+    await tester.tap(find.widgetWithText(FilledButton, 'Menyimpan...'),
+        warnIfMissed: false);
     await tester.pump();
     expect(server.writes('PATCH'), 1);
     server.writeGate!.complete();
@@ -279,29 +277,26 @@ void main() {
     expect(find.text('Jalan sore'), findsOneWidget);
   });
 
-  testWidgets('failed form delete retains goal and editor for retry',
+  testWidgets(
+      'restore and cancel discard drafts without changing the saved goal',
       (tester) async {
-    final server = _GoalServer()..failDelete = true;
+    final server = _GoalServer();
     await _open(tester, server);
     await _edit(tester);
-    await _tap(tester, find.text('Delete Goal'));
-    await _tap(tester, find.widgetWithText(FilledButton, 'Hapus'));
-    expect(find.text('Edit Goal'), findsOneWidget);
-    expect(server.goals.first['title'], 'Jalan pagi');
-    server.failDelete = false;
-    await _tap(tester, find.text('Delete Goal'));
-    await _tap(tester, find.widgetWithText(FilledButton, 'Hapus'));
-    expect(find.text('Edit Goal'), findsNothing);
-    expect(find.text('Jalan pagi'), findsNothing);
-    expect(find.text('Berenang'), findsOneWidget);
+    await tester.enterText(_title, 'Draft');
+    await _tap(tester, find.text('Pulihkan'));
+    expect(tester.widget<TextField>(_title).controller!.text, 'Jalan pagi');
+    await tester.enterText(_title, 'Draft kedua');
+    await _tap(tester, find.text('Batal & Kembali ke Daftar'));
+    expect(find.text('Jalan pagi'), findsOneWidget);
+    expect(server.writes('PATCH'), 0);
   });
 
   testWidgets('account switch during confirmation cannot delete prior goal',
       (tester) async {
     final server = _GoalServer();
     final container = await _open(tester, server);
-    await _edit(tester);
-    await _tap(tester, find.text('Delete Goal'));
+    await _tap(tester, find.byTooltip('Hapus goal').first);
     container.read(authStateProvider.notifier).setSession(_nextPatient);
     await tester.pumpAndSettle();
     await _tap(tester, find.widgetWithText(FilledButton, 'Hapus'));
@@ -316,6 +311,7 @@ void main() {
     final container = await _open(tester, server);
     await _edit(tester);
     await tester.enterText(_title, 'Catatan goal privat');
+    await tester.ensureVisible(_save);
     await tester.tap(_save);
     await tester.pump();
     container.read(authStateProvider.notifier).setSession(_nextPatient);
@@ -340,7 +336,7 @@ void main() {
     await tester.enterText(_title, 'Jalan sadar');
     await _tap(tester, _save);
     expect(find.text('Jalan sadar'), findsOneWidget);
-    expect(find.text('mindfulness • target 3x/minggu'), findsOneWidget);
+    expect(server.goals.first['category'], 'mindfulness');
   });
 
   testWidgets(

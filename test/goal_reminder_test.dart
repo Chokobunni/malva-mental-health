@@ -47,6 +47,14 @@ class _RecordingScheduler implements GoalReminderScheduler {
   }
 
   @override
+  Future<void> scheduleOnce(
+      {required int id,
+      required String title,
+      required String body,
+      required DateTime scheduledAt,
+      required String payload}) async {}
+
+  @override
   Future<void> cancel(int id) async {
     cancelled.add(id);
   }
