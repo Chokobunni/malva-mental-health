@@ -336,6 +336,9 @@ func renderOpenAPI(routes []route) []byte {
 					b.WriteString("            type: string\n")
 				}
 			}
+			if r.Method == "GET" && r.Path == "/v1/goals" {
+				writeGoalsQueryParameters(&b)
+			}
 			// Body permintaan (overlay hand-written untuk endpoint inti).
 			writeRequestBody(&b, r.Method, r.Path)
 			// Keamanan.
@@ -345,7 +348,9 @@ func renderOpenAPI(routes []route) []byte {
 			}
 			// Respons standar.
 			b.WriteString("      responses:\n")
-			writeResponseRef(&b, "200", "OK")
+			if !writeGoalResponse(&b, r.Method, r.Path) {
+				writeResponseRef(&b, "200", "OK")
+			}
 			writeResponseRef(&b, "400", "BadRequest")
 			writeResponseRef(&b, "401", "Unauthorized")
 			writeResponseRef(&b, "403", "Forbidden")
@@ -370,6 +375,7 @@ func renderOpenAPI(routes []route) []byte {
 	b.WriteString("          type: string\n")
 	b.WriteString("      required:\n")
 	b.WriteString("        - error\n")
+	b.WriteString(goalSchemas)
 	b.WriteString("  responses:\n")
 	writeResponseDef(&b, "OK", "Permintaan berhasil.", false)
 	writeResponseDef(&b, "BadRequest", "Permintaan tidak valid.", true)
@@ -580,6 +586,9 @@ var requestBodies = map[string][]bodyField{
 
 // writeRequestBody menulis blok requestBody untuk endpoint yang ada di overlay.
 func writeRequestBody(b *strings.Builder, method, path string) {
+	if writeGoalRequestBody(b, method, path) {
+		return
+	}
 	fields, ok := requestBodies[method+" "+path]
 	if !ok || len(fields) == 0 {
 		return

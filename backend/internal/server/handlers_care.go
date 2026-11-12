@@ -21,18 +21,21 @@ import (
 // ============================================================
 
 type goalRequest struct {
-	Title         string `json:"title"`
-	Category      string `json:"category"`
-	TargetPerWeek *int   `json:"target_per_week"`
-	IsActive      *bool  `json:"is_active"`
-	PatientID     string `json:"patient_id"`
+	Title         string             `json:"title"`
+	Category      string             `json:"category"`
+	TargetPerWeek *int               `json:"target_per_week"`
+	IsActive      *bool              `json:"is_active"`
+	PatientID     string             `json:"patient_id"`
+	Details       *store.GoalDetails `json:"details"`
 }
 
 type habitLogRequest struct {
-	GoalID   string `json:"goal_id"`
-	LoggedOn string `json:"logged_on"`
-	Date     string `json:"date"` // alias kompatibilitas
-	Done     *bool  `json:"done"`
+	GoalID           string    `json:"goal_id"`
+	LoggedOn         string    `json:"logged_on"`
+	Date             string    `json:"date"` // alias kompatibilitas
+	Done             *bool     `json:"done"`
+	Value            *int      `json:"value"`
+	CompletedStepIDs *[]string `json:"completed_step_ids"`
 }
 
 // resolvePatientScope menentukan patient_id yang boleh diakses:
@@ -75,7 +78,15 @@ func (s *Server) listGoals(w http.ResponseWriter, r *http.Request, claims auth.C
 		return
 	}
 	includeInactive := r.URL.Query().Get("include_inactive") == "true"
-	goals, err := s.store.ListGoals(r.Context(), patientID, includeInactive)
+	on := strings.TrimSpace(r.URL.Query().Get("on"))
+	if on != "" {
+		parsed, parseErr := time.ParseInLocation("2006-01-02", on, clock.Location())
+		if parseErr != nil || parsed.Format("2006-01-02") != on || parsed.Year() < 1 {
+			writeError(w, http.StatusBadRequest, errors.New("on harus YYYY-MM-DD"))
+			return
+		}
+	}
+	goals, err := s.store.ListGoals(r.Context(), patientID, includeInactive, on)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -137,6 +148,8 @@ func (s *Server) createGoal(w http.ResponseWriter, r *http.Request, claims auth.
 		Title:         title,
 		Category:      category,
 		TargetPerWeek: target,
+		IsActive:      req.IsActive,
+		Details:       req.Details,
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -164,7 +177,7 @@ func (s *Server) updateGoal(w http.ResponseWriter, r *http.Request, claims auth.
 	}
 	goal, err := s.store.UpdateGoal(r.Context(), patientID, goalID,
 		security.SanitizeText(req.Title), security.SanitizeText(strings.ToLower(req.Category)),
-		req.TargetPerWeek, req.IsActive)
+		req.TargetPerWeek, req.IsActive, req.Details)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusNotFound, errors.New("goal tidak ditemukan"))
@@ -244,7 +257,8 @@ func (s *Server) logHabit(w http.ResponseWriter, r *http.Request, claims auth.Cl
 	if req.Done != nil {
 		done = *req.Done
 	}
-	log, err := s.store.LogHabit(r.Context(), claims.Subject, goalID, logged, done)
+	log, err := s.store.LogHabit(r.Context(), claims.Subject, goalID, logged, done,
+		store.HabitProgressPatch{Value: req.Value, CompletedStepIDs: req.CompletedStepIDs})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusNotFound, errors.New("goal tidak ditemukan"))
