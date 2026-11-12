@@ -61,7 +61,7 @@ explicitly authorized. No table/column migration or dependency was added.
 Evidence: `D:/Project/Malva/2026-07-09/_qa_2026_11_13_goals_refinement/`.
 Local signing/Firebase config remains ignored. No secrets/PII are included in QA.
 Physical OS notification delivery and authenticated two-device sync are untested.
-Release workflow results and public APK verification will be recorded below.
+Release and public APK evidence is recorded below.
 
 
 ## Local release builds
@@ -86,3 +86,54 @@ Initial Security Gates passed. The advisory Code Review Graph completed analysis
 and rendering, then failed parsing a403 response from the authenticated-user API
 while preparing its sticky comment; it is explicitly advisory in the workflow.
 No permissions or gates were weakened.
+
+
+## Integration
+
+- Source commits:73543ef and0fa04bc. PR[#2](https://github.com/Chokobunni/malva-mental-health/pull/2)
+  merged as `b9a84968be7803352de1bfcf51b2cc0676c3345a` after required gates.
+- PR Flutter CI[43294978563](https://github.com/Chokobunni/malva-mental-health/actions/runs/43294978563)
+  passed both test timezone variants, analyzer, security and Android/web/Windows builds.
+- PR Go Backend CI[43294978257](https://github.com/Chokobunni/malva-mental-health/actions/runs/43294978257)
+  passed lint, real-PostgreSQL tests and policy gates, binary/Docker builds and security.
+- PR Security Gates[43294978300](https://github.com/Chokobunni/malva-mental-health/actions/runs/43294978300)
+  and Conventional Commits[43294978498](https://github.com/Chokobunni/malva-mental-health/actions/runs/43294978498) passed.
+- Advisory Code Review Graph[43294978255](https://github.com/Chokobunni/malva-mental-health/actions/runs/43294978255)
+  retained the comment API403 parsing failure described above. It is not a required gate.
+- Dedicated QA PostgreSQL on127.0.0.1:55433 stopped with pg_ctl after tests;
+  unrelated local PostgreSQL was not stopped. Managed worktree remains available.
+
+
+## Production release verification
+
+Runtime release commit:`b9a84968be7803352de1bfcf51b2cc0676c3345a`.
+
+- [API deployment43297830250](https://github.com/Chokobunni/malva-mental-health/actions/runs/43297830250) passed.
+- [Web app deployment43297830259](https://github.com/Chokobunni/malva-mental-health/actions/runs/43297830259) passed.
+- [Signed APK build/publish43297830312](https://github.com/Chokobunni/malva-mental-health/actions/runs/43297830312) passed.
+- [Security Gates43297830290](https://github.com/Chokobunni/malva-mental-health/actions/runs/43297830290) passed.
+- [Go Backend CI43297830246](https://github.com/Chokobunni/malva-mental-health/actions/runs/43297830246) passed.
+- API healthz returned status=ok. Homepage and /app/ returned200; app version.json
+  reported0.1.23/build24. The served flower PNG exactly matched the new source asset.
+- Fully downloaded[public APK](https://malva.web.id/downloads/malva-latest.apk):
+  32,220,711bytes, package id.malva.app, version0.1.23/code24. Its SHA256 equals
+  the malva-apk workflow artifact:
+  `428cf46c994972a88e04f6f40e28281226c0a020b7397986558f9c15ad62e83f`.
+- apksigner verified production certificate SHA256:
+  `965f7430ec7f67a44b7a99e83f155e601116ff16c18fa8db57a4e79de4f2d300`.
+- `verify-release.py` and `release-verification.json` preserve the public checks
+  in the external evidence directory. Local universal and published arm64 packages
+  intentionally differ; each was separately checked and the public package was
+  compared with its matching workflow artifact.
+
+- [Flutter CI43297830606](https://github.com/Chokobunni/malva-mental-health/actions/runs/43297830606)
+  passed both timezone test runs, analyzer/security and web/Windows builds.
+  Its Android job is skipped on push by design; Android passed in PR CI and the
+  separate signed release workflow above.
+- All six runtime release workflows completed successfully. Source and release
+  QA notes are committed and synchronized; worktree is retained for inspection.
+
+Residual limits remain those documented above: small visual rendering differences,
+no physical notification delivery or authenticated two-device sync test, and no
+emulator/physical launch of this refinement APK. No production patient fixtures,
+new SQL migrations, dependencies, or credential files were committed.

@@ -56,5 +56,5 @@ patient_goals_visual_test.dart.
 
 - [x] Capture five reference screens and flower crop; compare normalized full and focused regions; fix P0–P2 and repeat. Record design-qa.md and QA report.
 - [x] Sync module/business documentation; independent branch review and regression tests for findings.
-- [ ] Bump version, build signed APK/web; commit/push and deploy following existing preference after gates pass.
-- [ ] Verify workflows, health/version, actual public APK signature/version/hash; record limitations and final clean git state.
+- [x] Bump version, build signed APK/web; commit/push and deploy following existing preference after gates pass.
+- [x] Verify workflows, health/version, actual public APK signature/version/hash; record limitations and final clean git state.
