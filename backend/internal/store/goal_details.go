@@ -13,19 +13,20 @@ import (
 // GoalDetails is the persisted, optional configuration for a patient's habit.
 // A nil configuration retains the legacy yes/no behavior and weekly target.
 type GoalDetails struct {
-	Note       string     `json:"note"`
-	Method     string     `json:"method"`
-	Target     int        `json:"target"`
-	Unit       string     `json:"unit"`
-	Steps      []GoalStep `json:"steps"`
-	StartDate  string     `json:"start_date"`
-	Time       string     `json:"time"`
-	Recurrence string     `json:"recurrence"`
-	Interval   int        `json:"interval"`
-	Weekdays   []int      `json:"weekdays"`
-	Reminders  []int      `json:"reminders"`
-	AutoFail   bool       `json:"auto_fail"`
-	LockPast   bool       `json:"lock_past"`
+	Note         string     `json:"note"`
+	Method       string     `json:"method"`
+	Target       int        `json:"target"`
+	Unit         string     `json:"unit"`
+	Steps        []GoalStep `json:"steps"`
+	StartDate    string     `json:"start_date"`
+	Time         string     `json:"time"`
+	Recurrence   string     `json:"recurrence"`
+	Interval     int        `json:"interval"`
+	Weekdays     []int      `json:"weekdays"`
+	WeeklyTarget *int       `json:"weekly_target,omitempty"`
+	Reminders    []int      `json:"reminders"`
+	AutoFail     bool       `json:"auto_fail"`
+	LockPast     bool       `json:"lock_past"`
 }
 
 type GoalStep struct {
@@ -64,13 +65,18 @@ func ValidateGoalDetails(d *GoalDetails) error {
 	maxInterval := 365
 	if d.Recurrence == "weekly" {
 		maxInterval = 52
+	} else if d.Recurrence == "monthly" {
+		maxInterval = 12
 	} else if d.Recurrence != "daily" {
-		return errors.New("recurrence harus daily atau weekly")
+		return errors.New("recurrence harus daily, weekly, atau monthly")
 	}
 	if d.Interval < 1 || d.Interval > maxInterval {
 		return errors.New("interval di luar batas recurrence")
 	}
-	if d.Recurrence == "weekly" && len(d.Weekdays) == 0 {
+	if d.WeeklyTarget != nil && (d.Recurrence != "weekly" || *d.WeeklyTarget < 0 || *d.WeeklyTarget > 7) {
+		return errors.New("weekly_target hanya untuk weekly dalam 0–7")
+	}
+	if d.Recurrence == "weekly" && d.WeeklyTarget == nil && len(d.Weekdays) == 0 {
 		return errors.New("weekdays wajib untuk recurrence weekly")
 	}
 	days := map[int]bool{}
@@ -146,12 +152,19 @@ func goalDue(d *GoalDetails, on time.Time) bool {
 	if d.Recurrence == "daily" {
 		return days%d.Interval == 0
 	}
+	if d.Recurrence == "monthly" {
+		months := (on.Year()-start.Year())*12 + int(on.Month()-start.Month())
+		return months%d.Interval == 0 && goalMonthDate(start, months).Equal(goalDay(on))
+	}
 	if d.Recurrence != "weekly" {
 		return false
 	}
 	monday := start.AddDate(0, 0, 1-goalISOWeekday(start))
 	if (goalDayDistance(monday, on)/7)%d.Interval != 0 {
 		return false
+	}
+	if d.WeeklyTarget != nil {
+		return true
 	}
 	for _, day := range d.Weekdays {
 		if day == goalISOWeekday(on) {
@@ -161,7 +174,17 @@ func goalDue(d *GoalDetails, on time.Time) bool {
 	return false
 }
 
-// previousGoalDue jumps across inactive interval weeks instead of scanning days.
+// goalMonthDate clamps each occurrence against the original start-day anchor.
+func goalMonthDate(start time.Time, months int) time.Time {
+	first := time.Date(start.Year(), start.Month()+time.Month(months), 1, 0, 0, 0, 0, clock.Location())
+	day := start.Day()
+	if last := first.AddDate(0, 1, -1).Day(); day > last {
+		day = last
+	}
+	return first.AddDate(0, 0, day-1)
+}
+
+// previousGoalDue jumps across inactive interval weeks/months instead of scanning days.
 func previousGoalDue(d *GoalDetails, on time.Time) (time.Time, bool) {
 	on = goalDay(on)
 	if d == nil {
@@ -174,7 +197,17 @@ func previousGoalDue(d *GoalDetails, on time.Time) (time.Time, bool) {
 	if d.Recurrence == "daily" {
 		return on.AddDate(0, 0, -(goalDayDistance(start, on) % d.Interval)), true
 	}
-	if d.Recurrence != "weekly" || len(d.Weekdays) == 0 {
+	if d.Recurrence == "monthly" {
+		months := (on.Year()-start.Year())*12 + int(on.Month()-start.Month())
+		months -= months % d.Interval
+		candidate := goalMonthDate(start, months)
+		if candidate.After(on) {
+			months -= d.Interval
+			candidate = goalMonthDate(start, months)
+		}
+		return candidate, months >= 0
+	}
+	if d.Recurrence != "weekly" || (d.WeeklyTarget == nil && len(d.Weekdays) == 0) {
 		return time.Time{}, false
 	}
 	anchor := start.AddDate(0, 0, 1-goalISOWeekday(start))
@@ -278,6 +311,9 @@ func goalStreak(d *GoalDetails, logs []HabitLog, on, today time.Time) int {
 		}
 	}
 	sort.Slice(applicable, func(i, j int) bool { return applicable[i].LoggedOn > applicable[j].LoggedOn })
+	if d != nil && d.Recurrence == "weekly" && d.WeeklyTarget != nil {
+		return flexibleGoalStreak(d, applicable, on, today)
+	}
 	expected, hasExpected := previousGoalDue(d, on)
 	count := 0
 	for _, l := range applicable {
@@ -294,6 +330,53 @@ func goalStreak(d *GoalDetails, logs []HabitLog, on, today time.Time) int {
 		}
 		count++
 		expected, hasExpected = previousGoalDue(d, date.AddDate(0, 0, -1))
+	}
+	return count
+}
+
+// Only fully elapsed active weeks can fail a flexible quota; rest days stay pending.
+func flexibleGoalStreak(d *GoalDetails, logs []HabitLog, on, today time.Time) int {
+	cutoff := time.Time{}
+	if d.AutoFail && *d.WeeklyTarget > 0 {
+		counts := map[string]int{}
+		for _, l := range logs {
+			if goalLogDone(d, l) {
+				date, _ := goalDate(l.LoggedOn)
+				monday := date.AddDate(0, 0, 1-goalISOWeekday(date))
+				counts[monday.Format("2006-01-02")]++
+			}
+		}
+		start, _ := goalDate(d.StartDate)
+		anchor := start.AddDate(0, 0, 1-goalISOWeekday(start))
+		end := on
+		if on.Equal(today) {
+			end = on.AddDate(0, 0, -1)
+		}
+		week := goalDayDistance(anchor, end) / 7
+		if goalISOWeekday(end) != 7 {
+			week--
+		}
+		if end.Before(anchor) {
+			week = -1
+		}
+		if week >= 0 {
+			week -= week % d.Interval
+		}
+		for ; week >= 0; week -= d.Interval {
+			monday := anchor.AddDate(0, 0, 7*week)
+			if counts[monday.Format("2006-01-02")] < *d.WeeklyTarget {
+				cutoff = monday.AddDate(0, 0, 7)
+				break
+			}
+		}
+	}
+	count := 0
+	for _, l := range logs {
+		date, _ := goalDate(l.LoggedOn)
+		if (!cutoff.IsZero() && date.Before(cutoff)) || !goalLogDone(d, l) {
+			break
+		}
+		count++
 	}
 	return count
 }

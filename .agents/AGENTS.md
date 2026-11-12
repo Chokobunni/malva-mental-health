@@ -475,3 +475,10 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Layar penuh mengikuti tujuh acuan, menjaga retry/idempotensi dan isolasi akun. Edit dari riwayat mempertahankan progres tanggal terpilih ketika reload gagal. Hapus dari kartu memakai konfirmasi.
 - Pengingat konfigurasi dijadwalkan lokal dengan isi generik, maksimal 48 kejadian mendatang dari horizon 370 hari. Refill startup/resume/revisi, batalkan logout/ganti akun; reminder harian legacy hanya untuk goal tanpa details. Pengiriman fisik OS memerlukan QA perangkat.
 - Rujukan: [kontrak](../docs/superpowers/specs/2026-11-12-patient-goals-reference.md), [check-in](skills/health_checkin_module.md), [QA](../docs/qa/2026-11-12-patient-goals-reference.md).
+
+## Penyempurnaan Goals & Habits (2026-11-13)
+
+- Enam acuan terbaru mengatur list, tiga edit, tambah dan ikon bunga. Refresh progres pada tanggal yang sama mempertahankan kartu/posisi scroll; pergantian tanggal membuang snapshot harian lama. Edit hari ini memakai ringkasan server; ringkasan mingguan historis yang belum dimuat ulang ditandai belum tersedia.
+- `details.weekly_target` opsional 0–7: absen memakai hari terpilih; hadir memakai target mingguan fleksibel, 0 tanpa kuota. Hari istirahat tidak gagal otomatis; minggu aktif penuh yang kurang kuota memutus streak auto-fail. Streak hanya menghitung hari selesai nyata. `target_per_week` legacy tetap kompatibel.
+- `recurrence: monthly`, interval 1–12, memakai tanggal anchor asli dan clamp akhir bulan pendek, lalu pulih ke tanggal asli. `completed_weekdays` berasal dari log sukses aktual pada minggu/tanggal terpilih. Monthly/fleksibel menormalisasi `weekdays: []` agar scheduler klien lama tidak menebak alarm; edit pengaturan baru memerlukan klien baru. Tidak ada perubahan tabel/kolom.
+- Rujukan: [desain](../docs/superpowers/specs/2026-11-13-goals-refinement-design.md), [rencana](../docs/superpowers/plans/2026-11-13-goals-refinement.md).

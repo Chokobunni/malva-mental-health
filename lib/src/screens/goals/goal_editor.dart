@@ -28,6 +28,8 @@ class _GoalEditorState extends State<GoalEditor> {
   final _target = TextEditingController();
   late String _method, _date, _time, _recurrence;
   late int _interval;
+  late int _weeklyTarget;
+  late bool _frequencyMode;
   late List<GoalStep> _steps;
   late List<int> _weekdays, _reminders;
   late bool _autoFail, _lockPast;
@@ -68,6 +70,10 @@ class _GoalEditorState extends State<GoalEditor> {
     _time = d.time;
     _recurrence = d.recurrence;
     _interval = d.interval;
+    _weeklyTarget = d.weeklyTarget ?? widget.goal?.targetPerWeek ?? 0;
+    _frequencyMode = widget.goal == null ||
+        d.weeklyTarget != null ||
+        widget.goal?.details == null;
     _steps = [...d.steps];
     _weekdays = [...d.weekdays];
     _reminders = [...d.reminders];
@@ -87,7 +93,12 @@ class _GoalEditorState extends State<GoalEditor> {
       time: _time,
       recurrence: _recurrence,
       interval: _interval,
-      weekdays: [..._weekdays]..sort(),
+      weeklyTarget:
+          _recurrence == 'weekly' && _frequencyMode ? _weeklyTarget : null,
+      weekdays: _recurrence == 'monthly' ||
+              (_recurrence == 'weekly' && _frequencyMode)
+          ? const []
+          : ([..._weekdays]..sort()),
       reminders: [..._reminders]..sort(),
       autoFail: _autoFail,
       lockPast: _lockPast);
@@ -112,7 +123,7 @@ class _GoalEditorState extends State<GoalEditor> {
           () => _error = 'Tambahkan minimal satu langkah untuk sub-tugas.');
       return;
     }
-    if (_recurrence == 'weekly' && _weekdays.isEmpty) {
+    if (_recurrence == 'weekly' && !_frequencyMode && _weekdays.isEmpty) {
       setState(() => _error = 'Pilih minimal satu hari untuk jadwal mingguan.');
       return;
     }
@@ -166,7 +177,7 @@ class _GoalEditorState extends State<GoalEditor> {
             Text(label,
                 style: TextStyle(
                     fontFamily: 'PlusJakartaSans',
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     letterSpacing: .2,
                     color: note ? const Color(0xFF687582) : goalPurple)),
@@ -246,8 +257,10 @@ class _GoalEditorState extends State<GoalEditor> {
                                                   child: Center(
                                                       child: Image.asset(
                                                           'assets/goals/flower-white.png',
-                                                          width: 36,
-                                                          height: 36))),
+                                                          width: 42,
+                                                          height: 46,
+                                                          fit:
+                                                              BoxFit.contain))),
                                               TextButton.icon(
                                                   onPressed: () =>
                                                       setState(_restore),
@@ -262,7 +275,7 @@ class _GoalEditorState extends State<GoalEditor> {
                                                       minimumSize:
                                                           const Size(0, 34)),
                                                   icon: const Icon(
-                                                      Icons.restart_alt_rounded,
+                                                      Icons.restore_rounded,
                                                       size: 17),
                                                   label: Text(_editing ? 'Pulihkan' : 'Reset',
                                                       style: const TextStyle(
@@ -755,7 +768,7 @@ class _GoalEditorState extends State<GoalEditor> {
         const Text('Atur jumlah angka dan satuan target setiap sesi',
             style: TextStyle(
                 fontFamily: 'PlusJakartaSans',
-                fontSize: 14,
+                fontSize: 11.5,
                 height: 1.4,
                 color: goalMuted)),
         const SizedBox(height: 12),
@@ -846,13 +859,13 @@ class _GoalEditorState extends State<GoalEditor> {
                       onTap: _pickDate,
                       child: Row(children: [
                         Expanded(
-                            child: Text(_date.split('-').reversed.join(' / '),
+                            child: Text(_date.split('-').reversed.join('/'),
                                 style: const TextStyle(
                                     fontFamily: 'PlusJakartaSans',
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700))),
-                        const Icon(Icons.calendar_today_outlined,
-                            size: 15, color: Color(0xFF7F8792))
+                        const Icon(Icons.expand_more,
+                            size: 16, color: goalMuted),
                       ])))),
           const SizedBox(width: 10),
           Expanded(
@@ -862,13 +875,13 @@ class _GoalEditorState extends State<GoalEditor> {
                       onTap: _pickTime,
                       child: Row(children: [
                         Expanded(
-                            child: Text(_clockLabel,
+                            child: Text(_time.isEmpty ? 'Tanpa waktu' : _time,
                                 style: const TextStyle(
                                     fontFamily: 'PlusJakartaSans',
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700))),
-                        const Icon(Icons.schedule,
-                            size: 15, color: Color(0xFF7F8792))
+                        const Icon(Icons.expand_more,
+                            size: 16, color: goalMuted),
                       ])))),
         ]),
         const SizedBox(height: 16),
@@ -878,26 +891,28 @@ class _GoalEditorState extends State<GoalEditor> {
                   'PENGULANGAN',
                   DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
-                          value: _recurrence,
-                          isExpanded: true,
-                          isDense: true,
-                          icon: const Icon(Icons.expand_more,
-                              size: 16, color: goalPurple),
-                          style: const TextStyle(
-                              fontFamily: 'PlusJakartaSans',
-                              color: goalPurple,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700),
-                          items: const [
-                            DropdownMenuItem(
-                                value: 'daily', child: Text('Harian')),
-                            DropdownMenuItem(
-                                value: 'weekly', child: Text('Mingguan'))
-                          ],
-                          onChanged: (v) => setState(() {
-                                _recurrence = v!;
-                                _interval = 1;
-                              }))))),
+                    value: _recurrence,
+                    isExpanded: true,
+                    isDense: true,
+                    icon: const Icon(Icons.expand_more,
+                        size: 16, color: goalPurple),
+                    style: const TextStyle(
+                        fontFamily: 'PlusJakartaSans',
+                        color: goalPurple,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700),
+                    items: const [
+                      DropdownMenuItem(value: 'daily', child: Text('Harian')),
+                      DropdownMenuItem(
+                          value: 'weekly', child: Text('Mingguan')),
+                      DropdownMenuItem(
+                          value: 'monthly', child: Text('Bulanan')),
+                    ],
+                    onChanged: (v) => setState(() {
+                      _recurrence = v!;
+                      _interval = 1;
+                    }),
+                  )))),
           const SizedBox(width: 10),
           Expanded(
               child: _scheduleCell(
@@ -906,7 +921,11 @@ class _GoalEditorState extends State<GoalEditor> {
                     _intervalButton(false),
                     Expanded(
                         child: Text(
-                            '$_interval ${_recurrence == 'daily' ? 'Hari' : 'Minggu'}',
+                            '$_interval ${switch (_recurrence) {
+                              'daily' => 'Hari',
+                              'monthly' => 'Bulan',
+                              _ => 'Minggu'
+                            }}',
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                                 fontFamily: 'PlusJakartaSans',
@@ -918,85 +937,308 @@ class _GoalEditorState extends State<GoalEditor> {
         ]),
         if (_recurrence == 'weekly') ...[
           const SizedBox(height: 20),
-          Row(children: [
-            for (final day in [7, 1, 2, 3, 4, 5, 6])
-              Expanded(
-                  child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: Semantics(
-                          selected: _weekdays.contains(day),
-                          button: true,
-                          label: const [
-                            'Senin',
-                            'Selasa',
-                            'Rabu',
-                            'Kamis',
-                            'Jumat',
-                            'Sabtu',
-                            'Minggu'
-                          ][day - 1],
-                          child: InkWell(
-                              key: Key('goal-weekday-$day'),
-                              borderRadius: BorderRadius.circular(99),
-                              onTap: () => setState(() => _weekdays.contains(day)
-                                  ? _weekdays.remove(day)
-                                  : _weekdays.add(day)),
-                              child: Container(
-                                  constraints:
-                                      const BoxConstraints(minHeight: 36),
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: _weekdays.contains(day)
-                                          ? goalPurple
-                                          : goalTint,
-                                      boxShadow: _weekdays.contains(day)
-                                          ? const [
-                                              BoxShadow(
-                                                  color: Color(0x269853A4),
-                                                  blurRadius: 6,
-                                                  offset: Offset(0, 4))
-                                            ]
-                                          : []),
-                                  child: Text(const ['S', 'S', 'R', 'K', 'J', 'S', 'M'][day - 1], style: TextStyle(fontFamily: 'PlusJakartaSans', fontSize: 13, fontWeight: FontWeight.w700, color: _weekdays.contains(day) ? Colors.white : goalPurple))))))),
-          ]),
-          const SizedBox(height: 12),
           Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                  color: const Color(0xFFF6F7F9),
-                  borderRadius: BorderRadius.circular(8)),
+                  color: goalTint, borderRadius: BorderRadius.circular(18)),
+              child: Row(children: [
+                _frequencyTab(true, 'Target\nFrekuensi', Icons.tune),
+                _frequencyTab(false, 'Pilih Hari\nTertentu',
+                    Icons.event_available_outlined),
+              ])),
+          const SizedBox(height: 14),
+          if (_frequencyMode) _frequencyTarget() else _weekdayChoices(),
+          const SizedBox(height: 14),
+          Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                  color: const Color(0xFFF7F8FA),
+                  borderRadius: BorderRadius.circular(10)),
               child: Text.rich(
                   TextSpan(children: [
-                    const TextSpan(text: 'Berulang setiap '),
-                    TextSpan(
-                        text: _interval == 1 ? 'minggu' : '$_interval minggu',
-                        style: const TextStyle(
-                            color: goalPurple, fontWeight: FontWeight.w700)),
-                    const TextSpan(text: ' pada '),
-                    TextSpan(
-                        text: _weekdays.length == 7
-                            ? 'setiap hari.'
-                            : '${(_weekdays.toList()..sort()).map((d) => const [
-                                  'Sen',
-                                  'Sel',
-                                  'Rab',
-                                  'Kam',
-                                  'Jum',
-                                  'Sab',
-                                  'Min'
-                                ][d - 1]).join(', ')}.',
-                        style: const TextStyle(
-                            color: goalPurple, fontWeight: FontWeight.w700)),
+                    if (_frequencyMode && _weeklyTarget > 0) ...[
+                      const TextSpan(text: 'Target '),
+                      TextSpan(
+                          text: '$_weeklyTarget kali per minggu',
+                          style: const TextStyle(
+                              color: goalPurple, fontWeight: FontWeight.w700)),
+                      const TextSpan(text: ' (hari fleksibel).'),
+                    ] else if (_frequencyMode)
+                      const TextSpan(
+                          text:
+                              'Berulang setiap minggu tanpa target frekuensi khusus.')
+                    else ...[
+                      const TextSpan(text: 'Setiap '),
+                      TextSpan(
+                          text: _interval == 1 ? 'minggu' : '$_interval minggu',
+                          style: const TextStyle(
+                              color: goalPurple, fontWeight: FontWeight.w700)),
+                      const TextSpan(text: ' pada hari '),
+                      TextSpan(
+                          text:
+                              '${(_weekdays.toList()..sort()).map((d) => const [
+                                    'Sen',
+                                    'Sel',
+                                    'Rab',
+                                    'Kam',
+                                    'Jum',
+                                    'Sab',
+                                    'Min'
+                                  ][d - 1]).join(', ')}.',
+                          style: const TextStyle(
+                              color: goalPurple, fontWeight: FontWeight.w700)),
+                    ]
                   ]),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                       fontFamily: 'PlusJakartaSans',
-                      fontSize: 14,
-                      height: 1.4,
-                      color: Color(0xFF6F7C88)))),
+                      fontSize: 11,
+                      height: 1.5,
+                      color: Color(0xFF7F8995)))),
         ],
       ]));
+
+  Widget _frequencyTab(bool target, String label, IconData icon) {
+    final selected = _frequencyMode == target;
+    return Expanded(
+        child: Semantics(
+            selected: selected,
+            button: true,
+            child: InkWell(
+              key:
+                  Key(target ? 'goal-frequency-target' : 'goal-frequency-days'),
+              borderRadius: BorderRadius.circular(14),
+              onTap: () => setState(() => _frequencyMode = target),
+              child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  decoration: BoxDecoration(
+                      color: selected ? Colors.white : Colors.transparent,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: selected
+                          ? const [
+                              BoxShadow(
+                                  color: Color(0x08000000),
+                                  blurRadius: 2,
+                                  offset: Offset(0, 2))
+                            ]
+                          : []),
+                  child: Row(children: [
+                    Icon(icon,
+                        size: 16,
+                        color: selected ? goalPurple : const Color(0xFF53606D)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: Text(label,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontFamily: 'PlusJakartaSans',
+                                color: selected
+                                    ? goalPurple
+                                    : const Color(0xFF53606D),
+                                fontSize: 12,
+                                height: 1.35,
+                                fontWeight: FontWeight.w700)))
+                  ])),
+            )));
+  }
+
+  Widget _frequencyTarget() => GoalSurface(
+      color: const Color(0xFFFCF8FF),
+      border: const Color(0xFFF0E8F5),
+      child: Column(children: [
+        const Text('Target Capaian Mingguan (Opsional)',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontFamily: 'PlusJakartaSans',
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        const Text('Atur 0 jika tidak memerlukan target frekuensi mingguan',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontFamily: 'PlusJakartaSans',
+                fontSize: 11,
+                height: 1.5,
+                color: goalMuted)),
+        const SizedBox(height: 16),
+        GoalSurface(
+            padding: const EdgeInsets.all(10),
+            border: const Color(0xFFEDE2F2),
+            child: Row(children: [
+              _weeklyTargetButton(false),
+              Expanded(
+                  child: Column(children: [
+                Text.rich(
+                    TextSpan(children: [
+                      TextSpan(
+                          text: '$_weeklyTarget',
+                          style: const TextStyle(
+                              color: goalPurple,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w800)),
+                      const TextSpan(
+                          text: ' kali / minggu',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w700))
+                    ]),
+                    style: const TextStyle(fontFamily: 'PlusJakartaSans')),
+                const SizedBox(height: 2),
+                Text(
+                    _weeklyTarget == 0
+                        ? 'Tanpa target frekuensi mingguan'
+                        : '${7 - _weeklyTarget} hari bebas istirahat',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontFamily: 'PlusJakartaSans',
+                        fontSize: 10.5,
+                        height: 1.4,
+                        color: goalMuted)),
+              ])),
+              _weeklyTargetButton(true),
+            ])),
+        if (_weeklyTarget > 0) ...[
+          const SizedBox(height: 16),
+          Row(children: [
+            for (var i = 0; i < 7; i++) ...[
+              if (i > 0) const SizedBox(width: 6),
+              Expanded(
+                  child: Container(
+                      height: 10,
+                      decoration: BoxDecoration(
+                          color: i < _weeklyTarget
+                              ? goalPurple
+                              : const Color(0xFFF3E7FA),
+                          borderRadius: BorderRadius.circular(99)))),
+            ]
+          ]),
+        ],
+      ]));
+
+  Widget _weeklyTargetButton(bool add) => SizedBox(
+      width: 40,
+      height: 40,
+      child: IconButton(
+          tooltip: add ? 'Tambah target mingguan' : 'Kurangi target mingguan',
+          onPressed: () => setState(() =>
+              _weeklyTarget = (_weeklyTarget + (add ? 1 : -1)).clamp(0, 7)),
+          style: IconButton.styleFrom(
+              backgroundColor: add ? goalPurple : goalTint,
+              foregroundColor: add ? Colors.white : goalPurple,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12))),
+          icon: Icon(add ? Icons.add : Icons.remove, size: 22)));
+
+  Widget _weekdayChoices() => GoalSurface(
+      color: const Color(0xFFFCF8FF),
+      border: const Color(0xFFF0E8F5),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          const Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text('Hari Pelaksanaan',
+                    style: TextStyle(
+                        fontFamily: 'PlusJakartaSans',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700)),
+                Text('Pilih hari apa saja habit ini dilakukan',
+                    style: TextStyle(
+                        fontFamily: 'PlusJakartaSans',
+                        fontSize: 10.5,
+                        color: goalMuted)),
+              ])),
+          GoalPill('${_weekdays.length} hari', fontSize: 10)
+        ]),
+        const SizedBox(height: 16),
+        for (var day = 1; day <= 7; day += 2) ...[
+          Row(children: [
+            Expanded(child: _weekdayTile(day)),
+            if (day < 7) ...[
+              const SizedBox(width: 8),
+              Expanded(child: _weekdayTile(day + 1))
+            ]
+          ]),
+          if (day < 7) const SizedBox(height: 8),
+        ],
+        const SizedBox(height: 16),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          for (final preset in <String, List<int>>{
+            'Hari Kerja': [1, 2, 3, 4, 5],
+            'Akhir Pekan': [6, 7],
+            'Setiap Hari': [1, 2, 3, 4, 5, 6, 7]
+          }.entries)
+            OutlinedButton(
+                onPressed: () => setState(() => _weekdays = [...preset.value]),
+                style: OutlinedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF53606D),
+                    minimumSize: const Size(0, 26),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    side: const BorderSide(color: goalLine),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(7)),
+                    textStyle: const TextStyle(
+                        fontFamily: 'PlusJakartaSans', fontSize: 10.5)),
+                child: Text(preset.key)),
+        ]),
+      ]));
+
+  Widget _weekdayTile(int day) {
+    final selected = _weekdays.contains(day);
+    return Semantics(
+        selected: selected,
+        button: true,
+        child: InkWell(
+          key: Key('goal-weekday-$day'),
+          onTap: () => setState(
+              () => selected ? _weekdays.remove(day) : _weekdays.add(day)),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+              decoration: BoxDecoration(
+                  color: selected ? goalPurple : Colors.white,
+                  border: Border.all(
+                      color: selected ? goalPurple : const Color(0xFFE7DFEB)),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: selected
+                      ? const [
+                          BoxShadow(
+                              color: Color(0x339853A4),
+                              blurRadius: 8,
+                              offset: Offset(0, 4))
+                        ]
+                      : []),
+              child: Row(children: [
+                Expanded(
+                    child: Text(
+                        const [
+                          'Senin',
+                          'Selasa',
+                          'Rabu',
+                          'Kamis',
+                          'Jumat',
+                          'Sabtu',
+                          'Minggu'
+                        ][day - 1],
+                        style: TextStyle(
+                            fontFamily: 'PlusJakartaSans',
+                            fontSize: 11,
+                            color: selected
+                                ? Colors.white
+                                : const Color(0xFF53606D),
+                            fontWeight: FontWeight.w700))),
+                Icon(Icons.check_circle,
+                    size: 11,
+                    color: selected
+                        ? const Color(0xFFF4DFF6)
+                        : const Color(0xFF53606D))
+              ])),
+        ));
+  }
 
   Widget _scheduleCell(String label, Widget child) => Container(
       constraints: const BoxConstraints(minHeight: 62),
@@ -1027,8 +1269,13 @@ class _GoalEditorState extends State<GoalEditor> {
                   borderRadius: BorderRadius.circular(6))),
           tooltip: add ? 'Tambah interval' : 'Kurangi interval',
           onPressed: () => setState(() => _interval =
-              (_interval + (add ? 1 : -1))
-                  .clamp(1, _recurrence == 'daily' ? 365 : 52)),
+              (_interval + (add ? 1 : -1)).clamp(
+                  1,
+                  switch (_recurrence) {
+                    'daily' => 365,
+                    'monthly' => 12,
+                    _ => 52
+                  })),
           icon: Icon(add ? Icons.add : Icons.remove,
               size: 13, color: goalPurple)));
 
@@ -1066,13 +1313,6 @@ class _GoalEditorState extends State<GoalEditor> {
                         borderRadius: BorderRadius.circular(4)),
                     onChanged: (v) => change(v!)),
               ])));
-
-  String get _clockLabel {
-    if (_time.isEmpty) return 'Tanpa waktu';
-    final parts = _time.split(':');
-    final h = int.parse(parts[0]);
-    return '${(h % 12 == 0 ? 12 : h % 12).toString().padLeft(2, '0')} : ${parts[1]}  ${h < 12 ? 'AM' : 'PM'}';
-  }
 
   Future<void> _pickDate() async {
     final date = DateTime.tryParse(_date) ?? wibNow();

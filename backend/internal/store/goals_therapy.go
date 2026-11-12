@@ -28,6 +28,7 @@ type Goal struct {
 	TodayValue            int          `json:"today_value"`
 	TodayCompletedStepIDs []string     `json:"today_completed_step_ids"`
 	StreakDays            int          `json:"streak_days"`
+	CompletedWeekdays     []int        `json:"completed_weekdays"`
 	IsDue                 bool         `json:"is_due"`
 	FailedToday           bool         `json:"failed_today"`
 

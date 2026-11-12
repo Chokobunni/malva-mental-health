@@ -503,3 +503,11 @@ the selected historical day's progress. Per-goal offsets use existing local OS
 notification ports, generic content, WIB recurrence and account-scoped replacement:
 at most 48 upcoming one-shot alarms scanned over 370 days, refilled on startup,
 resume and clinical revision. No additional FCM kind or dependency is introduced.
+
+The2026-11-13 refinement reuses this JSONB and scheduler for calendar-month
+intervals and optional flexible weekly quotas. Due/streak calculation and local
+reminders share anchor/month-end semantics. Server-derived completed weekdays
+drive day indicators. Same-date refresh retains list widgets and scroll; date
+rollover invalidates prior-day snapshots. Today's edit uses the returned server
+summary, while unknown historical weekly aggregates are explicitly unavailable
+until reload. Irrelevant weekdays are normalized to[] for older schedulers.

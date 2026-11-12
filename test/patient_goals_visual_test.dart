@@ -11,23 +11,25 @@ import 'package:malva_mental_health/src/screens/goals_screen.dart';
 import 'package:malva_mental_health/src/screens/goals/goal_editor.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 import 'record_render_capture.dart';
 
 // Synthetic fixtures matching the user's visual references, never seeded into patient data.
 final visualGoals = [
   {
     'id': 'a',
-    'title': 'Minum Air Hangat Saat Bangun',
+    'title': 'Olahraga Kardio / Jalan Pagi',
     'category': 'general',
-    'target_per_week': 7,
+    'target_per_week': 4,
     'is_active': true,
     'details': {
       'method': 'yes_no',
       'note':
-          'Segelas penuh (300ml) untuk mengaktifkan metabolisme tubuh di pagi hari.',
+          'Minimal 30 menit di pagi hari agar tubuh bugar sepanjang minggu.',
       'start_date': '2026-11-11',
       'time': '06:30',
-      'recurrence': 'daily',
+      'recurrence': 'weekly',
+      'weekly_target': 4,
       'interval': 1,
       'weekdays': [1, 2, 3, 4, 5, 6, 7],
       'reminders': [10],
@@ -38,6 +40,8 @@ final visualGoals = [
       'steps': []
     },
     'done_today': true,
+    'done_this_week': 3,
+    'completed_weekdays': [1, 2, 3],
     'streak_days': 12,
     'is_due': true
   },
@@ -49,12 +53,12 @@ final visualGoals = [
     'is_active': true,
     'details': {
       'method': 'numeric',
-      'note': 'Fokus membaca tanpa gangguan gawai sebelum tidur malam.',
+      'note': '',
       'start_date': '2026-11-11',
       'time': '21:30',
       'recurrence': 'weekly',
       'interval': 1,
-      'weekdays': [1, 2, 3, 4, 5, 6, 7],
+      'weekdays': [1, 2, 3, 4, 5],
       'reminders': [30],
       'auto_fail': true,
       'lock_past': false,
@@ -64,6 +68,8 @@ final visualGoals = [
     },
     'done_today': false,
     'today_value': 14,
+    'done_this_week': 2,
+    'completed_weekdays': [1, 2],
     'streak_days': 8,
     'is_due': true
   },
@@ -103,13 +109,13 @@ final visualGoals = [
   },
   {
     'id': 'd',
-    'title': 'Jalan Pagi & Peregangan Ringan',
+    'title': 'Latihan Peregangan & Mobilitas',
     'category': 'general',
     'target_per_week': 3,
     'is_active': true,
     'details': {
       'method': 'numeric',
-      'note': 'Hirup udara segar di sekitar rumah agar tubuh tetap bugar.',
+      'note': '',
       'start_date': '2026-11-11',
       'time': '07:00',
       'recurrence': 'weekly',
@@ -118,12 +124,14 @@ final visualGoals = [
       'reminders': [30],
       'auto_fail': true,
       'lock_past': false,
-      'target': 30,
+      'target': 15,
       'unit': 'menit',
       'steps': []
     },
     'done_today': true,
-    'today_value': 30,
+    'today_value': 15,
+    'done_this_week': 2,
+    'completed_weekdays': [1, 3],
     'streak_days': 6,
     'is_due': true
   },
@@ -157,7 +165,8 @@ void main() {
             child: MaterialApp(
                 debugShowCheckedModeBanner: false,
                 theme: buildMalvaTheme(),
-                home: const GoalsScreen()))));
+                home:
+                    GoalsScreen(now: () => wibFromParts(2026, 11, 11, 12))))));
     await tester.pumpAndSettle();
     tester.view.physicalSize = Size(
         390, tester.getSize(find.byKey(const Key('goal-list-content'))).height);
@@ -169,7 +178,7 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('goal-filter-numeric')));
     await tester.tap(find.byKey(const Key('goal-filter-numeric')));
     await tester.pumpAndSettle();
-    expect(find.text('Minum Air Hangat Saat Bangun'), findsNothing);
+    expect(find.text('Olahraga Kardio / Jalan Pagi'), findsNothing);
     expect(find.text('Baca Buku Pengembangan Diri'), findsOneWidget);
   });
   for (var i = 0; i < 6; i++) {
@@ -191,14 +200,21 @@ void main() {
                   goal: edit ? BackendGoal.fromJson(visualGoals[i % 3]) : null,
                   onSave: (_) async => true))));
       await tester.pumpAndSettle();
+      await tester.runAsync(() => precacheImage(
+          const AssetImage('assets/goals/flower-white.png'),
+          tester.element(find.byType(GoalEditor))));
+      await tester.pumpAndSettle();
+
       if (!edit) {
         await tester.tap(find.byKey(Key('goal-method-$method')));
         await tester.pumpAndSettle();
-        await tester.enterText(find.byKey(const Key('goal-new-step')),
-            'Siapkan buku di meja samping tempat tidur');
-        await tester.ensureVisible(find.text('Tambah Langkah'));
-        await tester.tap(find.text('Tambah Langkah'));
-        await tester.pumpAndSettle();
+        if (method == 'checklist') {
+          await tester.enterText(find.byKey(const Key('goal-new-step')),
+              'Siapkan buku di meja samping tempat tidur');
+          await tester.ensureVisible(find.text('Tambah Langkah'));
+          await tester.tap(find.text('Tambah Langkah'));
+          await tester.pumpAndSettle();
+        }
         if (method == 'numeric') {
           await tester.enterText(find.byKey(const Key('goal-target')), '20');
           await tester.enterText(find.byKey(const Key('goal-unit')), 'halaman');

@@ -109,17 +109,22 @@ const goalSchemas = `    GoalDetails:
           pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$|^$'
         recurrence:
           type: string
-          enum: [daily, weekly]
+          enum: [daily, weekly, monthly]
         interval:
           type: integer
           minimum: 1
           maximum: 365
-          description: Hari untuk daily (maksimal 365), minggu untuk weekly (maksimal 52). Minggu dimulai Senin pada minggu start_date.
+          description: Hari untuk daily (maksimal 365), minggu untuk weekly (maksimal 52), bulan untuk monthly (maksimal 12). Minggu dimulai Senin pada minggu start_date. Monthly mengikuti tanggal start_date, dijepit ke akhir bulan pendek lalu kembali ke tanggal asal.
+        weekly_target:
+          type: integer
+          minimum: 0
+          maximum: 7
+          description: Opsional, hanya weekly. Jika hadir, goal fleksibel pada setiap hari minggu aktif; 0 tanpa kuota. Jika absen gunakan weekdays. Tidak mengubah target_per_week legacy.
         weekdays:
           type: array
           uniqueItems: true
           maxItems: 7
-          description: ISO Senin=1 sampai Minggu=7; weekly wajib minimal satu hari.
+          description: ISO Senin=1 sampai Minggu=7; weekly tanpa weekly_target wajib minimal satu hari.
           items:
             type: integer
             minimum: 1
@@ -213,6 +218,14 @@ const goalSchemas = `    GoalDetails:
               format: date-time
             done_this_week:
               type: integer
+            completed_weekdays:
+              type: array
+              uniqueItems: true
+              description: Hari ISO terurut dengan log sukses yang terjadwal pada minggu pilihan sampai tanggal on; tidak mengisi hari tanpa log.
+              items:
+                type: integer
+                minimum: 1
+                maximum: 7
             last_logged_on:
               type: string
               format: date
@@ -228,12 +241,12 @@ const goalSchemas = `    GoalDetails:
                 type: string
             streak_days:
               type: integer
-              description: Occurrence terjadwal selesai berturut-turut; lewati hari tidak terjadwal dan izinkan hari ini belum dicatat. Log gagal eksplisit memutus streak; log hilang yang lewat memutus hanya bila auto_fail.
+              description: Jumlah hari habit sukses berturut-turut; lewati hari tidak terjadwal dan izinkan hari ini belum dicatat. Log gagal eksplisit memutus streak; log hilang memutus hanya bila auto_fail. Weekly fleksibel memutus hanya setelah minggu aktif selesai di bawah kuota; kuota 0 mengabaikan log hilang.
             is_due:
               type: boolean
             failed_today:
               type: boolean
-              description: Log belum selesai atau occurrence hilang yang sudah lewat dengan auto_fail, pada tanggal on.
+              description: Log belum selesai atau occurrence hilang yang sudah lewat dengan auto_fail, pada tanggal on. Weekly fleksibel tidak menggagalkan hari istirahat tanpa log.
     HabitLog:
       type: object
       properties:

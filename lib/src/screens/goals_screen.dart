@@ -12,7 +12,8 @@ import 'goals/goal_editor.dart';
 import 'goals/goal_reference_widgets.dart';
 
 class GoalsScreen extends ConsumerStatefulWidget {
-  const GoalsScreen({super.key});
+  const GoalsScreen({super.key, this.now = wibNow});
+  final DateTime Function() now;
   @override
   ConsumerState<GoalsScreen> createState() => _GoalsScreenState();
 }
@@ -39,7 +40,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   @override
   void initState() {
     super.initState();
-    _today = _selectedDate = wibDateKey(wibNow());
+    _today = _selectedDate = wibDateKey(widget.now());
     _screenOwner = _ownerKey(ref.read(currentSessionProvider));
     ref.listenManual<AuthSession?>(currentSessionProvider, (_, session) {
       if (_ownerKey(session) != _screenOwner) {
@@ -68,13 +69,16 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   }
 
   void _rollDate() {
-    final next = wibDateKey(wibNow());
-    if (_selectedDate == _today) _selectedDate = next;
+    final next = wibDateKey(widget.now());
+    if (_selectedDate == _today && _selectedDate != next) {
+      _selectedDate = next;
+      _serverGoals = const [];
+    }
     _today = next;
   }
 
   void _scheduleMidnight() {
-    final now = wibNow();
+    final now = widget.now();
     _midnight = Timer(
         wibFromParts(now.year, now.month, now.day + 1).difference(now), () {
       if (!_current) return;
@@ -112,6 +116,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
         _error = friendlyErrorMessage(e);
         _loading = false;
       });
+      if (_serverGoals.isNotEmpty) _showError(e);
     }
   }
 
@@ -127,7 +132,11 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
               note: g.note,
               time:
                   '${g.reminder.hour.toString().padLeft(2, '0')}:${g.reminder.minute.toString().padLeft(2, '0')}',
-              recurrence: g.frequency == 'Mingguan' ? 'weekly' : 'daily'),
+              recurrence: switch (g.frequency) {
+                'Mingguan' => 'weekly',
+                'Bulanan' => 'monthly',
+                _ => 'daily'
+              }),
       doneToday: g.completedToday,
       todayValue: g.value,
       todayCompletedStepIds: g.completedStepIds,
@@ -139,8 +148,9 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   @override
   Widget build(BuildContext context) {
     ref.watch(currentSessionProvider);
-    ref.listen<int>(
-        clinicalDataRevisionProvider, (_, __) => unawaited(_load()));
+    ref.listen<int>(clinicalDataRevisionProvider, (_, __) {
+      if (!_mutating) unawaited(_load());
+    });
     if (!_current)
       return const Scaffold(
           body: Center(
@@ -171,14 +181,18 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                     children: [
                       Container(
                           decoration: const BoxDecoration(
-                              gradient: goalGradient,
+                              gradient: LinearGradient(colors: [
+                                Color(0xFF5B216F),
+                                Color(0xFF9D3BAF),
+                                Color(0xFFD980E7)
+                              ]),
                               borderRadius: BorderRadius.vertical(
                                   bottom: Radius.circular(28))),
                           child: SafeArea(
                               bottom: false,
                               child: Padding(
                                   padding:
-                                      const EdgeInsets.fromLTRB(14, 16, 20, 24),
+                                      const EdgeInsets.fromLTRB(14, 23, 20, 32),
                                   child: Row(children: [
                                     IconButton(
                                         onPressed: () =>
@@ -244,13 +258,10 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                                 crossAxisAlignment:
                                                     CrossAxisAlignment.start,
                                                 children: [
-                                                  Wrap(
-                                                      alignment: WrapAlignment
-                                                          .spaceBetween,
-                                                      runSpacing: 8,
-                                                      spacing: 12,
-                                                      children: [
-                                                        InkWell(
+                                                  Row(children: [
+                                                    Expanded(
+                                                        flex: 57,
+                                                        child: InkWell(
                                                             onTap: _mutating
                                                                 ? null
                                                                 : _selectDate,
@@ -259,15 +270,26 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                                                     .circular(
                                                                         99),
                                                             child: GoalPill(
-                                                                goalDateLabel(
-                                                                    _selectedDate),
+                                                                '${const [
+                                                                  'Senin',
+                                                                  'Selasa',
+                                                                  'Rabu',
+                                                                  'Kamis',
+                                                                  'Jumat',
+                                                                  'Sabtu',
+                                                                  'Minggu'
+                                                                ][DateTime.parse(_selectedDate).weekday - 1]}, ${goalDateLabel(_selectedDate)}',
                                                                 icon: Icons
                                                                     .calendar_today_outlined,
                                                                 background:
                                                                     Colors
                                                                         .white,
-                                                                fontSize: 12)),
-                                                        GoalPill(
+                                                                fontSize: 12,
+                                                                verticalPadding:
+                                                                    6))),
+                                                    Expanded(
+                                                        flex: 43,
+                                                        child: GoalPill(
                                                             '$streak Hari Beruntun',
                                                             icon: Icons
                                                                 .local_fire_department_rounded,
@@ -276,8 +298,10 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                                             background:
                                                                 const Color(
                                                                     0xFFFFF2CC),
-                                                            fontSize: 12),
-                                                      ]),
+                                                            fontSize: 12,
+                                                            verticalPadding:
+                                                                6)),
+                                                  ]),
                                                   const SizedBox(height: 20),
                                                   Row(children: [
                                                     Expanded(
@@ -407,7 +431,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                                                           .white
                                                                       : const Color(
                                                                           0xFF53606D),
-                                                                  fontSize: 16,
+                                                                  fontSize: 13,
                                                                   fontWeight: _filter ==
                                                                           method
                                                                       ? FontWeight
@@ -417,8 +441,9 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                                         ])),
                                               ]
                                             ])),
-                                        const SizedBox(height: 18),
-                                        if (_error != null)
+                                        const SizedBox(height: 26),
+                                        if (_error != null &&
+                                            _serverGoals.isEmpty)
                                           Padding(
                                               padding: const EdgeInsets.only(
                                                   bottom: 14),
@@ -436,7 +461,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                                     child:
                                                         const Text('Coba lagi'))
                                               ])),
-                                        if (_loading)
+                                        if (_loading && _serverGoals.isEmpty)
                                           const Center(
                                               child: CircularProgressIndicator(
                                                   color: goalPurple))
@@ -482,8 +507,8 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
         !goal.isDue ||
         _selectedDate.compareTo(_today) > 0 ||
         (configured?.lockPast == true &&
-            _selectedDate.compareTo(
-                    wibDateKey(wibNow().subtract(const Duration(days: 1)))) <
+            _selectedDate.compareTo(wibDateKey(
+                    widget.now().subtract(const Duration(days: 1)))) <
                 0);
     final badgeColor = method == 'numeric'
         ? const Color(0xFFA66A1D)
@@ -496,6 +521,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
             ? const Color(0xFFFBE6F0)
             : const Color(0xFFF4EBF7);
     return GoalSurface(
+        key: ValueKey(goal.id),
         color: done ? const Color(0xFFFCF8FF) : Colors.white,
         border: done ? const Color(0xFFD4BADF) : goalLine,
         child:
@@ -545,47 +571,22 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                 fontWeight: FontWeight.w700,
                 height: 1.3,
                 color: done ? goalMuted : goalInk,
+                decoration: done ? TextDecoration.lineThrough : null,
+                decorationThickness: done ? 1.5 : null,
               )),
           if ((configured?.note ?? '').isNotEmpty) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             Text(configured!.note,
                 style: const TextStyle(
                     fontFamily: 'PlusJakartaSans',
-                    fontSize: 15.5,
+                    fontSize: 12.5,
                     height: 1.6,
                     color: Color(0xFF76818D))),
           ],
-          const SizedBox(height: 14),
-          Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                  color: const Color(0xFFFAF3FD),
-                  borderRadius: BorderRadius.circular(13)),
-              child: Row(children: [
-                const Icon(Icons.schedule, size: 13, color: goalPurple),
-                const SizedBox(width: 7),
-                Expanded(
-                    child: Text(
-                        configured?.scheduleLabel ??
-                            '${goal.category} • target ${goal.targetPerWeek}x/minggu',
-                        style: const TextStyle(
-                            fontFamily: 'PlusJakartaSans',
-                            color: goalPurple,
-                            fontSize: 11.5,
-                            height: 1.4,
-                            fontWeight: FontWeight.w500))),
-                if (configured != null && configured.reminders.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  const Icon(Icons.notifications_active,
-                      size: 11, color: goalPurple),
-                  const SizedBox(width: 4),
-                  Text('${configured.reminders.length}',
-                      style: const TextStyle(
-                          fontFamily: 'PlusJakartaSans',
-                          color: goalPurple,
-                          fontSize: 11)),
-                ]
-              ])),
+          if (method != 'checklist') ...[
+            const SizedBox(height: 14),
+            _habitSchedule(goal),
+          ],
           if (!goal.isDue)
             const Padding(
                 padding: EdgeInsets.only(top: 10),
@@ -744,6 +745,152 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
             ]),
           ],
         ]));
+  }
+
+  Widget _habitSchedule(BackendGoal goal) {
+    if (!goal.weeklyProgressAvailable) {
+      return const Text('Riwayat mingguan belum dapat dimuat',
+          style: TextStyle(
+              fontFamily: 'PlusJakartaSans', fontSize: 11.5, color: goalMuted));
+    }
+    final details = goal.details;
+    if (details?.recurrence == 'weekly' && details?.weeklyTarget == null) {
+      final selected = DateTime.parse(_selectedDate);
+      final monday = wibFromParts(
+          selected.year, selected.month, selected.day - selected.weekday + 1);
+      return Column(children: [
+        Row(children: [
+          Expanded(
+              child: Text('Hari terpilih (${details!.weekdays.length}×/minggu)',
+                  style: const TextStyle(
+                      fontFamily: 'PlusJakartaSans',
+                      fontSize: 11.5,
+                      color: goalMuted))),
+          Text(
+              _done(goal)
+                  ? 'Selesai ${_selectedDate == _today ? 'hari ini' : 'pada tanggal ini'}'
+                  : goal.isDue
+                      ? 'Jadwal ${_selectedDate == _today ? 'hari ini' : 'tanggal ini'}'
+                      : 'Di luar jadwal',
+              style: TextStyle(
+                  fontFamily: 'PlusJakartaSans',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _done(goal) ? const Color(0xFF288873) : goalPurple)),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          for (var day = 1; day <= 7; day++) ...[
+            if (day > 1) const SizedBox(width: 6),
+            Expanded(child: Builder(builder: (_) {
+              final date =
+                  wibFromParts(monday.year, monday.month, monday.day + day - 1);
+              final scheduled = details.isDueOn(date);
+              final completed = goal.completedWeekdays.contains(day);
+              final current = selected.weekday == day;
+              return Container(
+                  constraints: const BoxConstraints(minHeight: 41),
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  decoration: BoxDecoration(
+                      color: completed
+                          ? goalPurple
+                          : scheduled
+                              ? goalTint
+                              : const Color(0xFFF8F9FB),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                          color: current
+                              ? goalPurple
+                              : scheduled
+                                  ? const Color(0xFFE8D9EF)
+                                  : const Color(0xFFF0F1F5)),
+                      boxShadow: current
+                          ? const [
+                              BoxShadow(
+                                  color: Color(0xFFEBDCF2), spreadRadius: 2)
+                            ]
+                          : []),
+                  child: Column(children: [
+                    Text(
+                        const [
+                          'Sen',
+                          'Sel',
+                          'Rab',
+                          'Kam',
+                          'Jum',
+                          'Sab',
+                          'Min'
+                        ][day - 1],
+                        style: TextStyle(
+                            fontFamily: 'PlusJakartaSans',
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: completed
+                                ? Colors.white
+                                : scheduled
+                                    ? goalPurple
+                                    : const Color(0xFFC9CFD7))),
+                    SizedBox(
+                        height: 10,
+                        child: completed
+                            ? const Icon(Icons.check,
+                                size: 11, color: Colors.white)
+                            : current
+                                ? const Icon(Icons.circle,
+                                    size: 4, color: goalPurple)
+                                : null),
+                  ]));
+            })),
+          ]
+        ]),
+      ]);
+    }
+    if (details == null ||
+        details.recurrence == 'weekly' ||
+        (details.method == 'yes_no' && details.recurrence == 'daily')) {
+      final target = details?.weeklyTarget ?? goal.targetPerWeek;
+      return Column(children: [
+        Row(children: [
+          const Expanded(
+              child: Text('Minggu ini',
+                  style: TextStyle(
+                      fontFamily: 'PlusJakartaSans',
+                      fontSize: 11.5,
+                      color: goalMuted))),
+          Text(
+              target == 0
+                  ? '${goal.doneThisWeek} kali'
+                  : '${goal.doneThisWeek}/$target kali',
+              style: const TextStyle(
+                  fontFamily: 'PlusJakartaSans',
+                  fontSize: 11.5,
+                  color: goalPurple,
+                  fontWeight: FontWeight.w700)),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          for (var i = 0; i < 7; i++) ...[
+            if (i > 0) const SizedBox(width: 6),
+            Expanded(
+                child: Container(
+                    height: 8,
+                    decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(99),
+                        color: i < goal.doneThisWeek
+                            ? goalPurple
+                            : i < target
+                                ? const Color(0xFFE8D5F6)
+                                : const Color(0xFFF1F4F7)))),
+          ]
+        ]),
+      ]);
+    }
+    return Text(details.scheduleLabel,
+        style: const TextStyle(
+            fontFamily: 'PlusJakartaSans',
+            fontSize: 11.5,
+            color: goalPurple,
+            height: 1.4));
   }
 
   Widget _yesNo(BackendGoal goal, bool yes, bool done, bool locked) => SizedBox(
@@ -922,9 +1069,11 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                 id: goal?.id ??
                                     'goal_${wibNow().microsecondsSinceEpoch}',
                                 title: result.title,
-                                frequency: result.details.recurrence == 'daily'
-                                    ? 'Harian'
-                                    : 'Mingguan',
+                                frequency: switch (result.details.recurrence) {
+                                  'daily' => 'Harian',
+                                  'monthly' => 'Bulanan',
+                                  _ => 'Mingguan'
+                                },
                                 streakDays: existing?.streakDays ?? 0,
                                 completedToday:
                                     existing?.completedToday ?? false,
@@ -994,7 +1143,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
           backgroundColor: Theme.of(context).colorScheme.error));
 
   Future<void> _selectDate() async {
-    final date = DateTime.parse(_selectedDate), now = wibNow();
+    final date = DateTime.parse(_selectedDate), now = widget.now();
     final selected = await showDatePicker(
         context: context,
         initialDate: date,
