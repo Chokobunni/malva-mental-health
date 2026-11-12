@@ -36,6 +36,6 @@ Files: goals_screen.dart, goal_details.go, goal_persistence.go, relevant Go/Flut
 ### Task 3: Review, visual checks and release
 - [x] Capture corrected editor/list/dialog states; verify narrow/large text controls.
 - [x] Run independent final review; address important findings with RED→GREEN regressions.
-- [ ] Bump version, build signed APK/web; run required gates; commit/push/PR and deploy.
-- [ ] Verify production workflows/health/web version and actual public APK version/signature/hash.
-- [ ] Complete QA report, ledger and final clean Git state.
+- [x] Bump version, build signed APK/web; run required gates; commit/push/PR and deploy.
+- [x] Verify production workflows/health/web version and actual public APK version/signature/hash.
+- [x] Complete QA report, ledger and final clean Git state.
