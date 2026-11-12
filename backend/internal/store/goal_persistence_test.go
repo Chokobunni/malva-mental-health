@@ -264,3 +264,43 @@ func TestGoalYesNoConfigurationRoundTripsAllControls(t *testing.T) {
 		t.Fatalf("unbounded dates history=%+v err=%v", all, err)
 	}
 }
+
+func TestGoalDetailsPersistCanonicalIrrelevantWeekdays(t *testing.T) {
+	s, db := openGoalTestStore(t)
+	ctx := context.Background()
+	owner := insertTestUser(t, db, ctx, "patient", "Canonical owner", "canonical-owner")
+	t.Cleanup(func() { cleanupTestUsers(t, db, owner) })
+	quota := 2
+	for _, tc := range []struct {
+		name         string
+		recurrence   string
+		weeklyTarget *int
+	}{{"monthly", "monthly", nil}, {"flexible", "weekly", &quota}} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := validGoalDetails()
+			d.Recurrence = tc.recurrence
+			d.WeeklyTarget = tc.weeklyTarget
+			g, err := s.CreateGoal(ctx, UpsertGoalParams{PatientID: owner, Title: tc.name, Details: d})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if g.Details.Weekdays == nil || len(g.Details.Weekdays) != 0 {
+				t.Fatalf("returned irrelevant weekdays=%v", g.Details.Weekdays)
+			}
+			var stored string
+			if err := db.QueryRow(`SELECT details->'weekdays' FROM goals WHERE id=$1`, g.ID).Scan(&stored); err != nil {
+				t.Fatal(err)
+			}
+			if stored != "[]" {
+				t.Fatalf("stored irrelevant weekdays=%s", stored)
+			}
+			if len(d.Weekdays) != 7 {
+				t.Fatal("normalization mutated caller")
+			}
+			d.Weekdays = []int{0}
+			if _, err := goalDetailsJSON(d); err == nil {
+				t.Fatal("invalid caller weekdays bypassed validation")
+			}
+		})
+	}
+}

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -36,7 +37,7 @@ func TestGoalDetailsValidation(t *testing.T) {
 		{"invalid time", func(d *GoalDetails) { d.Time = "24:00" }, false},
 		{"noncanonical time", func(d *GoalDetails) { d.Time = "9:00" }, false},
 		{"no timed reminder", func(d *GoalDetails) { d.Time = "" }, true},
-		{"invalid recurrence", func(d *GoalDetails) { d.Recurrence = "monthly" }, false},
+		{"invalid recurrence", func(d *GoalDetails) { d.Recurrence = "yearly" }, false},
 		{"zero interval", func(d *GoalDetails) { d.Interval = 0 }, false},
 		{"daily interval bound", func(d *GoalDetails) { d.Interval = 366 }, false},
 		{"weekly interval bound", func(d *GoalDetails) { d.Recurrence = "weekly"; d.Interval = 53 }, false},
@@ -182,5 +183,140 @@ func TestGoalStreakCountsOccurrencesAndAllowsPendingToday(t *testing.T) {
 	}
 	if got := goalStreak(d, logs, goalTestDate("2026-11-04"), goalTestDate("2026-11-11")); got != 2 {
 		t.Fatalf("selected-date streak=%d want 2", got)
+	}
+}
+
+func TestGoalMonthlyAnchorAndPrevious(t *testing.T) {
+	d := validGoalDetails()
+	d.Recurrence = "monthly"
+	d.StartDate = "2024-01-31"
+	if err := ValidateGoalDetails(d); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		on       string
+		due      bool
+		previous string
+	}{
+		{"2024-02-28", false, "2024-01-31"}, {"2024-02-29", true, "2024-02-29"}, {"2024-03-30", false, "2024-02-29"}, {"2024-03-31", true, "2024-03-31"},
+	} {
+		if got := goalDue(d, goalTestDate(tc.on)); got != tc.due {
+			t.Errorf("due %s=%v", tc.on, got)
+		}
+		got, ok := previousGoalDue(d, goalTestDate(tc.on))
+		if !ok || got.Format("2006-01-02") != tc.previous {
+			t.Errorf("previous %s=%v %v", tc.on, got, ok)
+		}
+	}
+	d.Interval = 2
+	if goalDue(d, goalTestDate("2024-02-29")) || !goalDue(d, goalTestDate("2024-03-31")) {
+		t.Fatal("monthly interval ignored")
+	}
+	d.Interval = 13
+	if ValidateGoalDetails(d) == nil {
+		t.Fatal("accepted monthly interval13")
+	}
+}
+
+func TestGoalFlexibleWeeklyQuota(t *testing.T) {
+	d := validGoalDetails()
+	d.Recurrence = "weekly"
+	d.Weekdays = nil
+	if err := json.Unmarshal([]byte(`{"weekly_target":2}`), d); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateGoalDetails(d); err != nil {
+		t.Fatal(err)
+	}
+	logs := []HabitLog{{LoggedOn: "2026-11-02", Done: true}, {LoggedOn: "2026-11-04", Done: true}, {LoggedOn: "2026-11-09", Done: true}}
+	for _, tc := range []struct {
+		on   string
+		want int
+	}{{"2026-11-08", 2}, {"2026-11-09", 3}, {"2026-11-15", 3}, {"2026-11-16", 0}} {
+		if got := goalStreak(d, logs, goalTestDate(tc.on), goalTestDate(tc.on)); got != tc.want {
+			t.Errorf("streak %s=%d want%d", tc.on, got, tc.want)
+		}
+	}
+	var g Goal
+	g.Details = d
+	summarizeGoal(&g, logs, goalTestDate("2026-11-05"), goalTestDate("2026-11-09"))
+	raw, _ := json.Marshal(g)
+	var out map[string]any
+	_ = json.Unmarshal(raw, &out)
+	days, ok := out["completed_weekdays"].([]any)
+	if !ok || len(days) != 2 || days[0] != float64(1) || days[1] != float64(3) {
+		t.Fatalf("actual weekdays: %s", raw)
+	}
+	if g.FailedToday {
+		t.Fatal("rest day auto-failed")
+	}
+	logs = append(logs, HabitLog{LoggedOn: "2026-11-10", Done: false})
+	if got := goalStreak(d, logs, goalTestDate("2026-11-10"), goalTestDate("2026-11-10")); got != 0 {
+		t.Fatalf("explicit fail streak=%d", got)
+	}
+	_ = json.Unmarshal([]byte(`{"weekly_target":0}`), d)
+	if got := goalStreak(d, logs[:3], goalTestDate("2026-12-01"), goalTestDate("2026-12-01")); got != 3 {
+		t.Fatalf("zero quota=%d", got)
+	}
+	for _, raw := range []string{`{"weekly_target":-1}`, `{"weekly_target":8}`} {
+		_ = json.Unmarshal([]byte(raw), d)
+		if ValidateGoalDetails(d) == nil {
+			t.Fatal("invalid quota accepted", raw)
+		}
+	}
+	_ = json.Unmarshal([]byte(`{"weekly_target":1}`), d)
+	d.Recurrence = "daily"
+	if ValidateGoalDetails(d) == nil {
+		t.Fatal("daily quota accepted")
+	}
+}
+
+func TestGoalFlexibleWeeklyInactiveIntervalsAndProjection(t *testing.T) {
+	quota := 2
+	d := validGoalDetails()
+	d.Recurrence = "weekly"
+	d.Interval = 2
+	d.WeeklyTarget = &quota
+	d.Weekdays = []int{1}
+	logs := []HabitLog{{LoggedOn: "2026-11-02", Done: true}, {LoggedOn: "2026-11-04", Done: true}, {LoggedOn: "2026-11-09", Done: true}, {LoggedOn: "2026-11-16", Done: true}}
+	if goalDue(d, goalTestDate("2026-11-09")) || !goalDue(d, goalTestDate("2026-11-04")) {
+		t.Fatal("flexible interval/day filter")
+	}
+	if got := goalStreak(d, logs, goalTestDate("2026-11-16"), goalTestDate("2026-11-16")); got != 3 {
+		t.Fatalf("inactive rest week broke streak=%d", got)
+	}
+	if got := goalStreak(d, logs, goalTestDate("2026-11-23"), goalTestDate("2026-11-23")); got != 0 {
+		t.Fatalf("missing active quota streak=%d", got)
+	}
+	for _, tc := range []struct {
+		details *GoalDetails
+		on      string
+		want    []int
+	}{{nil, "2026-11-03", []int{1}}, {d, "2026-11-10", []int{}}} {
+		g := Goal{Details: tc.details}
+		summarizeGoal(&g, logs, goalTestDate(tc.on), goalTestDate("2026-11-23"))
+		if len(g.CompletedWeekdays) != len(tc.want) {
+			t.Fatalf("projected %+v want %+v", g.CompletedWeekdays, tc.want)
+		}
+		for i := range tc.want {
+			if g.CompletedWeekdays[i] != tc.want[i] {
+				t.Fatalf("projected %+v", g.CompletedWeekdays)
+			}
+		}
+	}
+	d.AutoFail = false
+	if got := goalStreak(d, logs, goalTestDate("2026-12-01"), goalTestDate("2026-12-01")); got != 3 {
+		t.Fatalf("auto-fail disabled=%d", got)
+	}
+}
+
+func TestGoalFlexibleFirstMondayIsPending(t *testing.T) {
+	quota := 2
+	d := validGoalDetails()
+	d.Recurrence = "weekly"
+	d.WeeklyTarget = &quota
+	logs := []HabitLog{{LoggedOn: "2026-11-02", Done: true}}
+	if got := goalStreak(d, logs, goalTestDate("2026-11-02"), goalTestDate("2026-11-02")); got != 1 {
+		t.Fatalf("first Monday streak=%d want1", got)
 	}
 }

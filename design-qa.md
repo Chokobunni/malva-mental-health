@@ -1,77 +1,68 @@
-# Goals & Habits visual verification — 2026-11-12 WIB
+# Goals & Habits visual QA — 2026-11-13 WIB
 
 final result: passed
 
-## Visual truth and rendering
+## Target and capture
 
-Source: the seven user PNG attachments in `C:/Users/user/AppData/Local/Temp/`:
-`codex-clipboard-2cc72e7c-4b61-48c0-8f6f-7cef9d0b83d5.png`,
-`codex-clipboard-d8784470-9fa7-4a15-8b07-7ace17af4af0.png`,
-`codex-clipboard-ca0eb1fb-e679-44c4-8995-a0ed9aeb0a43.png`,
-`codex-clipboard-7752817d-c45c-49c7-bf55-0da3dd1e50e3.png`,
-`codex-clipboard-3bdf7a48-da32-464e-9a83-a0ca88aa6dd2.png`,
-`codex-clipboard-67256077-c8af-497f-ab03-2263e4a43774.png`,
-`codex-clipboard-cf22b659-ae6b-4242-952a-34a4200d6cf0.png`.
+The six latest supplied attachments are the source of truth: list, edit yes/no,
+edit numeric, edit checklist, create and replacement flower. Source originals,
+normalizations, app captures and comparison script are preserved in
+`D:/Project/Malva/2026-07-09/_qa_2026_11_13_goals_refinement/`.
+Original filenames are recorded in `compare.py`; copies are reference-original-1
+through6.png. Sources1–5:699×2560,528×2560,453×2560,580×2560,544×2560.
+Black frame crop bounds respectively:(27,8,671,2560),(21,10,508,2546),
+(18,14,435,2548),(23,11,557,2550),(21,24,523,2546).
+Each crop is resized proportionally to logical width390, never stretched in height.
+Native Flutter captures are logical width390 at DPR2 (780px), with full content
+height measured from the rendered widget. Normalized source heights are1545,
+2031,2370,1854,1959; app heights1557,2035,2314,1857,1958. Device corners and
+external scrollbar are reference chrome rather than app content.
 
-Implementation/evidence directory:
-`D:/Project/Malva/2026-07-09/_qa_2026_11_12_goals_reference/`.
-`01-list.png` through `07-edit-checklist.png` are actual Flutter raster captures
-at logical width390, DPR2. Full-page height follows measured content rather than
-stretching the screenshot to fit. Source black borders are cropped and each
-reference is resized proportionally to width390. Exact crop bounds are recorded
-in `compare.py`. `comparison-1.png` through `comparison-7.png` place both full
-views beside each other without altering their relative height. The original
-PNGs, captures and normalized comparisons were opened and inspected directly.
-Native Flutter rendering is used because the target is the existing Flutter app,
-not a new HTML prototype. No browser console claim is made.
+Actual Flutter raster output is used because this is the existing Flutter app,
+not an HTML prototype. No browser or authenticated live-patient capture is claimed.
+Synthetic fixtures use actual response fields and never seed production. List
+clock is injected at11 November2026 for a matched Wednesday state; editor saved
+records match that date, and create time follows current WIB. Production uses
+wibNow and real patient records. The sixth supplied flower explicitly overrides
+the older flower shown in the five screen references.
 
-States: list with four synthetic reference-shaped fixtures (50%, real response
-status fields); create yes/no/numeric/checklist; edit each method using the same
-reference content. Fixtures exist only in tests. Production consumes actual
-patient records. Create timestamps intentionally follow the current WIB clock;
-edit timestamps/configuration follow saved records. New forms contain no invented
-sample steps. Visual fixture steps are entered through the actual form.
+## Comparison history
 
-## Findings and comparison history
+1. Initial combined captures comparison-1..5.png showed P2 header/achievement
+   proportions, oversized filter type, schedule copy wrapping and old schedule
+   layout. Replaced weekly schedule UI with frequency/day modes, corrected
+   header spacing/gradient, weekday date, filter size and numeric helper type.
+2. The first create raster had an unloaded flower image. Explicit precaching
+   corrected the capture; production uses the ordinary asset loader.
+3. Captured again after fixes. Opened comparison-final-1..5.png together with
+   focused editor capture focus-3.png and flower-comparison.png. All required
+   components, method states, day buttons, frequency0/4, reminders, rule checks,
+   actions, notes and completion states appear in the reference order.
 
-- Initial P1/P2: reused plant asset differed from reference flower, default test
-  font produced Ahem bars, header was too tall, multiline hints inflated fields,
-  and checklist native spacing changed density. Fixed with the supplied flower
-  crop, scoped licensed font, explicit styles and compact component sizing.
-- Iterations5–6: corrected material ancestry, top alignment, full-page captures
-  and title placement below badges/actions. Captures no longer clip the footer
-  or add arbitrary empty gradient space.
-- Iterations7–9: corrected filter tap-target spacing, schedule padding, checklist
-  rows, title completion style, reset icon, secondary-button tap padding and
-  tracking-control spacing. Numeric/checklist/status values are server data.
-- Final: compared all seven full views again; headers, method states, cards,
-  scheduling fields, reminder counts, tracking checks and actions are present in
-  the correct order. No actionable P0/P1/P2 visual or responsive issue remains.
-  Focused inspection of headers/flower, method tiles, schedule controls and bottom
-  actions was performed within the full-resolution combined images; separate
-  crops were unnecessary.
+## Required fidelity surfaces
 
-## Follow-up polish and limits
+- Typography: existing scoped Plus Jakarta Sans with explicit sizes/weights;
+  matching hierarchy and wrapping. Original font metadata was not supplied;
+  small shape/weight differences remain P3.
+- Spacing/layout: card widths, rounded surfaces, header, method grid, weekly
+  panels and actions match overall composition. Native font/control metrics
+  leave small cumulative spacing and quick-preset wrapping differences (P3).
+- Colors/tokens: sampled purple/lilac/cream/pink and white surfaces, states and
+  header gradients retained. Minor indicator-gradient/shadow variations P3.
+- Assets: source flower silhouette extracted with transparent background,
+  replacing the previous raster. No invented icon drawing or generated logo.
+  Standard icons reuse Material equivalents; stroke/raster differences P3.
+- Copy/content: reference UI copy retained, except dynamic date/status/progress
+  and intentional new monthly option. No example patient record is introduced.
 
-- P3: small font-metric, icon-stroke, shadow and cumulative spacing differences
-  remain across raster platforms. This is a faithful implementation, not proof
-  of pixel-for-pixel identity. Original font metadata was not supplied.
-- P3: long unsaved create-step previews truncate on one line; editing displays
-  the full wrapping label. Actual patient text can change page height.
-- Tests also exercise320/390px at text scale1.35 and scroll to the save action
-  without overflow. Physical-device raster comparison is not covered.
+## Behavior and responsive evidence
 
-## Pixel dimensions
+Visual suite9/9, including320/390px at text scale1.35. Regression tests verify
+monthly dates/reminders, weekly modes and saved quota0, stable habit Y/scroll
+offset during numeric/checklist save and successful/failed refresh, account
+lifecycle safety, day rollover and authoritative post-edit weekly data.
+Full Flutter suite1212/1212 passed after review fixes.
 
-| View | Source PNG | Implementation PNG | Logical viewport |
-|---|---|---|---|
-| List |635x2560 |780x3406 |390x1703 |
-| Create yes/no |613x2560 |780x3578 |390x1789 |
-| Create numeric |551x2560 |780x3948 |390x1974 |
-| Create checklist |608x2560 |780x3578 |390x1789 |
-| Edit yes/no |652x2560 |780x3366 |390x1683 |
-| Edit numeric |536x2560 |780x3992 |390x1996 |
-| Edit checklist |585x2560 |780x3726 |390x1863 |
-
-Source density is inferred from each cropped content width; implementation DPR2
-is explicit. Captures use full content height, not a physical-device viewport.
+No actionable P0/P1/P2 visual issue remains. This passes the design-QA gate;
+pixel-for-pixel identity is not claimed. Physical-device OS alarm delivery and
+authenticated two-device synchronization were not exercised.

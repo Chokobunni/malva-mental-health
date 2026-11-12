@@ -1577,3 +1577,14 @@ are independently patched atomically. Configured goals reject future/unscheduled
 logs; lock-past permits today and yesterday WIB. Missing elapsed occurrences fail
 only with auto-fail enabled. Goal/log ownership and clinical consent checks remain
 mandatory. Additive migration 041 must run before the new API binary.
+
+Refinement 2026-11-13 adds `recurrence: monthly` (interval1–12), anchored to
+the original start day with short-month clamp and anchor restoration. Optional
+`details.weekly_target`0–7 selects flexible weekly frequency; omission retains
+selected weekdays, 0 has no quota. Empty rest days do not fail a flexible quota;
+only fully elapsed active weeks below quota break auto-fail streaks. Explicit
+failed logs still break streaks. `completed_weekdays` is the sorted ISO weekday
+list of actual qualifying completions in the selected week through `on`.
+`target_per_week` remains unchanged. Monthly/flexible writes normalize irrelevant
+weekdays to[] after validation so older schedulers cannot guess daily alarms;
+editing these settings requires the updated app. No additional migration is needed.

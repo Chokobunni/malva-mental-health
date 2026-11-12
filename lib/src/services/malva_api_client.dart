@@ -5317,6 +5317,8 @@ class BackendGoal {
     required this.targetPerWeek,
     required this.isActive,
     this.doneThisWeek = 0,
+    this.completedWeekdays = const [],
+    this.weeklyProgressAvailable = true,
     this.lastLoggedOn,
     this.details,
     this.doneToday,
@@ -5336,6 +5338,13 @@ class BackendGoal {
       targetPerWeek: (json['target_per_week'] as num?)?.toInt() ?? 3,
       isActive: json['is_active'] != false,
       doneThisWeek: (json['done_this_week'] as num?)?.toInt() ?? 0,
+      completedWeekdays: (json['completed_weekdays'] as List? ?? [])
+          .whereType<num>()
+          .map((n) => n.toInt())
+          .where((day) => day >= 1 && day <= 7)
+          .toSet()
+          .toList()
+        ..sort(),
       lastLoggedOn: json['last_logged_on']?.toString(),
       details: json['details'] is Map
           ? GoalDetails.fromJson(
@@ -5361,6 +5370,8 @@ class BackendGoal {
   final int targetPerWeek;
   final bool isActive;
   final int doneThisWeek;
+  final List<int> completedWeekdays;
+  final bool weeklyProgressAvailable;
   final String? lastLoggedOn;
   final GoalDetails? details;
   final bool? doneToday;
@@ -5372,6 +5383,7 @@ class BackendGoal {
   // Update responses summarize today. Keep the selected day's log when the
   // user edits from history, including when the subsequent refresh fails.
   BackendGoal withDefinition(BackendGoal saved, {required DateTime on}) {
+    if (wibDateKey(on) == wibDateKey(wibNow())) return saved;
     final d = saved.details;
     final completed = switch (d?.method) {
       'numeric' => todayValue >= d!.target,
@@ -5388,6 +5400,8 @@ class BackendGoal {
       createdAt: saved.createdAt,
       details: d,
       doneThisWeek: doneThisWeek,
+      completedWeekdays: const [],
+      weeklyProgressAvailable: false,
       lastLoggedOn: lastLoggedOn,
       doneToday: completed,
       todayValue: todayValue,
@@ -5398,23 +5412,34 @@ class BackendGoal {
     );
   }
 
-  BackendGoal withProgress(BackendHabitLog log) => BackendGoal(
-        id: id,
-        title: title,
-        category: category,
-        targetPerWeek: targetPerWeek,
-        isActive: isActive,
-        doneThisWeek: doneThisWeek,
-        lastLoggedOn: lastLoggedOn,
-        details: details,
-        doneToday: log.done,
-        todayValue: log.value,
-        todayCompletedStepIds: log.completedStepIds,
-        streakDays: streakDays,
-        isDue: isDue,
-        failedToday: !log.done,
-        createdAt: createdAt,
-      );
+  BackendGoal withProgress(BackendHabitLog log) {
+    final day = DateTime.tryParse(log.loggedOn)?.weekday;
+    final days = completedWeekdays.toSet();
+    if (day != null) {
+      log.done ? days.add(day) : days.remove(day);
+    }
+    return BackendGoal(
+      id: id,
+      title: title,
+      category: category,
+      targetPerWeek: targetPerWeek,
+      isActive: isActive,
+      doneThisWeek:
+          (doneThisWeek + (log.done ? 1 : 0) - (doneToday == true ? 1 : 0))
+              .clamp(0, 7),
+      completedWeekdays: days.toList()..sort(),
+      weeklyProgressAvailable: weeklyProgressAvailable,
+      lastLoggedOn: lastLoggedOn,
+      details: details,
+      doneToday: log.done,
+      todayValue: log.value,
+      todayCompletedStepIds: log.completedStepIds,
+      streakDays: streakDays,
+      isDue: isDue,
+      failedToday: !log.done,
+      createdAt: createdAt,
+    );
+  }
 }
 
 /// Log habit (centang) dari POST/GET /v1/habit-logs.

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -40,6 +41,7 @@ func scanGoal(row goalScanner) (Goal, error) {
 		}
 	}
 	g.TodayCompletedStepIDs = []string{}
+	g.CompletedWeekdays = []int{}
 	return g, nil
 }
 
@@ -55,7 +57,8 @@ func goalDetailsJSON(d *GoalDetails) (any, error) {
 	if normalized.Steps == nil {
 		normalized.Steps = []GoalStep{}
 	}
-	if normalized.Weekdays == nil {
+	// Older clients must not infer weekday reminders for schedules they cannot read.
+	if normalized.Weekdays == nil || normalized.Recurrence == "monthly" || normalized.WeeklyTarget != nil {
 		normalized.Weekdays = []int{}
 	}
 	if normalized.Reminders == nil {
@@ -71,12 +74,15 @@ func goalDetailsJSON(d *GoalDetails) (any, error) {
 func summarizeGoal(g *Goal, logs []HabitLog, on, today time.Time) {
 	g.IsDue = goalDue(g.Details, on)
 	g.TodayCompletedStepIDs = []string{}
+	g.CompletedWeekdays = []int{}
 	selected := on.Format("2006-01-02")
 	monday := on.AddDate(0, 0, 1-goalISOWeekday(on)).Format("2006-01-02")
 	found := false
 	for _, l := range logs {
 		done := goalLogDone(g.Details, l)
-		if done && l.LoggedOn >= monday && l.LoggedOn <= selected {
+		date, err := goalDate(l.LoggedOn)
+		if done && err == nil && goalDue(g.Details, date) && l.LoggedOn >= monday && l.LoggedOn <= selected {
+			g.CompletedWeekdays = append(g.CompletedWeekdays, goalISOWeekday(date))
 			g.DoneThisWeek++
 			date := l.LoggedOn
 			if g.LastLoggedOn == nil || date > *g.LastLoggedOn {
@@ -90,8 +96,9 @@ func summarizeGoal(g *Goal, logs []HabitLog, on, today time.Time) {
 			g.TodayCompletedStepIDs = append([]string{}, l.CompletedStepIDs...)
 		}
 	}
+	sort.Ints(g.CompletedWeekdays)
 	if g.IsDue {
-		g.FailedToday = (found && !g.DoneToday) || (!found && g.Details != nil && g.Details.AutoFail && on.Before(goalDay(today)))
+		g.FailedToday = (found && !g.DoneToday) || (!found && g.Details != nil && g.Details.AutoFail && (g.Details.Recurrence != "weekly" || g.Details.WeeklyTarget == nil) && on.Before(goalDay(today)))
 	}
 	g.StreakDays = goalStreak(g.Details, logs, on, today)
 }

@@ -87,6 +87,28 @@ BackendGoal goal(
 const details =
     GoalDetails(startDate: '2026-11-12', time: '22:30', reminders: [30, 0]);
 void main() {
+  test(
+      'monthly reminders retain calendar anchor and WIB offsets across leap month',
+      () {
+    final times = GoalReminderService.upcomingReminders(
+        goal(
+            details: const GoalDetails(
+                startDate: '2028-01-31',
+                time: '00:15',
+                recurrence: 'monthly',
+                weekdays: [],
+                reminders: [30, 0])),
+        now: wibFromParts(2028, 1, 30, 12),
+        limit: 6);
+    expect(times.map(wibApiDateTime).toList(), [
+      '2028-01-30T23:45',
+      '2028-01-31T00:15',
+      '2028-02-28T23:45',
+      '2028-02-29T00:15',
+      '2028-03-30T23:45',
+      '2028-03-31T00:15',
+    ]);
+  });
   test('completed legacy goal keeps its future repeating daily reminder',
       () async {
     final scheduler = Scheduler();

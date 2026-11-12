@@ -73,6 +73,10 @@
 - Pengujian utama: mood_insights*, medication_checklist_ui, diary_separation,
   doctor_reviews_distance, health_export_server, health_pdf_report.
 
+## Goals & Habits (2026-11-13)
+
+Goals & Habits (2026-11-13): list/tiga edit/tambah mengikuti acuan terbaru dan ikon bunga supplied. Refresh same-date tidak menghapus kartu atau mengubah scroll. Rollover membuang progres tanggal lama. Weekly mendukung optional `details.weekly_target` 0–7 (absen=hari terpilih, 0=tanpa kuota); hari kosong fleksibel bukan kegagalan harian. Streak auto-fail hanya terputus bila minggu aktif penuh kurang kuota atau ada log gagal eksplisit. Monthly interval1–12 memakai tanggal anchor asli, clamp akhir bulan dan pulih bulan berikutnya. Respons `completed_weekdays` berisi hari sukses aktual hingga tanggal pilihan. Weekdays monthly/fleksibel dinormalisasi [] untuk scheduler lama. Kontrak legacy target_per_week tetap; tidak ada migrasi baru. Rujukan [desain](../../../docs/superpowers/specs/2026-11-13-goals-refinement-design.md).
+
 ## Resep dan rutinitas obat (2026-11-10)
 
 - Wizard E-Prescription hanya untuk Sp.KJ terverifikasi dan pasien terhubung. Empat tahap: Detail Obat, Atur Rutinitas, pengingat konsumsi, pengingat isi ulang. Stok hanya di pengingat isi ulang dan tetap disimpan saat toggle notifikasi mati. Nama obat maupun diagnosis tidak boleh diisi dari contoh.

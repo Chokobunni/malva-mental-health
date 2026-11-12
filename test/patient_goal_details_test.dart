@@ -4,8 +4,71 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 
 void main() {
+  test(
+      'today definition uses returned server weekly history after target change',
+      () {
+    final before = BackendGoal.fromJson({
+      'id': 'g',
+      'title': 'Baca',
+      'done_this_week': 2,
+      'completed_weekdays': [1, 2],
+      'done_today': true
+    });
+    final saved = BackendGoal.fromJson({
+      'id': 'g',
+      'title': 'Baca',
+      'done_this_week': 0,
+      'completed_weekdays': [],
+      'done_today': false
+    });
+    final dynamic result = before.withDefinition(saved, on: wibNow());
+    expect(result.doneThisWeek, 0);
+    expect(result.completedWeekdays, isEmpty);
+  });
+  test(
+      'historical definition retains daily log but invalidates unknown weekly history',
+      () {
+    final before = BackendGoal.fromJson({
+      'id': 'g',
+      'title': 'Baca',
+      'done_this_week': 2,
+      'completed_weekdays': [1, 2],
+      'today_value': 14
+    });
+    final saved = BackendGoal.fromJson({
+      'id': 'g',
+      'title': 'Baca',
+      'details': {'method': 'numeric', 'target': 30, 'start_date': '2026-01-01'}
+    });
+    final dynamic result =
+        before.withDefinition(saved, on: DateTime(2026, 1, 2));
+    expect(result.todayValue, 14);
+    expect(result.weeklyProgressAvailable, isFalse);
+    expect(result.completedWeekdays, isEmpty);
+  });
+  test(
+      'accepted progress updates actual weekday states without waiting for reload',
+      () {
+    final goal = BackendGoal.fromJson({
+      'id': 'g',
+      'title': 'Baca',
+      'is_active': true,
+      'done_today': false,
+      'done_this_week': 2,
+      'completed_weekdays': [1, 2],
+    });
+    final dynamic completed = goal.withProgress(const BackendHabitLog(
+        id: 'l', goalId: 'g', loggedOn: '2026-11-11', done: true));
+    expect(completed.doneThisWeek, 3);
+    expect(completed.completedWeekdays, [1, 2, 3]);
+    final dynamic undone = completed.withProgress(const BackendHabitLog(
+        id: 'l', goalId: 'g', loggedOn: '2026-11-11', done: false));
+    expect(undone.doneThisWeek, 2);
+    expect(undone.completedWeekdays, [1, 2]);
+  });
   test('goal response keeps numeric and checklist progress separate from done',
       () {
     final dynamic goal = BackendGoal.fromJson({

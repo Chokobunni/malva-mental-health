@@ -990,6 +990,11 @@ Log pengiriman blast SOS per kontak (channel WhatsApp via Fonnte).
 
 ### 3.40 goals (migrasi 010)
 
+Refinement2026-11-13 adds no table/column: optional `details.weekly_target`0–7
+and `recurrence: monthly` reuse JSONB introduced in041. Quota absence preserves
+weekday semantics; monthly/flexible configurations store weekdays[] canonically.
+`completed_weekdays` is computed from real habit logs, never a stored counter.
+
 Target/habit pasien yang tersimpan di server.
 
 | Column | Type | Constraints | Description |

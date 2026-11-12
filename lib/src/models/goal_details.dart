@@ -20,6 +20,7 @@ class GoalDetails {
     this.time = '',
     this.recurrence = 'daily',
     this.interval = 1,
+    this.weeklyTarget,
     this.weekdays = const [1, 2, 3, 4, 5, 6, 7],
     this.reminders = const [],
     this.autoFail = true,
@@ -39,6 +40,7 @@ class GoalDetails {
         time: json['time'] as String? ?? '',
         recurrence: json['recurrence'] as String? ?? 'daily',
         interval: (json['interval'] as num?)?.toInt() ?? 1,
+        weeklyTarget: (json['weekly_target'] as num?)?.toInt(),
         weekdays: (json['weekdays'] as List? ?? [1, 2, 3, 4, 5, 6, 7])
             .whereType<num>()
             .map((n) => n.toInt())
@@ -53,6 +55,7 @@ class GoalDetails {
 
   final String note, method, unit, startDate, time, recurrence;
   final int target, interval;
+  final int? weeklyTarget;
   final List<GoalStep> steps;
   final List<int> weekdays, reminders;
   final bool autoFail, lockPast;
@@ -67,6 +70,7 @@ class GoalDetails {
         'time': time,
         'recurrence': recurrence,
         'interval': interval,
+        if (weeklyTarget != null) 'weekly_target': weeklyTarget,
         'weekdays': weekdays,
         'reminders': reminders,
         'auto_fail': autoFail,
@@ -81,16 +85,25 @@ class GoalDetails {
     final days = day.difference(anchor).inDays;
     if (days < 0) return false;
     if (recurrence == 'daily') return days % interval == 0;
+    if (recurrence == 'monthly') {
+      final months = (day.year - anchor.year) * 12 + day.month - anchor.month;
+      final lastDay = wibFromParts(day.year, day.month + 1, 0).day;
+      return months % interval == 0 &&
+          day.day == (anchor.day > lastDay ? lastDay : anchor.day);
+    }
+    if (recurrence != 'weekly') return false;
     final monday = anchor.subtract(Duration(days: anchor.weekday - 1));
     return day.difference(monday).inDays ~/ 7 % interval == 0 &&
-        weekdays.contains(day.weekday);
+        (weeklyTarget != null || weekdays.contains(day.weekday));
   }
 
   String get scheduleLabel {
     final every = recurrence == 'weekly'
         ? (interval == 1 ? 'setiap minggu' : 'setiap $interval minggu')
-        : (interval == 1 ? 'setiap hari' : 'setiap $interval hari');
-    final days = recurrence == 'weekly'
+        : recurrence == 'monthly'
+            ? (interval == 1 ? 'setiap bulan' : 'setiap $interval bulan')
+            : (interval == 1 ? 'setiap hari' : 'setiap $interval hari');
+    final days = recurrence == 'weekly' && weeklyTarget == null
         ? ' pada ${weekdays.length == 7 ? 'setiap hari' : (weekdays.toList()..sort()).map((d) => const [
               'Sen',
               'Sel',
@@ -100,7 +113,13 @@ class GoalDetails {
               'Sab',
               'Min'
             ][d - 1]).join(', ')}'
-        : '';
+        : recurrence == 'weekly' && weeklyTarget != null
+            ? (weeklyTarget == 0
+                ? ' tanpa target frekuensi khusus'
+                : ' • target $weeklyTarget kali per minggu (hari fleksibel)')
+            : recurrence == 'monthly'
+                ? ' pada tanggal ${startDate.split('-').last} (akhir bulan bila lebih pendek)'
+                : '';
     return 'Berulang $every$days${time.isEmpty ? '' : ' • Pukul ${time.replaceAll(':', '.')}'}';
   }
 }
