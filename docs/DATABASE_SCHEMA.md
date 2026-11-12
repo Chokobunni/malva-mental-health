@@ -1001,6 +1001,7 @@ Target/habit pasien yang tersimpan di server.
 | `target_per_week` | integer | NOT NULL, DEFAULT 3 | Target mingguan |
 | `is_active` | boolean | NOT NULL, DEFAULT true | Aktif |
 | `sort_order` | integer | NOT NULL, DEFAULT 0 | Urutan tampil |
+| `details` | jsonb | NULL (041) | Konfigurasi metode, catatan, target/satuan, langkah, jadwal, pengingat dan aturan pelacakan; NULL = legacy |
 | `created_at` / `updated_at` | timestamptz | DEFAULT now() | Audit |
 
 **Index:** `goals_patient_idx` ON (patient_id, is_active, sort_order).
@@ -1016,6 +1017,8 @@ Log harian per goal (satu baris per goal per tanggal).
 | `patient_id` | uuid | NOT NULL, FK → users(id) CASCADE | Pasien |
 | `logged_date` | date | NOT NULL, DEFAULT CURRENT_DATE | Tanggal log |
 | `done` | boolean | NOT NULL, DEFAULT true | Selesai |
+| `value` | integer | NOT NULL, DEFAULT 0 (041) | Progres nilai; completion diproyeksikan dari target saat ini |
+| `completed_step_ids` | jsonb | NOT NULL, DEFAULT '[]' (041) | ID langkah selesai; completion dari langkah saat ini |
 | `created_at` | timestamptz | DEFAULT now() | Waktu dibuat |
 
 **Constraint:** UNIQUE (goal_id, logged_date). **Index:** `habit_logs_patient_idx` ON (patient_id, logged_date DESC).

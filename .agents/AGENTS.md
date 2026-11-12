@@ -467,3 +467,11 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 ## CRUD goals pasien (2026-11-11)
 
 - Kartu Goals & Habits pasien menyediakan edit dan hapus langsung, memakai API ownership yang sudah ada dan konfirmasi sebelum hapus. Form menunggu hasil, mencegah submit ganda, mempertahankan input saat gagal dan menolak judul kosong. Kategori tersimpan di luar pilihan bawaan tetap kompatibel. Pergantian akun, termasuk A→B→A, menonaktifkan layar/editor lama; refresh token pemilik sama tetap sah. Rujukan: [check-in](skills/health_checkin_module.md), [rencana](../docs/superpowers/plans/2026-11-11-patient-goals-crud.md).
+
+## Goals & Habits referensi (2026-11-12)
+
+- User mengizinkan perluasan data. Migrasi 041 menambah `goals.details` nullable dan progres nilai/sub-tugas pada `habit_logs`; data tanpa details tetap yes/no legacy dengan kategori, target mingguan dan riwayat asli.
+- Metode yes/no, numeric, checklist menyimpan catatan, target/satuan, langkah ber-ID stabil, jadwal WIB, interval/hari, offset pengingat, auto-fail dan lock-past. Server menghitung completion/streak dari log nyata; GET `on` memilih tanggal. Jadwal tidak aktif/tanggal masa depan ditolak; lock-past mengizinkan hari ini dan kemarin WIB.
+- Layar penuh mengikuti tujuh acuan, menjaga retry/idempotensi dan isolasi akun. Edit dari riwayat mempertahankan progres tanggal terpilih ketika reload gagal. Hapus dari kartu memakai konfirmasi.
+- Pengingat konfigurasi dijadwalkan lokal dengan isi generik, maksimal 48 kejadian mendatang dari horizon 370 hari. Refill startup/resume/revisi, batalkan logout/ganti akun; reminder harian legacy hanya untuk goal tanpa details. Pengiriman fisik OS memerlukan QA perangkat.
+- Rujukan: [kontrak](../docs/superpowers/specs/2026-11-12-patient-goals-reference.md), [check-in](skills/health_checkin_module.md), [QA](../docs/qa/2026-11-12-patient-goals-reference.md).

@@ -1559,3 +1559,21 @@ the existing non-reservation policy and activation reschedule flow.
   idempotent backfill restricted to positive linked supply snapshots with no
   edits, taken/partial logs or ambiguous medication references. Unknown legacy
   zero supply is left unchanged.
+
+### Goals & Habits configuration and daily progress (2026-11-12)
+
+Migration 041 adds optional `details` to goal create/update/read and `value` /
+`completed_step_ids` to habit logs. Existing goals without details preserve legacy
+yes/no behavior, categories, weekly targets and history. Full field names, bounds
+and response shapes are in [OpenAPI](openapi.yaml) and the
+[feature contract](superpowers/specs/2026-11-12-patient-goals-reference.md).
+
+GET `/v1/goals?on=YYYY-MM-DD` projects the selected WIB date's `done_today`,
+`today_value`, `today_completed_step_ids`, `streak_days`, `is_due`, `failed_today`.
+Create/update responses project today. Clients editing a historical view must
+preserve that day's progress until the selected-date refresh completes.
+Numeric/checklist completion derives from the current definition; progress fields
+are independently patched atomically. Configured goals reject future/unscheduled
+logs; lock-past permits today and yesterday WIB. Missing elapsed occurrences fail
+only with auto-fail enabled. Goal/log ownership and clinical consent checks remain
+mandatory. Additive migration 041 must run before the new API binary.

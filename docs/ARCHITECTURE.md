@@ -489,3 +489,17 @@ read, sehingga revisi draft paralel tidak bercampur dengan header issued lama.
 Wizard profesional mengikuti empat tahap referensi; stok hanya pada pengingat isi ulang. Fleksibel melewati pengingat konsumsi, memakai explicit times[] dan interval0; tidak ada fallback jam. Key opsional schedule.interval_months0–12 mendukung injeksi tiapXbulan, eksklusif dengan interval jam/hari. Scheduler menghitung bulan kalender dari tanggal anchor asli, clamp ke hari terakhir bulan pendek lalu kembali ke tanggal anchor pada bulan berikutnya. Pengingat berkala mengantre60kejadian dan diisi ulang saat refresh/resume. Tidak ada migrasi tabel/kolom.
 
 Pada batas respons HTTP, jadwal bulanan mengembalikan times[] dan monthly_times berisi jam aktual; reminder_time obat dikosongkan. Klien lama tidak akan menurunkan jadwal menjadi harian setelah refresh. Klien baru memulihkan monthly_times hanya untuk interval bulan positif dan mengirim request kanonis memakai times. Penyimpanan serta audit tetap kanonis tanpa proyeksi; edit bulanan membutuhkan versi baru. Seluruh delapan respons obat/resep termasuk verifikasi QR memakai proyeksi yang sama.
+
+### Configured patient goals (2026-11-12)
+
+Goal configuration is optional JSONB (`details`); absent configuration retains
+legacy behavior. Ownership-scoped transactions serialize goal/log writes. A
+repeatable-read snapshot combines definitions with real history for selected-date
+completion, due/failure state and streak. Numeric values and stable completed-step
+IDs are independent progress patches; no synthetic failure history is inserted.
+Flutter uses a shared full-screen editor and actual server summaries with account
+and request-generation guards. A failed reload preserves accepted mutations and
+the selected historical day's progress. Per-goal offsets use existing local OS
+notification ports, generic content, WIB recurrence and account-scoped replacement:
+at most 48 upcoming one-shot alarms scanned over 370 days, refilled on startup,
+resume and clinical revision. No additional FCM kind or dependency is introduced.

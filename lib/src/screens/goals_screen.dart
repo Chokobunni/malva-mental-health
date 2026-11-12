@@ -1,52 +1,45 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
-import '../platform/platform_providers.dart';
+import '../models/goal_details.dart';
 import '../providers/providers.dart';
-import '../services/goal_reminder_service.dart';
 import '../services/malva_api_client.dart';
-import '../theme.dart';
-import '../widgets/friendly_error.dart';
-import '../widgets/malva_components.dart';
 import '../time/wib.dart';
+import '../widgets/friendly_error.dart';
+import 'goals/goal_editor.dart';
+import 'goals/goal_reference_widgets.dart';
 
 class GoalsScreen extends ConsumerStatefulWidget {
   const GoalsScreen({super.key});
-
   @override
   ConsumerState<GoalsScreen> createState() => _GoalsScreenState();
 }
 
-class _GoalsScreenState extends ConsumerState<GoalsScreen> {
-  String _tab = 'Goals';
+class _GoalsScreenState extends ConsumerState<GoalsScreen>
+    with WidgetsBindingObserver {
   List<BackendGoal> _serverGoals = const [];
-  bool _isLoading = true;
+  bool _loading = true, _mutating = false, _ownerChanged = false;
   String? _error;
+  String _filter = 'all';
+  late String _selectedDate, _today, _screenOwner;
   int _loadRequest = 0;
-  late final String _screenOwner;
-  bool _ownerChanged = false;
-  bool _mutating = false;
+  Timer? _midnight;
 
   String _ownerKey(AuthSession? session) =>
       '${session?.role.name}:${session?.backendUserId ?? session?.identifier ?? ''}';
-
-  bool get _isCurrentOwner =>
+  bool get _current =>
       mounted &&
       !_ownerChanged &&
       _screenOwner == _ownerKey(ref.read(currentSessionProvider));
-
-  /// Pengingat goals harian (notifikasi lokal, bukan push).
-  late final GoalReminderService _goalReminder = GoalReminderService(
-    enabled: ref.read(capabilitiesProvider).canScheduleOsReminders,
-  );
-  GoalReminderSettings _reminderSettings = const GoalReminderSettings();
+  bool get _server =>
+      (ref.read(currentSessionProvider)?.accessToken ?? '').isNotEmpty;
 
   @override
   void initState() {
     super.initState();
+    _today = _selectedDate = wibDateKey(wibNow());
     _screenOwner = _ownerKey(ref.read(currentSessionProvider));
     ref.listenManual<AuthSession?>(currentSessionProvider, (_, session) {
       if (_ownerKey(session) != _screenOwner) {
@@ -54,1016 +47,951 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
         _loadRequest++;
       }
     });
-    _loadFromServer();
-    unawaited(_loadReminderSettings());
-  }
-
-  Future<void> _loadReminderSettings() async {
-    final settings = await _goalReminder.loadSettings();
-    if (!mounted) return;
-    setState(() => _reminderSettings = settings);
-  }
-
-  /// Simpan preferensi lalu sinkronkan jadwal notifikasi.
-  Future<void> _updateReminderSettings({
-    bool? enabled,
-    int? hour,
-    int? minute,
-    required bool hasActiveGoals,
-  }) async {
-    final next = _reminderSettings.copyWith(
-      enabled: enabled,
-      hour: hour,
-      minute: minute,
-    );
-    await _goalReminder.saveSettings(next);
-    if (!mounted) return;
-    setState(() => _reminderSettings = next);
-    await _goalReminder.sync(
-      hasActiveGoals: hasActiveGoals,
-      enabled: next.enabled,
-      hour: next.hour,
-      minute: next.minute,
-    );
-  }
-
-  Future<void> _pickReminderTime(bool hasActiveGoals) async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay(
-        hour: _reminderSettings.hour,
-        minute: _reminderSettings.minute,
-      ),
-      helpText: 'Jam pengingat goals (WIB)',
-    );
-    if (picked == null || !mounted) return;
-    await _updateReminderSettings(
-      hour: picked.hour,
-      minute: picked.minute,
-      hasActiveGoals: hasActiveGoals,
-    );
-  }
-
-  /// Baris ringkas pengingat harian pada kartu Daily Progress.
-  ///
-  /// Hanya tampil bila pasien punya minimal satu goal aktif — mengingatkan
-  /// goals saat tidak ada goals hanya jadi gangguan.
-  Widget _buildGoalReminderRow(bool hasActiveGoals) {
-    if (!hasActiveGoals) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const SizedBox(height: 6),
-        Row(
-          children: <Widget>[
-            const Expanded(
-              child: Text(
-                'Pengingat harian',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-            Switch(
-              key: const Key('goal-reminder-switch'),
-              value: _reminderSettings.enabled,
-              activeThumbColor: Colors.white,
-              activeTrackColor: Colors.white38,
-              onChanged: (bool value) => unawaited(
-                _updateReminderSettings(
-                  enabled: value,
-                  hasActiveGoals: hasActiveGoals,
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            OutlinedButton.icon(
-              key: const Key('goal-reminder-time'),
-              onPressed: _reminderSettings.enabled
-                  ? () => unawaited(_pickReminderTime(hasActiveGoals))
-                  : null,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: Colors.white54),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                minimumSize: const Size(0, 34),
-              ),
-              icon: const Icon(Icons.schedule_rounded, size: 15),
-              label: Text(
-                _reminderSettings.label,
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const Text(
-          'Notifikasi lokal di perangkat, tidak memakai kuota push.',
-          style: TextStyle(color: Colors.white70, fontSize: 11),
-        ),
-      ],
-    );
-  }
-
-  /// Goals tersimpan di server sehingga tidak hilang saat aplikasi ditutup.
-  Future<void> _loadFromServer() async {
-    if (!_isCurrentOwner) return;
-    final request = ++_loadRequest;
-    bool isCurrent() => _isCurrentOwner && request == _loadRequest;
-    final token = ref.read(currentSessionProvider)?.accessToken;
-    if (token == null || token.isEmpty) {
-      if (isCurrent()) setState(() => _isLoading = false);
-      return;
-    }
-    if (isCurrent()) {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-    }
-    try {
-      final goals = await ref
-          .read(apiClientProvider)
-          .listGoals(accessToken: token, includeInactive: true);
-      if (!isCurrent()) return;
-      setState(() {
-        _serverGoals = goals;
-        _isLoading = false;
-      });
-    } on Object catch (e) {
-      if (!isCurrent()) return;
-      setState(() {
-        _isLoading = false;
-        _error = friendlyErrorMessage(e);
-      });
-    }
-  }
-
-  bool get _hasServer =>
-      (ref.read(currentSessionProvider)?.accessToken ?? '').isNotEmpty;
-
-  @override
-  Widget build(BuildContext context) {
-    ref.watch(currentSessionProvider);
-    if (!_isCurrentOwner) {
-      return const Scaffold(
-          body: Center(
-              child: Text('Sesi akun telah berubah. Buka kembali Goals.')));
-    }
-    ref.listen<int>(
-        clinicalDataRevisionProvider, (_, __) => unawaited(_loadFromServer()));
-    final storeState = ref.watch(malvaStoreProvider);
-    final store = ref.read(malvaStoreProvider.notifier);
-    final useServer = _hasServer;
-    final localGoals = storeState.goals;
-    // Pengingat harian hanya relevan bila ada goal aktif.
-    // Goal lokal tidak punya penanda aktif/nonaktif: daftar lokal hanya berisi
-    // goal yang dipakai, jadi cukup tidak kosong.
-    final hasActiveGoal = useServer
-        ? _serverGoals.any((goal) => goal.isActive)
-        : localGoals.isNotEmpty;
-    return Scaffold(
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'goals_add_fab',
-        onPressed: _mutating ? null : () => _openGoalForm(context, ref),
-        child: const Icon(Icons.add_rounded),
-      ),
-      body: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          GradientHeader(
-            title: 'Goals & Habits',
-            subtitle: 'Daily focus dan history',
-            leading: IconButton(
-              onPressed: () => Navigator.maybePop(context),
-              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SoftCard(
-                  color: MalvaColors.seed,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Daily Progress',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        useServer
-                            ? '${_serverDonePercent()}% completed'
-                            : '${storeState.completedGoalPercent}% completed',
-                        style:
-                            Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                      ),
-                      const SizedBox(height: 12),
-                      ProgressStrip(
-                        value: (useServer
-                                ? _serverDonePercent()
-                                : storeState.completedGoalPercent) /
-                            100,
-                        color: Colors.white,
-                      ),
-                      _buildGoalReminderRow(hasActiveGoal),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Center(
-                  child: SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'Goals', label: Text('Goals')),
-                      ButtonSegment(value: 'History', label: Text('History')),
-                    ],
-                    selected: {_tab},
-                    onSelectionChanged: (s) => setState(() => _tab = s.first),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      'Gagal memuat dari server: $_error',
-                      style: const TextStyle(
-                          fontSize: 12, color: MalvaColors.danger),
-                    ),
-                  ),
-                if (useServer && _isLoading)
-                  const Center(child: CircularProgressIndicator())
-                else if (_tab == 'History') ...[
-                  if ((useServer ? _serverGoals : localGoals).isEmpty)
-                    const EmptyState(
-                      icon: Icons.history_rounded,
-                      title: 'Belum ada history',
-                      subtitle: 'Goals yang selesai akan tercatat di sini.',
-                    )
-                  else if (useServer)
-                    for (final goal in _serverGoals) ...[
-                      SoftCard(
-                        child: Row(
-                          children: [
-                            Icon(
-                              goal.doneThisWeek >= goal.targetPerWeek
-                                  ? Icons.check_circle_rounded
-                                  : Icons.radio_button_unchecked_rounded,
-                              color: goal.doneThisWeek >= goal.targetPerWeek
-                                  ? MalvaColors.mint
-                                  : Colors.black38,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(goal.title,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w900)),
-                                  Text(
-                                    '${goal.doneThisWeek}/${goal.targetPerWeek} minggu ini'
-                                    '${goal.lastLoggedOn != null ? ' • terakhir ${goal.lastLoggedOn}' : ''}',
-                                    style:
-                                        Theme.of(context).textTheme.bodySmall,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            StatusPill(
-                              label: goal.doneThisWeek >= goal.targetPerWeek
-                                  ? 'SELESAI'
-                                  : 'Aktif',
-                              color: goal.doneThisWeek >= goal.targetPerWeek
-                                  ? MalvaColors.mint
-                                  : MalvaColors.amber,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                    ]
-                  else
-                    for (final goal in localGoals) ...[
-                      SoftCard(
-                        child: Row(
-                          children: [
-                            Icon(
-                              goal.completedToday
-                                  ? Icons.check_circle_rounded
-                                  : Icons.radio_button_unchecked_rounded,
-                              color: goal.completedToday
-                                  ? MalvaColors.mint
-                                  : Colors.black38,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(goal.title,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w900)),
-                                  Text(
-                                    '${goal.streakDays} hari streak',
-                                    style:
-                                        Theme.of(context).textTheme.bodySmall,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            StatusPill(
-                              label: goal.completedToday ? 'ACHIEVED' : 'Aktif',
-                              color: goal.completedToday
-                                  ? MalvaColors.mint
-                                  : MalvaColors.amber,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                ] else ...[
-                  const SectionLabel('Today focus'),
-                  if (useServer) ...[
-                    if (_serverGoals.isEmpty)
-                      const EmptyState(
-                        icon: Icons.flag_rounded,
-                        title: 'Belum ada goal',
-                        subtitle: 'Tekan + untuk menambah goal pertamamu. '
-                            'Semua goal tersimpan permanen di server.',
-                      )
-                    else
-                      for (final goal in _serverGoals) ...[
-                        _ServerGoalCard(
-                          goal: goal,
-                          onToggle:
-                              _mutating ? null : () => _toggleServerGoal(goal),
-                          onEdit: _mutating
-                              ? null
-                              : () =>
-                                  _openGoalForm(context, ref, serverGoal: goal),
-                          onDelete: _mutating
-                              ? null
-                              : () => _deleteGoalFromCard(serverGoal: goal),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                  ] else
-                    for (final goal in localGoals) ...[
-                      _GoalCard(
-                        goal: goal,
-                        onToggle:
-                            _mutating ? null : () => store.toggleGoal(goal.id),
-                        onEdit: _mutating
-                            ? null
-                            : () => _openGoalForm(context, ref, goal: goal),
-                        onDelete: _mutating
-                            ? null
-                            : () => _deleteGoalFromCard(goal: goal),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                ],
-                const SizedBox(height: 70),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Persen goal yang sudah dicentang HARI INI.
-  ///
-  /// Sebelumnya memakai `doneThisWeek >= targetPerWeek`, sehingga habit
-  /// dengan target mingguan (mis. 7x/minggu) tetap 0% walau sudah dicentang
-  /// hari ini. Karena kartu ini berjudul "Daily Progress", acuannya adalah
-  /// penyelesaian hari ini.
-  int _serverDonePercent() {
-    if (_serverGoals.isEmpty) return 0;
-    final today = wibDateKey(wibNow());
-    final done = _serverGoals.where((g) => g.lastLoggedOn == today).length;
-    return ((done / _serverGoals.length) * 100).round();
-  }
-
-  /// Centang habit hari ini (server) & update daftar.
-  Future<void> _toggleServerGoal(BackendGoal goal) async {
-    final token = ref.read(currentSessionProvider)?.accessToken;
-    if (token == null || token.isEmpty) return;
-    final today = wibDateKey(wibNow());
-    final alreadyDone = goal.lastLoggedOn == today;
-    try {
-      await ref.read(apiClientProvider).logHabit(
-            accessToken: token,
-            goalId: goal.id,
-            loggedOn: today,
-            done: !alreadyDone,
-          );
-      await _loadFromServer();
-    } on Object catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: MalvaColors.danger),
-      );
-    }
-  }
-
-  void _openGoalForm(BuildContext context, WidgetRef ref,
-      {GoalItem? goal, BackendGoal? serverGoal}) {
-    if (!_isCurrentOwner || _mutating) return;
-    final useServer = serverGoal != null || _hasServer;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => Consumer(builder: (context, ref, _) {
-        ref.watch(currentSessionProvider);
-        if (!_isCurrentOwner) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: Text('Sesi akun telah berubah. Buka kembali Goals.'),
-          );
-        }
-        return _GoalFormSheet(
-          initialGoal: goal,
-          initialServerGoal: serverGoal,
-          serverMode: useServer,
-          onSave: (savedGoal, serverForm) async {
-            if (!_isCurrentOwner) return false;
-            if (useServer) return _saveServerGoal(serverGoal, serverForm!);
-            ref.read(malvaStoreProvider.notifier).upsertGoal(savedGoal);
-            return true;
-          },
-          onDelete: (goal == null && serverGoal == null)
-              ? null
-              : () => _confirmDeleteGoal(goal: goal, serverGoal: serverGoal),
-        );
-      }),
-    );
-  }
-
-  Future<void> _deleteGoalFromCard(
-      {GoalItem? goal, BackendGoal? serverGoal}) async {
-    try {
-      await _confirmDeleteGoal(goal: goal, serverGoal: serverGoal);
-    } on Object catch (error) {
-      if (!_isCurrentOwner) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(friendlyErrorMessage(error)),
-        backgroundColor: MalvaColors.danger,
-      ));
-    }
-  }
-
-  Future<bool> _confirmDeleteGoal(
-      {GoalItem? goal, BackendGoal? serverGoal}) async {
-    if (!_isCurrentOwner || _mutating) return false;
-    setState(() => _mutating = true);
-    try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          icon: const Icon(Icons.delete_rounded, color: MalvaColors.danger),
-          title: const Text('Hapus Goal?'),
-          content: const Text(
-              'Tindakan ini tidak dapat dibatalkan. Apakah Anda yakin ingin menghapus goal ini?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Batal'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: compactFilledButtonStyle.copyWith(
-                backgroundColor:
-                    const WidgetStatePropertyAll(MalvaColors.danger),
-              ),
-              child: const Text('Hapus'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true || !_isCurrentOwner) return false;
-      if (serverGoal != null) return await _deleteServerGoal(serverGoal);
-      if (goal == null) return false;
-      ref.read(malvaStoreProvider.notifier).deleteGoal(goal.id);
-      return true;
-    } finally {
-      if (mounted) setState(() => _mutating = false);
-    }
-  }
-
-  Future<bool> _saveServerGoal(
-      BackendGoal? existing, _ServerGoalForm form) async {
-    if (!_isCurrentOwner || _mutating) return false;
-    final token = ref.read(currentSessionProvider)?.accessToken;
-    if (token == null || token.isEmpty) return false;
-    final api = ref.read(apiClientProvider);
-    setState(() => _mutating = true);
-    try {
-      final BackendGoal saved;
-      if (existing == null) {
-        saved = await api.createGoal(
-          accessToken: token,
-          title: form.title,
-          category: form.category,
-          targetPerWeek: form.targetPerWeek,
-        );
-      } else {
-        saved = await api.updateGoal(
-          accessToken: token,
-          goalId: existing.id,
-          title: form.title,
-          category: form.category,
-          targetPerWeek: form.targetPerWeek,
-        );
-      }
-      if (!_isCurrentOwner) return false;
-      setState(() => _serverGoals = [
-            if (existing == null) ..._serverGoals,
-            if (existing == null) saved,
-            if (existing != null)
-              for (final goal in _serverGoals)
-                goal.id == existing.id ? saved : goal,
-          ]);
-      await _loadFromServer();
-      if (_isCurrentOwner) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Goal tersimpan di server.'),
-            backgroundColor: MalvaColors.mint,
-          ),
-        );
-      }
-      return _isCurrentOwner;
-    } finally {
-      if (mounted) setState(() => _mutating = false);
-    }
-  }
-
-  Future<bool> _deleteServerGoal(BackendGoal goal) async {
-    if (!_isCurrentOwner) return false;
-    final token = ref.read(currentSessionProvider)?.accessToken;
-    if (token == null || token.isEmpty) return false;
-    await ref
-        .read(apiClientProvider)
-        .deleteGoal(accessToken: token, goalId: goal.id);
-    if (!_isCurrentOwner) return false;
-    setState(() =>
-        _serverGoals = _serverGoals.where((g) => g.id != goal.id).toList());
-    await _loadFromServer();
-    return _isCurrentOwner;
-  }
-}
-
-/// Data form goal versi server.
-class _ServerGoalForm {
-  const _ServerGoalForm({
-    required this.title,
-    required this.category,
-    required this.targetPerWeek,
-  });
-
-  final String title;
-  final String category;
-  final int targetPerWeek;
-}
-
-/// Kartu goal versi server (tersimpan di database).
-class _ServerGoalCard extends StatelessWidget {
-  const _ServerGoalCard({
-    required this.goal,
-    required this.onToggle,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  final BackendGoal goal;
-  final VoidCallback? onToggle;
-  final VoidCallback? onEdit;
-  final VoidCallback? onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final today = wibDateKey(wibNow());
-    final doneToday = goal.lastLoggedOn == today;
-    return SoftCard(
-      child: Row(
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: onToggle,
-            child: CircleAvatar(
-              radius: 28,
-              backgroundColor: doneToday
-                  ? MalvaColors.mint
-                  : Colors.black.withValues(alpha: 0.06),
-              child: Icon(
-                doneToday
-                    ? Icons.check_rounded
-                    : Icons.radio_button_unchecked_rounded,
-                color: doneToday ? Colors.white : Colors.black38,
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  goal.title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    decoration: doneToday ? TextDecoration.lineThrough : null,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${goal.category} • target ${goal.targetPerWeek}x/minggu'
-                  '${doneToday ? ' • ✓ hari ini' : ''}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    for (var i = 0; i < 7; i++) ...[
-                      Expanded(
-                          child: Container(
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: i < goal.doneThisWeek.clamp(0, 7)
-                              ? MalvaColors.seed
-                              : Colors.black12,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      )),
-                      if (i < 6) const SizedBox(width: 5),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Edit goal',
-            onPressed: onEdit,
-            icon: const Icon(Icons.edit_rounded),
-          ),
-          IconButton(
-            tooltip: 'Hapus goal',
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline_rounded,
-                color: MalvaColors.danger),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GoalCard extends StatelessWidget {
-  const _GoalCard({
-    required this.goal,
-    required this.onToggle,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  final GoalItem goal;
-  final VoidCallback? onToggle;
-  final VoidCallback? onEdit;
-  final VoidCallback? onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final time =
-        '${goal.reminder.hour.toString().padLeft(2, '0')}:${goal.reminder.minute.toString().padLeft(2, '0')}';
-
-    return SoftCard(
-      child: Row(
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: onToggle,
-            child: CircleAvatar(
-              radius: 28,
-              backgroundColor: goal.completedToday
-                  ? Colors.green
-                  : Colors.black.withValues(alpha: 0.06),
-              child: Icon(
-                goal.completedToday
-                    ? Icons.check_rounded
-                    : Icons.radio_button_unchecked_rounded,
-                color: goal.completedToday ? Colors.white : Colors.black38,
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  goal.title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    decoration:
-                        goal.completedToday ? TextDecoration.lineThrough : null,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text('${goal.frequency} - reminder $time'),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    for (var i = 0; i < 7; i++) ...[
-                      Expanded(
-                          child: Container(
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: i < goal.streakDays.clamp(0, 7).toInt()
-                              ? MalvaColors.seed
-                              : Colors.black12,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      )),
-                      if (i < 6) const SizedBox(width: 5),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Edit goal',
-            onPressed: onEdit,
-            icon: const Icon(Icons.edit_rounded),
-          ),
-          IconButton(
-            tooltip: 'Hapus goal',
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline_rounded,
-                color: MalvaColors.danger),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GoalFormSheet extends StatefulWidget {
-  const _GoalFormSheet({
-    this.initialGoal,
-    this.initialServerGoal,
-    this.serverMode = false,
-    required this.onSave,
-    this.onDelete,
-  });
-
-  final GoalItem? initialGoal;
-  final BackendGoal? initialServerGoal;
-  final bool serverMode;
-
-  /// Callback: (goal lokal, form server). Salah satu terisi sesuai mode.
-  final Future<bool> Function(GoalItem, _ServerGoalForm?) onSave;
-  final Future<bool> Function()? onDelete;
-
-  @override
-  State<_GoalFormSheet> createState() => _GoalFormSheetState();
-}
-
-class _GoalFormSheetState extends State<_GoalFormSheet> {
-  late final TextEditingController _title;
-  late final TextEditingController _note;
-  late String _frequency;
-  late TimeOfDay _reminder;
-  late int _targetPerWeek;
-  late String _category;
-  bool _busy = false;
-  String? _error;
-  String? _titleError;
-
-  bool get _isEditing =>
-      widget.initialGoal != null || widget.initialServerGoal != null;
-
-  @override
-  void initState() {
-    super.initState();
-    final goal = widget.initialGoal;
-    final serverGoal = widget.initialServerGoal;
-    _title =
-        TextEditingController(text: goal?.title ?? serverGoal?.title ?? '');
-    _note = TextEditingController(text: goal?.note ?? '');
-    _frequency = goal?.frequency ?? 'Harian';
-    _reminder = goal?.reminder ?? const TimeOfDay(hour: 20, minute: 0);
-    _targetPerWeek = serverGoal?.targetPerWeek ?? 3;
-    _category = serverGoal?.category ?? 'general';
+    WidgetsBinding.instance.addObserver(this);
+    _scheduleMidnight();
+    unawaited(_load());
   }
 
   @override
   void dispose() {
-    _title.dispose();
-    _note.dispose();
+    _midnight?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  static const _categories = [
-    ('general', 'Umum'),
-    ('health', 'Kesehatan'),
-    ('activity', 'Aktivitas'),
-    ('sleep', 'Tidur'),
-    ('social', 'Sosial'),
-  ];
-
   @override
-  Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(18, 0, 18, bottomInset + 18),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              _isEditing ? 'Edit Goal' : 'New Goal',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              enabled: !_busy,
-              controller: _title,
-              textInputAction: TextInputAction.next,
-              onChanged: (_) {
-                if (_titleError != null) setState(() => _titleError = null);
-              },
-              decoration: InputDecoration(
-                  labelText: 'Goal title', errorText: _titleError),
-            ),
-            const SizedBox(height: 10),
-            if (widget.serverMode) ...[
-              DropdownButtonFormField<String>(
-                initialValue: _category,
-                decoration: const InputDecoration(labelText: 'Kategori'),
-                items: [
-                  for (final (value, label) in _categories)
-                    DropdownMenuItem(value: value, child: Text(label)),
-                  if (!_categories.any((item) => item.$1 == _category))
-                    DropdownMenuItem(value: _category, child: Text(_category)),
-                ],
-                onChanged: _busy
-                    ? null
-                    : (value) => setState(() => _category = value ?? _category),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text('Target per minggu',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
-                  ),
-                  IconButton(
-                    onPressed: !_busy && _targetPerWeek > 1
-                        ? () => setState(() => _targetPerWeek--)
-                        : null,
-                    icon: const Icon(Icons.remove_circle_outline_rounded),
-                  ),
-                  Text('$_targetPerWeek',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w900, fontSize: 18)),
-                  IconButton(
-                    onPressed: !_busy && _targetPerWeek < 7
-                        ? () => setState(() => _targetPerWeek++)
-                        : null,
-                    icon: const Icon(Icons.add_circle_outline_rounded),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-            ] else ...[
-              DropdownButtonFormField<String>(
-                initialValue: _frequency,
-                decoration: const InputDecoration(labelText: 'Frequency'),
-                items: const [
-                  DropdownMenuItem(value: 'Harian', child: Text('Harian')),
-                  DropdownMenuItem(value: 'Mingguan', child: Text('Mingguan')),
-                  DropdownMenuItem(
-                      value: 'Sesuai sesi', child: Text('Sesuai sesi')),
-                ],
-                onChanged: _busy
-                    ? null
-                    : (value) =>
-                        setState(() => _frequency = value ?? _frequency),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _pickTime,
-                icon: const Icon(Icons.schedule_rounded),
-                label: Text(
-                  'Reminder ${_reminder.hour.toString().padLeft(2, '0')}:${_reminder.minute.toString().padLeft(2, '0')}',
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                enabled: !_busy,
-                controller: _note,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(labelText: 'Note'),
-              ),
-            ],
-            const SizedBox(height: 16),
-            if (_error != null) ...[
-              Text(_error!, style: const TextStyle(color: MalvaColors.danger)),
-              const SizedBox(height: 8),
-            ],
-            if (_busy) const Text('Memproses...', textAlign: TextAlign.center),
-            FilledButton(
-              onPressed: _busy ? null : _save,
-              child: Text(_isEditing ? 'Save Goal' : 'Create Goal'),
-            ),
-            if (widget.onDelete != null) ...[
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: _busy ? null : () => _submit(widget.onDelete!),
-                icon: const Icon(Icons.delete_rounded),
-                label: const Text('Delete Goal'),
-                style:
-                    TextButton.styleFrom(foregroundColor: MalvaColors.danger),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _rollDate();
+      unawaited(_load());
+    }
   }
 
-  Future<void> _pickTime() async {
-    final picked =
-        await showTimePicker(context: context, initialTime: _reminder);
-    if (picked != null) setState(() => _reminder = picked);
+  void _rollDate() {
+    final next = wibDateKey(wibNow());
+    if (_selectedDate == _today) _selectedDate = next;
+    _today = next;
   }
 
-  Future<void> _submit(Future<bool> Function() action) async {
-    if (_busy) return;
+  void _scheduleMidnight() {
+    final now = wibNow();
+    _midnight = Timer(
+        wibFromParts(now.year, now.month, now.day + 1).difference(now), () {
+      if (!_current) return;
+      _rollDate();
+      unawaited(_load());
+      _scheduleMidnight();
+    });
+  }
+
+  Future<void> _load() async {
+    if (!_current) return;
+    final generation = ++_loadRequest;
+    final token = ref.read(currentSessionProvider)?.accessToken;
+    if (token == null || token.isEmpty) {
+      setState(() => _loading = false);
+      return;
+    }
+    final date = _selectedDate;
     setState(() {
-      _busy = true;
+      _loading = true;
       _error = null;
     });
     try {
-      final success = await action();
-      if (mounted && success) Navigator.of(context).pop();
-    } on Object catch (error) {
-      if (mounted) setState(() => _error = friendlyErrorMessage(error));
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      final goals = await ref
+          .read(apiClientProvider)
+          .listGoals(accessToken: token, includeInactive: true, on: date);
+      if (!_current || generation != _loadRequest) return;
+      setState(() {
+        _serverGoals = goals;
+        _loading = false;
+      });
+    } on Object catch (e) {
+      if (!_current || generation != _loadRequest) return;
+      setState(() {
+        _error = friendlyErrorMessage(e);
+        _loading = false;
+      });
     }
   }
 
-  Future<void> _save() async {
-    final title = _title.text.trim();
-    if (title.isEmpty) {
-      setState(() => _titleError = 'Judul goal wajib diisi.');
-      return;
+  BackendGoal _fromLocal(GoalItem g) => BackendGoal(
+      id: g.id,
+      title: g.title,
+      category: 'general',
+      targetPerWeek: 3,
+      isActive: true,
+      details: g.details ??
+          GoalDetails(
+              startDate: _today,
+              note: g.note,
+              time:
+                  '${g.reminder.hour.toString().padLeft(2, '0')}:${g.reminder.minute.toString().padLeft(2, '0')}',
+              recurrence: g.frequency == 'Mingguan' ? 'weekly' : 'daily'),
+      doneToday: g.completedToday,
+      todayValue: g.value,
+      todayCompletedStepIds: g.completedStepIds,
+      streakDays: g.streakDays);
+
+  bool _done(BackendGoal goal) =>
+      goal.doneToday ?? (goal.lastLoggedOn == _selectedDate);
+
+  @override
+  Widget build(BuildContext context) {
+    ref.watch(currentSessionProvider);
+    ref.listen<int>(
+        clinicalDataRevisionProvider, (_, __) => unawaited(_load()));
+    if (!_current)
+      return const Scaffold(
+          body: Center(
+              child: Text('Sesi akun telah berubah. Buka kembali Goals.')));
+    final local = ref.watch(malvaStoreProvider).goals;
+    final all = _server ? _serverGoals : local.map(_fromLocal).toList();
+    final goals =
+        all.where((g) => g.isActive || _selectedDate != _today).toList();
+    final due = goals.where((g) => g.isActive && g.isDue).toList();
+    final completed = due.where(_done).length;
+    final ratio = due.isEmpty ? 0.0 : completed / due.length;
+    final streak =
+        goals.fold<int>(0, (n, g) => g.streakDays > n ? g.streakDays : n);
+    final filtered = goals
+        .where((g) =>
+            _filter == 'all' || (g.details?.method ?? 'yes_no') == _filter)
+        .toList();
+    return Scaffold(
+        backgroundColor: goalPaper,
+        body: RefreshIndicator(
+            onRefresh: _load,
+            child: SingleChildScrollView(
+                key: const Key('goals-scroll'),
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                    key: const Key('goal-list-content'),
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                          decoration: const BoxDecoration(
+                              gradient: goalGradient,
+                              borderRadius: BorderRadius.vertical(
+                                  bottom: Radius.circular(28))),
+                          child: SafeArea(
+                              bottom: false,
+                              child: Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(14, 16, 20, 24),
+                                  child: Row(children: [
+                                    IconButton(
+                                        onPressed: () =>
+                                            Navigator.maybePop(context),
+                                        tooltip: 'Kembali',
+                                        icon: const Icon(
+                                            Icons.arrow_back_rounded,
+                                            color: Colors.white,
+                                            size: 23)),
+                                    const SizedBox(width: 4),
+                                    const Expanded(
+                                        child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                          Text('Goals & Habits',
+                                              style: TextStyle(
+                                                  fontFamily: 'PlusJakartaSans',
+                                                  color: Colors.white,
+                                                  fontSize: 26,
+                                                  height: 1.2,
+                                                  fontWeight: FontWeight.w700,
+                                                  letterSpacing: -.6)),
+                                          SizedBox(height: 2),
+                                          Text('Daily focus dan history',
+                                              style: TextStyle(
+                                                  fontFamily: 'PlusJakartaSans',
+                                                  color: Colors.white70,
+                                                  fontSize: 13,
+                                                  height: 1.2)),
+                                        ])),
+                                    const SizedBox(width: 8),
+                                    TextButton.icon(
+                                        onPressed:
+                                            _mutating ? null : () => _edit(),
+                                        style: TextButton.styleFrom(
+                                            foregroundColor: Colors.white,
+                                            backgroundColor: Colors.white
+                                                .withValues(alpha: .18),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 14),
+                                            minimumSize: const Size(0, 38)),
+                                        icon: const Icon(Icons.add, size: 20),
+                                        label: const Text('Baru',
+                                            style: TextStyle(
+                                                fontFamily: 'PlusJakartaSans',
+                                                fontSize: 14))),
+                                  ])))),
+                      Center(
+                          child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 600),
+                              child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 20, vertical: 20),
+                                  child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        GoalSurface(
+                                            color: const Color(0xFFF3E9FB),
+                                            border: const Color(0xFFE8DAF2),
+                                            child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Wrap(
+                                                      alignment: WrapAlignment
+                                                          .spaceBetween,
+                                                      runSpacing: 8,
+                                                      spacing: 12,
+                                                      children: [
+                                                        InkWell(
+                                                            onTap: _mutating
+                                                                ? null
+                                                                : _selectDate,
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        99),
+                                                            child: GoalPill(
+                                                                goalDateLabel(
+                                                                    _selectedDate),
+                                                                icon: Icons
+                                                                    .calendar_today_outlined,
+                                                                background:
+                                                                    Colors
+                                                                        .white,
+                                                                fontSize: 12)),
+                                                        GoalPill(
+                                                            '$streak Hari Beruntun',
+                                                            icon: Icons
+                                                                .local_fire_department_rounded,
+                                                            color: const Color(
+                                                                0xFFC68722),
+                                                            background:
+                                                                const Color(
+                                                                    0xFFFFF2CC),
+                                                            fontSize: 12),
+                                                      ]),
+                                                  const SizedBox(height: 20),
+                                                  Row(children: [
+                                                    Expanded(
+                                                        child: Column(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .start,
+                                                            children: [
+                                                          const Text(
+                                                              'Capaian Kebiasaanmu',
+                                                              style: TextStyle(
+                                                                  fontFamily:
+                                                                      'PlusJakartaSans',
+                                                                  fontSize: 17,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w700,
+                                                                  color:
+                                                                      goalInk)),
+                                                          const SizedBox(
+                                                              height: 3),
+                                                          Text(
+                                                              '$completed dari ${due.length} target ${_selectedDate == _today ? 'hari ini' : 'pada tanggal ini'} telah selesai',
+                                                              style: const TextStyle(
+                                                                  fontFamily:
+                                                                      'PlusJakartaSans',
+                                                                  fontSize: 13,
+                                                                  color: Color(
+                                                                      0xFF7F8792))),
+                                                        ])),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                        '${(ratio * 100).round()}%',
+                                                        style: const TextStyle(
+                                                            fontFamily:
+                                                                'PlusJakartaSans',
+                                                            color: goalPurple,
+                                                            fontWeight:
+                                                                FontWeight.w800,
+                                                            fontSize: 21))
+                                                  ]),
+                                                  const SizedBox(height: 14),
+                                                  ClipRRect(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              99),
+                                                      child: LinearProgressIndicator(
+                                                          value: ratio,
+                                                          minHeight: 7,
+                                                          backgroundColor:
+                                                              Colors.white,
+                                                          color: goalPurple,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(
+                                                                      99))),
+                                                ])),
+                                        const SizedBox(height: 20),
+                                        SingleChildScrollView(
+                                            scrollDirection: Axis.horizontal,
+                                            child: Row(children: [
+                                              for (final method in [
+                                                'all',
+                                                'yes_no',
+                                                'numeric',
+                                                'checklist'
+                                              ]) ...[
+                                                if (method != 'all')
+                                                  const SizedBox(width: 7),
+                                                ChoiceChip(
+                                                    materialTapTargetSize:
+                                                        MaterialTapTargetSize
+                                                            .shrinkWrap,
+                                                    key: Key(
+                                                        'goal-filter-$method'),
+                                                    showCheckmark: false,
+                                                    selected: _filter == method,
+                                                    onSelected: (_) => setState(
+                                                        () => _filter = method),
+                                                    backgroundColor:
+                                                        Colors.white,
+                                                    selectedColor: goalPurple,
+                                                    side: BorderSide(
+                                                        color: _filter == method
+                                                            ? goalPurple
+                                                            : const Color(
+                                                                0xFFE3E3E8)),
+                                                    shape:
+                                                        const StadiumBorder(),
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 5),
+                                                    label: Row(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          if (method !=
+                                                              'all') ...[
+                                                            Icon(
+                                                                goalMethodIcon(
+                                                                    method),
+                                                                size: 13,
+                                                                color: _filter ==
+                                                                        method
+                                                                    ? Colors
+                                                                        .white
+                                                                    : method ==
+                                                                            'numeric'
+                                                                        ? const Color(
+                                                                            0xFFD4A12E)
+                                                                        : goalPurple),
+                                                            const SizedBox(
+                                                                width: 5)
+                                                          ],
+                                                          Text(
+                                                              method == 'all'
+                                                                  ? 'Semua ( ${goals.length} )'
+                                                                  : goalMethodLabel(
+                                                                      method),
+                                                              style: TextStyle(
+                                                                  fontFamily:
+                                                                      'PlusJakartaSans',
+                                                                  color: _filter ==
+                                                                          method
+                                                                      ? Colors
+                                                                          .white
+                                                                      : const Color(
+                                                                          0xFF53606D),
+                                                                  fontSize: 16,
+                                                                  fontWeight: _filter ==
+                                                                          method
+                                                                      ? FontWeight
+                                                                          .w700
+                                                                      : FontWeight
+                                                                          .w500)),
+                                                        ])),
+                                              ]
+                                            ])),
+                                        const SizedBox(height: 18),
+                                        if (_error != null)
+                                          Padding(
+                                              padding: const EdgeInsets.only(
+                                                  bottom: 14),
+                                              child: Column(children: [
+                                                Text(
+                                                    'Gagal memuat dari server: $_error',
+                                                    style: TextStyle(
+                                                        fontFamily:
+                                                            'PlusJakartaSans',
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .error)),
+                                                TextButton(
+                                                    onPressed: _load,
+                                                    child:
+                                                        const Text('Coba lagi'))
+                                              ])),
+                                        if (_loading)
+                                          const Center(
+                                              child: CircularProgressIndicator(
+                                                  color: goalPurple))
+                                        else if (filtered.isEmpty)
+                                          Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 30),
+                                              child: Text(
+                                                  goals.isEmpty
+                                                      ? 'Belum ada target atau kebiasaan.\nMulai dari satu langkah kecil hari ini.'
+                                                      : 'Belum ada kebiasaan dengan metode ini.',
+                                                  textAlign: TextAlign.center,
+                                                  style: const TextStyle(
+                                                      fontFamily:
+                                                          'PlusJakartaSans',
+                                                      color: goalMuted,
+                                                      fontSize: 15)))
+                                        else
+                                          for (final goal in filtered) ...[
+                                            _card(goal),
+                                            const SizedBox(height: 14),
+                                          ],
+                                        const SizedBox(height: 22),
+                                        GoalButton(
+                                            'Tambah Target / Kebiasaan Baru',
+                                            icon: Icons.add_circle_outline,
+                                            primary: true,
+                                            onPressed: _mutating
+                                                ? null
+                                                : () => _edit()),
+                                        const SizedBox(height: 6),
+                                      ])))),
+                    ]))));
+  }
+
+  Widget _card(BackendGoal goal) {
+    final method = goal.details?.method ?? 'yes_no';
+    final done = _done(goal);
+    final configured = goal.details;
+    final locked = _mutating ||
+        !goal.isActive ||
+        !goal.isDue ||
+        _selectedDate.compareTo(_today) > 0 ||
+        (configured?.lockPast == true &&
+            _selectedDate.compareTo(
+                    wibDateKey(wibNow().subtract(const Duration(days: 1)))) <
+                0);
+    final badgeColor = method == 'numeric'
+        ? const Color(0xFFA66A1D)
+        : method == 'checklist'
+            ? const Color(0xFFAB356E)
+            : goalPurple;
+    final badgeBg = method == 'numeric'
+        ? const Color(0xFFFFF2C5)
+        : method == 'checklist'
+            ? const Color(0xFFFBE6F0)
+            : const Color(0xFFF4EBF7);
+    return GoalSurface(
+        color: done ? const Color(0xFFFCF8FF) : Colors.white,
+        border: done ? const Color(0xFFD4BADF) : goalLine,
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Expanded(
+                child: Wrap(spacing: 8, runSpacing: 5, children: [
+              GoalPill(goalMethodLabel(method).toUpperCase(),
+                  icon: goalMethodIcon(method),
+                  color: badgeColor,
+                  background: badgeBg,
+                  fontSize: 10,
+                  verticalPadding: 3),
+              if (goal.streakDays > 0)
+                GoalPill('${goal.streakDays} hari',
+                    icon: Icons.local_fire_department_rounded,
+                    color: const Color(0xFFC68D26),
+                    background: const Color(0xFFFFF9E5),
+                    fontSize: 10,
+                    verticalPadding: 3),
+              if (!goal.isActive) const GoalPill('Nonaktif'),
+            ])),
+            SizedBox(
+                width: 32,
+                height: 22,
+                child: IconButton(
+                    tooltip: 'Edit goal',
+                    onPressed: _mutating ? null : () => _edit(goal),
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.edit_outlined,
+                        size: 17, color: goalMuted))),
+            SizedBox(
+                width: 30,
+                height: 22,
+                child: IconButton(
+                    tooltip: 'Hapus goal',
+                    onPressed: _mutating ? null : () => _delete(goal),
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.delete_outline,
+                        size: 17, color: goalMuted))),
+          ]),
+          const SizedBox(height: 4),
+          Text(goal.title,
+              style: TextStyle(
+                fontFamily: 'PlusJakartaSans',
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                height: 1.3,
+                color: done ? goalMuted : goalInk,
+              )),
+          if ((configured?.note ?? '').isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(configured!.note,
+                style: const TextStyle(
+                    fontFamily: 'PlusJakartaSans',
+                    fontSize: 15.5,
+                    height: 1.6,
+                    color: Color(0xFF76818D))),
+          ],
+          const SizedBox(height: 14),
+          Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                  color: const Color(0xFFFAF3FD),
+                  borderRadius: BorderRadius.circular(13)),
+              child: Row(children: [
+                const Icon(Icons.schedule, size: 13, color: goalPurple),
+                const SizedBox(width: 7),
+                Expanded(
+                    child: Text(
+                        configured?.scheduleLabel ??
+                            '${goal.category} • target ${goal.targetPerWeek}x/minggu',
+                        style: const TextStyle(
+                            fontFamily: 'PlusJakartaSans',
+                            color: goalPurple,
+                            fontSize: 11.5,
+                            height: 1.4,
+                            fontWeight: FontWeight.w500))),
+                if (configured != null && configured.reminders.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  const Icon(Icons.notifications_active,
+                      size: 11, color: goalPurple),
+                  const SizedBox(width: 4),
+                  Text('${configured.reminders.length}',
+                      style: const TextStyle(
+                          fontFamily: 'PlusJakartaSans',
+                          color: goalPurple,
+                          fontSize: 11)),
+                ]
+              ])),
+          if (!goal.isDue)
+            const Padding(
+                padding: EdgeInsets.only(top: 10),
+                child: Text('Tidak dijadwalkan pada tanggal ini',
+                    style: TextStyle(
+                        fontFamily: 'PlusJakartaSans',
+                        color: goalMuted,
+                        fontSize: 12))),
+          const SizedBox(height: 12),
+          if (method == 'numeric')
+            GoalSurface(
+                color: const Color(0xFFFAF3FD),
+                border: const Color(0xFFF0E7F5),
+                radius: 13,
+                padding: const EdgeInsets.all(12),
+                child: Column(children: [
+                  Row(children: [
+                    Expanded(
+                        child: Text.rich(
+                            TextSpan(children: [
+                              const TextSpan(text: 'Progres: '),
+                              TextSpan(
+                                  text: '${goal.todayValue}',
+                                  style: const TextStyle(
+                                      fontFamily: 'PlusJakartaSans',
+                                      color: goalPurple)),
+                              TextSpan(
+                                  text:
+                                      ' / ${configured!.target} ${configured.unit}')
+                            ]),
+                            style: const TextStyle(
+                                fontFamily: 'PlusJakartaSans',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF424C59)))),
+                    _progressButton(goal, false, locked),
+                    const SizedBox(width: 6),
+                    _progressButton(goal, true, locked)
+                  ]),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                      value: (goal.todayValue / configured.target).clamp(0, 1),
+                      minHeight: 8,
+                      color: goalPurple,
+                      backgroundColor: Colors.white,
+                      borderRadius: BorderRadius.circular(99)),
+                ]))
+          else if (method == 'checklist')
+            GoalSurface(
+                color: const Color(0xFFF9F3FC),
+                border: const Color(0xFFF0E7F5),
+                radius: 13,
+                padding: const EdgeInsets.fromLTRB(12, 14, 10, 10),
+                child: Column(children: [
+                  Row(children: [
+                    const Expanded(
+                        child: Text('Daftar Langkah',
+                            style: TextStyle(
+                                fontFamily: 'PlusJakartaSans',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF53606D)))),
+                    Text(
+                        '${goal.todayCompletedStepIds.where((id) => configured!.steps.any((s) => s.id == id)).length}/${configured!.steps.length} selesai',
+                        style: const TextStyle(
+                            fontFamily: 'PlusJakartaSans',
+                            fontSize: 12,
+                            color: goalPurple,
+                            fontWeight: FontWeight.w700))
+                  ]),
+                  const SizedBox(height: 6),
+                  for (final step in configured.steps)
+                    InkWell(
+                        onTap: locked
+                            ? null
+                            : () => _log(goal, steps: [
+                                  for (final id in goal.todayCompletedStepIds)
+                                    if (id != step.id) id,
+                                  if (!goal.todayCompletedStepIds
+                                      .contains(step.id))
+                                    step.id,
+                                ]),
+                        child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Row(children: [
+                              SizedBox(
+                                  width: 28,
+                                  height: 28,
+                                  child: Transform.scale(
+                                      scale: .75,
+                                      child: Checkbox(
+                                          visualDensity: VisualDensity.compact,
+                                          activeColor: goalPurple,
+                                          fillColor:
+                                              WidgetStateProperty.resolveWith(
+                                                  (states) => states.contains(
+                                                          WidgetState.selected)
+                                                      ? goalPurple
+                                                      : const Color(
+                                                          0xFFD8B2EE)),
+                                          side: BorderSide.none,
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(1)),
+                                          value: goal.todayCompletedStepIds
+                                              .contains(step.id),
+                                          onChanged: locked
+                                              ? null
+                                              : (checked) => _log(goal, steps: [
+                                                    for (final id in goal
+                                                        .todayCompletedStepIds)
+                                                      if (id != step.id) id,
+                                                    if (checked == true)
+                                                      step.id,
+                                                  ])))),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                  child: Text(step.label,
+                                      style: TextStyle(
+                                          fontFamily: 'PlusJakartaSans',
+                                          fontSize: 12.5,
+                                          height: 1.5,
+                                          color: goal.todayCompletedStepIds
+                                                  .contains(step.id)
+                                              ? goalMuted
+                                              : goalInk,
+                                          decoration: goal.todayCompletedStepIds
+                                                  .contains(step.id)
+                                              ? TextDecoration.lineThrough
+                                              : null))),
+                            ]))),
+                ]))
+          else ...[
+            const Divider(color: Color(0xFFF1EDF5), height: 1),
+            const SizedBox(height: 10),
+            Row(children: [
+              if (done) ...[
+                const Icon(Icons.auto_awesome,
+                    size: 12, color: Color(0xFFE0BC48)),
+                const SizedBox(width: 3),
+              ],
+              Expanded(
+                  child: Text(
+                      done
+                          ? 'Ya, selesai ${_selectedDate == _today ? 'hari ini' : 'pada tanggal ini'}'
+                          : goal.failedToday
+                              ? 'Belum tercapai'
+                              : 'Sudah dilakukan?',
+                      style: const TextStyle(
+                          fontFamily: 'PlusJakartaSans',
+                          fontSize: 11,
+                          color: goalPurple))),
+              _yesNo(goal, true, done, locked),
+              const SizedBox(width: 6),
+              _yesNo(goal, false, done, locked)
+            ]),
+          ],
+        ]));
+  }
+
+  Widget _yesNo(BackendGoal goal, bool yes, bool done, bool locked) => SizedBox(
+      height: 32,
+      child: FilledButton.icon(
+          onPressed: locked ? null : () => _log(goal, done: yes),
+          style: FilledButton.styleFrom(
+              minimumSize: const Size(0, 32),
+              backgroundColor: (yes ? done : goal.failedToday)
+                  ? goalPurple
+                  : const Color(0xFFF0F3F7),
+              foregroundColor: (yes ? done : goal.failedToday)
+                  ? Colors.white
+                  : const Color(0xFF6A7785),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13)),
+              textStyle: const TextStyle(
+                  fontFamily: 'PlusJakartaSans',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700)),
+          icon: Icon(yes ? Icons.check : Icons.close, size: 14),
+          label: Text(yes ? 'Ya' : 'Tidak')));
+
+  Widget _progressButton(BackendGoal goal, bool add, bool locked) => SizedBox(
+      width: 30,
+      height: 30,
+      child: IconButton(
+          tooltip: add
+              ? 'Tambah progres ${goal.title}'
+              : 'Kurangi progres ${goal.title}',
+          onPressed: locked ||
+                  (!add && goal.todayValue <= 0) ||
+                  (add && goal.todayValue >= 1000000)
+              ? null
+              : () => _log(goal, value: goal.todayValue + (add ? 1 : -1)),
+          style: IconButton.styleFrom(
+              backgroundColor: add ? goalPurple : Colors.white,
+              foregroundColor: add ? Colors.white : goalPurple,
+              side: add
+                  ? BorderSide.none
+                  : const BorderSide(color: Color(0xFFE5D5EB)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(9)),
+              padding: EdgeInsets.zero),
+          icon: Icon(add ? Icons.add : Icons.remove, size: 16)));
+
+  Future<void> _log(BackendGoal goal,
+      {bool? done, int? value, List<String>? steps}) async {
+    if (!_current || _mutating) return;
+    setState(() => _mutating = true);
+    try {
+      if (_server) {
+        final token = ref.read(currentSessionProvider)!.accessToken!;
+        final date = _selectedDate;
+        final log = await ref.read(apiClientProvider).logHabit(
+            accessToken: token,
+            goalId: goal.id,
+            loggedOn: date,
+            done: done ?? false,
+            value: value,
+            completedStepIds: steps);
+        if (_current) {
+          if (date == _selectedDate) {
+            setState(() => _serverGoals = [
+                  for (final g in _serverGoals)
+                    g.id == goal.id ? g.withProgress(log) : g
+                ]);
+          }
+          ref.read(clinicalDataRevisionProvider.notifier).state++;
+          await _load();
+        }
+      } else {
+        final local = ref
+            .read(malvaStoreProvider)
+            .goals
+            .firstWhere((g) => g.id == goal.id);
+        final nextValue = value ?? local.value;
+        final nextSteps = steps ?? local.completedStepIds;
+        final completed = switch (goal.details?.method) {
+          'numeric' => nextValue >= goal.details!.target,
+          'checklist' =>
+            goal.details!.steps.every((s) => nextSteps.contains(s.id)),
+          _ => done ?? false,
+        };
+        ref.read(malvaStoreProvider.notifier).upsertGoal(local.copyWith(
+            completedToday: completed,
+            value: nextValue,
+            completedStepIds: nextSteps));
+      }
+    } on Object catch (e) {
+      if (_current) _showError(e);
+    } finally {
+      if (mounted) setState(() => _mutating = false);
     }
-    final existingGoal = widget.initialGoal;
-    await _submit(() => widget.onSave(
-          GoalItem(
-            id: existingGoal?.id ?? 'goal_${wibNow().millisecondsSinceEpoch}',
-            title: title,
-            frequency: _frequency,
-            streakDays: existingGoal?.streakDays ?? 0,
-            completedToday: existingGoal?.completedToday ?? false,
-            reminder: _reminder,
-            note: _note.text.trim(),
-          ),
-          widget.serverMode
-              ? _ServerGoalForm(
-                  title: title,
-                  category: _category,
-                  targetPerWeek: _targetPerWeek,
-                )
-              : null,
-        ));
+  }
+
+  Future<void> _edit([BackendGoal? goal]) async {
+    if (!_current || _mutating) return;
+    final useServer = _server;
+    final createKey = 'patient_goal_${wibNow().microsecondsSinceEpoch}';
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder: (_) => Consumer(builder: (context, ref, _) {
+              ref.watch(currentSessionProvider);
+              if (!_current)
+                return const Scaffold(
+                    body: Center(
+                        child: Text(
+                            'Sesi akun telah berubah. Buka kembali Goals.')));
+              return GoalEditor(
+                  goal: goal,
+                  onSave: (result) async {
+                    if (!_current || _mutating) return false;
+                    setState(() => _mutating = true);
+                    try {
+                      if (useServer) {
+                        final api = ref.read(apiClientProvider),
+                            token =
+                                ref.read(currentSessionProvider)!.accessToken!;
+                        final saved = goal == null
+                            ? await api.createGoal(
+                                accessToken: token,
+                                title: result.title,
+                                targetPerWeek: 7,
+                                idempotencyKey: createKey,
+                                details: result.details)
+                            : await api.updateGoal(
+                                accessToken: token,
+                                goalId: goal.id,
+                                title: result.title,
+                                details: result.details);
+                        if (!_current) return false;
+                        setState(() => _serverGoals = [
+                              if (goal == null) ..._serverGoals,
+                              if (goal == null)
+                                _selectedDate == _today
+                                    ? saved
+                                    : BackendGoal(
+                                        id: saved.id,
+                                        title: saved.title,
+                                        category: saved.category,
+                                        targetPerWeek: saved.targetPerWeek,
+                                        isActive: saved.isActive,
+                                      ).withDefinition(saved,
+                                        on: DateTime.parse(_selectedDate)),
+                              if (goal != null)
+                                for (final g in _serverGoals)
+                                  g.id == goal.id
+                                      ? g.withDefinition(saved,
+                                          on: DateTime.parse(_selectedDate))
+                                      : g
+                            ]);
+                        ref.read(clinicalDataRevisionProvider.notifier).state++;
+                        await _load();
+                      } else {
+                        final existing = ref
+                            .read(malvaStoreProvider)
+                            .goals
+                            .where((g) => g.id == goal?.id)
+                            .firstOrNull;
+                        final parts = result.details.time.split(':');
+                        ref.read(malvaStoreProvider.notifier).upsertGoal(
+                            GoalItem(
+                                id: goal?.id ??
+                                    'goal_${wibNow().microsecondsSinceEpoch}',
+                                title: result.title,
+                                frequency: result.details.recurrence == 'daily'
+                                    ? 'Harian'
+                                    : 'Mingguan',
+                                streakDays: existing?.streakDays ?? 0,
+                                completedToday:
+                                    existing?.completedToday ?? false,
+                                reminder: parts.length == 2
+                                    ? TimeOfDay(
+                                        hour: int.parse(parts[0]),
+                                        minute: int.parse(parts[1]))
+                                    : const TimeOfDay(hour: 19, minute: 0),
+                                note: result.details.note,
+                                details: result.details,
+                                value: existing?.value ?? 0,
+                                completedStepIds:
+                                    existing?.completedStepIds ?? const []));
+                      }
+                      return _current;
+                    } finally {
+                      if (mounted) setState(() => _mutating = false);
+                    }
+                  });
+            })));
+  }
+
+  Future<void> _delete(BackendGoal goal) async {
+    if (!_current || _mutating) return;
+    setState(() => _mutating = true);
+    try {
+      final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+                  title: const Text('Hapus Goal?'),
+                  content: const Text(
+                      'Tindakan ini tidak dapat dibatalkan. Apakah Anda yakin ingin menghapus goal ini?'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Batal')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Hapus'))
+                  ]));
+      if (confirm != true || !_current) return;
+      if (_server) {
+        await ref.read(apiClientProvider).deleteGoal(
+            accessToken: ref.read(currentSessionProvider)!.accessToken!,
+            goalId: goal.id);
+        if (!_current) return;
+        setState(() =>
+            _serverGoals = _serverGoals.where((g) => g.id != goal.id).toList());
+        ref.read(clinicalDataRevisionProvider.notifier).state++;
+        await _load();
+      } else {
+        ref.read(malvaStoreProvider.notifier).deleteGoal(goal.id);
+      }
+    } on Object catch (e) {
+      if (_current) _showError(e);
+    } finally {
+      if (mounted) setState(() => _mutating = false);
+    }
+  }
+
+  void _showError(Object error) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(friendlyErrorMessage(error)),
+          backgroundColor: Theme.of(context).colorScheme.error));
+
+  Future<void> _selectDate() async {
+    final date = DateTime.parse(_selectedDate), now = wibNow();
+    final selected = await showDatePicker(
+        context: context,
+        initialDate: date,
+        firstDate: DateTime(2000),
+        lastDate: DateTime(now.year, now.month, now.day),
+        helpText: 'Riwayat kebiasaan (WIB)');
+    if (selected == null || !_current) return;
+    setState(() {
+      _selectedDate =
+          wibDateKey(wibFromParts(selected.year, selected.month, selected.day));
+      _serverGoals = const [];
+    });
+    await _load();
   }
 }

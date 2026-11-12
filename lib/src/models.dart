@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'models/goal_details.dart';
 import './time/wib.dart';
 
 enum UserRole { patient, professional, admin }
@@ -448,6 +449,9 @@ class GoalItem {
     required this.completedToday,
     required this.reminder,
     required this.note,
+    this.details,
+    this.value = 0,
+    this.completedStepIds = const [],
   });
 
   final String id;
@@ -458,6 +462,10 @@ class GoalItem {
   final TimeOfDay reminder;
   final String note;
 
+  final GoalDetails? details;
+  final int value;
+  final List<String> completedStepIds;
+
   GoalItem copyWith({
     String? id,
     String? title,
@@ -466,6 +474,9 @@ class GoalItem {
     bool? completedToday,
     TimeOfDay? reminder,
     String? note,
+    GoalDetails? details,
+    int? value,
+    List<String>? completedStepIds,
   }) {
     return GoalItem(
       id: id ?? this.id,
@@ -475,6 +486,9 @@ class GoalItem {
       completedToday: completedToday ?? this.completedToday,
       reminder: reminder ?? this.reminder,
       note: note ?? this.note,
+      details: details ?? this.details,
+      value: value ?? this.value,
+      completedStepIds: completedStepIds ?? this.completedStepIds,
     );
   }
 }

@@ -62,7 +62,9 @@ func TestLegacyResumeBindsSelectedPackageAmongDuplicatePendingPurchases(t *testi
 	db, st := openOnboardingTestStore(t)
 	patient := createIdentityTestUser(t, db, st, "patient", nil)
 	prof := verifiedProfessional(t, db, st)
-	start := clock.Now().AddDate(0, 0, 4)
+	day := clock.Now().AddDate(0, 0, 4)
+	// Keep the full session inside practice hours, even when tests run near midnight.
+	start := time.Date(day.Year(), day.Month(), day.Day(), 10, 0, 0, 0, clock.Location())
 	if _, err := db.Exec(`INSERT INTO professional_schedules(professional_id,day_of_week,start_time,end_time) VALUES($1,$2,'00:00','23:59')`, prof.ID, int(start.Weekday())); err != nil {
 		t.Fatal(err)
 	}

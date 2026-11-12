@@ -2,9 +2,17 @@
 
 ## CRUD Goals & Habits pasien (2026-11-11)
 
-- Tambah, edit dan hapus memakai `/v1/goals` dan PATCH/DELETE ID milik pasien yang diperiksa server. Kartu menyediakan edit/hapus; hapus dari kartu/form selalu dikonfirmasi. Mode lokal tetap kompatibel.
+- Tambah, edit dan hapus memakai `/v1/goals` dan PATCH/DELETE ID milik pasien yang diperiksa server. Kartu menyediakan edit/hapus; hapus dari kartu selalu dikonfirmasi. Form penuh menyediakan Pulihkan, Simpan dan Batal. Mode lokal tetap kompatibel.
 - Form menunggu hasil dan mengunci submit selama request, menampilkan error serta mempertahankan input untuk retry. Judul wajib terisi; kategori tersimpan di luar opsi bawaan dipertahankan. Respons sukses menjadi sumber tampilan sebelum refresh sehingga kegagalan reload tidak mengembalikan goal yang sudah dihapus/diubah. Perubahan akun membuang editor lama dan menolak mutasi/hasil async lama, termasuk A→B→A; rotasi token pemilik sama tidak membuang input.
 - Uji: `test/patient_goals_crud_test.dart`, `clinical_sync_revision_test.dart`, `malva_store_edit_test.dart`, `goal_reminder_test.dart`.
+
+### Metode, jadwal dan pengingat (2026-11-12)
+
+- Migrasi 041 menyimpan details opsional serta value/completed_step_ids harian. Tanpa details = legacy yes/no. Metode numeric/checklist dihitung server terhadap target/ID langkah saat ini; patch progres independen dan atomik.
+- Daftar memakai GET goals `on=yyyy-MM-dd`, status due/failure/streak nyata dan filter metode. Edit/hapus/log mempertahankan hasil sukses bila reload gagal, termasuk progres tanggal riwayat. Tidak ada data contoh produksi.
+- Jadwal WIB daily/weekly dan interval, hari ISO Senin1–Minggu7. Goal terkonfigurasi menolak log masa depan/tidak terjadwal. Lock-past mengunci sebelum kemarin WIB; missing occurrence yang sudah lewat gagal hanya saat auto_fail aktif.
+- Offset pengingat memakai notifikasi lokal generik tanpa judul/ID pribadi: 48 jadwal terdekat dalam 370 hari, refill startup/resume/revisi, cancel logout/ganti akun, generasi akun diperiksa setelah operasi native. Tidak ada jenis FCM baru.
+- Uji tambahan: `patient_goal_details_test.dart`, `patient_goals_reference_test.dart`, `patient_goals_visual_test.dart`, `goal_configured_reminder_test.dart`, dan lifecycle reminder. Tujuh render dibandingkan pada lebar390; lebar320/390 dan textscale1.35 diuji.
 
 ## Home dan halaman check-in referensi (2026-11-11)
 
