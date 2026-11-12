@@ -66,3 +66,15 @@ Full Flutter suite1212/1212 passed after review fixes.
 No actionable P0/P1/P2 visual issue remains. This passes the design-QA gate;
 pixel-for-pixel identity is not claimed. Physical-device OS alarm delivery and
 authenticated two-device synchronization were not exercised.
+
+## Synchronization corrections — 2026-11-13,0.1.24+25
+
+Latest eight reports supersede earlier checklist rendering for yes/no/numeric.
+Opened native Flutter renders `01-list`, `05-edit-yes_no`, `06-edit-numeric`,
+`07-edit-checklist` and `08-reminder-dialog` in the synchronization evidence
+directory. Rincian Aktivitas uses bullets; only sub-tasks have checkboxes. Bells
+appear next to method badges and reminder dialog no longer has range helper text.
+Schedule labels use effective dates, including the partial first week. Visual
+suite9/9,320/390px large-text checks pass. Small prior raster/icon differences
+remain; pixel identity and live-patient/physical-device screenshots are not claimed.
+See [synchronization QA](docs/qa/2026-11-13-goals-sync-fixes.md).

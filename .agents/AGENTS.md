@@ -471,7 +471,7 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 ## Goals & Habits referensi (2026-11-12)
 
 - User mengizinkan perluasan data. Migrasi 041 menambah `goals.details` nullable dan progres nilai/sub-tugas pada `habit_logs`; data tanpa details tetap yes/no legacy dengan kategori, target mingguan dan riwayat asli.
-- Metode yes/no, numeric, checklist menyimpan catatan, target/satuan, langkah ber-ID stabil, jadwal WIB, interval/hari, offset pengingat, auto-fail dan lock-past. Server menghitung completion/streak dari log nyata; GET `on` memilih tanggal. Jadwal tidak aktif/tanggal masa depan ditolak; lock-past mengizinkan hari ini dan kemarin WIB.
+- Metode yes/no, numeric, checklist menyimpan catatan, target/satuan, langkah ber-ID stabil, jadwal WIB, interval/hari, offset pengingat, auto-fail dan lock-past. Server menghitung completion/streak dari log nyata; GET `on` memilih tanggal. Tanggal masa depan/sebelum mulai dan goal nonaktif ditolak; lock-past mengizinkan hari ini dan kemarin WIB. Checklist boleh mencatat progres tambahan di luar jadwal tanpa kredit mingguan/streak; metode lain tetap wajib sesuai jadwal.
 - Layar penuh mengikuti tujuh acuan, menjaga retry/idempotensi dan isolasi akun. Edit dari riwayat mempertahankan progres tanggal terpilih ketika reload gagal. Hapus dari kartu memakai konfirmasi.
 - Pengingat konfigurasi dijadwalkan lokal dengan isi generik, maksimal 48 kejadian mendatang dari horizon 370 hari. Refill startup/resume/revisi, batalkan logout/ganti akun; reminder harian legacy hanya untuk goal tanpa details. Pengiriman fisik OS memerlukan QA perangkat.
 - Rujukan: [kontrak](../docs/superpowers/specs/2026-11-12-patient-goals-reference.md), [check-in](skills/health_checkin_module.md), [QA](../docs/qa/2026-11-12-patient-goals-reference.md).
@@ -482,3 +482,10 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - `details.weekly_target` opsional 0–7: absen memakai hari terpilih; hadir memakai target mingguan fleksibel, 0 tanpa kuota. Hari istirahat tidak gagal otomatis; minggu aktif penuh yang kurang kuota memutus streak auto-fail. Streak hanya menghitung hari selesai nyata. `target_per_week` legacy tetap kompatibel.
 - `recurrence: monthly`, interval 1–12, memakai tanggal anchor asli dan clamp akhir bulan pendek, lalu pulih ke tanggal asli. `completed_weekdays` berasal dari log sukses aktual pada minggu/tanggal terpilih. Monthly/fleksibel menormalisasi `weekdays: []` agar scheduler klien lama tidak menebak alarm; edit pengaturan baru memerlukan klien baru. Tidak ada perubahan tabel/kolom.
 - Rujukan: [desain](../docs/superpowers/specs/2026-11-13-goals-refinement-design.md), [rencana](../docs/superpowers/plans/2026-11-13-goals-refinement.md).
+
+## Koreksi sinkronisasi Goals & Habits (2026-11-13)
+
+- Yes/no dan numeric memakai Rincian Aktivitas berupa bullet; hanya checklist memiliki centang langkah. ID/deskripsi tetap disimpan, completion metode lain tidak ditentukan oleh langkah.
+- Editor legacy mempertahankan kuota mingguan tanpa mengarang waktu; konfigurasi tersimpan mengatur jadwal. Jumlah hari pada card memakai tanggal efektif pada minggu terpilih, termasuk minggu pertama parsial. Catatan bebas tidak diparsing menjadi jadwal.
+- Bell muncul jika waktu dan offset pengingat tersimpan. Dialog pengingat tidak menampilkan helper rentang; validasi 0–10080 tetap aktif. Check/uncheck dan counter mempertahankan posisi scroll.
+- Rujukan: [desain](../docs/superpowers/specs/2026-11-13-goals-sync-fixes-design.md), [rencana](../docs/superpowers/plans/2026-11-13-goals-sync-fixes.md).

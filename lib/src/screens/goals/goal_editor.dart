@@ -55,11 +55,13 @@ class _GoalEditorState extends State<GoalEditor> {
     final now = wibNow();
     final d = widget.goal?.details ??
         GoalDetails(
-            recurrence: widget.goal == null ? 'weekly' : 'daily',
+            recurrence: 'weekly',
+            weeklyTarget: widget.goal?.targetPerWeek,
             reminders: widget.goal == null ? const [30] : const [],
             startDate: wibDateKey(widget.goal?.createdAt ?? now),
-            time:
-                '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}');
+            time: widget.goal == null
+                ? '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}'
+                : '');
     _title.text = widget.goal?.title ?? '';
     _note.text = d.note;
     _unit.text = d.unit;
@@ -424,7 +426,9 @@ class _GoalEditorState extends State<GoalEditor> {
                                                   ],
                                                   const SizedBox(height: 26),
                                                   _section(
-                                                      'Daftar Langkah (Checklist)',
+                                                      _method == 'checklist'
+                                                          ? 'Daftar Langkah (Checklist)'
+                                                          : 'Rincian Aktivitas',
                                                       '${_steps.length} langkah'),
                                                   for (final step
                                                       in _steps) ...[
@@ -438,11 +442,21 @@ class _GoalEditorState extends State<GoalEditor> {
                                                                 right: 5),
                                                         radius: 12,
                                                         child: Row(children: [
-                                                          const Icon(
-                                                              Icons
-                                                                  .check_circle,
-                                                              color: goalPurple,
-                                                              size: 14),
+                                                          if (_method ==
+                                                              'checklist')
+                                                            const Icon(
+                                                                Icons
+                                                                    .check_circle,
+                                                                color:
+                                                                    goalPurple,
+                                                                size: 14)
+                                                          else
+                                                            const Text('•',
+                                                                style: TextStyle(
+                                                                    color:
+                                                                        goalPurple,
+                                                                    fontSize:
+                                                                        18)),
                                                           const SizedBox(
                                                               width: 12),
                                                           Expanded(
@@ -962,11 +976,14 @@ class _GoalEditorState extends State<GoalEditor> {
                           text: '$_weeklyTarget kali per minggu',
                           style: const TextStyle(
                               color: goalPurple, fontWeight: FontWeight.w700)),
-                      const TextSpan(text: ' (hari fleksibel).'),
+                      TextSpan(
+                          text: _interval == 1
+                              ? ' (hari fleksibel).'
+                              : ' (hari fleksibel; setiap $_interval minggu).'),
                     ] else if (_frequencyMode)
-                      const TextSpan(
+                      TextSpan(
                           text:
-                              'Berulang setiap minggu tanpa target frekuensi khusus.')
+                              'Berulang setiap ${_interval == 1 ? 'minggu' : '$_interval minggu'} tanpa target frekuensi khusus.')
                     else ...[
                       const TextSpan(text: 'Setiap '),
                       TextSpan(
@@ -1342,25 +1359,34 @@ class _GoalEditorState extends State<GoalEditor> {
 
   Future<void> _addReminder() async {
     final controller = TextEditingController(text: '30');
+    final form = GlobalKey<FormState>();
     final value = await showDialog<int>(
         context: context,
         builder: (ctx) => AlertDialog(
                 title: const Text('Tambah Pengingat'),
-                content: TextField(
-                    controller: controller,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                        labelText: 'Menit sebelum jadwal',
-                        helperText: '0–10080 menit (0 = saat waktunya)')),
+                content: Form(
+                    key: form,
+                    child: TextFormField(
+                        controller: controller,
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          final minutes = int.tryParse(value ?? '');
+                          return minutes == null ||
+                                  minutes < 0 ||
+                                  minutes > 10080
+                              ? 'Masukkan angka 0–10080.'
+                              : null;
+                        },
+                        decoration: const InputDecoration(
+                            labelText: 'Menit sebelum jadwal'))),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(ctx),
                       child: const Text('Batal')),
                   FilledButton(
                       onPressed: () {
-                        final n = int.tryParse(controller.text);
-                        if (n != null && n >= 0 && n <= 10080)
-                          Navigator.pop(ctx, n);
+                        if (form.currentState!.validate())
+                          Navigator.pop(ctx, int.parse(controller.text));
                       },
                       child: const Text('Tambah'))
                 ]));
