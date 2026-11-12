@@ -5415,7 +5415,7 @@ class BackendGoal {
   BackendGoal withProgress(BackendHabitLog log) {
     final day = DateTime.tryParse(log.loggedOn)?.weekday;
     final days = completedWeekdays.toSet();
-    if (day != null) {
+    if (day != null && isDue) {
       log.done ? days.add(day) : days.remove(day);
     }
     return BackendGoal(
@@ -5424,9 +5424,10 @@ class BackendGoal {
       category: category,
       targetPerWeek: targetPerWeek,
       isActive: isActive,
-      doneThisWeek:
-          (doneThisWeek + (log.done ? 1 : 0) - (doneToday == true ? 1 : 0))
-              .clamp(0, 7),
+      doneThisWeek: isDue
+          ? (doneThisWeek + (log.done ? 1 : 0) - (doneToday == true ? 1 : 0))
+              .clamp(0, 7)
+          : doneThisWeek,
       completedWeekdays: days.toList()..sort(),
       weeklyProgressAvailable: weeklyProgressAvailable,
       lastLoggedOn: lastLoggedOn,
@@ -5436,7 +5437,7 @@ class BackendGoal {
       todayCompletedStepIds: log.completedStepIds,
       streakDays: streakDays,
       isDue: isDue,
-      failedToday: !log.done,
+      failedToday: isDue && !log.done,
       createdAt: createdAt,
     );
   }

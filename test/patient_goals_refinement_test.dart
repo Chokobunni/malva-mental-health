@@ -267,7 +267,9 @@ void main() {
         await tester.pumpAndSettle();
         final control = method == 'numeric'
             ? find.byTooltip('Tambah progres Kebiasaan 8')
-            : find.text('Langkah delapan');
+            : find.descendant(
+                of: find.byKey(const ValueKey('g8')),
+                matching: find.text('Langkah delapan'));
         await tester.ensureVisible(control);
         await tester.pumpAndSettle();
         final title = find.text('Kebiasaan 8');

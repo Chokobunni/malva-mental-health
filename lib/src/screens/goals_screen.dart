@@ -502,14 +502,17 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     final method = goal.details?.method ?? 'yes_no';
     final done = _done(goal);
     final configured = goal.details;
-    final locked = _mutating ||
-        !goal.isActive ||
-        !goal.isDue ||
-        _selectedDate.compareTo(_today) > 0 ||
+    final dateLocked = _selectedDate.compareTo(_today) > 0 ||
+        (configured != null &&
+            _selectedDate.compareTo(configured.startDate) < 0) ||
         (configured?.lockPast == true &&
             _selectedDate.compareTo(wibDateKey(
                     widget.now().subtract(const Duration(days: 1)))) <
                 0);
+    final locked = _mutating ||
+        !goal.isActive ||
+        dateLocked ||
+        (!goal.isDue && method != 'checklist');
     final badgeColor = method == 'numeric'
         ? const Color(0xFFA66A1D)
         : method == 'checklist'
@@ -535,6 +538,14 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                   background: badgeBg,
                   fontSize: 10,
                   verticalPadding: 3),
+              if (configured != null &&
+                  configured.time.isNotEmpty &&
+                  configured.reminders.isNotEmpty)
+                Tooltip(
+                    message:
+                        'Pengingat aktif • jadwal pukul ${configured.time.replaceAll(':', '.')} WIB',
+                    child: const Icon(Icons.notifications_active_outlined,
+                        color: goalPurple, size: 17)),
               if (goal.streakDays > 0)
                 GoalPill('${goal.streakDays} hari',
                     icon: Icons.local_fire_department_rounded,
@@ -583,15 +594,45 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                     height: 1.6,
                     color: Color(0xFF76818D))),
           ],
+          if (method != 'checklist' &&
+              configured != null &&
+              configured.steps.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text('Rincian Aktivitas',
+                style: TextStyle(
+                    fontFamily: 'PlusJakartaSans',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF53606D))),
+            for (final step in configured.steps)
+              Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('•', style: TextStyle(color: goalPurple)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            child: Text(step.label,
+                                style: const TextStyle(
+                                    fontFamily: 'PlusJakartaSans',
+                                    fontSize: 12.5,
+                                    height: 1.5,
+                                    color: goalInk))),
+                      ])),
+          ],
           if (method != 'checklist') ...[
             const SizedBox(height: 14),
             _habitSchedule(goal),
           ],
           if (!goal.isDue)
-            const Padding(
-                padding: EdgeInsets.only(top: 10),
-                child: Text('Tidak dijadwalkan pada tanggal ini',
-                    style: TextStyle(
+            Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text(
+                    method == 'checklist' && !dateLocked && goal.isActive
+                        ? 'Progres tambahan di luar jadwal'
+                        : 'Tidak dijadwalkan pada tanggal ini',
+                    style: const TextStyle(
                         fontFamily: 'PlusJakartaSans',
                         color: goalMuted,
                         fontSize: 12))),
@@ -756,12 +797,11 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     final details = goal.details;
     if (details?.recurrence == 'weekly' && details?.weeklyTarget == null) {
       final selected = DateTime.parse(_selectedDate);
-      final monday = wibFromParts(
-          selected.year, selected.month, selected.day - selected.weekday + 1);
+      final scheduledDays = details!.scheduledWeekdaysInWeek(selected);
       return Column(children: [
         Row(children: [
           Expanded(
-              child: Text('Hari terpilih (${details!.weekdays.length}×/minggu)',
+              child: Text('Hari terpilih (${scheduledDays.length}×/minggu)',
                   style: const TextStyle(
                       fontFamily: 'PlusJakartaSans',
                       fontSize: 11.5,
@@ -783,9 +823,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
           for (var day = 1; day <= 7; day++) ...[
             if (day > 1) const SizedBox(width: 6),
             Expanded(child: Builder(builder: (_) {
-              final date =
-                  wibFromParts(monday.year, monday.month, monday.day + day - 1);
-              final scheduled = details.isDueOn(date);
+              final scheduled = scheduledDays.contains(day);
               final completed = goal.completedWeekdays.contains(day);
               final current = selected.weekday == day;
               return Container(
@@ -848,7 +886,12 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     if (details == null ||
         details.recurrence == 'weekly' ||
         (details.method == 'yes_no' && details.recurrence == 'daily')) {
-      final target = details?.weeklyTarget ?? goal.targetPerWeek;
+      final target = details == null
+          ? goal.targetPerWeek
+          : details.weeklyTarget ??
+              details
+                  .scheduledWeekdaysInWeek(DateTime.parse(_selectedDate))
+                  .length;
       return Column(children: [
         Row(children: [
           const Expanded(

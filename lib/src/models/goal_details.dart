@@ -97,6 +97,16 @@ class GoalDetails {
         (weeklyTarget != null || weekdays.contains(day.weekday));
   }
 
+  List<int> scheduledWeekdaysInWeek(DateTime on) {
+    final monday = wibFromParts(on.year, on.month, on.day - on.weekday + 1);
+    return [
+      for (var day = 1; day <= 7; day++)
+        if (isDueOn(
+            wibFromParts(monday.year, monday.month, monday.day + day - 1)))
+          day,
+    ];
+  }
+
   String get scheduleLabel {
     final every = recurrence == 'weekly'
         ? (interval == 1 ? 'setiap minggu' : 'setiap $interval minggu')

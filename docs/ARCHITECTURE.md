@@ -511,3 +511,10 @@ drive day indicators. Same-date refresh retains list widgets and scroll; date
 rollover invalidates prior-day snapshots. Today's edit uses the returned server
 summary, while unknown historical weekly aggregates are explicitly unavailable
 until reload. Irrelevant weekdays are normalized to[] for older schedulers.
+
+The synchronization correction keeps activity descriptions in the existing steps
+JSON for all methods; only checklist derives completion from those IDs. Manual
+off-schedule checklist logs persist independently from scheduled weekly/streak
+credit. Future, pre-start, inactive and locked-history guards apply before writes.
+Flutter derives card weekday counts and enabled tiles from the same effective
+schedule and hydrates legacy weekly quotas without inventing a time.

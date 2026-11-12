@@ -234,7 +234,11 @@ func validateHabitDate(d *GoalDetails, on, now time.Time) error {
 	if on.After(today) {
 		return errors.New("habit tidak dapat dicatat untuk tanggal mendatang")
 	}
-	if !goalDue(d, on) {
+	start, err := goalDate(d.StartDate)
+	if err != nil || on.Before(start) {
+		return errors.New("habit belum dimulai pada tanggal ini")
+	}
+	if d.Method != "checklist" && !goalDue(d, on) {
 		return errors.New("habit tidak dijadwalkan pada tanggal ini")
 	}
 	if d.LockPast && on.Before(today.AddDate(0, 0, -1)) {

@@ -354,6 +354,9 @@ func (s *Store) LogHabit(ctx context.Context, patientID, goalID, loggedOn string
 	if err != nil {
 		return HabitLog{}, err
 	}
+	if !g.IsActive {
+		return HabitLog{}, errors.New("habit nonaktif tidak dapat dicatat")
+	}
 	if err := validateHabitDate(g.Details, on, now); err != nil {
 		return HabitLog{}, err
 	}

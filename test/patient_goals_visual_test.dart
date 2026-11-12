@@ -37,7 +37,10 @@ final visualGoals = [
       'lock_past': false,
       'target': 1,
       'unit': '',
-      'steps': []
+      'steps': [
+        {'id': 'activity-a', 'label': 'Siapkan sepatu dan air minum'},
+        {'id': 'activity-b', 'label': 'Jalan santai selama 30 menit'}
+      ]
     },
     'done_today': true,
     'done_this_week': 3,
@@ -64,7 +67,10 @@ final visualGoals = [
       'lock_past': false,
       'target': 20,
       'unit': 'halaman',
-      'steps': []
+      'steps': [
+        {'id': 'reading-a', 'label': 'Siapkan buku yang ingin dibaca'},
+        {'id': 'reading-b', 'label': 'Baca dan catat gagasan utama'}
+      ]
     },
     'done_today': false,
     'today_value': 14,
@@ -195,7 +201,19 @@ void main() {
           key: boundary,
           child: MaterialApp(
               debugShowCheckedModeBanner: false,
-              theme: buildMalvaTheme(),
+              theme: recordCaptureEnabled
+                  ? buildMalvaTheme().copyWith(
+                      filledButtonTheme: FilledButtonThemeData(
+                          style: buildMalvaTheme()
+                              .filledButtonTheme
+                              .style!
+                              .copyWith(
+                                  textStyle: const WidgetStatePropertyAll(
+                                      TextStyle(
+                                          fontFamily: 'Roboto',
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 16)))))
+                  : buildMalvaTheme(),
               home: GoalEditor(
                   goal: edit ? BackendGoal.fromJson(visualGoals[i % 3]) : null,
                   onSave: (_) async => true))));
@@ -229,6 +247,15 @@ void main() {
       await tester.pumpAndSettle();
       await captureRecord(tester, boundary,
           '0${i + 2}-${edit ? 'edit' : 'create'}-$method.png');
+      if (i == 3) {
+        tester.view.physicalSize = const Size(390, 844);
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Tambah Pengingat'));
+        await tester.tap(find.text('Tambah Pengingat'));
+        await tester.pumpAndSettle();
+        await captureRecord(tester, boundary, '08-reminder-dialog.png');
+        expect(find.textContaining('0–10080'), findsNothing);
+      }
       resetRecordCaptureRendering();
       expect(tester.takeException(), isNull);
     });

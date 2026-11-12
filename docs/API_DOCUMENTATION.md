@@ -1573,8 +1573,11 @@ GET `/v1/goals?on=YYYY-MM-DD` projects the selected WIB date's `done_today`,
 Create/update responses project today. Clients editing a historical view must
 preserve that day's progress until the selected-date refresh completes.
 Numeric/checklist completion derives from the current definition; progress fields
-are independently patched atomically. Configured goals reject future/unscheduled
-logs; lock-past permits today and yesterday WIB. Missing elapsed occurrences fail
+are independently patched atomically. Configured goals reject future/pre-start
+logs; lock-past permits today and yesterday WIB. Inactive goals reject new progress.
+Checklist accepts manual extra progress outside schedule; those records persist
+but do not count toward scheduled weekly completion or streak. Other methods
+still require a scheduled date. Missing elapsed occurrences fail
 only with auto-fail enabled. Goal/log ownership and clinical consent checks remain
 mandatory. Additive migration 041 must run before the new API binary.
 
@@ -1588,3 +1591,11 @@ list of actual qualifying completions in the selected week through `on`.
 `target_per_week` remains unchanged. Monthly/flexible writes normalize irrelevant
 weekdays to[] after validation so older schedulers cannot guess daily alarms;
 editing these settings requires the updated app. No additional migration is needed.
+
+Synchronization correction 2026-11-13: steps on yes/no and numeric are activity
+descriptions only, displayed as bullets without step controls. Legacy edit uses
+the saved weekly quota and does not invent a reminder time. Card weekday counts
+and enabled dates use the same effective schedule, clipped at the start date.
+Reminder bells require a configured time and at least one offset (including 0).
+The reminder dialog omits range helper text but still rejects values outside
+0–10080. Existing payloads and schema remain unchanged.
