@@ -29,6 +29,7 @@ class FailingDeleteStore extends MemoryStore {
 class Scheduler implements GoalReminderScheduler {
   final pending = <int, DateTime>{};
   final daily = <int>{};
+  final dailyAt = <int, DateTime>{};
   final payloads = <String>[];
   Completer<void>? block;
   Completer<void>? initialization;
@@ -41,6 +42,7 @@ class Scheduler implements GoalReminderScheduler {
   Future<void> cancel(int id) async {
     pending.remove(id);
     daily.remove(id);
+    dailyAt.remove(id);
   }
 
   @override
@@ -51,6 +53,7 @@ class Scheduler implements GoalReminderScheduler {
       required DateTime scheduledAt,
       required String payload}) async {
     daily.add(id);
+    dailyAt[id] = scheduledAt;
   }
 
   @override
@@ -84,6 +87,20 @@ BackendGoal goal(
 const details =
     GoalDetails(startDate: '2026-11-12', time: '22:30', reminders: [30, 0]);
 void main() {
+  test('completed legacy goal keeps its future repeating daily reminder',
+      () async {
+    final scheduler = Scheduler();
+    final service =
+        GoalReminderService(store: MemoryStore(), scheduler: scheduler);
+    final now = wibNow();
+    await service.syncGoals(
+        goals: [goal(done: true)],
+        settings: const GoalReminderSettings(hour: 0),
+        now: now);
+    expect(scheduler.daily, contains(GoalReminderService.notificationId));
+    expect(scheduler.dailyAt[GoalReminderService.notificationId],
+        wibFromParts(now.year, now.month, now.day + 1));
+  });
   test('storage deletion failure cannot preserve the legacy OS alarm on logout',
       () async {
     final scheduler = Scheduler()

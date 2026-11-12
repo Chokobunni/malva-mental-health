@@ -19,6 +19,105 @@ Future<void> tapGoalControl(WidgetTester tester, Finder finder) async {
 }
 
 void main() {
+  for (final historical in [false, true]) {
+    testWidgets(
+        'removed completed checklist step is excluded on ${historical ? 'historical' : 'today'} retry after edit refresh failure',
+        (tester) async {
+      FlutterSecureStorage.setMockInitialValues({});
+      tester.view.physicalSize = const Size(430, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final yesterday = wibNow().subtract(const Duration(days: 1));
+      var edited = false;
+      Map<String, dynamic>? posted;
+      final definition = <String, dynamic>{
+        'id': 'g',
+        'title': 'Daftar',
+        'category': 'general',
+        'target_per_week': 7,
+        'is_active': true,
+        'details': {
+          'method': 'checklist',
+          'start_date': '2026-01-01',
+          'steps': [
+            {'id': 'a', 'label': 'Langkah A'},
+            {'id': 'b', 'label': 'Langkah B'}
+          ]
+        },
+        'today_completed_step_ids': ['a'],
+        'done_today': false,
+        'is_due': true,
+      };
+      final container = ProviderContainer(overrides: [
+        apiClientProvider.overrideWithValue(MalvaApiClient(
+            baseUrl: 'https://goals.test',
+            httpClient: MockClient((r) async {
+              if (r.method == 'GET')
+                return edited
+                    ? http.Response('{"error":"reload gagal"}', 503)
+                    : http.Response(
+                        jsonEncode({
+                          'goals': [definition]
+                        }),
+                        200);
+              final body = jsonDecode(r.body) as Map<String, dynamic>;
+              if (r.method == 'PATCH') {
+                edited = true;
+                definition.addAll(body);
+                return http.Response(jsonEncode({'goal': definition}), 200);
+              }
+              posted = body;
+              if ((body['completed_step_ids'] as List).contains('a'))
+                return http.Response('{"error":"unknown step a"}', 422);
+              return http.Response(
+                  jsonEncode({
+                    'log': {
+                      'id': 'l',
+                      'goal_id': 'g',
+                      'logged_on': body['logged_on'],
+                      'done': true,
+                      'completed_step_ids': body['completed_step_ids']
+                    }
+                  }),
+                  200);
+            })))
+      ]);
+      addTearDown(container.dispose);
+      container.read(authStateProvider.notifier).setSession(const AuthSession(
+          role: UserRole.patient,
+          identifier: 'p',
+          displayName: 'P',
+          accessToken: 't'));
+      await tester.pumpWidget(UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+              theme: buildMalvaTheme(), home: const GoalsScreen())));
+      await tester.pumpAndSettle();
+      if (historical) {
+        await tapGoalControl(
+            tester, find.byIcon(Icons.calendar_today_outlined));
+        await tester.tap(find.byTooltip('Switch to input'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField),
+            '${yesterday.month}/${yesterday.day}/${yesterday.year}');
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+      }
+      await tapGoalControl(tester, find.byTooltip('Edit goal'));
+      await tapGoalControl(tester, find.byTooltip('Hapus langkah Langkah A'));
+      await tapGoalControl(tester, find.text('Simpan Perubahan'));
+      expect(find.text('Langkah A'), findsNothing);
+      if (historical) {
+        await tapGoalControl(tester, find.byType(Checkbox));
+      } else {
+        await tapGoalControl(tester, find.text('Langkah B'));
+      }
+      expect(posted?['completed_step_ids'], ['b']);
+      expect(posted?['logged_on'],
+          historical ? wibDateKey(yesterday) : wibDateKey(wibNow()));
+      expect(find.text('1/1 selesai'), findsOneWidget);
+    });
+  }
   testWidgets('historical progress survives edit and failed reload',
       (tester) async {
     FlutterSecureStorage.setMockInitialValues({});

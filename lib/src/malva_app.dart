@@ -81,6 +81,8 @@ class _MalvaAppState extends ConsumerState<MalvaApp>
   int _reminderGeneration = 0;
   Future<void> _medicationReminderWork = Future<void>.value();
   int _goalReminderRequest = 0;
+  int _goalReminderSnapshotRevision = 0;
+  List<BackendGoal> _goalReminderGoals = const [];
   final Set<String> _scheduledMedicationIds = {};
 
   @override
@@ -210,6 +212,8 @@ class _MalvaAppState extends ConsumerState<MalvaApp>
       await _medicationReminderService.cancelObsoleteReminders(const []);
     }).catchError((_) {});
     _goalReminderRequest++;
+    _goalReminderSnapshotRevision++;
+    _goalReminderGoals = const [];
     // cancel invalidates its generation synchronously, including an OS write
     // already in flight. Do not put this behind an app-level scheduling queue.
     unawaited(_goalReminderService.cancel().catchError((_) {}));
@@ -231,20 +235,49 @@ class _MalvaAppState extends ConsumerState<MalvaApp>
     final token = session.accessToken;
     if (token == null || token.isEmpty) return;
     try {
-      final settings = await _goalReminderService.loadSettings();
-      if (!current()) return;
       final goals = await ref.read(apiClientProvider).listGoals(
             accessToken: token,
             includeInactive: true,
           );
       if (!current()) return;
-      await _goalReminderService.syncGoals(
-        goals: goals,
-        settings: settings,
-        isCurrent: current,
-      );
+      _goalReminderGoals = goals;
+      await _scheduleGoalReminderSnapshot(session);
     } on Object {
       // Offline / izin ditolak: pengingat lama tetap dipakai.
+    }
+  }
+
+  void _applyGoalReminderMutation(GoalReminderMutation mutation) {
+    if (!_capabilities.canScheduleOsReminders ||
+        !_isCurrentReminderSession(mutation.session, _reminderGeneration))
+      return;
+    // Invalidate reads started before the accepted write. Keep other known
+    // goals, so a failed reconciliation cannot discard their valid reminders.
+    _goalReminderRequest++;
+    final saved = mutation.goal;
+    _goalReminderGoals = [
+      for (final goal in _goalReminderGoals)
+        if (goal.id != mutation.deletedId && goal.id != saved?.id) goal,
+      if (saved != null) saved,
+    ];
+    unawaited(_scheduleGoalReminderSnapshot(mutation.session));
+  }
+
+  Future<void> _scheduleGoalReminderSnapshot(AuthSession session) async {
+    final generation = _reminderGeneration;
+    final revision = ++_goalReminderSnapshotRevision;
+    final goals = _goalReminderGoals;
+    bool current() =>
+        revision == _goalReminderSnapshotRevision &&
+        _isCurrentReminderSession(session, generation);
+    try {
+      final settings = await _goalReminderService.loadSettings();
+      if (!current()) return;
+      await _goalReminderService.syncGoals(
+          goals: goals, settings: settings, isCurrent: current);
+    } on Object {
+      // Notification/storage failures do not turn an accepted goal write into
+      // an error in the editor. A later resume/revision retries reconciliation.
     }
   }
 
@@ -402,6 +435,11 @@ class _MalvaAppState extends ConsumerState<MalvaApp>
       if (!identical(previous?.medications, next.medications)) {
         _scheduleAllMedicationReminders();
       }
+    });
+
+    ref.listen<GoalReminderMutation?>(acceptedGoalMutationProvider,
+        (_, mutation) {
+      if (mutation != null) _applyGoalReminderMutation(mutation);
     });
 
     ref.listen<int>(clinicalDataRevisionProvider, (_, __) {

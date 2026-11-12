@@ -145,8 +145,9 @@ class GoalReminderService {
         return;
       }
       await sync(
-          hasActiveGoals: goals.any(
-              (g) => g.isActive && g.details == null && g.doneToday != true),
+          // A repeating legacy alarm must survive today's completion so its
+          // future daily occurrences still fire while the app stays closed.
+          hasActiveGoals: goals.any((g) => g.isActive && g.details == null),
           enabled: settings.enabled,
           hour: settings.hour,
           minute: settings.minute);

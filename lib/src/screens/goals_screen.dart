@@ -794,6 +794,10 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   Future<void> _log(BackendGoal goal,
       {bool? done, int? value, List<String>? steps}) async {
     if (!_current || _mutating) return;
+    // Logs retain historical IDs after a definition edit. Only current steps
+    // may be submitted again, including when a historical-date reload failed.
+    final currentIds = goal.details?.steps.map((step) => step.id).toSet() ?? {};
+    steps = steps?.where(currentIds.contains).toSet().toList();
     setState(() => _mutating = true);
     try {
       if (_server) {
@@ -812,6 +816,11 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                   for (final g in _serverGoals)
                     g.id == goal.id ? g.withProgress(log) : g
                 ]);
+          }
+          if (date == _today) {
+            ref.read(acceptedGoalMutationProvider.notifier).state =
+                GoalReminderMutation.upsert(
+                    ref.read(currentSessionProvider)!, goal.withProgress(log));
           }
           ref.read(clinicalDataRevisionProvider.notifier).state++;
           await _load();
@@ -896,6 +905,9 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                           on: DateTime.parse(_selectedDate))
                                       : g
                             ]);
+                        ref.read(acceptedGoalMutationProvider.notifier).state =
+                            GoalReminderMutation.upsert(
+                                ref.read(currentSessionProvider)!, saved);
                         ref.read(clinicalDataRevisionProvider.notifier).state++;
                         await _load();
                       } else {
@@ -961,6 +973,9 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
         if (!_current) return;
         setState(() =>
             _serverGoals = _serverGoals.where((g) => g.id != goal.id).toList());
+        ref.read(acceptedGoalMutationProvider.notifier).state =
+            GoalReminderMutation.delete(
+                ref.read(currentSessionProvider)!, goal.id);
         ref.read(clinicalDataRevisionProvider.notifier).state++;
         await _load();
       } else {

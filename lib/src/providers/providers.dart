@@ -2,6 +2,7 @@ export 'malva_store_provider.dart';
 export 'auth_providers.dart';
 export 'location_provider.dart';
 export 'realtime_providers.dart';
+export 'goal_reminder_providers.dart';
 export 'data/sync_provider.dart';
 export 'data/crisis_provider.dart';
 export 'data/export_provider.dart';
