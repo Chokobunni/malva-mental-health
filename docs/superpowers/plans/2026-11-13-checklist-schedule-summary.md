@@ -44,12 +44,12 @@ create `docs/qa/2026-11-13-checklist-schedule-summary.md`.
 - [x] Run full Flutter suite, analyzer, Dart format, WIB/platform policies;
   Go build/vet/test with real PostgreSQL and backend policy gates.
   Expected: PASS; no API document drift.
-- [ ] Commit with Conventional Commit header and bullet body; task completion
+- [x] Commit with Conventional Commit header and bullet body; task completion
   command `flutter test test/patient_goals_sync_test.dart`. Expected: PASS.
 
 ## Release
 
-- [ ] One independent final branch review; fix Important findings with RED/GREEN.
-- [ ] Push/create attached PR, pass required checks and merge.
-- [ ] Verify web/APK deployment workflows, public APK version/signature/hash and
+- [x] One independent final branch review; fix Important findings with RED/GREEN.
+- [x] Push/create attached PR, pass required checks and merge.
+- [x] Verify web/APK deployment workflows, public APK version/signature/hash and
   API health. Record results in QA; leave a clean branch.
