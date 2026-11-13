@@ -108,6 +108,8 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
           .read(apiClientProvider)
           .listGoals(accessToken: token, includeInactive: true, on: date);
       if (!_current || generation != _loadRequest) return;
+      // Log presence controls off-schedule corrections, not access to the list.
+      setState(() => _serverGoals = goals);
       final logs = goals.any((g) => g.details?.method == 'checklist')
           ? await ref
               .read(apiClientProvider)

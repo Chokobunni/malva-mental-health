@@ -393,6 +393,8 @@ void main() {
               if (r.method == 'GET' && r.url.path == '/v1/habit-logs') {
                 expect(r.url.queryParameters['from'], '2026-11-13');
                 expect(r.url.queryParameters['to'], '2026-11-13');
+                if (fail && writes > 0)
+                  return http.Response('{"error":"refresh gagal"}', 503);
                 return http.Response(
                     jsonEncode({
                       'logs': [
@@ -408,13 +410,11 @@ void main() {
                     200);
               }
               if (r.method == 'GET')
-                return fail && writes > 0
-                    ? http.Response('{"error":"refresh gagal"}', 503)
-                    : http.Response(
-                        jsonEncode({
-                          'goals': [snapshot()]
-                        }),
-                        200);
+                return http.Response(
+                    jsonEncode({
+                      'goals': [snapshot()]
+                    }),
+                    200);
               final body = jsonDecode(r.body) as Map<String, dynamic>;
               expect(body['logged_on'], '2026-11-13');
               ids = (body['completed_step_ids'] as List).cast<String>();
@@ -536,13 +536,104 @@ void main() {
               theme: buildMalvaTheme(),
               home: GoalsScreen(now: () => wibFromParts(2026, 11, 13, 12)))));
       await t.pumpAndSettle();
-      if (presence != 'failed') {
-        final checkbox = find.byType(Checkbox);
-        expect(t.widget<Checkbox>(checkbox).onChanged, isNull);
-        await tap(t, checkbox);
-      }
+      final checkbox = find.byType(Checkbox);
+      expect(t.widget<Checkbox>(checkbox).onChanged, isNull);
+      await tap(t, checkbox);
       expect(writes, 0);
       expect(find.text('Koreksi progres di luar jadwal'), findsNothing);
+    });
+  }
+
+  for (final historical in [false, true]) {
+    testWidgets(
+        'day-log read failure preserves mixed goals on ${historical ? 'date change' : 'first load'}',
+        (t) async {
+      size(t);
+      FlutterSecureStorage.setMockInitialValues({});
+      final c = ProviderContainer(overrides: [
+        apiClientProvider.overrideWithValue(MalvaApiClient(
+            baseUrl: 'https://goals.test',
+            httpClient: MockClient((r) async {
+              if (r.url.path == '/v1/habit-logs')
+                return http.Response('{"error":"log tidak tersedia"}', 503);
+              return http.Response(
+                  jsonEncode({
+                    'goals': [
+                      for (final method in [
+                        'yes_no',
+                        'numeric',
+                        'checklist',
+                        'off'
+                      ])
+                        {
+                          ...record({
+                            'method': method == 'off' ? 'checklist' : method,
+                            'start_date': '2026-01-01',
+                            'target': 20,
+                            'unit': 'halaman',
+                            'steps': [
+                              {'id': 'a', 'label': 'A'}
+                            ]
+                          }),
+                          'id': method,
+                          'title': 'Habit $method',
+                          'is_due': method != 'off'
+                        }
+                    ]
+                  }),
+                  200);
+            })))
+      ]);
+      addTearDown(c.dispose);
+      c.read(authStateProvider.notifier).setSession(const AuthSession(
+          role: UserRole.patient,
+          identifier: 'p',
+          displayName: 'P',
+          accessToken: 't'));
+      await t.pumpWidget(UncontrolledProviderScope(
+          container: c,
+          child: MaterialApp(
+              theme: buildMalvaTheme(),
+              home: GoalsScreen(now: () => wibFromParts(2026, 11, 13, 12)))));
+      await t.pumpAndSettle();
+      if (historical) {
+        await tap(t, find.text('Jumat, 13 November 2026'));
+        await t.tap(find.text('12'));
+        await t.tap(find.text('OK'));
+        await t.pumpAndSettle();
+      }
+      for (final method in ['yes_no', 'numeric', 'checklist', 'off']) {
+        expect(find.text('Habit $method'), findsOneWidget);
+      }
+      final scheduled = find.descendant(
+          of: find.byKey(const ValueKey('checklist')),
+          matching: find.byType(Checkbox));
+      final outside = find.descendant(
+          of: find.byKey(const ValueKey('off')),
+          matching: find.byType(Checkbox));
+      expect(t.widget<Checkbox>(scheduled).onChanged, isNotNull);
+      expect(t.widget<Checkbox>(outside).onChanged, isNull);
+      expect(find.byTooltip('Tambah progres Habit numeric'), findsOneWidget);
+      expect(
+          t
+              .widget<IconButton>(find
+                  .ancestor(
+                      of: find.byTooltip('Tambah progres Habit numeric'),
+                      matching: find.byType(IconButton))
+                  .first)
+              .onPressed,
+          isNotNull);
+      final yesNo = find.descendant(
+          of: find.byKey(const ValueKey('yes_no')),
+          matching: find.byType(FilledButton));
+      expect(yesNo, findsNWidgets(2));
+      expect(
+          t
+              .widgetList<FilledButton>(yesNo)
+              .every((button) => button.onPressed != null),
+          isTrue);
+      expect(find.text('Koreksi progres di luar jadwal'), findsNothing);
+      expect(t.takeException(), isNull);
     });
   }
 

@@ -18,7 +18,9 @@ No new SQL columns, DTO fields, dependencies or invented progress flags.
 
 Keep presence scoped to account/request generation and selected date. Accepted
 writes preserve presence during failed reload; changing day clears it. Failed
-presence reads must not grant correction permission. The UI labels eligible
+presence reads must not grant correction permission. Publish a successful goals
+snapshot even if the separate presence read fails, so scheduled methods remain
+available. The UI labels eligible
 off-schedule controls as corrections, and keeps unrecorded controls disabled.
 
 Impact: small Flutter Goals/store-query changes plus Go validation, tests and
