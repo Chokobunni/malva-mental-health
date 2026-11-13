@@ -75,6 +75,12 @@
 
 ## Goals & Habits (2026-11-13)
 
+Sub-Tugas menampilkan ringkasan jadwal bersama di atas Daftar Langkah: tile hari
+efektif dan marker selesai aktual untuk Pilih Hari Tertentu, segmen/count mingguan
+aktual untuk Target Frekuensi (0 tetap tanpa kuota). Ringkasan belum tersedia
+tetap jujur saat reload riwayat gagal; tidak menambah izin tulis di luar jadwal.
+Rujukan [perbaikan kartu](../../../docs/superpowers/specs/2026-11-13-checklist-schedule-summary-design.md).
+
 Koreksi sinkronisasi: yes/no dan numeric menampilkan Rincian Aktivitas sebagai bullet, hanya checklist dapat mencentang langkah. Deskripsi dan ID tetap tersimpan. Editor legacy memakai kuota mingguan asli tanpa jam buatan; card menghitung hari efektif dalam minggu terpilih (termasuk minggu pertama parsial). Jangan menebak jadwal dari catatan. Bell membutuhkan waktu + offset pengingat; dialog tanpa helper rentang tetap memvalidasi 0–10080 menit. Rujukan [desain koreksi](../../../docs/superpowers/specs/2026-11-13-goals-sync-fixes-design.md).
 
 Goals & Habits (2026-11-13): list/tiga edit/tambah mengikuti acuan terbaru dan ikon bunga supplied. Refresh same-date tidak menghapus kartu atau mengubah scroll. Rollover membuang progres tanggal lama. Weekly mendukung optional `details.weekly_target` 0–7 (absen=hari terpilih, 0=tanpa kuota); hari kosong fleksibel bukan kegagalan harian. Streak auto-fail hanya terputus bila minggu aktif penuh kurang kuota atau ada log gagal eksplisit. Monthly interval1–12 memakai tanggal anchor asli, clamp akhir bulan dan pulih bulan berikutnya. Respons `completed_weekdays` berisi hari sukses aktual hingga tanggal pilihan. Weekdays monthly/fleksibel dinormalisasi [] untuk scheduler lama. Kontrak legacy target_per_week tetap; tidak ada migrasi baru. Rujukan [desain](../../../docs/superpowers/specs/2026-11-13-goals-refinement-design.md).

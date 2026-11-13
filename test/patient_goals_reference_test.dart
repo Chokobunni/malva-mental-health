@@ -123,6 +123,8 @@ void main() {
       await tapGoalControl(tester, find.text('Simpan Perubahan'));
       expect(find.text('Langkah A'), findsNothing);
       if (historical) {
+        expect(
+            find.text('Riwayat mingguan belum dapat dimuat'), findsOneWidget);
         await tapGoalControl(tester, find.byType(Checkbox));
       } else {
         await tapGoalControl(tester, find.text('Langkah B'));

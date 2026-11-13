@@ -488,4 +488,5 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Yes/no dan numeric memakai Rincian Aktivitas berupa bullet; hanya checklist memiliki centang langkah. ID/deskripsi tetap disimpan, completion metode lain tidak ditentukan oleh langkah.
 - Editor legacy mempertahankan kuota mingguan tanpa mengarang waktu; konfigurasi tersimpan mengatur jadwal. Jumlah hari pada card memakai tanggal efektif pada minggu terpilih, termasuk minggu pertama parsial. Catatan bebas tidak diparsing menjadi jadwal.
 - Bell muncul jika waktu dan offset pengingat tersimpan. Dialog pengingat tidak menampilkan helper rentang; validasi 0–10080 tetap aktif. Check/uncheck dan counter mempertahankan posisi scroll.
+- Kartu Sub-Tugas memakai ringkasan jadwal yang sama dengan Ya/Tidak sebelum Daftar Langkah: tile hari efektif untuk Pilih Hari Tertentu, atau segmen progres mingguan untuk Target Frekuensi. Sumbernya jadwal dan completion server; ringkasan tidak menambah izin koreksi di luar jadwal.
 - Rujukan: [desain](../docs/superpowers/specs/2026-11-13-goals-sync-fixes-design.md), [rencana](../docs/superpowers/plans/2026-11-13-goals-sync-fixes.md).
