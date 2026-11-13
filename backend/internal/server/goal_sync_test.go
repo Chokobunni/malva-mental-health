@@ -74,11 +74,11 @@ func TestGoalScheduleEditsHTTPRoundTrip(t *testing.T) {
 	}
 }
 
-func TestChecklistExtraProgressHTTPEmptyIDs(t *testing.T) {
+func TestChecklistCorrectionsHTTPEmptyIDs(t *testing.T) {
 	f := newClinicalFixture(t)
 	now := clock.Now()
 	today := now.Format("2006-01-02")
-	d := map[string]any{"method": "checklist", "start_date": now.AddDate(0, 0, -1).Format("2006-01-02"), "recurrence": "daily", "interval": 2, "steps": []map[string]string{{"id": "a", "label": "A"}}}
+	d := map[string]any{"method": "checklist", "start_date": now.AddDate(0, 0, -1).Format("2006-01-02"), "recurrence": "daily", "interval": 1, "steps": []map[string]string{{"id": "a", "label": "A"}}}
 	out := f.call(t, "POST", "/v1/goals", "patient", f.patient.ID, map[string]any{"title": "Checklist", "details": d})
 	var created struct {
 		Goal store.Goal `json:"goal"`
@@ -88,6 +88,15 @@ func TestChecklistExtraProgressHTTPEmptyIDs(t *testing.T) {
 	}
 	if err := json.Unmarshal(out.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
+	}
+	out = f.call(t, "POST", "/v1/habit-logs", "patient", f.patient.ID, map[string]any{"goal_id": created.Goal.ID, "logged_on": today, "completed_step_ids": []string{"a"}})
+	if out.Code != 200 {
+		t.Fatalf("initial write: %d %s", out.Code, out.Body)
+	}
+	d["interval"] = 2
+	out = f.call(t, "PATCH", "/v1/goals/"+created.Goal.ID, "patient", f.patient.ID, map[string]any{"details": d})
+	if out.Code != 200 {
+		t.Fatalf("edit: %d %s", out.Code, out.Body)
 	}
 	for _, ids := range [][]string{{"a"}, {}, {"a"}} {
 		out = f.call(t, "POST", "/v1/habit-logs", "patient", f.patient.ID, map[string]any{"goal_id": created.Goal.ID, "logged_on": today, "completed_step_ids": ids})
@@ -107,6 +116,26 @@ func TestChecklistExtraProgressHTTPEmptyIDs(t *testing.T) {
 		g := listed.Goals[0]
 		if !reflect.DeepEqual(g.TodayCompletedStepIDs, ids) || g.DoneToday != (len(ids) == 1) || g.IsDue || g.DoneThisWeek != 0 || g.StreakDays != 0 {
 			t.Fatalf("wrong progress: %s", out.Body)
+		}
+		out = f.call(t, "GET", "/v1/habit-logs?from="+today+"&to="+today, "patient", f.patient.ID, nil)
+		var history struct {
+			Logs []store.HabitLog `json:"logs"`
+		}
+		if err := json.Unmarshal(out.Body.Bytes(), &history); err != nil {
+			t.Fatal(err)
+		}
+		if out.Code != 200 || len(history.Logs) != 1 || !reflect.DeepEqual(history.Logs[0].CompletedStepIDs, ids) {
+			t.Fatalf("presence: %d %s", out.Code, out.Body)
+		}
+	}
+	out = f.call(t, "POST", "/v1/goals", "patient", f.patient.ID, map[string]any{"title": "Unrecorded", "details": d})
+	if err := json.Unmarshal(out.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	for _, ids := range [][]string{{"a"}, {}} {
+		out = f.call(t, "POST", "/v1/habit-logs", "patient", f.patient.ID, map[string]any{"goal_id": created.Goal.ID, "logged_on": today, "completed_step_ids": ids})
+		if out.Code != 400 {
+			t.Errorf("new off-schedule write: %d %s", out.Code, out.Body)
 		}
 	}
 }

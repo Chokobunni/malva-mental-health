@@ -364,6 +364,9 @@ func (s *Store) LogHabit(ctx context.Context, patientID, goalID, loggedOn string
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return HabitLog{}, err
 	}
+	if g.Details != nil && !goalDue(g.Details, on) && current.ID == "" {
+		return HabitLog{}, errors.New("di luar jadwal hanya dapat mengoreksi progres yang sudah dicatat pada tanggal ini")
+	}
 	patch := HabitProgressPatch{}
 	if len(progress) > 0 {
 		patch = progress[0]
@@ -411,7 +414,7 @@ func (s *Store) ListHabitLogs(ctx context.Context, patientID, from, to string) (
  FROM habit_logs l JOIN goals g ON g.id=l.goal_id AND g.patient_id=l.patient_id
  WHERE l.patient_id=$1 AND (NULLIF($2,'')::date IS NULL OR l.logged_date>=NULLIF($2,'')::date)
  AND (NULLIF($3,'')::date IS NULL OR l.logged_date<=NULLIF($3,'')::date)
- ORDER BY l.logged_date DESC LIMIT 400`, patientID, from, to)
+ ORDER BY l.logged_date DESC LIMIT CASE WHEN $2<>'' AND $2=$3 THEN NULL ELSE 400 END`, patientID, from, to)
 	if err != nil {
 		return nil, err
 	}

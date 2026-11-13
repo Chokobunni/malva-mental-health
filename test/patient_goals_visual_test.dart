@@ -154,8 +154,11 @@ void main() {
     final container = ProviderContainer(overrides: [
       apiClientProvider.overrideWithValue(MalvaApiClient(
           baseUrl: 'https://synthetic.test',
-          httpClient: MockClient((r) async =>
-              http.Response(jsonEncode({'goals': visualGoals}), 200))))
+          httpClient: MockClient((r) async => http.Response(
+              jsonEncode(r.url.path == '/v1/habit-logs'
+                  ? {'logs': []}
+                  : {'goals': visualGoals}),
+              200))))
     ]);
     addTearDown(container.dispose);
     container.read(authStateProvider.notifier).setSession(const AuthSession(

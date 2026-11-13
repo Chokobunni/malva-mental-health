@@ -223,6 +223,23 @@ void main() {
           apiClientProvider.overrideWithValue(MalvaApiClient(
             baseUrl: 'https://goals.test',
             httpClient: MockClient((r) async {
+              if (r.method == 'GET' && r.url.path == '/v1/habit-logs') {
+                return http.Response(
+                    jsonEncode({
+                      'logs': changed
+                          ? [
+                              {
+                                'id': 'l',
+                                'goal_id': 'g8',
+                                'logged_on': today,
+                                'done': true,
+                                'completed_step_ids': ['a']
+                              }
+                            ]
+                          : []
+                    }),
+                    200);
+              }
               if (r.method == 'GET') {
                 if (changed) {
                   await reload.future;

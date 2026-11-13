@@ -52,6 +52,21 @@ void main() {
         apiClientProvider.overrideWithValue(MalvaApiClient(
             baseUrl: 'https://goals.test',
             httpClient: MockClient((r) async {
+              if (r.method == 'GET' && r.url.path == '/v1/habit-logs') {
+                return http.Response(
+                    jsonEncode({
+                      'logs': [
+                        {
+                          'id': 'l',
+                          'goal_id': 'g',
+                          'logged_on': r.url.queryParameters['from'],
+                          'done': false,
+                          'completed_step_ids': ['a']
+                        }
+                      ]
+                    }),
+                    200);
+              }
               if (r.method == 'GET')
                 return edited
                     ? http.Response('{"error":"reload gagal"}', 503)
@@ -231,6 +246,9 @@ void main() {
         apiClientProvider.overrideWithValue(MalvaApiClient(
             baseUrl: 'https://goals.test',
             httpClient: MockClient((r) async {
+              if (r.method == 'GET' && r.url.path == '/v1/habit-logs') {
+                return http.Response('{"logs":[]}', 200);
+              }
               if (r.method == 'GET')
                 return posted
                     ? http.Response('{"error":"reload gagal"}', 503)

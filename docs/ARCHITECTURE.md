@@ -513,8 +513,12 @@ summary, while unknown historical weekly aggregates are explicitly unavailable
 until reload. Irrelevant weekdays are normalized to[] for older schedulers.
 
 The synchronization correction keeps activity descriptions in the existing steps
-JSON for all methods; only checklist derives completion from those IDs. Manual
-off-schedule checklist logs persist independently from scheduled weekly/streak
-credit. Future, pre-start, inactive and locked-history guards apply before writes.
+JSON for all methods; only checklist derives completion from those IDs. Outside
+schedule, the owned goal transaction requires an exact existing log before
+applying corrections, including an empty existing row. Corrections receive no
+scheduled weekly/streak credit. Flutter reads exact-day log presence (uncapped;
+broader history remains400) with account/request/date guards; accepted writes
+retain presence across failed refresh. Future, pre-start, inactive and
+locked-history guards apply before writes.
 Flutter derives card weekday counts and enabled tiles from the same effective
 schedule and hydrates legacy weekly quotas without inventing a time.
