@@ -21,6 +21,7 @@ class GoalsScreen extends ConsumerStatefulWidget {
 class _GoalsScreenState extends ConsumerState<GoalsScreen>
     with WidgetsBindingObserver {
   List<BackendGoal> _serverGoals = const [];
+  Set<String> _recordedGoals = {};
   bool _loading = true, _mutating = false, _ownerChanged = false;
   String? _error;
   String _filter = 'all';
@@ -73,6 +74,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     if (_selectedDate == _today && _selectedDate != next) {
       _selectedDate = next;
       _serverGoals = const [];
+      _recordedGoals = {};
     }
     _today = next;
   }
@@ -106,8 +108,19 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
           .read(apiClientProvider)
           .listGoals(accessToken: token, includeInactive: true, on: date);
       if (!_current || generation != _loadRequest) return;
+      final logs = goals.any((g) => g.details?.method == 'checklist')
+          ? await ref
+              .read(apiClientProvider)
+              .listHabitLogs(accessToken: token, from: date, to: date)
+          : const <BackendHabitLog>[];
+      if (!_current || generation != _loadRequest || date != _selectedDate)
+        return;
       setState(() {
         _serverGoals = goals;
+        _recordedGoals = logs
+            .where((log) => log.loggedOn == date)
+            .map((log) => log.goalId)
+            .toSet();
         _loading = false;
       });
     } on Object catch (e) {
@@ -512,7 +525,8 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     final locked = _mutating ||
         !goal.isActive ||
         dateLocked ||
-        (!goal.isDue && method != 'checklist');
+        (!goal.isDue &&
+            (method != 'checklist' || !_recordedGoals.contains(goal.id)));
     final badgeColor = method == 'numeric'
         ? const Color(0xFFA66A1D)
         : method == 'checklist'
@@ -629,8 +643,11 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
             Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: Text(
-                    method == 'checklist' && !dateLocked && goal.isActive
-                        ? 'Progres tambahan di luar jadwal'
+                    method == 'checklist' &&
+                            !dateLocked &&
+                            goal.isActive &&
+                            _recordedGoals.contains(goal.id)
+                        ? 'Koreksi progres di luar jadwal'
                         : 'Tidak dijadwalkan pada tanggal ini',
                     style: const TextStyle(
                         fontFamily: 'PlusJakartaSans',
@@ -1002,10 +1019,13 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
             completedStepIds: steps);
         if (_current) {
           if (date == _selectedDate) {
-            setState(() => _serverGoals = [
-                  for (final g in _serverGoals)
-                    g.id == goal.id ? g.withProgress(log) : g
-                ]);
+            setState(() {
+              _recordedGoals.add(goal.id);
+              _serverGoals = [
+                for (final g in _serverGoals)
+                  g.id == goal.id ? g.withProgress(log) : g
+              ];
+            });
           }
           if (date == _today) {
             ref.read(acceptedGoalMutationProvider.notifier).state =
@@ -1198,6 +1218,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
       _selectedDate =
           wibDateKey(wibFromParts(selected.year, selected.month, selected.day));
       _serverGoals = const [];
+      _recordedGoals = {};
     });
     await _load();
   }

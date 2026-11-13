@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,9 +42,11 @@ Future<void> list(WidgetTester t, Map<String, dynamic> data) async {
     apiClientProvider.overrideWithValue(MalvaApiClient(
         baseUrl: 'https://goals.test',
         httpClient: MockClient((r) async => http.Response(
-            jsonEncode({
-              'goals': [data]
-            }),
+            jsonEncode(r.url.path == '/v1/habit-logs'
+                ? {'logs': []}
+                : {
+                    'goals': [data]
+                  }),
             200))))
   ]);
   addTearDown(c.dispose);
@@ -359,7 +362,7 @@ void main() {
 
   for (final failedReload in [false, true]) {
     testWidgets(
-        'extra checklist toggles and clears all IDs through ${failedReload ? 'failed' : 'successful'} reload',
+        'recorded checklist corrects and reopens empty log through ${failedReload ? 'failed' : 'successful'} reload',
         (t) async {
       size(t);
       FlutterSecureStorage.setMockInitialValues({});
@@ -387,6 +390,23 @@ void main() {
         apiClientProvider.overrideWithValue(MalvaApiClient(
             baseUrl: 'https://goals.test',
             httpClient: MockClient((r) async {
+              if (r.method == 'GET' && r.url.path == '/v1/habit-logs') {
+                expect(r.url.queryParameters['from'], '2026-11-13');
+                expect(r.url.queryParameters['to'], '2026-11-13');
+                return http.Response(
+                    jsonEncode({
+                      'logs': [
+                        {
+                          'id': 'l',
+                          'goal_id': 'g',
+                          'logged_on': '2026-11-13',
+                          'done': ids.length == 2,
+                          'completed_step_ids': ids
+                        }
+                      ]
+                    }),
+                    200);
+              }
               if (r.method == 'GET')
                 return fail && writes > 0
                     ? http.Response('{"error":"refresh gagal"}', 503)
@@ -436,6 +456,12 @@ void main() {
       expect(find.text('1/2 selesai'), findsOneWidget);
       await tap(t, checkboxes.last);
       expect(find.text('0/2 selesai'), findsOneWidget);
+      // An existing empty row must remain correctable after reopening.
+      fail = false;
+      await t.pumpWidget(const SizedBox());
+      await open();
+      expect(t.widget<Checkbox>(checkboxes.first).onChanged, isNotNull);
+      fail = failedReload;
       await tap(t, checkboxes.first);
       expect(find.text('1/2 selesai'), findsOneWidget);
       expect(writes, 4);
@@ -445,6 +471,154 @@ void main() {
       expect(t.widget<Checkbox>(checkboxes.first).value, isTrue);
       expect(t.widget<Checkbox>(checkboxes.last).value, isFalse);
       expect(find.text('1/2 selesai'), findsOneWidget);
+    });
+  }
+
+  for (final presence in ['absent', 'other-date', 'failed']) {
+    testWidgets('off-schedule checklist blocks $presence record', (t) async {
+      size(t);
+      FlutterSecureStorage.setMockInitialValues({});
+      var writes = 0;
+      final c = ProviderContainer(overrides: [
+        apiClientProvider.overrideWithValue(MalvaApiClient(
+            baseUrl: 'https://goals.test',
+            httpClient: MockClient((r) async {
+              if (r.method == 'POST') {
+                writes++;
+                return http.Response('{}', 400);
+              }
+              if (r.url.path == '/v1/habit-logs') {
+                if (presence == 'failed')
+                  return http.Response('{"error":"gagal"}', 503);
+                return http.Response(
+                    jsonEncode({
+                      'logs': presence == 'absent'
+                          ? []
+                          : [
+                              {
+                                'id': 'l',
+                                'goal_id': 'g',
+                                'logged_on': '2026-11-12',
+                                'done': false,
+                                'completed_step_ids': []
+                              }
+                            ]
+                    }),
+                    200);
+              }
+              return http.Response(
+                  jsonEncode({
+                    'goals': [
+                      {
+                        ...record({
+                          'method': 'checklist',
+                          'start_date': '2026-01-01',
+                          'steps': [
+                            {'id': 'a', 'label': 'A'}
+                          ]
+                        }),
+                        'is_due': false
+                      }
+                    ]
+                  }),
+                  200);
+            })))
+      ]);
+      addTearDown(c.dispose);
+      c.read(authStateProvider.notifier).setSession(const AuthSession(
+          role: UserRole.patient,
+          identifier: 'p',
+          displayName: 'P',
+          accessToken: 't'));
+      await t.pumpWidget(UncontrolledProviderScope(
+          container: c,
+          child: MaterialApp(
+              theme: buildMalvaTheme(),
+              home: GoalsScreen(now: () => wibFromParts(2026, 11, 13, 12)))));
+      await t.pumpAndSettle();
+      if (presence != 'failed') {
+        final checkbox = find.byType(Checkbox);
+        expect(t.widget<Checkbox>(checkbox).onChanged, isNull);
+        await tap(t, checkbox);
+      }
+      expect(writes, 0);
+      expect(find.text('Koreksi progres di luar jadwal'), findsNothing);
+    });
+  }
+
+  for (final change in ['date', 'account']) {
+    testWidgets('late day-log response cannot grant another $change correction',
+        (t) async {
+      size(t);
+      FlutterSecureStorage.setMockInitialValues({});
+      final pending = Completer<http.Response>();
+      final c = ProviderContainer(overrides: [
+        apiClientProvider.overrideWithValue(MalvaApiClient(
+            baseUrl: 'https://goals.test',
+            httpClient: MockClient((r) async {
+              final date =
+                  r.url.queryParameters['on'] ?? r.url.queryParameters['from'];
+              if (r.url.path == '/v1/habit-logs') {
+                if (date == '2026-11-13') return pending.future;
+                return http.Response('{"logs":[]}', 200);
+              }
+              return http.Response(
+                  jsonEncode({
+                    'goals': [
+                      {
+                        ...record({
+                          'method': 'checklist',
+                          'start_date': '2026-01-01',
+                          'steps': [
+                            {'id': 'a', 'label': 'A'}
+                          ]
+                        }),
+                        'is_due': false
+                      }
+                    ]
+                  }),
+                  200);
+            })))
+      ]);
+      addTearDown(c.dispose);
+      c.read(authStateProvider.notifier).setSession(const AuthSession(
+          role: UserRole.patient,
+          identifier: 'p',
+          displayName: 'P',
+          accessToken: 't'));
+      await t.pumpWidget(UncontrolledProviderScope(
+          container: c,
+          child: MaterialApp(
+              theme: buildMalvaTheme(),
+              home: GoalsScreen(now: () => wibFromParts(2026, 11, 13, 12)))));
+      await t.pumpAndSettle();
+      if (change == 'date') {
+        await tap(t, find.text('Jumat, 13 November 2026'));
+        await t.tap(find.text('12'));
+        await t.tap(find.text('OK'));
+        await t.pumpAndSettle();
+      } else {
+        for (final owner in ['next', 'p']) {
+          c.read(authStateProvider.notifier).setSession(AuthSession(
+              role: UserRole.patient,
+              identifier: owner,
+              displayName: owner,
+              accessToken: 't'));
+          await t.pump();
+        }
+      }
+      pending.complete(http.Response(
+          '{"logs":[{"id":"l","goal_id":"g","logged_on":"2026-11-13","done":false,"completed_step_ids":[]}]}',
+          200));
+      await t.pumpAndSettle();
+      if (change == 'date') {
+        expect(t.widget<Checkbox>(find.byType(Checkbox)).onChanged, isNull);
+        expect(find.text('Kamis, 12 November 2026'), findsOneWidget);
+      } else {
+        expect(find.byType(Checkbox), findsNothing);
+        expect(find.text('Sesi akun telah berubah. Buka kembali Goals.'),
+            findsOneWidget);
+      }
     });
   }
 }

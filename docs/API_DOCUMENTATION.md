@@ -1575,8 +1575,13 @@ preserve that day's progress until the selected-date refresh completes.
 Numeric/checklist completion derives from the current definition; progress fields
 are independently patched atomically. Configured goals reject future/pre-start
 logs; lock-past permits today and yesterday WIB. Inactive goals reject new progress.
-Checklist accepts manual extra progress outside schedule; those records persist
-but do not count toward scheduled weekly completion or streak. Other methods
+Outside schedule, checklist writes may only correct an existing owned log for
+that exact goal/date, including a row cleared to empty step IDs. A missing row
+is rejected before upsert. These corrections do not count toward scheduled
+weekly completion or streak. GET `/v1/habit-logs?from=DATE&to=DATE` returns all
+owned logs on that date, including empty rows; broader history retains its
+400-row cap. Flutter scopes presence to the account/request/date and does not
+grant new correction permission when that read fails. Other methods
 still require a scheduled date. Missing elapsed occurrences fail
 only with auto-fail enabled. Goal/log ownership and clinical consent checks remain
 mandatory. Additive migration 041 must run before the new API binary.

@@ -11,7 +11,7 @@ import (
 	"malva/backend/internal/clock"
 )
 
-func TestChecklistExtraProgressPersistsWithoutScheduledCredit(t *testing.T) {
+func TestChecklistCorrectionsPersistWithoutScheduledCredit(t *testing.T) {
 	s, db := openGoalTestStore(t)
 	ctx := context.Background()
 	owner := insertTestUser(t, db, ctx, "patient", "QA checklist", "sync-checklist")
@@ -33,8 +33,17 @@ func TestChecklistExtraProgressPersistsWithoutScheduledCredit(t *testing.T) {
 			if goalDue(d, now) {
 				t.Fatal("fixture must be outside schedule")
 			}
-			g, err := s.CreateGoal(ctx, UpsertGoalParams{PatientID: owner, Title: "Checklist", Details: d})
+			scheduled := *d
+			scheduled.Recurrence, scheduled.Interval = "daily", 1
+			g, err := s.CreateGoal(ctx, UpsertGoalParams{PatientID: owner, Title: "Checklist", Details: &scheduled})
 			if err != nil {
+				t.Fatal(err)
+			}
+			initial := []string{"a"}
+			if _, err := s.LogHabit(ctx, owner, g.ID, today, false, HabitProgressPatch{CompletedStepIDs: &initial}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.UpdateGoal(ctx, owner, g.ID, "", "", nil, nil, d); err != nil {
 				t.Fatal(err)
 			}
 			for _, ids := range [][]string{{"a"}, {"a", "b"}, {"b"}, {}, {"a"}} {
@@ -85,6 +94,69 @@ func TestChecklistExtraProgressPersistsWithoutScheduledCredit(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestChecklistOffScheduleRequiresExactOwnedLog(t *testing.T) {
+	s, db := openGoalTestStore(t)
+	ctx := context.Background()
+	owner := insertTestUser(t, db, ctx, "patient", "QA correction", "correction-owner")
+	other := insertTestUser(t, db, ctx, "patient", "QA other", "correction-other")
+	t.Cleanup(func() { cleanupTestUsers(t, db, owner, other) })
+	now := goalDay(clock.Now())
+	today := now.Format("2006-01-02")
+	d := validGoalDetails()
+	d.Method, d.Interval = "checklist", 2
+	d.StartDate = now.AddDate(0, 0, -1).Format("2006-01-02")
+	d.Steps = []GoalStep{{ID: "a", Label: "A"}}
+	g, err := s.CreateGoal(ctx, UpsertGoalParams{PatientID: owner, Title: "Correction", Details: d})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Yesterday's scheduled record is not permission to create today's record.
+	ids := []string{"a"}
+	if _, err := s.LogHabit(ctx, owner, g.ID, d.StartDate, false, HabitProgressPatch{CompletedStepIDs: &ids}); err != nil {
+		t.Fatal(err)
+	}
+	for _, patch := range [][]string{{"a"}, {}} {
+		if _, err := s.LogHabit(ctx, owner, g.ID, today, false, HabitProgressPatch{CompletedStepIDs: &patch}); err == nil {
+			t.Error("created new off-schedule log")
+		}
+	}
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM habit_logs WHERE goal_id=$1 AND logged_date=$2::date`, g.ID, today).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("unexpected persisted rows=%d err=%v", count, err)
+	}
+	if _, err := s.LogHabit(ctx, other, g.ID, d.StartDate, false, HabitProgressPatch{CompletedStepIDs: &ids}); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("foreign correction err=%v", err)
+	}
+}
+
+func TestHabitLogsExactDayIncludesAllOwnedRecords(t *testing.T) {
+	s, db := openGoalTestStore(t)
+	ctx := context.Background()
+	owner := insertTestUser(t, db, ctx, "patient", "QA many", "correction-many")
+	other := insertTestUser(t, db, ctx, "patient", "QA foreign", "correction-foreign")
+	t.Cleanup(func() { cleanupTestUsers(t, db, owner, other) })
+	today := clock.Now().Format("2006-01-02")
+	for _, patient := range []string{owner, other} {
+		_, err := db.Exec(`WITH inserted AS (INSERT INTO goals(patient_id,title) SELECT $1,'QA day log' FROM generate_series(1,401) RETURNING id,patient_id) INSERT INTO habit_logs(goal_id,patient_id,logged_date,done,completed_step_ids) SELECT id,patient_id,$2::date,false,'[]'::jsonb FROM inserted`, patient, today)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	logs, err := s.ListHabitLogs(ctx, owner, today, today)
+	if err != nil || len(logs) != 401 {
+		t.Fatalf("day records=%d err=%v", len(logs), err)
+	}
+	for _, l := range logs {
+		if l.PatientID != owner || l.LoggedOn != today || len(l.CompletedStepIDs) != 0 {
+			t.Fatalf("wrong day record=%+v", l)
+		}
+	}
+	logs, err = s.ListHabitLogs(ctx, owner, "", "")
+	if err != nil || len(logs) != 400 {
+		t.Fatalf("history records=%d err=%v", len(logs), err)
 	}
 }
 
