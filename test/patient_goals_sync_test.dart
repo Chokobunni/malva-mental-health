@@ -74,6 +74,79 @@ Map<String, dynamic> record(Map<String, dynamic> details) => {
     };
 
 void main() {
+  testWidgets('checklist schedule shows effective weekdays above its steps',
+      (t) async {
+    size(t);
+    t.view.physicalSize = const Size(320, 1100);
+    await list(t, {
+      ...record({
+        'method': 'checklist',
+        'start_date': '2026-11-13',
+        'recurrence': 'weekly',
+        'weekdays': [1, 2, 3, 4, 5, 6, 7],
+        'steps': [
+          {'id': 'a', 'label': 'Siapkan kebutuhan'},
+          {'id': 'b', 'label': 'Beli kebutuhan'}
+        ]
+      }),
+      'completed_weekdays': [5],
+      'done_today': true,
+      'today_completed_step_ids': ['a', 'b']
+    });
+    expect(find.text('Hari terpilih (3×/minggu)'), findsOneWidget);
+    expect(find.text('Selesai hari ini'), findsOneWidget);
+    for (final day in ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']) {
+      expect(find.text(day), findsOneWidget);
+    }
+    expect(t.widget<Text>(find.text('Jum')).style!.color, Colors.white);
+    expect(
+        t.widget<Text>(find.text('Sab')).style!.color, const Color(0xFF9853A4));
+    expect(
+        t.widget<Text>(find.text('Sen')).style!.color, const Color(0xFFC9CFD7));
+    expect(t.getTopLeft(find.text('Hari terpilih (3×/minggu)')).dy,
+        lessThan(t.getTopLeft(find.text('Daftar Langkah')).dy));
+    expect(find.byType(Checkbox), findsNWidgets(2));
+    expect(find.text('Ya'), findsNothing);
+    expect(find.text('Tidak'), findsNothing);
+    expect(t.takeException(), isNull);
+  });
+
+  for (final target in [0, 4]) {
+    testWidgets('checklist schedule shows actual frequency with target $target',
+        (t) async {
+      size(t);
+      await list(
+          t,
+          record({
+            'method': 'checklist',
+            'start_date': '2026-01-01',
+            'recurrence': 'weekly',
+            'weekly_target': target,
+            'weekdays': [],
+            'steps': [
+              {'id': 'a', 'label': 'Siapkan kebutuhan'}
+            ]
+          }));
+      expect(find.text('Minggu ini'), findsOneWidget);
+      expect(find.text(target == 0 ? '2 kali' : '2/4 kali'), findsOneWidget);
+      expect(find.text('2/3 kali'), findsNothing);
+      final segments = t.widgetList<Container>(find.byWidgetPredicate((w) =>
+          w is Container &&
+          w.constraints?.maxHeight == 8 &&
+          w.decoration is BoxDecoration));
+      expect(segments, hasLength(7));
+      final colors =
+          segments.map((w) => (w.decoration! as BoxDecoration).color).toList();
+      expect(colors.where((c) => c == const Color(0xFF9853A4)), hasLength(2));
+      expect(colors.where((c) => c == const Color(0xFFE8D5F6)),
+          hasLength(target == 0 ? 0 : 2));
+      expect(t.getTopLeft(find.text('Minggu ini')).dy,
+          lessThan(t.getTopLeft(find.text('Daftar Langkah')).dy));
+      expect(find.byType(Checkbox), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+  }
+
   for (final reason in ['pre-start', 'inactive', 'locked history']) {
     testWidgets('checklist still blocks $reason progress', (t) async {
       size(t);

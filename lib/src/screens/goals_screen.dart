@@ -637,10 +637,8 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                     color: goalInk))),
                       ])),
           ],
-          if (method != 'checklist') ...[
-            const SizedBox(height: 14),
-            _habitSchedule(goal),
-          ],
+          const SizedBox(height: 14),
+          _habitSchedule(goal),
           if (!goal.isDue)
             Padding(
                 padding: const EdgeInsets.only(top: 10),

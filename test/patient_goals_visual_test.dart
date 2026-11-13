@@ -145,6 +145,65 @@ final visualGoals = [
 
 void main() {
   setUpAll(loadRecordCaptureFonts);
+  for (final frequency in [false, true]) {
+    testWidgets(
+        'checklist schedule ${frequency ? 'frequency' : 'weekdays'} at 320px',
+        (tester) async {
+      FlutterSecureStorage.setMockInitialValues({});
+      tester.view.physicalSize = const Size(320, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      enableRecordCaptureRendering();
+      final data = {
+        ...visualGoals[2],
+        'details': {
+          ...visualGoals[2]['details']! as Map<String, dynamic>,
+          'start_date': '2026-11-01',
+          'recurrence': 'weekly',
+          'weekdays': frequency ? [] : [5, 6, 7],
+          if (frequency) 'weekly_target': 4,
+        },
+        'completed_weekdays': frequency ? [3, 5] : [5],
+        'done_this_week': frequency ? 2 : 1,
+      };
+      final container = ProviderContainer(overrides: [
+        apiClientProvider.overrideWithValue(MalvaApiClient(
+            baseUrl: 'https://synthetic.test',
+            httpClient: MockClient((r) async => http.Response(
+                jsonEncode(r.url.path == '/v1/habit-logs'
+                    ? {'logs': []}
+                    : {
+                        'goals': [data]
+                      }),
+                200))))
+      ]);
+      addTearDown(container.dispose);
+      container.read(authStateProvider.notifier).setSession(const AuthSession(
+          role: UserRole.patient,
+          identifier: 'visual',
+          displayName: 'Pasien',
+          accessToken: 'synthetic'));
+      final boundary = GlobalKey();
+      await tester.pumpWidget(UncontrolledProviderScope(
+          container: container,
+          child: RepaintBoundary(
+              key: boundary,
+              child: MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  theme: buildMalvaTheme(),
+                  home: GoalsScreen(
+                      now: () => wibFromParts(2026, 11, 14, 12))))));
+      await tester.pumpAndSettle();
+      expect(find.text(frequency ? '2/4 kali' : 'Hari terpilih (3×/minggu)'),
+          findsOneWidget);
+      expect(find.text('2/3 selesai'), findsOneWidget);
+      expect(find.byType(Checkbox), findsNWidgets(3));
+      expect(tester.takeException(), isNull);
+      await captureRecord(tester, boundary,
+          'checklist-${frequency ? 'frequency' : 'weekdays'}-320.png');
+      resetRecordCaptureRendering();
+    });
+  }
   testWidgets('reference list renders with real status fields', (tester) async {
     FlutterSecureStorage.setMockInitialValues({});
     tester.view.physicalSize = const Size(390, 2600);
