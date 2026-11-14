@@ -28,7 +28,13 @@ See root `design-qa.md` (passed), including normalized combined comparisons, res
 
 ## Release evidence
 
-Pending source push, CI/release workflows and production verification. Do not treat the target version as deployed until this section is updated.
+- Source commit `9b6a07240b1348dfd6160ad0386dba74b5b12f0c`; [PR6](https://github.com/Chokobunni/malva-mental-health/pull/6) merged as `862a188a021221f87254295bebd8a58c6761757a` on15 November WIB. Merge tree equals tested source tree.
+- PR Flutter CI [43624157480](https://github.com/Chokobunni/malva-mental-health/actions/runs/43624157480) passed both timezones and Android/web/Windows builds. Backend CI43624157443, Security Gates43624157520 and Commit Messages43624157559 passed. Advisory Code Review Graph43624157499 failed posting its comment because the GitHub authenticated-user API returned403; it is explicitly non-blocking and no code gate was bypassed.
+- On the exact merge commit: backend deploy [43625531326](https://github.com/Chokobunni/malva-mental-health/actions/runs/43625531326), web app deploy [43625531325](https://github.com/Chokobunni/malva-mental-health/actions/runs/43625531325), signed APK build/publication [43625531345](https://github.com/Chokobunni/malva-mental-health/actions/runs/43625531345), backend CI43625531295 and Security Gates43625531337 passed. Main Flutter CI [43625531410](https://github.com/Chokobunni/malva-mental-health/actions/runs/43625531410) passed both timezone suites, analyzer and web/Windows builds; its Android job is intentionally skipped on main because the separate signed APK workflow builds Android.
+- Public `https://malva.web.id/app/version.json` reports0.1.27/build28. API `/healthz` is `{"status":"ok"}`; landing returns200; private diary URL without credentials returns401. The deployed browser rendered the login page and its captured error/warning console list was empty. This does not verify authenticated diary images in the browser.
+- Fully downloaded [public APK](https://malva.web.id/downloads/malva-latest.apk),32287771 bytes, package `id.malva.app`, versionName0.1.27/versionCode28. SHA256 `89abf185166e7b4ac2e5156ab851a081d96b7a7a12c2f3e29ec14a265b9ff020` equals the downloaded artifact from43625531345 and its SHA256SUMS.
+- `apksigner verify --print-certs` passes. Signer SHA256 `965f7430ec7f67a44b7a99e83f155e601116ff16c18fa8db57a4e79de4f2d300` matches the freshly downloaded previous production0.1.26/build27 APK.
+- Local release evidence includes `production-health.json`, `production-version.json`, `public-apk-badging.txt`, `public-cert.txt`, `release-workflows.json`, `release-artifact-43625531345/` and `logs/`. The isolated PostgreSQL cluster at port55435 was stopped after verification.
 
 ## Limits
 

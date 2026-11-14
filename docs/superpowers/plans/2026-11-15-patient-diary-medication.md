@@ -17,4 +17,4 @@
 - [x] Project last consumed medication history on refresh; enforce rolling24h in shared client/store and atomic backend transaction, retain retry-safe authoritative timestamps and stock.
 - [x] Run focused and full Flutter tests/analyzer, real PostgreSQL backend tests, build/vet, API-doc/convention/env/migration/coverage gates.
 - [x] Compare rendered screens at320/390 against supplied references; resolve overflow and verify core interactions.
-- [ ] Review implementation, update product contracts/QA, version and commit; push, deploy backend/app and publish release APK. Verify exact workflow commit, API/web health, signed APK version/checksum and actual public download.
+- [x] Review implementation, update product contracts/QA, version and commit; push, deploy backend/app and publish release APK. Verify exact workflow commit, API/web health, signed APK version/checksum and actual public download.
