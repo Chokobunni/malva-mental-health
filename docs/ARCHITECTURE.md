@@ -1,5 +1,13 @@
 # System Architecture
 
+### Diary rich content dan dosis idempoten — 15 November 2026
+
+`DiaryContent` mengodekan tipografi/referensi media dalam suffix versi 1 pada `diary_entries.note`; tanpa formatting/media, note tetap teks biasa. Editor, pembaca pasien/profesional, kartu chat dan ekspor memakai codec yang sama. Ekspor PDF/CSV menyertakan tulisan dan jumlah lampiran; JSON backup mempertahankan note lengkap. Tidak ada tabel, kolom atau dependency baru.
+
+Gambar dinormalisasi PNG melalui `dart:ui`; pilihan kamera/galeri melewati `FilePickerPort`. Handler menyimpan gambar valid bernama acak dalam sibling `UploadDir + "-diary-private"`, di luar mount publik. GET memeriksa pemilik atau relasi, consent dan referensi pada diary yang dibagikan. Klien hanya mengirim kredensial ke origin API dan path media yang sah. Unggahan draft yang ditinggalkan belum memiliki garbage collection.
+
+Store obat memproyeksikan consumed history lengkap ke `lastTakenAt`, menjaga cache dan timestamp intent offline. `CreateMedicationLog` mengambil row lock obat aktif milik pasien, mencari taken/partial dalam jendela simetris kurang dari 24 jam, lalu mengembalikan dosis yang sudah ada atau memasukkan dosis dan mengurangi stok secara atomik. Klien menyelaraskan timestamp/status respons dan selalu memuat stok server. Respons dan rute editor/kanvas milik generasi akun lama diabaikan, termasuk A→B→A.
+
 ### Entitlement ulasan — 9 November 2026
 
 Store menurunkan satu hak dari sesi satu kali selesai atau paket yang seluruh

@@ -8,7 +8,6 @@ import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/medication_reminder_service.dart';
-import '../services/server_clock.dart';
 import '../theme.dart';
 import '../time/wib.dart';
 import '../widgets/home_personalization.dart';
@@ -52,11 +51,14 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
   /// Guard agar satu dosis tidak tercatat dua kali karena tap ganda.
   final Set<String> _pendingLogs = {};
   final Map<String, DateTime> _lastLogAt = {};
+  final Map<String, MedicationLog> _unsavedLogs = {};
+  Timer? _cooldownTimer;
 
   String? _owner(AuthSession? session) => session == null
       ? null
       : '${session.role.name}|${session.backendUserId ?? session.identifier}';
   AuthSession? get _session {
+    if (_historyAccountInvalid) return null;
     final active = ref.read(authStateProvider).session;
     if (active == null) return widget.session;
     if (widget.session != null && _owner(active) != _owner(widget.session))
@@ -71,6 +73,9 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
   @override
   void initState() {
     super.initState();
+    _cooldownTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
     // Ditunda ke post-frame: jangan menyentuh platform channel saat build
     // pertama (dan aman untuk widget test).
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -287,10 +292,21 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
                       medication: med,
                       serverReady: _looksLikeServerId(med.id),
                       busy: _pendingLogs.contains(med.id),
+                      retry: _unsavedLogs.containsKey(med.id),
+                      cooldown: !ref
+                          .read(malvaStoreProvider.notifier)
+                          .canTakeMedication(med.id),
                       onTake: _pendingLogs.contains(med.id) ||
+                              (!_unsavedLogs.containsKey(med.id) &&
+                                  !ref
+                                      .read(malvaStoreProvider.notifier)
+                                      .canTakeMedication(med.id)) ||
                               !_looksLikeServerId(med.id)
                           ? null
-                          : () => _takeMedication(context, med),
+                          : _unsavedLogs.containsKey(med.id)
+                              ? () => unawaited(_logMedication(
+                                  context, med, _unsavedLogs[med.id]!.status))
+                              : () => _takeMedication(context, med),
                       onEdit: () => _openMedicationForm(context, med),
                     ),
                     const SizedBox(height: 12),
@@ -579,11 +595,14 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
   ) async {
     if (_session == null) return;
     if (_pendingLogs.contains(medication.id)) return;
+    final retry = _unsavedLogs[medication.id];
     // Debounce per obat + status: tap ganda dalam 3 detik diabaikan.
     final key = '${medication.id}|$status';
     final now = wibNow();
     final last = _lastLogAt[key];
-    if (last != null && now.difference(last) < const Duration(seconds: 3)) {
+    if (retry == null &&
+        last != null &&
+        now.difference(last) < const Duration(seconds: 3)) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Dosis ini baru saja dicatat.')));
       return;
@@ -595,15 +614,21 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
 
     final store = ref.read(malvaStoreProvider.notifier);
     final consumed = status == 'taken' || status == 'partial';
-    store.takeMedication(medication.id, status: status);
-    final accepted = await _syncMedicationLog(context, medication, status);
+    if (retry == null && !store.takeMedication(medication.id, status: status)) {
+      setState(() => _pendingLogs.remove(medication.id));
+      return;
+    }
+    final local = retry ?? ref.read(malvaStoreProvider).medicationLogs.first;
+    final takenAt = local.takenAt;
+    final accepted =
+        await _syncMedicationLog(context, medication, status, takenAt);
     if (!mounted) return;
     setState(() => _pendingLogs.remove(medication.id));
     if (_owner(ref.read(authStateProvider).session) != startedAuthOwner ||
         _owner(_session) != startedOwner) return;
 
     if (accepted) {
-      if (consumed) store.confirmDose(medication.id);
+      setState(() => _unsavedLogs.remove(medication.id));
       unawaited(_reloadMedications());
       // Muat ulang log dari server agar entri optimistis digantikan versi
       // server (id/timestamp otoritatif) dan riwayat tidak dobel.
@@ -618,14 +643,27 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
       // `medicationId` hanya dikirim bila sudah berupa id server: backend
       // menerima id kosong (hanya tidak memotong stok), dan lebih baik log
       // tercatat tanpa pemotongan stok daripada hilang sama sekali.
-      unawaited(
-        ref.read(offlineSyncServiceProvider).enqueueMedicationLog(
+      try {
+        await ref.read(offlineSyncServiceProvider).enqueueMedicationLog(
               medicationId:
                   _looksLikeServerId(medication.id) ? medication.id : '',
               medicationName: medication.name,
               status: status,
-            ),
-      );
+              takenAt: takenAt,
+            );
+      } on Object {
+        if (context.mounted && _owner(_session) == startedOwner) {
+          setState(() => _unsavedLogs[medication.id] = local);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content:
+                  Text('Antrean obat belum tersimpan. Coba sinkronkan lagi.')));
+        }
+        return;
+      }
+      if (!context.mounted ||
+          _owner(ref.read(authStateProvider).session) != startedAuthOwner ||
+          _owner(_session) != startedOwner) return;
+      setState(() => _unsavedLogs.remove(medication.id));
       // Penanda pending DIBIARKAN (tidak confirmDose) supaya stok di layar
       // tetap terpotong dan tidak naik kembali saat refresh.
       ScaffoldMessenger.of(context).showSnackBar(
@@ -758,33 +796,41 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
     BuildContext context,
     Medication medication,
     String status,
+    DateTime takenAt,
   ) async {
     final accessToken = _session?.accessToken;
     final api = _apiClient;
     if (api == null || accessToken == null || accessToken.isEmpty) return false;
     final serverId = _looksLikeServerId(medication.id) ? medication.id : null;
     try {
-      await api.createMedicationLog(
+      final startedOwner = _owner(_session);
+      final startedAuthOwner = _owner(ref.read(authStateProvider).session);
+      final accepted = await api.createMedicationLog(
         accessToken: accessToken,
         medicationId: serverId,
         medicationName: medication.name,
         status: status,
         // Waktu minum memakai acuan server (bukan jam perangkat) agar dosis
         // tidak tercatat di hari yang salah bila jam perangkat meleset.
-        takenAt: ServerClock.now(),
+        takenAt: takenAt,
       );
-      return true;
-    } on Object catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('Log obat tersimpan lokal, sync backend gagal: $error'),
-          ),
-        );
+      if (mounted &&
+          _owner(_session) == startedOwner &&
+          _owner(ref.read(authStateProvider).session) == startedAuthOwner) {
+        ref
+            .read(malvaStoreProvider.notifier)
+            .confirmMedicationLog(medication.id, takenAt, accepted);
       }
+      return true;
+    } on Object {
       return false;
     }
+  }
+
+  @override
+  void dispose() {
+    _cooldownTimer?.cancel();
+    super.dispose();
   }
 }
 
@@ -795,6 +841,8 @@ class _MedicationCard extends StatelessWidget {
     required this.onEdit,
     this.busy = false,
     this.serverReady = true,
+    this.cooldown = false,
+    this.retry = false,
   });
 
   final Medication medication;
@@ -802,6 +850,8 @@ class _MedicationCard extends StatelessWidget {
   final VoidCallback onEdit;
   final bool busy;
   final bool serverReady;
+  final bool cooldown;
+  final bool retry;
 
   @override
   Widget build(BuildContext context) {
@@ -872,15 +922,17 @@ class _MedicationCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 8,
             children: [
-              Expanded(
-                child: Text(
-                  medication.lastTakenLabel,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
+              Text(
+                medication.lastTakenLabel,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
               ),
               FilledButton.icon(
                 onPressed: onTake,
@@ -895,9 +947,13 @@ class _MedicationCard extends StatelessWidget {
                     : const Icon(Icons.check_rounded),
                 label: Text(busy
                     ? 'Menyimpan…'
-                    : serverReady
-                        ? 'Take Now'
-                        : 'Menunggu sync'),
+                    : !serverReady
+                        ? 'Menunggu sync'
+                        : retry
+                            ? 'Coba simpan'
+                            : cooldown
+                                ? 'Tunggu 24 jam'
+                                : 'Take Now'),
               ),
             ],
           ),

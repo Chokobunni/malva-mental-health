@@ -2,13 +2,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
+import '../models/diary_content.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../time/wib.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
-import 'diary_form_sheet.dart';
+import '../widgets/diary_body.dart';
+import 'diary_editor_screen.dart';
 
 class DiaryHistoryScreen extends ConsumerStatefulWidget {
   const DiaryHistoryScreen({super.key, this.session, this.apiClient});
@@ -83,32 +85,44 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
 
   void _open({DiaryEntry? entry}) {
     final owner = _identity(_session);
-    showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (sheet) => Consumer(builder: (context, ref, _) {
-              ref.watch(currentSessionProvider);
-              if (_accountChanged || _identity(_session) != owner) {
-                return const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(
-                        'Sesi akun telah berubah. Buka kembali diary dari akun aktif.'));
-              }
-              return DiaryFormSheet(
-                  initialEntry: entry,
-                  onSave: (value) {
-                    Navigator.pop(sheet);
-                    if (!_accountChanged && _identity(_session) == owner)
-                      unawaited(
+    Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+            builder: (_) => Consumer(builder: (context, ref, _) {
+                  ref.watch(currentSessionProvider);
+                  if (_accountChanged || _identity(_session) != owner) {
+                    return const Scaffold(
+                        body: Center(
+                            child: Text(
+                                'Sesi akun telah berubah. Buka kembali diary dari akun aktif.')));
+                  }
+                  return DiaryEditorScreen(
+                      initialEntry: entry,
+                      api: _api,
+                      accessToken: _session?.accessToken,
+                      protectRoute: (child) =>
+                          Consumer(builder: (context, ref, _) {
+                            ref.watch(currentSessionProvider);
+                            if (!mounted ||
+                                _accountChanged ||
+                                _identity(_session) != owner) {
+                              return Scaffold(
+                                  appBar: AppBar(),
+                                  body: const Center(
+                                      child: Text(
+                                          'Sesi akun telah berubah. Buka kembali diary dari akun aktif.')));
+                            }
+                            return child;
+                          }),
+                      onSave: (value) =>
                           _save(value, isUpdate: entry != null, owner: owner));
-                  });
-            }));
+                })));
   }
 
-  Future<void> _save(DiaryEntry entry,
+  Future<bool> _save(DiaryEntry entry,
       {required bool isUpdate, required String owner}) async {
-    if (_saving || _accountChanged || _identity(_session) != owner) return;
+    if (_saving || _accountChanged || _identity(_session) != owner)
+      return false;
     final session = _session;
     final identity = _identity(session);
     final token = session?.accessToken;
@@ -135,20 +149,18 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                 occurredAt: entry.createdAt);
         saved = _entry(response);
       }
-      if (!mounted || _identity(_session) != identity) return;
+      if (!mounted || _accountChanged || _identity(_session) != identity)
+        return false;
       ref.read(malvaStoreProvider.notifier).upsertDiary(saved);
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Diary tersimpan.')));
+      return true;
     } on Object catch (e) {
-      if (!mounted || _identity(_session) != identity) return;
+      if (!mounted || _accountChanged || _identity(_session) != identity)
+        return false;
       setState(
           () => _error = 'Diary belum tersimpan: ${friendlyErrorMessage(e)}');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(_error!),
-          action: SnackBarAction(
-              label: 'Coba lagi',
-              onPressed: () =>
-                  unawaited(_save(entry, isUpdate: isUpdate, owner: owner)))));
+      return false;
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -207,9 +219,10 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
     final entries = ref
         .watch(malvaStoreProvider)
         .diaryEntries
-        .where((e) => '${e.title} ${e.note} ${e.professionalFeedback ?? ''}'
-            .toLowerCase()
-            .contains(query))
+        .where((e) =>
+            '${e.title} ${DiaryContent.parse(e.note).text} ${e.professionalFeedback ?? ''}'
+                .toLowerCase()
+                .contains(query))
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return Scaffold(
@@ -305,7 +318,10 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                           .textTheme
                                           .bodySmall),
                                   const SizedBox(height: 10),
-                                  SelectableText(entry.note),
+                                  DiaryBody(
+                                      note: entry.note,
+                                      api: _api,
+                                      token: _session?.accessToken),
                                   if (entry.professionalFeedback
                                           ?.trim()
                                           .isNotEmpty ??

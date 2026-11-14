@@ -291,6 +291,14 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Setelah perubahan Malva selesai dan gate wajib lolos, langsung commit/push ke GitHub, deploy komponen yang berubah, serta publikasikan APK release terbaru ke website. Instruksi user ini merupakan otorisasi berkelanjutan; tidak perlu meminta konfirmasi ulang untuk rilis rutin tersebut. Instruksi khusus berikutnya seperti hanya lokal/draft atau jangan deploy tetap mengesampingkan default ini.
 - Verifikasi workflow pada commit rilis, health API/web dan APK yang benar-benar tersedia di tautan unduh (versi, tanda tangan, checksum). Kegagalan deployment harus ditangani dan dilaporkan; jangan menyatakan rilis selesai hanya karena push berhasil.
 
+## Diary dan pengaman obat pasien (2026-11-15)
+
+- Tambah/edit diary memakai halaman penuh bertanggal WIB, tanpa input mood. Tipografi dan maksimal enam foto/gambar memakai metadata versi1 dalam field `note` yang sudah ada; catatan lama tetap teks biasa. Metadata tanpa tulisan boleh berdiri pada awal note, metadata setelah teks wajib dipisah dua newline. Judul maksimal160byte dan note6000byte ditolak secara eksplisit bila terlampaui, tanpa pemotongan diam-diam.
+- Kamera/galeri memakai FilePickerPort dan normalisasi PNG. Media diary disimpan privat di sibling UploadDir `-diary-private`; GET memerlukan pemilik atau profesional terhubung dengan consent dan referensi pada diary yang dibagikan. Bukan public uploads. Ekspor PDF/CSV menampilkan tulisan dan jumlah lampiran, bukan metadata atau foto privat.
+- Kanvas menyediakan pena/marker/pensil/penghapus, warna HSV, ukuran/opasitas, kertas/stiker transparan, rotasi dan undo/redo, lalu mengembalikan PNG. Draft/editor/kanvas lama ditutup secara visual saat akun berubah, termasuk A→B→A.
+- Taken/partial obat yang sama memiliki jeda minimal24jam sejak dosis terakhir. Store memproyeksikan waktu terakhir dari seluruh riwayat consumed; server mengunci baris obat dan mengembalikan dosis otoritatif untuk duplikat/retry dalam jendela24jam. Stok berkurang sekali sesuai units_per_dose. Skipped/missed tidak mengurangi stok. Konfirmasi menyelaraskan timestamp dan memuat stok server; kegagalan antrean durable dapat dicoba lagi dengan intent/waktu lama, tanpa konsumsi ulang.
+- Rujukan: [check-in](skills/health_checkin_module.md), [rencana](../docs/superpowers/plans/2026-11-15-patient-diary-medication.md).
+
 ## Kontrak referensi chat/MyCare (2026-11-11)
 
 - Chat kedua peran menampilkan ringkasan tujuh hari, goals/habits, seluruh screening,

@@ -45,7 +45,7 @@ class ImagePickerAdapter implements FilePickerPort {
       picked = await _picker.pickVideo(source: ImageSource.gallery);
     } else {
       picked = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: kind == 'camera' ? ImageSource.camera : ImageSource.gallery,
         maxWidth: maxWidth?.toDouble(),
         maxHeight: maxHeight?.toDouble(),
         imageQuality: imageQuality,

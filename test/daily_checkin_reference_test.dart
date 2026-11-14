@@ -84,6 +84,7 @@ void main() {
     tester.view.physicalSize = const Size(390, 950);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    final acceptedDoses = <String, int>{};
     final api = MalvaApiClient(
         baseUrl: 'https://test.invalid',
         httpClient: MockClient((r) async {
@@ -96,12 +97,17 @@ void main() {
               return http.Response(jsonEncode({'error': 'offline'}), 503);
             if (r.url.path == '/v1/medication-logs' && medicationFailures-- > 0)
               return http.Response(jsonEncode({'error': 'offline'}), 503);
-            if (r.url.path == '/v1/medication-logs')
+            if (r.url.path == '/v1/medication-logs') {
+              if (body['status'] == 'taken' || body['status'] == 'partial') {
+                final id = body['medication_id'] as String;
+                acceptedDoses[id] = (acceptedDoses[id] ?? 0) + 1;
+              }
               return http.Response(
                   jsonEncode({
                     'medication_log': {'id': 'log', ...body}
                   }),
                   200);
+            }
             return http.Response(
                 jsonEncode({
                   'mood': {'id': 'm', ...body}
@@ -110,7 +116,22 @@ void main() {
           }
           return http.Response(
               jsonEncode({
-                'medications': [],
+                'medications': [
+                  for (final med in meds)
+                    {
+                      'id': med.id,
+                      'name': med.name,
+                      'dosage': med.dosage,
+                      'form': med.form,
+                      'source': med.source,
+                      'reminder_time': med.reminders.firstOrNull?.label ?? '',
+                      'current_stock': med.currentStock -
+                          (acceptedDoses[med.id] ?? 0) * med.unitsPerDose,
+                      'alert_below': med.alertBelow,
+                      if (med.schedule != null)
+                        'schedule': med.schedule!.toJson(),
+                    }
+                ],
                 'medication_logs': [],
                 'moods': serverMoods
               }),
@@ -339,6 +360,88 @@ void main() {
     expect(find.text('Selamat datang, Dina!'), findsOneWidget);
     expect(find.text('Bagaimana tingkat energimu?'), findsNothing);
   });
+  testWidgets('daily medication selection respects confirmed rolling cooldown',
+      (tester) async {
+    await mount(tester, [], meds: [
+      Medication(
+          id: 'm',
+          name: 'A',
+          dosage: '5mg',
+          form: 'Tablet',
+          currentStock: 9,
+          alertBelow: 2,
+          reminders: [],
+          source: 'patient',
+          lastTakenAt: ServerClock.now().subtract(const Duration(hours: 23)))
+    ]);
+    await tester.tap(find.text('Baik'));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<IconButton>(find.byKey(const ValueKey('m-taken')))
+            .onPressed,
+        isNull);
+    expect(
+        tester
+            .widget<IconButton>(find.byKey(const ValueKey('m-skipped')))
+            .onPressed,
+        isNotNull);
+  });
+
+  testWidgets('near-duplicate confirmed daily dose reloads authoritative stock',
+      (tester) async {
+    final coalescedAt =
+        wibIso(ServerClock.now().subtract(const Duration(minutes: 1)));
+    final api = MalvaApiClient(
+        baseUrl: 'https://test.invalid',
+        httpClient: MockClient((request) async {
+          final body = request.method == 'POST'
+              ? jsonDecode(request.body) as Map<String, dynamic>
+              : <String, dynamic>{};
+          return http.Response(
+              jsonEncode({
+                'mood': {'id': 'mood', ...body},
+                'medication_log': {
+                  'id': 'existing-dose',
+                  ...body,
+                  'taken_at': coalescedAt
+                },
+                'medications': [
+                  {'id': 'm', 'name': 'A', 'current_stock': 9}
+                ],
+                'moods': [],
+                'medication_logs': [],
+              }),
+              200);
+        }));
+    final c = ProviderContainer(
+        overrides: [apiClientProvider.overrideWithValue(api)]);
+    addTearDown(c.dispose);
+    c.read(authStateProvider.notifier).setSession(_session);
+    c.read(malvaStoreProvider.notifier).applySession(_session);
+    c.read(malvaStoreProvider.notifier).upsertMedication(const Medication(
+        id: 'm',
+        name: 'A',
+        dosage: '5 mg',
+        form: 'Tablet',
+        reminders: [],
+        currentStock: 9,
+        alertBelow: 2,
+        source: 'patient'));
+    await pumpFlow(tester, c);
+    await tester.tap(find.text('Baik'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('m-taken')));
+    await next(tester);
+    await next(tester);
+    await next(tester);
+    await tester.ensureVisible(find.text('Selesai Check-in'));
+    await tester.tap(find.text('Selesai Check-in'));
+    await tester.pumpAndSettle();
+    expect(c.read(malvaStoreProvider).medications.single.currentStock, 9);
+    expect(c.read(malvaStoreProvider).medicationLogs, hasLength(1));
+  });
+
   testWidgets(
       'daily medications sync once; skipped preserves stock; temporary ID cannot dose',
       (tester) async {
@@ -470,6 +573,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(requests.where((r) => r.containsKey('mood')), hasLength(1));
     expect(requests.where((r) => r.containsKey('medication_id')), hasLength(2));
+    final doseAttempts =
+        requests.where((r) => r.containsKey('medication_id')).toList();
+    expect(doseAttempts.first['taken_at'], doseAttempts.last['taken_at']);
+    expect(c.read(malvaStoreProvider).medicationLogs, hasLength(1));
     expect(c.read(malvaStoreProvider).medications.single.currentStock, 29);
     expect(c.read(malvaStoreProvider.notifier).pendingDosesFor('m'), 0);
     expect(find.textContaining('Log obat belum tersimpan'), findsNothing);

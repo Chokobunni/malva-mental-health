@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/services.dart';
+import '../models/diary_content.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../models.dart';
@@ -307,7 +308,7 @@ Iterable<pw.Widget> _diarySection(List<DiaryEntry> entries) sync* {
     'ISI DIARY'
   ], [
     for (final entry in sorted)
-      for (final chunk in _chunks(entry.note))
+      for (final chunk in _chunks(DiaryContent.parse(entry.note).plainText))
         [
           _text(formatWibDateTime(entry.createdAt)),
           _text(entry.title, bold: true),

@@ -22,6 +22,7 @@ tags:
   - name: follow-ups
   - name: mood-checkins
   - name: diary-entries
+  - name: diary-media
   - name: medications
   - name: medication-logs
   - name: timeline
@@ -908,6 +909,61 @@ paths:
       tags:
         - diary-entries
       summary: createDiaryEntry
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/OK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  "/v1/diary-media":
+    post:
+      tags:
+        - diary-media
+      summary: uploadDiaryImage
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          $ref: '#/components/responses/OK'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  "/v1/diary-media/{patient_id}/{filename}":
+    get:
+      tags:
+        - diary-media
+      summary: getDiaryImage
+      parameters:
+        - name: patient_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
       security:
         - bearerAuth: []
       responses:

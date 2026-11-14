@@ -1717,6 +1717,36 @@ func (s *Store) CreateMedicationLog(ctx context.Context, input MedicationLog) (M
 
 	var saved MedicationLog
 	var medicationIDOut sql.NullString
+	if input.MedicationID != "" {
+		// Serialize every writer for this medication before checking its history.
+		// The existing row lock covers retries and simultaneous devices without a new schema.
+		var ownedID string
+		if err := tx.QueryRowContext(ctx, `SELECT id FROM medications WHERE id=$1 AND patient_id=$2 AND active FOR UPDATE`, input.MedicationID, input.PatientID).Scan(&ownedID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return MedicationLog{}, ErrMedicationNotFound
+			}
+			return MedicationLog{}, err
+		}
+		if input.Status == "taken" || input.Status == "partial" {
+			// Return the authoritative dose for retries, including lost responses.
+			// Check both directions so delayed, out-of-order offline logs cannot consume twice.
+			err := tx.QueryRowContext(ctx, `
+				SELECT id, patient_id, medication_id, medication_name, status, taken_at, created_at
+				FROM medication_logs
+				WHERE patient_id=$1 AND medication_id=$2 AND status IN ('taken','partial')
+				  AND taken_at > $3::timestamptz - interval '24 hours'
+				  AND taken_at < $3::timestamptz + interval '24 hours'
+				ORDER BY abs(extract(epoch FROM (taken_at - $3::timestamptz))), taken_at DESC
+				LIMIT 1
+			`, input.PatientID, input.MedicationID, input.TakenAt).Scan(&saved.ID, &saved.PatientID, &saved.MedicationID, &saved.MedicationName, &saved.Status, &saved.TakenAt, &saved.CreatedAt)
+			if err == nil {
+				return saved, nil
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return MedicationLog{}, err
+			}
+		}
+	}
 	err = tx.QueryRowContext(ctx, `
 		INSERT INTO medication_logs (
 			patient_id, medication_id, medication_name, status, taken_at

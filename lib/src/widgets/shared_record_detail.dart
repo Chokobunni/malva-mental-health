@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/providers.dart';
+import 'diary_body.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import '../models.dart';
+import '../models/diary_content.dart';
 import '../services/malva_api_client.dart';
 import '../assessment_engine.dart';
 import '../time/wib.dart';
@@ -358,6 +362,8 @@ class SharedRecordDetail extends StatelessWidget {
 
   List<Widget> _diary(Map meta) {
     final data = meta['diary'] is Map ? meta['diary'] as Map : meta;
+    final note = _value(data, 'note', _value(data, 'content', message.text));
+    final content = DiaryContent.parse(note);
     final at = parseWibStored(_value(data, 'occurred_at'));
     return [
       _card(
@@ -386,14 +392,24 @@ class SharedRecordDetail extends StatelessWidget {
                   color: Color(0xFFE9D996), size: 30),
               const SizedBox(width: 8),
               Expanded(
-                  child: SelectableText(
-                      _value(
-                          data, 'note', _value(data, 'content', message.text)),
-                      style: const TextStyle(
-                          fontSize: 16,
-                          fontStyle: FontStyle.italic,
-                          height: 1.6,
-                          color: _ink))),
+                  child: content.media.isEmpty
+                      ? SelectableText(content.text,
+                          textAlign: content.align,
+                          style: note == content.text
+                              ? const TextStyle(
+                                  fontSize: 16,
+                                  fontStyle: FontStyle.italic,
+                                  height: 1.6,
+                                  color: _ink)
+                              : content.style)
+                      : Consumer(
+                          builder: (context, ref, _) => DiaryBody(
+                              note: _value(data, 'note',
+                                  _value(data, 'content', message.text)),
+                              api: ref.watch(apiClientProvider),
+                              token: ref
+                                  .watch(currentSessionProvider)
+                                  ?.accessToken))),
             ]),
           ]),
           color: const Color(0xFFFFFAEB))

@@ -118,4 +118,23 @@ void main() {
     await service.syncNow();
     expect(storage.value, '[]');
   });
+
+  test(
+      'connectivity failure after durable enqueue does not fail or duplicate dose',
+      () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+            const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+            (_) async => throw PlatformException(code: 'unavailable'));
+    final storage = _Storage();
+    final service = OfflineSyncService(
+        apiClient: MalvaApiClient(baseUrl: 'https://fixture.test'),
+        activeUserIdReader: () => 'a',
+        secureStore: storage);
+    addTearDown(service.dispose);
+    await service.enqueueMedicationLog(
+        medicationId: 'm', medicationName: 'A', status: 'taken');
+    expect(service.queue, hasLength(1));
+    expect(jsonDecode(storage.value!) as List, hasLength(1));
+  });
 }

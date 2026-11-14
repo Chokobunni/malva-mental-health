@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -413,6 +414,15 @@ void main() {
   testWidgets(
       'POST log gagal: log masuk antrean offline dengan taken_at dari ServerClock',
       (tester) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+            const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+            (_) async => ['none']);
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+            const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+            null));
     tester.view.physicalSize = const Size(1200, 4000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -446,10 +456,7 @@ void main() {
     expect(drift, lessThan(const Duration(minutes: 1)),
         reason: 'taken_at antrean harus memakai acuan ServerClock');
 
-    // SnackBar jujur: menyebut antrean offline. SnackBar error dari jalur sync
-    // tampil lebih dulu, jadi majukan waktu agar SnackBar antrean yang tampil.
-    await tester.pump(const Duration(seconds: 5));
-    await tester.pumpAndSettle();
+    // Only report the result after the offline queue has been persisted.
     expect(
       find.textContaining('antrean offline'),
       findsWidgets,

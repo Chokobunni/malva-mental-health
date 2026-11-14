@@ -1,5 +1,15 @@
 # Check-in, diary, review dan PDF
 
+## Diary kreatif dan batas konsumsi (2026-11-15)
+
+Diary memakai editor penuh dan kanvas terpisah; mood legacy dipertahankan tanpa input emotikon. Font/ukuran/warna/perataan/jarakbaris dan media privat disimpan sebagai suffix `<!--malva-diary-v1:BASE64URL_JSON-->` pada note yang ada, dua newline setelah teks atau marker pada index0 bila media saja. Parser harus menjaga catatan legacy. Normalisasi server tidak boleh merusak marker atau Unicode: batas judul160byte/note6000byte ditolak, bukan dipotong. PDF/CSV merender teks/jumlah lampiran saja; backup JSON mempertahankan note penuh.
+
+Upload foto dan PNG kanvas melalui POST `/v1/diary-media`, JPEG/PNG valid maksimal5MiB, sisi4096piksel/16MP. GET privat `/v1/diary-media/{patient_id}/{filename}` hanya pemilik atau profesional berizin dan memiliki referensi pada diary dibagikan. Simpan di luar public uploads. Kamera/galeri melalui FilePickerPort. Hasil drawing tidak memakai stok/API mood; akun/generasi lama tidak boleh menyimpan atau mempertahankan kanvas setelah pergantian akun.
+
+Taken/partial obat per ID hanya sekali dalam rolling24jam (tepat24jam diperbolehkan); skipped/missed tidak mengubah stok/cooldown. Shared store dan backend menjaga aturan, bukan debounce tombol saja. Backend serialisasi dengan lock baris obat dan mengembalikan existing dose untuk retry/permintaan tumpang tindih, termasuk antrean terlambat. Klien mengganti attempt optimistik dengan waktu/status server dan selalu memuat stok otoritatif. Bila penulisan antrean gagal, retry memakai attempt lama dan tidak menambah history/pengurangan stok. Probe konektivitas setelah persist bukan kegagalan persist. UI status terakhir berasal dari riwayat consumed lengkap (limit0), bukan field API yang tidak ada.
+
+Uji: diary_content, diary_editor, diary_account_draw, diary_media_editor, diary_drawing_screen, diary_media_api, diary_save_integrity, diary_media, medication_daily_guard, medication_checklist_ui, medication_missing_reminder, medication_timezone_clock dan daily_checkin_reference.
+
 ## CRUD Goals & Habits pasien (2026-11-11)
 
 - Tambah, edit dan hapus memakai `/v1/goals` dan PATCH/DELETE ID milik pasien yang diperiksa server. Kartu menyediakan edit/hapus; hapus dari kartu selalu dikonfirmasi. Form penuh menyediakan Pulihkan, Simpan dan Batal. Mode lokal tetap kompatibel.

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"malva/backend/internal/clock"
 	"malva/backend/internal/store"
 	"net/http/httptest"
 	"os"
@@ -127,8 +128,9 @@ func TestPrescriptionCRUDPreservesConsumptionAndInvalidatesQR(t *testing.T) {
 	}
 	item := persisted.Items[0]
 	medID := *item.MedicationID
+	firstDoseAt := clock.Now().Add(-5 * 24 * time.Hour)
 	for i := 0; i < 5; i++ {
-		if _, err := f.st.CreateMedicationLog(context.Background(), store.MedicationLog{PatientID: f.patient.ID, MedicationID: medID, MedicationName: item.Name, Status: "taken"}); err != nil {
+		if _, err := f.st.CreateMedicationLog(context.Background(), store.MedicationLog{PatientID: f.patient.ID, MedicationID: medID, MedicationName: item.Name, Status: "taken", TakenAt: firstDoseAt.Add(time.Duration(i) * 24 * time.Hour)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -294,10 +296,11 @@ func TestPrescriptionConcurrentDoseAndSupplyEditPreserveBoth(t *testing.T) {
 	body["items"] = []any{item}
 	start := make(chan struct{})
 	results := make(chan error, 11)
+	firstDoseAt := clock.Now().Add(-10 * 24 * time.Hour)
 	for i := 0; i < 10; i++ {
 		go func() {
 			<-start
-			_, err := f.st.CreateMedicationLog(context.Background(), store.MedicationLog{PatientID: f.patient.ID, MedicationID: medID, MedicationName: "Prescription CRUD", Status: "taken"})
+			_, err := f.st.CreateMedicationLog(context.Background(), store.MedicationLog{PatientID: f.patient.ID, MedicationID: medID, MedicationName: "Prescription CRUD", Status: "taken", TakenAt: firstDoseAt.Add(time.Duration(i) * 24 * time.Hour)})
 			results <- err
 		}()
 	}

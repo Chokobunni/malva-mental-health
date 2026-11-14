@@ -375,10 +375,8 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     try {
       final logs = await api.listMedicationLogs(
         accessToken: token,
-        // 100 = batas maksimum backend. Log diurut `taken_at DESC`, jadi 100
-        // entri terbaru pasti memuat seluruh dosis hari ini untuk pemakaian
-        // wajar (termasuk pasien dengan banyak obat / banyak dosis).
-        limit: 100,
+        // Restore each medication's actual last dose, including older history.
+        limit: 0,
       );
       if (!_isCurrentAccountGeneration(generation)) return;
       final mapped = <MedicationLog>[];
@@ -849,9 +847,18 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
   /// Sebelumnya status selalu ditulis 'taken' dan stok selalu berkurang,
   /// sehingga menandai "Skipped" atau "Missed" tetap tercatat sebagai sudah
   /// diminum dan memotong stok — riwayat kepatuhan minum obat jadi salah.
-  void takeMedication(String medicationId, {String status = 'taken'}) {
+  bool canTakeMedication(String medicationId) {
+    final med =
+        state.medications.where((m) => m.id == medicationId).firstOrNull;
+    if (med == null || pendingDosesFor(medicationId) > 0) return false;
+    final last = _lastTakenFor(med, state.medicationLogs);
+    return last == null ||
+        ServerClock.now().difference(last) >= const Duration(hours: 24);
+  }
+
+  bool takeMedication(String medicationId, {String status = 'taken'}) {
     final index = state.medications.indexWhere((m) => m.id == medicationId);
-    if (index == -1) return;
+    if (index == -1) return false;
     final med = state.medications[index];
     // Waktu dicatat dari acuan SERVER, bukan jam perangkat: bila jam perangkat
     // meleset, dosis bisa tersimpan di hari yang salah dan kepatuhan "hari ini"
@@ -860,6 +867,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     // Hanya dosis yang benar-benar masuk (utuh atau sebagian) yang mengurangi
     // stok dan memperbarui penanda "terakhir diminum".
     final consumed = status == 'taken' || status == 'partial';
+    if (consumed && !canTakeMedication(medicationId)) return false;
     final updatedMed = consumed
         ? med.copyWith(
             currentStock:
@@ -888,6 +896,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     // Tulis cache lokal agar log baru tidak hilang bila app ditutup paksa
     // sebelum sempat sync ke server.
     unawaited(_persistMedicationLogs());
+    return true;
   }
 
   void upsertMedication(Medication medication) {
@@ -965,17 +974,30 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     final adjusted = <Medication>[];
     for (final med in meds) {
       final pending = _pendingDoses[med.id] ?? 0;
-      adjusted.add(
-        pending <= 0
-            ? med
-            : med.copyWith(
-                currentStock: (med.currentStock - pending * med.unitsPerDose)
-                    .clamp(0, 999)
-                    .toInt(),
-              ),
-      );
+      adjusted.add(med.copyWith(
+        lastTakenAt: _lastTakenFor(med, state.medicationLogs),
+        currentStock: pending <= 0
+            ? med.currentStock
+            : (med.currentStock - pending * med.unitsPerDose)
+                .clamp(0, 999)
+                .toInt(),
+      ));
     }
     state = state.copyWith(medications: adjusted);
+  }
+
+  DateTime? _lastTakenFor(Medication med, List<MedicationLog> logs) {
+    var last = med.lastTakenAt;
+    for (final log in logs) {
+      if (log.status != 'taken' && log.status != 'partial') continue;
+      final sameId = med.id == log.medicationId;
+      final legacyName = isTemporaryMedicationId(log.medicationId) &&
+          med.name.trim().toLowerCase() ==
+              log.medicationName.trim().toLowerCase();
+      if (!sameId && !legacyName) continue;
+      if (last == null || log.takenAt.isAfter(last)) last = log.takenAt;
+    }
+    return last;
   }
 
   // ============================================================
@@ -1039,7 +1061,13 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
       merged.add(local);
     }
     merged.sort((a, b) => b.takenAt.compareTo(a.takenAt));
-    state = state.copyWith(medicationLogs: merged);
+    state = state.copyWith(
+      medicationLogs: merged,
+      medications: [
+        for (final med in state.medications)
+          med.copyWith(lastTakenAt: _lastTakenFor(med, merged)),
+      ],
+    );
     // Persist gabungan agar konsisten dengan cache saat app dibuka lagi.
     unawaited(_persistMedicationLogs());
   }
@@ -1117,6 +1145,36 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
 
   /// Berapa dosis yang masih pending untuk satu obat.
   int pendingDosesFor(String medicationId) => _pendingDoses[medicationId] ?? 0;
+
+  /// Replace the optimistic attempt with the dose actually accepted by the server.
+  void confirmMedicationLog(String medicationId, DateTime attemptedAt,
+      BackendMedicationLog accepted) {
+    bool isAttempt(MedicationLog log) =>
+        log.medicationId == medicationId &&
+        log.takenAt.difference(attemptedAt).abs() <
+            const Duration(milliseconds: 1);
+    final consumed = state.medicationLogs.any((log) =>
+        isAttempt(log) && (log.status == 'taken' || log.status == 'partial'));
+    final at = accepted.takenAt ?? accepted.createdAt;
+    if (at != null) {
+      final logs =
+          state.medicationLogs.where((log) => !isAttempt(log)).toList();
+      logs.add(MedicationLog(
+          medicationId: medicationId,
+          medicationName: accepted.medicationName,
+          takenAt: at,
+          status: accepted.status));
+      state = state.copyWith(medicationLogs: logs, medications: [
+        for (final med in state.medications)
+          med.id == medicationId &&
+                  (accepted.status == 'taken' || accepted.status == 'partial')
+              ? med.copyWith(lastTakenAt: at)
+              : med,
+      ]);
+      replaceMedicationLogs(const []);
+    }
+    if (consumed) confirmDose(medicationId);
+  }
 
   /// Tandai satu dosis pending sudah diterima server.
   void confirmDose(String medicationId) {

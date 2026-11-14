@@ -1,5 +1,7 @@
 # MODULE_FEATURES — Matriks Fitur Malva
 
+Pembaruan 15 November 2026: diary pasien memakai editor halaman penuh, tipografi, kamera/galeri privat dan kanvas dengan alat gambar lengkap. Riwayat diary lama dan pembagian berizin tetap kompatibel. Medication Check-in memproyeksikan waktu konsumsi terakhir dari riwayat, menyelaraskan stok server dan membatasi taken/partial obat yang sama minimal 24 jam dengan retry idempoten. Rujukan: [rencana diary/obat](superpowers/plans/2026-11-15-patient-diary-medication.md).
+
 Perbaikan 5 November 2026: booking/payment pending idempoten dan dapat dilanjutkan; Paket MyCare difilter status; pasien membagikan Therapy Record dari chat dan profesional membuka detail berotorisasi. CF memakai interpretasi dukungan rule. Notifikasi mobile pasien hanya chat sesi aktif + reminder lokal goals/obat; profesional hanya chat sesi aktif. Rujukan implementasi: [rencana perbaikan](superpowers/plans/2026-11-05-patient-flow-repairs.md).
 
 Dokumen ini memetakan fitur per modul dan per peran (**Pasien**, **Profesional**, **Admin**).

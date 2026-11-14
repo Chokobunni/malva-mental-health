@@ -100,8 +100,8 @@ void main() {
         find.widgetWithText(TextField, 'Judul'), 'Cerita baru');
     await tester.enterText(
         find.widgetWithText(TextField, 'Catatan diary'), 'Isi diary baru');
-    await tester.ensureVisible(find.text('Simpan Entry'));
-    await tester.tap(find.text('Simpan Entry'));
+    await tester.ensureVisible(find.text('Simpan'));
+    await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
     expect(
         container

@@ -1,5 +1,11 @@
 # Business Requirements Document (BRD) - Malva Mental Health
 
+### Diary dan konsumsi obat pasien — 15 November 2026
+
+Pasien menulis diary di halaman penuh bertanggal WIB, dengan judul, tulisan, pengaturan tipografi, foto opsional dari kamera/galeri dan kanvas gambar. Mood tetap dicatat melalui Mood Tracker. Foto diary bersifat privat; profesional hanya dapat melihat gambar dalam diary yang dibagikan dengan relasi dan consent yang berlaku.
+
+Konsumsi obat yang sama dibatasi minimal 24 jam sejak dosis terakhir. Catatan konsumsi memperbarui riwayat, waktu terakhir dan stok sesuai dosis satu kali, termasuk saat pengiriman diulang atau koneksi terputus. Tidak ada perubahan skema database.
+
 ### Ketentuan operasional pasien — 5 November 2026
 
 Satu intent pembelian pending harus dapat dilanjutkan tanpa membuat paket atau pembayaran ganda. MyCare menyediakan filter paket `pending_payment`, `active`, dan `cancelled`. Status lunas harus dikonfirmasi server ke Midtrans sebelum aktivasi dan pemilihan data yang dibagikan.

@@ -107,6 +107,7 @@ class OfflineSyncService {
     String? Function()? activeUserIdReader,
     SecureStore? secureStore,
     this.onMedicationLogSynced,
+    this.onMedicationLogConfirmed,
     this.accountGenerationReader,
   })  : _readAccessToken = accessTokenReader,
         _readActiveUserId = activeUserIdReader,
@@ -115,6 +116,8 @@ class OfflineSyncService {
   final MalvaApiClient apiClient;
   final void Function(String medicationId, String ownerId)?
       onMedicationLogSynced;
+  final void Function(String medicationId, String ownerId, DateTime attemptedAt,
+      BackendMedicationLog accepted)? onMedicationLogConfirmed;
   final int Function()? accountGenerationReader;
 
   /// Membaca access token aktif saat dibutuhkan — bukan disalin sekali saat
@@ -218,6 +221,7 @@ class OfflineSyncService {
     required String medicationId,
     required String medicationName,
     required String status,
+    DateTime? takenAt,
   }) async {
     final item = SyncItem(
       id: 'sync_medlog_${wibNow().millisecondsSinceEpoch}',
@@ -229,7 +233,7 @@ class OfflineSyncService {
         // Waktu minum memakai acuan SERVER, bukan jam perangkat: log yang
         // dikirim belakangan tetap tercatat pada jam yang benar, dan "hari
         // ini" tidak bergeser bila jam perangkat meleset.
-        'taken_at': wibIso(ServerClock.now()),
+        'taken_at': wibIso(takenAt ?? ServerClock.now()),
       },
       createdAt: wibNow(),
       userId: _activeUserId,
@@ -376,13 +380,15 @@ class OfflineSyncService {
           gad7Answers: List<int>.from(item.payload['gad7'] as List),
         );
       case SyncOperation.medicationLog:
-        await apiClient.createMedicationLog(
+        final attemptedAt =
+            parseWibStored(item.payload['taken_at'] as String?) ??
+                ServerClock.now();
+        final accepted = await apiClient.createMedicationLog(
           accessToken: accessToken,
           medicationId: item.payload['medication_id'] as String,
           medicationName: item.payload['medication_name'] as String,
           status: item.payload['status'] as String,
-          takenAt: parseWibStored(item.payload['taken_at'] as String?) ??
-              ServerClock.now(),
+          takenAt: attemptedAt,
         );
         if (generation == accountGenerationReader?.call() &&
             item.userId == _activeUserId &&
@@ -390,6 +396,11 @@ class OfflineSyncService {
                 item.payload['status'] == 'partial')) {
           onMedicationLogSynced?.call(
               item.payload['medication_id'] as String, item.userId!);
+          onMedicationLogConfirmed?.call(
+              item.payload['medication_id'] as String,
+              item.userId!,
+              attemptedAt,
+              accepted);
         }
       case SyncOperation.diaryEntry:
         // Harus sama dengan jalur online (diary_history_screen):
@@ -432,10 +443,14 @@ class OfflineSyncService {
     }
     _notifyQueue();
 
-    // Try immediate sync if online
-    final connectivity = await Connectivity().checkConnectivity();
-    if (!connectivity.contains(ConnectivityResult.none)) {
-      unawaited(syncNow());
+    // Connectivity is best effort; the item is already durable at this point.
+    try {
+      final connectivity = await Connectivity().checkConnectivity();
+      if (!connectivity.contains(ConnectivityResult.none)) {
+        unawaited(syncNow());
+      }
+    } on Object {
+      // A platform error must not make callers retry an already saved item.
     }
   }
 

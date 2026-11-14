@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/diary_content.dart';
 
 import '../../platform/platform_providers.dart';
 import '../../services/export_service.dart';
@@ -31,7 +32,7 @@ final diaryReportProvider = Provider<List<String>>((ref) => [
       'CATATAN HARIAN',
       for (final e in ref.watch(malvaStoreProvider).diaryEntries)
         '${formatWibDateTime(e.createdAt)} | ${e.title}\n'
-            '${e.note}\nTanggapan profesional: ${e.professionalFeedback ?? "Belum ada"}',
+            '${DiaryContent.parse(e.note).plainText}\nTanggapan profesional: ${e.professionalFeedback ?? "Belum ada"}',
     ]);
 
 // ----------------------------------------------------------
