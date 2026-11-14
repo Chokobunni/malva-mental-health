@@ -47,7 +47,7 @@ class ImagePickerAdapterWeb implements FilePickerPort {
       // image_picker_for_web mengecilkan gambar via canvas (image_resizer.dart)
       // memakai maxWidth/maxHeight/imageQuality — bukan diabaikan.
       picked = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: kind == 'camera' ? ImageSource.camera : ImageSource.gallery,
         maxWidth: maxWidth?.toDouble(),
         maxHeight: maxHeight?.toDouble(),
         imageQuality: imageQuality,

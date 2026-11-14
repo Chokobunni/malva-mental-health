@@ -1,7 +1,7 @@
 name: malva_mental_health
 description: Flutter MVP for a mental health patient and professional app.
 publish_to: "none"
-version: 0.1.26+27
+version: 0.1.27+28
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -44,6 +44,11 @@ dev_dependencies:
 
 flutter:
   fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/roboto-regular.ttf
+        - asset: assets/fonts/roboto-bold.ttf
+          weight: 700
     - family: PlusJakartaSans
       fonts:
         - asset: assets/fonts/plus-jakarta-sans-regular.ttf

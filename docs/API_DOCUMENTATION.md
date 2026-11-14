@@ -1,5 +1,13 @@
 # API Documentation
 
+### Media diary privat dan pengaman konsumsi — 15 November 2026
+
+`POST /v1/diary-media` menerima multipart `file` JPEG/PNG dari pasien terautentikasi, maksimal 5 MiB, 4096 piksel per sisi dan 16 megapiksel; isi gambar wajib valid. Respons 201 berisi `url`, `filename`, `size`, `mime`. `GET /v1/diary-media/{patient_id}/{filename}` hanya untuk pemilik atau profesional terhubung dengan consent `mood_diary` dan referensi pada diary yang dibagikan. Respons privat memakai `Cache-Control: private, no-store` dan `nosniff`.
+
+POST/PUT diary tetap memakai field lama. `note` dapat menyimpan teks dengan suffix `<!--malva-diary-v1:BASE64URL_JSON-->`; metadata tanpa teks berdiri di awal note, sedangkan metadata setelah teks dipisah dua newline. Metadata memuat font/ukuran/warna/perataan/jarak baris dan referensi media. Judul di atas 160 byte UTF-8 atau note di atas 6000 byte ditolak secara eksplisit untuk menghindari pemotongan metadata.
+
+POST medication-log tetap memakai kontrak lama. Taken/partial dalam jendela kurang dari 24 jam dari konsumsi obat yang sama mengembalikan log otoritatif yang sudah ada, tanpa INSERT atau pengurangan stok kedua; tepat 24 jam diperbolehkan. Skipped/missed tidak mengonsumsi stok. Klien mempertahankan timestamp intent saat retry dan mengambil ulang stok setelah konfirmasi.
+
 ### Ulasan dan jarak profesional — 8 November 2026
 
 `GET /v1/doctors/search` mengirim `average_stars`, `review_count`, dan

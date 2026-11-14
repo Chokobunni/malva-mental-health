@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../assessment_engine.dart';
 import '../models.dart';
+import '../models/diary_content.dart';
 import '../platform/contracts/ports.dart';
 import '../time/wib.dart';
 import 'health_pdf_report.dart';
@@ -198,7 +199,7 @@ class ExportService {
         '"${e.id}",'
         '${wibIso(e.createdAt)},'
         '"${e.title.replaceAll('"', '""')}",'
-        '"${e.note.replaceAll('"', '""')}",'
+        '"${DiaryContent.parse(e.note).plainText.replaceAll('"', '""')}",'
         '"${(e.professionalFeedback ?? '').replaceAll('"', '""')}"',
       );
     }

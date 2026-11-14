@@ -29,9 +29,11 @@ final offlineSyncServiceProvider = Provider<OfflineSyncService>((ref) {
   });
   final service = OfflineSyncService(
     accountGenerationReader: () => generation,
-    onMedicationLogSynced: (id, owner) {
+    onMedicationLogConfirmed: (id, owner, attemptedAt, accepted) {
       if (container.read(authStateProvider).session?.backendUserId == owner) {
-        container.read(malvaStoreProvider.notifier).confirmDose(id);
+        final store = container.read(malvaStoreProvider.notifier);
+        store.confirmMedicationLog(id, attemptedAt, accepted);
+        unawaited(store.loadMedications());
       }
     },
     apiClient: apiClient,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models.dart';
+import '../../widgets/diary_body.dart';
 import '../../services/malva_api_client.dart';
 import '../../services/mood_insights.dart';
 import '../../widgets/mood_insights.dart';
@@ -568,8 +569,10 @@ class _DiaryTabState
                 ),
                 if (entry.note.trim().isNotEmpty) ...[
                   const SizedBox(height: 6),
-                  Text(entry.note,
-                      style: Theme.of(context).textTheme.bodySmall),
+                  DiaryBody(
+                      note: entry.note,
+                      api: widget.apiClient ?? ref.read(apiClientProvider),
+                      token: widget.session?.accessToken),
                 ],
               ],
             ),

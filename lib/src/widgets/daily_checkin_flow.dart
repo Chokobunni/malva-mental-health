@@ -79,6 +79,7 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
   int _generation = 0;
   MoodEntry? _savedMood;
   final Set<String> _startedDoses = {}, _finishedDoses = {};
+  final Map<String, DateTime> _doseTakenAt = {};
   bool _pending = false;
   final Map<String, String> _doses = {};
   String? _error;
@@ -89,6 +90,7 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
     _day = wibDateKey(ServerClock.now());
     _savedMood = null;
     _startedDoses.clear();
+    _doseTakenAt.clear();
     _finishedDoses.clear();
     _pending = false;
     _step = 0;
@@ -592,7 +594,11 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
                         key: ValueKey('${m.id}-$status'),
                         tooltip:
                             status == 'taken' ? 'Sudah diminum' : 'Dilewati',
-                        onPressed: enabled
+                        onPressed: enabled &&
+                                (status != 'taken' ||
+                                    ref
+                                        .read(malvaStoreProvider.notifier)
+                                        .canTakeMedication(m.id))
                             ? () => setState(() {
                                   if (_doses[m.id] == status) {
                                     _doses.remove(m.id);
@@ -695,22 +701,31 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
           (!_startedDoses.contains(med.id) &&
               notifier.pendingDosesFor(med.id) > 0)) continue;
       if (!current()) return;
-      if (_startedDoses.add(med.id))
-        notifier.takeMedication(med.id, status: status);
+      if (!_startedDoses.contains(med.id)) {
+        if (!notifier.takeMedication(med.id, status: status)) continue;
+        _startedDoses.add(med.id);
+        _doseTakenAt[med.id] =
+            ref.read(malvaStoreProvider).medicationLogs.first.takenAt;
+      }
       try {
-        await api.createMedicationLog(
+        final accepted = await api.createMedicationLog(
             accessToken: ref.read(currentSessionProvider)!.accessToken!,
             medicationId: med.id,
             medicationName: med.name,
             status: status,
-            takenAt: _savedMood!.date);
+            takenAt: _doseTakenAt[med.id]);
         if (!current()) return;
-        if (status == 'taken') notifier.confirmDose(med.id);
+        notifier.confirmMedicationLog(med.id, _doseTakenAt[med.id]!, accepted);
+        unawaited(notifier.loadMedications(
+            api, ref.read(currentSessionProvider)!.accessToken!));
       } on Object {
         if (!current()) return;
         try {
           await queue.enqueueMedicationLog(
-              medicationId: med.id, medicationName: med.name, status: status);
+              medicationId: med.id,
+              medicationName: med.name,
+              status: status,
+              takenAt: _doseTakenAt[med.id]);
           _pending = true;
         } on Object {
           if (current())

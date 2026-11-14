@@ -1,5 +1,13 @@
 # Product Requirements Document (PRD) - Malva Mental Health
 
+### Kriteria penerimaan diary dan obat — 15 November 2026
+
+- Tambah/edit diary membuka halaman penuh dengan tanggal WIB, judul dan tulisan, tanpa input emoticon. Tombol bawah membuka media, halaman kanvas dan pengaturan font; kegagalan simpan mempertahankan draft.
+- Font menyediakan Roboto/Jakarta, ukuran H1–H4, warna, perataan dan jarak baris. Media opsional maksimal enam gambar; kamera/galeri dinormalisasi PNG maksimal 1600 piksel dan 5 MiB per unggahan.
+- Kanvas menyediakan pena, marker, pensil, penghapus, ukuran, opasitas, warna preset/HSV, kertas, stiker transparan, rotasi, undo/redo dan selesai menjadi PNG. Pergantian akun menutup akses visual editor/kanvas lama.
+- Riwayat dan kartu obat menampilkan konsumsi taken/partial terakhir. Pengiriman ulang obat yang sama dalam 24 jam memakai dosis tersimpan dan tidak mengurangi stok lagi; tepat 24 jam diperbolehkan. Antrean offline mempertahankan waktu percobaan dan dapat dicoba lagi saat penyimpanan lokal gagal.
+- Diary lama tetap terbaca. Pembaca dan ekspor teks memisahkan tulisan dari metadata; akses gambar memakai otorisasi API.
+
 ### Kriteria penerimaan perbaikan pasien — 5 November 2026
 
 - Retry booking/payment dan “Lanjut Bayar” mengacu ke intent pending yang sama. Cek status serta refresh otomatis merekonsiliasi Midtrans; callback bukan bukti lunas.

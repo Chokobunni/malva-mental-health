@@ -7,6 +7,7 @@ import '../../ai/assessment_scoring.dart';
 import '../../assessment_engine.dart';
 import '../../models.dart';
 import '../../providers/auth_providers.dart';
+import '../../widgets/diary_body.dart';
 import '../../services/malva_api_client.dart';
 import '../../services/weekly_summary_service.dart';
 import '../../time/wib.dart';
@@ -602,14 +603,11 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
                       color: _ink, fontSize: 14, fontWeight: FontWeight.w700)),
               const SizedBox(height: 7),
             ],
-            Text(
-                _text(
+            DiaryBody(
+                note: _text(
                     data, 'note', _text(data, 'content', widget.message.text)),
-                style: const TextStyle(
-                    color: Color(0xFF8E7B53),
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                    height: 1.5)),
+                api: ref.watch(apiClientProvider),
+                token: ref.watch(currentSessionProvider)?.accessToken),
           ]),
           color: const Color(0xFFFFFCEE)),
     ];

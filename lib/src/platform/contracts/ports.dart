@@ -32,7 +32,7 @@ class PickedFile {
 
 /// Memilih berkas dari perangkat. Batas ukuran divalidasi di pemanggil.
 abstract interface class FilePickerPort {
-  /// [kind]: image | video | file (private chat: images/PDF).
+  /// [kind]: image (gallery) | camera (photo) | video | file (private chat: images/PDF).
   ///
   /// [maxWidth]/[maxHeight]/[imageQuality] hanya berlaku untuk gambar dan
   /// diteruskan apa adanya ke `ImagePicker.pickImage` (mobile) dan

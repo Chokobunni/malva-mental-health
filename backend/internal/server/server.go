@@ -247,6 +247,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/mood-checkins", s.requireAuth(s.listMoodCheckins))
 	mux.HandleFunc("POST /v1/mood-checkins", s.requireAuth(s.createMoodCheckin))
 	mux.HandleFunc("GET /v1/diary-entries", s.requireAuth(s.listDiaryEntries))
+	mux.HandleFunc("POST /v1/diary-media", s.requireAuth(s.uploadDiaryImage))
+	mux.HandleFunc("GET /v1/diary-media/{patient_id}/{filename}", s.requireAuth(s.getDiaryImage))
 	mux.HandleFunc("POST /v1/diary-entries", s.requireAuth(s.createDiaryEntry))
 	mux.HandleFunc("PUT /v1/diary-entries/{diary_id}", s.requireAuth(s.updateDiaryEntry))
 	mux.HandleFunc("DELETE /v1/diary-entries/{diary_id}", s.requireAuth(s.deleteDiaryEntry))
@@ -1173,6 +1175,14 @@ func (s *Server) createDiaryEntry(w http.ResponseWriter, r *http.Request, claims
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	if len(req.Title) > 160 {
+		writeError(w, http.StatusBadRequest, errors.New("judul diary maksimal 160 byte"))
+		return
+	}
+	if len(req.Note) > 6000 {
+		writeError(w, http.StatusBadRequest, errors.New("isi diary maksimal 6000 byte"))
+		return
+	}
 	req.Mood = strings.ToLower(strings.TrimSpace(req.Mood))
 	req.Title = trimMax(req.Title, 160)
 	req.Note = trimMax(req.Note, 6000)
@@ -1228,6 +1238,14 @@ func (s *Server) updateDiaryEntry(w http.ResponseWriter, r *http.Request, claims
 	var req diaryEntryRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if len(req.Title) > 160 {
+		writeError(w, http.StatusBadRequest, errors.New("judul diary maksimal 160 byte"))
+		return
+	}
+	if len(req.Note) > 6000 {
+		writeError(w, http.StatusBadRequest, errors.New("isi diary maksimal 6000 byte"))
 		return
 	}
 	req.Mood = strings.ToLower(strings.TrimSpace(req.Mood))

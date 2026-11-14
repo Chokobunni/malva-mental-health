@@ -2737,6 +2737,52 @@ class MalvaApiClient {
     return url;
   }
 
+  /// Uploads a private diary image. Reading its URL also requires authorization.
+  Future<String> uploadDiaryImage({
+    required String accessToken,
+    required String fileName,
+    required Uint8List bytes,
+    required String mimeType,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      baseUri.replace(path: '/v1/diary-media'),
+    )
+      ..headers['Authorization'] = 'Bearer $accessToken'
+      ..files.add(http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: fileName,
+        contentType: http.MediaType.parse(mimeType),
+      ));
+    late final http.Response response;
+    try {
+      final streamed = await _httpClient.send(request).timeout(
+            const Duration(seconds: 60),
+          );
+      response = await http.Response.fromStream(streamed);
+    } on Object {
+      throw const MalvaApiException('Gagal mengunggah gambar diary.');
+    }
+    Map<String, dynamic> body;
+    try {
+      body = _expectMap(
+          jsonDecode(response.body), 'Respons unggahan tidak valid.');
+    } on Object {
+      throw const MalvaApiException('Respons unggahan tidak valid.');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw MalvaApiException(
+          body['error']?.toString() ?? 'Gagal mengunggah gambar diary.');
+    }
+    final path = body['url'];
+    if (path is! String || !path.startsWith('/v1/diary-media/')) {
+      throw const MalvaApiException(
+          'Server tidak mengembalikan URL gambar diary.');
+    }
+    return '${baseUri.origin}$path';
+  }
+
   // Direktori publik: token opsional agar bisa dijelajahi offline/tanpa login.
   Future<List<BackendDoctorSearchResult>> searchDoctors({
     String? accessToken,
