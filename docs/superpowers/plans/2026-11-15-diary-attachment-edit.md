@@ -30,5 +30,5 @@
 
 - [x] Jalankan suite Flutter penuh, analyzer, format dan gate WIB/platform; lakukan review independen.
 - [x] Sinkronkan kontrak fitur/dokumentasi dan bump versi patch untuk APK.
-- [ ] Commit/push dan buat PR; gabungkan hanya setelah gate wajib yang relevan lulus.
-- [ ] Verifikasi deployment web/APK pada commit rilis, health backend, versi/tanda tangan/checksum APK unduhan publik; laporkan batas QA perangkat.
+- [x] Commit/push dan buat PR; gabungkan hanya setelah gate wajib yang relevan lulus.
+- [x] Verifikasi deployment web/APK pada commit rilis, health backend, versi/tanda tangan/checksum APK unduhan publik; laporkan batas QA perangkat.
