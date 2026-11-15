@@ -12,7 +12,7 @@
 - [x] Rebuild the diary landing page, prompt flips, badge bar/page, real calendar/filter/search, cards/reader and vault actions. Keep API authorization/account guards and multiple records on the same day.
 - [x] Integrate selected question, palette, vault, topic tags, self-note and optional appreciation evidence into the existing editor. Preserve media and typography tools and failed-save input.
 - [x] Verify navigation/save/edit/delete, account changes, empty/legacy history, all catalogue rules, 320/390px and large text; render matching source/implementation states and write design QA.
-- [ ] Update feature/agent documentation, run Flutter and required repository gates, independent review, commit/push and release via existing workflows; verify deployed web/API and public APK.
+- [x] Update feature/agent documentation, run Flutter and required repository gates, independent review, commit/push and release via existing workflows; verify deployed web/API and public APK.
 
 ## Review focus
 
