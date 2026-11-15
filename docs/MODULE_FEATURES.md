@@ -1,5 +1,7 @@
 # MODULE_FEATURES — Matriks Fitur Malva
 
+Versi 0.1.28: editor diary menyediakan Edit gambar untuk memperbaiki kembali hasil draw tersimpan dan Ganti foto dari galeri. Penggantian mempertahankan posisi lampiran, dapat dilakukan pada enam slot penuh, serta menjaga lampiran lama ketika dibatalkan atau gagal. Draw PNG tetap dapat ditambah/dihapus/diputar dengan rasio asli; undo/redo berlaku pada sesi edit sekarang. Rujukan: [rencana edit lampiran](superpowers/plans/2026-11-15-diary-attachment-edit.md).
+
 Pembaruan 15 November 2026: diary pasien memakai editor halaman penuh, tipografi, kamera/galeri privat dan kanvas dengan alat gambar lengkap. Riwayat diary lama dan pembagian berizin tetap kompatibel. Medication Check-in memproyeksikan waktu konsumsi terakhir dari riwayat, menyelaraskan stok server dan membatasi taken/partial obat yang sama minimal 24 jam dengan retry idempoten. Rujukan: [rencana diary/obat](superpowers/plans/2026-11-15-patient-diary-medication.md).
 
 Perbaikan 5 November 2026: booking/payment pending idempoten dan dapat dilanjutkan; Paket MyCare difilter status; pasien membagikan Therapy Record dari chat dan profesional membuka detail berotorisasi. CF memakai interpretasi dukungan rule. Notifikasi mobile pasien hanya chat sesi aktif + reminder lokal goals/obat; profesional hanya chat sesi aktif. Rujukan implementasi: [rencana perbaikan](superpowers/plans/2026-11-05-patient-flow-repairs.md).

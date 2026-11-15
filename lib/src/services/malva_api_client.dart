@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import '../ai/assessment_scoring.dart' show isCompleteAssessmentAnswers;
 import '../assessment_engine.dart';
 import '../models.dart';
+import '../models/diary_content.dart';
 import '../platform/api_base_url.dart';
 import '../platform/contracts/ports.dart' show PickedFile;
 import 'server_clock.dart';
@@ -2735,6 +2736,27 @@ class MalvaApiClient {
       return '${baseUri.origin}$url';
     }
     return url;
+  }
+
+  /// Reads a private diary PNG for editing, retaining auth refresh/account guards.
+  Future<Uint8List> fetchDiaryImage({
+    required String accessToken,
+    required String url,
+  }) async {
+    final uri = DiaryMedia(url: url).resolve(baseUri);
+    if (uri == null || accessToken.isEmpty) {
+      throw const MalvaApiException('Gambar diary tidak dapat diakses.');
+    }
+    final response = await _privateChatRequest(accessToken, (token) async {
+      final request = http.Request('GET', uri)
+        ..followRedirects = false
+        ..headers['Authorization'] = 'Bearer $token';
+      return http.Response.fromStream(await _httpClient.send(request));
+    });
+    if (response.bodyBytes.length > 5 * 1024 * 1024) {
+      throw const MalvaApiException('Gambar diary melebihi 5 MB.');
+    }
+    return response.bodyBytes;
   }
 
   /// Uploads a private diary image. Reading its URL also requires authorization.

@@ -30,10 +30,12 @@ class DiaryImage extends StatelessWidget {
       required this.media,
       required this.api,
       this.token,
+      this.onEdit,
       this.onRemove});
   final DiaryMedia media;
   final MalvaApiClient api;
   final String? token;
+  final VoidCallback? onEdit;
   final VoidCallback? onRemove;
   @override
   Widget build(BuildContext context) {
@@ -71,6 +73,18 @@ class DiaryImage extends StatelessWidget {
                 tooltip: 'Hapus lampiran',
                 onPressed: onRemove,
                 icon: const Icon(Icons.close, size: 20))),
+      if (onEdit != null)
+        Positioned(
+            top: 4,
+            right: onRemove == null ? 4 : 52,
+            child: IconButton.filledTonal(
+                tooltip: media.kind == 'drawing' ? 'Edit gambar' : 'Ganti foto',
+                onPressed: onEdit,
+                icon: Icon(
+                    media.kind == 'drawing'
+                        ? Icons.edit_outlined
+                        : Icons.photo_library_outlined,
+                    size: 20))),
       Positioned(
           left: 10,
           bottom: 8,

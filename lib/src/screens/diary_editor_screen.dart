@@ -138,13 +138,14 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
     }
   }
 
-  Future<void> _upload(Uint8List bytes, String kind) async {
+  Future<void> _upload(Uint8List bytes, String kind,
+      {DiaryMedia? replace}) async {
     final token = widget.accessToken;
     if (token == null || token.isEmpty) {
       setState(() => _error = 'Masuk ke akun untuk menyimpan gambar diary.');
       return;
     }
-    if (_media.length >= 6) {
+    if (replace == null && _media.length >= 6) {
       setState(() => _error = 'Maksimal 6 gambar dalam satu diary.');
       return;
     }
@@ -185,7 +186,13 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
         if (item.resolve(widget.api.baseUri) == null)
           throw const FormatException('Alamat gambar tidak valid.');
         setState(() {
-          _media.add(item);
+          if (replace == null) {
+            _media.add(item);
+          } else {
+            final index = _media.indexOf(replace);
+            if (index < 0) return;
+            _media[index] = item;
+          }
           _mediaChanged = true;
         });
       } finally {
@@ -202,28 +209,61 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
     }
   }
 
-  Future<void> _pick(String kind) async {
-    Navigator.pop(context);
+  Future<void> _pick(String kind, {DiaryMedia? replace}) async {
+    if (_busy) return;
+    if (replace == null) Navigator.pop(context);
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       final file = await ref
           .read(filePickerProvider)
           .pick(kind, maxWidth: 1600, maxHeight: 1600, imageQuality: 90);
       if (file == null || !mounted) return;
-      await _upload(file.bytes, 'photo');
+      await _upload(file.bytes, 'photo', replace: replace);
     } on Object catch (e) {
       if (mounted) setState(() => _error = friendlyErrorMessage(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _draw() async {
+  Future<void> _draw({DiaryMedia? replace}) async {
+    if (_busy) return;
     FocusManager.instance.primaryFocus?.unfocus();
-    final png = await Navigator.push<Uint8List>(
-        context,
-        MaterialPageRoute(
-            builder: (_) =>
-                widget.protectRoute?.call(const DiaryDrawingScreen()) ??
-                const DiaryDrawingScreen()));
-    if (png != null && mounted) await _upload(png, 'drawing');
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    ui.Image? initialImage;
+    try {
+      if (replace != null) {
+        final bytes = await widget.api.fetchDiaryImage(
+            accessToken: widget.accessToken ?? '', url: replace.url);
+        if (!mounted) return;
+        final codec = await ui.instantiateImageCodec(bytes);
+        try {
+          initialImage = (await codec.getNextFrame()).image;
+        } finally {
+          codec.dispose();
+        }
+        if (!mounted) return;
+      }
+      final drawing = DiaryDrawingScreen(initialImage: initialImage);
+      final png = await Navigator.push<Uint8List>(
+          context,
+          MaterialPageRoute(
+              builder: (_) => widget.protectRoute?.call(drawing) ?? drawing));
+      if (png != null && mounted)
+        await _upload(png, 'drawing', replace: replace);
+    } on Object catch (e) {
+      if (mounted) setState(() => _error = friendlyErrorMessage(e));
+    } finally {
+      initialImage?.dispose();
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   void _addMedia() {
@@ -576,6 +616,11 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                                     media: media,
                                     api: widget.api,
                                     token: widget.accessToken,
+                                    onEdit: _busy
+                                        ? null
+                                        : () => media.kind == 'drawing'
+                                            ? _draw(replace: media)
+                                            : _pick('image', replace: media),
                                     onRemove: _busy
                                         ? null
                                         : () => setState(() {
