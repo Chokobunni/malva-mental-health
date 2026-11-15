@@ -146,6 +146,7 @@ class DiaryHeader extends StatelessWidget {
             button: true,
             label: 'Lencana Apresiasi Diri, $unlocked dari 100 terbuka',
             child: InkWell(
+                key: const ValueKey('diary-badges-header'),
                 onTap: onBadges,
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
@@ -168,9 +169,13 @@ class DiaryHeader extends StatelessWidget {
 
 class DiaryPalettePill extends StatelessWidget {
   const DiaryPalettePill(
-      {super.key, required this.palette, this.selected = false, this.onTap});
+      {super.key,
+      required this.palette,
+      this.selected = false,
+      this.onTap,
+      this.bullet = false});
   final String? palette;
-  final bool selected;
+  final bool selected, bullet;
   final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
@@ -190,150 +195,364 @@ class DiaryPalettePill extends StatelessWidget {
                     border: Border.all(
                         color: selected ? diaryPurple : Colors.transparent,
                         width: 2)),
-                child: Text(meta?.$1 ?? 'Tanpa palet',
-                    style: TextStyle(
-                        color: meta?.$3 ?? Colors.grey,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700)))));
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (bullet) ...[
+                    Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: meta?.$3 ?? Colors.grey)),
+                    const SizedBox(width: 6)
+                  ],
+                  Text(meta?.$1 ?? 'Tanpa palet',
+                      style: TextStyle(
+                          color: meta?.$3 ?? Colors.grey,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700))
+                ]))));
   }
+}
+
+class DiaryVaultCard extends StatelessWidget {
+  const DiaryVaultCard(
+      {super.key,
+      required this.count,
+      required this.onRandom,
+      required this.onAll,
+      this.vaultOnly = false});
+  final int count;
+  final bool vaultOnly;
+  final VoidCallback onRandom, onAll;
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+      borderRadius: BorderRadius.circular(26),
+      child: DecoratedBox(
+          decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xff6e2b7e), Color(0xffb55cc4)])),
+          child: Stack(children: [
+            Positioned(
+                top: -38,
+                right: -35,
+                child: Container(
+                    width: 140,
+                    height: 140,
+                    decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: .1)))),
+            Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: .2),
+                                    borderRadius: BorderRadius.circular(16)),
+                                child: const Icon(Icons.bookmark,
+                                    color: Colors.white, size: 22)),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                  Text('POSITIVE VAULT',
+                                      style: TextStyle(
+                                          color: Color(0xffe9d5ff),
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: .6)),
+                                  SizedBox(height: 4),
+                                  Text('Kotak Kenangan Baik & Syukur',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          height: 1.35,
+                                          fontWeight: FontWeight.w800))
+                                ])),
+                            const SizedBox(width: 8),
+                            if (!_compact(context)) _countChip()
+                          ]),
+                      if (_compact(context))
+                        Align(
+                            alignment: Alignment.centerRight,
+                            child: Padding(
+                                padding: const EdgeInsets.only(top: 10),
+                                child: _countChip())),
+                      const SizedBox(height: 18),
+                      const Text(
+                          'Saat hari terasa berat, buka kembali catatan positif yang pernah kamu tulis sebagai pengingat bahwa kamu sudah melangkah sejauh ini.',
+                          style: TextStyle(
+                              color: Color(0xfff3e8ff),
+                              fontSize: 12,
+                              height: 1.65)),
+                      const SizedBox(height: 18),
+                      Row(children: [
+                        Expanded(
+                            flex: 68,
+                            child: FilledButton.icon(
+                                onPressed: onRandom,
+                                style: FilledButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: diaryPlum,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 13),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(13))),
+                                icon: const Icon(Icons.bookmark, size: 14),
+                                label: const Text('Acak Kenangan Baik',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800)))),
+                        const SizedBox(width: 9),
+                        Expanded(
+                            flex: 32,
+                            child: TextButton(
+                                onPressed: onAll,
+                                style: TextButton.styleFrom(
+                                    backgroundColor:
+                                        Colors.white.withValues(alpha: .2),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 13),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(13))),
+                                child: Text(
+                                    vaultOnly ? 'Semua Diari' : 'Lihat Semua',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800))))
+                      ])
+                    ]))
+          ])));
+  bool _compact(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < 350 ||
+      MediaQuery.textScalerOf(context).scale(1) > 1.2;
+  Widget _countChip() => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: .2),
+          borderRadius: BorderRadius.circular(20)),
+      child: Text('$count Tersimpan',
+          style: const TextStyle(
+              color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)));
 }
 
 class DailyPromptCards extends StatefulWidget {
   const DailyPromptCards(
-      {super.key, required this.onAnswer, this.onRefresh, this.initialPrompt});
+      {super.key,
+      required this.onAnswer,
+      this.onRefresh,
+      this.onClose,
+      this.draw});
   final ValueChanged<DiaryPrompt> onAnswer;
-  final VoidCallback? onRefresh;
-  final DiaryPrompt? initialPrompt;
+  final VoidCallback? onRefresh, onClose;
+  final Future<List<DiaryPrompt>> Function()? draw;
   @override
   State<DailyPromptCards> createState() => _DailyPromptCardsState();
 }
 
 class _DailyPromptCardsState extends State<DailyPromptCards> {
   final _deck = DiaryPromptDeck();
+  List<DiaryPrompt> _cards = [];
   int? _selected;
+  bool _loading = false;
+  String? _error;
   @override
   void initState() {
     super.initState();
-    if (widget.initialPrompt != null) {
-      final at =
-          _deck.cards.indexWhere((p) => p.id == widget.initialPrompt!.id);
-      if (at >= 0) {
-        _selected = at;
+    _load();
+  }
+
+  Future<void> _load({bool refresh = false}) async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+      _selected = null;
+    });
+    try {
+      final List<DiaryPrompt> cards;
+      if (widget.draw != null) {
+        cards = await widget.draw!();
       } else {
-        _deck.cards[0] = widget.initialPrompt!;
-        _selected = 0;
+        if (refresh) _deck.refresh();
+        cards = [..._deck.cards];
       }
+      if (!mounted) return;
+      setState(() => _cards = cards);
+      if (refresh) widget.onRefresh?.call();
+    } on Object {
+      if (mounted)
+        setState(() => _error =
+            'Kartu belum dapat dimuat. Ketuk refresh untuk mencoba lagi.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) => DiaryCard(
-      padding: const EdgeInsets.all(16),
-      color: const Color(0xfffdfaff),
+      padding: const EdgeInsets.all(14),
+      color: const Color(0xfffcf7ff),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
-          const Icon(Icons.circle, color: diaryPurple, size: 8),
-          const SizedBox(width: 6),
+          Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                  color: const Color(0xffefe0f4),
+                  borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.event_note_outlined,
+                  color: diaryPurple, size: 24)),
+          Container(
+              width: 1,
+              height: 32,
+              margin: const EdgeInsets.symmetric(horizontal: 9),
+              color: const Color(0xffe4d2ec)),
           const Expanded(
-              child: Text('KARTU PERTANYAAN HARIAN',
-                  style: TextStyle(
-                      color: diaryPurple,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: .5))),
-          IconButton(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text('Pertanyaan Harian',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: diaryPlum)),
+                SizedBox(height: 4),
+                Text('Pilih satu kartu, beri ruang untuk ceritamu.',
+                    style: TextStyle(
+                        fontSize: 10, height: 1.4, color: Color(0xff6b7280)))
+              ])),
+          IconButton.filledTonal(
               tooltip: 'Ganti pertanyaan baru',
-              visualDensity: VisualDensity.compact,
-              onPressed: () {
-                setState(() {
-                  _deck.refresh(_selected ?? 0);
-                  _selected = null;
-                });
-                widget.onRefresh?.call();
-              },
-              icon: const Icon(Icons.refresh, color: diaryPurple, size: 20))
+              style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xffefe0f4),
+                  foregroundColor: diaryPurple,
+                  minimumSize: const Size(32, 32),
+                  padding: const EdgeInsets.all(6)),
+              onPressed: _loading ? null : () => _load(refresh: true),
+              icon: const Icon(Icons.refresh, size: 22)),
+          if (widget.onClose != null)
+            IconButton(
+                tooltip: 'Tutup kartu pertanyaan',
+                onPressed: widget.onClose,
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 40),
+                icon: const Icon(Icons.close, size: 20, color: diaryPurple))
         ]),
-        const Text('Pilih satu kartu, beri ruang untuk ceritamu.',
-            style: TextStyle(fontSize: 11, color: Color(0xff6b7280))),
-        const SizedBox(height: 12),
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          for (var i = 0; i < 3; i++) ...[
-            if (i > 0) const SizedBox(width: 8),
-            Expanded(
-                child: Semantics(
-                    button: true,
-                    selected: _selected == i,
-                    label:
-                        'Kartu pertanyaan ${i + 1}, ${_selected == i ? 'terbuka' : 'tertutup'}',
-                    child: InkWell(
-                        key: ValueKey('prompt-card-$i'),
-                        onTap: () => setState(() => _selected = i),
-                        borderRadius: BorderRadius.circular(16),
-                        child: TweenAnimationBuilder<double>(
-                            tween: Tween(end: _selected == i ? math.pi : 0),
-                            duration: MediaQuery.disableAnimationsOf(context)
-                                ? Duration.zero
-                                : const Duration(milliseconds: 450),
-                            builder: (context, angle, _) => Transform(
-                                alignment: Alignment.center,
-                                transform: Matrix4.identity()
-                                  ..setEntry(3, 2, .001)
-                                  ..rotateY(angle),
-                                child: Container(
-                                    height: 90,
-                                    decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                            colors: angle < math.pi / 2
-                                                ? const [
-                                                    Color(0xff8c4393),
-                                                    Color(0xffb66ac3)
-                                                  ]
-                                                : const [
-                                                    Color(0xfff2e2f3),
-                                                    Color(0xfffaf5ff)
-                                                  ]),
-                                        borderRadius: BorderRadius.circular(16),
-                                        border: Border.all(
-                                            color: const Color(0xffe9d5ed))),
-                                    child: Transform(
-                                        alignment: Alignment.center,
-                                        transform: Matrix4.rotationY(
-                                            angle >= math.pi / 2 ? math.pi : 0),
-                                        child: Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              Icon(
-                                                  angle < math.pi / 2
-                                                      ? Icons
-                                                          .auto_awesome_outlined
-                                                      : Icons
-                                                          .chat_bubble_outline,
-                                                  color: angle < math.pi / 2
-                                                      ? Colors.white
-                                                      : diaryPurple,
-                                                  size: 24),
-                                              const SizedBox(height: 6),
-                                              Text(
-                                                  angle < math.pi / 2
-                                                      ? '${i + 1}'
-                                                      : _deck.cards[i].category,
-                                                  textAlign: TextAlign.center,
-                                                  style: TextStyle(
-                                                      fontSize: 10,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                      color: angle < math.pi / 2
-                                                          ? Colors.white
-                                                          : diaryPlum))
-                                            ]))))))))
-          ]
-        ]),
-        if (_selected != null) ...[
+        const SizedBox(height: 16),
+        if (_loading) const LinearProgressIndicator(),
+        if (_error != null)
+          Text(_error!, style: const TextStyle(fontSize: 11, color: diaryPlum)),
+        if (!_loading && _error == null)
+          Row(children: [
+            for (var i = 0; i < _cards.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              Expanded(
+                  child: Semantics(
+                      button: true,
+                      selected: _selected == i,
+                      label:
+                          'Kartu pertanyaan ${i + 1}, ${_selected == i ? 'terbuka' : 'tertutup'}',
+                      child: InkWell(
+                          key: ValueKey('prompt-card-$i'),
+                          onTap: () => setState(() => _selected = i),
+                          borderRadius: BorderRadius.circular(16),
+                          child: TweenAnimationBuilder<double>(
+                              tween: Tween(end: _selected == i ? math.pi : 0),
+                              duration: MediaQuery.disableAnimationsOf(context)
+                                  ? Duration.zero
+                                  : const Duration(milliseconds: 450),
+                              builder: (context, angle, _) => Transform(
+                                  alignment: Alignment.center,
+                                  transform: Matrix4.identity()
+                                    ..setEntry(3, 2, .001)
+                                    ..rotateY(angle),
+                                  child: Container(
+                                      height: 74,
+                                      decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                              colors: angle < math.pi / 2
+                                                  ? const [
+                                                      Color(0xffb77ac5),
+                                                      Color(0xff9c56ae)
+                                                    ]
+                                                  : const [
+                                                      Color(0xfff2e2f3),
+                                                      Color(0xfffaf5ff)
+                                                    ]),
+                                          borderRadius:
+                                              BorderRadius.circular(16),
+                                          border:
+                                              Border.all(color: Colors.white),
+                                          boxShadow: const [
+                                            BoxShadow(
+                                                color: Color(0x33622774),
+                                                blurRadius: 8,
+                                                offset: Offset(0, 4))
+                                          ]),
+                                      child: Transform(
+                                          alignment: Alignment.center,
+                                          transform: Matrix4.rotationY(
+                                              angle >= math.pi / 2
+                                                  ? math.pi
+                                                  : 0),
+                                          child: Padding(
+                                              padding: const EdgeInsets.all(6),
+                                              child:
+                                                  Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                                Icon(
+                                                    angle < math.pi / 2
+                                                        ? Icons
+                                                            .auto_awesome_outlined
+                                                        : Icons
+                                                            .chat_bubble_outline,
+                                                    color: angle < math.pi / 2
+                                                        ? Colors.white
+                                                        : diaryPurple,
+                                                    size: 25),
+                                                const SizedBox(height: 5),
+                                                Flexible(
+                                                    child: Text(
+                                                        angle < math.pi / 2
+                                                            ? '${i + 1}'
+                                                            : _cards[i]
+                                                                .category,
+                                                        textAlign:
+                                                            TextAlign.center,
+                                                        style: TextStyle(
+                                                            fontSize: angle <
+                                                                    math.pi / 2
+                                                                ? 21
+                                                                : 9,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            color: angle <
+                                                                    math.pi / 2
+                                                                ? Colors.white
+                                                                : diaryPlum)))
+                                              ])))))))))
+            ]
+          ]),
+        if (_selected != null && !_loading && _error == null) ...[
           const SizedBox(height: 14),
-          Text('“${_deck.cards[_selected!].question}”',
+          Text('“${_cards[_selected!].question}”',
               style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
@@ -344,10 +563,7 @@ class _DailyPromptCardsState extends State<DailyPromptCards> {
           Align(
               alignment: Alignment.centerRight,
               child: FilledButton(
-                  onPressed: () => widget.onAnswer(_deck.cards[_selected!]),
-                  style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xfff2e2f3),
-                      foregroundColor: diaryPlum),
+                  onPressed: () => widget.onAnswer(_cards[_selected!]),
                   child: const Text('Jawab di Diari')))
         ]
       ]));
@@ -384,10 +600,17 @@ class DiaryCalendar extends StatelessWidget {
     return DiaryCard(
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(Icons.calendar_month_outlined, color: diaryPurple, size: 22),
-        SizedBox(width: 12),
-        Expanded(
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+                color: const Color(0xfffcf5ff),
+                borderRadius: BorderRadius.circular(12)),
+            child: const Icon(Icons.calendar_month_outlined,
+                color: diaryPurple, size: 22)),
+        const SizedBox(width: 12),
+        const Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('PALET WARNA DIARI',
@@ -437,9 +660,13 @@ class DiaryCalendar extends StatelessWidget {
                   if (day < 1 || day > length)
                     return const SizedBox(height: 40);
                   final records = byDay[day] ?? const <DiaryEntry>[];
-                  final content = records.isEmpty
-                      ? null
-                      : DiaryContent.parse(records.first.note);
+                  final palettes = records
+                      .map((e) => DiaryContent.parse(e.note).palette)
+                      .whereType<String>()
+                      .toSet()
+                      .toList();
+                  final colors =
+                      palettes.map((p) => diaryPalettes[p]!.$2).toList();
                   final date = wibFromParts(month.year, month.month, day),
                       isSelected = selectedDay == diaryDay(date);
                   return Semantics(
@@ -449,13 +676,30 @@ class DiaryCalendar extends StatelessWidget {
                           onTap: records.isEmpty ? null : () => onDay(date),
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
+                              key: ValueKey('diary-date-${diaryDay(date)}'),
                               margin: const EdgeInsets.symmetric(horizontal: 2),
                               constraints: const BoxConstraints(minHeight: 40),
                               decoration: BoxDecoration(
-                                  color: diaryPalettes[content?.palette]?.$2 ??
-                                      (records.isEmpty
+                                  color: colors.isNotEmpty
+                                      ? colors.first
+                                      : records.isEmpty
                                           ? Colors.transparent
-                                          : const Color(0xfff0e5f3)),
+                                          : const Color(0xfff0e5f3),
+                                  gradient: colors.length > 1
+                                      ? LinearGradient(colors: [
+                                          for (final color in colors) ...[
+                                            color,
+                                            color
+                                          ]
+                                        ], stops: [
+                                          for (var i = 0;
+                                              i < colors.length;
+                                              i++) ...[
+                                            i / colors.length,
+                                            (i + 1) / colors.length
+                                          ]
+                                        ])
+                                      : null,
                                   borderRadius: BorderRadius.circular(12),
                                   border: isSelected
                                       ? Border.all(color: diaryPurple, width: 2)
@@ -465,7 +709,11 @@ class DiaryCalendar extends StatelessWidget {
                                   children: [
                                     Text('$day',
                                         style: TextStyle(
-                                            fontSize: 11,
+                                            fontSize: 12,
+                                            color: palettes.isEmpty
+                                                ? const Color(0xff374151)
+                                                : diaryPalettes[palettes.first]!
+                                                    .$3,
                                             fontWeight: records.isEmpty
                                                 ? FontWeight.w400
                                                 : FontWeight.w700)),
@@ -480,20 +728,27 @@ class DiaryCalendar extends StatelessWidget {
                                   ]))));
                 }))
             ])),
-      const Divider(height: 24),
+      const Divider(height: 24, color: Color(0xfff3f4f6)),
       const Text('Filter berdasarkan nuansa cerita hari:',
+          textAlign: TextAlign.center,
           style: TextStyle(fontSize: 10, color: Color(0xff6b7280))),
       const SizedBox(height: 8),
-      Wrap(spacing: 5, runSpacing: 6, children: [
-        for (final key in diaryPalettes.keys)
-          DiaryPalettePill(
-              palette: key,
-              selected: palette == key,
-              onTap: () => onPalette(palette == key ? null : key))
-      ]),
+      Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 7,
+          runSpacing: 7,
+          children: [
+            for (final key in diaryPalettes.keys)
+              DiaryPalettePill(
+                  palette: key,
+                  bullet: true,
+                  selected: palette == key,
+                  onTap: () => onPalette(palette == key ? null : key))
+          ]),
       const SizedBox(height: 10),
       const Text(
           'Tanggal berwarna = diari tercatat • Titik ungu = tersimpan di Vault',
+          textAlign: TextAlign.center,
           style: TextStyle(fontSize: 9, color: Color(0xff9ca3af), height: 1.5))
     ]));
   }

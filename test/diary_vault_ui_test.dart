@@ -33,7 +33,7 @@ void main() {
                     displayName: 'P',
                     accessToken: 'test')))));
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('diary-badge-bar')));
+    await tester.tap(find.byKey(const ValueKey('diary-badges-header')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(
@@ -94,7 +94,8 @@ void main() {
     await tester.tap(find.text('Tulis Cerita Diari Baru'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.enterText(find.widgetWithText(TextField, 'Catatan diary'),
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Tulis ceritamu di sini...'),
         'Cerita yang baru disimpan');
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
@@ -154,7 +155,8 @@ void main() {
             theme: buildMalvaTheme(),
             home: DiaryHistoryScreen(apiClient: api, session: a))));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Kenangan lama'));
+    await tester.scrollUntilVisible(find.text('Kenangan lama'), 300,
+        scrollable: find.byType(Scrollable).first);
     await tester.pump();
     await tester.tap(find.text('Kenangan lama'));
     await tester.pumpAndSettle();
@@ -172,9 +174,12 @@ void main() {
         'new');
     await tester.pageBack();
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const ValueKey('diary-badge-bar')));
+    await tester.drag(find.byType(ListView).first, const Offset(0, 4000));
+    await tester.pumpAndSettle();
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('diary-badges-header')));
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('diary-badge-bar')));
+    await tester.tap(find.byKey(const ValueKey('diary-badges-header')));
     await tester.pumpAndSettle();
     expect(
         tester
@@ -185,7 +190,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
   });
-  testWidgets('private appreciation modal is hidden after A to B to A',
+  testWidgets('private reflection cards are hidden after A to B to A',
       (tester) async {
     const a = AuthSession(
         role: UserRole.patient,
@@ -207,11 +212,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Tulis Cerita Diari Baru'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Hal kecil yang kuapresiasi'));
+    await tester.ensureVisible(find.text('Pertanyaan Refleksi'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Hal kecil yang kuapresiasi'));
+    await tester.tap(find.text('Pertanyaan Refleksi'));
     await tester.pumpAndSettle();
-    expect(find.byType(CheckboxListTile), findsWidgets);
+    expect(find.byKey(const ValueKey('prompt-card-0')), findsOneWidget);
     container.read(authStateProvider.notifier).setSession(const AuthSession(
         role: UserRole.patient,
         identifier: 'b',
@@ -220,7 +225,7 @@ void main() {
     await tester.pumpAndSettle();
     container.read(authStateProvider.notifier).setSession(a);
     await tester.pumpAndSettle();
-    expect(find.byType(CheckboxListTile), findsNothing);
+    expect(find.byKey(const ValueKey('prompt-card-0')), findsNothing);
     expect(tester.takeException(), isNull);
   });
   for (final cancel in [true, false]) {
@@ -265,7 +270,8 @@ void main() {
                       displayName: 'P',
                       accessToken: 'p')))));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Cerita privat'));
+      await tester.scrollUntilVisible(find.text('Cerita privat'), 300,
+          scrollable: find.byType(Scrollable).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cerita privat'));
       await tester.pumpAndSettle();
@@ -313,7 +319,8 @@ void main() {
     await tester.tap(find.text('Jawab di Diari'));
     await tester.pumpAndSettle();
     await tester.enterText(
-        find.widgetWithText(TextField, 'Catatan diary'), 'Jawaban pribadiku.');
+        find.widgetWithText(TextField, 'Tulis ceritamu di sini...'),
+        'Jawaban pribadiku.');
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
     final content = DiaryContent.parse(saved!['note'] as String);
@@ -321,13 +328,16 @@ void main() {
     expect(content.text, 'Jawaban pribadiku.');
     expect(saved!['mood'], 'okay');
   });
-  testWidgets('badge bar opens complete catalogue without fabricated progress',
+  testWidgets('header opens complete catalogue without fabricated progress',
       (tester) async {
     await tester.pumpWidget(
         const ProviderScope(child: MaterialApp(home: DiaryHistoryScreen())));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const ValueKey('diary-badge-bar')));
-    await tester.tap(find.byKey(const ValueKey('diary-badge-bar')));
+    await tester.drag(find.byType(ListView).first, const Offset(0, 4000));
+    await tester.pumpAndSettle();
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('diary-badges-header')));
+    await tester.tap(find.byKey(const ValueKey('diary-badges-header')));
     await tester.pumpAndSettle();
     expect(find.text('0 dari 100 Lencana Terbuka'), findsOneWidget);
     expect(find.text('Langkah Pertama'), findsOneWidget);

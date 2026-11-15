@@ -35,10 +35,13 @@ void main() {
         child:
             MaterialApp(home: DiaryHistoryScreen(apiClient: api, session: a))));
     await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).first, const Offset(0, 4000));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Tulis Cerita Diari Baru'));
     await tester.pumpAndSettle();
     await tester.enterText(
-        find.widgetWithText(TextField, 'Catatan diary'), 'PRIVATE_DRAFT_A');
+        find.widgetWithText(TextField, 'Tulis ceritamu di sini...'),
+        'PRIVATE_DRAFT_A');
     container.read(authStateProvider.notifier).setSession(const AuthSession(
         role: UserRole.patient,
         identifier: 'b',
@@ -91,15 +94,21 @@ void main() {
                     displayName: 'P',
                     accessToken: 'test')))));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('SERVER_DIARY'), 300,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     expect(find.text('SERVER_DIARY'), findsOneWidget);
     expect(container.read(malvaStoreProvider).diaryEntries.single.id,
         'server-existing');
+    await tester.drag(find.byType(ListView).first, const Offset(0, 4000));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Tulis Cerita Diari Baru'));
     await tester.pumpAndSettle();
     await tester.enterText(
         find.widgetWithText(TextField, 'Judul'), 'Cerita baru');
     await tester.enterText(
-        find.widgetWithText(TextField, 'Catatan diary'), 'Isi diary baru');
+        find.widgetWithText(TextField, 'Tulis ceritamu di sini...'),
+        'Isi diary baru');
     await tester.ensureVisible(find.text('Simpan'));
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
@@ -110,6 +119,9 @@ void main() {
             .where((e) => e.id == 'server-new')
             .length,
         1);
+    await tester.scrollUntilVisible(find.text('Cerita baru'), 300,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     expect(find.text('Cerita baru'), findsOneWidget);
   });
   testWidgets(
@@ -158,6 +170,9 @@ void main() {
     await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
         child: const MaterialApp(home: DiaryHistoryScreen())));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('DIARY_TITLE'), 300,
+        scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(find.text('DIARY_TITLE'), findsOneWidget);
     expect(find.textContaining('DIARY_BODY'), findsOneWidget);

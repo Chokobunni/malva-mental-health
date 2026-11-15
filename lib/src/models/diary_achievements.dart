@@ -4,32 +4,63 @@ import '../time/wib.dart';
 import 'diary_content.dart';
 import 'diary_catalog.dart';
 
-/// Draw without replacement, keeping all three visible choices distinct.
+/// Visit every ordered three-card arrangement once using a shuffled rank cycle.
 class DiaryPromptDeck {
-  DiaryPromptDeck({Random? random}) : _random = random ?? Random() {
-    _refill();
-    cards = List.generate(3, (_) => _next(const {}));
-  }
-  final Random _random;
-  final _queue = <DiaryPrompt>[];
-  late final List<DiaryPrompt> cards;
-  void _refill() => _queue.addAll([...diaryPrompts]..shuffle(_random));
-  DiaryPrompt _next(Set<int> exclude) {
-    if (_queue.isEmpty) _refill();
-    var at = _queue.indexWhere((p) => !exclude.contains(p.id));
-    if (at < 0) {
-      // Carry the excluded cards into the next cycle without an immediate repeat.
-      final deferred = [..._queue];
-      _queue.clear();
-      _refill();
-      _queue.removeWhere((p) => deferred.any((d) => d.id == p.id));
-      _queue.addAll(deferred);
-      at = _queue.indexWhere((p) => !exclude.contains(p.id));
+  DiaryPromptDeck({Random? random, Map<String, dynamic>? state})
+      : _random = random ?? Random() {
+    if (state != null &&
+        state['start'] is int &&
+        state['step'] is int &&
+        state['cursor'] is int &&
+        state['start'] >= 0 &&
+        state['start'] < cycleSize &&
+        _validStep(state['step'] as int) &&
+        state['cursor'] >= 0 &&
+        state['cursor'] <= cycleSize) {
+      _start = state['start'];
+      _step = state['step'];
+      _cursor = state['cursor'];
+    } else {
+      _reset();
     }
-    return _queue.removeAt(at);
+    refresh();
+  }
+  static const cycleSize = 100 * 99 * 98;
+  // Keep each rank digit far enough apart that exclusion remapping cannot
+  // leave a question in the same slot on two consecutive hands.
+  static bool _validStep(int step) =>
+      step >= 99 * 98 &&
+      step <= cycleSize - 99 * 98 &&
+      step.gcd(cycleSize) == 1 &&
+      step % 98 >= 3 &&
+      step % 98 <= 95 &&
+      step ~/ 98 % 99 >= 2 &&
+      step ~/ 98 % 99 <= 95;
+  final Random _random;
+  late int _start, _step, _cursor;
+  List<DiaryPrompt> cards = [];
+  Map<String, dynamic> toJson() =>
+      {'start': _start, 'step': _step, 'cursor': _cursor};
+  void _reset() {
+    _start = _random.nextInt(cycleSize);
+    do {
+      _step = _random.nextInt(cycleSize - 1) + 1;
+    } while (!_validStep(_step));
+    _cursor = 0;
   }
 
-  void refresh(int slot) => cards[slot] = _next(cards.map((p) => p.id).toSet());
+  void refresh([int? slot]) {
+    if (_cursor == cycleSize) _reset();
+    final rank = (_start + _cursor++ * _step) % cycleSize;
+    final a = rank ~/ (99 * 98);
+    var b = rank ~/ 98 % 99;
+    if (b >= a) b++;
+    var c = rank % 98;
+    for (final excluded in ([a, b]..sort())) {
+      if (c >= excluded) c++;
+    }
+    cards = [diaryPrompts[a], diaryPrompts[b], diaryPrompts[c]];
+  }
 }
 
 const diarySubjectiveBadges = <int>{

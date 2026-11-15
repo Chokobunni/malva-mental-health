@@ -5,8 +5,39 @@ import 'package:malva_mental_health/src/screens/diary_editor_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
 import 'record_render_capture.dart';
+import 'package:malva_mental_health/src/models.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 
 void main() {
+  testWidgets('edit diary reference composition', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await loadRecordCaptureFonts();
+    enableRecordCaptureRendering();
+    final boundary = GlobalKey();
+    await tester.pumpWidget(ProviderScope(
+        child: RepaintBoundary(
+            key: boundary,
+            child: MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: buildMalvaTheme(),
+                home: DiaryEditorScreen(
+                    initialEntry: DiaryEntry(
+                        id: 'reference',
+                        createdAt: wibFromParts(2026, 11, 8),
+                        mood: MoodValue.okay,
+                        title: 'Bertemu dengan teman',
+                        note: ''),
+                    api: MalvaApiClient(),
+                    accessToken: 'test',
+                    onSave: (_) async => true)))));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await captureRecord(tester, boundary, 'diary-edit-reference-390.png');
+    resetRecordCaptureRendering();
+  });
   for (final width in [320.0, 390.0]) {
     testWidgets('diary controls fit width $width and large text',
         (tester) async {
@@ -36,6 +67,19 @@ void main() {
       expect(tester.takeException(), isNull);
       await captureRecord(
           tester, boundary, 'diary-editor-${width.toInt()}.png');
+      await tester.ensureVisible(find.text('Tandai Topik Cerita'));
+      await tester.pumpAndSettle();
+      await captureRecord(
+          tester, boundary, 'diary-editor-topics-${width.toInt()}.png');
+      await tester.ensureVisible(find.text('Pertanyaan Refleksi'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pertanyaan Refleksi'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await captureRecord(
+          tester, boundary, 'diary-editor-cards-${width.toInt()}.png');
+      await tester.tap(find.byTooltip('Tutup kartu pertanyaan'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Pengaturan font'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);

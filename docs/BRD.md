@@ -1,5 +1,7 @@
 # Business Requirements Document (BRD) - Malva Mental Health
 
+Diary 0.1.30 (16 November 2026): tujuh koreksi gambar pengguna diterapkan pada Vault, kalender/palet, daftar cerita dan editor. Header menjadi akses lencana; pilihan apresiasi editor dipindah ke halaman lencana dan ditautkan ke diari pilihan pasien, dengan tetap mempertahankan bukti lama. Kartu refleksi bisa dibuka/ditutup; refresh mengganti ketiga posisi dan tidak mengulang susunan sampai 970.200 susunan habis. Daftar memuat hanya foto/sketsa pertama secara lazy dengan token akun terkini. Tidak ada perubahan kontrak HTTP/skema.
+
 ### Ruang Cerita & Diari — 15 November 2026
 
 Pasien memperoleh pemantik dari seluruh 100 pertanyaan refleksi harian, memilih satu dari tiga kartu tertutup dan dapat menjawabnya langsung di diari. Positive Vault menyimpan catatan pilihan untuk dibaca ulang atau diacak. Kalender dan filter palet memetakan nuansa cerita secara terpisah dari Mood Tracker.

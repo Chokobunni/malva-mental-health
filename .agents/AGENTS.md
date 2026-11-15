@@ -502,3 +502,9 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Bell muncul jika waktu dan offset pengingat tersimpan. Dialog pengingat tidak menampilkan helper rentang; validasi 0–10080 tetap aktif. Check/uncheck dan counter mempertahankan posisi scroll.
 - Kartu Sub-Tugas memakai ringkasan jadwal yang sama dengan Ya/Tidak sebelum Daftar Langkah: tile hari efektif untuk Pilih Hari Tertentu, atau segmen progres mingguan untuk Target Frekuensi. Sumbernya jadwal dan completion server; ringkasan tidak menambah izin koreksi di luar jadwal.
 - Rujukan: [desain](../docs/superpowers/specs/2026-11-13-goals-sync-fixes-design.md), [rencana](../docs/superpowers/plans/2026-11-13-goals-sync-fixes.md).
+
+## Penyempurnaan Diary referensi (2026-11-16)
+
+- Tujuh acuan mengatur Vault, kalender warna, list kartu dan editor. Lencana hanya melalui header; CTA apresiasi editor dipindah ke halaman lencana: pasien memilih diari tersimpan lalu pengalaman pribadi; metadata lama tetap dipertahankan, gagal simpan menjaga pilihan dan batas6000byte tetap berlaku. Hashtag terlihat sebelum fokus. Refleksi/Vault berada di atas cerita; close kartu tidak melepas prompt.
+- Riwayat susunan tiga kartu dibagi home/editor, disimpan sebelum tampil dengan SecureStore per akun/perangkat. Setiap posisi berubah saat refresh; 970.200 susunan berurutan unik sebelum reset. Gagal storage menampilkan retry.
+- Daftar diari memuat preview foto pertama dan sketsa pertama secara lazy, decode720px; reader tetap full-size. Refresh token pemilik sama memperbarui preview. Palet per tanggal WIB memuat semua warna tersimpan pada hari itu. Tidak ada perubahan API/skema/dependency.

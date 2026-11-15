@@ -36,21 +36,23 @@ class DiaryContent {
           ? diaryPrompts[promptId! - 1]
           : null;
 
-  DiaryContent copyWith({String? text, bool? inVault}) => DiaryContent(
-      text: text ?? this.text,
-      font: font,
-      size: size,
-      color: color,
-      align: align,
-      height: height,
-      media: media,
-      palette: palette,
-      promptId: promptId,
-      selfNote: selfNote,
-      tags: tags,
-      appreciations: appreciations,
-      brushColors: brushColors,
-      inVault: inVault ?? this.inVault);
+  DiaryContent copyWith(
+          {String? text, bool? inVault, List<int>? appreciations}) =>
+      DiaryContent(
+          text: text ?? this.text,
+          font: font,
+          size: size,
+          color: color,
+          align: align,
+          height: height,
+          media: media,
+          palette: palette,
+          promptId: promptId,
+          selfNote: selfNote,
+          tags: tags,
+          appreciations: appreciations ?? this.appreciations,
+          brushColors: brushColors,
+          inVault: inVault ?? this.inVault);
 
   factory DiaryContent.parse(String note) {
     final start = note.lastIndexOf(marker);

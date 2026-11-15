@@ -47,7 +47,8 @@ void main() {
     await tester.enterText(
         find.widgetWithText(TextField, 'Judul'), 'Hari baru');
     await tester.enterText(
-        find.widgetWithText(TextField, 'Catatan diary'), 'Cerita saya');
+        find.widgetWithText(TextField, 'Tulis ceritamu di sini...'),
+        'Cerita saya');
     await tester.tap(find.byTooltip('Pengaturan font'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('H2'));
