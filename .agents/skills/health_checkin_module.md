@@ -1,5 +1,7 @@
 # Check-in, diary, review dan PDF
 
+Editor lampiran (0.1.28): Edit gambar membuka PNG privat yang sudah tersimpan sebagai dasar kanvas; pena/penghapus/rotasi bekerja pada pikselnya, rasio/transparansi tetap dan undo/redo hanya untuk sesi edit berjalan. Ganti foto membuka galeri. Upload baru mengganti referensi pada posisi yang sama hanya setelah sukses, juga pada enam lampiran; batal/gagal download/decode/upload mempertahankan yang lama. URL GET wajib origin/path diary valid, tanpa mengikuti redirect; respons dari generasi akun lama ditolak. Berkas server lama tidak ditimpa. Uji tambahan: diary_attachment_edit, pixel PNG reopened pada diary_drawing_screen, serta pembacaan privat diary_media_api.
+
 ## Diary kreatif dan batas konsumsi (2026-11-15)
 
 Diary memakai editor penuh dan kanvas terpisah; mood legacy dipertahankan tanpa input emotikon. Font/ukuran/warna/perataan/jarakbaris dan media privat disimpan sebagai suffix `<!--malva-diary-v1:BASE64URL_JSON-->` pada note yang ada, dua newline setelah teks atau marker pada index0 bila media saja. Parser harus menjaga catatan legacy. Normalisasi server tidak boleh merusak marker atau Unicode: batas judul160byte/note6000byte ditolak, bukan dipotong. PDF/CSV merender teks/jumlah lampiran saja; backup JSON mempertahankan note penuh.

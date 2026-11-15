@@ -12,7 +12,9 @@ void main() {
   setUpAll(loadRecordCaptureFonts);
 
   Future<void> open(WidgetTester tester, ValueChanged<Uint8List?> result,
-      {Size size = const Size(390, 844), double scale = 1}) async {
+      {Size size = const Size(390, 844),
+      double scale = 1,
+      ui.Image? initialImage}) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -31,7 +33,8 @@ void main() {
                     onPressed: () async {
                       result(await Navigator.of(context).push<Uint8List>(
                         MaterialPageRoute(
-                            builder: (_) => const DiaryDrawingScreen()),
+                            builder: (_) =>
+                                DiaryDrawingScreen(initialImage: initialImage)),
                       ));
                     },
                     child: const Text('Open')),
@@ -55,7 +58,15 @@ void main() {
   Future<void> finish(WidgetTester tester) async {
     await tester.runAsync(() async {
       await tester.tap(find.text('Selesai'));
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      final elapsed = Stopwatch()..start();
+      while (find.byType(DiaryDrawingScreen).evaluate().isNotEmpty &&
+          elapsed.elapsed < const Duration(seconds: 15)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      expect(find.byType(DiaryDrawingScreen), findsNothing,
+          reason:
+              'Wait for PNG export and route completion, not a fixed delay.');
     });
     await tester.pumpAndSettle();
   }
@@ -77,6 +88,64 @@ void main() {
       return result;
     }))!;
   }
+
+  testWidgets('reopened PNG pixels can be erased and undo restores them',
+      (tester) async {
+    final initial = (await tester.runAsync(() async {
+      final recorder = ui.PictureRecorder();
+      Canvas(recorder).drawColor(const Color(0xffaa22cc), BlendMode.src);
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(120, 90);
+      picture.dispose();
+      return image;
+    }))!;
+    Uint8List? result;
+    await open(tester, (value) => result = value, initialImage: initial);
+    initial.dispose(); // The drawing route must keep its own image reference.
+    await tester.tap(find.text('ERASER'));
+    await tester.pump();
+    await stroke(tester, y: .25);
+    await tester.tap(find.byTooltip('Urungkan'));
+    await tester.pump();
+    await stroke(tester, y: .75);
+    await finish(tester);
+    final image = await decode(tester, result!);
+    expect((image.width, image.height), (120, 90));
+    expect(image.pixels.sublist(0, 4), [170, 34, 204, 255]);
+    expect(image.pixels[(22 * 120 + 60) * 4 + 3], 255);
+    expect(image.pixels[(67 * 120 + 60) * 4 + 3], 0);
+  });
+
+  testWidgets(
+      'portrait drawing reopens without stretching and rotates correctly',
+      (tester) async {
+    final initial = (await tester.runAsync(() async {
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      canvas.drawRect(const Rect.fromLTWH(0, 0, 90, 60),
+          Paint()..color = const Color(0xffee1122));
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(90, 120);
+      picture.dispose();
+      return image;
+    }))!;
+    Uint8List? result;
+    await open(tester, (value) => result = value, initialImage: initial);
+    initial.dispose();
+    expect(
+        tester
+            .getSize(find.byKey(const Key('diary-drawing-canvas')))
+            .aspectRatio,
+        closeTo(.75, .01));
+    await tester.tap(find.byTooltip('Putar kanvas 90°'));
+    await tester.pump();
+    await finish(tester);
+    final image = await decode(tester, result!);
+    expect((image.width, image.height), (120, 90));
+    expect(image.pixels[(45 * 120 + 90) * 4], 238);
+    expect(image.pixels[(45 * 120 + 90) * 4 + 3], 255);
+    expect(image.pixels[(45 * 120 + 20) * 4 + 3], 0);
+  });
 
   testWidgets('drawing exports a real PNG with ink and an opaque paper',
       (tester) async {

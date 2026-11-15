@@ -8,7 +8,10 @@ import '../theme.dart';
 
 /// Returns the finished PNG to the diary editor, or null when cancelled.
 class DiaryDrawingScreen extends StatefulWidget {
-  const DiaryDrawingScreen({super.key});
+  const DiaryDrawingScreen({super.key, this.initialImage});
+
+  /// The caller retains ownership; this route clones the image for its lifetime.
+  final ui.Image? initialImage;
 
   @override
   State<DiaryDrawingScreen> createState() => _DiaryDrawingScreenState();
@@ -55,6 +58,24 @@ class _DiaryDrawingScreenState extends State<DiaryDrawingScreen> {
   int _turns = 0;
   bool _sticker = false;
   bool _exporting = false;
+  ui.Image? _baseImage;
+  Size get _baseSize => _baseImage == null
+      ? const Size(1200, 900)
+      : Size(_baseImage!.width.toDouble(), _baseImage!.height.toDouble());
+
+  @override
+  void initState() {
+    super.initState();
+    _baseImage = widget.initialImage?.clone();
+    // Preserve existing PNG transparency rather than flattening it onto white.
+    if (_baseImage != null) _sticker = true;
+  }
+
+  @override
+  void dispose() {
+    _baseImage?.dispose();
+    super.dispose();
+  }
 
   Offset _normalized(Offset point, Size size) => Offset(
       (point.dx / size.width).clamp(0, 1),
@@ -107,9 +128,9 @@ class _DiaryDrawingScreenState extends State<DiaryDrawingScreen> {
     try {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
-      const baseSize = Size(1200, 900);
+      final baseSize = _baseSize;
       final rotated = _turns.isOdd;
-      final size = rotated ? const Size(900, 1200) : baseSize;
+      final size = rotated ? Size(baseSize.height, baseSize.width) : baseSize;
       switch (_turns) {
         case 1:
           canvas.translate(size.width, 0);
@@ -121,7 +142,10 @@ class _DiaryDrawingScreenState extends State<DiaryDrawingScreen> {
           canvas.translate(0, size.height);
           canvas.rotate(-math.pi / 2);
       }
-      _DrawingPainter(strokes: _strokes, paper: _sticker ? null : _paper)
+      _DrawingPainter(
+              strokes: _strokes,
+              paper: _sticker ? null : _paper,
+              baseImage: _baseImage)
           .paint(canvas, baseSize);
       picture = recorder.endRecording();
       image = await picture.toImage(size.width.toInt(), size.height.toInt());
@@ -338,7 +362,9 @@ class _DiaryDrawingScreenState extends State<DiaryDrawingScreen> {
                     child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 720),
                   child: AspectRatio(
-                    aspectRatio: _turns.isOdd ? 3 / 4 : 4 / 3,
+                    aspectRatio: _turns.isOdd
+                        ? 1 / _baseSize.aspectRatio
+                        : _baseSize.aspectRatio,
                     child: DecoratedBox(
                       decoration:
                           BoxDecoration(color: Colors.white, boxShadow: [
@@ -365,6 +391,7 @@ class _DiaryDrawingScreenState extends State<DiaryDrawingScreen> {
                                 child: CustomPaint(
                                     size: size,
                                     foregroundPainter: _DrawingPainter(
+                                        baseImage: _baseImage,
                                         strokes: _strokes,
                                         paper: _sticker ? null : _paper),
                                     painter: _sticker
@@ -533,9 +560,11 @@ class _DiaryDrawingScreenState extends State<DiaryDrawingScreen> {
 }
 
 class _DrawingPainter extends CustomPainter {
-  const _DrawingPainter({required this.strokes, required this.paper});
+  const _DrawingPainter(
+      {required this.strokes, required this.paper, this.baseImage});
   final List<_DrawingStroke> strokes;
   final Color? paper;
+  final ui.Image? baseImage;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -545,6 +574,14 @@ class _DrawingPainter extends CustomPainter {
     if (paper != null) canvas.drawRect(bounds, Paint()..color = paper!);
     // Keep the paper outside the ink layer so clearing reveals its real color.
     canvas.saveLayer(bounds, Paint());
+    final image = baseImage;
+    if (image != null) {
+      canvas.drawImageRect(
+          image,
+          Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+          bounds,
+          Paint());
+    }
     for (final stroke in strokes) {
       final paint = Paint()
         ..color = stroke.color.withValues(alpha: stroke.opacity)
