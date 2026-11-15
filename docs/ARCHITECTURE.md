@@ -1,8 +1,10 @@
 # System Architecture
 
+Diary 0.1.30 (16 November 2026): tujuh koreksi gambar pengguna diterapkan pada Vault, kalender/palet, daftar cerita dan editor. Header menjadi akses lencana; pilihan apresiasi editor dipindah ke halaman lencana dan ditautkan ke diari pilihan pasien, dengan tetap mempertahankan bukti lama. Kartu refleksi bisa dibuka/ditutup; refresh mengganti ketiga posisi dan tidak mengulang susunan sampai 970.200 susunan habis. Daftar memuat hanya foto/sketsa pertama secara lazy dengan token akun terkini. Tidak ada perubahan kontrak HTTP/skema.
+
 ### Diary, kartu refleksi dan lencana — 15 November 2026
 
-Katalog pertanyaan/lencana dibundel di klien. `DiaryPromptDeck` mengacak seluruh pool tanpa pengulangan sebelum habis. Evaluator murni menghasilkan 100 progres dari `DiaryEntry` tersinkron; tanggal dihitung dengan helper WIB. Metadata pilihan pengguna memakai envelope note yang ada (palette, promptId, selfNote, tags, appreciations, inVault dan colors per gambar), tanpa kontrak HTTP/kolom baru. Reader, editor, chat dan ekspor memakai codec bersama.
+Katalog pertanyaan/lencana dibundel di klien. `DiaryPromptDeck` mengunjungi 970.200 susunan tiga kartu tanpa pengulangan sebelum reset, dengan cursor SecureStore per akun/perangkat yang dibagi home/editor. Evaluator murni menghasilkan 100 progres dari `DiaryEntry` tersinkron; tanggal dihitung dengan helper WIB. Metadata pilihan pengguna memakai envelope note yang ada (palette, promptId, selfNote, tags, appreciations, inVault dan colors per gambar), tanpa kontrak HTTP/kolom baru. Reader, editor, chat dan ekspor memakai codec bersama.
 
 Aktivitas interaksi disimpan melalui port SecureStore dengan kunci akun, antrean tulis dan guard pergantian akun. Hidrasi tidak bergantung pada generasi GET diary; GET lama diinvalidasi sebelum mutasi. Progres berbasis isi dapat dihitung di perangkat lain, sedangkan riwayat baca/filter/refresh tetap lokal. Font Inter dibundel dengan lisensi OFL, tanpa unduhan runtime.
 

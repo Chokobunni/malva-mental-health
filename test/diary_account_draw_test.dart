@@ -26,7 +26,8 @@ void main() {
     await tester.tap(find.text('Tulis Cerita Diari Baru'));
     await tester.pumpAndSettle();
     await tester.enterText(
-        find.widgetWithText(TextField, 'Catatan diary'), 'PRIVATE_DRAFT_A');
+        find.widgetWithText(TextField, 'Tulis ceritamu di sini...'),
+        'PRIVATE_DRAFT_A');
     await tester.tap(find.byTooltip('Menggambar'));
     await tester.pumpAndSettle();
     expect(find.text('Gambar sebagai stiker'), findsOneWidget);

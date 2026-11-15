@@ -256,19 +256,13 @@ void main() {
     expect(parsed.plainText, contains(diaryPrompts[23].question));
     expect(parsed.plainText, isNot(contains('malva-diary-v1')));
   });
-  test('three prompts are distinct and the whole pool is reached before repeat',
-      () {
-    final deck = DiaryPromptDeck(random: Random(7));
-    final seen = <int>{...deck.cards.map((p) => p.id)};
-    for (var i = 0; i < 97; i++) {
-      deck.refresh(i % 3);
+  test('prompt arrangements survive a saved cursor without repeating', () {
+    var deck = DiaryPromptDeck(random: Random(7));
+    final seen = <String>{};
+    for (var i = 0; i < 2000; i++) {
       expect(deck.cards.map((p) => p.id).toSet().length, 3);
-      seen.add(deck.cards[i % 3].id);
-    }
-    expect(seen.length, 100);
-    for (var i = 0; i < 100; i++) {
-      deck.refresh(i % 3);
-      expect(deck.cards.map((p) => p.id).toSet().length, 3);
+      expect(seen.add(deck.cards.map((p) => p.id).join(',')), isTrue);
+      deck = DiaryPromptDeck(state: deck.toJson(), random: Random(7));
     }
   });
   test('empty history unlocks nothing; gaps never erase total progress', () {

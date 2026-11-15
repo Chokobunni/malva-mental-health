@@ -1,10 +1,12 @@
 # Product Requirements Document (PRD) - Malva Mental Health
 
+Diary 0.1.30 (16 November 2026): tujuh koreksi gambar pengguna diterapkan pada Vault, kalender/palet, daftar cerita dan editor. Header menjadi akses lencana; pilihan apresiasi editor dipindah ke halaman lencana dan ditautkan ke diari pilihan pasien, dengan tetap mempertahankan bukti lama. Kartu refleksi bisa dibuka/ditutup; refresh mengganti ketiga posisi dan tidak mengulang susunan sampai 970.200 susunan habis. Daftar memuat hanya foto/sketsa pertama secara lazy dengan token akun terkini. Tidak ada perubahan kontrak HTTP/skema.
+
 ### Kartu refleksi dan Apresiasi Diri — 15 November 2026
 
-- Landing Diary mengikuti HTML pengguna: header gradasi, kartu lunak, palet, kalender, daftar dan pembaca terpisah. Tiga kartu flip ditempatkan tepat di bawah Tulis Cerita Diari Baru, diikuti bar progres lencana; seluruh 100 pertanyaan tersedia tanpa duplikat di tiga kartu yang sama.
+- Landing Diary mengikuti HTML pengguna: header gradasi, kartu lunak, palet, kalender, daftar dan pembaca terpisah. Tiga kartu flip ditempatkan tepat di bawah Tulis Cerita Diari Baru, diikuti Vault; lencana dibuka dari header; seluruh 100 pertanyaan tersedia tanpa duplikat di tiga kartu yang sama.
 - Jawab di Diari membuka editor dengan pertanyaan terpasang; pilihan kartu juga tersedia di editor. Palet, tanggal WIB, Vault, topik, pesan penguat diri serta media/font bisa diedit dan dipertahankan saat membuka ulang.
-- Bar progres membuka 100 lencana dengan deskripsi, target, progres, pencarian dan filter kategori. Evaluator memakai data tersimpan tanpa streak. Pilihan pengalaman pasien memberi bukti untuk apresiasi subjektif; tidak ada analisis sentimen atau klaim pemulihan.
+- Tombol pada header membuka 100 lencana dengan deskripsi, target, progres, pencarian dan filter kategori. Evaluator memakai data tersimpan tanpa streak. Pilihan pengalaman pasien memberi bukti untuk apresiasi subjektif; tidak ada analisis sentimen atau klaim pemulihan.
 - Legacy plain note/mood/media dan consent tetap berlaku. Kegagalan simpan/hapus tidak menghilangkan draft/reader; respons lama dan seluruh route/modal akun lama ditolak setelah pergantian akun.
 
 ### Kriteria penerimaan diary dan obat — 15 November 2026

@@ -9,6 +9,7 @@ import 'package:malva_mental_health/src/screens/diary_history_screen.dart';
 import 'package:malva_mental_health/src/theme.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
 import 'record_render_capture.dart';
+import 'package:malva_mental_health/src/widgets/diary_design.dart';
 
 void main() {
   for (final width in [390.0, 320.0]) {
@@ -67,6 +68,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await captureRecord(tester, boundary, 'diary-main-${width.toInt()}.png');
+      await tester.ensureVisible(find.byType(DiaryVaultCard));
+      await tester.pumpAndSettle();
+      await captureRecord(tester, boundary, 'diary-vault-${width.toInt()}.png');
+      await tester.ensureVisible(find.byType(DiaryCalendar));
+      await tester.pumpAndSettle();
+      await captureRecord(
+          tester, boundary, 'diary-calendar-${width.toInt()}.png');
+      await tester.scrollUntilVisible(
+          find.text('Menyelesaikan Revisi Bab Desain Halaman Diari'), 300,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView).first, const Offset(0, -200));
+      await tester.pumpAndSettle();
+      await captureRecord(tester, boundary, 'diary-list-${width.toInt()}.png');
+      await tester.drag(find.byType(ListView).first, const Offset(0, 4000));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('prompt-card-0')));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
@@ -80,16 +97,20 @@ void main() {
           tester, boundary, 'diary-prompt-editor-${width.toInt()}.png');
       await tester.tap(find.byTooltip('Kembali'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byKey(const ValueKey('diary-badge-bar')));
-      await tester.tap(find.byKey(const ValueKey('diary-badge-bar')));
+      await tester.drag(find.byType(ListView).first, const Offset(0, 4000));
+      await tester.pumpAndSettle();
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('diary-badges-header')));
+      await tester.tap(find.byKey(const ValueKey('diary-badges-header')));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await captureRecord(
           tester, boundary, 'diary-badges-${width.toInt()}.png');
       await tester.tap(find.text('Kembali ke Diari'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(
-          find.text('Menyelesaikan Revisi Bab Desain Halaman Diari'));
+      await tester.scrollUntilVisible(
+          find.text('Menyelesaikan Revisi Bab Desain Halaman Diari'), 300,
+          scrollable: find.byType(Scrollable).first);
       await tester.pumpAndSettle();
       await tester
           .tap(find.text('Menyelesaikan Revisi Bab Desain Halaman Diari'));

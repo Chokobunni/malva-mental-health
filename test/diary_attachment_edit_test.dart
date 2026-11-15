@@ -94,6 +94,7 @@ void main() {
       await tester.pumpAndSettle();
       final replace = find.byTooltip('Ganti foto').at(1);
       await tester.ensureVisible(replace);
+      await tester.pumpAndSettle();
       await tester.tap(replace);
       await _flush(tester);
       await tester.tap(find.text('Simpan'));
@@ -168,6 +169,8 @@ void main() {
                     saved = entry;
                     return false;
                   }))));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byTooltip('Edit gambar'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Edit gambar'));
       await _flush(tester);

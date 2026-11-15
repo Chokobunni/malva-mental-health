@@ -7,7 +7,6 @@ import '../platform/platform_providers.dart';
 import '../models.dart';
 import '../models/diary_content.dart';
 import '../models/diary_catalog.dart';
-import '../models/diary_achievements.dart';
 import '../widgets/diary_design.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
@@ -22,6 +21,7 @@ class DiaryEditorScreen extends ConsumerStatefulWidget {
       this.initialEntry,
       this.initialPrompt,
       this.onPromptRefresh,
+      this.drawPrompts,
       required this.api,
       required this.accessToken,
       this.protectRoute,
@@ -29,6 +29,7 @@ class DiaryEditorScreen extends ConsumerStatefulWidget {
   final DiaryEntry? initialEntry;
   final DiaryPrompt? initialPrompt;
   final VoidCallback? onPromptRefresh;
+  final Future<List<DiaryPrompt>> Function()? drawPrompts;
   final MalvaApiClient api;
   final String? accessToken;
   final Widget Function(Widget)? protectRoute;
@@ -43,7 +44,7 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
   late final _original = widget.initialEntry == null
       ? DiaryContent(
           text: '',
-          palette: 'teduh',
+          palette: null,
           promptId: widget.initialPrompt?.id,
           inVault: true)
       : DiaryContent.parse(widget.initialEntry!.note);
@@ -90,6 +91,7 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
     _note.dispose();
     _selfNote.dispose();
     _tagInput.dispose();
+    _affirmationFocus.dispose();
     super.dispose();
   }
 
@@ -556,67 +558,6 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
           picked.year, picked.month, picked.day, current.hour, current.minute));
   }
 
-  void _chooseAppreciations() {
-    FocusManager.instance.primaryFocus?.unfocus();
-    showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (sheet) =>
-            (widget.protectRoute ?? (child) => child)(StatefulBuilder(
-                builder: (context, update) => SafeArea(
-                    child: SizedBox(
-                        height: MediaQuery.sizeOf(context).height * .75,
-                        child: Column(children: [
-                          Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 20),
-                              child: Row(children: [
-                                const Expanded(
-                                    child: Text('Hal kecil yang kuapresiasi',
-                                        style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w800,
-                                            color: diaryPlum))),
-                                IconButton(
-                                    tooltip: 'Selesai memilih apresiasi',
-                                    onPressed: () => Navigator.pop(sheet),
-                                    icon: const Icon(Icons.check,
-                                        color: diaryPurple))
-                              ])),
-                          const Padding(
-                              padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
-                              child: Text(
-                                  'Pilih yang sesuai dengan pengalaman dalam ceritamu. Tidak perlu memilih apa pun.',
-                                  style: TextStyle(
-                                      fontSize: 12, color: Colors.grey))),
-                          Expanded(
-                              child: ListView(children: [
-                            for (final badge in diaryBadges.where(
-                                (b) => diarySubjectiveBadges.contains(b.id)))
-                              CheckboxListTile(
-                                  value: _appreciations.contains(badge.id),
-                                  activeColor: diaryPurple,
-                                  title: Text(badge.title,
-                                      style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700)),
-                                  subtitle: Text(badge.description,
-                                      style: const TextStyle(fontSize: 11)),
-                                  onChanged: (checked) {
-                                    setState(() {
-                                      if (checked == true) {
-                                        _appreciations.add(badge.id);
-                                      } else {
-                                        _appreciations.remove(badge.id);
-                                      }
-                                    });
-                                    update(() {});
-                                  })
-                          ]))
-                        ]))))));
-  }
-
   @override
   Widget build(BuildContext context) {
     final at = toWib(_date), paper = diaryEditorPaper(_palette);
@@ -636,15 +577,17 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                         tooltip: 'Kembali',
                         onPressed: _busy ? null : _back,
                         icon: const Icon(Icons.arrow_back)),
-                    title: Text(
-                        widget.initialEntry == null
-                            ? 'Tambah Diary'
-                            : 'Edit Diary',
-                        style: const TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 16,
-                            color: diaryPlum,
-                            fontWeight: FontWeight.w800)),
+                    title: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                            widget.initialEntry == null
+                                ? 'Tambah Diary'
+                                : 'Edit Diary',
+                            style: const TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 16,
+                                color: diaryPlum,
+                                fontWeight: FontWeight.w800))),
                     actions: [
                       Padding(
                           padding: const EdgeInsets.only(right: 16),
@@ -657,142 +600,141 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                   if (_busy) const LinearProgressIndicator(minHeight: 2),
                   if (_error != null)
                     Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+                        padding: const EdgeInsets.all(16),
                         child: Text(_error!,
                             style: const TextStyle(
                                 color: MalvaColors.danger, fontSize: 12))),
                   Expanded(
                       child: SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                          padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
                           child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Wrap(
-                                    alignment: WrapAlignment.spaceBetween,
-                                    spacing: 12,
-                                    runSpacing: 12,
-                                    crossAxisAlignment:
-                                        WrapCrossAlignment.center,
-                                    children: [
-                                      Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            FittedBox(
-                                                fit: BoxFit.scaleDown,
-                                                alignment: Alignment.centerLeft,
-                                                child: Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment.end,
-                                                    children: [
-                                                      Text(
-                                                          '${at.day}'.padLeft(
-                                                              2, '0'),
-                                                          style: const TextStyle(
-                                                              fontFamily:
-                                                                  'Inter',
-                                                              fontSize: 48,
-                                                              height: 1,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w800,
-                                                              color:
-                                                                  diaryPlum)),
-                                                      const SizedBox(width: 8),
-                                                      Padding(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .only(
-                                                                  bottom: 4),
-                                                          child: Text(
-                                                              '${diaryMonths[at.month - 1].substring(0, 3)} ${at.year}',
-                                                              style: const TextStyle(
-                                                                  fontFamily:
-                                                                      'Inter',
-                                                                  fontSize: 16,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
-                                                                  color:
-                                                                      diaryPlum)))
-                                                    ])),
-                                            if (widget.initialEntry == null)
-                                              TextButton(
-                                                  onPressed: _busy
-                                                      ? null
-                                                      : _chooseDate,
-                                                  style: TextButton.styleFrom(
-                                                      padding: EdgeInsets.zero,
-                                                      minimumSize:
-                                                          const Size(0, 32),
-                                                      tapTargetSize:
-                                                          MaterialTapTargetSize
-                                                              .shrinkWrap),
-                                                  child: const Text(
-                                                      'Ubah Tanggal ⌄',
-                                                      style: TextStyle(
-                                                          fontFamily: 'Inter',
-                                                          fontSize: 10,
-                                                          fontWeight:
-                                                              FontWeight.w700)))
-                                          ]),
-                                      Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.end,
-                                          children: [
-                                            Text(
-                                                'PALET: ${diaryPalettes[_palette]?.$1.toUpperCase() ?? 'BELUM DIPILIH'}',
-                                                style: const TextStyle(
-                                                    fontFamily: 'Inter',
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: diaryPlum)),
-                                            const SizedBox(height: 6),
-                                            Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 4),
-                                                decoration: BoxDecoration(
-                                                    color: Colors.white
-                                                        .withValues(alpha: .8),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            20)),
-                                                child: Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      for (final key
-                                                          in diaryPalettes.keys)
-                                                        Semantics(
-                                                            selected:
-                                                                _palette == key,
-                                                            child: IconButton(
-                                                                tooltip:
-                                                                    'Palet ${diaryPalettes[key]!.$1}',
-                                                                style: IconButton.styleFrom(
-                                                                    minimumSize: const Size(
-                                                                        26, 32),
-                                                                    tapTargetSize:
-                                                                        MaterialTapTargetSize
-                                                                            .shrinkWrap),
-                                                                onPressed: _busy
-                                                                    ? null
-                                                                    : () => setState(() =>
-                                                                        _palette =
-                                                                            key),
-                                                                padding:
-                                                                    const EdgeInsets.all(
-                                                                        4),
-                                                                constraints:
-                                                                    const BoxConstraints(minWidth: 26, minHeight: 32),
-                                                                icon: Container(width: 18, height: 18, decoration: BoxDecoration(color: diaryPalettes[key]!.$2, shape: BoxShape.circle, border: _palette == key ? Border.all(color: diaryPurple, width: 2) : null))))
-                                                    ]))
-                                          ])
-                                    ]),
-                                const SizedBox(height: 26),
+                                LayoutBuilder(
+                                    builder: (context, box) => Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
+                                            children: [
+                                              Expanded(
+                                                  child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                    FittedBox(
+                                                        fit: BoxFit.scaleDown,
+                                                        child: Row(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .center,
+                                                            children: [
+                                                              Text(
+                                                                  '${at.day}'
+                                                                      .padLeft(2,
+                                                                          '0'),
+                                                                  style: const TextStyle(
+                                                                      fontSize:
+                                                                          44,
+                                                                      height: 1,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w800,
+                                                                      color:
+                                                                          diaryPlum)),
+                                                              const SizedBox(
+                                                                  width: 7),
+                                                              Text(
+                                                                  '${diaryMonths[at.month - 1].substring(0, 3)} ${at.year}',
+                                                                  style: const TextStyle(
+                                                                      fontSize:
+                                                                          14,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w700,
+                                                                      color:
+                                                                          diaryPlum))
+                                                            ])),
+                                                    if (widget.initialEntry ==
+                                                        null)
+                                                      TextButton(
+                                                          onPressed: _busy
+                                                              ? null
+                                                              : _chooseDate,
+                                                          style: TextButton.styleFrom(
+                                                              padding:
+                                                                  EdgeInsets
+                                                                      .zero,
+                                                              minimumSize:
+                                                                  const Size(
+                                                                      0, 28),
+                                                              tapTargetSize:
+                                                                  MaterialTapTargetSize
+                                                                      .shrinkWrap),
+                                                          child: const Text(
+                                                              'Ubah Tanggal ⌄',
+                                                              style: TextStyle(
+                                                                  fontSize:
+                                                                      10)))
+                                                  ])),
+                                              Container(
+                                                  width: 1,
+                                                  height: 48,
+                                                  margin: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 12),
+                                                  color:
+                                                      const Color(0xffe9deed)),
+                                              Flexible(
+                                                  child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                    Text(
+                                                        'Palet: ${diaryPalettes[_palette]?.$1 ?? 'Belum Dipilih'}',
+                                                        style: const TextStyle(
+                                                            fontSize: 10,
+                                                            color: diaryPlum)),
+                                                    const SizedBox(height: 6),
+                                                    Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .all(3),
+                                                        decoration: BoxDecoration(
+                                                            color: Colors.white
+                                                                .withValues(
+                                                                    alpha: .8),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        24)),
+                                                        child: Row(
+                                                            mainAxisSize:
+                                                                MainAxisSize
+                                                                    .min,
+                                                            children: [
+                                                              for (final key
+                                                                  in diaryPalettes
+                                                                      .keys)
+                                                                Expanded(
+                                                                    child: Semantics(
+                                                                        selected:
+                                                                            _palette ==
+                                                                                key,
+                                                                        child: IconButton(
+                                                                            tooltip:
+                                                                                'Palet ${diaryPalettes[key]!.$1}',
+                                                                            onPressed: _busy
+                                                                                ? null
+                                                                                : () => setState(() => _palette = key),
+                                                                            padding: const EdgeInsets.all(3),
+                                                                            constraints: const BoxConstraints(minWidth: 20, minHeight: 30),
+                                                                            style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                                                                            icon: Container(width: 17, height: 17, decoration: BoxDecoration(color: diaryPalettes[key]!.$2, shape: BoxShape.circle, border: _palette == key ? Border.all(color: diaryPurple, width: 2) : null)))))
+                                                            ]))
+                                                  ]))
+                                            ])),
+                                const SizedBox(height: 2),
                                 TextField(
                                     controller: _title,
                                     enabled: !_busy,
@@ -801,22 +743,55 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                                     onChanged: (_) => setState(() {}),
                                     style: const TextStyle(
                                         fontFamily: 'Inter',
-                                        fontSize: 25,
+                                        fontSize: 24,
                                         fontWeight: FontWeight.w800,
                                         color: Color(0xff1f2937)),
                                     decoration: const InputDecoration(
                                         hintText: 'Judul',
-                                        hintStyle: TextStyle(
-                                            color: Color(0xff9ca3af),
-                                            fontWeight: FontWeight.w700),
+                                        hintStyle:
+                                            TextStyle(color: Color(0xff9ca3af)),
                                         border: InputBorder.none,
                                         enabledBorder: InputBorder.none,
                                         focusedBorder: InputBorder.none,
                                         filled: false,
                                         contentPadding: EdgeInsets.zero,
                                         counterText: '')),
+                                const SizedBox(height: 4),
+                                Row(children: [
+                                  Expanded(
+                                      child: _editorAction(
+                                          Icons.help_outline,
+                                          'Pertanyaan Refleksi',
+                                          () => setState(
+                                              () => _showCards = !_showCards),
+                                          selected: _showCards)),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                      child: _editorAction(
+                                          _inVault
+                                              ? Icons.bookmark
+                                              : Icons.bookmark_border,
+                                          'Positive Vault',
+                                          () => setState(
+                                              () => _inVault = !_inVault),
+                                          selected: _inVault))
+                                ]),
+                                if (_showCards) ...[
+                                  const SizedBox(height: 14),
+                                  IgnorePointer(
+                                      ignoring: _busy,
+                                      child: DailyPromptCards(
+                                          draw: widget.drawPrompts,
+                                          onClose: () => setState(
+                                              () => _showCards = false),
+                                          onRefresh: widget.onPromptRefresh,
+                                          onAnswer: (p) => setState(() {
+                                                _prompt = p;
+                                                _showCards = false;
+                                              })))
+                                ],
                                 if (_prompt != null) ...[
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 14),
                                   DiaryCard(
                                       padding: const EdgeInsets.all(14),
                                       color: Colors.white.withValues(alpha: .8),
@@ -830,7 +805,6 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                                                       _prompt!.category
                                                           .toUpperCase(),
                                                       style: const TextStyle(
-                                                          fontFamily: 'Inter',
                                                           fontSize: 10,
                                                           fontWeight:
                                                               FontWeight.w800,
@@ -841,8 +815,7 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                                                   onPressed: _busy
                                                       ? null
                                                       : () => setState(() =>
-                                                          _showCards =
-                                                              !_showCards),
+                                                          _showCards = true),
                                                   icon: const Icon(
                                                       Icons.refresh,
                                                       color: diaryPurple,
@@ -859,7 +832,6 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                                             ]),
                                             Text('“${_prompt!.question}”',
                                                 style: const TextStyle(
-                                                    fontFamily: 'Inter',
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.w600,
                                                     fontStyle: FontStyle.italic,
@@ -867,45 +839,42 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                                                     color: diaryPlum))
                                           ]))
                                 ],
-                                if (_showCards) ...[
-                                  const SizedBox(height: 12),
-                                  IgnorePointer(
-                                      ignoring: _busy,
-                                      child: DailyPromptCards(
-                                          initialPrompt: _prompt,
-                                          onRefresh: widget.onPromptRefresh,
-                                          onAnswer: (p) => setState(() {
-                                                _prompt = p;
-                                                _showCards = false;
-                                              })))
-                                ],
-                                const SizedBox(height: 18),
-                                TextField(
-                                    controller: _note,
-                                    enabled: !_busy,
-                                    minLines: 5,
-                                    maxLines: null,
-                                    maxLength: 5000,
-                                    onChanged: (_) => setState(() {}),
-                                    textAlign: _align,
-                                    style: _content.style,
-                                    decoration: const InputDecoration(
-                                        alignLabelWithHint: true,
-                                        hintText: 'Catatan diary',
-                                        hintStyle: TextStyle(
-                                            fontFamily: 'Inter',
-                                            fontSize: 14,
-                                            color: Color(0xff9ca3af)),
-                                        border: InputBorder.none,
-                                        enabledBorder: InputBorder.none,
-                                        focusedBorder: InputBorder.none,
-                                        filled: false,
-                                        contentPadding: EdgeInsets.zero,
-                                        counterText: '')),
+                                const SizedBox(height: 10),
+                                DiaryCard(
+                                    padding: const EdgeInsets.all(18),
+                                    color: Colors.white.withValues(alpha: .82),
+                                    radius: 24,
+                                    child: ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                            minHeight:
+                                                MediaQuery.sizeOf(context)
+                                                        .height *
+                                                    .40),
+                                        child: TextField(
+                                            controller: _note,
+                                            enabled: !_busy,
+                                            minLines: 10,
+                                            maxLines: null,
+                                            maxLength: 5000,
+                                            onChanged: (_) => setState(() {}),
+                                            textAlign: _align,
+                                            style: _content.style,
+                                            decoration: const InputDecoration(
+                                                hintText:
+                                                    'Tulis ceritamu di sini...',
+                                                hintStyle: TextStyle(
+                                                    fontFamily: 'Inter',
+                                                    fontSize: 14,
+                                                    color: Color(0xff6b7280)),
+                                                border: InputBorder.none,
+                                                enabledBorder: InputBorder.none,
+                                                focusedBorder: InputBorder.none,
+                                                filled: false,
+                                                contentPadding: EdgeInsets.zero,
+                                                counterText: '')))),
                                 for (final media in _media)
                                   Padding(
-                                      padding:
-                                          const EdgeInsets.only(bottom: 16),
+                                      padding: const EdgeInsets.only(top: 14),
                                       child: DiaryImage(
                                           media: media,
                                           api: widget.api,
@@ -922,173 +891,148 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                                                     _media.remove(media);
                                                     _mediaChanged = true;
                                                   }))),
-                                const SizedBox(height: 16),
-                                Wrap(spacing: 8, runSpacing: 8, children: [
-                                  TextButton.icon(
-                                      onPressed: _busy
-                                          ? null
-                                          : () => setState(
-                                              () => _showCards = !_showCards),
-                                      style: TextButton.styleFrom(
-                                          backgroundColor: Colors.white
-                                              .withValues(alpha: .85),
-                                          foregroundColor: diaryPlum,
-                                          shape: const StadiumBorder()),
-                                      icon: const Icon(Icons.help_outline,
-                                          size: 14),
-                                      label: const Text(
-                                          'Gunakan Kartu Pertanyaan Refleksi',
-                                          style: TextStyle(
-                                              fontFamily: 'Inter',
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w700))),
-                                  FilterChip(
-                                      selected: _inVault,
-                                      onSelected: _busy
-                                          ? null
-                                          : (v) => setState(() => _inVault = v),
-                                      avatar: Icon(
-                                          _inVault
-                                              ? Icons.bookmark
-                                              : Icons.bookmark_border,
-                                          size: 15,
-                                          color: _inVault
-                                              ? Colors.white
-                                              : diaryPurple),
-                                      showCheckmark: false,
-                                      label: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Flexible(
-                                                child: Text('Positive Vault',
-                                                    style: TextStyle(
-                                                        fontFamily: 'Inter',
-                                                        fontSize: 11,
-                                                        color: _inVault
-                                                            ? Colors.white
-                                                            : diaryPlum,
-                                                        fontWeight:
-                                                            FontWeight.w700))),
-                                            if (_inVault) ...[
-                                              const SizedBox(width: 7),
-                                              Container(
-                                                  width: 7,
-                                                  height: 7,
-                                                  decoration:
-                                                      const BoxDecoration(
-                                                          color:
-                                                              Color(0xff6ee7b7),
-                                                          shape:
-                                                              BoxShape.circle))
-                                            ]
-                                          ]),
-                                      selectedColor: diaryPurple,
-                                      shape: const StadiumBorder())
-                                ]),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 10),
                                 DiaryCard(
-                                    padding: const EdgeInsets.all(14),
-                                    radius: 16,
-                                    color: Colors.white.withValues(alpha: .8),
+                                    padding: const EdgeInsets.all(16),
+                                    color: Colors.white.withValues(alpha: .85),
+                                    radius: 24,
                                     child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.stretch,
                                         children: [
-                                          const Text('Tandai Topik Cerita',
-                                              style: TextStyle(
-                                                  fontFamily: 'Inter',
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: diaryPlum)),
-                                          const SizedBox(height: 10),
-                                          Wrap(
-                                              spacing: 6,
-                                              runSpacing: 4,
-                                              children: [
-                                                for (final tag in _tags)
-                                                  InputChip(
-                                                      label: Text('#$tag',
-                                                          style:
-                                                              const TextStyle(
-                                                                  fontSize:
-                                                                      11)),
-                                                      onDeleted: _busy
-                                                          ? null
-                                                          : () => setState(() =>
-                                                              _tags
-                                                                  .remove(tag)))
-                                              ]),
                                           Row(children: [
-                                            Expanded(
-                                                child: TextField(
-                                                    controller: _tagInput,
-                                                    enabled: !_busy,
-                                                    maxLength: 32,
-                                                    onSubmitted: (_) =>
-                                                        _addTag(),
-                                                    decoration:
-                                                        const InputDecoration(
-                                                            isDense: true,
-                                                            contentPadding:
-                                                                EdgeInsets
-                                                                    .symmetric(
-                                                                        vertical:
-                                                                            8),
-                                                            hintText:
-                                                                'Tambah topik...',
-                                                            prefixText: '# ',
-                                                            counterText: '',
-                                                            border: InputBorder
-                                                                .none,
-                                                            enabledBorder:
-                                                                InputBorder
-                                                                    .none,
-                                                            focusedBorder:
-                                                                InputBorder
-                                                                    .none,
-                                                            filled: false),
-                                                    style: const TextStyle(
-                                                        fontFamily: 'Inter',
-                                                        fontSize: 12))),
+                                            const Icon(Icons.sell_outlined,
+                                                color: diaryPurple, size: 19),
+                                            const SizedBox(width: 10),
+                                            const Expanded(
+                                                child: Text(
+                                                    'Tandai Topik Cerita',
+                                                    style: TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: diaryPlum))),
                                             IconButton(
                                                 tooltip: 'Tambah Topik',
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                constraints:
+                                                    const BoxConstraints(
+                                                        minWidth: 28,
+                                                        minHeight: 28),
+                                                padding: EdgeInsets.zero,
+                                                style: IconButton.styleFrom(
+                                                    tapTargetSize:
+                                                        MaterialTapTargetSize
+                                                            .shrinkWrap),
                                                 onPressed:
                                                     _busy ? null : _addTag,
                                                 icon: const Icon(Icons.add,
                                                     color: diaryPurple,
-                                                    size: 18))
+                                                    size: 20))
                                           ]),
-                                          const Divider(
-                                              height: 16,
-                                              color: Color(0xfff3e8ff)),
-                                          const Row(children: [
-                                            Icon(Icons.favorite_border,
-                                                color: diaryPurple, size: 17),
-                                            SizedBox(width: 8),
-                                            Expanded(
-                                                child: Text(
-                                                    'PESAN PENGUAT DIRI',
-                                                    style: TextStyle(
-                                                        fontFamily: 'Inter',
-                                                        fontSize: 9,
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        color: diaryPurple)))
-                                          ]),
+                                          if (_tags.isNotEmpty)
+                                            Wrap(
+                                                spacing: 6,
+                                                runSpacing: 4,
+                                                children: [
+                                                  for (final tag in _tags)
+                                                    InputChip(
+                                                        label: Text('#$tag',
+                                                            style:
+                                                                const TextStyle(
+                                                                    fontSize:
+                                                                        11)),
+                                                        onDeleted: _busy
+                                                            ? null
+                                                            : () => setState(
+                                                                () => _tags
+                                                                    .remove(
+                                                                        tag)))
+                                                ]),
                                           TextField(
-                                              controller: _selfNote,
+                                              controller: _tagInput,
                                               enabled: !_busy,
-                                              maxLength: 300,
-                                              maxLines: null,
-                                              onChanged: (_) => setState(() {}),
-                                              style: const TextStyle(
-                                                  fontFamily: 'Inter',
-                                                  fontSize: 12),
+                                              maxLength: 32,
+                                              onSubmitted: (_) => _addTag(),
                                               decoration: const InputDecoration(
                                                   isDense: true,
                                                   contentPadding:
                                                       EdgeInsets.symmetric(
-                                                          vertical: 8),
+                                                          vertical: 4),
+                                                  hintText: 'Tambah topik...',
+                                                  prefixIcon: Padding(
+                                                      padding: EdgeInsets.only(
+                                                          right: 6),
+                                                      child: Text('#',
+                                                          style: TextStyle(
+                                                              fontSize: 15,
+                                                              color:
+                                                                  diaryPurple))),
+                                                  prefixIconConstraints:
+                                                      BoxConstraints(
+                                                          minWidth: 18,
+                                                          minHeight: 20),
+                                                  border: InputBorder.none,
+                                                  enabledBorder:
+                                                      InputBorder.none,
+                                                  focusedBorder:
+                                                      InputBorder.none,
+                                                  filled: false,
+                                                  counterText: ''),
+                                              style: const TextStyle(
+                                                  fontSize: 12)),
+                                          const Divider(
+                                              height: 12,
+                                              color: Color(0xfff3e8ff)),
+                                          Row(children: [
+                                            const Icon(Icons.favorite_border,
+                                                color: diaryPurple, size: 20),
+                                            const SizedBox(width: 10),
+                                            const Expanded(
+                                                child: Text(
+                                                    'Pesan Penguat Diri',
+                                                    style: TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: diaryPlum))),
+                                            IconButton(
+                                                tooltip:
+                                                    'Tulis pesan penguat diri',
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                constraints:
+                                                    const BoxConstraints(
+                                                        minWidth: 28,
+                                                        minHeight: 28),
+                                                padding: EdgeInsets.zero,
+                                                style: IconButton.styleFrom(
+                                                    tapTargetSize:
+                                                        MaterialTapTargetSize
+                                                            .shrinkWrap),
+                                                onPressed: _busy
+                                                    ? null
+                                                    : () => _affirmationFocus
+                                                        .requestFocus(),
+                                                icon: const Icon(Icons.add,
+                                                    color: diaryPurple,
+                                                    size: 20))
+                                          ]),
+                                          TextField(
+                                              controller: _selfNote,
+                                              focusNode: _affirmationFocus,
+                                              enabled: !_busy,
+                                              maxLength: 300,
+                                              maxLines: null,
+                                              onChanged: (_) => setState(() {}),
+                                              style:
+                                                  const TextStyle(fontSize: 12),
+                                              decoration: const InputDecoration(
+                                                  isDense: true,
+                                                  contentPadding:
+                                                      EdgeInsets.symmetric(
+                                                          vertical: 4),
                                                   hintText:
                                                       'Tulis satu kalimat afirmasi hangat untuk dirimu...',
                                                   border: InputBorder.none,
@@ -1097,21 +1041,7 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                                                   focusedBorder:
                                                       InputBorder.none,
                                                   filled: false,
-                                                  counterText: '')),
-                                          TextButton.icon(
-                                              onPressed: _busy
-                                                  ? null
-                                                  : _chooseAppreciations,
-                                              icon: const Icon(
-                                                  Icons.auto_awesome_outlined,
-                                                  size: 16),
-                                              label: Text(
-                                                  _appreciations.isEmpty
-                                                      ? 'Hal kecil yang kuapresiasi'
-                                                      : '${_appreciations.length} apresiasi dalam cerita ini',
-                                                  style: const TextStyle(
-                                                      fontFamily: 'Inter',
-                                                      fontSize: 11)))
+                                                  counterText: ''))
                                         ]))
                               ]))),
                   Material(
@@ -1130,6 +1060,26 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                           ])))
                 ])))));
   }
+
+  final _affirmationFocus = FocusNode();
+  Widget _editorAction(IconData icon, String label, VoidCallback action,
+          {bool selected = false}) =>
+      Semantics(
+          selected: selected,
+          child: OutlinedButton.icon(
+              onPressed: _busy ? null : action,
+              icon: Icon(icon, size: 19),
+              style: OutlinedButton.styleFrom(
+                  backgroundColor: Colors.white.withValues(alpha: .4),
+                  foregroundColor: diaryPlum,
+                  side: const BorderSide(color: Color(0xffe9deed)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                  shape: const StadiumBorder()),
+              label: Text(label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 11, fontWeight: FontWeight.w700))));
 
   Widget _tool(IconData icon, String label, String tooltip, VoidCallback fn) =>
       Expanded(

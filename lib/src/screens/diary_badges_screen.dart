@@ -3,8 +3,10 @@ import '../models/diary_achievements.dart';
 import '../widgets/diary_design.dart';
 
 class DiaryBadgesScreen extends StatefulWidget {
-  const DiaryBadgesScreen({super.key, required this.progress});
+  const DiaryBadgesScreen(
+      {super.key, required this.progress, this.onAppreciation});
   final List<DiaryBadgeProgress> progress;
+  final VoidCallback? onAppreciation;
   @override
   State<DiaryBadgesScreen> createState() => _DiaryBadgesScreenState();
 }
@@ -89,6 +91,19 @@ class _DiaryBadgesScreenState extends State<DiaryBadgesScreen> {
                                           fontSize: 11, color: diaryPlum))
                                 ])),
                             const SizedBox(height: 16),
+                            if (widget.onAppreciation != null) ...[
+                              FilledButton.icon(
+                                  onPressed: widget.onAppreciation,
+                                  icon: const Icon(Icons.favorite_outline),
+                                  label:
+                                      const Text('Catat pengalaman pribadi')),
+                              const SizedBox(height: 8),
+                              const Text(
+                                  'Pilih diari dan pengalaman yang ingin kamu apresiasi.',
+                                  style: TextStyle(
+                                      fontSize: 11, color: diaryPlum)),
+                              const SizedBox(height: 16),
+                            ],
                             ExpansionTile(
                                 tilePadding: EdgeInsets.zero,
                                 title: const Text('Cari atau filter lencana',

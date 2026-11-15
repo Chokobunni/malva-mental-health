@@ -80,12 +80,14 @@ class DiaryImage extends StatelessWidget {
       required this.api,
       this.token,
       this.onEdit,
-      this.onRemove});
+      this.onRemove,
+      this.preview = false});
   final DiaryMedia media;
   final MalvaApiClient api;
   final String? token;
   final VoidCallback? onEdit;
   final VoidCallback? onRemove;
+  final bool preview;
   @override
   Widget build(BuildContext context) {
     final url = media.resolve(api.baseUri);
@@ -97,6 +99,7 @@ class DiaryImage extends StatelessWidget {
                 child: Center(child: Text('Masuk untuk melihat gambar.')))
             : Image.network(url.toString(),
                 headers: {'Authorization': 'Bearer $token'},
+                cacheWidth: preview ? 720 : null,
                 fit: BoxFit.contain,
                 semanticLabel:
                     media.kind == 'drawing' ? 'Gambar diary' : 'Foto diary',

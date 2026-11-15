@@ -11,6 +11,8 @@ import '../services/malva_api_client.dart';
 import '../models/diary_catalog.dart';
 import '../models/diary_achievements.dart';
 import '../widgets/diary_design.dart';
+import '../widgets/diary_body.dart';
+import '../services/diary_prompt_history.dart';
 import 'diary_badges_screen.dart';
 import 'diary_reader_screen.dart';
 import '../time/wib.dart';
@@ -28,6 +30,8 @@ class DiaryHistoryScreen extends ConsumerStatefulWidget {
 
 class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
   final _search = TextEditingController();
+  late final _promptHistory = DiaryPromptHistory(ref.read(secureStoreProvider),
+      'diary-prompt-order-v1-${base64Url.encode(utf8.encode(_identity(_session)))}');
   bool _loading = true;
   bool _saving = false;
   DateTime _month = wibNow();
@@ -102,9 +106,167 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                     builder: (context, _, child) =>
                         Consumer(builder: (context, ref, _) {
                           ref.watch(malvaStoreProvider);
-                          return DiaryBadgesScreen(progress: _progress);
+                          return DiaryBadgesScreen(
+                              progress: _progress, onAppreciation: _appreciate);
                         })),
                 owner)));
+  }
+
+  Future<void> _appreciate() async {
+    if (_saving || _accountChanged) return;
+    final owner = _identity(_session), entries = _all;
+    String? selectedId, error;
+    var choices = <int>{};
+    var saving = false;
+    await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: diaryPaper,
+        builder: (sheet) => _protect(
+            () => StatefulBuilder(
+                builder: (form, update) => SizedBox(
+                    height: MediaQuery.sizeOf(form).height * .85,
+                    child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Text('Pengalaman yang kuapresiasi',
+                                  style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      color: diaryPlum)),
+                              const SizedBox(height: 12),
+                              if (entries.isEmpty)
+                                const Text(
+                                    'Tulis diari terlebih dahulu untuk mencatat pengalamanmu.')
+                              else ...[
+                                DropdownButtonFormField<String>(
+                                    initialValue: selectedId,
+                                    isExpanded: true,
+                                    decoration: const InputDecoration(
+                                        labelText: 'Pilih diari'),
+                                    items: entries
+                                        .map((e) => DropdownMenuItem(
+                                            value: e.id,
+                                            child: Text(e.title,
+                                                maxLines: 1,
+                                                overflow:
+                                                    TextOverflow.ellipsis)))
+                                        .toList(),
+                                    onChanged: saving
+                                        ? null
+                                        : (id) => update(() {
+                                              selectedId = id;
+                                              choices = DiaryContent.parse(
+                                                      entries
+                                                          .firstWhere(
+                                                              (e) => e.id == id)
+                                                          .note)
+                                                  .appreciations
+                                                  .toSet();
+                                              error = null;
+                                            })),
+                                const SizedBox(height: 8),
+                                const Text(
+                                    'Pilih sesuai pengalamanmu dalam diari ini. Progres mengikuti isi diari yang tersimpan.',
+                                    style: TextStyle(
+                                        fontSize: 12, color: diaryPlum)),
+                              ],
+                              const SizedBox(height: 8),
+                              Expanded(
+                                  child: ListView(children: [
+                                if (selectedId != null)
+                                  for (final badge in diaryBadges.where((b) =>
+                                      diarySubjectiveBadges.contains(b.id)))
+                                    CheckboxListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        value: choices.contains(badge.id),
+                                        title: Text(badge.title,
+                                            style:
+                                                const TextStyle(fontSize: 13)),
+                                        subtitle: Text(badge.description,
+                                            style:
+                                                const TextStyle(fontSize: 11)),
+                                        onChanged: saving
+                                            ? null
+                                            : (value) => update(() {
+                                                  if (value == true) {
+                                                    choices.add(badge.id);
+                                                  } else {
+                                                    choices.remove(badge.id);
+                                                  }
+                                                })),
+                              ])),
+                              if (error != null)
+                                Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: Text(error!,
+                                        style: TextStyle(
+                                            color: Theme.of(form)
+                                                .colorScheme
+                                                .error))),
+                              FilledButton(
+                                  onPressed: selectedId == null || saving
+                                      ? null
+                                      : () async {
+                                          if (_accountChanged ||
+                                              _identity(_session) != owner)
+                                            return;
+                                          final current = _all
+                                              .where((e) => e.id == selectedId)
+                                              .firstOrNull;
+                                          if (current == null) {
+                                            update(() => error =
+                                                'Diari ini sudah tidak tersedia.');
+                                            return;
+                                          }
+                                          final note =
+                                              DiaryContent.parse(current.note)
+                                                  .copyWith(
+                                                      appreciations:
+                                                          choices.toList()
+                                                            ..sort())
+                                                  .encode();
+                                          if (utf8.encode(note).length > 6000) {
+                                            update(() => error =
+                                                'Diari beserta pilihan apresiasi melebihi batas 6000 byte. Kurangi pilihan atau isi diari.');
+                                            return;
+                                          }
+                                          update(() {
+                                            saving = true;
+                                            error = null;
+                                          });
+                                          final saved = await _save(
+                                              current.copyWith(note: note),
+                                              isUpdate: true,
+                                              owner: owner);
+                                          if (!form.mounted ||
+                                              !mounted ||
+                                              _accountChanged ||
+                                              _identity(_session) != owner)
+                                            return;
+                                          if (saved) {
+                                            Navigator.pop(sheet);
+                                          } else {
+                                            update(() {
+                                              saving = false;
+                                              error =
+                                                  'Pilihan belum tersimpan. Coba lagi.';
+                                            });
+                                          }
+                                        },
+                                  child: Text(saving
+                                      ? 'Menyimpan...'
+                                      : 'Simpan pengalaman')),
+                              TextButton(
+                                  onPressed: saving
+                                      ? null
+                                      : () => Navigator.pop(sheet),
+                                  child: const Text('Batal')),
+                            ])))),
+            owner));
   }
 
   void _read(DiaryEntry entry, {bool random = false}) {
@@ -232,6 +394,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                   return DiaryEditorScreen(
                       initialEntry: entry,
                       initialPrompt: prompt,
+                      drawPrompts: _promptHistory.draw,
                       onPromptRefresh: () => _record('refreshPrompt'),
                       api: _api,
                       accessToken: _session?.accessToken,
@@ -353,6 +516,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(currentSessionProvider);
     ref.listen(currentSessionProvider, (old, next) {
       if (_identity(old) != _identity(next)) {
         _accountChanged = true;
@@ -421,206 +585,33 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                                         FontWeight.w700)))),
                                     const SizedBox(height: 16),
                                     DailyPromptCards(
+                                        draw: _promptHistory.draw,
                                         onAnswer: (p) => _open(prompt: p),
                                         onRefresh: () =>
                                             _record('refreshPrompt')),
                                     const SizedBox(height: 16),
-                                    InkWell(
-                                        key: const ValueKey('diary-badge-bar'),
-                                        onTap: _badges,
-                                        borderRadius: BorderRadius.circular(20),
-                                        child: DiaryCard(
-                                            padding: const EdgeInsets.all(16),
-                                            child: Row(children: [
-                                              const Icon(Icons.star_rounded,
-                                                  color: Color(0xffd6a625),
-                                                  size: 28),
-                                              const SizedBox(width: 12),
-                                              Expanded(
-                                                  child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      children: [
-                                                    const Text(
-                                                        'Lencana Apresiasi Diri',
-                                                        style: TextStyle(
-                                                            color: diaryPlum,
-                                                            fontSize: 12,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .w800)),
-                                                    const SizedBox(height: 6),
-                                                    LinearProgressIndicator(
-                                                        value: unlocked / 100,
-                                                        color: diaryPurple,
-                                                        backgroundColor:
-                                                            const Color(
-                                                                0xfff2e2f3),
-                                                        minHeight: 4,
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(4)),
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                        '$unlocked dari 100 terbuka • Setiap langkah kecil berarti',
-                                                        style: const TextStyle(
-                                                            fontSize: 10,
-                                                            color: Color(
-                                                                0xff6b7280)))
-                                                  ])),
-                                              const SizedBox(width: 8),
-                                              const Icon(Icons.chevron_right,
-                                                  color: diaryPurple, size: 18)
-                                            ]))),
-                                    const SizedBox(height: 16),
-                                    Container(
-                                        padding: const EdgeInsets.all(20),
-                                        decoration: BoxDecoration(
-                                            gradient: const LinearGradient(
-                                                begin: Alignment.topLeft,
-                                                end: Alignment.bottomRight,
-                                                colors: [
-                                                  Color(0xff6e2b7e),
-                                                  Color(0xffb55cc4)
-                                                ]),
-                                            borderRadius:
-                                                BorderRadius.circular(26)),
-                                        child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              Row(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Container(
-                                                        width: 40,
-                                                        height: 40,
-                                                        decoration: BoxDecoration(
-                                                            color: Colors.white
-                                                                .withValues(
-                                                                    alpha: .2),
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        16)),
-                                                        child: const Icon(
-                                                            Icons.bookmark,
-                                                            color: Colors.white,
-                                                            size: 21)),
-                                                    const SizedBox(width: 12),
-                                                    const Expanded(
-                                                        child: Column(
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .start,
-                                                            children: [
-                                                          Text('POSITIVE VAULT',
-                                                              style: TextStyle(
-                                                                  color: Color(
-                                                                      0xffe9d5ff),
-                                                                  fontSize: 9,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w800,
-                                                                  letterSpacing:
-                                                                      .6)),
-                                                          SizedBox(height: 3),
-                                                          Text(
-                                                              'Kotak Kenangan Baik & Syukur',
-                                                              style: TextStyle(
-                                                                  color: Colors
-                                                                      .white,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w800,
-                                                                  fontSize: 13,
-                                                                  height: 1.3))
-                                                        ])),
-                                                    const SizedBox(width: 6),
-                                                    Text(
-                                                        '${vault.length} Tersimpan',
-                                                        style: const TextStyle(
-                                                            color: Colors.white,
-                                                            fontSize: 10,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .w700))
-                                                  ]),
-                                              const SizedBox(height: 14),
-                                              const Text(
-                                                  'Saat hari terasa berat, buka kembali catatan positif yang pernah kamu tulis sebagai pengingat bahwa kamu sudah melangkah sejauh ini.',
-                                                  style: TextStyle(
-                                                      color: Color(0xfff3e8ff),
-                                                      fontSize: 11,
-                                                      height: 1.65)),
-                                              const SizedBox(height: 16),
-                                              Wrap(
-                                                  spacing: 10,
-                                                  runSpacing: 8,
-                                                  children: [
-                                                    FilledButton.icon(
-                                                        style: FilledButton
-                                                            .styleFrom(
-                                                                backgroundColor:
-                                                                    Colors
-                                                                        .white,
-                                                                foregroundColor:
-                                                                    diaryPlum),
-                                                        onPressed: () {
-                                                          if (vault.isEmpty) {
-                                                            ScaffoldMessenger
-                                                                    .of(context)
-                                                                .showSnackBar(
-                                                                    const SnackBar(
-                                                                        content:
-                                                                            Text('Simpan cerita ke Positive Vault terlebih dahulu.')));
-                                                            return;
-                                                          }
-                                                          _read(
-                                                              vault[Random()
-                                                                  .nextInt(vault
-                                                                      .length)],
-                                                              random: true);
-                                                        },
-                                                        icon: const Icon(
-                                                            Icons.bookmark,
-                                                            size: 14),
-                                                        label: const Text(
-                                                            'Acak Kenangan Baik',
-                                                            style: TextStyle(
-                                                                fontSize: 11))),
-                                                    TextButton(
-                                                        style: TextButton.styleFrom(
-                                                            backgroundColor:
-                                                                Colors.white.withValues(
-                                                                    alpha: .2),
-                                                            foregroundColor:
-                                                                Colors.white,
-                                                            shape: RoundedRectangleBorder(
-                                                                borderRadius:
-                                                                    BorderRadius.circular(
-                                                                        12))),
-                                                        onPressed: () =>
-                                                            setState(() {
-                                                              _vaultOnly =
-                                                                  !_vaultOnly;
-                                                              _day = null;
-                                                              _palette = null;
-                                                              _monthFilter =
-                                                                  false;
-                                                            }),
-                                                        child: Text(
-                                                            _vaultOnly
-                                                                ? 'Semua Diari'
-                                                                : 'Lihat Semua',
-                                                            style: const TextStyle(
-                                                                fontSize: 11,
-                                                                fontWeight:
-                                                                    FontWeight.w700)))
-                                                  ])
-                                            ])),
+                                    DiaryVaultCard(
+                                        count: vault.length,
+                                        vaultOnly: _vaultOnly,
+                                        onRandom: () {
+                                          if (vault.isEmpty) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(const SnackBar(
+                                                    content: Text(
+                                                        'Simpan cerita ke Positive Vault terlebih dahulu.')));
+                                            return;
+                                          }
+                                          _read(
+                                              vault[Random()
+                                                  .nextInt(vault.length)],
+                                              random: true);
+                                        },
+                                        onAll: () => setState(() {
+                                              _vaultOnly = !_vaultOnly;
+                                              _day = null;
+                                              _palette = null;
+                                              _monthFilter = false;
+                                            })),
                                     const SizedBox(height: 16),
                                     DiaryCalendar(
                                         month: _month,
@@ -657,28 +648,6 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                           if (p != null) _record('colorFilter');
                                         }),
                                     const SizedBox(height: 20),
-                                    Row(children: [
-                                      Expanded(
-                                          child: Text(
-                                              _vaultOnly
-                                                  ? 'Kenangan di Positive Vault'
-                                                  : 'Daftar Cerita Diari',
-                                              style: const TextStyle(
-                                                  fontSize: 15,
-                                                  fontWeight:
-                                                      FontWeight.w800))),
-                                      Text('${entries.length} Cerita',
-                                          style: const TextStyle(
-                                              fontSize: 10,
-                                              color: Color(0xff6b7280)))
-                                    ]),
-                                    const SizedBox(height: 4),
-                                    const Text(
-                                        'Ketuk salah satu kartu untuk membaca halaman isi diari',
-                                        style: TextStyle(
-                                            fontSize: 10,
-                                            color: Color(0xff6b7280))),
-                                    const SizedBox(height: 12),
                                     TextField(
                                         controller: _search,
                                         onChanged: (_) => setState(() {}),
@@ -698,6 +667,38 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                                     },
                                                     icon: const Icon(
                                                         Icons.close)))),
+                                    const SizedBox(height: 16),
+                                    Row(children: [
+                                      Expanded(
+                                          child: Text(
+                                              _vaultOnly
+                                                  ? 'Kenangan di Positive Vault'
+                                                  : 'Daftar Cerita Diari',
+                                              style: const TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight:
+                                                      FontWeight.w800))),
+                                      Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 12, vertical: 5),
+                                          decoration: BoxDecoration(
+                                              color: const Color(0xfff2e2f3),
+                                              borderRadius:
+                                                  BorderRadius.circular(20)),
+                                          child: Text(
+                                              '${entries.length} Cerita',
+                                              style: const TextStyle(
+                                                  fontSize: 10,
+                                                  color: diaryPurple,
+                                                  fontWeight: FontWeight.w800)))
+                                    ]),
+                                    const SizedBox(height: 4),
+                                    const Text(
+                                        'Ketuk salah satu kartu untuk membaca halaman isi diari',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            color: Color(0xff6b7280))),
+                                    const SizedBox(height: 12),
                                     if (_day != null ||
                                         _palette != null ||
                                         _monthFilter ||
@@ -729,16 +730,18 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                       Text(_activityError!,
                                           style: const TextStyle(
                                               color: Colors.red, fontSize: 11)),
-                                    Align(
-                                        alignment: Alignment.centerRight,
-                                        child: TextButton.icon(
-                                            onPressed: _loading ? null : _load,
-                                            icon: const Icon(Icons.refresh,
-                                                size: 16),
-                                            label: const Text(
-                                                'Muat ulang diary',
-                                                style:
-                                                    TextStyle(fontSize: 11)))),
+                                    if (_error != null)
+                                      Align(
+                                          alignment: Alignment.centerRight,
+                                          child: TextButton.icon(
+                                              onPressed:
+                                                  _loading ? null : _load,
+                                              icon: const Icon(Icons.refresh,
+                                                  size: 16),
+                                              label: const Text(
+                                                  'Muat ulang diary',
+                                                  style: TextStyle(
+                                                      fontSize: 11)))),
                                     if (!_loading && entries.isEmpty)
                                       const DiaryCard(
                                           child: Column(children: [
@@ -757,99 +760,160 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                                 color: Color(0xff6b7280),
                                                 height: 1.5))
                                       ])),
-                                    for (final entry in entries)
-                                      Padding(
-                                          padding:
-                                              const EdgeInsets.only(bottom: 12),
-                                          child: _storyCard(entry))
-                                  ]))
+                                  ])),
+                          for (final entry in entries)
+                            Padding(
+                                key: ValueKey('diary-story-${entry.id}'),
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                                child: _storyCard(entry))
                         ])))));
   }
 
   Widget _storyCard(DiaryEntry entry) {
     final c = DiaryContent.parse(entry.note), d = toWib(entry.createdAt);
+    final color = diaryPalettes[c.palette];
+    final compact = MediaQuery.sizeOf(context).width < 350 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.2;
+    final previews = <DiaryMedia>[];
+    for (final kind in ['photo', 'drawing']) {
+      final matches = c.media
+          .where((m) => (m.kind == 'drawing' ? 'drawing' : 'photo') == kind);
+      if (matches.isNotEmpty) previews.add(matches.first);
+    }
+    const weekdays = [
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu'
+    ];
     return InkWell(
         onTap: () => _read(entry),
         borderRadius: BorderRadius.circular(26),
         child: DiaryCard(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                    color: const Color(0xfffaf5ff),
-                    borderRadius: BorderRadius.circular(12)),
-                child: Column(children: [
-                  Text('${d.day}',
-                      style: const TextStyle(
-                          color: diaryPlum,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800)),
-                  Text(diaryMonths[d.month - 1].substring(0, 3).toUpperCase(),
-                      style: const TextStyle(
-                          color: diaryPurple,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700))
-                ])),
-            const SizedBox(width: 10),
-            Expanded(
-                child: Text(diaryDate(d),
-                    style: const TextStyle(
-                        fontSize: 10, color: Color(0xff6b7280)))),
-            if (c.inVault)
-              const Icon(Icons.bookmark, color: diaryPurple, size: 18),
-            PopupMenuButton<String>(
-                tooltip: 'Aksi diary',
-                onSelected: (a) {
-                  if (a == 'edit') _open(entry: entry);
-                  if (a == 'delete') unawaited(_delete(entry));
-                },
-                itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Edit Diary')),
-                      PopupMenuItem(value: 'delete', child: Text('Hapus Diary'))
-                    ])
-          ]),
-          const SizedBox(height: 12),
-          Text(entry.title,
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w800, height: 1.4)),
-          const SizedBox(height: 10),
-          DiaryPalettePill(palette: c.palette),
-          const SizedBox(height: 10),
-          if (c.text.isNotEmpty)
-            Text(c.text,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontSize: 11, height: 1.7, color: Color(0xff6b7280))),
-          if (c.media.isNotEmpty)
-            Text('${c.media.length} gambar terlampir',
-                style: const TextStyle(fontSize: 10, color: diaryPurple)),
-          if (c.tags.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Wrap(spacing: 5, runSpacing: 5, children: [
-              for (final tag in c.tags)
-                Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                        color: const Color(0xfff3f4f6),
-                        borderRadius: BorderRadius.circular(6)),
-                    child: Text('#$tag',
-                        style: const TextStyle(
-                            fontSize: 9, color: Color(0xff6b7280))))
-            ])
-          ],
-          const SizedBox(height: 12),
-          const Align(
-              alignment: Alignment.centerRight,
-              child: Text('Baca Diari ›',
-                  style: TextStyle(
-                      color: diaryPurple,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800)))
-        ])));
+            padding: const EdgeInsets.all(16),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Container(
+                        width: 44,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                            color: color?.$2 ?? const Color(0xfff0e5f3),
+                            borderRadius: BorderRadius.circular(16)),
+                        child: Column(children: [
+                          Text('${d.day}',
+                              style: TextStyle(
+                                  color: color?.$3 ?? diaryPlum,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800)),
+                          Text(
+                              diaryMonths[d.month - 1]
+                                  .substring(0, 3)
+                                  .toUpperCase(),
+                              style: TextStyle(
+                                  color: color?.$3 ?? diaryPurple,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700))
+                        ])),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Text('${weekdays[d.weekday - 1]}, ${diaryDate(d)}',
+                              style: const TextStyle(
+                                  fontSize: 10, color: Color(0xff9ca3af))),
+                          if (c.inVault)
+                            Padding(
+                                padding:
+                                    const EdgeInsets.only(top: 6, bottom: 6),
+                                child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 7, vertical: 3),
+                                    decoration: BoxDecoration(
+                                        color: const Color(0xfff5eaf7),
+                                        borderRadius: BorderRadius.circular(6)),
+                                    child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.bookmark,
+                                              color: diaryPurple, size: 11),
+                                          SizedBox(width: 4),
+                                          Flexible(
+                                              child: Text('Positive Vault',
+                                                  style: TextStyle(
+                                                      color: diaryPurple,
+                                                      fontSize: 10,
+                                                      fontWeight:
+                                                          FontWeight.w800)))
+                                        ]))),
+                          if (!compact)
+                            Text(entry.title,
+                                style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    height: 1.4,
+                                    color: Color(0xff111827)))
+                        ])),
+                    const SizedBox(width: 6),
+                    DiaryPalettePill(palette: c.palette)
+                  ]),
+                  if (compact)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(entry.title,
+                            style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                height: 1.4,
+                                color: Color(0xff111827)))),
+                  if (c.text.isNotEmpty)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 14),
+                        child: Text(c.text,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 12,
+                                height: 1.65,
+                                color: Color(0xff4b5563)))),
+                  for (final media in previews)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 180),
+                            child: DiaryImage(
+                                media: media,
+                                api: _api,
+                                token: _session?.accessToken,
+                                preview: true))),
+                  const Divider(height: 26, color: Color(0xfff0f0f0)),
+                  Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                    Expanded(
+                        child: Wrap(spacing: 6, runSpacing: 6, children: [
+                      for (final tag in c.tags)
+                        Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                                color: const Color(0xfff3f4f6),
+                                borderRadius: BorderRadius.circular(6)),
+                            child: Text('#$tag',
+                                style: const TextStyle(
+                                    fontSize: 10, color: Color(0xff6b7280))))
+                    ])),
+                    const SizedBox(width: 8),
+                    const Text('Baca Diari ›',
+                        style: TextStyle(
+                            color: diaryPurple,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800))
+                  ])
+                ])));
   }
 }
