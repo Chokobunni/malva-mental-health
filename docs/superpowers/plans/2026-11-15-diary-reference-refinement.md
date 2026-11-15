@@ -45,9 +45,9 @@ Modify `lib/src/widgets/diary_design.dart`, `lib/src/models/diary_achievements.d
 
 ### Task 4: Release
 
-- [ ] Bump version, commit/push branch, create/attach PR, pass required checks and merge.
-- [ ] Verify release workflows, web/API health and actual public APK version/signature/checksum.
-- [ ] Record production evidence and deliver concise Indonesian release result.
+- [x] Bump version, commit/push branch, create/attach PR, pass required checks and merge.
+- [x] Verify release workflows, web/API health and actual public APK version/signature/checksum.
+- [x] Record production evidence and deliver concise Indonesian release result.
 
 ### Approved follow-up: personal appreciation on the badge page
 
