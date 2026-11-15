@@ -1,5 +1,7 @@
 # MODULE_FEATURES — Matriks Fitur Malva
 
+Versi 0.1.29: Diary mengikuti Mental Health Diary & Positive Vault, dengan tiga kartu flip dari 100 pertanyaan, pemasangan prompt di editor, palet/kalender/filter, Vault acak dan reader terpisah. Bar progres membuka 100 lencana Apresiasi Diri yang dihitung dari catatan tersimpan tanpa streak. Pengalaman pribadi berasal dari pilihan pasien; aktivitas interaksi tersimpan per akun/perangkat. Topik, afirmasi dan metadata dipertahankan lewat note versi 1. Rujukan: [rencana Diary & Vault](superpowers/plans/2026-11-15-diary-positive-vault.md).
+
 Versi 0.1.28: editor diary menyediakan Edit gambar untuk memperbaiki kembali hasil draw tersimpan dan Ganti foto dari galeri. Penggantian mempertahankan posisi lampiran, dapat dilakukan pada enam slot penuh, serta menjaga lampiran lama ketika dibatalkan atau gagal. Draw PNG tetap dapat ditambah/dihapus/diputar dengan rasio asli; undo/redo berlaku pada sesi edit sekarang. Rujukan: [rencana edit lampiran](superpowers/plans/2026-11-15-diary-attachment-edit.md).
 
 Pembaruan 15 November 2026: diary pasien memakai editor halaman penuh, tipografi, kamera/galeri privat dan kanvas dengan alat gambar lengkap. Riwayat diary lama dan pembagian berizin tetap kompatibel. Medication Check-in memproyeksikan waktu konsumsi terakhir dari riwayat, menyelaraskan stok server dan membatasi taken/partial obat yang sama minimal 24 jam dengan retry idempoten. Rujukan: [rencana diary/obat](superpowers/plans/2026-11-15-patient-diary-medication.md).

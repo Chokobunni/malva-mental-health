@@ -1,5 +1,12 @@
 # Product Requirements Document (PRD) - Malva Mental Health
 
+### Kartu refleksi dan Apresiasi Diri — 15 November 2026
+
+- Landing Diary mengikuti HTML pengguna: header gradasi, kartu lunak, palet, kalender, daftar dan pembaca terpisah. Tiga kartu flip ditempatkan tepat di bawah Tulis Cerita Diari Baru, diikuti bar progres lencana; seluruh 100 pertanyaan tersedia tanpa duplikat di tiga kartu yang sama.
+- Jawab di Diari membuka editor dengan pertanyaan terpasang; pilihan kartu juga tersedia di editor. Palet, tanggal WIB, Vault, topik, pesan penguat diri serta media/font bisa diedit dan dipertahankan saat membuka ulang.
+- Bar progres membuka 100 lencana dengan deskripsi, target, progres, pencarian dan filter kategori. Evaluator memakai data tersimpan tanpa streak. Pilihan pengalaman pasien memberi bukti untuk apresiasi subjektif; tidak ada analisis sentimen atau klaim pemulihan.
+- Legacy plain note/mood/media dan consent tetap berlaku. Kegagalan simpan/hapus tidak menghilangkan draft/reader; respons lama dan seluruh route/modal akun lama ditolak setelah pergantian akun.
+
 ### Kriteria penerimaan diary dan obat — 15 November 2026
 
 - Tambah/edit diary membuka halaman penuh dengan tanggal WIB, judul dan tulisan, tanpa input emoticon. Tombol bawah membuka media, halaman kanvas dan pengaturan font; kegagalan simpan mempertahankan draft.

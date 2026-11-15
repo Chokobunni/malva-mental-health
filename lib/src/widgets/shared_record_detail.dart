@@ -392,7 +392,10 @@ class SharedRecordDetail extends StatelessWidget {
                   color: Color(0xFFE9D996), size: 30),
               const SizedBox(width: 8),
               Expanded(
-                  child: content.media.isEmpty
+                  child: content.media.isEmpty &&
+                          content.prompt == null &&
+                          content.selfNote.isEmpty &&
+                          content.tags.isEmpty
                       ? SelectableText(content.text,
                           textAlign: content.align,
                           style: note == content.text

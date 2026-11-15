@@ -1,5 +1,11 @@
 # Business Requirements Document (BRD) - Malva Mental Health
 
+### Ruang Cerita & Diari — 15 November 2026
+
+Pasien memperoleh pemantik dari seluruh 100 pertanyaan refleksi harian, memilih satu dari tiga kartu tertutup dan dapat menjawabnya langsung di diari. Positive Vault menyimpan catatan pilihan untuk dibaca ulang atau diacak. Kalender dan filter palet memetakan nuansa cerita secara terpisah dari Mood Tracker.
+
+Seratus lencana Apresiasi Diri dihitung otomatis dari data diari dan aktivitas yang relevan, tanpa tuntutan berturut-turut. Pengalaman pribadi memakai pilihan pasien di catatan, bukan penilaian otomatis atas kondisi psikologis. Progres berbasis catatan mengikuti data tersimpan; aktivitas interaksi terikat akun pada perangkat yang digunakan.
+
 ### Diary dan konsumsi obat pasien — 15 November 2026
 
 Pasien menulis diary di halaman penuh bertanggal WIB, dengan judul, tulisan, pengaturan tipografi, foto opsional dari kamera/galeri dan kanvas gambar. Mood tetap dicatat melalui Mood Tracker. Foto diary bersifat privat; profesional hanya dapat melihat gambar dalam diary yang dibagikan dengan relasi dan consent yang berlaku.

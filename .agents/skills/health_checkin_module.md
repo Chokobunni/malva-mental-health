@@ -1,5 +1,13 @@
 # Check-in, diary, review dan PDF
 
+## Diary & Positive Vault (0.1.29)
+
+`diary_catalog.dart` memuat 100 pertanyaan dan 100 apresiasi dari PDF pengguna. Landing menempatkan tiga kartu tertutup/flip tepat di bawah tombol tulis, lalu bar lencana, Vault, kalender WIB/filter warna dan daftar cerita. Jawab di Diari memasang promptId di editor; pasien juga bisa memilih kartu langsung saat menulis. Deck mengacak tanpa pengulangan sampai seluruh pool terpakai dan selalu menampilkan tiga ID berbeda.
+
+`diary_achievements.dart` menghitung progres dari catatan tersimpan: jumlah, tanggal WIB berbeda, palet, prompt terjawab, afirmasi, topik dan media. Jeda tidak mereset progres. Pengalaman pribadi memerlukan pilihan apresiasi pasien dan isi pendukung, bukan inferensi kata kunci. Aktivitas baca/filter/refresh memakai SecureStore terikat akun di perangkat ini; progres berbasis isi mengikuti sinkronisasi note. Hapus/edit catatan mengubah hasil evaluasi. Tidak ada notifikasi streak.
+
+Envelope note versi 1 mempertahankan metadata opsional palette/promptId/selfNote/tags/appreciations/inVault dan colors per DiaryMedia. Semua edit, reader, chat dan ekspor harus mempertahankan metadata serta mood legacy. Batas 160/6000 byte tetap; gagal simpan mempertahankan draft. Route/editor/modal/badge/reader dan respons HTTP harus menolak akun/generasi lama A→B→A. GET lama tidak boleh menimpa hasil save/delete. Uji tambahan: diary_vault*, diary_editor_visual, diary_content dan diary_account_draw.
+
 Editor lampiran (0.1.28): Edit gambar membuka PNG privat yang sudah tersimpan sebagai dasar kanvas; pena/penghapus/rotasi bekerja pada pikselnya, rasio/transparansi tetap dan undo/redo hanya untuk sesi edit berjalan. Ganti foto membuka galeri. Upload baru mengganti referensi pada posisi yang sama hanya setelah sukses, juga pada enam lampiran; batal/gagal download/decode/upload mempertahankan yang lama. URL GET wajib origin/path diary valid, tanpa mengikuti redirect; respons dari generasi akun lama ditolak. Berkas server lama tidak ditimpa. Uji tambahan: diary_attachment_edit, pixel PNG reopened pada diary_drawing_screen, serta pembacaan privat diary_media_api.
 
 ## Diary kreatif dan batas konsumsi (2026-11-15)
