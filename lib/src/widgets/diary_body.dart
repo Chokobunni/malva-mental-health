@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/diary_content.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
+import 'diary_design.dart';
 
 class DiaryBody extends StatelessWidget {
   const DiaryBody(
@@ -13,6 +14,28 @@ class DiaryBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final content = DiaryContent.parse(note);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (content.prompt != null)
+        Padding(
+            padding: const EdgeInsets.only(bottom: 18),
+            child: DiaryCard(
+                padding: const EdgeInsets.all(14),
+                color: const Color(0xfffaf5ff),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(content.prompt!.category.toUpperCase(),
+                          style: const TextStyle(
+                              fontSize: 10,
+                              color: diaryPurple,
+                              fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 8),
+                      SelectableText('“${content.prompt!.question}”',
+                          style: const TextStyle(
+                              fontSize: 13,
+                              fontStyle: FontStyle.italic,
+                              color: diaryPlum,
+                              height: 1.6))
+                    ]))),
       if (content.text.isNotEmpty)
         SelectableText(content.text,
             textAlign: content.align, style: content.style),
@@ -20,6 +43,32 @@ class DiaryBody extends StatelessWidget {
         Padding(
             padding: const EdgeInsets.only(top: 12),
             child: DiaryImage(media: item, api: api, token: token)),
+      if (content.tags.isNotEmpty)
+        Padding(
+            padding: const EdgeInsets.only(top: 18),
+            child: Wrap(spacing: 6, runSpacing: 6, children: [
+              for (final tag in content.tags)
+                Chip(label: Text('#$tag', style: const TextStyle(fontSize: 11)))
+            ])),
+      if (content.selfNote.isNotEmpty)
+        Padding(
+            padding: const EdgeInsets.only(top: 18),
+            child: DiaryCard(
+                padding: const EdgeInsets.all(16),
+                color: const Color(0xfffaf5ff),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('PESAN PENGUAT DIRI',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: diaryPurple,
+                              fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 8),
+                      SelectableText(content.selfNote,
+                          style: const TextStyle(
+                              fontSize: 13, color: diaryPlum, height: 1.6))
+                    ]))),
     ]);
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models.dart';
+import '../models/diary_content.dart';
 import '../time/wib.dart';
 
 class DiaryFormSheet extends StatefulWidget {
@@ -15,8 +16,8 @@ class DiaryFormSheet extends StatefulWidget {
 class _DiaryFormSheetState extends State<DiaryFormSheet> {
   late final _title =
       TextEditingController(text: widget.initialEntry?.title ?? '');
-  late final _note =
-      TextEditingController(text: widget.initialEntry?.note ?? '');
+  late final _note = TextEditingController(
+      text: DiaryContent.parse(widget.initialEntry?.note ?? '').text);
   String? _error;
   @override
   void dispose() {
@@ -83,7 +84,9 @@ class _DiaryFormSheetState extends State<DiaryFormSheet> {
       // Retain the legacy wire field without using it as a diary input.
       mood: previous?.mood ?? MoodValue.okay,
       title: _title.text.trim().isEmpty ? 'Catatan harian' : _title.text.trim(),
-      note: _note.text.trim(),
+      note: DiaryContent.parse(previous?.note ?? '')
+          .copyWith(text: _note.text.trim())
+          .encode(),
       professionalFeedback: previous?.professionalFeedback,
     ));
   }

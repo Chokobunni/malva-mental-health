@@ -1,5 +1,11 @@
 # System Architecture
 
+### Diary, kartu refleksi dan lencana — 15 November 2026
+
+Katalog pertanyaan/lencana dibundel di klien. `DiaryPromptDeck` mengacak seluruh pool tanpa pengulangan sebelum habis. Evaluator murni menghasilkan 100 progres dari `DiaryEntry` tersinkron; tanggal dihitung dengan helper WIB. Metadata pilihan pengguna memakai envelope note yang ada (palette, promptId, selfNote, tags, appreciations, inVault dan colors per gambar), tanpa kontrak HTTP/kolom baru. Reader, editor, chat dan ekspor memakai codec bersama.
+
+Aktivitas interaksi disimpan melalui port SecureStore dengan kunci akun, antrean tulis dan guard pergantian akun. Hidrasi tidak bergantung pada generasi GET diary; GET lama diinvalidasi sebelum mutasi. Progres berbasis isi dapat dihitung di perangkat lain, sedangkan riwayat baca/filter/refresh tetap lokal. Font Inter dibundel dengan lisensi OFL, tanpa unduhan runtime.
+
 ### Diary rich content dan dosis idempoten — 15 November 2026
 
 `DiaryContent` mengodekan tipografi/referensi media dalam suffix versi 1 pada `diary_entries.note`; tanpa formatting/media, note tetap teks biasa. Editor, pembaca pasien/profesional, kartu chat dan ekspor memakai codec yang sama. Ekspor PDF/CSV menyertakan tulisan dan jumlah lampiran; JSON backup mempertahankan note lengkap. Tidak ada tabel, kolom atau dependency baru.

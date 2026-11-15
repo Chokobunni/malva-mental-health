@@ -11,6 +11,9 @@ bool get recordCaptureEnabled =>
 
 Future<void> loadRecordCaptureFonts() async {
   if (!recordCaptureEnabled) return;
+  await (FontLoader('Inter')
+        ..addFont(rootBundle.load('assets/fonts/inter-variable.ttf')))
+      .load();
   await (FontLoader('Roboto')
         ..addFont(rootBundle.load('assets/fonts/roboto-regular.ttf'))
         ..addFont(rootBundle.load('assets/fonts/roboto-bold.ttf')))

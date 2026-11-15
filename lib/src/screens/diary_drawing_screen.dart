@@ -8,7 +8,8 @@ import '../theme.dart';
 
 /// Returns the finished PNG to the diary editor, or null when cancelled.
 class DiaryDrawingScreen extends StatefulWidget {
-  const DiaryDrawingScreen({super.key, this.initialImage});
+  const DiaryDrawingScreen({super.key, this.initialImage, this.onColorsUsed});
+  final ValueChanged<Set<int>>? onColorsUsed;
 
   /// The caller retains ownership; this route clones the image for its lifetime.
   final ui.Image? initialImage;
@@ -151,8 +152,13 @@ class _DiaryDrawingScreenState extends State<DiaryDrawingScreen> {
       image = await picture.toImage(size.width.toInt(), size.height.toInt());
       final data = await image.toByteData(format: ui.ImageByteFormat.png);
       if (data == null) throw StateError('PNG unavailable');
-      if (mounted && ModalRoute.of(context)?.isCurrent == true)
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+        widget.onColorsUsed?.call(_strokes
+            .where((s) => !s.erase)
+            .map((s) => s.color.toARGB32())
+            .toSet());
         Navigator.of(context).pop<Uint8List>(data.buffer.asUint8List());
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

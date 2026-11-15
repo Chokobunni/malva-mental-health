@@ -35,7 +35,7 @@ void main() {
         child:
             MaterialApp(home: DiaryHistoryScreen(apiClient: api, session: a))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tambah'));
+    await tester.tap(find.text('Tulis Cerita Diari Baru'));
     await tester.pumpAndSettle();
     await tester.enterText(
         find.widgetWithText(TextField, 'Catatan diary'), 'PRIVATE_DRAFT_A');
@@ -94,7 +94,7 @@ void main() {
     expect(find.text('SERVER_DIARY'), findsOneWidget);
     expect(container.read(malvaStoreProvider).diaryEntries.single.id,
         'server-existing');
-    await tester.tap(find.text('Tambah'));
+    await tester.tap(find.text('Tulis Cerita Diari Baru'));
     await tester.pumpAndSettle();
     await tester.enterText(
         find.widgetWithText(TextField, 'Judul'), 'Cerita baru');
@@ -162,7 +162,8 @@ void main() {
     expect(find.text('DIARY_TITLE'), findsOneWidget);
     expect(find.textContaining('DIARY_BODY'), findsOneWidget);
     expect(find.textContaining('MOOD_ONLY'), findsNothing);
-    expect(find.textContaining('/10'), findsNothing);
+    expect(
+        find.textContaining(RegExp(r'(?<![0-9])/10(?![0-9])')), findsNothing);
     expect(find.text('😢'), findsNothing);
   });
 }

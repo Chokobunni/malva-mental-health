@@ -42,6 +42,8 @@ void main() {
       await captureRecord(tester, boundary, 'diary-font-${width.toInt()}.png');
       await tester.tap(find.byTooltip('Selesai mengatur font'));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byTooltip('Tambah media'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Tambah media'));
       await tester.pumpAndSettle();
       expect(find.text('Kamera'), findsOneWidget);

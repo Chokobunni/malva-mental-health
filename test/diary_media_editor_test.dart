@@ -93,6 +93,8 @@ void main() {
           'https://api.test/v1/diary-media/p/photo.png');
       expect(content.media.single.kind, 'photo');
       expect(content.text, isEmpty);
+      await tester.ensureVisible(find.byTooltip('Hapus lampiran'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Hapus lampiran'));
       await tester.pumpAndSettle();
       expect(find.byTooltip('Hapus lampiran'), findsNothing);
