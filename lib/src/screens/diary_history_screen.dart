@@ -336,6 +336,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
   void dispose() {
     _search.dispose();
     _activityRevision.dispose();
+    _promptHistory.dispose();
     super.dispose();
   }
 
@@ -393,8 +394,10 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                   }
                   return DiaryEditorScreen(
                       initialEntry: entry,
-                      initialPrompt: prompt,
-                      drawPrompts: _promptHistory.draw,
+                      initialPrompt: entry == null
+                          ? prompt ?? _promptHistory.selected
+                          : null,
+                      promptHistory: _promptHistory,
                       onPromptRefresh: () => _record('refreshPrompt'),
                       api: _api,
                       accessToken: _session?.accessToken,
@@ -585,7 +588,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                                         FontWeight.w700)))),
                                     const SizedBox(height: 16),
                                     DailyPromptCards(
-                                        draw: _promptHistory.draw,
+                                        history: _promptHistory,
                                         onAnswer: (p) => _open(prompt: p),
                                         onRefresh: () =>
                                             _record('refreshPrompt')),

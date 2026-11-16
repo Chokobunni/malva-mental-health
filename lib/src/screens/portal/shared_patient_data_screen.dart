@@ -570,6 +570,7 @@ class _DiaryTabState
                 if (entry.note.trim().isNotEmpty) ...[
                   const SizedBox(height: 6),
                   DiaryBody(
+                      compactMedia: true,
                       note: entry.note,
                       api: widget.apiClient ?? ref.read(apiClientProvider),
                       token: widget.session?.accessToken),
