@@ -407,6 +407,7 @@ class SharedRecordDetail extends StatelessWidget {
                               : content.style)
                       : Consumer(
                           builder: (context, ref, _) => DiaryBody(
+                              compactMedia: true,
                               note: _value(data, 'note',
                                   _value(data, 'content', message.text)),
                               api: ref.watch(apiClientProvider),

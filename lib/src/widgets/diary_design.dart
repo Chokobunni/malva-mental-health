@@ -4,6 +4,7 @@ import '../models.dart';
 import '../models/diary_content.dart';
 import '../models/diary_catalog.dart';
 import '../models/diary_achievements.dart';
+import '../services/diary_prompt_history.dart';
 import '../time/wib.dart';
 
 const diaryPurple = Color(0xff8c4393),
@@ -355,12 +356,14 @@ class DailyPromptCards extends StatefulWidget {
   const DailyPromptCards(
       {super.key,
       required this.onAnswer,
+      this.onSelected,
       this.onRefresh,
       this.onClose,
-      this.draw});
+      this.history});
   final ValueChanged<DiaryPrompt> onAnswer;
+  final ValueChanged<DiaryPrompt>? onSelected;
   final VoidCallback? onRefresh, onClose;
-  final Future<List<DiaryPrompt>> Function()? draw;
+  final DiaryPromptHistory? history;
   @override
   State<DailyPromptCards> createState() => _DailyPromptCardsState();
 }
@@ -374,7 +377,24 @@ class _DailyPromptCardsState extends State<DailyPromptCards> {
   @override
   void initState() {
     super.initState();
+    widget.history?.addListener(_sync);
     _load();
+  }
+
+  void _sync() {
+    final history = widget.history;
+    if (!mounted || history == null) return;
+    setState(() {
+      _cards = history.cards;
+      final index = _cards.indexWhere((p) => p.id == history.selected?.id);
+      _selected = index < 0 ? null : index;
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.history?.removeListener(_sync);
+    super.dispose();
   }
 
   Future<void> _load({bool refresh = false}) async {
@@ -386,14 +406,17 @@ class _DailyPromptCardsState extends State<DailyPromptCards> {
     });
     try {
       final List<DiaryPrompt> cards;
-      if (widget.draw != null) {
-        cards = await widget.draw!();
+      if (widget.history != null) {
+        cards = await (refresh
+            ? widget.history!.draw()
+            : widget.history!.current());
       } else {
         if (refresh) _deck.refresh();
         cards = [..._deck.cards];
       }
       if (!mounted) return;
       setState(() => _cards = cards);
+      _sync();
       if (refresh) widget.onRefresh?.call();
     } on Object {
       if (mounted)
@@ -470,7 +493,14 @@ class _DailyPromptCardsState extends State<DailyPromptCards> {
                           'Kartu pertanyaan ${i + 1}, ${_selected == i ? 'terbuka' : 'tertutup'}',
                       child: InkWell(
                           key: ValueKey('prompt-card-$i'),
-                          onTap: () => setState(() => _selected = i),
+                          onTap: () {
+                            if (widget.history != null) {
+                              widget.history!.select(_cards[i]);
+                            } else {
+                              setState(() => _selected = i);
+                            }
+                            widget.onSelected?.call(_cards[i]);
+                          },
                           borderRadius: BorderRadius.circular(16),
                           child: TweenAnimationBuilder<double>(
                               tween: Tween(end: _selected == i ? math.pi : 0),

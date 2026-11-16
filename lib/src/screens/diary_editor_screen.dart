@@ -9,6 +9,7 @@ import '../models/diary_content.dart';
 import '../models/diary_catalog.dart';
 import '../widgets/diary_design.dart';
 import '../services/malva_api_client.dart';
+import '../services/diary_prompt_history.dart';
 import '../theme.dart';
 import '../time/wib.dart';
 import '../widgets/diary_body.dart';
@@ -21,7 +22,7 @@ class DiaryEditorScreen extends ConsumerStatefulWidget {
       this.initialEntry,
       this.initialPrompt,
       this.onPromptRefresh,
-      this.drawPrompts,
+      this.promptHistory,
       required this.api,
       required this.accessToken,
       this.protectRoute,
@@ -29,7 +30,7 @@ class DiaryEditorScreen extends ConsumerStatefulWidget {
   final DiaryEntry? initialEntry;
   final DiaryPrompt? initialPrompt;
   final VoidCallback? onPromptRefresh;
-  final Future<List<DiaryPrompt>> Function()? drawPrompts;
+  final DiaryPromptHistory? promptHistory;
   final MalvaApiClient api;
   final String? accessToken;
   final Widget Function(Widget)? protectRoute;
@@ -57,7 +58,8 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
   final _tagInput = TextEditingController();
   late final _tags = [..._original.tags];
   late final _appreciations = {..._original.appreciations};
-  bool _showCards = false;
+  late bool _showCards =
+      widget.initialEntry == null && widget.initialPrompt != null;
 
   late String _font = _original.font;
   late double _size = _original.size, _height = _original.height;
@@ -781,7 +783,9 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                                   IgnorePointer(
                                       ignoring: _busy,
                                       child: DailyPromptCards(
-                                          draw: widget.drawPrompts,
+                                          history: widget.promptHistory,
+                                          onSelected: (p) =>
+                                              setState(() => _prompt = p),
                                           onClose: () => setState(
                                               () => _showCards = false),
                                           onRefresh: widget.onPromptRefresh,
@@ -790,7 +794,7 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                                                 _showCards = false;
                                               })))
                                 ],
-                                if (_prompt != null) ...[
+                                if (_prompt != null && !_showCards) ...[
                                   const SizedBox(height: 14),
                                   DiaryCard(
                                       padding: const EdgeInsets.all(14),

@@ -604,6 +604,7 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
               const SizedBox(height: 7),
             ],
             DiaryBody(
+                compactMedia: true,
                 note: _text(
                     data, 'note', _text(data, 'content', widget.message.text)),
                 api: ref.watch(apiClientProvider),

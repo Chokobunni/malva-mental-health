@@ -6,10 +6,15 @@ import 'diary_design.dart';
 
 class DiaryBody extends StatelessWidget {
   const DiaryBody(
-      {super.key, required this.note, required this.api, this.token});
+      {super.key,
+      required this.note,
+      required this.api,
+      this.token,
+      this.compactMedia = false});
   final String note;
   final MalvaApiClient api;
   final String? token;
+  final bool compactMedia;
   @override
   Widget build(BuildContext context) {
     final content = DiaryContent.parse(note);
@@ -42,7 +47,16 @@ class DiaryBody extends StatelessWidget {
       for (final item in content.media)
         Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: DiaryImage(media: item, api: api, token: token)),
+            child: Align(
+                alignment: Alignment.centerLeft,
+                child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                        maxWidth: compactMedia ? 240 : double.infinity),
+                    child: DiaryImage(
+                        media: item,
+                        api: api,
+                        token: token,
+                        preview: compactMedia)))),
       if (content.tags.isNotEmpty)
         Padding(
             padding: const EdgeInsets.only(top: 18),
@@ -110,7 +124,7 @@ class DiaryImage extends StatelessWidget {
                             'Gambar belum dapat dimuat. Buka kembali diary untuk mencoba lagi.')))));
     return Stack(children: [
       Container(
-          constraints: const BoxConstraints(maxHeight: 360),
+          constraints: BoxConstraints(maxHeight: preview ? 180 : 360),
           width: double.infinity,
           decoration: BoxDecoration(
               color: Colors.white,
