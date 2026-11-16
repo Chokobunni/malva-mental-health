@@ -1,6 +1,6 @@
 # Diary prompt synchronization and shared media QA — 16 November 2026
 
-Release candidate: **0.1.31+32**, branch `codex/diary-prompt-sync`, base `a8d4936`.
+Released **0.1.31+32**, branch `codex/diary-prompt-sync`, base `a8d4936`.
 
 ## Change
 
@@ -20,3 +20,12 @@ Diary photos and drawings shared in chat, record details, and professional patie
 ## Limits
 
 No physical-device patient/professional test was performed. Media reduction concerns displayed previews and decoded image size; original uploaded files remain intact.
+
+## Production verification
+
+- [PR #10](https://github.com/Chokobunni/malva-mental-health/pull/10) merged as `c496191131d98811e3f8e5269429ee109950339a`; its source tree matches the tested PR head `4fc108a`.
+- PR [Flutter CI](https://github.com/Chokobunni/malva-mental-health/actions/runs/43827921901) passed both timezone suites and Android/web/Windows builds. [Security Gates](https://github.com/Chokobunni/malva-mental-health/actions/runs/43827922020) and Conventional Commits passed. Advisory Code Review Graph failed on the authenticated-user GitHub API 403 while preparing its comment; it is not a blocking gate.
+- Production [APK build/publication](https://github.com/Chokobunni/malva-mental-health/actions/runs/43829990709), [web deployment](https://github.com/Chokobunni/malva-mental-health/actions/runs/43829990686), and [Security Gates](https://github.com/Chokobunni/malva-mental-health/actions/runs/43829990822) passed on the merge commit. The duplicate [main Flutter CI](https://github.com/Chokobunni/malva-mental-health/actions/runs/43829990702) was still running at APK verification; PR checks on the identical source tree had already passed.
+- Downloaded the actual bare [public APK](https://malva.web.id/downloads/malva-latest.apk): package `id.malva.app`, version `0.1.31`, code `32`, 33,011,556 bytes. SHA-256 `48798e80ce3a59ddb1428b244211883ab0e30198d206073647e6f6839c4d7e66` matches the workflow APK and its checksum file.
+- `apksigner verify` passed. Certificate SHA-256 `965f7430ec7f67a44b7a99e83f155e601116ff16c18fa8db57a4e79de4f2d300` matches the previous production release. The existing website download link is present; landing and `/app/` return HTTP200, `/app/version.json` reports `0.1.31`/`32`, and API `/healthz` reports `ok`.
+- Evidence includes `release-verification.json`, `public-apk-badging.txt`, `public-cert.txt`, `workflow-apk/SHA256SUMS.txt`, and the verification script in the QA evidence directory.
