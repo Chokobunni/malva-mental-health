@@ -205,6 +205,14 @@ func TestClinicalPrivateAttachments(t *testing.T) {
 	if unauth.Code != 401 {
 		t.Fatalf("anonymous download %d", unauth.Code)
 	}
+	if deleted := f.call(t, http.MethodDelete, "/v1/messages/"+p.Message.ID, "professional", f.prof.ID, nil); deleted.Code != http.StatusNoContent {
+		t.Fatalf("attachment deletion status %d: %s", deleted.Code, deleted.Body)
+	}
+	for _, user := range []struct{ role, id string }{{"patient", f.patient.ID}, {"professional", f.prof.ID}} {
+		if get := f.call(t, http.MethodGet, "/v1/chat-attachments/"+p.Message.ID, user.role, user.id, nil); get.Code != http.StatusNotFound {
+			t.Fatalf("deleted attachment readable by %s: %d", user.role, get.Code)
+		}
+	}
 }
 
 func TestClinicalCardRetryDoesNotDuplicate(t *testing.T) {

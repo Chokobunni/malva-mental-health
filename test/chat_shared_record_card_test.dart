@@ -372,23 +372,23 @@ void main() {
     expect(bars.length, 1);
   });
 
-  testWidgets('diary heading precedes dated cream card and full saved note',
+  testWidgets('diary bubble limits the note to three lines and shows dates',
       (tester) async {
-    const note = 'Catatan lengkap.\nBaris kedua yang tetap dibaca langsung.';
+    const note = 'Baris pertama.\nBaris kedua.\nBaris ketiga.\nBaris keempat.';
     await _show(tester, kind: 'diary', metadata: {
       'title': 'Bertemu teman',
       'note': note,
       'occurred_at': '2026-11-08T19:39:00+07:00'
     });
     expect(find.text('Diary'), findsOneWidget);
-    expect(find.text(note), findsOneWidget);
-    expect(find.text('11/11/2026'), findsOneWidget);
-    expect(find.text('17:43'), findsOneWidget);
-    expect(tester.getTopLeft(find.text('Diary')).dy,
-        lessThan(tester.getTopLeft(find.text('11/11/2026')).dy));
-    expect(tester.getTopLeft(find.text('17:43')).dy,
-        lessThan(tester.getTopLeft(find.text('08/11/2026 19:39 WIB')).dy));
-    expect(find.textContaining('Baca'), findsNothing);
+    expect(find.textContaining('Baris pertama.'), findsOneWidget);
+    final preview = tester.widget<Text>(find.textContaining('Baris pertama.'));
+    expect(preview.maxLines, 3);
+    expect(preview.overflow, TextOverflow.ellipsis);
+    expect(preview.data, isNot(contains('Baris keempat')));
+    expect(preview.data, endsWith('...'));
+    expect(find.text('11/11/2026 · 17:43'), findsOneWidget);
+    expect(find.text('08/11/2026 19:39 WIB'), findsOneWidget);
   });
 
   testWidgets(

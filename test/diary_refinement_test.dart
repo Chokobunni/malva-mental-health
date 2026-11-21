@@ -138,7 +138,7 @@ void main() {
             home: DiaryEditorScreen(
                 api: MalvaApiClient(),
                 accessToken: 'test',
-                onSave: (_) async => true))));
+                onSave: (entry, _) async => entry))));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('prompt-card-0')), findsNothing);
     await tester.tap(find.text('Pertanyaan Refleksi'));
@@ -194,8 +194,15 @@ void main() {
         tester.widgetList<DiaryImage>(find.byType(DiaryImage)).toList();
     expect(previews.map((p) => p.media.url),
         ['/v1/diary-media/p/photo1.png', '/v1/diary-media/p/sketch1.png']);
+    final tiles = find.byType(DiaryImage);
+    expect(tester.getTopLeft(tiles.first).dy, tester.getTopLeft(tiles.last).dy);
+    expect(find.textContaining('Baca Diari'), findsNothing);
     expect(find.text('Positive Vault'), findsOneWidget);
     expect(find.text('#Lega'), findsOneWidget);
+    expect(find.text('Cerita berwarna').hitTestable(), findsOneWidget);
+    await tester.tap(find.text('Cerita berwarna'));
+    await tester.pumpAndSettle();
+    expect(find.text('Isi cerita'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
   testWidgets('offscreen story thumbnails stay unmounted', (tester) async {

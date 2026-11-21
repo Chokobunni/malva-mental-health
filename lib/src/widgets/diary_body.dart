@@ -10,11 +10,13 @@ class DiaryBody extends StatelessWidget {
       required this.note,
       required this.api,
       this.token,
-      this.compactMedia = false});
+      this.compactMedia = false,
+      this.mediaGrid = false});
   final String note;
   final MalvaApiClient api;
   final String? token;
   final bool compactMedia;
+  final bool mediaGrid;
   @override
   Widget build(BuildContext context) {
     final content = DiaryContent.parse(note);
@@ -44,26 +46,36 @@ class DiaryBody extends StatelessWidget {
       if (content.text.isNotEmpty)
         SelectableText(content.text,
             textAlign: content.align, style: content.style),
-      for (final item in content.media)
-        Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Align(
-                alignment: Alignment.centerLeft,
-                child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                        maxWidth: compactMedia ? 240 : double.infinity),
-                    child: DiaryImage(
-                        media: item,
-                        api: api,
-                        token: token,
-                        preview: compactMedia)))),
+      if (mediaGrid && content.media.isNotEmpty)
+        LayoutBuilder(builder: (context, constraints) {
+          final size = ((constraints.maxWidth - 10) / 2).clamp(0.0, 180.0);
+          return Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Wrap(spacing: 10, runSpacing: 10, children: [
+                for (final kind in ['drawing', 'photo'])
+                  for (final item in content.media.where((m) => m.kind == kind))
+                    DiaryMediaTile(
+                        media: item, api: api, token: token, size: size),
+              ]));
+        })
+      else
+        for (final item in content.media)
+          Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                          maxWidth: compactMedia ? 240 : double.infinity),
+                      child: DiaryImage(
+                          media: item,
+                          api: api,
+                          token: token,
+                          preview: compactMedia)))),
       if (content.tags.isNotEmpty)
         Padding(
             padding: const EdgeInsets.only(top: 18),
-            child: Wrap(spacing: 6, runSpacing: 6, children: [
-              for (final tag in content.tags)
-                Chip(label: Text('#$tag', style: const TextStyle(fontSize: 11)))
-            ])),
+            child: DiaryTags(tags: content.tags)),
       if (content.selfNote.isNotEmpty)
         Padding(
             padding: const EdgeInsets.only(top: 18),
@@ -87,6 +99,55 @@ class DiaryBody extends StatelessWidget {
   }
 }
 
+class DiaryTags extends StatelessWidget {
+  const DiaryTags({super.key, required this.tags});
+
+  final List<String> tags;
+
+  @override
+  Widget build(BuildContext context) =>
+      Wrap(spacing: 6, runSpacing: 6, children: [
+        for (final tag in tags)
+          Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+              decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xffddd0e5)),
+                  borderRadius: BorderRadius.circular(8)),
+              child: Text('#$tag', style: const TextStyle(fontSize: 11))),
+      ]);
+}
+
+class DiaryMediaTile extends StatelessWidget {
+  const DiaryMediaTile(
+      {super.key,
+      required this.media,
+      required this.api,
+      this.token,
+      required this.size});
+
+  final DiaryMedia media;
+  final MalvaApiClient api;
+  final String? token;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+      width: size,
+      child: Column(children: [
+        SizedBox.square(
+            dimension: size,
+            child: DiaryImage(
+                media: media,
+                api: api,
+                token: token,
+                preview: true,
+                showLabel: false)),
+        const SizedBox(height: 5),
+        Text(media.kind == 'drawing' ? 'Sketsa' : 'Foto',
+            style: const TextStyle(color: Color(0xff625a6b), fontSize: 11)),
+      ]));
+}
+
 class DiaryImage extends StatelessWidget {
   const DiaryImage(
       {super.key,
@@ -95,40 +156,51 @@ class DiaryImage extends StatelessWidget {
       this.token,
       this.onEdit,
       this.onRemove,
-      this.preview = false});
+      this.preview = false,
+      this.showLabel = true});
   final DiaryMedia media;
   final MalvaApiClient api;
   final String? token;
   final VoidCallback? onEdit;
   final VoidCallback? onRemove;
   final bool preview;
+  final bool showLabel;
   @override
   Widget build(BuildContext context) {
     final url = media.resolve(api.baseUri);
+    final radius = BorderRadius.circular(showLabel ? 18 : 10);
     final image = ClipRRect(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: radius,
         child: url == null || token == null || token!.isEmpty
-            ? const SizedBox(
-                height: 100,
-                child: Center(child: Text('Masuk untuk melihat gambar.')))
+            ? !showLabel
+                ? const Center(
+                    child: Icon(Icons.lock_outline,
+                        semanticLabel: 'Masuk untuk melihat gambar'))
+                : const SizedBox(
+                    height: 100,
+                    child: Center(child: Text('Masuk untuk melihat gambar.')))
             : Image.network(url.toString(),
                 headers: {'Authorization': 'Bearer $token'},
                 cacheWidth: preview ? 720 : null,
                 fit: BoxFit.contain,
                 semanticLabel:
                     media.kind == 'drawing' ? 'Gambar diary' : 'Foto diary',
-                errorBuilder: (_, __, ___) => const SizedBox(
-                    height: 100,
-                    child: Center(
-                        child: Text(
-                            'Gambar belum dapat dimuat. Buka kembali diary untuk mencoba lagi.')))));
-    return Stack(children: [
+                errorBuilder: (_, __, ___) => !showLabel
+                    ? const Center(
+                        child: Icon(Icons.broken_image_outlined,
+                            semanticLabel: 'Gambar belum dapat dimuat'))
+                    : const SizedBox(
+                        height: 100,
+                        child: Center(
+                            child: Text(
+                                'Gambar belum dapat dimuat. Buka kembali diary untuk mencoba lagi.')))));
+    return Stack(fit: StackFit.passthrough, children: [
       Container(
           constraints: BoxConstraints(maxHeight: preview ? 180 : 360),
           width: double.infinity,
           decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: radius,
               border: Border.all(color: const Color(0xffe8daef))),
           child: image),
       if (onRemove != null)
@@ -151,29 +223,30 @@ class DiaryImage extends StatelessWidget {
                         ? Icons.edit_outlined
                         : Icons.photo_library_outlined,
                     size: 20))),
-      Positioned(
-          left: 10,
-          bottom: 8,
-          child: IgnorePointer(
-              child: DecoratedBox(
-                  decoration: BoxDecoration(
-                      color: MalvaColors.paper.withValues(alpha: .92),
-                      borderRadius: BorderRadius.circular(20)),
-                  child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 9, vertical: 4),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(
-                            media.kind == 'drawing'
-                                ? Icons.draw_outlined
-                                : Icons.image_outlined,
-                            size: 14,
-                            color: MalvaColors.seed),
-                        const SizedBox(width: 4),
-                        Text(media.kind == 'drawing' ? 'Gambar' : 'Foto',
-                            style: const TextStyle(
-                                fontSize: 11, color: MalvaColors.plum))
-                      ]))))),
+      if (showLabel)
+        Positioned(
+            left: 10,
+            bottom: 8,
+            child: IgnorePointer(
+                child: DecoratedBox(
+                    decoration: BoxDecoration(
+                        color: MalvaColors.paper.withValues(alpha: .92),
+                        borderRadius: BorderRadius.circular(20)),
+                    child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 4),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(
+                              media.kind == 'drawing'
+                                  ? Icons.draw_outlined
+                                  : Icons.image_outlined,
+                              size: 14,
+                              color: MalvaColors.seed),
+                          const SizedBox(width: 4),
+                          Text(media.kind == 'drawing' ? 'Gambar' : 'Foto',
+                              style: const TextStyle(
+                                  fontSize: 11, color: MalvaColors.plum))
+                        ]))))),
     ]);
   }
 }

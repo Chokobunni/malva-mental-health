@@ -1455,6 +1455,8 @@ tarik izin berbagi bila `professional_id` dikirim kosong.
 - GET /v1/chat-attachments/{id} returns private authenticated bytes with safe download headers; only the persisted message participants can read, including after session end. No public URL or access token query is returned.
 - clinical_data_changed realtime event: {patient_id,resource}, resource medications/goals/health_record. Emitted after successful mutation. Refresh the patient data using current credentials; discard stale account responses. This event is not OS push.
 - Medication create/update/delete by professional requires verified psychiatrist, linked patient, consent and active session. Health-record diagnosis and goals use corresponding consent scopes. Existing patient self-management remains supported.
+
+- `PUT /v1/health-record` requires a verified professional, an active patient link, and Health Record consent. A valid active multi-session package grants write access before and between sessions. A scheduled standalone session grants access from its start through its exclusive end. `diagnosis_summary` remains a string with a 2,000-byte limit. The app sends selected ICD-10 codes and titles as one ordered entry per line, with the primary diagnosis first.
 - Payment GET status trusts configured authenticated HTTPS provider transport, binds response order to requested reference and enforces amount/fraud validation. Webhook signature remains required.
 - Provider body codes are accepted only as 200 for capture/settlement, 201/pending, 202/deny and 407/expire. Unrecognized non-200 combinations stay pending; missing or mismatched orders cannot change state. Terminal reconciliation is idempotent and never activates an unpaid booking.
 

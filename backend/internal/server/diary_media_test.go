@@ -240,10 +240,20 @@ func TestDiaryMediaOnlySaveRoundTripAndProfessionalRead(t *testing.T) {
 		if payload.Diary.Note != note {
 			t.Fatalf("%s changed media-only marker", method)
 		}
+		path = "/v1/diary-entries/" + payload.Diary.ID
+		if method == "POST" {
+			private := doAuthed(t, f.srv.Routes(), "GET", imageURL, professional, "")
+			if private.Code != 404 {
+				t.Fatalf("new media-only diary must be private: %d", private.Code)
+			}
+			grant := doAuthed(t, f.srv.Routes(), "PUT", path+"/access/"+f.prof.ID, owner, "")
+			if grant.Code != 200 {
+				t.Fatalf("grant diary access: %d %s", grant.Code, grant.Body)
+			}
+		}
 		read := doAuthed(t, f.srv.Routes(), "GET", imageURL, professional, "")
 		if read.Code != 200 {
 			t.Fatalf("%s media-only professional read %d: %s", method, read.Code, read.Body)
 		}
-		path = "/v1/diary-entries/" + payload.Diary.ID
 	}
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:malva_mental_health/features/diagnosis/icd10_service.dart';
 import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/screens/pro_patient_detail_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
@@ -85,6 +86,9 @@ Map<String, dynamic> _worksheet(String id, String title) => {
 
 class _Responses {
   bool psychiatrist = false;
+  bool verified = false;
+  String diagnosis = 'Diagnosis tersimpan';
+  final diagnosisWrites = <String>[];
   final statusByPath = <String, int>{};
   bool missingGad = false;
   final requested = <String>[];
@@ -98,6 +102,12 @@ class _Responses {
     httpClient: MockClient((request) async {
       final path = request.url.path;
       requested.add(path);
+      if (path == '/v1/health-record' && request.method == 'PUT') {
+        final data = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(data['patient_id'], 'patient');
+        diagnosis = data['diagnosis_summary'] as String;
+        diagnosisWrites.add(diagnosis);
+      }
       final status = statusByPath[path] ?? 200;
       if (status != 200) {
         return http.Response(
@@ -125,13 +135,13 @@ class _Responses {
         '/v1/timeline' => {'events': []},
         '/v1/messages' => {'messages': []},
         '/v1/health-record' => {
-            'health_record': {'diagnosis_summary': 'Diagnosis tersimpan'},
+            'health_record': {'diagnosis_summary': diagnosis},
           },
         '/v1/credentials/me' => {
-            'credential': psychiatrist
+            'credential': psychiatrist || verified
                 ? {
-                    'specialization': 'Sp.KJ',
-                    'verification_status': 'APPROVED',
+                    'specialization': psychiatrist ? 'Sp.KJ' : 'M.Psi',
+                    'verification_status': 'VERIFIED',
                   }
                 : null
           },
@@ -162,6 +172,77 @@ Future<void> _pump(WidgetTester tester, _Responses responses) async {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  // The production asset is decoded in an isolate outside the fake clock.
+  setUpAll(() async => Icd10Service().load());
+
+  testWidgets('unused valid package opens ICD-10 selection in Isi diagnosis',
+      (tester) async {
+    final now = wibNow();
+    final responses = _Responses()
+      ..verified = true
+      ..packages.add({
+        'id': 'unused',
+        'patient_id': 'patient',
+        'professional_id': 'professional',
+        'total_sessions': 4,
+        'used_sessions': 0,
+        'remaining_sessions': 4,
+        'status': 'active',
+        'starts_at': wibIso(now.subtract(const Duration(days: 1))),
+        'expires_at': wibIso(now.add(const Duration(days: 42))),
+      });
+    await _pump(tester, responses);
+    await tester.tap(find.text('Isi diagnosis'));
+    await tester.pumpAndSettle();
+    final dialog = find.byType(AlertDialog);
+    expect(dialog, findsOneWidget);
+    final search =
+        find.descendant(of: dialog, matching: find.byType(TextField));
+    await tester.enterText(search, 'F411');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Generalized anxiety disorder'));
+    await tester.pumpAndSettle();
+    await tester.enterText(search, 'F431');
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Post-traumatic stress disorder'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Simpan'));
+    await tester.pumpAndSettle();
+    expect(responses.diagnosisWrites, [
+      'F41.1 - Generalized anxiety disorder\nF43.1 - Post-traumatic stress disorder',
+    ]);
+    await tester.tap(find.text('Isi diagnosis'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Primary'), findsOneWidget);
+    expect(find.textContaining('Secondary'), findsOneWidget);
+  });
+
+  for (final offset in [-90, -10, 90]) {
+    testWidgets('single-session diagnosis availability at start offset $offset',
+        (tester) async {
+      final responses = _Responses()
+        ..verified = true
+        ..sessions.add({
+          'id': 'single',
+          'patient_id': 'patient',
+          'professional_id': 'professional',
+          'scheduled_at': wibIso(wibNow().add(Duration(minutes: offset))),
+          'status': 'scheduled',
+          'session_type': 'video',
+          'duration_minutes': 60,
+        });
+      await _pump(tester, responses);
+      final button = tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Isi diagnosis'));
+      if (offset == -10) {
+        expect(button.onPressed, isNotNull);
+      } else {
+        expect(button.onPressed, isNull);
+      }
+    });
+  }
+
   testWidgets('prescribe from patient detail opens the new medicine wizard',
       (tester) async {
     final responses = _Responses()..psychiatrist = true;

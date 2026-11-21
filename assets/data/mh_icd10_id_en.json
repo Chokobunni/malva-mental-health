@@ -1,0 +1,4872 @@
+[
+  {
+    "code": "F00.0",
+    "code_clean": "F000",
+    "title": "Dementia in Alzheimers disease with early onset",
+    "keywords": [
+      "Demensia pada penyakit Alzheimers dengan onset awal"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F00.1",
+    "code_clean": "F001",
+    "title": "Dementia in Alzheimers disease with late onset",
+    "keywords": [
+      "Demensia pada penyakit Alzheimers dengan onset terlambat"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F00.2",
+    "code_clean": "F002",
+    "title": "Dementia in Alzheimers disease, atypical or mixed type",
+    "keywords": [
+      "Demensia pada penyakit Alzheimers , atipikal atau tipe campuran"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F00.9",
+    "code_clean": "F009",
+    "title": "Dementia in Alzheimers disease, unspecified",
+    "keywords": [
+      "Demensia pada penyakit Alzheimers , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F01.0",
+    "code_clean": "F010",
+    "title": "Vascular dementia of acute onset",
+    "keywords": [
+      "Demensia vaskular onset akut"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F01.1",
+    "code_clean": "F011",
+    "title": "Multi-infarct dementia",
+    "keywords": [
+      "Demensia multi-infark"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F01.2",
+    "code_clean": "F012",
+    "title": "Subcortical vascular dementia",
+    "keywords": [
+      "Demensia vaskular subkortikal"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F01.3",
+    "code_clean": "F013",
+    "title": "Mixed cortical and subcortical vascular dementia",
+    "keywords": [
+      "Campuran demensia vaskular kortikal dan subkortikal"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F01.8",
+    "code_clean": "F018",
+    "title": "Other vascular dementia",
+    "keywords": [
+      "Demensia vaskular lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F01.9",
+    "code_clean": "F019",
+    "title": "Vascular dementia, unspecified",
+    "keywords": [
+      "Demensia vaskular , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F02.0",
+    "code_clean": "F020",
+    "title": "Dementia in Picks disease",
+    "keywords": [
+      "Demensia pada penyakit Pilihan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F02.1",
+    "code_clean": "F021",
+    "title": "Dementia in Creutzfeldt-Jakob disease",
+    "keywords": [
+      "Demensia pada penyakit Creutzfeldt - Jakob"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F02.2",
+    "code_clean": "F022",
+    "title": "Dementia in Huntingtons disease",
+    "keywords": [
+      "Demensia pada penyakit Huntingtons"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F02.3",
+    "code_clean": "F023",
+    "title": "Dementia in Parkinsons disease",
+    "keywords": [
+      "Demensia pada penyakit Parkinson"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F02.4",
+    "code_clean": "F024",
+    "title": "Dementia in human immunodeficiency virus [HIV] disease",
+    "keywords": [
+      "Demensia pada manusia immunodeficiency virus [ HIV ] penyakit"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F02.8",
+    "code_clean": "F028",
+    "title": "Dementia in other specified diseases classified elsewhere",
+    "keywords": [
+      "Demensia pada penyakit tertentu lainnya diklasifikasikan di tempat lain"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F03",
+    "code_clean": "F03",
+    "title": "Unspecified dementia",
+    "keywords": [
+      "Tidak disebutkan demensia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F04",
+    "code_clean": "F04",
+    "title": "Organic amnesic syndrome, not induced by alcohol and other psychoactive substances",
+    "keywords": [
+      "Sindrom amnesia organik , tidak disebabkan oleh alkohol dan zat psikoaktif lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F05.0",
+    "code_clean": "F050",
+    "title": "Delirium not superimposed on dementia, so described",
+    "keywords": [
+      "Delirium tidak ditumpangkan pada demensia , sehingga dijelaskan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F05.1",
+    "code_clean": "F051",
+    "title": "Delirium superimposed on dementia",
+    "keywords": [
+      "Delirium ditumpangkan pada demensia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F05.8",
+    "code_clean": "F058",
+    "title": "Other delirium",
+    "keywords": [
+      "Delirium lain"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F05.9",
+    "code_clean": "F059",
+    "title": "Delirium, unspecified",
+    "keywords": [
+      "Delirium , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F06.0",
+    "code_clean": "F060",
+    "title": "Organic hallucinosis",
+    "keywords": [
+      "Halusinasi organik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F06.1",
+    "code_clean": "F061",
+    "title": "Organic catatonic disorder",
+    "keywords": [
+      "Gangguan katatonik organik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F06.2",
+    "code_clean": "F062",
+    "title": "Organic delusional [schizophrenia-like] disorder",
+    "keywords": [
+      "Delusional [ seperti skizofrenia ] gangguan organik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F06.3",
+    "code_clean": "F063",
+    "title": "Organic mood [affective] disorders",
+    "keywords": [
+      "Suasana hati organik [ afektif ] gangguan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F06.4",
+    "code_clean": "F064",
+    "title": "Organic anxiety disorder",
+    "keywords": [
+      "Gangguan kecemasan Organik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F06.5",
+    "code_clean": "F065",
+    "title": "Organic dissociative disorder",
+    "keywords": [
+      "Gangguan disosiatif organik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F06.6",
+    "code_clean": "F066",
+    "title": "Organic emotionally labile [asthenic] disorder",
+    "keywords": [
+      "Emosional labil [ asthenic ] gangguan organik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F06.7",
+    "code_clean": "F067",
+    "title": "Mild cognitive disorder",
+    "keywords": [
+      "Gangguan kognitif ringan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F06.8",
+    "code_clean": "F068",
+    "title": "Other specified mental disorders due to brain damage and dysfunction and to physical disease",
+    "keywords": [
+      "Gangguan mental tertentu lainnya akibat kerusakan otak dan disfungsi dan penyakit fisik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F06.9",
+    "code_clean": "F069",
+    "title": "Unspecified mental disorder due to brain damage and dysfunction and to physical disease",
+    "keywords": [
+      "Gangguan mental yang tidak spesifik akibat kerusakan otak dan disfungsi dan penyakit fisik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F07.0",
+    "code_clean": "F070",
+    "title": "Organic personality disorder",
+    "keywords": [
+      "Gangguan kepribadian organik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F07.1",
+    "code_clean": "F071",
+    "title": "Postencephalitic syndrome",
+    "keywords": [
+      "sindrom Postencephalitic"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F07.2",
+    "code_clean": "F072",
+    "title": "Postconcussional syndrome",
+    "keywords": [
+      "sindrom postconcussional"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F07.8",
+    "code_clean": "F078",
+    "title": "Other organic personality and behavioural disorders due to brain disease, damage and dysfunction",
+    "keywords": [
+      "Kepribadian organik lainnya dan gangguan perilaku akibat penyakit otak , kerusakan dan disfungsi"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F07.9",
+    "code_clean": "F079",
+    "title": "Unspecified organic personality and behavioural disorder due to brain disease, damage and dysfunction",
+    "keywords": [
+      "Kepribadian organik yang tidak spesifik dan gangguan perilaku akibat penyakit otak , kerusakan dan disfungsi"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F09",
+    "code_clean": "F09",
+    "title": "Unspecified organic or symptomatic mental disorder",
+    "keywords": [
+      "Gangguan mental organik yang tidak spesifik atau gejala"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F10.0",
+    "code_clean": "F100",
+    "title": "Mental and behavioural disorders due to use of alcohol, acute intoxication",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan alkohol , intoksikasi akut"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F10.1",
+    "code_clean": "F101",
+    "title": "Mental and behavioural disorders due to use of alcohol, harmful use",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan alkohol , penggunaan berbahaya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F10.2",
+    "code_clean": "F102",
+    "title": "Mental and behavioural disorders due to use of alcohol, dependence syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan alkohol , sindrom ketergantungan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F10.3",
+    "code_clean": "F103",
+    "title": "Mental and behavioural disorders due to use of alcohol, withdrawal state",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan alkohol , keadaan putus"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F10.4",
+    "code_clean": "F104",
+    "title": "Mental and behavioural disorders due to use of alcohol, withdrawal state with delirium",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan alkohol , keadaan putus dengan delirium"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F10.5",
+    "code_clean": "F105",
+    "title": "Mental and behavioural disorders due to use of alcohol, psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan alkohol , gangguan psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F10.6",
+    "code_clean": "F106",
+    "title": "Mental and behavioural disorders due to use of alcohol, amnesic syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan alkohol , sindrom amnesia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F10.7",
+    "code_clean": "F107",
+    "title": "Mental and behavioural disorders due to use of alcohol, residual and late-onset psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan alkohol , residual dan gangguan psikotik akhir-onset"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F10.8",
+    "code_clean": "F108",
+    "title": "Mental and behavioural disorders due to use of alcohol, other mental and behavioural disorders",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan alkohol , gangguan mental dan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F10.9",
+    "code_clean": "F109",
+    "title": "Mental and behavioural disorders due to use of alcohol, unspecified mental and behavioural disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan alkohol , gangguan mental dan perilaku yang tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F11.0",
+    "code_clean": "F110",
+    "title": "Mental and behavioural disorders due to use of opioids, acute intoxication",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan opioid , intoksikasi akut"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F11.1",
+    "code_clean": "F111",
+    "title": "Mental and behavioural disorders due to use of opioids, harmful use",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan opioid , penggunaan berbahaya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F11.2",
+    "code_clean": "F112",
+    "title": "Mental and behavioural disorders due to use of opioids, dependence syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan opioid , sindrom ketergantungan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F11.3",
+    "code_clean": "F113",
+    "title": "Mental and behavioural disorders due to use of opioids, withdrawal state",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan opioid , keadaan putus"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F11.4",
+    "code_clean": "F114",
+    "title": "Mental and behavioural disorders due to use of opioids, withdrawal state with delirium",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan opioid , keadaan putus dengan delirium"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F11.5",
+    "code_clean": "F115",
+    "title": "Mental and behavioural disorders due to use of opioids, psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan opioid , gangguan psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F11.6",
+    "code_clean": "F116",
+    "title": "Mental and behavioural disorders due to use of opioids, amnesic syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan opioid , sindrom amnesia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F11.7",
+    "code_clean": "F117",
+    "title": "Mental and behavioural disorders due to use of opioids, residual and late-onset psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan opioid , residual dan gangguan psikotik akhir - onset"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F11.8",
+    "code_clean": "F118",
+    "title": "Mental and behavioural disorders due to use of opioids, other mental and behavioural disorders",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan opioid , gangguan mental dan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F11.9",
+    "code_clean": "F119",
+    "title": "Mental and behavioural disorders due to use of opioids, unspecified mental and behavioural disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan opioid , gangguan mental dan perilaku yang tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F12.0",
+    "code_clean": "F120",
+    "title": "Mental and behavioural disorders due to use of cannabinoids, acute intoxication",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan cannabinoids , intoksikasi akut"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F12.1",
+    "code_clean": "F121",
+    "title": "Mental and behavioural disorders due to use of cannabinoids, harmful use",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan cannabinoids , penggunaan berbahaya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F12.2",
+    "code_clean": "F122",
+    "title": "Mental and behavioural disorders due to use of cannabinoids, dependence syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan cannabinoids , sindrom ketergantungan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F12.3",
+    "code_clean": "F123",
+    "title": "Mental and behavioural disorders due to use of cannabinoids, withdrawal state",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan cannabinoids , keadaan putus"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F12.4",
+    "code_clean": "F124",
+    "title": "Mental and behavioural disorders due to use of cannabinoids, withdrawal state with delirium",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan cannabinoids , keadaan putus dengan delirium"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F12.5",
+    "code_clean": "F125",
+    "title": "Mental and behavioural disorders due to use of cannabinoids, psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan cannabinoids , gangguan psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F12.6",
+    "code_clean": "F126",
+    "title": "Mental and behavioural disorders due to use of cannabionoids, amnesic syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan cannabionoids , sindrom amnesia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F12.7",
+    "code_clean": "F127",
+    "title": "Mental and behavioural disorders due to use of cannabinoids, residual and late-onset psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan cannabinoids , residual dan gangguan psikotik akhir - onset"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F12.8",
+    "code_clean": "F128",
+    "title": "Mental and behavioural disorders due to use of cannabinoids, other mental and behavioural disorders",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan cannabinoids , gangguan mental dan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F12.9",
+    "code_clean": "F129",
+    "title": "Mental and behavioural disorders due to use of cannabinoids, unspecified mental and behavioural disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan cannabinoids , gangguan mental dan perilaku yang tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F13.0",
+    "code_clean": "F130",
+    "title": "Mental and behavioural disorders due to use of sedatives or hypnotics, acute intoxication",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan obat penenang atau hipnotik , intoksikasi akut"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F13.1",
+    "code_clean": "F131",
+    "title": "Mental and behavioural disorders due to use of sedatives or hypnotics, harmful use",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan obat penenang atau hipnotik , penggunaan berbahaya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F13.2",
+    "code_clean": "F132",
+    "title": "Mental and behavioural disorders due to use of sedatives or hypnotics, dependence syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan obat penenang atau hipnotik , sindrom ketergantungan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F13.3",
+    "code_clean": "F133",
+    "title": "Mental and behavioural disorders due to use of sedatives or hypnotics, withdrawal state",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan obat penenang atau hipnotik , keadaan putus"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F13.4",
+    "code_clean": "F134",
+    "title": "Mental and behavioural disorders due to use of sedatives or hypnotics, withdrawal state with delirium",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan obat penenang atau hipnotik , keadaan putus dengan delirium"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F13.5",
+    "code_clean": "F135",
+    "title": "Mental and behavioural disorders due to use of sedatives or hypnotics, psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan obat penenang atau hipnotik , gangguan psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F13.6",
+    "code_clean": "F136",
+    "title": "Mental and behavioural disorders due to use of sedatives or hypnotics, amnesic syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan obat penenang atau hipnotik , sindrom amnesia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F13.7",
+    "code_clean": "F137",
+    "title": "Mental and behavioural disorders due to use of sedatives or hypnotics, residual and late-onset psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan obat penenang atau hipnotik , residual dan gangguan psikotik akhir - onset"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F13.8",
+    "code_clean": "F138",
+    "title": "Mental and behavioural disorders due to use of sedatives or hypnotics, other mental and behavioural disorders",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan obat penenang atau hipnotik , gangguan mental dan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F13.9",
+    "code_clean": "F139",
+    "title": "Mental and behavioural disorders due to use of sedatives or hypnotics, unspecified mental and behavioural disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan obat penenang atau hipnotik , gangguan mental dan perilaku yang tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F14.0",
+    "code_clean": "F140",
+    "title": "Mental and behavioural disorders due to use of cocaine, acute intoxication",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan kokain , intoksikasi akut"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F14.1",
+    "code_clean": "F141",
+    "title": "Mental and behavioural disorders due to use of cocaine, harmful use",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan kokain , penggunaan berbahaya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F14.2",
+    "code_clean": "F142",
+    "title": "Mental and behavioural disorders due to use of cocaine, dependence syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan kokain , sindrom ketergantungan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F14.3",
+    "code_clean": "F143",
+    "title": "Mental and behavioural disorders due to use of cocaine, withdrawal state",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan kokain , keadaan putus"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F14.4",
+    "code_clean": "F144",
+    "title": "Mental and behavioural disorders due to use of cocaine, withdrawal state with delirium",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan kokain , keadaan putus dengan delirium"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F14.5",
+    "code_clean": "F145",
+    "title": "Mental and behavioural disorders due to use of cocaine, psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan kokain , gangguan psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F14.6",
+    "code_clean": "F146",
+    "title": "Mental and behavioural disorders due to use of cocaine, amnesic syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan kokain , sindrom amnesia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F14.7",
+    "code_clean": "F147",
+    "title": "Mental and behavioural disorders due to use of cocaine, residual and late-onset psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan kokain , residual dan gangguan psikotik akhir - onset"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F14.8",
+    "code_clean": "F148",
+    "title": "Mental and behavioural disorders due to use of cocaine, other mental and behavioural disorders",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan kokain , gangguan mental dan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F14.9",
+    "code_clean": "F149",
+    "title": "Mental and behavioural disorders due to use of cocaine, unspecified mental and behavioural disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan kokain , gangguan mental dan perilaku yang tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F15.0",
+    "code_clean": "F150",
+    "title": "Mental and behavioural disorders due to use of other stimulants including caffeine, acute intoxication",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan stimulan lainnya termasuk kafein , intoksikasi akut"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F15.1",
+    "code_clean": "F151",
+    "title": "Mental and behavioural disorders due to use of other stimulants including caffeine, harmful use",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan stimulan lain termasuk kafein , penggunaan berbahaya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F15.2",
+    "code_clean": "F152",
+    "title": "Mental and behavioural disorders due to use of other stimulants including caffeine, dependence syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan stimulan lain termasuk kafein , sindrom ketergantungan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F15.3",
+    "code_clean": "F153",
+    "title": "Mental and behavioural disorders due to use of other stimulants including caffeine, withdrawal state",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan stimulan lain termasuk kafein , keadaan putus"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F15.4",
+    "code_clean": "F154",
+    "title": "Mental and behavioural disorders due to use of other stimulants including caffeine, withdrawal state with delirium",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan stimulan lain termasuk kafein , keadaan putus dengan delirium"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F15.5",
+    "code_clean": "F155",
+    "title": "Mental and behavioural disorders due to use of other stimulants including caffeine, psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan stimulan lainnya termasuk kafein , gangguan psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F15.6",
+    "code_clean": "F156",
+    "title": "Mental and behavioural disorders due to use of other stimulants inclduing caffeine, amnesic syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan stimulan lainnya inclduing kafein , sindrom amnesia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F15.7",
+    "code_clean": "F157",
+    "title": "Mental and behavioural disorders due to use of other stimulants inclduing caffeine, residual and late-onset psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan stimulan lainnya inclduing kafein , residual dan gangguan psikotik akhir - onset"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F15.8",
+    "code_clean": "F158",
+    "title": "Mental and behavioural disorders due to use of other stimulants including caffeine, other mental and behavioural disorders",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan stimulan lain termasuk kafein , gangguan mental dan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F15.9",
+    "code_clean": "F159",
+    "title": "Mental and behavioural disorders due to use of other stimulants including caffeine, unspecified mental and behavioural disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan stimulan lainnya termasuk kafein , gangguan mental dan perilaku yang tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F16.0",
+    "code_clean": "F160",
+    "title": "Mental and behavioural disorders due to use of hallucinogens, acute intoxication",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan halusinogen , intoksikasi akut"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F16.1",
+    "code_clean": "F161",
+    "title": "Mental and behavioural disorders due to use of hallucinogens, harmful use",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan halusinogen , penggunaan berbahaya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F16.2",
+    "code_clean": "F162",
+    "title": "Mental and behavioural disorders due to use of hallucinogens, dependence syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan halusinogen , sindrom ketergantungan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F16.3",
+    "code_clean": "F163",
+    "title": "Mental and behavioural disorders due to use of hallucinogens, withdrawal state",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan halusinogen , keadaan putus"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F16.4",
+    "code_clean": "F164",
+    "title": "Mental and behavioural disorders due to use of hallucinogens, withdrawal state with delirium",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan halusinogen , keadaan putus dengan delirium"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F16.5",
+    "code_clean": "F165",
+    "title": "Mental and behavioural disorders due to use of hallucinogens, psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan halusinogen , gangguan psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F16.6",
+    "code_clean": "F166",
+    "title": "Mental and behavioural disorders due to use of hallucinogens, amnesic syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan halusinogen , sindrom amnesia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F16.7",
+    "code_clean": "F167",
+    "title": "Mental and behavioural disorders due to use of hallucinogens, residual and late-onset psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan halusinogen , residual dan gangguan psikotik akhir - onset"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F16.8",
+    "code_clean": "F168",
+    "title": "Mental and behavioural disorders due to use of hallucinogens, other mental and behavioural disorders",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan halusinogen , gangguan mental dan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F16.9",
+    "code_clean": "F169",
+    "title": "Mental and behavioural disorders due to use of hallucinogens, unspecified mental and behavioural disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan halusinogen , gangguan mental dan perilaku yang tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F17.0",
+    "code_clean": "F170",
+    "title": "Mental and behavioural disorders due to use of tobacco, acute intoxication",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan tembakau , intoksikasi akut"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F17.1",
+    "code_clean": "F171",
+    "title": "Mental and behavioural disorders due to use of tobacco, harmful use",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan tembakau , penggunaan berbahaya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F17.2",
+    "code_clean": "F172",
+    "title": "Mental and behavioural disorders due to use of tobacco, dependence syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan tembakau , sindrom ketergantungan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F17.3",
+    "code_clean": "F173",
+    "title": "Mental and behavioural disorders due to use of tobacco, withdrawal state",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan tembakau , keadaan putus"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F17.4",
+    "code_clean": "F174",
+    "title": "Mental and behavioural disorders due to use of tobacco, withdrawal state with delirium",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan tembakau , keadaan putus dengan delirium"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F17.5",
+    "code_clean": "F175",
+    "title": "Mental and behavioural disorders due to use of tobacco, psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan tembakau , gangguan psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F17.6",
+    "code_clean": "F176",
+    "title": "Mental and behavioural disorders due to use of tobacco, amnesic syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan tembakau , sindrom amnesia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F17.7",
+    "code_clean": "F177",
+    "title": "Mental and behavioural disorders due to use of tobacco, residual and late-onset psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan tembakau , residual dan gangguan psikotik akhir-onset"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F17.8",
+    "code_clean": "F178",
+    "title": "Mental and behavioural disorders due to use of tobacco, other mental and behavioural disorders",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan tembakau , gangguan mental dan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F17.9",
+    "code_clean": "F179",
+    "title": "Mental and behavioural disorders due to use of tobacco, unspecified mental and behavioural disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan tembakau , gangguan mental dan perilaku yang tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F18.0",
+    "code_clean": "F180",
+    "title": "Mental and behavioural disorders due to use of volatile solvents, acute intoxication",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan pelarut yang mudah menguap , intoksikasi akut"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F18.1",
+    "code_clean": "F181",
+    "title": "Mental and behavioural disorders due to use of volatile solvents, harmful use",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan pelarut yang mudah menguap , penggunaan berbahaya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F18.2",
+    "code_clean": "F182",
+    "title": "Mental and behavioural disorders due to use of volatile solvents, dependence syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan pelarut yang mudah menguap , sindrom ketergantungan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F18.3",
+    "code_clean": "F183",
+    "title": "Mental and behavioural disorders due to use of volatile solvents, withdrawal state",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan pelarut yang mudah menguap , keadaan putus"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F18.4",
+    "code_clean": "F184",
+    "title": "Mental and behavioural disorders due to use of volatile solvents, withdrawal state with delirium",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan pelarut yang mudah menguap , keadaan putus dengan delirium"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F18.5",
+    "code_clean": "F185",
+    "title": "Mental and behavioural disorders due to use of volatile solvents, psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan pelarut yang mudah menguap , gangguan psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F18.6",
+    "code_clean": "F186",
+    "title": "Mental and behavioural disorders due to use of volatile solvents, amnesic syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan pelarut yang mudah menguap , sindrom amnesia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F18.7",
+    "code_clean": "F187",
+    "title": "Mental and behavioural disorders due to use of volatile solvents, residual and late-onset psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan pelarut yang mudah menguap , sisa dan gangguan psikotik akhir-onset"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F18.8",
+    "code_clean": "F188",
+    "title": "Mental and behavioural disorders due to use of volatile solvents, other mental and behavioural disorders",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan pelarut yang mudah menguap , gangguan mental dan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F18.9",
+    "code_clean": "F189",
+    "title": "Mental and behavioural disorders due to use of volatile solvents, unspecified mental and behavioural disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku akibat penggunaan pelarut yang mudah menguap , gangguan mental dan perilaku yang tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F19.0",
+    "code_clean": "F190",
+    "title": "Mental and behavioural disorders due to multiple drug use and use of psychoactive substances, acute intoxication",
+    "keywords": [
+      "Gangguan mental dan perilaku karena beberapa penggunaan narkoba dan penggunaan zat psikoaktif , intoksikasi akut"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F19.1",
+    "code_clean": "F191",
+    "title": "Mental and behavioural disorders due to multiple drug use and use of psychoactive substances, harmful use",
+    "keywords": [
+      "Gangguan mental dan perilaku karena beberapa penggunaan narkoba dan penggunaan zat psikoaktif , penggunaan berbahaya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F19.2",
+    "code_clean": "F192",
+    "title": "Mental and behavioural disorders due to multiple drug use and use of psychoactive substances, dependence syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku karena beberapa penggunaan narkoba dan penggunaan zat psikoaktif , sindrom ketergantungan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F19.3",
+    "code_clean": "F193",
+    "title": "Mental and behavioural disorders due to multiple drug use and use of psychoactive substances, withdrawal state",
+    "keywords": [
+      "Gangguan mental dan perilaku karena beberapa penggunaan narkoba dan penggunaan zat psikoaktif , keadaan putus"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F19.4",
+    "code_clean": "F194",
+    "title": "Mental and behavioural disorders due to multiple drug sue and use of psychoactive substances, withdrawal state with delirium",
+    "keywords": [
+      "Gangguan mental dan perilaku karena beberapa sue narkoba dan penggunaan zat psikoaktif , keadaan putus dengan delirium"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F19.5",
+    "code_clean": "F195",
+    "title": "Mental and behavioural disorders due to multiple drug use and use of psychoactive substances, psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku karena beberapa penggunaan narkoba dan penggunaan zat psikoaktif , gangguan psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F19.6",
+    "code_clean": "F196",
+    "title": "Mental and behavioural disorders due to multiple drug use and use of psychoactive substances, amnesic syndrome",
+    "keywords": [
+      "Gangguan mental dan perilaku karena beberapa penggunaan narkoba dan penggunaan zat psikoaktif , sindrom amnesia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F19.7",
+    "code_clean": "F197",
+    "title": "Mental and behavioural disorders due to multiple drug use and use of psychoactive substances, residual and late-onset psychotic disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku karena beberapa penggunaan narkoba dan penggunaan zat psikoaktif , residual dan gangguan psikotik akhir-onset"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F19.8",
+    "code_clean": "F198",
+    "title": "Mental and behavioural disorders due to multiple drug use and use of psychoactive substances, other mental and behavioural disorders",
+    "keywords": [
+      "Gangguan mental dan perilaku karena beberapa penggunaan narkoba dan penggunaan zat psikoaktif , gangguan mental dan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F19.9",
+    "code_clean": "F199",
+    "title": "Mental and behavioural disorders due to multiple drug use and use of psychoactive substances, unspecified mental and behavioural disorder",
+    "keywords": [
+      "Gangguan mental dan perilaku karena beberapa penggunaan narkoba dan penggunaan zat psikoaktif , gangguan mental dan perilaku yang tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F20.0",
+    "code_clean": "F200",
+    "title": "Paranoid schizophrenia",
+    "keywords": [
+      "Skizofrenia paranoid"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F20.1",
+    "code_clean": "F201",
+    "title": "Hebephrenic schizophrenia",
+    "keywords": [
+      "Skizofrenia Hebephrenic"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F20.2",
+    "code_clean": "F202",
+    "title": "Catatonic schizophrenia",
+    "keywords": [
+      "Skizofrenia katatonik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F20.3",
+    "code_clean": "F203",
+    "title": "Undifferentiated schizophrenia",
+    "keywords": [
+      "Skizofrenia dibeda-bedakan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F20.4",
+    "code_clean": "F204",
+    "title": "Post-schizophrenic depression",
+    "keywords": [
+      "Depresi pasca - skizofrenia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F20.5",
+    "code_clean": "F205",
+    "title": "Residual schizophrenia",
+    "keywords": [
+      "Skizofrenia residual"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F20.6",
+    "code_clean": "F206",
+    "title": "Simple schizophrenia",
+    "keywords": [
+      "Simple skizofrenia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F20.8",
+    "code_clean": "F208",
+    "title": "Other schizophrenia",
+    "keywords": [
+      "Skizofrenia lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F20.9",
+    "code_clean": "F209",
+    "title": "Schizophrenia, unspecified",
+    "keywords": [
+      "Schizophrenia , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F21",
+    "code_clean": "F21",
+    "title": "Schizotypal disorder",
+    "keywords": [
+      "Gangguan schizotypal"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F22.0",
+    "code_clean": "F220",
+    "title": "Delusional disorder",
+    "keywords": [
+      "Gangguan delusi"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F22.8",
+    "code_clean": "F228",
+    "title": "Other persistent delusional disorders",
+    "keywords": [
+      "Gangguan delusi persisten lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F22.9",
+    "code_clean": "F229",
+    "title": "Persistent delusional disorder, unspecified",
+    "keywords": [
+      "Gangguan delusi persisten , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F23.0",
+    "code_clean": "F230",
+    "title": "Acute polymorphic psychotic disorder without symptoms of schizophrenia",
+    "keywords": [
+      "Gangguan psikotik polimorfik akut tanpa gejala skizofrenia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F23.1",
+    "code_clean": "F231",
+    "title": "Acute polymorphic psychotic disorder with symptoms of schizophrenia",
+    "keywords": [
+      "Gangguan psikotik polimorfik akut dengan gejala skizofrenia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F23.2",
+    "code_clean": "F232",
+    "title": "Acute schizophrenia-like psychotic disorder",
+    "keywords": [
+      "Gangguan psikotik seperti skizofrenia akut"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F23.3",
+    "code_clean": "F233",
+    "title": "Other acute predominantly delusional psychotic disorders",
+    "keywords": [
+      "Gangguan psikotik akut terutama delusi lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F23.8",
+    "code_clean": "F238",
+    "title": "Other acute and transient psychotic disorders",
+    "keywords": [
+      "Gangguan psikotik lainnya akut dan transien"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F23.9",
+    "code_clean": "F239",
+    "title": "Acute and transient psychotic disorder, unspecified",
+    "keywords": [
+      "Gangguan psikotik akut dan sementara , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F24",
+    "code_clean": "F24",
+    "title": "Induced delusional disorder",
+    "keywords": [
+      "Gangguan delusi Induced"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F25.0",
+    "code_clean": "F250",
+    "title": "Schizoaffective disorder, manic type",
+    "keywords": [
+      "Gangguan schizoafektif , jenis manik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F25.1",
+    "code_clean": "F251",
+    "title": "Schizoaffective disorder, depressive type",
+    "keywords": [
+      "Gangguan schizoafektif , jenis depresi"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F25.2",
+    "code_clean": "F252",
+    "title": "Schizoaffective disorder, mixed type",
+    "keywords": [
+      "Gangguan schizoafektif , tipe campuran"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F25.8",
+    "code_clean": "F258",
+    "title": "Other schizoaffective disorders",
+    "keywords": [
+      "Gangguan skizoafektif lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F25.9",
+    "code_clean": "F259",
+    "title": "Schizoaffective disorder, unspecified",
+    "keywords": [
+      "Gangguan skizoafektif , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F28",
+    "code_clean": "F28",
+    "title": "Other nonorganic psychotic disorders",
+    "keywords": [
+      "Gangguan psikotik nonorganik lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F29",
+    "code_clean": "F29",
+    "title": "Unspecified nonorganic psychosis",
+    "keywords": [
+      "Tidak disebutkan psikosis nonorganik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F30.0",
+    "code_clean": "F300",
+    "title": "Hypomania",
+    "keywords": [
+      "Hypomania"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F30.1",
+    "code_clean": "F301",
+    "title": "Mania without psychotic symptoms",
+    "keywords": [
+      "Mania tanpa gejala psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F30.2",
+    "code_clean": "F302",
+    "title": "Mania with psychotic symptoms",
+    "keywords": [
+      "Mania dengan gejala psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F30.8",
+    "code_clean": "F308",
+    "title": "Other manic episodes",
+    "keywords": [
+      "Episode manik lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F30.9",
+    "code_clean": "F309",
+    "title": "Manic episode, unspecified",
+    "keywords": [
+      "Episode manic , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F31.0",
+    "code_clean": "F310",
+    "title": "Bipolar affective disorder, current episode hypomanic",
+    "keywords": [
+      "Gangguan afektif bipolar , episode hypomanic saat ini"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F31.1",
+    "code_clean": "F311",
+    "title": "Bipolar affective disorder, current episode manic without psychotic symptoms",
+    "keywords": [
+      "Gangguan afektif bipolar , episode manik saat tanpa gejala psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F31.2",
+    "code_clean": "F312",
+    "title": "Bipolar affective disorder, current episode manic with psychotic symptoms",
+    "keywords": [
+      "Gangguan afektif bipolar , episode manik saat ini dengan gejala psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F31.3",
+    "code_clean": "F313",
+    "title": "Bipolar affective disorder, current episode mild or moderate depression",
+    "keywords": [
+      "Gangguan afektif bipolar , episode saat depresi ringan atau sedang"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F31.4",
+    "code_clean": "F314",
+    "title": "Bipolar affective disorder, current episode severe depression without psychotic symptoms",
+    "keywords": [
+      "Gangguan afektif bipolar , episode depresi berat saat tanpa gejala psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F31.5",
+    "code_clean": "F315",
+    "title": "Bipolar affective disorder, current episode severe depression with psychotic symptoms",
+    "keywords": [
+      "Gangguan afektif bipolar , episode saat depresi berat dengan gejala psikotik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F31.6",
+    "code_clean": "F316",
+    "title": "Bipolar affective disorder, current episode mixed",
+    "keywords": [
+      "Gangguan afektif bipolar , episode saat dicampur"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F31.7",
+    "code_clean": "F317",
+    "title": "Bipolar affective disorder, currently in remission",
+    "keywords": [
+      "Gangguan afektif bipolar , saat ini dalam remisi"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F31.8",
+    "code_clean": "F318",
+    "title": "Other bipolar affective disorders",
+    "keywords": [
+      "Gangguan afektif bipolar lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F31.9",
+    "code_clean": "F319",
+    "title": "Bipolar affective disorder, unspecified",
+    "keywords": [
+      "Gangguan afektif bipolar , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F32.0",
+    "code_clean": "F320",
+    "title": "Mild depressive episode",
+    "keywords": [
+      "Mild episode depresi",
+      "MDD",
+      "depresi mayor"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F32.1",
+    "code_clean": "F321",
+    "title": "Moderate depressive episode",
+    "keywords": [
+      "Sedang episode depresi",
+      "MDD",
+      "depresi mayor"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F32.2",
+    "code_clean": "F322",
+    "title": "Severe depressive episode without psychotic symptoms",
+    "keywords": [
+      "Episode depresi berat tanpa gejala psikotik",
+      "MDD",
+      "depresi mayor"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F32.3",
+    "code_clean": "F323",
+    "title": "Severe depressive episode with psychotic symptoms",
+    "keywords": [
+      "Episode depresi berat dengan gejala psikotik",
+      "MDD",
+      "depresi mayor"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F32.8",
+    "code_clean": "F328",
+    "title": "Other depressive episodes",
+    "keywords": [
+      "Episode depresi lain"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F32.9",
+    "code_clean": "F329",
+    "title": "Depressive episode, unspecified",
+    "keywords": [
+      "Episode depresi , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F33.0",
+    "code_clean": "F330",
+    "title": "Recurrent depressive disorder, current episode mild",
+    "keywords": [
+      "Gangguan depresi berulang , episode saat ini ringan",
+      "MDD",
+      "depresi mayor"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F33.1",
+    "code_clean": "F331",
+    "title": "Recurrent depressive disorder, current episode moderate",
+    "keywords": [
+      "Gangguan depresi berulang , episode saat ini sedang",
+      "MDD",
+      "depresi mayor"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F33.2",
+    "code_clean": "F332",
+    "title": "Recurrent depressive disorder, current episode severe without psychotic symptoms",
+    "keywords": [
+      "Gangguan depresi berulang , episode saat berat tanpa gejala psikotik",
+      "MDD",
+      "depresi mayor"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F33.3",
+    "code_clean": "F333",
+    "title": "Recurrent depressive disorder, current episode severe with psychotic symptoms",
+    "keywords": [
+      "Gangguan depresi berulang , episode saat berat dengan gejala psikotik",
+      "MDD",
+      "depresi mayor"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F33.4",
+    "code_clean": "F334",
+    "title": "Recurrent depressive disorder, currently in remission",
+    "keywords": [
+      "Gangguan depresi berulang , saat ini dalam remisi",
+      "MDD",
+      "depresi mayor"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F33.8",
+    "code_clean": "F338",
+    "title": "Other recurrent depressive disorders",
+    "keywords": [
+      "Gangguan depresi berulang lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F33.9",
+    "code_clean": "F339",
+    "title": "Recurrent depressive disorder, unspecified",
+    "keywords": [
+      "Gangguan depresi berulang, tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F34.0",
+    "code_clean": "F340",
+    "title": "Cyclothymia",
+    "keywords": [
+      "cyclothymia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F34.1",
+    "code_clean": "F341",
+    "title": "Dysthymia",
+    "keywords": [
+      "Dysthymia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F34.8",
+    "code_clean": "F348",
+    "title": "Other persistent mood [affective] disorders",
+    "keywords": [
+      "Suasana hati persisten lainnya [ afektif ] gangguan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F34.9",
+    "code_clean": "F349",
+    "title": "Persistent mood [affective] disorder, unspecified",
+    "keywords": [
+      "Suasana Persistent [ afektif ] gangguan , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F38.0",
+    "code_clean": "F380",
+    "title": "Other single mood [affective] disorders",
+    "keywords": [
+      "Suasana tunggal lainnya [ afektif ] gangguan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F38.1",
+    "code_clean": "F381",
+    "title": "Other recurrent mood [affective] disorders",
+    "keywords": [
+      "Suasana hati berulang Lainnya [ afektif ] gangguan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F38.8",
+    "code_clean": "F388",
+    "title": "Other specified mood [affective] disorders",
+    "keywords": [
+      "Suasana hati tertentu lainnya [ afektif ] gangguan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F39",
+    "code_clean": "F39",
+    "title": "Unspecified mood [affective] disorder",
+    "keywords": [
+      "Suasana Unspecified [ afektif ] gangguan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F40.0",
+    "code_clean": "F400",
+    "title": "Agoraphobia",
+    "keywords": [
+      "Rasa takut thd ruang membuka"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F40.1",
+    "code_clean": "F401",
+    "title": "Social phobias",
+    "keywords": [
+      "Fobia sosial"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F40.2",
+    "code_clean": "F402",
+    "title": "Specific (isolated) phobias",
+    "keywords": [
+      "Fobia Tertentu ( terisolasi )"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F40.8",
+    "code_clean": "F408",
+    "title": "Other phobic anxiety disorders",
+    "keywords": [
+      "Gangguan fobia kecemasan lain"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F40.9",
+    "code_clean": "F409",
+    "title": "Phobic anxiety disorder, unspecified",
+    "keywords": [
+      "Gangguan kecemasan fobia , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F41.0",
+    "code_clean": "F410",
+    "title": "Panic disorder [episodic paroxysmal anxiety]",
+    "keywords": [
+      "Gangguan panik [ episodik paroxysmal kecemasan ]"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F41.1",
+    "code_clean": "F411",
+    "title": "Generalized anxiety disorder",
+    "keywords": [
+      "Gangguan kecemasan umum",
+      "GAD",
+      "gangguan cemas menyeluruh"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F41.2",
+    "code_clean": "F412",
+    "title": "Mixed anxiety and depressive disorder",
+    "keywords": [
+      "Campuran kecemasan dan gangguan depresi"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F41.3",
+    "code_clean": "F413",
+    "title": "Other mixed anxiety disorders",
+    "keywords": [
+      "Gangguan kecemasan campuran lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F41.8",
+    "code_clean": "F418",
+    "title": "Other specified anxiety disorders",
+    "keywords": [
+      "Gangguan kecemasan tertentu lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F41.9",
+    "code_clean": "F419",
+    "title": "Anxiety disorder, unspecified",
+    "keywords": [
+      "Gangguan kecemasan , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F42.0",
+    "code_clean": "F420",
+    "title": "Predominantly obsessional thoughts or ruminations",
+    "keywords": [
+      "Terutama pikiran obsesif atau perenungan",
+      "OCD",
+      "gangguan obsesif kompulsif"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F42.1",
+    "code_clean": "F421",
+    "title": "Predominantly compulsive acts [obsessional rituals]",
+    "keywords": [
+      "Terutama tindakan kompulsif [ ritual obsesif ]",
+      "OCD",
+      "gangguan obsesif kompulsif"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F42.2",
+    "code_clean": "F422",
+    "title": "Mixed obsessional thoughts and acts",
+    "keywords": [
+      "Campuran pikiran obsesif dan tindakan",
+      "OCD",
+      "gangguan obsesif kompulsif"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F42.8",
+    "code_clean": "F428",
+    "title": "Other obsessive-compulsive disorders",
+    "keywords": [
+      "Gangguan obsesif-kompulsif lainnya",
+      "OCD",
+      "gangguan obsesif kompulsif"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F42.9",
+    "code_clean": "F429",
+    "title": "Obsessive-compulsive disorder, unspecified",
+    "keywords": [
+      "Gangguan obsesif-kompulsif , tidak spesifik",
+      "OCD",
+      "gangguan obsesif kompulsif"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F43.0",
+    "code_clean": "F430",
+    "title": "Acute stress reaction",
+    "keywords": [
+      "Reaksi stres akut"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F43.1",
+    "code_clean": "F431",
+    "title": "Post-traumatic stress disorder",
+    "keywords": [
+      "Gangguan stres pasca -trauma",
+      "PTSD",
+      "gangguan stres pascatrauma"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F43.2",
+    "code_clean": "F432",
+    "title": "Adjustment disorders",
+    "keywords": [
+      "Gangguan penyesuaian"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F43.8",
+    "code_clean": "F438",
+    "title": "Other reactions to severe stress",
+    "keywords": [
+      "Reaksi lain terhadap stres berat"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F43.9",
+    "code_clean": "F439",
+    "title": "Reaction to severe stress, unspecified",
+    "keywords": [
+      "Reaksi terhadap stres berat , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F44.0",
+    "code_clean": "F440",
+    "title": "Dissociative amnesia",
+    "keywords": [
+      "Amnesia disosiatif"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F44.1",
+    "code_clean": "F441",
+    "title": "Dissociative fugue",
+    "keywords": [
+      "Fugue disosiatif"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F44.2",
+    "code_clean": "F442",
+    "title": "Dissociative stupor",
+    "keywords": [
+      "Stupor disosiatif"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F44.3",
+    "code_clean": "F443",
+    "title": "Trance and possession disorders",
+    "keywords": [
+      "Gangguan Trance dan kepemilikan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F44.4",
+    "code_clean": "F444",
+    "title": "Dissociative motor disorders",
+    "keywords": [
+      "Gangguan motorik disosiatif"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F44.5",
+    "code_clean": "F445",
+    "title": "Dissociative convulsions",
+    "keywords": [
+      "Kejang disosiatif"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F44.6",
+    "code_clean": "F446",
+    "title": "Dissociative anaesthesia and sensory loss",
+    "keywords": [
+      "Anestesi disosiatif dan gangguan sensorik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F44.7",
+    "code_clean": "F447",
+    "title": "Mixed dissociative [conversion] disorders",
+    "keywords": [
+      "Campuran disosiatif [ konversi ] gangguan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F44.8",
+    "code_clean": "F448",
+    "title": "Other dissociative [conversion] disorders",
+    "keywords": [
+      "Lain disosiatif [ konversi ] gangguan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F44.9",
+    "code_clean": "F449",
+    "title": "Dissociative [conversion] disorder, unspecified",
+    "keywords": [
+      "Disosiatif [ konversi ] gangguan , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F45.0",
+    "code_clean": "F450",
+    "title": "Somatization disorder",
+    "keywords": [
+      "Gangguan somatisasi"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F45.1",
+    "code_clean": "F451",
+    "title": "Undifferentiated somatoform disorder",
+    "keywords": [
+      "Gangguan somatoform dibeda-bedakan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F45.2",
+    "code_clean": "F452",
+    "title": "Hypochondriacal disorder",
+    "keywords": [
+      "Gangguan hypochondriacal"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F45.3",
+    "code_clean": "F453",
+    "title": "Somatoform autonomic dysfunction",
+    "keywords": [
+      "Disfungsi otonom somatoform"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F45.4",
+    "code_clean": "F454",
+    "title": "Persistent somatoform pain disorder",
+    "keywords": [
+      "Gangguan nyeri somatoform Persistent"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F45.8",
+    "code_clean": "F458",
+    "title": "Other somatoform disorders",
+    "keywords": [
+      "Gangguan somatoform lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F45.9",
+    "code_clean": "F459",
+    "title": "Somatoform disorder, unspecified",
+    "keywords": [
+      "Gangguan somatoform , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F48.0",
+    "code_clean": "F480",
+    "title": "Neurasthenia",
+    "keywords": [
+      "Neurasthenia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F48.1",
+    "code_clean": "F481",
+    "title": "Depersonalization-derealization syndrome",
+    "keywords": [
+      "Sindrom depersonalisasi - derealization"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F48.8",
+    "code_clean": "F488",
+    "title": "Other specified neurotic disorders",
+    "keywords": [
+      "Gangguan neurotik lainnya yang spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F48.9",
+    "code_clean": "F489",
+    "title": "Neurotic disorder, unspecified",
+    "keywords": [
+      "Gangguan neurotik, tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F50.0",
+    "code_clean": "F500",
+    "title": "Anorexia nervosa",
+    "keywords": [
+      "Anorexia nervosa"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F50.1",
+    "code_clean": "F501",
+    "title": "Atypical anorexia nervosa",
+    "keywords": [
+      "Atypical anorexia nervosa"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F50.2",
+    "code_clean": "F502",
+    "title": "Bulimia nervosa",
+    "keywords": [
+      "Bulimia nervosa"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F50.3",
+    "code_clean": "F503",
+    "title": "Atypical bulimia nervosa",
+    "keywords": [
+      "Atypical bulimia nervosa"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F50.4",
+    "code_clean": "F504",
+    "title": "Overeating associated with other psychological disturbances",
+    "keywords": [
+      "Terlalu banyak berhubungan dengan gangguan psikologis lain"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F50.5",
+    "code_clean": "F505",
+    "title": "Vomiting associated with other psychological disturbances",
+    "keywords": [
+      "Muntah yang berhubungan dengan gangguan psikologis lain"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F50.8",
+    "code_clean": "F508",
+    "title": "Other eating disorders",
+    "keywords": [
+      "Gangguan makan lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F50.9",
+    "code_clean": "F509",
+    "title": "Eating disorder, unspecified",
+    "keywords": [
+      "Gangguan makan , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F51.0",
+    "code_clean": "F510",
+    "title": "Nonorganic insomnia",
+    "keywords": [
+      "Insomnia nonorganik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F51.1",
+    "code_clean": "F511",
+    "title": "Nonorganic hypersomnia",
+    "keywords": [
+      "Hipersomnia nonorganik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F51.2",
+    "code_clean": "F512",
+    "title": "Nonorganic disorder of the sleep-wake schedule",
+    "keywords": [
+      "Gangguan nonorganik dari jadwal tidur-bangun"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F51.3",
+    "code_clean": "F513",
+    "title": "Sleepwalking [somnambulism]",
+    "keywords": [
+      "Sleepwalking [ somnambulism ]"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F51.4",
+    "code_clean": "F514",
+    "title": "Sleep terrors [night terrors]",
+    "keywords": [
+      "Teror tidur [ teror malam ]"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F51.5",
+    "code_clean": "F515",
+    "title": "Nightmares",
+    "keywords": [
+      "Mimpi buruk"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F51.8",
+    "code_clean": "F518",
+    "title": "Other nonorganic sleep disorders",
+    "keywords": [
+      "Gangguan tidur nonorganik lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F51.9",
+    "code_clean": "F519",
+    "title": "Nonorganic sleep disorder, unspecified",
+    "keywords": [
+      "Gangguan tidur nonorganik , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F52.0",
+    "code_clean": "F520",
+    "title": "Lack or loss of sexual desire",
+    "keywords": [
+      "Kurangnya atau hilangnya gairah seksual"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F52.1",
+    "code_clean": "F521",
+    "title": "Sexual aversion and lack of sexual enjoyment",
+    "keywords": [
+      "Keengganan seksual dan kurangnya kenikmatan seksual"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F52.2",
+    "code_clean": "F522",
+    "title": "Failure of genital response",
+    "keywords": [
+      "Kegagalan respon genital"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F52.3",
+    "code_clean": "F523",
+    "title": "Orgasmic dysfunction",
+    "keywords": [
+      "Disfungsi Orgasmic"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F52.4",
+    "code_clean": "F524",
+    "title": "Premature ejaculation",
+    "keywords": [
+      "Ejakulasi dini"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F52.5",
+    "code_clean": "F525",
+    "title": "Nonorganic vaginismus",
+    "keywords": [
+      "Vaginismus nonorganik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F52.6",
+    "code_clean": "F526",
+    "title": "Nonorganic dyspareunia",
+    "keywords": [
+      "Dispareunia nonorganik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F52.7",
+    "code_clean": "F527",
+    "title": "Excessive sexual drive",
+    "keywords": [
+      "Dorongan seksual yang berlebihan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F52.8",
+    "code_clean": "F528",
+    "title": "Other sexual dysfunction, not caused by organic disorder or disease",
+    "keywords": [
+      "Disfungsi seksual lainnya , tidak disebabkan oleh kelainan organik atau penyakit"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F52.9",
+    "code_clean": "F529",
+    "title": "Unspecified sexual dysfunction, not caused by organic disorder or disease",
+    "keywords": [
+      "Disfungsi seksual yang tidak spesifik , tidak disebabkan oleh kelainan organik atau penyakit"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F53.0",
+    "code_clean": "F530",
+    "title": "Mild mental and behavioural disorders associated with the puerperium, not elsewhere classified",
+    "keywords": [
+      "Gangguan mental dan perilaku ringan terkait dengan masa nifas , tidak diklasifikasikan di tempat lain"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F53.1",
+    "code_clean": "F531",
+    "title": "Severe mental and behavioural disorders associated with the puerperium, not elsewhere classified",
+    "keywords": [
+      "Gangguan mental dan perilaku berat yang berhubungan dengan masa nifas , tidak diklasifikasikan di tempat lain"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F53.8",
+    "code_clean": "F538",
+    "title": "Other mental and behavioural disorders associated with the puerperium, not elsewhere classified",
+    "keywords": [
+      "Gangguan mental dan perilaku lainnya yang terkait dengan masa nifas , tidak diklasifikasikan di tempat lain"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F53.9",
+    "code_clean": "F539",
+    "title": "Puerperal mental disorder, unspecified",
+    "keywords": [
+      "Gangguan mental nifas, tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F54",
+    "code_clean": "F54",
+    "title": "Psychological and behavioural factors associated with disorders or diseases classified elsewhere",
+    "keywords": [
+      "Faktor psikologis dan perilaku yang berhubungan dengan gangguan atau penyakit diklasifikasikan di tempat lain"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F55",
+    "code_clean": "F55",
+    "title": "Abuse of non-dependence-producing substances",
+    "keywords": [
+      "Penyalahgunaan zat - non - ketergantungan memproduksi"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F59",
+    "code_clean": "F59",
+    "title": "Unspecified behavioural syndromes associated with physiological disturbances and physical factors",
+    "keywords": [
+      "Sindrom perilaku yang tidak spesifik berhubungan dengan gangguan fisiologis dan faktor fisik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F60.0",
+    "code_clean": "F600",
+    "title": "Paranoid personality disorder",
+    "keywords": [
+      "Gangguan kepribadian paranoid"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F60.1",
+    "code_clean": "F601",
+    "title": "Schizoid personality disorder",
+    "keywords": [
+      "Gangguan kepribadian skizofrenia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F60.2",
+    "code_clean": "F602",
+    "title": "Dissocial personality disorder",
+    "keywords": [
+      "Gangguan kepribadian yg tdk suka bergaul"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F60.3",
+    "code_clean": "F603",
+    "title": "Emotionally unstable personality disorder",
+    "keywords": [
+      "Gangguan kepribadian emosional tidak stabil",
+      "BPD",
+      "gangguan kepribadian ambang"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F60.4",
+    "code_clean": "F604",
+    "title": "Histrionic personality disorder",
+    "keywords": [
+      "Gangguan kepribadian histrionik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F60.5",
+    "code_clean": "F605",
+    "title": "Anankastic personality disorder",
+    "keywords": [
+      "Gangguan kepribadian Anankastic"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F60.6",
+    "code_clean": "F606",
+    "title": "Anxious [avoidant] personality disorder",
+    "keywords": [
+      "Cemas [ avoidant ] gangguan kepribadian"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F60.7",
+    "code_clean": "F607",
+    "title": "Dependent personality disorder",
+    "keywords": [
+      "Gangguan kepribadian dependen"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F60.8",
+    "code_clean": "F608",
+    "title": "Other specific personality disorders",
+    "keywords": [
+      "Gangguan kepribadian tertentu lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F60.9",
+    "code_clean": "F609",
+    "title": "Personality disorder, unspecified",
+    "keywords": [
+      "Gangguan kepribadian , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F61",
+    "code_clean": "F61",
+    "title": "Mixed and other personality disorders",
+    "keywords": [
+      "Gangguan kepribadian campuran dan lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F62.0",
+    "code_clean": "F620",
+    "title": "Enduring personality change after catastrophic experience",
+    "keywords": [
+      "Perubahan kepribadian Enduring setelah pengalaman bencana"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F62.1",
+    "code_clean": "F621",
+    "title": "Enduring personality change after psychiatric illness",
+    "keywords": [
+      "Perubahan kepribadian Enduring setelah penyakit jiwa"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F62.8",
+    "code_clean": "F628",
+    "title": "Other enduring personality changes",
+    "keywords": [
+      "Perubahan kepribadian abadi Lain"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F62.9",
+    "code_clean": "F629",
+    "title": "Enduring personality change, unspecified",
+    "keywords": [
+      "Perubahan kepribadian Enduring , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F63.0",
+    "code_clean": "F630",
+    "title": "Pathological gambling",
+    "keywords": [
+      "judi patologis"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F63.1",
+    "code_clean": "F631",
+    "title": "Pathological fire-setting [pyromania]",
+    "keywords": [
+      "Patologis api - pengaturan [ pyromania ]"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F63.2",
+    "code_clean": "F632",
+    "title": "Pathological stealing [kleptomania]",
+    "keywords": [
+      "Mencuri Patologis [ kleptomania ]"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F63.3",
+    "code_clean": "F633",
+    "title": "Trichotillomania",
+    "keywords": [
+      "Trikotilomania"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F63.8",
+    "code_clean": "F638",
+    "title": "Other habit and impulse disorders",
+    "keywords": [
+      "Kebiasaan lain dan gangguan impuls"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F63.9",
+    "code_clean": "F639",
+    "title": "Habit and impulse disorder, unspecified",
+    "keywords": [
+      "Kebiasaan dan gangguan impuls , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F64.0",
+    "code_clean": "F640",
+    "title": "Transsexualism",
+    "keywords": [
+      "Transseksualisme"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F64.1",
+    "code_clean": "F641",
+    "title": "Dual-role transvestism",
+    "keywords": [
+      "Dual- peran kekedian"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F64.2",
+    "code_clean": "F642",
+    "title": "Gender identity disorder of childhood",
+    "keywords": [
+      "Gangguan identitas gender dari masa kanak-kanak"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F64.8",
+    "code_clean": "F648",
+    "title": "Other gender identity disorders",
+    "keywords": [
+      "Gangguan identitas gender lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F64.9",
+    "code_clean": "F649",
+    "title": "Gender identity disorder, unspecified",
+    "keywords": [
+      "Gangguan identitas gender , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F65.0",
+    "code_clean": "F650",
+    "title": "Fetishism",
+    "keywords": [
+      "Fetisisme"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F65.1",
+    "code_clean": "F651",
+    "title": "Fetishistic transvestism",
+    "keywords": [
+      "Kekedian fetisistik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F65.2",
+    "code_clean": "F652",
+    "title": "Exhibitionism",
+    "keywords": [
+      "Kecondongan memperlihatkan kecakapannya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F65.3",
+    "code_clean": "F653",
+    "title": "Voyeurism",
+    "keywords": [
+      "Kesukaan campur tangan dlm urusan orang lain"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F65.4",
+    "code_clean": "F654",
+    "title": "Paedophilia",
+    "keywords": [
+      "Pedofilia"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F65.5",
+    "code_clean": "F655",
+    "title": "Sadomasochism",
+    "keywords": [
+      "Sadomasochism"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F65.6",
+    "code_clean": "F656",
+    "title": "Multiple disorders of sexual preference",
+    "keywords": [
+      "Beberapa gangguan preferensi seksual"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F65.8",
+    "code_clean": "F658",
+    "title": "Other disorders of sexual preference",
+    "keywords": [
+      "Gangguan lain preferensi seksual"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F65.9",
+    "code_clean": "F659",
+    "title": "Disorder of sexual preference, unspecified",
+    "keywords": [
+      "Gangguan preferensi seksual , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F66.0",
+    "code_clean": "F660",
+    "title": "Sexual maturation disorder",
+    "keywords": [
+      "Gangguan pematangan seksual"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F66.1",
+    "code_clean": "F661",
+    "title": "Egodystonic sexual orientation",
+    "keywords": [
+      "Orientasi seksual Egodystonic"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F66.2",
+    "code_clean": "F662",
+    "title": "Sexual relationship disorder",
+    "keywords": [
+      "Gangguan hubungan seksual"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F66.8",
+    "code_clean": "F668",
+    "title": "Other psychosexual development disorders",
+    "keywords": [
+      "Gangguan perkembangan psikoseksual lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F66.9",
+    "code_clean": "F669",
+    "title": "Psychosexual development disorder, unspecified",
+    "keywords": [
+      "Gangguan perkembangan psikoseksual , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F68.0",
+    "code_clean": "F680",
+    "title": "Elaboration of physical symptoms for psychological reasons",
+    "keywords": [
+      "Elaborasi gejala fisik karena alasan psikologis"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F68.1",
+    "code_clean": "F681",
+    "title": "Intentional production or feigning of symptoms or disabilities, either physical or psychological [factitious disorder]",
+    "keywords": [
+      "Produksi disengaja atau pura-pura gejala atau cacat , baik [ gangguan buatan ] fisik atau psikologis"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F68.8",
+    "code_clean": "F688",
+    "title": "Other specified disorders of adult personality and behaviour",
+    "keywords": [
+      "Gangguan tertentu lainnya kepribadian dewasa dan perilaku"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F69",
+    "code_clean": "F69",
+    "title": "Unspecified disorder of adult personality and behaviour",
+    "keywords": [
+      "Tidak disebutkan gangguan kepribadian dewasa dan perilaku"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F70.0",
+    "code_clean": "F700",
+    "title": "Mild mental retardation with the statement of no, or minimal, impairment of behaviour",
+    "keywords": [
+      "Keterbelakangan mental ringan dengan pernyataan tidak, atau minimal, gangguan perilaku"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F70.1",
+    "code_clean": "F701",
+    "title": "Mild mental retardation, significant impairment of behaviour requiring attention or treatment",
+    "keywords": [
+      "Keterbelakangan mental ringan , penurunan yang signifikan dari perilaku yang membutuhkan perhatian atau pengobatan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F70.8",
+    "code_clean": "F708",
+    "title": "Mild mental retardation, other impairments of behaviour",
+    "keywords": [
+      "Keterbelakangan mental ringan , gangguan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F70.9",
+    "code_clean": "F709",
+    "title": "Mild mental retardation without mention of impairment of behaviour",
+    "keywords": [
+      "Keterbelakangan mental ringan tanpa menyebutkan gangguan perilaku"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F71.0",
+    "code_clean": "F710",
+    "title": "Moderate mental retardation with the statement of no, or minimal, impairment of behaviour",
+    "keywords": [
+      "Keterbelakangan mental moderat dengan pernyataan tidak, atau minimal, gangguan perilaku"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F71.1",
+    "code_clean": "F711",
+    "title": "Moderate mental retardation, significant impairment of behaviour requiring attention or treatment",
+    "keywords": [
+      "Keterbelakangan mental moderat , penurunan yang signifikan dari perilaku yang membutuhkan perhatian atau pengobatan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F71.8",
+    "code_clean": "F718",
+    "title": "Moderate mental retardation, other impairments of behaviour",
+    "keywords": [
+      "Keterbelakangan mental moderat , gangguan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F71.9",
+    "code_clean": "F719",
+    "title": "Moderate mental retardation without mention of impairment of behaviour",
+    "keywords": [
+      "Keterbelakangan mental moderat tanpa menyebutkan gangguan perilaku"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F72.0",
+    "code_clean": "F720",
+    "title": "Severe mental retardation with the statement of no, or minimal, impairment of behaviour",
+    "keywords": [
+      "Keterbelakangan mental yang berat dengan pernyataan tidak, atau minimal, gangguan perilaku"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F72.1",
+    "code_clean": "F721",
+    "title": "Severe mental retardation, significant impairment of behaviour requiring attention or treatment",
+    "keywords": [
+      "Keterbelakangan mental yang berat , penurunan yang signifikan dari perilaku yang membutuhkan perhatian atau pengobatan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F72.8",
+    "code_clean": "F728",
+    "title": "Severe mental retardation, other impairments of behaviour",
+    "keywords": [
+      "Keterbelakangan mental yang berat , gangguan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F72.9",
+    "code_clean": "F729",
+    "title": "Severe mental retardation without mention of impairment of behaviour",
+    "keywords": [
+      "Keterbelakangan mental yang berat tanpa menyebutkan gangguan perilaku"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F73.0",
+    "code_clean": "F730",
+    "title": "Profound mental retardation with the statement of no, or minimal, impairment of behaviour",
+    "keywords": [
+      "Keterbelakangan mental yang mendalam dengan pernyataan tidak, atau minimal, gangguan perilaku"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F73.1",
+    "code_clean": "F731",
+    "title": "Profound mental retardation, significant impairment of behaviour requiring attention or treatment",
+    "keywords": [
+      "Keterbelakangan mental yang mendalam , penurunan yang signifikan dari perilaku yang membutuhkan perhatian atau pengobatan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F73.8",
+    "code_clean": "F738",
+    "title": "Profound mental retardation, other impairments of behaviour",
+    "keywords": [
+      "Keterbelakangan mental yang mendalam , gangguan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F73.9",
+    "code_clean": "F739",
+    "title": "Profound mental retardation without mention of impairment of behaviour",
+    "keywords": [
+      "Keterbelakangan mental yang mendalam tanpa menyebutkan gangguan perilaku"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F78.0",
+    "code_clean": "F780",
+    "title": "Other mental retardation with the statement of no, or minimal, impairment of behaviour",
+    "keywords": [
+      "Keterbelakangan mental lainnya dengan pernyataan tidak, atau minimal, gangguan perilaku"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F78.1",
+    "code_clean": "F781",
+    "title": "Other mental retardation, significant impairment of behaviour requiring attention or treatment",
+    "keywords": [
+      "Keterbelakangan mental lainnya , penurunan yang signifikan dari perilaku yang membutuhkan perhatian atau pengobatan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F78.8",
+    "code_clean": "F788",
+    "title": "Other mental retardation, other impairments of behaviour",
+    "keywords": [
+      "Keterbelakangan mental lainnya , gangguan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F78.9",
+    "code_clean": "F789",
+    "title": "Other mental retardation without mention of impairment of behaviour",
+    "keywords": [
+      "Keterbelakangan mental lain tanpa menyebutkan gangguan perilaku"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F79.0",
+    "code_clean": "F790",
+    "title": "Unspecified mental retardation with the statement of no, or minimal, impairment of behaviour",
+    "keywords": [
+      "Keterbelakangan mental yang tidak spesifik dengan pernyataan tidak, atau minimal, gangguan perilaku"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F79.1",
+    "code_clean": "F791",
+    "title": "Unspecified mental retardation, significant impairment of behaviour requiring attention or treatment",
+    "keywords": [
+      "Keterbelakangan mental yang tidak spesifik , penurunan yang signifikan dari perilaku yang membutuhkan perhatian atau pengobatan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F79.8",
+    "code_clean": "F798",
+    "title": "Unspecified mental retardation, other impairments of behaviour",
+    "keywords": [
+      "Keterbelakangan mental yang tidak spesifik , gangguan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F79.9",
+    "code_clean": "F799",
+    "title": "Unspecified mental retardation without mention of impairment of behaviour",
+    "keywords": [
+      "Keterbelakangan mental Tidak disebutkan tanpa menyebutkan gangguan perilaku"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F80.0",
+    "code_clean": "F800",
+    "title": "Specific speech articulation disorder",
+    "keywords": [
+      "Gangguan bicara artikulasi tertentu"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F80.1",
+    "code_clean": "F801",
+    "title": "Expressive language disorder",
+    "keywords": [
+      "Gangguan bahasa ekspresif"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F80.2",
+    "code_clean": "F802",
+    "title": "Receptive language disorder",
+    "keywords": [
+      "Gangguan bahasa reseptif"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F80.3",
+    "code_clean": "F803",
+    "title": "Acquired aphasia with epilepsy [Landau-Kleffner]",
+    "keywords": [
+      "Acquired aphasia dengan epilepsi [ Landau - Kleffner ]"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F80.8",
+    "code_clean": "F808",
+    "title": "Other developmental disorders of speech and language",
+    "keywords": [
+      "Gangguan perkembangan lain bicara dan bahasa"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F80.9",
+    "code_clean": "F809",
+    "title": "Developmental disorder of speech and language, unspecified",
+    "keywords": [
+      "Gangguan perkembangan bicara dan bahasa , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F81.0",
+    "code_clean": "F810",
+    "title": "Specific reading disorder",
+    "keywords": [
+      "Gangguan membaca tertentu"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F81.1",
+    "code_clean": "F811",
+    "title": "Specific spelling disorder",
+    "keywords": [
+      "Gangguan ejaan tertentu"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F81.2",
+    "code_clean": "F812",
+    "title": "Specific disorder of arithmetical skills",
+    "keywords": [
+      "Gangguan spesifik keterampilan aritmatika"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F81.3",
+    "code_clean": "F813",
+    "title": "Mixed disorder of scholastic skills",
+    "keywords": [
+      "Gangguan Campuran keterampilan skolastik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F81.8",
+    "code_clean": "F818",
+    "title": "Other developmental disorders of scholastic skills",
+    "keywords": [
+      "Gangguan perkembangan lain keterampilan skolastik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F81.9",
+    "code_clean": "F819",
+    "title": "Developmental disorder of scholastic skills, unspecified",
+    "keywords": [
+      "Gangguan perkembangan keterampilan skolastik , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F82",
+    "code_clean": "F82",
+    "title": "Specific developmental disorder of motor function",
+    "keywords": [
+      "Gangguan perkembangan spesifik fungsi motorik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F83",
+    "code_clean": "F83",
+    "title": "Mixed specific developmental disorders",
+    "keywords": [
+      "Gangguan perkembangan campuran tertentu"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F84.0",
+    "code_clean": "F840",
+    "title": "Childhood autism",
+    "keywords": [
+      "Childhood autisme"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F84.1",
+    "code_clean": "F841",
+    "title": "Atypical autism",
+    "keywords": [
+      "Autisme atypical"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F84.2",
+    "code_clean": "F842",
+    "title": "Retts syndrome",
+    "keywords": [
+      "Sindrom Retts"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F84.3",
+    "code_clean": "F843",
+    "title": "Other childhood disintegrative disorder",
+    "keywords": [
+      "Anak lainnya gangguan disintegrasi"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F84.4",
+    "code_clean": "F844",
+    "title": "Overactive disorder associated with mental retardation and stereotyped movements",
+    "keywords": [
+      "Gangguan yang terlalu aktif terkait dengan keterbelakangan mental dan gerakan stereotip"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F84.5",
+    "code_clean": "F845",
+    "title": "Aspergers syndrome",
+    "keywords": [
+      "Sindrom Aspergers"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F84.8",
+    "code_clean": "F848",
+    "title": "Other pervasive developmental disorders",
+    "keywords": [
+      "Gangguan perkembangan pervasif lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F84.9",
+    "code_clean": "F849",
+    "title": "Pervasive developmental disorder, unspecified",
+    "keywords": [
+      "Gangguan perkembangan pervasif , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F88",
+    "code_clean": "F88",
+    "title": "Other disorders of psychological development",
+    "keywords": [
+      "Gangguan lain dari perkembangan psikologis"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F89",
+    "code_clean": "F89",
+    "title": "Unspecified disorder of psychological development",
+    "keywords": [
+      "Tidak disebutkan gangguan perkembangan psikologis"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F90.0",
+    "code_clean": "F900",
+    "title": "Disturbance of activity and attention",
+    "keywords": [
+      "Gangguan aktivitas dan perhatian",
+      "ADHD",
+      "GPPH",
+      "gangguan pemusatan perhatian dan hiperaktivitas"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F90.1",
+    "code_clean": "F901",
+    "title": "Hyperkinetic conduct disorder",
+    "keywords": [
+      "Gangguan perilaku hiperkinetik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F90.8",
+    "code_clean": "F908",
+    "title": "Other hyperkinetic disorders",
+    "keywords": [
+      "Gangguan hiperkinetik lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F90.9",
+    "code_clean": "F909",
+    "title": "Hyperkinetic disorder, unspecified",
+    "keywords": [
+      "Gangguan hiperkinetik , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F91.0",
+    "code_clean": "F910",
+    "title": "Conduct disorder confined to the family context",
+    "keywords": [
+      "Gangguan perilaku terbatas pada konteks keluarga"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F91.1",
+    "code_clean": "F911",
+    "title": "Unsocialized conduct disorder",
+    "keywords": [
+      "Gangguan perilaku Unsocialized"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F91.2",
+    "code_clean": "F912",
+    "title": "Socialized conduct disorder",
+    "keywords": [
+      "Gangguan perilaku disosialisasikan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F91.3",
+    "code_clean": "F913",
+    "title": "Oppositional defiant disorder",
+    "keywords": [
+      "Gangguan pemberontak oposisi"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F91.8",
+    "code_clean": "F918",
+    "title": "Other conduct disorders",
+    "keywords": [
+      "Gangguan perilaku lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F91.9",
+    "code_clean": "F919",
+    "title": "Conduct disorder, unspecified",
+    "keywords": [
+      "Melakukan gangguan , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F92.0",
+    "code_clean": "F920",
+    "title": "Depressive conduct disorder",
+    "keywords": [
+      "Gangguan perilaku depresi"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F92.8",
+    "code_clean": "F928",
+    "title": "Other mixed disorders of conduct and emotions",
+    "keywords": [
+      "Gangguan campuran lain perilaku dan emosi"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F92.9",
+    "code_clean": "F929",
+    "title": "Mixed disorder of conduct and emotions, unspecified",
+    "keywords": [
+      "Gangguan Campuran perilaku dan emosi , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F93.0",
+    "code_clean": "F930",
+    "title": "Separation anxiety disorder of childhood",
+    "keywords": [
+      "Separation anxiety disorder masa kanak-kanak"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F93.1",
+    "code_clean": "F931",
+    "title": "Phobic anxiety disorder of childhood",
+    "keywords": [
+      "Gangguan kecemasan fobia masa kanak-kanak"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F93.2",
+    "code_clean": "F932",
+    "title": "Social anxiety disorder of childhood",
+    "keywords": [
+      "Gangguan kecemasan sosial dari masa kanak-kanak"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F93.3",
+    "code_clean": "F933",
+    "title": "Sibling rivalry disorder",
+    "keywords": [
+      "Gangguan persaingan antar saudara"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F93.8",
+    "code_clean": "F938",
+    "title": "Other childhood emotional disorders",
+    "keywords": [
+      "Gangguan emosional anak lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F93.9",
+    "code_clean": "F939",
+    "title": "Childhood emotional disorder, unspecified",
+    "keywords": [
+      "Gangguan emosional Childhood , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F94.0",
+    "code_clean": "F940",
+    "title": "Elective mutism",
+    "keywords": [
+      "sifat bisu elektif"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F94.1",
+    "code_clean": "F941",
+    "title": "Reactive attachment disorder of childhood",
+    "keywords": [
+      "Gangguan lampiran reaktif dari masa kanak-kanak"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F94.2",
+    "code_clean": "F942",
+    "title": "Disinhibited attachment disorder of childhood",
+    "keywords": [
+      "Gangguan lampiran disinhibited masa kanak-kanak"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F94.8",
+    "code_clean": "F948",
+    "title": "Other childhood disorders of social functioning",
+    "keywords": [
+      "Gangguan anak lainnya dari fungsi sosial"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F94.9",
+    "code_clean": "F949",
+    "title": "Childhood disorder of social functioning, unspecified",
+    "keywords": [
+      "Gangguan masa kanak-kanak dari fungsi sosial , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F95.0",
+    "code_clean": "F950",
+    "title": "Transient tic disorder",
+    "keywords": [
+      "Gangguan tic Transient"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F95.1",
+    "code_clean": "F951",
+    "title": "Chronic motor or vocal tic disorder",
+    "keywords": [
+      "Motorik kronis atau gangguan tic vokal"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F95.2",
+    "code_clean": "F952",
+    "title": "Combined vocal and multiple motor tic disorder [de la Tourette]",
+    "keywords": [
+      "Gangguan motorik tic vocal dan beberapa Gabungan [ de la Tourette ]"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F95.8",
+    "code_clean": "F958",
+    "title": "Other tic disorders",
+    "keywords": [
+      "Gangguan tic lainnya"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F95.9",
+    "code_clean": "F959",
+    "title": "Tic disorder, unspecified",
+    "keywords": [
+      "Gangguan tic , tidak spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F98.0",
+    "code_clean": "F980",
+    "title": "Nonorganic enuresis",
+    "keywords": [
+      "Enuresis nonorganik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F98.1",
+    "code_clean": "F981",
+    "title": "Nonorganic encopresis",
+    "keywords": [
+      "Encopresis nonorganik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F98.2",
+    "code_clean": "F982",
+    "title": "Feeding disorder of infancy and childhood",
+    "keywords": [
+      "Gangguan makan pada bayi dan masa kanak-kanak"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F98.3",
+    "code_clean": "F983",
+    "title": "Pica of infancy and childhood",
+    "keywords": [
+      "Pica dari masa bayi dan masa kanak-kanak"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F98.4",
+    "code_clean": "F984",
+    "title": "Stereotyped movement disorders",
+    "keywords": [
+      "Gangguan gerak stereotip"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F98.5",
+    "code_clean": "F985",
+    "title": "Stuttering [stammering]",
+    "keywords": [
+      "Gagap [ gagap ]"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F98.6",
+    "code_clean": "F986",
+    "title": "Cluttering",
+    "keywords": [
+      "Mengacaukan"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F98.8",
+    "code_clean": "F988",
+    "title": "Other specified behavioural and emotional disorders with onset usually occurring in childhood and adolescence",
+    "keywords": [
+      "Gangguan perilaku dan emosional tertentu lainnya dengan onset biasanya terjadi pada masa kanak-kanak dan remaja"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F98.9",
+    "code_clean": "F989",
+    "title": "Unspecified behavioural and emotional disorders with onset usually occurring in childhood and adolescence",
+    "keywords": [
+      "Gangguan perilaku dan emosional yang tidak spesifik dengan onset biasanya terjadi pada masa kanak-kanak dan remaja"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "F99",
+    "code_clean": "F99",
+    "title": "Mental disorder, not otherwise specified",
+    "keywords": [
+      "Gangguan mental , tidak disebutkan secara spesifik"
+    ],
+    "type": "disorder"
+  },
+  {
+    "code": "R45.8",
+    "code_clean": "R458",
+    "title": "Other symptoms and signs involving emotional state",
+    "keywords": [
+      "Gejala dan tanda yang melibatkan kondisi emosional lainnya"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X60",
+    "code_clean": "X60",
+    "title": "Intentional self-poisoning by and exposure to nonopioid analgesics, antipyretics and antirheumatics",
+    "keywords": [
+      "Disengaja keracunan diri dengan dan paparan analgesik nonopioid , antipiretik dan antirheumatics"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X61",
+    "code_clean": "X61",
+    "title": "Intentional self-poisoning by and exposure to antiepileptic, sedative-hypnotic, antiparkinsonism and psychotropic drugs, not elsewhere classified",
+    "keywords": [
+      "Disengaja keracunan diri dengan dan paparan antiepilepsi , sedatif-hipnotik , antiparkinsonism dan psikotropika obat-obatan, tidak diklasifikasikan di tempat lain"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X62",
+    "code_clean": "X62",
+    "title": "Intentional self-poisoning by and exposure to narcotics and psychodysleptics [hallucinogens], not elsewhere classified",
+    "keywords": [
+      "Disengaja keracunan diri dengan dan paparan narkotika dan psychodysleptics [ halusinogen ] , tidak diklasifikasikan di tempat lain"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X63",
+    "code_clean": "X63",
+    "title": "Intentional self-poisoning by and exposure to other drugs acting on the autonomic nervous system",
+    "keywords": [
+      "Disengaja keracunan diri dengan dan paparan obat lain yang bekerja pada sistem saraf otonom"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X64",
+    "code_clean": "X64",
+    "title": "Intentional self-poisoning by and exposure to other and unspecified drugs, medicaments and biological substances",
+    "keywords": [
+      "Disengaja keracunan diri dengan dan paparan obat lain dan tidak spesifik , obat-obatan dan bahan biologi"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X65",
+    "code_clean": "X65",
+    "title": "Intentional self-poisoning by and exposure to alcohol",
+    "keywords": [
+      "Disengaja keracunan diri dengan dan paparan alkohol"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X66",
+    "code_clean": "X66",
+    "title": "Intentional self-poisoning by and exposure to organic solvents and halogenated hydrocarbons and their vapours",
+    "keywords": [
+      "Disengaja keracunan diri dengan dan paparan pelarut organik dan hidrokarbon terhalogenasi dan uap mereka"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X67",
+    "code_clean": "X67",
+    "title": "Intentional self-poisoning by and exposure to other gases and vapours",
+    "keywords": [
+      "Disengaja keracunan diri dengan dan paparan gas dan uap lainnya"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X68",
+    "code_clean": "X68",
+    "title": "Intentional self-poisoning by and exposure to pesticides",
+    "keywords": [
+      "Disengaja keracunan diri dengan dan paparan pestisida"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X69",
+    "code_clean": "X69",
+    "title": "Intentional self-poisoning by and exposure to other and unspecified chemicals and noxious substances",
+    "keywords": [
+      "Disengaja keracunan diri dengan dan paparan bahan kimia lain dan tidak spesifik dan zat berbahaya"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X70",
+    "code_clean": "X70",
+    "title": "Intentional self-harm by hanging, strangulation and suffocation",
+    "keywords": [
+      "Disengaja membahayakan diri dengan gantung , pencekikan dan sesak napas"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X71",
+    "code_clean": "X71",
+    "title": "Intentional self-harm by drowning and submersion",
+    "keywords": [
+      "Disengaja membahayakan diri dengan tenggelam dan perendaman"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X72",
+    "code_clean": "X72",
+    "title": "Intentional self-harm by handgun discharge",
+    "keywords": [
+      "Disengaja menyakiti diri dengan pistol debit"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X73",
+    "code_clean": "X73",
+    "title": "Intentional self-harm by rifle, shotgun and larger firearm discharge",
+    "keywords": [
+      "Disengaja membahayakan diri dengan senapan , senapan dan senjata api yang lebih besar debit"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X74",
+    "code_clean": "X74",
+    "title": "Intentional self-harm by other and unspecified firearm discharge",
+    "keywords": [
+      "Disengaja menyakiti diri dengan debit senjata api lainnya dan tidak spesifik"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X75",
+    "code_clean": "X75",
+    "title": "Intentional self-harm by explosive material",
+    "keywords": [
+      "Disengaja menyakiti diri oleh bahan peledak"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X76",
+    "code_clean": "X76",
+    "title": "Intentional self-harm by smoke, fire and flames",
+    "keywords": [
+      "Disengaja merugikan diri sendiri oleh asap , api dan api"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X77",
+    "code_clean": "X77",
+    "title": "Intentional self-harm by steam, hot vapours and hot objects",
+    "keywords": [
+      "Disengaja membahayakan diri dengan uap , panas uap dan benda panas"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X78",
+    "code_clean": "X78",
+    "title": "Intentional self-harm by sharp object",
+    "keywords": [
+      "Disengaja menyakiti diri dengan benda tajam"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X79",
+    "code_clean": "X79",
+    "title": "Intentional self-harm by blunt object",
+    "keywords": [
+      "Disengaja menyakiti diri dengan benda tumpul"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X80",
+    "code_clean": "X80",
+    "title": "Intentional self-harm by jumping from a high place",
+    "keywords": [
+      "Disengaja menyakiti diri dengan melompat dari tempat tinggi"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X81",
+    "code_clean": "X81",
+    "title": "Intentional self-harm by jumping or lying before moving object",
+    "keywords": [
+      "Disengaja menyakiti diri dengan melompat atau berbaring sebelum pindah objek"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X82",
+    "code_clean": "X82",
+    "title": "Intentional self-harm by crashing of motor vehicle",
+    "keywords": [
+      "Disengaja menyakiti diri dengan menabrak kendaraan bermotor"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X83",
+    "code_clean": "X83",
+    "title": "Intentional self-harm by other specified means",
+    "keywords": [
+      "Disengaja menyakiti diri dengan cara tertentu lainnya"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "X84",
+    "code_clean": "X84",
+    "title": "Intentional self-harm by unspecified means",
+    "keywords": [
+      "Disengaja menyakiti diri dengan cara yang tidak spesifik"
+    ],
+    "type": "risk_indicator"
+  },
+  {
+    "code": "Z55.0",
+    "code_clean": "Z550",
+    "title": "Illiteracy and low-level literacy",
+    "keywords": [
+      "Buta huruf dan tingkat rendah melek huruf"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z55.1",
+    "code_clean": "Z551",
+    "title": "Schooling unavailable and unattainable",
+    "keywords": [
+      "Sekolah tidak tersedia dan tak terjangkau"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z55.2",
+    "code_clean": "Z552",
+    "title": "Failed examinations",
+    "keywords": [
+      "pemeriksaan gagal"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z55.3",
+    "code_clean": "Z553",
+    "title": "Underachievement in school",
+    "keywords": [
+      "Prestasi di sekolah"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z55.4",
+    "code_clean": "Z554",
+    "title": "Educational maladjustment and discord with teachers and classmates",
+    "keywords": [
+      "Ketidakmampuan pendidikan dan perselisihan dengan para guru dan teman sekelas"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z55.8",
+    "code_clean": "Z558",
+    "title": "Other problems related to education and literacy",
+    "keywords": [
+      "Masalah lain terkait dengan pendidikan dan keaksaraan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z55.9",
+    "code_clean": "Z559",
+    "title": "Problem related to education and literacy, unspecified",
+    "keywords": [
+      "Masalah yang berkaitan dengan pendidikan dan melek huruf , tidak spesifik"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z56.0",
+    "code_clean": "Z560",
+    "title": "Unemployment, unspecified",
+    "keywords": [
+      "Pengangguran , tidak spesifik"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z56.1",
+    "code_clean": "Z561",
+    "title": "Change of job",
+    "keywords": [
+      "Perubahan pekerjaan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z56.2",
+    "code_clean": "Z562",
+    "title": "Threat of job loss",
+    "keywords": [
+      "Ancaman kehilangan pekerjaan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z56.3",
+    "code_clean": "Z563",
+    "title": "Stressful work schedule",
+    "keywords": [
+      "Jadwal kerja Stres"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z56.4",
+    "code_clean": "Z564",
+    "title": "Discord with boss and workmates",
+    "keywords": [
+      "Perselisihan dengan bos dan rekan kerja"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z56.5",
+    "code_clean": "Z565",
+    "title": "Uncongenial work",
+    "keywords": [
+      "pekerjaan uncongenial"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z56.6",
+    "code_clean": "Z566",
+    "title": "Other physical and mental strain related to work",
+    "keywords": [
+      "Ketegangan fisik dan mental lainnya yang berhubungan dengan pekerjaan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z56.7",
+    "code_clean": "Z567",
+    "title": "Other and unspecified problems related to employment",
+    "keywords": [
+      "Masalah lain dan tidak spesifik berkaitan dengan pekerjaan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z57.0",
+    "code_clean": "Z570",
+    "title": "Occupational exposure to noise",
+    "keywords": [
+      "Pajanan kebisingan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z57.1",
+    "code_clean": "Z571",
+    "title": "Occupational exposure to radiation",
+    "keywords": [
+      "Pajanan radiasi"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z57.2",
+    "code_clean": "Z572",
+    "title": "Occupational exposure to dust",
+    "keywords": [
+      "Pajanan debu"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z57.3",
+    "code_clean": "Z573",
+    "title": "Occupational exposure to other air contaminants",
+    "keywords": [
+      "Pajanan kontaminan udara lainnya"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z57.4",
+    "code_clean": "Z574",
+    "title": "Occupational exposure to toxic agents in agriculture",
+    "keywords": [
+      "Pajanan agen beracun di bidang pertanian"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z57.5",
+    "code_clean": "Z575",
+    "title": "Occupational exposure to toxic agents in other industries",
+    "keywords": [
+      "Pajanan agen beracun di industri lain"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z57.6",
+    "code_clean": "Z576",
+    "title": "Occupational exposure to extreme temperature",
+    "keywords": [
+      "Pajanan suhu ekstrim"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z57.7",
+    "code_clean": "Z577",
+    "title": "Occupational exposure to vibration",
+    "keywords": [
+      "Pajanan getaran"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z57.8",
+    "code_clean": "Z578",
+    "title": "Occupational exposure to other risk-factors",
+    "keywords": [
+      "Pajanan faktor risiko lain"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z57.9",
+    "code_clean": "Z579",
+    "title": "Occupational exposure to unspecified risk-factor",
+    "keywords": [
+      "Pajanan faktor risiko yang tidak spesifik"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z58.0",
+    "code_clean": "Z580",
+    "title": "Exposure to noise",
+    "keywords": [
+      "Paparan kebisingan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z58.1",
+    "code_clean": "Z581",
+    "title": "Exposure to air pollution",
+    "keywords": [
+      "Paparan polusi udara"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z58.2",
+    "code_clean": "Z582",
+    "title": "Exposure to water pollution",
+    "keywords": [
+      "Paparan polusi air"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z58.3",
+    "code_clean": "Z583",
+    "title": "Exposure to soil pollution",
+    "keywords": [
+      "Paparan polusi tanah"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z58.4",
+    "code_clean": "Z584",
+    "title": "Exposure to radiation",
+    "keywords": [
+      "Paparan radiasi"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z58.5",
+    "code_clean": "Z585",
+    "title": "Exposure to other pollution",
+    "keywords": [
+      "Paparan polusi lainnya"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z58.6",
+    "code_clean": "Z586",
+    "title": "Inadequate drinking-water supply",
+    "keywords": [
+      "Pasokan air minum tidak memadai"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z58.8",
+    "code_clean": "Z588",
+    "title": "Other problems related to physical environment",
+    "keywords": [
+      "Masalah lain yang berkaitan dengan lingkungan fisik"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z58.9",
+    "code_clean": "Z589",
+    "title": "Problem related to physical environment, unspecified",
+    "keywords": [
+      "Masalah yang berkaitan dengan lingkungan fisik , tidak spesifik"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z59.0",
+    "code_clean": "Z590",
+    "title": "Homelessness",
+    "keywords": [
+      "tunawisma"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z59.1",
+    "code_clean": "Z591",
+    "title": "Inadequate housing",
+    "keywords": [
+      "perumahan tidak memadai"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z59.2",
+    "code_clean": "Z592",
+    "title": "Discord with neighbours, lodgers and landlord",
+    "keywords": [
+      "Perselisihan dengan tetangga , tumpangan dan pemilik"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z59.3",
+    "code_clean": "Z593",
+    "title": "Problems related to living in residential institution",
+    "keywords": [
+      "Masalah yang terkait dengan hidup di lembaga perumahan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z59.4",
+    "code_clean": "Z594",
+    "title": "Lack of adequate food",
+    "keywords": [
+      "Kurangnya makanan yang memadai"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z59.5",
+    "code_clean": "Z595",
+    "title": "Extreme poverty",
+    "keywords": [
+      "kemiskinan ekstrim"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z59.6",
+    "code_clean": "Z596",
+    "title": "Low income",
+    "keywords": [
+      "berpenghasilan rendah"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z59.7",
+    "code_clean": "Z597",
+    "title": "Insufficient social insurance and welfare support",
+    "keywords": [
+      "Asuransi sosial dan kesejahteraan Kurangnya dukungan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z59.8",
+    "code_clean": "Z598",
+    "title": "Other problems related to housing and economic circumstances",
+    "keywords": [
+      "Masalah lain yang berkaitan dengan perumahan dan keadaan ekonomi"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z59.9",
+    "code_clean": "Z599",
+    "title": "Problem related to housing and economic circumstances, unspecified",
+    "keywords": [
+      "Masalah yang berkaitan dengan perumahan dan keadaan ekonomi , tidak spesifik"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z60.0",
+    "code_clean": "Z600",
+    "title": "Problems of adjustment to life-cycle transitions",
+    "keywords": [
+      "Masalah penyesuaian transisi siklus hidup"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z60.1",
+    "code_clean": "Z601",
+    "title": "Atypical parenting situation",
+    "keywords": [
+      "Situasi orangtua Atypical"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z60.2",
+    "code_clean": "Z602",
+    "title": "Living alone",
+    "keywords": [
+      "hidup sendiri"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z60.3",
+    "code_clean": "Z603",
+    "title": "Acculturation difficulty",
+    "keywords": [
+      "kesulitan akulturasi"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z60.4",
+    "code_clean": "Z604",
+    "title": "Social exclusion and rejection",
+    "keywords": [
+      "Pengucilan sosial dan penolakan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z60.5",
+    "code_clean": "Z605",
+    "title": "Target of perceived adverse discrimination and persecution",
+    "keywords": [
+      "Target diskriminasi yang merugikan dirasakan dan penganiayaan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z60.8",
+    "code_clean": "Z608",
+    "title": "Other problems related to social environment",
+    "keywords": [
+      "Masalah lain yang berkaitan dengan lingkungan sosial"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z60.9",
+    "code_clean": "Z609",
+    "title": "Problem related to social environment, unspecified",
+    "keywords": [
+      "Masalah yang berkaitan dengan lingkungan sosial , tidak spesifik"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z61.0",
+    "code_clean": "Z610",
+    "title": "Loss of love relationship in childhood",
+    "keywords": [
+      "Kehilangan hubungan cinta di masa kecil"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z61.1",
+    "code_clean": "Z611",
+    "title": "Removal from home in childhood",
+    "keywords": [
+      "Penghapusan dari rumah di masa kanak-kanak"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z61.2",
+    "code_clean": "Z612",
+    "title": "Altered pattern of family relationships in childhood",
+    "keywords": [
+      "Pola Perubahan hubungan keluarga di masa kanak-kanak"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z61.3",
+    "code_clean": "Z613",
+    "title": "Events resulting in loss of self-esteem in childhood",
+    "keywords": [
+      "Acara yang mengakibatkan hilangnya harga diri pada masa kanak-kanak"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z61.4",
+    "code_clean": "Z614",
+    "title": "Problems related to alleged sexual abuse of child by person within primary support group",
+    "keywords": [
+      "Masalah yang terkait dengan dugaan pelecehan seksual terhadap anak yang dilakukan oleh orang dalam kelompok dukungan utama"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z61.5",
+    "code_clean": "Z615",
+    "title": "Problems related to alleged sexual abuse of child by person outside primary support group",
+    "keywords": [
+      "Masalah yang terkait dengan dugaan pelecehan seksual terhadap anak yang dilakukan oleh orang di luar kelompok pendukung utama"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z61.6",
+    "code_clean": "Z616",
+    "title": "Problems related to alleged physical abuse of child",
+    "keywords": [
+      "Masalah yang terkait dengan dugaan penganiayaan fisik anak"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z61.7",
+    "code_clean": "Z617",
+    "title": "Personal frightening experience in childhood",
+    "keywords": [
+      "Pengalaman menakutkan pribadi di masa kecil"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z61.8",
+    "code_clean": "Z618",
+    "title": "Other negative life events in childhood",
+    "keywords": [
+      "Peristiwa kehidupan negatif lainnya di masa kanak-kanak"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z61.9",
+    "code_clean": "Z619",
+    "title": "Negative life event in childhood, unspecified",
+    "keywords": [
+      "Peristiwa hidup yang negatif di masa kecil , tidak spesifik"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z62.0",
+    "code_clean": "Z620",
+    "title": "Inadequate parental supervision and control",
+    "keywords": [
+      "Pengawasan orangtua yang tidak memadai dan kontrol"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z62.1",
+    "code_clean": "Z621",
+    "title": "Parental overprotection",
+    "keywords": [
+      "Parental overprotection"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z62.2",
+    "code_clean": "Z622",
+    "title": "Institutional upbringing",
+    "keywords": [
+      "asuhan institusional"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z62.3",
+    "code_clean": "Z623",
+    "title": "Hostility towards and scapegoating of child",
+    "keywords": [
+      "Permusuhan terhadap dan pengkambinghitaman anak"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z62.4",
+    "code_clean": "Z624",
+    "title": "Emotional neglect of child",
+    "keywords": [
+      "Pengabaian emosional anak"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z62.5",
+    "code_clean": "Z625",
+    "title": "Other problems related to neglect in upbringing",
+    "keywords": [
+      "Masalah lain yang berkaitan dengan kelalaian dalam asuhan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z62.6",
+    "code_clean": "Z626",
+    "title": "Inappropriate parental pressure and other abnormal qualities of upbringing",
+    "keywords": [
+      "Tekanan orang tua yang tidak pantas dan kualitas abnormal lainnya asuhan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z62.8",
+    "code_clean": "Z628",
+    "title": "Other specified problems related to upbringing",
+    "keywords": [
+      "Masalah tertentu lainnya yang terkait dengan pendidikan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z62.9",
+    "code_clean": "Z629",
+    "title": "Problem related to upbringing, unspecified",
+    "keywords": [
+      "Masalah yang berkaitan dengan pendidikan , tidak spesifik"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z63.0",
+    "code_clean": "Z630",
+    "title": "Problems in relationship with spouse or partner",
+    "keywords": [
+      "Masalah dalam hubungan dengan pasangan atau pasangan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z63.1",
+    "code_clean": "Z631",
+    "title": "Problems in relationship with parents and in-laws",
+    "keywords": [
+      "Masalah dalam hubungan dengan orang tua dan mertua"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z63.2",
+    "code_clean": "Z632",
+    "title": "Inadequate family support",
+    "keywords": [
+      "Dukungan keluarga tidak memadai"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z63.3",
+    "code_clean": "Z633",
+    "title": "Absence of family member",
+    "keywords": [
+      "Tidak adanya anggota keluarga"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z63.4",
+    "code_clean": "Z634",
+    "title": "Disappearance and death of family member",
+    "keywords": [
+      "Penghilangan dan kematian anggota keluarga"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z63.5",
+    "code_clean": "Z635",
+    "title": "Disruption of family by separation and divorce",
+    "keywords": [
+      "Gangguan keluarga dengan pemisahan dan perceraian"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z63.6",
+    "code_clean": "Z636",
+    "title": "Dependent relative needing care at home",
+    "keywords": [
+      "Dependent care membutuhkan relatif di rumah"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z63.7",
+    "code_clean": "Z637",
+    "title": "Other stressful life events affecting family and household",
+    "keywords": [
+      "Peristiwa kehidupan yang penuh stres lain yang mempengaruhi keluarga dan rumah tangga"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z63.8",
+    "code_clean": "Z638",
+    "title": "Other specified problems related to primary support group",
+    "keywords": [
+      "Masalah tertentu lainnya yang terkait dengan kelompok pendukung utama"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z63.9",
+    "code_clean": "Z639",
+    "title": "Problem related to primary support group, unspecified",
+    "keywords": [
+      "Masalah yang berkaitan dengan kelompok pendukung utama , tidak spesifik"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z64.0",
+    "code_clean": "Z640",
+    "title": "Problems related to unwanted pregnancy",
+    "keywords": [
+      "Masalah yang terkait dengan kehamilan yang tidak diinginkan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z64.1",
+    "code_clean": "Z641",
+    "title": "Problems related to multiparity",
+    "keywords": [
+      "Masalah yang terkait dengan multiparitas"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z64.2",
+    "code_clean": "Z642",
+    "title": "Seeking and accepting physical, nutritional and chemical interventions known to be hazardous and harmful",
+    "keywords": [
+      "Mencari dan menerima intervensi fisik , gizi dan kimia yang diketahui berbahaya dan berbahaya"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z64.3",
+    "code_clean": "Z643",
+    "title": "Seeking and accepting behavioural and psychological interventions known to be hazardous and harmful",
+    "keywords": [
+      "Mencari dan menerima intervensi perilaku dan psikologis yang diketahui berbahaya dan berbahaya"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z64.4",
+    "code_clean": "Z644",
+    "title": "Discord with counsellors",
+    "keywords": [
+      "Perselisihan dengan konselor"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z65.0",
+    "code_clean": "Z650",
+    "title": "Conviction in civil and criminal proceedings without imprisonment",
+    "keywords": [
+      "Keyakinan dalam proses perdata dan pidana penjara tanpa"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z65.1",
+    "code_clean": "Z651",
+    "title": "Imprisonment and other incarceration",
+    "keywords": [
+      "Penahanan dan penahanan lainnya"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z65.2",
+    "code_clean": "Z652",
+    "title": "Problems related to release from prison",
+    "keywords": [
+      "Masalah yang terkait untuk melepaskan dari penjara"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z65.3",
+    "code_clean": "Z653",
+    "title": "Problems related to other legal circumstances",
+    "keywords": [
+      "Masalah yang terkait dengan keadaan hukum lainnya"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z65.4",
+    "code_clean": "Z654",
+    "title": "Victim of crime and terrorism",
+    "keywords": [
+      "Korban kejahatan dan terorisme"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z65.5",
+    "code_clean": "Z655",
+    "title": "Exposure to disaster, war and other hostilities",
+    "keywords": [
+      "Paparan bencana , perang dan permusuhan lainnya"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z65.8",
+    "code_clean": "Z658",
+    "title": "Other specified problems related to psychosocial circumstances",
+    "keywords": [
+      "Masalah tertentu lainnya yang berhubungan dengan keadaan psikososial"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z65.9",
+    "code_clean": "Z659",
+    "title": "Problem related to unspecified psychosocial circumstances",
+    "keywords": [
+      "Masalah yang berkaitan dengan situasi psikososial yang tidak spesifik"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z71.0",
+    "code_clean": "Z710",
+    "title": "Person consulting on behalf of another person",
+    "keywords": [
+      "Konsultasi orang atas nama orang lain"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z71.1",
+    "code_clean": "Z711",
+    "title": "Person with feared complaint in whom no diagnosis is made",
+    "keywords": [
+      "Orang dengan takut keluhan di antaranya tidak ada diagnosis dibuat"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z71.2",
+    "code_clean": "Z712",
+    "title": "Person consulting for explanation of investigation findings",
+    "keywords": [
+      "Orang konsultasi untuk penjelasan temuan investigasi"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z71.3",
+    "code_clean": "Z713",
+    "title": "Dietary counselling and surveillance",
+    "keywords": [
+      "Konseling dan pengawasan diet"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z71.4",
+    "code_clean": "Z714",
+    "title": "Alcohol abuse counselling and surveillance",
+    "keywords": [
+      "Penyalahgunaan alkohol konseling dan pengawasan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z71.5",
+    "code_clean": "Z715",
+    "title": "Drug abuse counselling and surveillance",
+    "keywords": [
+      "Penyalahgunaan narkoba konseling dan pengawasan"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z71.6",
+    "code_clean": "Z716",
+    "title": "Tobacco abuse counselling",
+    "keywords": [
+      "Penyalahgunaan tembakau konseling"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z71.7",
+    "code_clean": "Z717",
+    "title": "Human immunodeficiency virus [HIV] counselling",
+    "keywords": [
+      "Human immunodeficiency virus [ HIV ] konseling"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z71.8",
+    "code_clean": "Z718",
+    "title": "Other specified counselling",
+    "keywords": [
+      "Konseling tertentu lainnya"
+    ],
+    "type": "psychosocial"
+  },
+  {
+    "code": "Z71.9",
+    "code_clean": "Z719",
+    "title": "Counselling, unspecified",
+    "keywords": [
+      "Konseling , tidak spesifik"
+    ],
+    "type": "psychosocial"
+  }
+]

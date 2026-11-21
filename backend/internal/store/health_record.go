@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"malva/backend/internal/clock"
 )
 
 // ============================================================
@@ -140,8 +142,10 @@ func (s *Store) GetHealthRecord(ctx context.Context, patientID string) (HealthRe
 	return rec, nil
 }
 
-// UpdateHealthRecordDiagnosis menyimpan diagnosis summary pasien oleh
-// profesional terverifikasi. Mengembalikan record terbaru.
+var ErrHealthRecordDiagnosisForbidden = errors.New("diagnosis memerlukan izin Health Record dan paket aktif atau sesi satu kali yang sedang berlangsung")
+
+// UpdateHealthRecordDiagnosis checks care and consent in the same statement
+// that writes the diagnosis.
 func (s *Store) UpdateHealthRecordDiagnosis(ctx context.Context, professionalID, patientID, diagnosis string) (HealthRecord, error) {
 	patientID = strings.TrimSpace(patientID)
 	professionalID = strings.TrimSpace(professionalID)
@@ -153,16 +157,42 @@ func (s *Store) UpdateHealthRecordDiagnosis(ctx context.Context, professionalID,
 		return HealthRecord{}, errors.New("professional_id is required")
 	}
 
-	// Cegah duplikat log audit beruntun: simpan hash sederhana via metadata.
-	res, err := s.db.ExecContext(ctx, `
-		UPDATE patient_profiles
-		SET diagnosis_summary = NULLIF($2, '')
-		WHERE user_id = $1
-	`, patientID, diagnosis)
+	var eligible, updated bool
+	err := s.db.QueryRowContext(ctx, `
+		WITH eligible AS (
+			SELECT 1 FROM patient_professional_links l
+			JOIN users p ON p.id = l.professional_id
+			JOIN professional_credentials pc ON pc.user_id = p.id
+			JOIN patient_data_consents c ON c.patient_id = l.patient_id AND c.professional_id = p.id
+			WHERE l.patient_id = $1 AND l.professional_id = $2 AND l.status = 'active'
+			  AND p.role = 'professional' AND p.disabled_at IS NULL AND pc.verification_status = 'VERIFIED'
+			  AND c.share_health_record
+			  AND (
+				EXISTS (SELECT 1 FROM care_packages cp
+					WHERE cp.patient_id = l.patient_id AND cp.professional_id = p.id
+					  AND cp.status = 'active' AND cp.total_sessions > 1
+					  AND cp.starts_at <= $4 AND cp.expires_at > $4)
+				OR EXISTS (SELECT 1 FROM care_sessions cs
+					WHERE cs.patient_id = l.patient_id AND cs.professional_id = p.id
+					  AND cs.package_id IS NULL AND cs.status = 'scheduled'
+					  AND cs.scheduled_at <= $4
+					  AND cs.scheduled_at + make_interval(mins => cs.duration_minutes) > $4)
+			  )
+		), updated AS (
+			UPDATE patient_profiles
+			SET diagnosis_summary = NULLIF($3, '')
+			WHERE user_id = $1 AND EXISTS (SELECT 1 FROM eligible)
+			RETURNING 1
+		)
+		SELECT EXISTS (SELECT 1 FROM eligible), EXISTS (SELECT 1 FROM updated)
+	`, patientID, professionalID, diagnosis, clock.Now()).Scan(&eligible, &updated)
 	if err != nil {
 		return HealthRecord{}, err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	if !eligible {
+		return HealthRecord{}, ErrHealthRecordDiagnosisForbidden
+	}
+	if !updated {
 		return HealthRecord{}, sql.ErrNoRows
 	}
 

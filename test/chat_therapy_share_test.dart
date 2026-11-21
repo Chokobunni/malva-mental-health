@@ -52,6 +52,7 @@ class _ChatBackend {
   bool noAssessments = false;
   String assessmentModule = 'who5';
   int assessmentDetailStatus = 200;
+  bool diaryReadable = true;
   Completer<http.Response>? pendingDetail;
   Map<String, dynamic> get assessment => {
         ..._record('assessment-1', assessmentModule,
@@ -202,6 +203,19 @@ class _ChatBackend {
                   },
               ]
             });
+          case 'PUT /v1/diary-entries/old/access/pro-1':
+            return _json({'recipients': [], 'eligible': []});
+          case 'GET /v1/diary-entries/old':
+            if (!diaryReadable)
+              return _json({'error': 'Diary tidak ditemukan'}, 404);
+            return _json({
+              'diary': {
+                'id': 'old',
+                'title': 'Diary lama',
+                'note': 'Isi lama lengkap',
+                'occurred_at': '2025-01-01T09:00:00+07:00',
+              }
+            });
           default:
             return _json({'error': 'Tidak ditemukan'}, 404);
         }
@@ -311,7 +325,6 @@ void main() {
     await _close(tester);
   });
   for (final kind in [
-    'diary',
     'goals',
     'habits',
     'prescription',
@@ -351,7 +364,7 @@ void main() {
     expect(find.text('Pilih diary'), findsOneWidget);
     await tester.tap(find.text('Diary lama'));
     await tester.pumpAndSettle();
-    expect(backend.sentShare?['metadata']['note'], 'Isi lama lengkap');
+    expect(backend.sentShare?['metadata'], {'diary_id': 'old'});
     await _close(tester);
   });
 
@@ -444,35 +457,74 @@ void main() {
 
   for (final professional in [false, true]) {
     testWidgets(
-        'both roles read full shared diary inline and reject account switch',
+        'shared diary opens its full note for professional=$professional and rejects account switch',
         (tester) async {
+      const note =
+          'Baris pertama.\nBaris kedua.\nBaris ketiga.\nIsi diary terakhir.';
       final backend = _ChatBackend()
         ..shared = true
         ..kind = 'diary'
-        ..metadata = {
-          'title': 'Catatan lengkap',
-          'note': 'Isi diary lengkap yang disimpan',
-          'mood': 'good'
-        };
+        ..metadata = {'title': 'Catatan lengkap', 'note': note, 'mood': 'good'};
       await _open(tester, backend, professional: professional);
+      expect(find.textContaining('Isi diary terakhir.'), findsNothing);
       await tester.tap(find.text('Catatan lengkap'));
       await tester.pumpAndSettle();
-      expect(find.text('Isi diary lengkap yang disimpan'), findsOneWidget);
-      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.text('Detail Diary'), findsOneWidget);
+      expect(find.text(note), findsOneWidget);
+      expect(find.byType(BottomSheet), findsOneWidget);
+      await tester.tap(find.byTooltip('Tutup detail diary'));
+      await tester.pumpAndSettle();
+      expect(find.text(note), findsNothing);
+      await tester.tap(find.text('Catatan lengkap'));
+      await tester.pumpAndSettle();
       final container =
           ProviderScope.containerOf(tester.element(find.byType(ChatScreen)));
       await tester.runAsync(() async {
+        final owner = container.read(currentSessionProvider)!;
         container.read(authStateProvider.notifier).setSession(const AuthSession(
             role: UserRole.patient,
             identifier: 'other',
             displayName: 'Other',
             accessToken: 'other-token'));
+        container.read(authStateProvider.notifier).setSession(owner);
       });
       await tester.pumpAndSettle();
-      expect(find.text('Isi diary lengkap yang disimpan'), findsNothing);
+      expect(find.text(note), findsNothing);
+      expect(find.text('Diary lama'), findsNothing);
       await _close(tester);
     });
   }
+
+  testWidgets(
+      'revoking a referenced diary removes content from the open detail',
+      (tester) async {
+    final backend = _ChatBackend()
+      ..shared = true
+      ..kind = 'diary'
+      ..metadata = {'diary_id': 'old', 'note': 'Snapshot yang harus diabaikan'};
+    await _open(tester, backend, professional: true);
+    expect(find.text('Isi lama lengkap'), findsOneWidget);
+    await tester.tap(find.text('Diary lama'));
+    await tester.pumpAndSettle();
+    expect(find.text('Detail Diary'), findsOneWidget);
+    backend.diaryReadable = false;
+    await tester.runAsync(() async {
+      _sockets.last.add(jsonEncode({
+        'type': 'diary_access_changed',
+        'data': {
+          'diary_id': 'old',
+          'patient_id': 'patient-1',
+          'professional_id': 'pro-1',
+        },
+      }));
+      await Future<void>.delayed(const Duration(milliseconds: 35));
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('Isi lama lengkap'), findsNothing);
+    expect(find.text('Snapshot yang harus diabaikan'), findsNothing);
+    expect(find.text('Akses diary tidak tersedia.'), findsWidgets);
+    await _close(tester);
+  });
 
   for (final module in ['who5', 'dass21']) {
     testWidgets(

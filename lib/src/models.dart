@@ -404,6 +404,16 @@ class MoodEntry {
   final String note;
 }
 
+class DiaryAccessRecipient {
+  const DiaryAccessRecipient({
+    required this.professionalId,
+    required this.displayName,
+  });
+
+  final String professionalId;
+  final String displayName;
+}
+
 class DiaryEntry {
   const DiaryEntry({
     required this.id,
@@ -412,6 +422,7 @@ class DiaryEntry {
     required this.title,
     required this.note,
     this.professionalFeedback,
+    this.accessRecipients = const [],
   });
 
   final String id;
@@ -420,6 +431,7 @@ class DiaryEntry {
   final String title;
   final String note;
   final String? professionalFeedback;
+  final List<DiaryAccessRecipient> accessRecipients;
 
   DiaryEntry copyWith({
     String? id,
@@ -428,6 +440,7 @@ class DiaryEntry {
     String? title,
     String? note,
     String? professionalFeedback,
+    List<DiaryAccessRecipient>? accessRecipients,
   }) {
     return DiaryEntry(
       id: id ?? this.id,
@@ -436,6 +449,7 @@ class DiaryEntry {
       title: title ?? this.title,
       note: note ?? this.note,
       professionalFeedback: professionalFeedback ?? this.professionalFeedback,
+      accessRecipients: accessRecipients ?? this.accessRecipients,
     );
   }
 }

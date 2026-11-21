@@ -2,6 +2,8 @@
 
 ## Diary & Positive Vault (0.1.30)
 
+Mulai 0.1.32, pemilik mengelola izin profesional per diary dari editor atau daftar. Diary baru, termasuk antrean offline, selalu pribadi. Bagikan pada draft baru menyimpan diary terlebih dahulu. Cabut akses tidak mengubah isi draft. Akses profesional pada daftar, detail, media dan timeline diperiksa terhadap entry yang sama.
+
 Koreksi 0.1.31: susunan dan kartu terpilih aktif dipakai bersama oleh home/editor; membuka/menutup panel tidak mengacak ulang. Refresh eksplisit tetap menyimpan cursor sebelum menampilkan tiga kartu baru. Pilihan home dibawa melalui Jawab di Diari maupun Tulis Cerita Diari Baru; pilihan baru di editor langsung menjadi prompt yang disimpan walaupun pasien langsung menekan Simpan. Diary lama memakai prompt tersimpannya sampai diganti. Media diary yang dibagikan pada chat/detail/data pasien profesional dibatasi preview240×180, decode720px dan BoxFit.contain; reader/editor pasien serta berkas sumber privat tetap.
 
 `diary_catalog.dart` memuat 100 pertanyaan dan 100 apresiasi dari PDF pengguna. Landing menempatkan tiga kartu tertutup/flip tepat di bawah tombol tulis, lalu Vault, kalender WIB/filter warna dan daftar cerita. Jawab di Diari memasang promptId di editor; pasien juga bisa memilih kartu langsung saat menulis. Header menjadi satu-satunya pintu lencana. Deck menyimpan cursor susunan berurutan per akun/perangkat melalui SecureStore, dibagi home/editor: 970.200 susunan unik, ketiga posisi berganti saat refresh, reset setelah habis. Gagal baca/tulis tidak mempresentasikan susunan baru.

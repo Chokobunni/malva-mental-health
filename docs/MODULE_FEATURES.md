@@ -121,7 +121,7 @@ Home pasien mengikuti referensi dengan check-in5langkah (mood, obat, tidur, ener
 | FEAT-085 | Keterkaitan pasien–profesional | Pasien, Profesional | `GET/POST /v1/patient-professional-links` | Aktif |
 | FEAT-086 | Catatan profesional | Profesional | `GET/POST /v1/professional-notes` | Aktif |
 | FEAT-087 | Follow-up pasien | Profesional | `/v1/follow-ups` (GET/POST/PATCH) | Aktif |
-| FEAT-088 | Rekam medis | Pasien, Profesional | `GET/PUT /v1/health-record` | Aktif |
+| FEAT-088 | Rekam medis dan pilihan jamak ICD-10 offline | Pasien, Profesional | `GET/PUT /v1/health-record` | Aktif |
 
 ## 10. Administrasi (Admin)
 

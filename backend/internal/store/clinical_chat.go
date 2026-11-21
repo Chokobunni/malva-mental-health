@@ -126,7 +126,7 @@ func (s *Store) ValidateProfessionalChatCard(ctx context.Context, patientID, pro
 func (s *Store) GetChatAttachment(ctx context.Context, messageID, userID string) (ChatMessage, error) {
 	var msg ChatMessage
 	err := s.db.QueryRowContext(ctx, `SELECT id,patient_id,professional_id,sender_id,sender_name,text,kind,attachment_meta,created_at
-		FROM chat_messages WHERE id=$1 AND kind='attachment' AND (patient_id=$2 OR professional_id=$2)`, messageID, userID).
+		FROM chat_messages WHERE id=$1 AND kind='attachment' AND deleted_at IS NULL AND (patient_id=$2 OR professional_id=$2)`, messageID, userID).
 		Scan(&msg.ID, &msg.PatientID, &msg.ProfessionalID, &msg.SenderID, &msg.SenderName, &msg.Text, &msg.Kind, &msg.Metadata, &msg.CreatedAt)
 	if err != nil {
 		return ChatMessage{}, err

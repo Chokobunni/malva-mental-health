@@ -1,12 +1,20 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/diagnosis/diagnosis_search_field.dart';
+import '../../features/diagnosis/diagnosis_summary.dart';
+import '../../features/diagnosis/icd10_service.dart';
 import '../models.dart';
 import '../assessment_engine.dart';
 import '../professional_role.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/mood_insights.dart';
+import '../services/server_clock.dart';
+import '../time/wib.dart';
 import '../widgets/mood_insights.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
@@ -160,6 +168,10 @@ class _ProPatientDetailScreenState
   List<BackendMoodCheckin> _moods = const [];
   List<BackendMedication> _medications = const [];
   BackendHealthRecord? _healthRecord;
+  bool _verified = false;
+  bool _diagnosisOpening = false;
+  bool _accountChanged = false;
+  Timer? _diagnosisBoundary;
   String? _restricted;
   bool _isLoading = true;
   String? _error;
@@ -177,14 +189,92 @@ class _ProPatientDetailScreenState
 
   MalvaApiClient get _api => widget.apiClient ?? ref.read(apiClientProvider);
   String? get _token {
-    final t = widget.session?.accessToken;
+    if (_accountChanged) return null;
+    final current = ref.read(currentSessionProvider);
+    final original = widget.session;
+    if (current != null &&
+        original != null &&
+        (current.role != original.role ||
+            (current.backendUserId ?? current.identifier) !=
+                (original.backendUserId ?? original.identifier))) return null;
+    final t = (current ?? original)?.accessToken;
     return (t == null || t.isEmpty) ? null : t;
   }
 
   @override
   void initState() {
     super.initState();
+    ref.listenManual(authStateProvider, (previous, next) {
+      final owner = widget.session ?? previous?.session;
+      if (owner == null) return;
+      final session = next.session;
+      if (session?.role != owner.role ||
+          (session?.backendUserId ?? session?.identifier) !=
+              (owner.backendUserId ?? owner.identifier)) {
+        setState(() => _accountChanged = true);
+        _diagnosisBoundary?.cancel();
+      }
+    });
     _load();
+  }
+
+  Iterable<({DateTime start, DateTime end})> get _diagnosisWindows sync* {
+    final professional = widget.session ?? ref.read(currentSessionProvider);
+    final id = professional?.backendUserId ?? professional?.identifier;
+    if (id == null || !_verified || _accountChanged) return;
+    for (final package in _packages) {
+      if (!package.isActive ||
+          package.totalSessions <= 1 ||
+          package.patientId != widget.patientId ||
+          package.professionalId != id) continue;
+      final start = parseWibStored(package.startsAt);
+      final end = package.expiresDateTime;
+      if (start != null && end != null) yield (start: start, end: end);
+    }
+    for (final session in _sessions) {
+      if (session.packageId?.isNotEmpty == true ||
+          session.status != 'scheduled' ||
+          session.patientId != widget.patientId ||
+          session.professionalId != id) continue;
+      final start = session.scheduledDateTime;
+      if (start != null)
+        yield (
+          start: start,
+          end: start.add(Duration(minutes: session.durationMinutes))
+        );
+    }
+  }
+
+  bool get _canEditDiagnosis {
+    final now = ServerClock.now();
+    return _healthRecord != null &&
+        _diagnosisWindows.any((window) =>
+            !now.isBefore(window.start) && now.isBefore(window.end));
+  }
+
+  void _watchDiagnosisBoundary() {
+    _diagnosisBoundary?.cancel();
+    final now = ServerClock.now();
+    final future = [
+      for (final window in _diagnosisWindows) ...[window.start, window.end]
+    ].where((time) => time.isAfter(now)).toList()
+      ..sort();
+    if (future.isEmpty) return;
+    _diagnosisBoundary = Timer(future.first.difference(now), () {
+      if (!mounted) return;
+      setState(() {});
+      if (_healthRecord == null) {
+        unawaited(_load());
+      } else {
+        _watchDiagnosisBoundary();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _diagnosisBoundary?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -290,12 +380,14 @@ class _ProPatientDetailScreenState
         _moods = (results[5] as List<BackendMoodCheckin>?) ?? const [];
         _medications = (results[6] as List<BackendMedication>?) ?? const [];
         _healthRecord = record;
+        _verified = cred?.verificationStatus.toUpperCase() == 'VERIFIED';
         _isPsychiatrist =
             cred != null && isPsychiatristSpecialization(cred.specialization);
         _failedSections = List.unmodifiable(failed);
         _unsharedSections = List.unmodifiable(unshared);
         _isLoading = false;
       });
+      _watchDiagnosisBoundary();
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
@@ -330,6 +422,13 @@ class _ProPatientDetailScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (_accountChanged) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Info Pasien')),
+        body: const Center(
+            child: Text('Sesi akun telah berubah. Buka kembali info pasien.')),
+      );
+    }
     return Theme(
         data: Theme.of(context).copyWith(
             cardTheme: Theme.of(context).cardTheme.copyWith(elevation: .35)),
@@ -497,9 +596,10 @@ class _ProPatientDetailScreenState
                           children: [
                             Expanded(
                               child: FilledButton.icon(
-                                onPressed: _isUnavailable('Health Record')
-                                    ? null
-                                    : () => _openHealthRecordEdit(context),
+                                onPressed:
+                                    !_canEditDiagnosis || _diagnosisOpening
+                                        ? null
+                                        : () => _openHealthRecordEdit(context),
                                 style: compactFilledButtonStyle,
                                 icon: const Icon(Icons.edit_note_rounded,
                                     size: 16),
@@ -723,44 +823,125 @@ class _ProPatientDetailScreenState
   }
 
   Future<void> _openHealthRecordEdit(BuildContext context) async {
-    final controller =
-        TextEditingController(text: _healthRecord?.diagnosisSummary ?? '');
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Diagnosis pasien'),
-        content: TextField(
-          controller: controller,
-          maxLines: 5,
-          decoration: const InputDecoration(
-              labelText: 'Diagnosis summary',
-              hintText: 'contoh: F41.1 Generalized anxiety disorder'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: compactFilledButtonStyle,
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
-    );
-    final diagnosis = controller.text.trim();
-    controller.dispose();
-    if (saved != true) return;
-    final token = _token;
-    if (token == null) return;
+    if (!_canEditDiagnosis || _diagnosisOpening) return;
+    setState(() => _diagnosisOpening = true);
     try {
-      final updated = await _api.updateHealthRecordDiagnosis(
-        accessToken: token,
-        patientId: widget.patientId,
-        diagnosisSummary: diagnosis,
+      final service = Icd10Service();
+      final catalog = await service.load();
+      if (!context.mounted || !_canEditDiagnosis) return;
+      final original = _healthRecord!.diagnosisSummary;
+      final patientId = widget.patientId;
+      var selected = selectedDiagnosesFrom(original, catalog);
+      final legacy = selected.isEmpty && original.trim().isNotEmpty;
+      var saving = false;
+      String? error;
+      final updated = await showDialog<BackendHealthRecord>(
+        context: context,
+        builder: (_) => Consumer(builder: (dialog, dialogRef, _) {
+          dialogRef.watch(authStateProvider);
+          if (_accountChanged || !mounted || widget.patientId != patientId) {
+            return AlertDialog(
+              content: const Text('Sesi akun telah berubah.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialog),
+                  child: const Text('Tutup'),
+                ),
+              ],
+            );
+          }
+          return StatefulBuilder(builder: (ctx, update) {
+            final summary = diagnosisSummaryFor(selected);
+            return PopScope(
+              canPop: !saving,
+              child: AlertDialog(
+                title: const Text('Diagnosis pasien'),
+                scrollable: true,
+                content: SizedBox(
+                  width: 440,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (legacy) ...[
+                        const Text('Diagnosis sebelumnya',
+                            style: TextStyle(fontWeight: FontWeight.w700)),
+                        Text(original),
+                        const SizedBox(height: 12),
+                      ],
+                      DiagnosisSearchField(
+                        service: service,
+                        selected: selected,
+                        enabled: !saving,
+                        onChanged: (value) => update(() {
+                          selected = value;
+                          error = null;
+                        }),
+                      ),
+                      if (error != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(error!,
+                              style: TextStyle(
+                                  color: Theme.of(ctx).colorScheme.error)),
+                        ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: saving ? null : () => Navigator.pop(ctx),
+                    child: const Text('Batal'),
+                  ),
+                  FilledButton(
+                    style: compactFilledButtonStyle,
+                    onPressed: saving ||
+                            summary == original ||
+                            (legacy && selected.isEmpty)
+                        ? null
+                        : () async {
+                            final token = _token;
+                            if (token == null || !_canEditDiagnosis) {
+                              update(() => error =
+                                  'Izin mengubah diagnosis sudah berakhir.');
+                              return;
+                            }
+                            if (utf8.encode(summary).length > 2000) {
+                              update(() => error =
+                                  'Diagnosis melebihi batas 2.000 byte.');
+                              return;
+                            }
+                            update(() {
+                              saving = true;
+                              error = null;
+                            });
+                            try {
+                              final record =
+                                  await _api.updateHealthRecordDiagnosis(
+                                accessToken: token,
+                                patientId: patientId,
+                                diagnosisSummary: summary,
+                              );
+                              if (ctx.mounted && !_accountChanged) {
+                                Navigator.pop(ctx, record);
+                              }
+                            } on Object catch (e) {
+                              if (!ctx.mounted || _accountChanged) return;
+                              update(() {
+                                saving = false;
+                                error = friendlyErrorMessage(e);
+                              });
+                            }
+                          },
+                    child: Text(saving ? 'Menyimpan...' : 'Simpan'),
+                  ),
+                ],
+              ),
+            );
+          });
+        }),
       );
-      if (!context.mounted) return;
+      if (!context.mounted || _accountChanged || updated == null) return;
       setState(() => _healthRecord = updated);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -769,12 +950,14 @@ class _ProPatientDetailScreenState
         ),
       );
     } on Object catch (e) {
-      if (!context.mounted) return;
+      if (!context.mounted || _accountChanged) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(friendlyErrorMessage(e)),
             backgroundColor: MalvaColors.danger),
       );
+    } finally {
+      if (mounted) setState(() => _diagnosisOpening = false);
     }
   }
 }

@@ -113,7 +113,7 @@ Malva menyediakan platform digital yang menghubungkan pasien dengan profesional 
 | BR-22 | Catatan profesional (notes) hanya visible untuk profesional yang membuatnya, kecuali `shared_with_patient` |
 | BR-23 | Follow-up message visible untuk pasien yang dituju |
 | BR-24 | Audit log mencatat semua akses data |
-| BR-25 | **Diagnosis resmi (health record) HANYA dapat diubah oleh profesional terverifikasi** — pasien read-only |
+| BR-25 | Diagnosis Health Record dapat diubah oleh profesional terverifikasi dengan relasi aktif dan persetujuan pasien selama paket multisesi berlaku atau selama sesi satu kali berlangsung. Pasien memiliki akses baca. |
 
 ### 3.4 Screening Rules
 
@@ -304,7 +304,7 @@ Home pasien menyediakan sesi berjalan dan video call mendatang beserta foto prof
 
 Kehadiran dicatat masing-masing oleh pasien dan profesional. Ketidakhadiran pasien memakai kuota; ketidakhadiran profesional mengembalikan kuota. Profesional hanya menyelesaikan sesi setelah durasi jadwal berakhir; chat/Meet tertutup pada akhir, riwayat tetap terbaca. Transaksi sukses diverifikasi melalui status Midtrans dengan referensi dan nominal yang sama, mengaktifkan paket tepat sekali.
 
-Selama sesi aktif, profesional dapat mengelola goals/habits, meminta assessment yang tersedia, mengubah diagnosis dan obat sesuai kewenangan psikiater, mengirim file/gambar resep privat, serta mengirim rangkuman homework dan insight. Perubahan obat langsung disinkronkan ke Medication Check-in pasien melalui event in-app. Batas push tetap chat sesi aktif, dengan reminder lokal goals dan obat hanya bagi pasien.
+Selama sesi aktif, profesional dapat mengelola goals/habits, meminta assessment yang tersedia, mengelola obat sesuai kewenangan psikiater, mengirim file/gambar resep privat, serta mengirim rangkuman homework dan insight. Akses tulis diagnosis mengikuti BR-25. Perubahan obat langsung disinkronkan ke Medication Check-in pasien melalui event in-app. Batas push tetap chat sesi aktif, dengan reminder lokal goals dan obat hanya bagi pasien.
 
 ## Skrining WHO-5 dan assessment terpadu (7 November 2026)
 

@@ -143,11 +143,7 @@ func (s *Server) getDiaryImage(w http.ResponseWriter, r *http.Request, claims au
 			http.NotFound(w, r)
 			return
 		}
-		if _, err := s.authorizePatientAccess(r, claims, patientID); err != nil || !s.consentAllows(r, patientID, claims.Subject, "mood_diary") {
-			http.NotFound(w, r)
-			return
-		}
-		entries, err := s.store.ListDiaryEntries(r.Context(), patientID, true, 0)
+		entries, err := s.store.ListDiaryEntriesForProfessional(r.Context(), patientID, claims.Subject, 0)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, errors.New("gagal memeriksa akses gambar diary"))
 			return

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:malva_mental_health/features/diagnosis/icd10_service.dart';
 import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/platform/contracts/ports.dart';
 import 'package:malva_mental_health/src/platform/platform_providers.dart';
@@ -216,6 +217,10 @@ Future<ProviderContainer> _open(WidgetTester tester, _Backend backend,
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  // The production asset is decoded in an isolate outside the fake clock.
+  setUpAll(() async => Icd10Service().load());
+
   testWidgets('professional tools expose five working menus', (tester) async {
     await _open(tester, _Backend());
     for (final key in ['goals', 'assessment', 'health', 'files', 'summary']) {
@@ -285,13 +290,23 @@ void main() {
     await tester.tap(find.byKey(const Key('tool-health')));
     await tester.pumpAndSettle();
     await tester.enterText(
-        find.byKey(const Key('diagnosis-summary')), 'Diagnosis diperbarui');
+        find.descendant(
+            of: find.byKey(const Key('diagnosis-summary')),
+            matching: find.byType(TextField)),
+        'F411');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Generalized anxiety disorder'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('save-diagnosis')));
     await tester.pumpAndSettle();
     expect(
         backend.requests.where(
             (r) => r.method == 'PUT' && r.url.path == '/v1/health-record'),
         hasLength(1));
+    final write = backend.requests.singleWhere(
+        (r) => r.method == 'PUT' && r.url.path == '/v1/health-record');
+    expect(jsonDecode(write.body)['diagnosis_summary'],
+        'F41.1 - Generalized anxiety disorder');
     expect(find.byKey(const Key('add-medication')), findsNothing);
     expect(find.textContaining('psikiater'), findsWidgets);
   });
@@ -507,9 +522,12 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.byKey(const Key('save-medication')));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Coba Lagi'), -180,
+    final retry = find.text('Coba Lagi');
+    await tester.scrollUntilVisible(retry, -180,
         scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('Coba Lagi'));
+    await Scrollable.ensureVisible(tester.element(retry), alignment: 0.5);
+    await tester.pumpAndSettle();
+    await tester.tap(retry);
     await tester.pumpAndSettle();
     expect(backend.medications, hasLength(1));
     final requests = backend.requests
