@@ -175,7 +175,8 @@ Revisi referensi 2026-11-11: Home pasien menjalankan5langkah: mood → obat → 
 | HR-01 | Health Record screen (record_screen) | P0 | ✅ Done |
 | HR-02 | **Diagnosis banner dengan label "Only your doctor can edit"** (read-only pasien) | P0 | 🔲 New |
 | HR-03 | **Document Vault**: search + filter tabs (All/Prescriptions/Billing/Letters) + upload + grid thumbnails dengan type icon (PDF/JPG) | P0 | 🔲 New |
-| HR-04 | **Role-based write**: hanya profesional terverifikasi bisa edit diagnosis | P0 | 🔲 New |
+| HR-04 | Profesional terverifikasi dengan relasi aktif dan izin Health Record dapat mengisi dan mengubah diagnosis selama paket aktif berlaku atau dalam durasi sesi satu kali. | P0 | Aktif |
+| HR-06 | Profesional → Info Pasien → Isi Diagnosis mendukung pencarian ICD-10 offline dengan judul Inggris dan pilihan jamak berurutan Primary dan Secondary. | P0 | Aktif |
 | HR-05 | **Diagnosis banner prominen** (contoh: "F31.4 Bipolar Affective Disorder") | P0 | 🔲 New |
 
 ### 4.9 Goals & Habits

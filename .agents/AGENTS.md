@@ -517,3 +517,8 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Diary baru selalu pribadi. Pemilik dapat menambah atau mencabut penerima per diary. Izin eksplisit memerlukan relasi aktif. Izin warisan tetap memerlukan consent kategori dan jendela layanan. Mutasi pertama mempertahankan penerima warisan yang sudah berizin.
 - Server memeriksa izin diary pada daftar, detail, media, dan timeline. Pesan diary baru hanya memuat ID diary. Chat memuat detail dengan izin terkini dan memperbarui pratinjau serta panel saat akses berubah. Snapshot chat lama tetap tersedia hingga pengirim menghapus pesannya.
 - Pengirim dapat menghapus pesannya untuk kedua peserta setelah konfirmasi. Server mengosongkan isi dan metadata serta mempertahankan ID agar retry tidak memulihkan pesan. WebSocket menyinkronkan penghapusan dan klien merekonsiliasi riwayat ketika kembali aktif atau tersambung lagi.
+
+## Diagnosis Health Record (2026-11-21)
+
+- Profesional terverifikasi yang terhubung dan menerima izin Health Record dapat mengubah diagnosis selama paket multisesi aktif dan berlaku, termasuk sebelum sesi pertama. Untuk sesi satu kali, akses tulis berlaku dari waktu mulai sampai sebelum akhir sesi terjadwal.
+- Isi Diagnosis di Info Pasien dan editor Health Record di chat menggunakan katalog ICD-10 offline dengan pilihan jamak. Urutan baris `kode - judul` di `diagnosis_summary` menetapkan Primary dan Secondary. Diagnosis teks lama tetap terbaca hingga diganti. Rujukan: [care session](skills/care_session_module.md).

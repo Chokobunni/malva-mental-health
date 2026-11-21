@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../features/diagnosis/diagnosis_search_field.dart';
+import '../../../features/diagnosis/diagnosis_summary.dart';
+import '../../../features/diagnosis/icd10_service.dart';
 import '../../models.dart';
 import '../../platform/contracts/ports.dart';
 import '../../platform/platform_providers.dart';
@@ -52,7 +55,9 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
   final _goalTitle = TextEditingController();
   final _goalTarget = TextEditingController(text: '3');
   final _insight = TextEditingController();
-  final _diagnosis = TextEditingController();
+  final _diagnosisCatalog = Icd10Service();
+  List<Icd10Diagnosis> _selectedDiagnoses = const [];
+  bool _loadedCodedDiagnoses = false;
   String _module = 'screening';
   String? _goalFingerprint, _goalIntent, _cardFingerprint, _cardIntent;
   BackendHealthRecord? _health;
@@ -138,7 +143,6 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
       _goalTitle,
       _goalTarget,
       _insight,
-      _diagnosis,
       _medName,
       _medDosage,
       _medForm,
@@ -211,10 +215,13 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
     try {
       final record = await widget.apiClient
           .getHealthRecord(accessToken: _token, patientId: widget.patientId);
+      final catalog = await _diagnosisCatalog.load();
       if (!_ownsAccount) return;
       setState(() {
         _health = record;
-        _diagnosis.text = record.diagnosisSummary;
+        _selectedDiagnoses =
+            selectedDiagnosesFrom(record.diagnosisSummary, catalog);
+        _loadedCodedDiagnoses = _selectedDiagnoses.isNotEmpty;
       });
     } on Object catch (error) {
       if (_ownsAccount) setState(() => _healthError = error);
@@ -708,6 +715,13 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
       ];
 
   List<Widget> _healthPanel() {
+    final original = _health?.diagnosisSummary ?? '';
+    final summary = diagnosisSummaryFor(_selectedDiagnoses);
+    final canSave = !_busy &&
+        summary != original &&
+        (_selectedDiagnoses.isNotEmpty ||
+            original.trim().isEmpty ||
+            _loadedCodedDiagnoses);
     return [
       if (_healthError != null)
         FriendlyErrorCard(
@@ -716,27 +730,39 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
               if (!_busy) _run(_loadDiagnosis);
             }),
       if (_health != null) ...[
-        TextField(
+        if (original.isNotEmpty && !_loadedCodedDiagnoses) ...[
+          const Text('Diagnosis sebelumnya',
+              style: TextStyle(fontWeight: FontWeight.w700)),
+          Text(original),
+          const SizedBox(height: 12),
+        ],
+        DiagnosisSearchField(
             key: const Key('diagnosis-summary'),
-            controller: _diagnosis,
+            service: _diagnosisCatalog,
+            selected: _selectedDiagnoses,
             enabled: !_busy,
-            maxLines: 4,
-            decoration: const InputDecoration(labelText: 'Diagnosis pasien')),
+            onChanged: (value) => setState(() => _selectedDiagnoses = value)),
         const SizedBox(height: 12),
         FilledButton(
             key: const Key('save-diagnosis'),
-            onPressed: _busy
+            onPressed: !canSave
                 ? null
                 : () {
-                    final diagnosis = _diagnosis.text.trim();
                     _run(() async {
+                      if (utf8.encode(summary).length > 2000) {
+                        _notice('Diagnosis melebihi batas 2.000 byte.');
+                        return;
+                      }
                       final record = await widget.apiClient
                           .updateHealthRecordDiagnosis(
                               accessToken: _token,
                               patientId: widget.patientId,
-                              diagnosisSummary: diagnosis);
+                              diagnosisSummary: summary);
                       if (_ownsAccount) {
-                        setState(() => _health = record);
+                        setState(() {
+                          _health = record;
+                          _loadedCodedDiagnoses = _selectedDiagnoses.isNotEmpty;
+                        });
                         _notice('Diagnosis tersimpan.');
                       }
                     });

@@ -538,3 +538,11 @@ retain presence across failed refresh. Future, pre-start, inactive and
 locked-history guards apply before writes.
 Flutter derives card weekday counts and enabled tiles from the same effective
 schedule and hydrates legacy weekly quotas without inventing a time.
+
+### Health Record diagnosis (2026-11-21)
+
+The Flutter picker searches a cached ICD-10 asset regenerated from the supplied
+master file with `node tools/build_mh_dataset.js <path-to-master_icd_x.json>`.
+Selections use the existing `diagnosis_summary` field as ordered code/title
+lines. The Go store checks the active package or standalone session window,
+professional verification, link, and Health Record consent in the update statement.

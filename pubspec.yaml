@@ -69,3 +69,4 @@ flutter:
     - assets/goals/
     - assets/checkin/
     - assets/prescription/
+    - assets/data/mh_icd10_id_en.json

@@ -8,6 +8,7 @@ import (
 
 	"malva/backend/internal/auth"
 	"malva/backend/internal/security"
+	"malva/backend/internal/store"
 )
 
 // ============================================================
@@ -46,8 +47,8 @@ func (s *Server) getHealthRecord(w http.ResponseWriter, r *http.Request, claims 
 	writeJSON(w, http.StatusOK, map[string]any{"health_record": record})
 }
 
-// updateHealthRecord menulis diagnosis pasien. Hanya profesional
-// terverifikasi yang terhubung + mendapat konsen health_record.
+// updateHealthRecord menulis diagnosis selama paket aktif atau sesi satu kali
+// berlangsung, dengan verifikasi, tautan, dan konsen Health Record.
 func (s *Server) updateHealthRecord(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	if !s.requireVerifiedProfessional(w, r, claims) {
 		return
@@ -62,13 +63,6 @@ func (s *Server) updateHealthRecord(w http.ResponseWriter, r *http.Request, clai
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
-	if !s.consentAllows(r, patientID, claims.Subject, "health_record") {
-		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan Health Record"))
-		return
-	}
-	if _, ok := s.requireClinicalSession(w, r, claims, patientID); !ok {
-		return
-	}
 	diagnosis := security.SanitizeText(strings.TrimSpace(req.DiagnosisSummary))
 	if len(diagnosis) > 2000 {
 		writeError(w, http.StatusBadRequest, errors.New("diagnosis maksimal 2000 karakter"))
@@ -76,6 +70,10 @@ func (s *Server) updateHealthRecord(w http.ResponseWriter, r *http.Request, clai
 	}
 	record, err := s.store.UpdateHealthRecordDiagnosis(r.Context(), claims.Subject, patientID, diagnosis)
 	if err != nil {
+		if errors.Is(err, store.ErrHealthRecordDiagnosisForbidden) {
+			writeError(w, http.StatusForbidden, err)
+			return
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusNotFound, errors.New("health record tidak ditemukan"))
 			return
