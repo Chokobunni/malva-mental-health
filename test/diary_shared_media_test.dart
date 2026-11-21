@@ -26,7 +26,7 @@ const _session = AuthSession(
 
 void main() {
   for (final width in [320.0, 1000.0]) {
-    for (final surface in ['chat', 'detail', 'patient']) {
+    for (final surface in ['chat', 'chat-detail', 'detail', 'patient']) {
       testWidgets('$surface keeps shared photos and drawings compact at $width',
           (tester) async {
         tester.view.physicalSize = Size(width, 1000);
@@ -118,10 +118,13 @@ void main() {
                             session: _session, apiClient: api)
                         : Scaffold(
                             body: SingleChildScrollView(
-                                child: surface == 'chat'
-                                    ? ChatSharedRecordCard(message: message)
-                                    : SharedRecordDetail(
-                                        message: message)))))));
+                                child: switch (surface) {
+                            'chat' => ChatSharedRecordCard(message: message),
+                            'chat-detail' => SizedBox(
+                                height: 750,
+                                child: ChatDiaryDetail(message: message)),
+                            _ => SharedRecordDetail(message: message),
+                          }))))));
         await tester.pumpAndSettle();
         if (surface == 'patient') {
           await tester.tap(find.widgetWithText(Tab, 'Diary'));
@@ -130,10 +133,20 @@ void main() {
         expect(find.text('Ceritaku hari ini.'), findsOneWidget);
         final images = find.byType(DiaryImage);
         expect(images, findsNWidgets(2));
+        if (surface.startsWith('chat')) {
+          expect(tester.getTopLeft(images.first).dy,
+              tester.getTopLeft(images.last).dy);
+          final content =
+              find.descendant(of: images, matching: find.byType(ClipRRect));
+          expect(content, findsNWidgets(2));
+          expect(tester.getSize(content.first), tester.getSize(content.last));
+          expect(find.text('Sketsa'), findsOneWidget);
+          expect(find.text('Foto'), findsOneWidget);
+        }
         for (final element in images.evaluate()) {
           final size = tester.getSize(find.byWidget(element.widget));
-          expect(size.width, lessThanOrEqualTo(240));
-          expect(size.height, lessThanOrEqualTo(180));
+          expect(size.width, lessThanOrEqualTo(surface == 'chat' ? 72 : 240));
+          expect(size.height, lessThanOrEqualTo(surface == 'chat' ? 72 : 180));
         }
         for (final image in tester.widgetList<Image>(find.byType(Image))) {
           expect(image.fit, BoxFit.contain);

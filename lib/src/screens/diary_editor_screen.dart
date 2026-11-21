@@ -12,6 +12,7 @@ import '../services/malva_api_client.dart';
 import '../services/diary_prompt_history.dart';
 import '../theme.dart';
 import '../time/wib.dart';
+import '../widgets/diary_access.dart';
 import '../widgets/diary_body.dart';
 import '../widgets/friendly_error.dart';
 import 'diary_drawing_screen.dart';
@@ -26,6 +27,7 @@ class DiaryEditorScreen extends ConsumerStatefulWidget {
       required this.api,
       required this.accessToken,
       this.protectRoute,
+      this.onManageAccess,
       required this.onSave});
   final DiaryEntry? initialEntry;
   final DiaryPrompt? initialPrompt;
@@ -34,12 +36,16 @@ class DiaryEditorScreen extends ConsumerStatefulWidget {
   final MalvaApiClient api;
   final String? accessToken;
   final Widget Function(Widget)? protectRoute;
-  final Future<bool> Function(DiaryEntry) onSave;
+  final Future<DiaryEntry?> Function(DiaryEntry, bool isUpdate) onSave;
+  final Future<void> Function(
+          BuildContext, DiaryEntry, ValueChanged<List<DiaryAccessRecipient>>)?
+      onManageAccess;
   @override
   ConsumerState<DiaryEditorScreen> createState() => _DiaryEditorScreenState();
 }
 
 class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
+  late DiaryEntry? _persistedEntry = widget.initialEntry;
   late final _title =
       TextEditingController(text: widget.initialEntry?.title ?? '');
   late final _original = widget.initialEntry == null
@@ -66,7 +72,11 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
   late int _color = _original.color;
   late TextAlign _align = _original.align;
   late final _media = [..._original.media];
-  bool _busy = false, _saved = false, _mediaChanged = false;
+  late String _savedTitle = widget.initialEntry?.title ?? '';
+  late String _savedNote = _original.encode();
+  late List<DiaryAccessRecipient> _recipients =
+      widget.initialEntry?.accessRecipients ?? const [];
+  bool _busy = false, _mediaChanged = false;
   String? _error;
   DiaryContent get _content => DiaryContent(
       text: _note.text.trim(),
@@ -85,8 +95,8 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
       inVault: _inVault);
   bool get _dirty =>
       _mediaChanged ||
-      _title.text != (widget.initialEntry?.title ?? '') ||
-      _content.encode() != _original.encode();
+      _title.text != _savedTitle ||
+      _content.encode() != _savedNote;
   @override
   void dispose() {
     _title.dispose();
@@ -99,7 +109,7 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
 
   Future<bool> _discard() async {
     if (_busy) return false;
-    if (!_dirty || _saved) return true;
+    if (!_dirty) return true;
     return await showDialog<bool>(
             context: context,
             builder: (dialog) => AlertDialog(
@@ -120,57 +130,99 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
     if (await _discard() && mounted) Navigator.pop(context);
   }
 
-  Future<void> _save() async {
-    if (_busy) return;
+  Future<DiaryEntry?> _save({bool close = true}) async {
+    if (_busy) return null;
     final content = _content;
     if (content.text.isEmpty && _media.isEmpty) {
       setState(() =>
           _error = 'Tuliskan cerita atau tambahkan gambar terlebih dahulu.');
-      return;
+      return null;
     }
     final note = content.encode();
     if (utf8.encode(_title.text.trim()).length > 160) {
       setState(() =>
           _error = 'Judul terlalu panjang. Gunakan judul yang lebih singkat.');
-      return;
+      return null;
     }
     if (utf8.encode(note).length > 6000) {
       setState(() => _error =
           'Catatan terlalu panjang. Ringkas tulisan atau kurangi lampiran agar dapat disimpan.');
-      return;
+      return null;
+    }
+    if (!close) {
+      final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialog) {
+            final confirmation = AlertDialog(
+                title: const Text('Simpan diary terlebih dahulu?'),
+                content:
+                    const Text('Setelah disimpan, kamu bisa memilih penerima.'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialog, false),
+                      child: const Text('Batal')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(dialog, true),
+                      child: const Text('Simpan dan lanjutkan'))
+                ]);
+            return widget.protectRoute?.call(confirmation) ?? confirmation;
+          });
+      if (confirmed != true || !mounted || _busy) return null;
     }
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final previous = widget.initialEntry;
-      final result = await widget.onSave(DiaryEntry(
-          id: previous?.id ?? 'diary_${_date.microsecondsSinceEpoch}',
-          createdAt: _date,
-          mood: previous?.mood ?? MoodValue.okay,
-          title: _title.text.trim().isEmpty
-              ? 'Catatan harian'
-              : _title.text.trim(),
-          note: note,
-          professionalFeedback: previous?.professionalFeedback));
-      if (!mounted) return;
-      if (result) {
-        setState(() => _saved = true);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) Navigator.pop(context);
+      final previous = _persistedEntry;
+      final title = _title.text;
+      final result = await widget.onSave(
+          DiaryEntry(
+              id: previous?.id ?? 'diary_${_date.microsecondsSinceEpoch}',
+              createdAt: _date,
+              mood: previous?.mood ?? MoodValue.okay,
+              title: title.trim().isEmpty ? 'Catatan harian' : title.trim(),
+              note: note,
+              professionalFeedback: previous?.professionalFeedback),
+          previous != null);
+      if (!mounted) return null;
+      if (result != null) {
+        setState(() {
+          _persistedEntry = result;
+          _savedTitle = title;
+          _savedNote = note;
+          _mediaChanged = false;
+          _recipients = result.accessRecipients;
         });
+        if (close) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) Navigator.pop(context);
+          });
+        }
       } else {
         setState(() => _error =
             'Diary belum tersimpan. Ceritamu tetap di sini, silakan coba lagi.');
       }
+      return result;
     } on Object catch (e) {
       if (mounted)
         setState(
             () => _error = 'Diary belum tersimpan: ${friendlyErrorMessage(e)}');
+      return null;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _manageAccess() async {
+    final manage = widget.onManageAccess;
+    if (_busy || manage == null) return;
+    FocusScope.of(context).unfocus();
+    final entry = _persistedEntry ?? await _save(close: false);
+    if (!mounted || entry == null) return;
+    await manage(context, entry, (recipients) {
+      if (mounted) setState(() => _recipients = recipients);
+    });
   }
 
   Future<void> _upload(Uint8List bytes, String kind,
@@ -548,7 +600,7 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
   }
 
   Future<void> _chooseDate() async {
-    if (widget.initialEntry != null || _busy) return;
+    if (_persistedEntry != null || _busy) return;
     final now = toWib(wibNow()), current = toWib(_date);
     final picked = await showDatePicker(
         context: context,
@@ -565,7 +617,7 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
     final at = toWib(_date), paper = diaryEditorPaper(_palette);
     return DiaryTheme(
         child: PopScope(
-            canPop: _saved || (!_dirty && !_busy),
+            canPop: !_dirty && !_busy,
             onPopInvokedWithResult: (didPop, _) {
               if (!didPop) _back();
             },
@@ -582,7 +634,7 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                     title: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
-                            widget.initialEntry == null
+                            _persistedEntry == null
                                 ? 'Tambah Diary'
                                 : 'Edit Diary',
                             style: const TextStyle(
@@ -656,8 +708,7 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                                                                       color:
                                                                           diaryPlum))
                                                             ])),
-                                                    if (widget.initialEntry ==
-                                                        null)
+                                                    if (_persistedEntry == null)
                                                       TextButton(
                                                           onPressed: _busy
                                                               ? null
@@ -842,6 +893,17 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                                                     height: 1.6,
                                                     color: diaryPlum))
                                           ]))
+                                ],
+                                if (widget.onManageAccess != null) ...[
+                                  const SizedBox(height: 6),
+                                  DiaryAccessRow(
+                                      recipients: _recipients,
+                                      showNames: true,
+                                      onPressed: _busy ||
+                                              widget.accessToken?.isNotEmpty !=
+                                                  true
+                                          ? null
+                                          : _manageAccess),
                                 ],
                                 const SizedBox(height: 10),
                                 DiaryCard(

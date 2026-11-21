@@ -32,7 +32,7 @@ void main() {
                         note: ''),
                     api: MalvaApiClient(),
                     accessToken: 'test',
-                    onSave: (_) async => true)))));
+                    onSave: (entry, _) async => entry)))));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await captureRecord(tester, boundary, 'diary-edit-reference-390.png');
@@ -62,7 +62,7 @@ void main() {
                   home: DiaryEditorScreen(
                       api: MalvaApiClient(),
                       accessToken: 'test',
-                      onSave: (_) async => true)))));
+                      onSave: (entry, _) async => entry)))));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await captureRecord(

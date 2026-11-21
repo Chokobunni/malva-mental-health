@@ -250,8 +250,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/diary-media", s.requireAuth(s.uploadDiaryImage))
 	mux.HandleFunc("GET /v1/diary-media/{patient_id}/{filename}", s.requireAuth(s.getDiaryImage))
 	mux.HandleFunc("POST /v1/diary-entries", s.requireAuth(s.createDiaryEntry))
+	mux.HandleFunc("GET /v1/diary-entries/{diary_id}", s.requireAuth(s.getDiaryEntry))
 	mux.HandleFunc("PUT /v1/diary-entries/{diary_id}", s.requireAuth(s.updateDiaryEntry))
 	mux.HandleFunc("DELETE /v1/diary-entries/{diary_id}", s.requireAuth(s.deleteDiaryEntry))
+	mux.HandleFunc("GET /v1/diary-entries/{diary_id}/access", s.requireAuth(s.getDiaryAccess))
+	mux.HandleFunc("PUT /v1/diary-entries/{diary_id}/access/{professional_id}", s.requireAuth(s.setDiaryRecipient))
+	mux.HandleFunc("DELETE /v1/diary-entries/{diary_id}/access/{professional_id}", s.requireAuth(s.setDiaryRecipient))
 	mux.HandleFunc("PATCH /v1/diary-entries/{diary_id}/feedback", s.requireAuth(s.updateDiaryFeedback))
 	mux.HandleFunc("GET /v1/medications", s.requireAuth(s.listMedications))
 	mux.HandleFunc("POST /v1/medications", s.requireAuth(s.createMedication))
@@ -268,6 +272,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PUT /v1/privacy/consents", s.requireAuth(s.updatePrivacyConsent))
 	mux.HandleFunc("GET /v1/messages", s.requireAuth(s.listMessages))
 	mux.HandleFunc("POST /v1/messages", s.requireAuth(s.sendMessage))
+	mux.HandleFunc("DELETE /v1/messages/{message_id}", s.requireAuth(s.deleteChatMessage))
 	mux.HandleFunc("GET /v1/notifications", s.requireAuth(s.listNotifications))
 	mux.HandleFunc("PATCH /v1/notifications/read-all", s.requireAuth(s.markAllNotificationsRead))
 	mux.HandleFunc("PATCH /v1/notifications/{notification_id}/read", s.requireAuth(s.markNotificationRead))
@@ -1191,12 +1196,11 @@ func (s *Server) createDiaryEntry(w http.ResponseWriter, r *http.Request, claims
 		return
 	}
 	item, err := s.store.UpsertDiaryEntry(r.Context(), store.DiaryEntry{
-		PatientID:               claims.Subject,
-		Mood:                    req.Mood,
-		Title:                   req.Title,
-		Note:                    req.Note,
-		SharedWithProfessionals: req.SharedWithProfessionals,
-		OccurredAt:              parseOptionalTime(req.OccurredAt),
+		PatientID:  claims.Subject,
+		Mood:       req.Mood,
+		Title:      req.Title,
+		Note:       req.Note,
+		OccurredAt: parseOptionalTime(req.OccurredAt),
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -1206,13 +1210,10 @@ func (s *Server) createDiaryEntry(w http.ResponseWriter, r *http.Request, claims
 }
 
 func (s *Server) listDiaryEntries(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	w.Header().Set("Cache-Control", "private, no-store")
 	patientID, err := s.authorizePatientAccess(r, claims, r.URL.Query().Get("patient_id"))
 	if err != nil {
 		writeError(w, http.StatusForbidden, err)
-		return
-	}
-	if claims.Role == "professional" && !s.consentAllows(r, patientID, claims.Subject, "mood_diary") {
-		writeError(w, http.StatusForbidden, errors.New("pasien belum membagikan data mood/diary"))
 		return
 	}
 	limit := 20
@@ -1222,12 +1223,30 @@ func (s *Server) listDiaryEntries(w http.ResponseWriter, r *http.Request, claims
 			limit = parsed
 		}
 	}
-	items, err := s.store.ListDiaryEntries(r.Context(), patientID, claims.Role == "professional", limit)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+	if claims.Role == "professional" {
+		items, err := s.store.ListDiaryEntriesForProfessional(r.Context(), patientID, claims.Subject, limit)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, errors.New("gagal membaca diary pasien"))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"diaries": items})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"diaries": items})
+	items, err := s.store.ListDiaryEntries(r.Context(), patientID, false, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errors.New("gagal membaca diary"))
+		return
+	}
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	recipients, err := s.store.ListDiaryRecipients(r.Context(), patientID, ids)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errors.New("gagal membaca daftar penerima diary"))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"diaries": items, "diary_access": recipients})
 }
 
 func (s *Server) updateDiaryEntry(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -1606,7 +1625,11 @@ func (s *Server) timeline(w http.ResponseWriter, r *http.Request, claims auth.Cl
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	events, err := s.store.ListTimelineEvents(r.Context(), patientID, limit)
+	var professionalID string
+	if claims.Role == "professional" {
+		professionalID = claims.Subject
+	}
+	events, err := s.store.ListTimelineEvents(r.Context(), patientID, professionalID, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -1730,6 +1753,7 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request, claims aut
 		messages = []store.ChatMessage{}
 	}
 	_ = s.store.AddAuditLog(r.Context(), claims.Subject, canonicalPatientID, "chat_messages.viewed", "chat_message", "", nil)
+	w.Header().Set("Cache-Control", "private, no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"messages": messages})
 }
 

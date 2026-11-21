@@ -34,11 +34,15 @@ class ChatService {
 
   final _stateController = StreamController<ChatState>.broadcast();
   final _messageController = StreamController<ChatMessage>.broadcast();
+  final _messageDeletedController = StreamController<String>.broadcast();
+  final _diaryAccessChanged = StreamController<String>.broadcast();
   final _typingController = StreamController<bool>.broadcast();
   final _presenceController = StreamController<ChatPresence>.broadcast();
 
   Stream<ChatState> get stateStream => _stateController.stream;
   Stream<ChatMessage> get messageStream => _messageController.stream;
+  Stream<String> get messageDeletedStream => _messageDeletedController.stream;
+  Stream<String> get diaryAccessChangedStream => _diaryAccessChanged.stream;
   Stream<bool> get typingStream => _typingController.stream;
   Stream<ChatPresence> get presenceStream => _presenceController.stream;
 
@@ -105,6 +109,25 @@ class ChatService {
               currentUserId: userId,
             );
             _messageController.add(msg);
+          }
+        case 'chat_message_deleted':
+          if (eventData is Map<String, dynamic>) {
+            final patient = eventData['patient_id'];
+            final professional = eventData['professional_id'];
+            final id = eventData['id'];
+            if (id is String &&
+                id.isNotEmpty &&
+                ((patient == userId && professional == recipientId) ||
+                    (patient == recipientId && professional == userId))) {
+              _messageDeletedController.add(id);
+            }
+          }
+        case 'diary_access_changed':
+          if (eventData is Map<String, dynamic> &&
+              eventData['patient_id'] == recipientId &&
+              eventData['professional_id'] == userId &&
+              eventData['diary_id'] is String) {
+            _diaryAccessChanged.add(eventData['diary_id'] as String);
           }
         case 'typing_indicator':
           if (eventData is Map<String, dynamic>) {
@@ -265,6 +288,8 @@ class ChatService {
     disconnect();
     _stateController.close();
     _messageController.close();
+    _messageDeletedController.close();
+    _diaryAccessChanged.close();
     _typingController.close();
     _presenceController.close();
   }

@@ -6,21 +6,136 @@ import '../../ai/assessment_interpretation.dart';
 import '../../ai/assessment_scoring.dart';
 import '../../assessment_engine.dart';
 import '../../models.dart';
+import '../../models/diary_content.dart';
 import '../../providers/auth_providers.dart';
 import '../../widgets/diary_body.dart';
 import '../../services/malva_api_client.dart';
 import '../../services/weekly_summary_service.dart';
+import '../../theme.dart';
 import '../../time/wib.dart';
+
+final chatDiaryEntryProvider =
+    FutureProvider.autoDispose.family<BackendDiaryEntry, String>((ref, id) {
+  final token = ref.watch(currentSessionProvider)?.accessToken;
+  if (token == null || token.isEmpty) throw StateError('Sesi tidak tersedia.');
+  return ref
+      .watch(apiClientProvider)
+      .fetchDiaryEntry(accessToken: token, diaryId: id);
+});
+
+String? chatDiaryReference(ChatMessage message) {
+  if (message.kind != 'diary') return null;
+  final id = message.metadata?['diary_id'];
+  return id is String && id.isNotEmpty ? id : null;
+}
+
+Map _diaryData(ChatMessage message, BackendDiaryEntry? entry) {
+  if (entry != null) {
+    return {
+      'title': entry.title,
+      'note': entry.note,
+      if (entry.occurredAt != null) 'occurred_at': wibIso(entry.occurredAt!),
+    };
+  }
+  final meta = message.metadata ?? const {};
+  return meta['diary'] is Map ? meta['diary'] as Map : meta;
+}
 
 /// Compact saved clinical records stay readable in the conversation.
 class ChatSharedRecordCard extends ConsumerStatefulWidget {
-  const ChatSharedRecordCard({super.key, required this.message});
+  const ChatSharedRecordCard(
+      {super.key, required this.message, this.onOpenDiary});
 
   final ChatMessage message;
+  final VoidCallback? onOpenDiary;
 
   @override
   ConsumerState<ChatSharedRecordCard> createState() =>
       _ChatSharedRecordCardState();
+}
+
+class ChatDiaryDetail extends ConsumerWidget {
+  const ChatDiaryDetail({super.key, required this.message});
+
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final id = chatDiaryReference(message);
+    if (id == null) return _detail(context, ref, _diaryData(message, null));
+    return ref.watch(chatDiaryEntryProvider(id)).when(
+        skipLoadingOnRefresh: false,
+        data: (entry) => _detail(context, ref, _diaryData(message, entry)),
+        error: (_, __) => _unavailable(context, 'Akses diary tidak tersedia.'),
+        loading: () => _unavailable(context, 'Memuat diary…'));
+  }
+
+  Widget _unavailable(BuildContext context, String text) => Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 12, 18),
+      child: Row(children: [
+        Expanded(child: Text(text)),
+        IconButton(
+            tooltip: 'Tutup detail diary',
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close, color: MalvaColors.plum)),
+      ]));
+
+  Widget _detail(BuildContext context, WidgetRef ref, Map data) {
+    final title = data['title']?.toString().trim() ?? '';
+    final at = parseWibStored(data['occurred_at']?.toString() ?? '');
+    final note = (data['note'] ?? data['content'] ?? message.text).toString();
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
+          child: Row(children: [
+            Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                    color: const Color(0xfffff1d3),
+                    borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.menu_book_outlined,
+                    color: Color(0xffac792a), size: 20)),
+            const SizedBox(width: 10),
+            const Expanded(
+                child: Text('Detail Diary',
+                    style: TextStyle(
+                        color: MalvaColors.plum,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800))),
+            IconButton(
+                tooltip: 'Tutup detail diary',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: MalvaColors.plum)),
+          ])),
+      const Divider(
+          height: 1, indent: 20, endIndent: 20, color: Color(0xffddd0e5)),
+      Flexible(
+          child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (title.isNotEmpty)
+                      Text(title,
+                          style: const TextStyle(
+                              color: MalvaColors.ink,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800)),
+                    if (at != null)
+                      Padding(
+                          padding: const EdgeInsets.only(top: 5),
+                          child: Text('${formatWibDateTime(at)} WIB',
+                              style: const TextStyle(
+                                  color: Color(0xff625a6b), fontSize: 13))),
+                    const SizedBox(height: 14),
+                    DiaryBody(
+                        note: note,
+                        api: ref.watch(apiClientProvider),
+                        token: ref.watch(currentSessionProvider)?.accessToken,
+                        mediaGrid: true),
+                  ]))),
+    ]);
+  }
 }
 
 class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
@@ -575,42 +690,72 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
       ];
 
   List<Widget> _diary() {
-    final data = _meta['diary'] is Map ? _meta['diary'] as Map : _meta;
-    final occurredAt = parseWibStored(_text(data, 'occurred_at'));
+    final id = chatDiaryReference(widget.message);
+    if (id == null) return _diaryPreview(_diaryData(widget.message, null));
+    return ref.watch(chatDiaryEntryProvider(id)).when(
+        skipLoadingOnRefresh: false,
+        data: (entry) => _diaryPreview(_diaryData(widget.message, entry)),
+        error: (_, __) => const [Text('Akses diary tidak tersedia.')],
+        loading: () => const [Text('Memuat diary…')]);
+  }
+
+  List<Widget> _diaryPreview(Map data) {
+    final content = DiaryContent.parse(
+        _text(data, 'note', _text(data, 'content', widget.message.text)));
+    final at = parseWibStored(_text(data, 'occurred_at'));
+    final lines = content.text.trim().split('\n');
+    final preview = lines.length > 3
+        ? '${lines.take(3).join('\n').trimRight()}...'
+        : lines.join('\n');
+    final previews = [
+      for (final kind in ['drawing', 'photo'])
+        if (content.media.where((item) => item.kind == kind).firstOrNull
+            case final item?)
+          item,
+    ];
+    final sent = widget.message.timestamp;
     return [
-      _heading('Diary', Icons.menu_book_outlined,
-          color: const Color(0xFFC69F49)),
-      _recordTimestamp(),
-      _white(
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (occurredAt != null) ...[
-              Row(children: [
-                const Icon(Icons.calendar_month_outlined,
-                    size: 13, color: Color(0xFFAC8040)),
-                const SizedBox(width: 5),
-                Expanded(
-                    child: Text('${formatWibDateTime(occurredAt)} WIB',
-                        style: const TextStyle(
-                            color: Color(0xFFAC8040),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700))),
-              ]),
-              const SizedBox(height: 9),
-            ],
-            if (_text(data, 'title').isNotEmpty) ...[
-              Text(_text(data, 'title'),
-                  style: const TextStyle(
-                      color: _ink, fontSize: 14, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 7),
-            ],
-            DiaryBody(
-                compactMedia: true,
-                note: _text(
-                    data, 'note', _text(data, 'content', widget.message.text)),
-                api: ref.watch(apiClientProvider),
-                token: ref.watch(currentSessionProvider)?.accessToken),
-          ]),
-          color: const Color(0xFFFFFCEE)),
+      Row(children: [
+        Expanded(
+            child: _heading('Diary', Icons.menu_book_outlined,
+                color: const Color(0xFFC69F49))),
+        const Icon(Icons.chevron_right, color: MalvaColors.plum),
+      ]),
+      if (_text(data, 'title').isNotEmpty)
+        Text(_text(data, 'title'),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+                color: _ink, fontSize: 16, fontWeight: FontWeight.w800)),
+      if (at != null)
+        Text('${formatWibDateTime(at)} WIB',
+            style: const TextStyle(color: Color(0xff625a6b), fontSize: 11)),
+      if (preview.isNotEmpty)
+        Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(preview,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    const TextStyle(color: _ink, fontSize: 14, height: 1.45))),
+      if (previews.isNotEmpty)
+        Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Wrap(spacing: 10, runSpacing: 6, children: [
+              for (final media in previews)
+                DiaryMediaTile(
+                    media: media,
+                    api: ref.watch(apiClientProvider),
+                    token: ref.watch(currentSessionProvider)?.accessToken,
+                    size: 68),
+            ])),
+      const SizedBox(height: 8),
+      Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+        Expanded(child: DiaryTags(tags: content.tags)),
+        const SizedBox(width: 6),
+        Text('${formatWibDate(sent)} · ${formatWibBubbleTime(sent)}',
+            style: const TextStyle(color: Color(0xff625a6b), fontSize: 10)),
+      ]),
     ];
   }
 
@@ -631,22 +776,28 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
             color: const Color(0xFFF9F5FF),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: const Color(0xFFEDE4F7))),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          ...content,
-          if (!const {'prescription', 'medication', 'diary'}
-              .contains(widget.message.kind)) ...[
-            SizedBox(
-                height: switch (widget.message.kind) {
-              'summary' || 'progress' => 17,
-              'assessment' || 'screening' || 'worksheet' => 12,
-              _ => 5,
-            }),
-            Align(
-                alignment: Alignment.centerRight,
-                child: Text(formatWibBubbleTime(widget.message.timestamp),
-                    style: const TextStyle(color: _muted, fontSize: 10))),
-          ],
-        ]));
+        child: InkWell(
+            onTap: widget.onOpenDiary,
+            borderRadius: BorderRadius.circular(18),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ...content,
+                  if (!const {'prescription', 'medication', 'diary'}
+                      .contains(widget.message.kind)) ...[
+                    SizedBox(
+                        height: switch (widget.message.kind) {
+                      'summary' || 'progress' => 17,
+                      'assessment' || 'screening' || 'worksheet' => 12,
+                      _ => 5,
+                    }),
+                    Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                            formatWibBubbleTime(widget.message.timestamp),
+                            style:
+                                const TextStyle(color: _muted, fontSize: 10))),
+                  ],
+                ])));
   }
 }

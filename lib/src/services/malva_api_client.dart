@@ -1113,11 +1113,91 @@ class MalvaApiClient {
       ),
       accessToken: accessToken,
     );
+    final access = payload['diary_access'] == null
+        ? const <String, dynamic>{}
+        : _expectMap(
+            payload['diary_access'], 'Respons akses diary tidak valid.');
     return _expectNullableCollection(
             payload, 'diaries', 'Respons diary tidak valid.')
         .whereType<Map<String, dynamic>>()
-        .map(BackendDiaryEntry.fromJson)
+        .map((entry) => BackendDiaryEntry.fromJson(entry,
+            accessRecipients: _diaryAccessRecipients(access[entry['id']])))
         .toList(growable: false);
+  }
+
+  Future<BackendDiaryEntry> fetchDiaryEntry({
+    required String accessToken,
+    required String diaryId,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(pathSegments: ['v1', 'diary-entries', diaryId]),
+      accessToken: accessToken,
+    );
+    return BackendDiaryEntry.fromJson(
+      _expectMap(payload['diary'], 'Respons diary tidak valid.'),
+    );
+  }
+
+  Future<BackendDiaryAccess> fetchDiaryAccess({
+    required String accessToken,
+    required String diaryId,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(pathSegments: ['v1', 'diary-entries', diaryId, 'access']),
+      accessToken: accessToken,
+    );
+    return _diaryAccess(payload);
+  }
+
+  Future<BackendDiaryAccess> updateDiaryAccess({
+    required String accessToken,
+    required String diaryId,
+    required String professionalId,
+    required bool grant,
+  }) async {
+    final payload = await _sendUri(
+      grant ? 'PUT' : 'DELETE',
+      baseUri.replace(pathSegments: [
+        'v1',
+        'diary-entries',
+        diaryId,
+        'access',
+        professionalId
+      ]),
+      accessToken: accessToken,
+    );
+    return _diaryAccess(payload);
+  }
+
+  BackendDiaryAccess _diaryAccess(Map<String, dynamic> payload) {
+    if (payload['recipients'] is! List || payload['eligible'] is! List) {
+      throw const MalvaApiException('Respons akses diary tidak valid.');
+    }
+    return BackendDiaryAccess(
+      recipients: _diaryAccessRecipients(payload['recipients']),
+      eligible: _diaryAccessRecipients(payload['eligible']),
+    );
+  }
+
+  List<DiaryAccessRecipient> _diaryAccessRecipients(Object? data) {
+    if (data == null) return const [];
+    if (data is! List) {
+      throw const MalvaApiException('Respons akses diary tidak valid.');
+    }
+    return List.unmodifiable(data.map((value) {
+      final row = _expectMap(value, 'Respons akses diary tidak valid.');
+      final id = row['professional_id'];
+      final name = row['display_name'];
+      if (id is! String ||
+          id.isEmpty ||
+          name is! String ||
+          name.trim().isEmpty) {
+        throw const MalvaApiException('Respons akses diary tidak valid.');
+      }
+      return DiaryAccessRecipient(professionalId: id, displayName: name);
+    }));
   }
 
   /// Perbarui diary milik pasien (PUT /v1/diary-entries/{id}).
@@ -1451,6 +1531,17 @@ class MalvaApiClient {
         .whereType<Map<String, dynamic>>()
         .map(BackendChatMessage.fromJson)
         .toList(growable: false);
+  }
+
+  Future<void> deleteChatMessage({
+    required String accessToken,
+    required String messageId,
+  }) async {
+    await _sendUri(
+      'DELETE',
+      baseUri.replace(pathSegments: ['v1', 'messages', messageId]),
+      accessToken: accessToken,
+    );
   }
 
   Future<BackendChatMessage> sendChatMessage({
@@ -3709,6 +3800,13 @@ class BackendMoodCheckin {
   final String professionalFeedback;
 }
 
+class BackendDiaryAccess {
+  const BackendDiaryAccess({required this.recipients, required this.eligible});
+
+  final List<DiaryAccessRecipient> recipients;
+  final List<DiaryAccessRecipient> eligible;
+}
+
 class BackendDiaryEntry {
   const BackendDiaryEntry({
     required this.id,
@@ -3717,9 +3815,11 @@ class BackendDiaryEntry {
     required this.mood,
     required this.occurredAt,
     required this.professionalFeedback,
+    this.accessRecipients = const [],
   });
 
-  factory BackendDiaryEntry.fromJson(Map<String, dynamic> json) {
+  factory BackendDiaryEntry.fromJson(Map<String, dynamic> json,
+      {List<DiaryAccessRecipient> accessRecipients = const []}) {
     return BackendDiaryEntry(
       id: json['id']?.toString() ?? '',
       title: json['title']?.toString() ?? '',
@@ -3727,6 +3827,7 @@ class BackendDiaryEntry {
       mood: json['mood']?.toString() ?? '',
       occurredAt: parseWibStored(json['occurred_at']?.toString()),
       professionalFeedback: json['professional_feedback']?.toString(),
+      accessRecipients: accessRecipients,
     );
   }
 
@@ -3736,6 +3837,7 @@ class BackendDiaryEntry {
   final String mood;
   final DateTime? occurredAt;
   final String? professionalFeedback;
+  final List<DiaryAccessRecipient> accessRecipients;
 }
 
 class BackendMedication {

@@ -87,9 +87,9 @@ void main() {
                           DiaryContent(text: 'Cerita', media: media).encode()),
                   api: api,
                   accessToken: 'token',
-                  onSave: (entry) async {
+                  onSave: (entry, _) async {
                     saved = entry;
-                    return false;
+                    return null;
                   }))));
       await tester.pumpAndSettle();
       final replace = find.byTooltip('Ganti foto').at(1);
@@ -165,9 +165,9 @@ void main() {
                       ]).encode()),
                   api: api,
                   accessToken: 'token',
-                  onSave: (entry) async {
+                  onSave: (entry, _) async {
                     saved = entry;
-                    return false;
+                    return null;
                   }))));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byTooltip('Edit gambar'));

@@ -306,7 +306,8 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 ## Kontrak referensi chat/MyCare (2026-11-11)
 
 - Chat kedua peran menampilkan ringkasan tujuh hari, goals/habits, seluruh screening,
-  obat dan diary langsung tanpa popup/dropdown. Screening hanya nama, skor, tingkat
+  dan obat langsung tanpa popup/dropdown. Kartu diary memuat pratinjau tiga baris
+  dan bisa diketuk untuk membuka Detail Diary. Screening hanya nama, skor, tingkat
   dan CF aktual, dengan indikator keselamatan positif tetap ada. Rincian pada
   [therapy/chat](skills/therapy_chat_module.md).
 - MyCare memakai Terhubung/Jadwal/Riwayat; kuota, expiry, rating, foto dan status
@@ -508,5 +509,11 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Tujuh acuan mengatur Vault, kalender warna, list kartu dan editor. Lencana hanya melalui header; CTA apresiasi editor dipindah ke halaman lencana: pasien memilih diari tersimpan lalu pengalaman pribadi; metadata lama tetap dipertahankan, gagal simpan menjaga pilihan dan batas6000byte tetap berlaku. Hashtag terlihat sebelum fokus. Refleksi/Vault berada di atas cerita; close kartu tidak melepas prompt.
 - Riwayat susunan tiga kartu dibagi home/editor, disimpan sebelum tampil dengan SecureStore per akun/perangkat. Setiap posisi berubah saat refresh; 970.200 susunan berurutan unik sebelum reset. Gagal storage menampilkan retry.
 - Susunan aktif dan kartu terpilih dibagi home/editor selama halaman diary terbuka. Membuka editor/panel refleksi tidak mengambil susunan baru; hanya refresh eksplisit. Tombol tulis baru membawa pilihan home, dan Simpan memakai pertanyaan yang terakhir dipilih di editor, termasuk saat kartu masih terbuka. Edit diary lama mempertahankan prompt tersimpan sampai pasien memilih penggantinya.
-- Foto/drawing pada chat, detail record dan data pasien profesional memakai preview maksimal240×180 dengan rasio utuh dan decode720px. Reader/editor pasien mempertahankan tampilan besarnya; media privat dan referensi tersimpan tidak diubah.
-- Daftar diari memuat preview foto pertama dan sketsa pertama secara lazy, decode720px; reader tetap full-size. Refresh token pemilik sama memperbarui preview. Palet per tanggal WIB memuat semua warna tersimpan pada hari itu. Tidak ada perubahan API/skema/dependency.
+- Kartu diary chat memuat sketsa pertama dan foto pertama berukuran 68 piksel logis. Detail Diary menampilkan semua lampiran berdampingan hingga 180 piksel logis. Detail record umum dan data pasien profesional memakai preview maksimal 240×180. Semua memakai rasio utuh dan decode720px.
+- Daftar diari memuat preview foto pertama dan sketsa pertama berdampingan secara lazy, decode720px. Ketuk kartu untuk membuka reader. Refresh token pemilik sama memperbarui preview. Palet per tanggal WIB memuat semua warna tersimpan pada hari itu.
+
+## Akses Diary dan hapus pesan (2026-11-21)
+
+- Diary baru selalu pribadi. Pemilik dapat menambah atau mencabut penerima per diary. Izin eksplisit memerlukan relasi aktif. Izin warisan tetap memerlukan consent kategori dan jendela layanan. Mutasi pertama mempertahankan penerima warisan yang sudah berizin.
+- Server memeriksa izin diary pada daftar, detail, media, dan timeline. Pesan diary baru hanya memuat ID diary. Chat memuat detail dengan izin terkini dan memperbarui pratinjau serta panel saat akses berubah. Snapshot chat lama tetap tersedia hingga pengirim menghapus pesannya.
+- Pengirim dapat menghapus pesannya untuk kedua peserta setelah konfirmasi. Server mengosongkan isi dan metadata serta mempertahankan ID agar retry tidak memulihkan pesan. WebSocket menyinkronkan penghapusan dan klien merekonsiliasi riwayat ketika kembali aktif atau tersambung lagi.
