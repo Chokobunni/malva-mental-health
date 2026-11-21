@@ -8,8 +8,12 @@
 - Kartu dibuka lewat `GET /v1/therapy-submissions/{submission_id}`. Profesional membaca record yang dibagikan individual kepadanya atau melalui consent kategori `therapy_records` untuk pasangan pasien/profesional yang sama; pasien hanya miliknya sendiri. Detail dan daftar memakai pilihan izin yang sama, tetap dengan relasi serta jendela akses sesi/paket aktif. Jangan mengirim jawaban privat ke push atau metadata chat.
 - Pemilihan dapat dibatalkan; daftar kosong dan gangguan jaringan harus memiliki umpan balik. Kunci aksi selama request dan periksa kembali akun setelah operasi async.
 - Pengujian: `test/chat_therapy_share_test.dart`, `backend/internal/server/therapy_chat_flow_test.go` dan test consent yang ada.
-- Chat kedua peserta menampilkan diary lengkap, obat, goals/habits, ringkasan,
-  screening dan assessment langsung di percakapan, tanpa popup/dropdown detail.
+- Chat kedua peserta menampilkan obat, goals/habits, ringkasan, screening dan
+  assessment langsung di percakapan. Kartu Diary menampilkan maksimal tiga
+  baris, thumbnail sketsa/foto pertama, topik, dan waktu kirim. Ketuk kartu
+  untuk membuka Detail Diary dengan tulisan dan semua lampiran.
+- Pesan diary baru memakai metadata `{diary_id}`. Berbagi dari chat memberi izin kepada penerima lalu mengirim referensi. Isi tersedia melalui GET diary terotorisasi. Cabut izin memperbarui kartu dan detail yang terbuka. Pesan snapshot lama tetap tersedia hingga dihapus oleh pengirim.
+- Setelah konfirmasi, DELETE pesan milik pengirim menghapus isi dan metadata dari riwayat kedua peserta dan menutup akses server ke lampiran chat yang terkait. Event WebSocket memicu penghapusan di kedua klien. Reconnect/resume memuat ulang riwayat.
   Worksheet terapi non-assessment tetap membuka detail. DASS/WHO memakai share
   endpoint yang sama tanpa duplikasi pesan; detail berizin dibaca otomatis untuk
   kartu inline, dan penolakan ID submission tidak boleh memakai fallback jawaban.

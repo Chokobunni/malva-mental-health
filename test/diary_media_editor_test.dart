@@ -70,9 +70,9 @@ void main() {
               home: DiaryEditorScreen(
                   api: api,
                   accessToken: 'token',
-                  onSave: (entry) async {
+                  onSave: (entry, _) async {
                     saved = entry;
-                    return false;
+                    return null;
                   }))));
       await tester.tap(find.byTooltip('Tambah media'));
       await tester.pumpAndSettle();

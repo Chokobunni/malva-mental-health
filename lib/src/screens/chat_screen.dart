@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../assessment_engine.dart';
@@ -62,9 +63,14 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen>
     with WidgetsBindingObserver {
+  static const _historyLimit = 100;
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   final _messages = <ChatMessage>[];
+  final _deletedMessageIds = <String>{};
+  final _pendingMessageDeletes = <String>{};
+  final _chatRevision = ValueNotifier<int>(0);
+  int _historyRequest = 0;
   ChatService? _chatService;
   ChatState _chatState = ChatState.disconnected;
   bool _otherTyping = false;
@@ -77,10 +83,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Timer? _accessExpiry;
   int _accessRequest = 0;
   late final String _owner;
+  bool _ownerChanged = false;
   Future<void>? _accessLoading;
   bool _liveExpired = false;
   StreamSubscription<ChatState>? _stateSub;
   StreamSubscription<ChatMessage>? _messageSub;
+  StreamSubscription<String>? _messageDeletedSub;
+  StreamSubscription<String>? _diaryAccessSub;
   StreamSubscription<bool>? _typingSub;
   StreamSubscription<ChatPresence>? _presenceSub;
   final Map<String, bool> _onlineUsers = {};
@@ -191,7 +200,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       '${session?.role.name}:${session?.backendUserId ?? session?.identifier ?? ''}';
 
   bool get _ownerMatches =>
-      _owner == _ownerKey(ref.read(currentSessionProvider));
+      !_ownerChanged && _owner == _ownerKey(ref.read(currentSessionProvider));
 
   void _startAccessPoll() {
     _accessPoll?.cancel();
@@ -207,10 +216,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_ownerMatches) return;
     if (state == AppLifecycleState.resumed) {
       _startAccessPoll();
       _expireAccess();
       unawaited(_loadAccess());
+      unawaited(_loadHistory());
     } else {
       _accessPoll?.cancel();
     }
@@ -259,6 +270,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   /// Muat riwayat chat dari server (GET /v1/messages) agar percakapan
   /// sebelumnya tidak hilang saat layar dibuka ulang.
   Future<bool> _loadHistory() async {
+    if (!_ownerMatches) return false;
     final session = ref.read(currentSessionProvider);
     final token = session?.accessToken;
     final myId = session?.backendUserId ?? session?.identifier;
@@ -267,19 +279,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final isPatient = session?.role == UserRole.patient;
     final patientId = isPatient ? myId : widget.otherUserId;
     final professionalId = isPatient ? widget.otherUserId : myId;
-    setState(() => _isLoadingHistory = true);
+    final request = ++_historyRequest;
+    final beforeLoad = _messages.map((message) => message.id).toSet();
+    if (beforeLoad.isEmpty) setState(() => _isLoadingHistory = true);
     try {
       final history = await ref.read(apiClientProvider).listMessages(
             accessToken: token,
             patientId: patientId,
             professionalId: professionalId,
+            limit: _historyLimit,
           );
-      if (!mounted || !_ownerMatches) return false;
+      if (!mounted || !_ownerMatches || request != _historyRequest)
+        return false;
       // Server mengembalikan terbaru dulu; tampilkan lama -> baru.
-      final ordered = history.reversed.toList(growable: false);
+      final received = history.map((message) => message.id).toSet();
+      final disappeared = beforeLoad.difference(received);
+      final oldest = history.length == _historyLimit ? history.last : null;
+      final cutoff = oldest?.createdDateTime;
       setState(() {
-        for (final msg in ordered) {
-          if (_messages.any((m) => m.id == msg.id)) continue;
+        // A row older than a full window can return if newer rows are deleted.
+        for (final message in _messages) {
+          if (!disappeared.contains(message.id)) continue;
+          if (oldest == null ||
+              (cutoff != null &&
+                  (message.timestamp.isAfter(cutoff) ||
+                      (message.timestamp.isAtSameMomentAs(cutoff) &&
+                          message.id.compareTo(oldest.id) > 0)))) {
+            _deletedMessageIds.add(message.id);
+          }
+        }
+        _messages.removeWhere((message) => disappeared.contains(message.id));
+        for (final msg in history.reversed) {
+          if (_hasMessage(msg.id)) continue;
           _messages.add(
             ChatMessage(
               id: msg.id,
@@ -293,13 +324,95 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             ),
           );
         }
+        _messages.sort((first, second) {
+          final order = first.timestamp.compareTo(second.timestamp);
+          return order == 0 ? first.id.compareTo(second.id) : order;
+        });
         _isLoadingHistory = false;
       });
-      _scrollToBottom(animated: false);
+      if (disappeared.isNotEmpty) _chatRevision.value++;
+      if (beforeLoad.isNotEmpty && !isPatient) {
+        for (final id
+            in _messages.map(chatDiaryReference).whereType<String>().toSet()) {
+          ref.invalidate(chatDiaryEntryProvider(id));
+        }
+      }
+      if (beforeLoad.isEmpty) _scrollToBottom(animated: false);
       return true;
     } on Object {
-      if (mounted) setState(() => _isLoadingHistory = false);
+      if (mounted && _ownerMatches && request == _historyRequest) {
+        setState(() => _isLoadingHistory = false);
+      }
       return false;
+    }
+  }
+
+  bool _hasMessage(String id) =>
+      _deletedMessageIds.contains(id) ||
+      _messages.any((message) => message.id == id);
+
+  void _removeMessage(String id) {
+    if (!mounted || !_ownerMatches || !_deletedMessageIds.add(id)) return;
+    setState(() => _messages.removeWhere((message) => message.id == id));
+    _chatRevision.value++;
+  }
+
+  Future<void> _confirmDeleteMessage(ChatMessage message) async {
+    if (!_ownerMatches ||
+        !message.isMine ||
+        !_messages.contains(message) ||
+        !_pendingMessageDeletes.add(message.id)) return;
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => _ownedOverlay(AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          icon: const CircleAvatar(
+            radius: 24,
+            backgroundColor: Color(0xFFFCE8E8),
+            child:
+                Icon(Icons.delete_outline_rounded, color: MalvaColors.danger),
+          ),
+          title: const Text('Hapus pesan ini?', textAlign: TextAlign.center),
+          content: const Text(
+            'Pesan ini akan dihapus dari riwayat chat semua peserta.',
+            textAlign: TextAlign.center,
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            OutlinedButton(
+              onPressed: () => Navigator.pop(dialog, false),
+              child: const Text('Batal'),
+            ),
+            FilledButton(
+              style:
+                  FilledButton.styleFrom(backgroundColor: MalvaColors.danger),
+              onPressed: () => Navigator.pop(dialog, true),
+              child: const Text('Hapus untuk semua'),
+            ),
+          ],
+        )),
+      );
+      if (confirmed != true ||
+          !mounted ||
+          !_ownerMatches ||
+          _deletedMessageIds.contains(message.id)) return;
+      final token = ref.read(currentSessionProvider)?.accessToken;
+      if (token == null || token.isEmpty) return;
+      await ref.read(apiClientProvider).deleteChatMessage(
+            accessToken: token,
+            messageId: message.id,
+          );
+      _removeMessage(message.id);
+    } on Object catch (error) {
+      if (mounted &&
+          _ownerMatches &&
+          !_deletedMessageIds.contains(message.id)) {
+        _toast('Gagal menghapus pesan: ${friendlyErrorMessage(error)}');
+      }
+    } finally {
+      _pendingMessageDeletes.remove(message.id);
     }
   }
 
@@ -319,9 +432,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
   }
 
-  void _initChat() {
+  void _initChat([AuthSession? refreshedSession]) {
     _disposeChat();
-    final session = ref.read(currentSessionProvider);
+    final session = refreshedSession ?? ref.read(currentSessionProvider);
     final apiClient = ref.read(apiClientProvider);
     if (session?.accessToken == null || session!.accessToken!.isEmpty) return;
 
@@ -344,16 +457,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           _chatState = state;
           if (state != ChatState.connected) _onlineUsers.clear();
         });
-        if (state == ChatState.connected) unawaited(_loadAccess());
+        if (state == ChatState.connected) {
+          unawaited(_loadAccess());
+          unawaited(_loadHistory());
+        }
       }
     });
 
     _messageSub = _chatService!.messageStream.listen((msg) {
       if (!mounted || !_ownerMatches) return;
       // Hindari duplikat (mis. share dikirim via REST + echo WS).
-      if (_messages.any((m) => m.id == msg.id)) return;
+      if (_hasMessage(msg.id)) return;
       setState(() => _messages.add(msg));
       _scrollToBottom();
+    });
+
+    _messageDeletedSub =
+        _chatService!.messageDeletedStream.listen(_removeMessage);
+    _diaryAccessSub = _chatService!.diaryAccessChangedStream.listen((id) {
+      if (mounted && _ownerMatches) ref.invalidate(chatDiaryEntryProvider(id));
     });
 
     _typingSub = _chatService!.typingStream.listen((isTyping) {
@@ -374,6 +496,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   void _disposeChat() {
     _stateSub?.cancel();
     _messageSub?.cancel();
+    _messageDeletedSub?.cancel();
+    _diaryAccessSub?.cancel();
     _typingSub?.cancel();
     _presenceSub?.cancel();
     _chatService?.dispose();
@@ -395,6 +519,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
     _inputController.dispose();
     _scrollController.dispose();
+    _chatRevision.dispose();
     _disposeChat();
     super.dispose();
   }
@@ -474,7 +599,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           );
       if (!mounted || !_ownerMatches) return true;
       setState(() {
-        if (!_messages.any((m) => m.id == sent.id)) {
+        if (!_hasMessage(sent.id)) {
           _messages.add(
             ChatMessage(
               id: sent.id,
@@ -513,8 +638,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _appendClinicalMessage(BackendChatMessage sent) {
-    if (!mounted || !_ownerMatches || _messages.any((m) => m.id == sent.id))
-      return;
+    if (!mounted || !_ownerMatches || _hasMessage(sent.id)) return;
     final session = ref.read(currentSessionProvider);
     setState(() => _messages.add(ChatMessage(
         id: sent.id,
@@ -858,7 +982,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         final diaries = await _collectDiaries(
           token: token,
           api: api,
-          fallback: store,
         );
         if (diaries.isEmpty) {
           _toast('Belum ada diary untuk dibagikan.');
@@ -866,9 +989,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         }
         if (!mounted || !_ownerMatches) return;
         final diary = await _pickCandidate(diaries, title: 'Pilih diary');
-        if (diary == null || !mounted || !_ownerMatches) return;
-        metadata = diary.metadata;
-        text = diary.text;
+        if (diary == null || !mounted || !_canShare) return;
+        final currentToken = ref.read(currentSessionProvider)?.accessToken;
+        if (currentToken == null || currentToken.isEmpty) return;
+        await api.updateDiaryAccess(
+            accessToken: currentToken,
+            diaryId: diary.metadata['diary_id'] as String,
+            professionalId: widget.otherUserId,
+            grant: true);
+        if (!mounted || !_ownerMatches) return;
+        final sent = await _sendShare(
+            kind: 'diary', text: diary.text, metadata: diary.metadata);
+        if (mounted && _ownerMatches) {
+          _toast(sent
+              ? 'Diary terkirim ke chat.'
+              : 'Akses diary diberikan, tetapi pesan belum terkirim.');
+        }
+        return;
       default:
         return;
     }
@@ -1013,6 +1150,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     if (!mounted || !_ownerMatches) return;
     await _showSharedDetail(message);
   }
+
+  Future<void> _showDiaryDetail(ChatMessage message) =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        backgroundColor: Colors.white,
+        builder: (sheet) => _ownedOverlay(ValueListenableBuilder<int>(
+          valueListenable: _chatRevision,
+          builder: (context, revision, _) {
+            if (!mounted || !_messages.any((entry) => entry.id == message.id)) {
+              return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('Detail diary sudah tidak tersedia.'));
+            }
+            return SafeArea(
+                top: false,
+                child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                        maxHeight: MediaQuery.sizeOf(sheet).height * .78),
+                    child: ChatDiaryDetail(message: message)));
+          },
+        )),
+      );
 
   Future<void> _showSharedDetail(ChatMessage message,
           {Widget? detail, BackendScreeningSession? screening}) =>
@@ -1298,7 +1459,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Widget _ownedOverlay(Widget child) =>
       Consumer(builder: (context, overlayRef, _) {
         final current = overlayRef.watch(currentSessionProvider);
-        return _owner == _ownerKey(current)
+        return !_ownerChanged && _owner == _ownerKey(current)
             ? child
             : const Padding(
                 padding: EdgeInsets.all(24),
@@ -1378,34 +1539,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     ];
   }
 
-  /// Semua diary server tersedia untuk dipilih; fallback hanya saat API gagal.
+  /// Izin dibagikan untuk ID diary tersimpan, termasuk catatan lama.
   Future<List<_ShareCandidate>> _collectDiaries({
     required String token,
     required MalvaApiClient api,
-    required MalvaStoreState fallback,
   }) async {
-    final entries = <({String title, String note, DateTime? at})>[];
-    try {
-      final diaries = await api.listDiaryEntries(accessToken: token, limit: 0);
-      entries.addAll(
-          diaries.map((d) => (title: d.title, note: d.note, at: d.occurredAt)));
-    } on Object {
-      entries.addAll(fallback.diaryEntries
-          .map((d) => (title: d.title, note: d.note, at: d.createdAt)));
-    }
+    final entries = await api.listDiaryEntries(accessToken: token, limit: 0);
     return [
       for (final entry in entries)
         _ShareCandidate(
           title: entry.title.trim().isEmpty ? 'Diary' : entry.title.trim(),
-          subtitle: _dateLabel(entry.at),
-          text:
-              'Diary: "${entry.title.trim().isEmpty ? entry.note : entry.title}".',
+          subtitle: _dateLabel(entry.occurredAt),
+          text: 'Diary dibagikan',
           icon: Icons.edit_note_rounded,
-          metadata: {
-            'title': entry.title,
-            'note': entry.note,
-            if (entry.at != null) 'occurred_at': wibIso(entry.at!),
-          },
+          metadata: {'diary_id': entry.id},
         ),
     ];
   }
@@ -1425,24 +1572,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   @override
   Widget build(BuildContext context) {
     ref.watch(currentSessionProvider);
-    ref.listen<AuthSession?>(currentSessionProvider, (previous, next) {
-      if (_ownerKey(next) == _owner) {
-        if (previous?.accessToken != next?.accessToken) {
+    ref.listen(authStateProvider, (previous, next) {
+      if (_ownerChanged) return;
+      if (_ownerKey(next.session) == _owner) {
+        if (previous?.session?.accessToken != next.session?.accessToken) {
           setState(() {
             _onlineUsers.clear();
             _otherTyping = false;
             _chatState = ChatState.disconnected;
           });
-          _initChat();
+          _initChat(next.session);
         }
         return;
       }
+      setState(() => _ownerChanged = true);
       _accessRequest++;
       _accessPoll?.cancel();
       _accessExpiry?.cancel();
       _disposeChat();
       _messages.clear();
       _inputController.clear();
+      _chatRevision.value++;
     });
     if (!_ownerMatches)
       return Scaffold(
@@ -1597,10 +1747,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
                       final msg = _messages[index];
+                      final onDelete = msg.isMine && msg.id.isNotEmpty
+                          ? () => _confirmDeleteMessage(msg)
+                          : null;
                       final showTimestamp = index == 0 ||
                           formatWibDate(_messages[index - 1].timestamp) !=
                               formatWibDate(msg.timestamp);
                       return Column(
+                        key: ValueKey(msg.id),
                         children: [
                           if (showTimestamp)
                             _TimestampLabel(date: msg.timestamp),
@@ -1638,8 +1792,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                                       ].contains(msg.kind)
                                                         ? .86
                                                         : .70)),
-                                    child: ChatSharedRecordCard(
-                                        key: ValueKey(msg.id), message: msg)))
+                                    child: _ChatMessageActions(
+                                      onDelete: onDelete,
+                                      child: ChatSharedRecordCard(
+                                          key: ValueKey(msg.id),
+                                          message: msg,
+                                          onOpenDiary: msg.kind == 'diary'
+                                              ? () => _showDiaryDetail(msg)
+                                              : null),
+                                    )))
                           else if (const [
                                 'assessment_request',
                                 'session_summary',
@@ -1668,14 +1829,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                                 (msg.kind == 'session_summary'
                                                     ? .95
                                                     : .85)),
-                                    child: ClinicalChatCard(
-                                        message: msg,
-                                        isPatient: _isPatient,
-                                        onAction: () =>
-                                            _openClinicalCard(msg))))
+                                    child: _ChatMessageActions(
+                                      onDelete: onDelete,
+                                      child: ClinicalChatCard(
+                                          message: msg,
+                                          isPatient: _isPatient,
+                                          onAction: () =>
+                                              _openClinicalCard(msg)),
+                                    )))
                           else
                             _ChatBubble(
                               message: msg,
+                              onDelete: onDelete,
                               isProfessional: _isPatient != msg.isMine,
                               senderPhotoUrl:
                                   _professionalPhotoUrl.isEmpty && _isPatient
@@ -1966,16 +2131,42 @@ class _TimestampLabel extends StatelessWidget {
   }
 }
 
+class _ChatMessageActions extends StatelessWidget {
+  const _ChatMessageActions({required this.onDelete, required this.child});
+
+  final VoidCallback? onDelete;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final delete = onDelete;
+    if (delete == null) return child;
+    return Semantics(
+      customSemanticsActions: {
+        const CustomSemanticsAction(label: 'Hapus untuk semua'): delete,
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onLongPress: delete,
+        onSecondaryTap: delete,
+        child: child,
+      ),
+    );
+  }
+}
+
 class _ChatBubble extends StatelessWidget {
   const _ChatBubble(
       {required this.message,
       this.onOpenRecord,
+      this.onDelete,
       this.isProfessional = false,
       this.senderPhotoUrl = '',
       this.senderRole = 'Profesional'});
 
   final ChatMessage message;
   final VoidCallback? onOpenRecord;
+  final VoidCallback? onDelete;
   final bool isProfessional;
   final String senderPhotoUrl;
   final String senderRole;
@@ -2001,84 +2192,87 @@ class _ChatBubble extends StatelessWidget {
                 color: Color(0x05000000), blurRadius: 10, offset: Offset(0, 3))
           ],
         ),
-        child: InkWell(
-          onTap: onOpenRecord,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (isProfessional)
-                Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: Row(children: [
-                      ProfessionalAvatar(
-                          displayName: message.senderName,
-                          photoUrl: senderPhotoUrl,
-                          radius: 14,
-                          borderRadius: BorderRadius.circular(9)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                          child: Text(message.senderName,
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: MalvaColors.ink))),
-                      const SizedBox(width: 6),
-                      Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 3),
-                          decoration: BoxDecoration(
-                              color: const Color(0xFFF5EBFF),
-                              borderRadius: BorderRadius.circular(5)),
-                          child: Text(senderRole,
-                              style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: MalvaColors.seed))),
-                    ]))
-              else if (!isMine)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    message.senderName,
-                    // Nama pengirim tampil di latar terang (bubble lavender),
-                    // jadi wajib hitam agar terbaca. Bubble milik sendiri
-                    // (isMine) tidak menampilkan nama ini.
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.black87,
+        child: _ChatMessageActions(
+          onDelete: onDelete,
+          child: InkWell(
+            onTap: onOpenRecord,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isProfessional)
+                  Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Row(children: [
+                        ProfessionalAvatar(
+                            displayName: message.senderName,
+                            photoUrl: senderPhotoUrl,
+                            radius: 14,
+                            borderRadius: BorderRadius.circular(9)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            child: Text(message.senderName,
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: MalvaColors.ink))),
+                        const SizedBox(width: 6),
+                        Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                                color: const Color(0xFFF5EBFF),
+                                borderRadius: BorderRadius.circular(5)),
+                            child: Text(senderRole,
+                                style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: MalvaColors.seed))),
+                      ]))
+                else if (!isMine)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      message.senderName,
+                      // Nama pengirim tampil di latar terang (bubble lavender),
+                      // jadi wajib hitam agar terbaca. Bubble milik sendiri
+                      // (isMine) tidak menampilkan nama ini.
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.black87,
+                      ),
                     ),
                   ),
+                if (message.kind == 'file') ...[
+                  _FileBubble(message: message, isMine: false),
+                  const SizedBox(height: 6),
+                ] else if (message.kind == 'voice') ...[
+                  _VoiceBubble(message: message, isMine: false),
+                  const SizedBox(height: 6),
+                ] else if (message.kind != 'text') ...[
+                  _SharedCardBubble(message: message, isMine: false),
+                  const SizedBox(height: 6),
+                ],
+                Text(
+                  message.text,
+                  style: const TextStyle(
+                    color: Color(0xFF707782),
+                    height: 1.6,
+                    fontSize: 12,
+                  ),
                 ),
-              if (message.kind == 'file') ...[
-                _FileBubble(message: message, isMine: false),
-                const SizedBox(height: 6),
-              ] else if (message.kind == 'voice') ...[
-                _VoiceBubble(message: message, isMine: false),
-                const SizedBox(height: 6),
-              ] else if (message.kind != 'text') ...[
-                _SharedCardBubble(message: message, isMine: false),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
+                Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      ChatScreen.formatMessageTime(message.timestamp),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.black38,
+                      ),
+                    )),
               ],
-              Text(
-                message.text,
-                style: const TextStyle(
-                  color: Color(0xFF707782),
-                  height: 1.6,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    ChatScreen.formatMessageTime(message.timestamp),
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: Colors.black38,
-                    ),
-                  )),
-            ],
+            ),
           ),
         ),
       ),

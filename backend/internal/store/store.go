@@ -1461,37 +1461,13 @@ func (s *Store) DeleteDiaryEntry(ctx context.Context, patientID, diaryID string)
 }
 
 func (s *Store) ListDiaryEntries(ctx context.Context, patientID string, sharedOnly bool, limit int) ([]DiaryEntry, error) {
-	sqlLimit := historyQueryLimit(limit)
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, patient_id, mood, title, note, shared_with_professionals,
-		       professional_feedback, occurred_at, created_at, updated_at
-		FROM diary_entries
-		WHERE patient_id = $1
-		  AND deleted_at IS NULL
-		  AND ($2 = false OR shared_with_professionals = true)
-		ORDER BY occurred_at DESC
-		LIMIT $3
-	`, patientID, sharedOnly, sqlLimit)
+	rows, err := s.db.QueryContext(ctx, diarySelect+`
+		AND d.patient_id = $1 AND ($2 = false OR d.shared_with_professionals)
+		ORDER BY d.occurred_at DESC LIMIT $3`, patientID, sharedOnly, historyQueryLimit(limit))
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-	var items []DiaryEntry
-	for rows.Next() {
-		var item DiaryEntry
-		var feedback sql.NullString
-		if err := rows.Scan(&item.ID, &item.PatientID, &item.Mood,
-			&item.Title, &item.Note, &item.SharedWithProfessionals,
-			&feedback, &item.OccurredAt, &item.CreatedAt,
-			&item.UpdatedAt); err != nil {
-			return nil, err
-		}
-		if feedback.Valid {
-			item.ProfessionalFeedback = feedback.String
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+	return scanDiaryEntries(rows)
 }
 
 func (s *Store) UpdateDiaryFeedback(ctx context.Context, professionalID, patientID, diaryID, feedback string) (DiaryEntry, error) {
@@ -1931,7 +1907,7 @@ func (s *Store) UpdatePatientDataConsent(ctx context.Context, consent PatientDat
 	return saved, nil
 }
 
-func (s *Store) ListTimelineEvents(ctx context.Context, patientID string, limit int) ([]TimelineEvent, error) {
+func (s *Store) ListTimelineEvents(ctx context.Context, patientID, professionalID string, limit int) ([]TimelineEvent, error) {
 	limit = normalizeLimit(limit, 30, 100)
 	events := make([]TimelineEvent, 0)
 
@@ -1962,7 +1938,12 @@ func (s *Store) ListTimelineEvents(ctx context.Context, patientID string, limit 
 		events = append(events, TimelineEvent{ID: item.ID, PatientID: item.PatientID, Type: "mood", Title: "Mood " + item.Mood, Body: item.Note, Metadata: map[string]any{"energy": item.Energy, "anxiety": item.Anxiety}, CreatedAt: item.OccurredAt})
 	}
 
-	diaries, err := s.ListDiaryEntries(ctx, patientID, false, limit)
+	var diaries []DiaryEntry
+	if professionalID == "" {
+		diaries, err = s.ListDiaryEntries(ctx, patientID, false, limit)
+	} else {
+		diaries, err = s.ListDiaryEntriesForProfessional(ctx, patientID, professionalID, limit)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -2574,6 +2555,23 @@ func (s *Store) CreateChatMessage(ctx context.Context, msg ChatMessage) (ChatMes
 	msg.Kind = normalizeChatKind(msg.Kind)
 	// Pesan terstruktur (share) boleh tanpa teks bila ada metadata.
 	hasMetadata := len(msg.Metadata) > 0 && string(msg.Metadata) != "null"
+	if msg.Kind == "diary" {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(msg.Metadata, &fields); err != nil {
+			return ChatMessage{}, errors.New("perbarui aplikasi untuk membagikan diary")
+		}
+		var diaryID string
+		if err := json.Unmarshal(fields["diary_id"], &diaryID); err != nil ||
+			!ValidClinicalClientID(diaryID) || msg.SenderID != msg.PatientID {
+			return ChatMessage{}, errors.New("perbarui aplikasi untuk membagikan diary")
+		}
+		entry, err := s.GetDiaryEntryForProfessional(ctx, msg.ProfessionalID, diaryID)
+		if err != nil || entry.PatientID != msg.PatientID {
+			return ChatMessage{}, errors.New("diary belum dibagikan ke profesional ini")
+		}
+		msg.Text = "Diary dibagikan"
+		msg.Metadata, _ = json.Marshal(map[string]string{"diary_id": strings.ToLower(diaryID)})
+	}
 	if msg.ID == "" || msg.PatientID == "" || msg.ProfessionalID == "" || msg.SenderID == "" {
 		return ChatMessage{}, errors.New("id, patient_id, professional_id, and sender_id are required")
 	}
@@ -2591,7 +2589,8 @@ func (s *Store) CreateChatMessage(ctx context.Context, msg ChatMessage) (ChatMes
 		INSERT INTO chat_messages (id, patient_id, professional_id, sender_id, sender_name, text, kind, attachment_meta)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
 		ON CONFLICT(id) DO UPDATE SET id=chat_messages.id
-		WHERE chat_messages.patient_id=EXCLUDED.patient_id AND chat_messages.professional_id=EXCLUDED.professional_id
+		WHERE chat_messages.deleted_at IS NULL
+		 AND chat_messages.patient_id=EXCLUDED.patient_id AND chat_messages.professional_id=EXCLUDED.professional_id
 		 AND chat_messages.sender_id=EXCLUDED.sender_id AND chat_messages.text=EXCLUDED.text AND chat_messages.kind=EXCLUDED.kind
 		 AND (CASE WHEN chat_messages.sender_id=chat_messages.professional_id AND chat_messages.kind IN ('goals','session_summary') THEN chat_messages.attachment_meta - 'goals' ELSE chat_messages.attachment_meta END)
 		 IS NOT DISTINCT FROM (CASE WHEN EXCLUDED.sender_id=EXCLUDED.professional_id AND EXCLUDED.kind IN ('goals','session_summary') THEN EXCLUDED.attachment_meta - 'goals' ELSE EXCLUDED.attachment_meta END)
@@ -2619,6 +2618,19 @@ func metadataOrNull(raw json.RawMessage) any {
 	return string(raw)
 }
 
+func (s *Store) DeleteOwnChatMessage(ctx context.Context, id, senderID, role string) (patientID, professionalID string, err error) {
+	err = s.db.QueryRowContext(ctx, `
+		UPDATE chat_messages
+		SET deleted_at = COALESCE(deleted_at, $4), text = '', sender_name = '',
+		    attachment_type = NULL, attachment_url = NULL, attachment_meta = NULL
+		WHERE id = $1 AND sender_id = $2
+		  AND (($3 = 'patient' AND patient_id = sender_id)
+		    OR ($3 = 'professional' AND professional_id = sender_id))
+		RETURNING patient_id, professional_id
+	`, id, senderID, role, clock.Now()).Scan(&patientID, &professionalID)
+	return patientID, professionalID, err
+}
+
 func (s *Store) ListChatMessages(ctx context.Context, patientID, professionalID string, limit int) ([]ChatMessage, error) {
 	patientID = strings.TrimSpace(patientID)
 	professionalID = strings.TrimSpace(professionalID)
@@ -2630,8 +2642,8 @@ func (s *Store) ListChatMessages(ctx context.Context, patientID, professionalID 
 		SELECT id, patient_id, professional_id, sender_id, sender_name, text, kind,
 		       COALESCE(attachment_meta, '{}'::jsonb), created_at
 		FROM chat_messages
-		WHERE patient_id = $1 AND professional_id = $2
-		ORDER BY created_at DESC
+		WHERE patient_id = $1 AND professional_id = $2 AND deleted_at IS NULL
+		ORDER BY created_at DESC, id DESC
 		LIMIT $3
 	`, patientID, professionalID, limit)
 	if err != nil {

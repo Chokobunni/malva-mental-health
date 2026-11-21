@@ -12,6 +12,7 @@ import '../models/diary_catalog.dart';
 import '../models/diary_achievements.dart';
 import '../widgets/diary_design.dart';
 import '../widgets/diary_body.dart';
+import '../widgets/diary_access.dart';
 import '../services/diary_prompt_history.dart';
 import 'diary_badges_screen.dart';
 import 'diary_reader_screen.dart';
@@ -87,7 +88,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
 
   Widget _protect(Widget Function() builder, String owner) =>
       Consumer(builder: (context, ref, _) {
-        ref.watch(currentSessionProvider);
+        ref.watch(authStateProvider);
         if (!mounted || _accountChanged || _identity(_session) != owner)
           return const Scaffold(
               body: Center(
@@ -247,7 +248,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                               _accountChanged ||
                                               _identity(_session) != owner)
                                             return;
-                                          if (saved) {
+                                          if (saved != null) {
                                             Navigator.pop(sheet);
                                           } else {
                                             update(() {
@@ -312,7 +313,8 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                         Navigator.pop(readerContext);
                       return deleted;
                     },
-                    onVault: (e) => _save(e, isUpdate: true, owner: owner)),
+                    onVault: (e) async =>
+                        await _save(e, isUpdate: true, owner: owner) != null),
                 owner)));
   }
 
@@ -347,7 +349,8 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
           .firstWhere((m) => m.name == e.mood, orElse: () => MoodValue.okay),
       title: e.title,
       note: e.note,
-      professionalFeedback: e.professionalFeedback);
+      professionalFeedback: e.professionalFeedback,
+      accessRecipients: e.accessRecipients);
 
   Future<void> _load() async {
     if (_saving || _accountChanged) return;
@@ -385,7 +388,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
         context,
         MaterialPageRoute(
             builder: (_) => Consumer(builder: (context, ref, _) {
-                  ref.watch(currentSessionProvider);
+                  ref.watch(authStateProvider);
                   if (_accountChanged || _identity(_session) != owner) {
                     return const Scaffold(
                         body: Center(
@@ -403,7 +406,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                       accessToken: _session?.accessToken,
                       protectRoute: (child) =>
                           Consumer(builder: (context, ref, _) {
-                            ref.watch(currentSessionProvider);
+                            ref.watch(authStateProvider);
                             if (!mounted ||
                                 _accountChanged ||
                                 _identity(_session) != owner) {
@@ -415,15 +418,63 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                             }
                             return child;
                           }),
-                      onSave: (value) =>
-                          _save(value, isUpdate: entry != null, owner: owner));
+                      onSave: (value, isUpdate) =>
+                          _save(value, isUpdate: isUpdate, owner: owner),
+                      onManageAccess: (editorContext, value, onChanged) =>
+                          _showAccess(editorContext, value, owner,
+                              onChanged: onChanged));
                 })));
   }
 
-  Future<bool> _save(DiaryEntry entry,
+  Future<void> _showAccess(BuildContext source, DiaryEntry entry, String owner,
+      {ValueChanged<List<DiaryAccessRecipient>>? onChanged}) async {
+    String? currentToken() {
+      if (!mounted || _accountChanged || _identity(_session) != owner) {
+        return null;
+      }
+      return _session?.accessToken;
+    }
+
+    if (currentToken()?.isNotEmpty != true || _saving) return;
+    final api = _api;
+    await showModalBottomSheet<void>(
+      context: source,
+      isScrollControlled: true,
+      barrierColor: const Color(0x99502b54),
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      isDismissible: false,
+      enableDrag: false,
+      builder: (_) => _protect(
+          () => DiaryAccessSheet(
+                entry: entry,
+                api: api,
+                accessToken: currentToken,
+                onChanged: (recipients) {
+                  if (currentToken() == null) return;
+                  if (_loading) {
+                    setState(() {
+                      _generation++;
+                      _loading = false;
+                    });
+                  }
+                  for (final current in _all) {
+                    if (current.id != entry.id) continue;
+                    ref.read(malvaStoreProvider.notifier).upsertDiary(
+                        current.copyWith(accessRecipients: recipients));
+                    break;
+                  }
+                  onChanged?.call(recipients);
+                },
+              ),
+          owner),
+    );
+  }
+
+  Future<DiaryEntry?> _save(DiaryEntry entry,
       {required bool isUpdate, required String owner}) async {
-    if (_saving || _accountChanged || _identity(_session) != owner)
-      return false;
+    if (_saving || _accountChanged || _identity(_session) != owner) return null;
     final session = _session;
     final identity = _identity(session);
     final token = session?.accessToken;
@@ -448,22 +499,32 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                 mood: entry.mood.name,
                 title: entry.title,
                 note: entry.note,
-                sharedWithProfessionals: true,
+                sharedWithProfessionals: false,
                 occurredAt: entry.createdAt);
+        if (response.id.isEmpty) {
+          throw const MalvaApiException('Respons diary tidak valid.');
+        }
         saved = _entry(response);
       }
       if (!mounted || _accountChanged || _identity(_session) != identity)
-        return false;
+        return null;
+      if (isUpdate) {
+        for (final current in _all) {
+          if (current.id != saved.id) continue;
+          saved = saved.copyWith(accessRecipients: current.accessRecipients);
+          break;
+        }
+      }
       ref.read(malvaStoreProvider.notifier).upsertDiary(saved);
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Diary tersimpan.')));
-      return true;
+      return saved;
     } on Object catch (e) {
       if (!mounted || _accountChanged || _identity(_session) != identity)
-        return false;
+        return null;
       setState(
           () => _error = 'Diary belum tersimpan: ${friendlyErrorMessage(e)}');
-      return false;
+      return null;
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -520,8 +581,8 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     ref.watch(currentSessionProvider);
-    ref.listen(currentSessionProvider, (old, next) {
-      if (_identity(old) != _identity(next)) {
+    ref.listen(authStateProvider, (old, next) {
+      if (_identity(old?.session) != _identity(next.session)) {
         _accountChanged = true;
         _generation++;
         _search.clear();
@@ -885,38 +946,37 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                 fontSize: 12,
                                 height: 1.65,
                                 color: Color(0xff4b5563)))),
-                  for (final media in previews)
+                  if (previews.isNotEmpty)
                     Padding(
                         padding: const EdgeInsets.only(top: 12),
-                        child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 180),
-                            child: DiaryImage(
-                                media: media,
-                                api: _api,
-                                token: _session?.accessToken,
-                                preview: true))),
-                  const Divider(height: 26, color: Color(0xfff0f0f0)),
-                  Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                    Expanded(
-                        child: Wrap(spacing: 6, runSpacing: 6, children: [
-                      for (final tag in c.tags)
-                        Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                                color: const Color(0xfff3f4f6),
-                                borderRadius: BorderRadius.circular(6)),
-                            child: Text('#$tag',
-                                style: const TextStyle(
-                                    fontSize: 10, color: Color(0xff6b7280))))
-                    ])),
-                    const SizedBox(width: 8),
-                    const Text('Baca Diari ›',
-                        style: TextStyle(
-                            color: diaryPurple,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800))
-                  ])
+                        child: Row(children: [
+                          for (var index = 0;
+                              index < previews.length;
+                              index++) ...[
+                            if (index > 0) const SizedBox(width: 8),
+                            Expanded(
+                                child: SizedBox(
+                                    height: 94,
+                                    child: DiaryImage(
+                                        media: previews[index],
+                                        api: _api,
+                                        token: _session?.accessToken,
+                                        preview: true))),
+                          ],
+                        ])),
+                  if (c.tags.isNotEmpty)
+                    Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: DiaryTags(tags: c.tags)),
+                  const Divider(height: 18, color: Color(0xffeadfed)),
+                  DiaryAccessRow(
+                      recipients: entry.accessRecipients,
+                      onPressed: _loading ||
+                              _saving ||
+                              _session?.accessToken?.isNotEmpty != true
+                          ? null
+                          : () =>
+                              _showAccess(context, entry, _identity(_session))),
                 ])));
   }
 }
