@@ -50,6 +50,7 @@ void main() {
     };
     for (final action in actions.entries) {
       await tester.ensureVisible(find.text(action.key));
+      await tester.pumpAndSettle();
       await tester.tap(find.text(action.key));
       await tester.pumpAndSettle();
       expect(port.names.last, 'malva_${action.value}.pdf');
@@ -68,6 +69,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Export Mood History'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Export Mood History'));
     await tester.pumpAndSettle();
     expect(find.textContaining('PDF belum dapat dibuat'), findsOneWidget);

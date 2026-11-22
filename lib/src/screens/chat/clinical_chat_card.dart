@@ -21,7 +21,6 @@ class ClinicalChatCard extends StatelessWidget {
       return SessionSummaryChatCard(message: message);
     }
     final meta = message.metadata ?? const <String, dynamic>{};
-    final summary = message.kind == 'session_summary';
     final assessment = message.kind == 'assessment_request';
     final attachment = message.kind == 'attachment';
     final rawGoals = meta['goals'];
@@ -37,18 +36,78 @@ class ClinicalChatCard extends StatelessWidget {
     };
     final insight = meta['insight']?.toString() ?? '';
     final filename = meta['filename']?.toString() ?? 'Lampiran';
-    final title = attachment
-        ? filename
-        : assessment
-            ? assessmentLabel
-            : summary
-                ? 'Rangkuman sesi'
-                : 'Goals & Habits';
-    final action = attachment
-        ? 'Buka lampiran'
-        : assessment && isPatient
-            ? 'Isi assessment'
-            : 'Lihat detail';
+    if (assessment || attachment) {
+      final action = attachment
+          ? 'Buka lampiran'
+          : isPatient
+              ? 'Isi assessment'
+              : 'Lihat detail';
+      final size = meta['size'];
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: const Color(0xffece5f2)),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+                color: const Color(0xfff3e8fc),
+                borderRadius: BorderRadius.circular(10)),
+            child: Icon(
+                attachment
+                    ? Icons.attach_file_rounded
+                    : Icons.fact_check_outlined,
+                color: MalvaColors.seed),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(attachment ? filename : assessmentLabel,
+                    style: const TextStyle(
+                        color: MalvaColors.ink,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14)),
+                if (assessment) ...[
+                  const SizedBox(height: 4),
+                  const Text(
+                      'Isi sendiri untuk mencatat kondisi terkini. Hasil tersimpan di Assessment Record.',
+                      style: TextStyle(color: MalvaColors.ink, fontSize: 12)),
+                ],
+                if (attachment && size is num && size.isFinite && size > 0) ...[
+                  const SizedBox(height: 4),
+                  Text('${(size / 1024).ceil()} KB',
+                      style: const TextStyle(
+                          color: MalvaColors.ink, fontSize: 12)),
+                ],
+                const SizedBox(height: 7),
+                FilledButton.tonalIcon(
+                  onPressed: onAction,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 32),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    foregroundColor: MalvaColors.seed,
+                    textStyle: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w800),
+                  ),
+                  icon: Icon(
+                      attachment
+                          ? Icons.download_outlined
+                          : Icons.edit_note_rounded,
+                      size: 17),
+                  label: Text(action),
+                ),
+              ])),
+        ]),
+      );
+    }
     return InkWell(
         onTap: onAction,
         child: Container(
@@ -60,22 +119,18 @@ class ClinicalChatCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(children: [
-                  Icon(
-                      attachment
-                          ? Icons.attach_file
-                          : assessment
-                              ? Icons.fact_check_outlined
-                              : Icons.summarize_outlined,
-                      color: MalvaColors.seed),
-                  const SizedBox(width: 8),
+                const Row(children: [
+                  Icon(Icons.flag_outlined, color: MalvaColors.seed),
+                  SizedBox(width: 8),
                   Expanded(
-                      child: Text(title,
-                          style: const TextStyle(
+                      child: Text('Goals & Habits',
+                          style: TextStyle(
                               fontWeight: FontWeight.w800,
                               color: MalvaColors.ink)))
                 ]),
-                if (summary || goalIds.isNotEmpty) ...[
+                if (goalIds.isNotEmpty ||
+                    goals.isNotEmpty ||
+                    insight.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   if (goals.isEmpty && goalIds.isNotEmpty)
                     Text('${goalIds.length} homework goals tersimpan'),
@@ -109,24 +164,9 @@ class ClinicalChatCard extends StatelessWidget {
                     Text(insight)
                   ],
                 ],
-                if (assessment)
-                  const Padding(
-                      padding: EdgeInsets.only(top: 8),
-                      child: Text(
-                          'Isi sendiri untuk mencatat kondisi terkini. Hasil tersimpan di Assessment Record.')),
-                if (attachment)
-                  Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                          '${meta['mime'] ?? ''} · ${((meta['size'] is num ? meta['size'] as num : 0) / 1024).ceil()} KB')),
-                TextButton.icon(
-                    onPressed: onAction,
-                    icon: Icon(
-                        attachment
-                            ? Icons.download_outlined
-                            : Icons.open_in_new,
-                        size: 18),
-                    label: Text(action)),
+                if (onAction != null)
+                  TextButton(
+                      onPressed: onAction, child: const Text('Lihat detail')),
               ]),
         ));
   }

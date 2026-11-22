@@ -177,9 +177,12 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tombol ekspor HARUS ada (bukan catatan) di web.
-      expect(find.text('Export Mood History'), findsOneWidget);
+      final moodExport = find.text('Export Mood History');
+      expect(moodExport, findsOneWidget);
 
-      await tester.tap(find.text('Export Mood History'));
+      await tester.ensureVisible(moodExport);
+      await tester.pumpAndSettle();
+      await tester.tap(moodExport);
       await tester.pumpAndSettle();
 
       expect(exporter.calls, isNotEmpty);

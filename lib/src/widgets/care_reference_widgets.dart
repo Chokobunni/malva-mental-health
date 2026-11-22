@@ -4,6 +4,9 @@ import '../theme.dart';
 import 'malva_components.dart';
 
 const carePageColor = Color(0xfff8f2fc);
+const careSoftShadow = [
+  BoxShadow(color: Color(0x1654206f), blurRadius: 12, offset: Offset(0, 4))
+];
 const careCardBorder = BorderSide(color: Color(0xffe5d4ed));
 const careHeaderDecoration = BoxDecoration(
   gradient: LinearGradient(
@@ -14,6 +17,22 @@ const careHeaderDecoration = BoxDecoration(
   ),
   borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
 );
+
+class CareHeaderNotification extends StatelessWidget {
+  const CareHeaderNotification({super.key, required this.onPressed});
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton.filledTonal(
+        tooltip: 'Notifikasi',
+        onPressed: onPressed,
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.white.withValues(alpha: .16),
+          foregroundColor: Colors.white,
+        ),
+        icon: const Icon(Icons.notifications_outlined, size: 19),
+      );
+}
 
 class CarePageHeader extends StatelessWidget {
   const CarePageHeader({
@@ -47,15 +66,7 @@ class CarePageHeader extends StatelessWidget {
                     width: 26, height: 30),
                 const Spacer(),
                 if (extraAction != null) extraAction!,
-                IconButton.filledTonal(
-                  tooltip: 'Notifikasi',
-                  onPressed: onNotifications,
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: .16),
-                    foregroundColor: Colors.white,
-                  ),
-                  icon: const Icon(Icons.notifications_outlined, size: 19),
-                ),
+                CareHeaderNotification(onPressed: onNotifications),
                 const SizedBox(width: 6),
                 IconButton.outlined(
                   tooltip: 'Profil',

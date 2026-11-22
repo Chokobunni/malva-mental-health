@@ -1186,23 +1186,42 @@ class _SessionCard extends StatelessWidget {
           if (upcoming) ...[
             const SizedBox(height: 12),
             _sessionStrip(Icons.calendar_today_outlined, dateLabel,
-                const Color(0xfff6f2f8)),
+                const Color(0xfff6f2f8), MalvaColors.ink),
             if (session.isBeforeJoinWindow) ...[
               const SizedBox(height: 6),
               _sessionStrip(Icons.schedule_rounded, 'Mulai dalam $remaining',
-                  const Color(0xfff3e8fa)),
+                  const Color(0xfff3e8fa), MalvaColors.seed),
               const SizedBox(height: 6),
               const Text('Check-in dibuka 10 menit sebelum sesi.'),
             ],
             const SizedBox(height: 12),
-            Wrap(spacing: 7, runSpacing: 5, children: [
-              FilledButton.icon(
-                  onPressed: onOpenChat,
-                  style: compactFilledButtonStyle,
-                  icon: const Icon(Icons.chat_bubble_rounded, size: 15),
-                  label: const Text('Chat')),
-              if (live)
-                FilledButton(
+            LayoutBuilder(builder: (context, constraints) {
+              final primary = FilledButton.icon(
+                onPressed: onOpenChat,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 38),
+                  padding: const EdgeInsets.symmetric(horizontal: 7),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(11)),
+                  textStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w800),
+                ),
+                icon: const Icon(Icons.chat_bubble_rounded, size: 14),
+                label: const Text('Chat'),
+              );
+              final secondaryStyle = OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 38),
+                padding: const EdgeInsets.symmetric(horizontal: 7),
+                side: careCardBorder,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(11)),
+                textStyle:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+              );
+              final actions = [
+                primary,
+                if (live)
+                  FilledButton(
                     onPressed:
                         session.isVideo && session.meetingUrl.trim().isEmpty
                             ? null
@@ -1211,22 +1230,37 @@ class _SessionCard extends StatelessWidget {
                     child: Text(
                         session.isVideo && session.meetingUrl.trim().isEmpty
                             ? 'Menunggu link video'
-                            : 'Gabung')),
-              if (!live) ...[
-                OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(0, 42),
-                        padding: const EdgeInsets.symmetric(horizontal: 12)),
-                    onPressed: mayChange ? onReschedule : null,
-                    child: const Text('Reschedule')),
-                OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(0, 42),
-                        padding: const EdgeInsets.symmetric(horizontal: 12)),
+                            : 'Gabung'),
+                  )
+                else ...[
+                  OutlinedButton(
+                      style: secondaryStyle,
+                      onPressed: mayChange ? onReschedule : null,
+                      child: const Text('Reschedule')),
+                  OutlinedButton(
+                    style: secondaryStyle.copyWith(
+                        foregroundColor: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.disabled)
+                          ? null
+                          : const Color(0xffa62c60),
+                    )),
                     onPressed: mayChange ? onCancel : null,
-                    child: const Text('Batal')),
-              ],
-            ]),
+                    child: const Text('Batal'),
+                  ),
+                ],
+              ];
+              if (live ||
+                  constraints.maxWidth < 260 ||
+                  MediaQuery.textScalerOf(context).scale(12) > 16) {
+                return Wrap(spacing: 7, runSpacing: 4, children: actions);
+              }
+              return Row(children: [
+                for (var i = 0; i < actions.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 7),
+                  Expanded(child: actions[i]),
+                ],
+              ]);
+            }),
           ],
           if (session.summaryForPatient.isNotEmpty)
             Padding(
@@ -1256,11 +1290,19 @@ class _SessionCard extends StatelessWidget {
         Expanded(child: Text(text, style: const TextStyle(fontSize: 12))),
       ]);
 
-  Widget _sessionStrip(IconData icon, String text, Color color) => Container(
+  Widget _sessionStrip(IconData icon, String text, Color color, Color ink) =>
+      Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
             color: color, borderRadius: BorderRadius.circular(10)),
-        child: _detailLine(icon, text),
+        child: Row(children: [
+          Icon(icon, color: MalvaColors.seed, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Text(text,
+                  style: TextStyle(
+                      color: ink, fontSize: 13, fontWeight: FontWeight.w800))),
+        ]),
       );
 }
 
@@ -1306,68 +1348,85 @@ class _ProfessionalLinkCard extends StatelessWidget {
       radius: 17,
       padding: const EdgeInsets.all(13),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           _ProAvatar(
               professionalId: link.professionalUserId,
               displayName: link.professionalDisplayName,
               photoUrl: link.professionalPhotoUrl),
           const SizedBox(width: 10),
           Expanded(
-              child: TextButton(
-            onPressed: onProfile,
-            style: TextButton.styleFrom(
-                alignment: Alignment.centerLeft, padding: EdgeInsets.zero),
-            child: Text(
-                link.professionalDisplayName.isEmpty
-                    ? 'Profesional'
-                    : link.professionalDisplayName,
-                style: const TextStyle(
-                    color: MalvaColors.plum,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900)),
-          )),
-          const SizedBox(width: 5),
-          _careBadge(label, color),
-        ]),
-        InkWell(
-          onTap: onPackage,
-          borderRadius: BorderRadius.circular(10),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 7),
-            child: Column(children: [
-              Row(children: [
-                Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                Row(children: [
+                  Expanded(
+                      child: TextButton(
+                    onPressed: onProfile,
+                    style: TextButton.styleFrom(
+                      alignment: Alignment.centerLeft,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(0, 40),
+                    ),
                     child: Text(
-                        '$remaining/${package.totalSessions} sesi tersisa',
+                        link.professionalDisplayName.isEmpty
+                            ? 'Profesional'
+                            : link.professionalDisplayName,
                         style: const TextStyle(
-                            color: MalvaColors.seed,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12))),
-                if (expires != null)
-                  Flexible(
-                      child: Text(
-                          '${active ? 'Hingga' : 'Berakhir'} ${expires.day}/${expires.month}/${expires.year}',
-                          textAlign: TextAlign.right,
-                          style: TextStyle(
-                              color: active
-                                  ? const Color(0xff535964)
-                                  : MalvaColors.danger,
-                              fontSize: 12))),
-              ]),
-              const SizedBox(height: 6),
-              ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    value: package.totalSessions <= 0
-                        ? 0
-                        : (remaining / package.totalSessions).clamp(0.0, 1.0),
-                    minHeight: 7,
-                    color: MalvaColors.orchid,
-                    backgroundColor: const Color(0xfff2e4f8),
+                            color: MalvaColors.plum,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900)),
                   )),
-            ]),
-          ),
-        ),
+                  const SizedBox(width: 5),
+                  _careBadge(label, color),
+                ]),
+                InkWell(
+                  onTap: onPackage,
+                  borderRadius: BorderRadius.circular(7),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 1, bottom: 8),
+                    child: Column(children: [
+                      Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                                child: Text(
+                                    '$remaining/${package.totalSessions} sesi tersisa',
+                                    style: const TextStyle(
+                                        color: MalvaColors.seed,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 11))),
+                            if (expires != null) ...[
+                              const SizedBox(width: 6),
+                              Flexible(
+                                  child: Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Text(
+                                        '${active ? 'Hingga' : 'Berakhir'} ${expires.day}/${expires.month}/${expires.year}',
+                                        textAlign: TextAlign.right,
+                                        style: TextStyle(
+                                            color: active
+                                                ? const Color(0xff535964)
+                                                : MalvaColors.danger,
+                                            fontSize: 11),
+                                      ))),
+                            ],
+                          ]),
+                      const SizedBox(height: 6),
+                      LinearProgressIndicator(
+                        value: package.totalSessions <= 0
+                            ? 0
+                            : (remaining / package.totalSessions)
+                                .clamp(0.0, 1.0),
+                        borderRadius: BorderRadius.circular(8),
+                        minHeight: 7,
+                        color: MalvaColors.orchid,
+                        backgroundColor: const Color(0xfff2e4f8),
+                      ),
+                    ]),
+                  ),
+                ),
+              ])),
+        ]),
         Row(children: [
           const Icon(Icons.star_rounded, color: MalvaColors.amber, size: 18),
           const SizedBox(width: 5),
@@ -1387,18 +1446,39 @@ class _ProfessionalLinkCard extends StatelessWidget {
             Expanded(
                 child: FilledButton.icon(
                     onPressed: onChat,
-                    style: compactFilledButtonStyle,
+                    style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 34),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9)),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        textStyle: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w800)),
                     icon: const Icon(Icons.chat_bubble_rounded, size: 15),
                     label: const Text('Chat'))),
             const SizedBox(width: 8),
             Expanded(
                 child: OutlinedButton.icon(
                     onPressed: onManage,
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 34),
+                        side: careCardBorder,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9)),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        textStyle: const TextStyle(fontSize: 12)),
                     icon: const Icon(Icons.share_rounded, size: 15),
                     label: const Text('Bagikan data'))),
           ]),
+          const SizedBox(height: 3),
           FilledButton.tonalIcon(
               onPressed: onSchedule,
+              style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 33),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(9)),
+                  foregroundColor: MalvaColors.plum,
+                  textStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w800)),
               icon: const Icon(Icons.calendar_today_outlined, size: 16),
               label: const Text('Jadwalkan Sesi')),
         ],

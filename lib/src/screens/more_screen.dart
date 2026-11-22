@@ -11,6 +11,7 @@ import 'assessment_history_screen.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/care_reference_widgets.dart';
 import 'consent_management_screen.dart';
 import 'admin/admin_panel_screen.dart';
 import 'safety/emergency_contacts_screen.dart';
@@ -40,72 +41,81 @@ class MoreScreen extends ConsumerStatefulWidget {
 class _MoreScreenState extends ConsumerState<MoreScreen> {
   @override
   Widget build(BuildContext context) {
+    final session = widget.session ?? ref.watch(currentSessionProvider);
+    final name = session?.displayName.trim().isNotEmpty == true
+        ? session!.displayName
+        : ref.watch(malvaStoreProvider).patient.name;
+    void open(Widget page) =>
+        Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+    void openProfile() => open(const ProfileScreen());
+    void openNotifications() => open(
+        NotificationsScreen(session: session, apiClient: widget.apiClient));
     return Scaffold(
+      backgroundColor: carePageColor,
       body: ListView(
         padding: EdgeInsets.zero,
         children: [
-          GradientHeader(
+          CarePageHeader(
             title: 'Lainnya',
-            subtitle: 'Assessment, goals, record, dan pengaturan',
-            trailing: IconButton(
-              tooltip: 'Keluar',
-              onPressed: widget.onLogout,
-              icon: const Icon(Icons.logout_rounded, color: Colors.white),
-            ),
+            subtitle: 'Kelola profil, pengaturan, dan data.',
+            name: name,
+            onNotifications: openNotifications,
+            onProfile: openProfile,
           ),
           Padding(
             padding: const EdgeInsets.all(18),
             child: Column(
               children: [
-                ActionTile(
-                    icon: Icons.notifications_rounded,
-                    title: 'Notifikasi',
-                    subtitle: 'Lihat notifikasi Malva',
-                    color: MalvaColors.seed,
-                    onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => NotificationsScreen(
-                                session: widget.session,
-                                apiClient: widget.apiClient)))),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.contact_emergency_rounded,
-                  title: 'Kontak Darurat',
-                  subtitle: 'Kelola kontak untuk Silent SOS',
-                  color: MalvaColors.amber,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const EmergencyContactsScreen()),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.settings_rounded,
-                  title: 'Settings',
-                  subtitle: 'Akun, notifikasi, dan keamanan',
-                  color: MalvaColors.seed,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => SettingsScreen(
-                            onLogout: widget.onLogout,
-                            session: widget.session)),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ActionTile(
-                  icon: Icons.security_rounded,
-                  title: 'Consent Management',
-                  subtitle: 'Kelola berbagi data dengan profesional',
-                  color: MalvaColors.orchid,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const ConsentManagementScreen()),
-                  ),
-                ),
+                _MoreCard(
+                    child: Row(children: [
+                  InitialAvatar(
+                      name: name, color: MalvaColors.seed, radius: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                      child: Text(name,
+                          style: const TextStyle(
+                              fontSize: 17, fontWeight: FontWeight.w900))),
+                ])),
+                const SizedBox(height: 8),
+                const SectionLabel('Pengaturan'),
+                _MoreCard(
+                    child: Column(children: [
+                  _ExportTile(
+                      icon: Icons.edit_rounded,
+                      title: 'Edit Profil',
+                      subtitle: 'Foto dan informasi pribadi',
+                      color: MalvaColors.seed,
+                      onTap: openProfile),
+                  const Divider(height: 12),
+                  _ExportTile(
+                      icon: Icons.notifications_rounded,
+                      title: 'Notifikasi',
+                      subtitle: 'Lihat notifikasi Malva',
+                      color: MalvaColors.seed,
+                      onTap: openNotifications),
+                  const Divider(height: 12),
+                  _ExportTile(
+                      icon: Icons.contact_emergency_rounded,
+                      title: 'Kontak Darurat',
+                      subtitle: 'Kelola kontak untuk Silent SOS',
+                      color: MalvaColors.amber,
+                      onTap: () => open(const EmergencyContactsScreen())),
+                  const Divider(height: 12),
+                  _ExportTile(
+                      icon: Icons.settings_rounded,
+                      title: 'Settings',
+                      subtitle: 'Akun, notifikasi, dan keamanan',
+                      color: MalvaColors.seed,
+                      onTap: () => open(SettingsScreen(
+                          onLogout: widget.onLogout, session: widget.session))),
+                  const Divider(height: 12),
+                  _ExportTile(
+                      icon: Icons.security_rounded,
+                      title: 'Consent Management',
+                      subtitle: 'Kelola berbagi data dengan profesional',
+                      color: MalvaColors.orchid,
+                      onTap: () => open(const ConsentManagementScreen())),
+                ])),
                 if (widget.session?.role == UserRole.admin) ...[
                   const SizedBox(height: 10),
                   ActionTile(
@@ -145,6 +155,20 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 18),
+                _MoreCard(
+                    child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const CircleAvatar(
+                      backgroundColor: Color(0xfffae7ef),
+                      child:
+                          Icon(Icons.logout_rounded, color: Color(0xffa62c60))),
+                  title: const Text('Keluar',
+                      style: TextStyle(
+                          color: Color(0xffa62c60),
+                          fontWeight: FontWeight.w800)),
+                  onTap: widget.onLogout,
+                )),
               ],
             ),
           ),
@@ -157,6 +181,24 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
 // ============================================================
 // EXPORT SECTION WIDGET
 // ============================================================
+
+class _MoreCard extends StatelessWidget {
+  const _MoreCard({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: careSoftShadow),
+        child: Material(
+          type: MaterialType.transparency,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(padding: const EdgeInsets.all(14), child: child),
+        ),
+      );
+}
 
 class _ExportSection extends ConsumerStatefulWidget {
   @override
@@ -296,7 +338,7 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
         child: Text('Ekspor PDF belum tersedia pada perangkat ini.'),
       );
     }
-    return SoftCard(
+    return _MoreCard(
       child: AbsorbPointer(
         absorbing: _exporting,
         child: Column(

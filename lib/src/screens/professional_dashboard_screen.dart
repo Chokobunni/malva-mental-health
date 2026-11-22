@@ -1017,6 +1017,7 @@ class _ProfessionalHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
+        width: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
               colors: [Color(0xFF54206F), Color(0xFF8A3AA2), Color(0xFFC97BCC)],
@@ -1068,50 +1069,56 @@ class _ProfessionalHeader extends StatelessWidget {
                                                   fontSize: 12)),
                                         ])))),
                         const Spacer(),
-                        _headerAction(
-                            'Refresh manual',
-                            onRefresh,
-                            syncing
-                                ? const SizedBox.square(
-                                    dimension: 16,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2, color: Colors.white))
-                                : const Icon(Icons.refresh_rounded, size: 19)),
-                        const SizedBox(width: 8),
-                        _headerAction('Notifikasi', onNotifications,
-                            const Icon(Icons.notifications_outlined, size: 19)),
-                        const SizedBox(width: 10),
-                        Tooltip(
-                            message: 'Profil Profesional',
-                            child: InkWell(
-                                onTap: onProfile,
-                                borderRadius: BorderRadius.circular(24),
-                                child: Container(
-                                    width: 42,
-                                    height: 42,
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                            color: Colors.white
-                                                .withValues(alpha: .6),
-                                            width: 2)),
-                                    child: Stack(children: [
-                                      Center(
-                                          child: Text(_initials(displayName),
-                                              style: const TextStyle(
-                                                  fontSize: 15,
-                                                  color: Colors.white,
-                                                  fontWeight:
-                                                      FontWeight.w600))),
-                                      if (online)
-                                        const Positioned(
-                                            right: 0,
-                                            bottom: 0,
-                                            child: Icon(Icons.circle,
-                                                color: MalvaColors.mint,
-                                                size: 8)),
-                                    ]))))
+                        Row(mainAxisSize: MainAxisSize.min, children: [
+                          _headerAction(
+                              'Refresh manual',
+                              onRefresh,
+                              syncing
+                                  ? const SizedBox.square(
+                                      dimension: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.white))
+                                  : const Icon(Icons.refresh_rounded,
+                                      size: 19)),
+                          const SizedBox(width: 8),
+                          _headerAction(
+                              'Notifikasi',
+                              onNotifications,
+                              const Icon(Icons.notifications_outlined,
+                                  size: 19)),
+                          const SizedBox(width: 10),
+                          Tooltip(
+                              message: 'Profil Profesional',
+                              child: InkWell(
+                                  onTap: onProfile,
+                                  borderRadius: BorderRadius.circular(24),
+                                  child: Container(
+                                      width: 42,
+                                      height: 42,
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                              color: Colors.white
+                                                  .withValues(alpha: .6),
+                                              width: 2)),
+                                      child: Stack(children: [
+                                        Center(
+                                            child: Text(_initials(displayName),
+                                                style: const TextStyle(
+                                                    fontSize: 15,
+                                                    color: Colors.white,
+                                                    fontWeight:
+                                                        FontWeight.w600))),
+                                        if (online)
+                                          const Positioned(
+                                              right: 0,
+                                              bottom: 0,
+                                              child: Icon(Icons.circle,
+                                                  color: MalvaColors.mint,
+                                                  size: 8)),
+                                      ])))),
+                        ]),
                       ]),
                       const SizedBox(height: 24),
                       Text(title,
