@@ -156,8 +156,21 @@ func (s *Server) getDiaryImage(w http.ResponseWriter, r *http.Request, claims au
 			}
 		}
 		if !referenced {
-			http.NotFound(w, r)
-			return
+			notes, err := s.store.DiaryChatSnapshotNotes(r.Context(), patientID, claims.Subject)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, errors.New("gagal memeriksa riwayat gambar diary"))
+				return
+			}
+			for _, note := range notes {
+				if diaryNoteReferencesMedia(note, r.URL.Path) {
+					referenced = true
+					break
+				}
+			}
+			if !referenced {
+				http.NotFound(w, r)
+				return
+			}
 		}
 	}
 	file, err := os.Open(filepath.Join(s.privateDiaryDir(), patientID, filename))

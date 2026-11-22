@@ -1360,6 +1360,29 @@ type ChatAccess struct {
 	SessionEndsAt *time.Time `json:"session_ends_at,omitempty"`
 }
 
+// careSessionPackageValidSQL excludes schedules whose package has expired.
+const careSessionPackageValidSQL = `(cs.package_id IS NULL OR EXISTS (
+    SELECT 1 FROM care_packages original
+    JOIN care_packages usable ON usable.id = COALESCE(original.merged_into, original.id)
+    WHERE original.id = cs.package_id
+      AND usable.patient_id = cs.patient_id AND usable.professional_id = cs.professional_id
+      AND usable.status = 'active' AND usable.expires_at > $3
+))`
+
+// These predicates share the same pair alias and clock parameter.
+const activeCarePackageSQL = `EXISTS (SELECT 1 FROM care_packages cp
+    WHERE cp.patient_id = l.patient_id AND cp.professional_id = l.professional_id
+    AND cp.status = 'active' AND cp.expires_at > $3)`
+
+const openCareSessionSQL = `SELECT 1 FROM care_sessions cs
+    WHERE cs.patient_id = l.patient_id AND cs.professional_id = l.professional_id
+    AND cs.status = 'scheduled'
+    AND cs.scheduled_at + make_interval(mins => cs.duration_minutes) > $3
+    AND ` + careSessionPackageValidSQL
+
+const activeCareAccessSQL = `(` + activeCarePackageSQL + ` OR EXISTS (` +
+	openCareSessionSQL + ` AND cs.scheduled_at <= $3))`
+
 // sessionWindow sesi dianggap "berjalan" dari 10 menit sebelum mulai sampai
 // TEPAT durasi sesi berakhir (start + duration_minutes) — tanpa kelonggaran
 // tambahan, karena chat/Meet harus tertutup begitu waktu sesi habis.
@@ -1386,10 +1409,11 @@ func (s *Store) ChatAccessFor(ctx context.Context, patientID, professionalID, se
 	var duration int
 	var status string
 	err = s.db.QueryRowContext(ctx, `SELECT id, scheduled_at, duration_minutes, status
-		FROM care_sessions
-		WHERE patient_id = $1 AND professional_id = $2
-		  AND status = 'scheduled'
-		  AND scheduled_at + (duration_minutes || ' minutes')::interval > $3
+		FROM care_sessions cs
+		WHERE cs.patient_id = $1 AND cs.professional_id = $2
+		  AND cs.status = 'scheduled'
+		  AND cs.scheduled_at + make_interval(mins => cs.duration_minutes) > $3
+		  AND `+careSessionPackageValidSQL+`
 		ORDER BY CASE WHEN scheduled_at - interval '10 minutes' <= $3 THEN 0 ELSE 1 END,
 		  scheduled_at ASC
 		LIMIT 1`, patientID, professionalID, now).Scan(&id, &start, &duration, &status)
@@ -1429,14 +1453,9 @@ func (s *Store) ChatAccessFor(ctx context.Context, patientID, professionalID, se
 // PatientDataAccessActive is narrower than chat's ten-minute early join window:
 // saved consent preferences become effective only during the scheduled duration.
 func (s *Store) PatientDataAccessActive(ctx context.Context, patientID, professionalID string) (bool, error) {
-	_, hasPackage, err := s.ActivePackageBetween(ctx, patientID, professionalID)
-	if err != nil || hasPackage {
-		return hasPackage, err
-	}
 	var active bool
-	err = s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM care_sessions
-		WHERE patient_id=$1 AND professional_id=$2 AND status='scheduled'
-		AND scheduled_at <= $3 AND scheduled_at + make_interval(mins => duration_minutes) > $3)`,
+	err := s.db.QueryRowContext(ctx, `SELECT `+activeCareAccessSQL+`
+		FROM (SELECT $1::uuid AS patient_id, $2::uuid AS professional_id) l`,
 		patientID, professionalID, clock.Now()).Scan(&active)
 	return active, err
 }
@@ -1471,7 +1490,9 @@ func (s *Store) PairRelation(ctx context.Context, patientID, professionalID stri
 		    AND status IN ('pending_payment','scheduled','completed','no_show')) +
 		(SELECT COUNT(*) FROM care_packages
 		  WHERE patient_id = $1 AND professional_id = $2
-		    AND status IN ('pending_payment','active'))
+		    AND status IN ('pending_payment','active','expired','completed','merged','cancelled')) +
+		(SELECT COUNT(*) FROM chat_messages
+		  WHERE patient_id = $1 AND professional_id = $2 AND deleted_at IS NULL)
 	)`, patientID, professionalID).Scan(&n)
 	return n > 0, err
 }

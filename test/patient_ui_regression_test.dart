@@ -113,7 +113,18 @@ MalvaApiClient _careApi(String photoUrl) => MalvaApiClient(
       httpClient: _FakeClient((request) async {
         switch (request.url.path) {
           case '/v1/care-packages':
-            return _json({'packages': <dynamic>[]});
+            return _json({
+              'packages': [
+                {
+                  'id': 'avatar-package',
+                  'professional_id': 'pro_user_1',
+                  'status': 'active',
+                  'total_sessions': 8,
+                  'remaining_sessions': 6,
+                  'expires_at': '2099-12-18T10:00:00+07:00'
+                }
+              ]
+            });
           case '/v1/care-sessions':
             return _json({'sessions': <dynamic>[]});
           case '/v1/patient-professional-links':

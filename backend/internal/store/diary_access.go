@@ -30,15 +30,7 @@ const diaryLegacyAccess = `EXISTS (
 	SELECT 1 FROM patient_data_consents c
 	WHERE c.patient_id = l.patient_id AND c.professional_id = l.professional_id
 	AND c.share_mood_diary
-) AND (
-	EXISTS (SELECT 1 FROM care_packages cp
-		WHERE cp.patient_id = l.patient_id AND cp.professional_id = l.professional_id
-		AND cp.status = 'active' AND cp.expires_at > $3)
-	OR EXISTS (SELECT 1 FROM care_sessions cs
-		WHERE cs.patient_id = l.patient_id AND cs.professional_id = l.professional_id
-		AND cs.status = 'scheduled' AND cs.scheduled_at <= $3
-		AND cs.scheduled_at + make_interval(mins => cs.duration_minutes) > $3)
-)`
+) AND ` + activeCareAccessSQL
 
 // The caller supplies the prospective reader as $2 and the current time as $3.
 const diaryProfessionalAccess = `EXISTS (
@@ -99,6 +91,33 @@ func scanDiaryEntries(rows *sql.Rows) ([]DiaryEntry, error) {
 	return items, rows.Err()
 }
 
+// DiaryChatSnapshotNotes returns only legacy snapshots sent by the media owner
+// to this professional. Reference-only messages still use revocable diary access.
+func (s *Store) DiaryChatSnapshotNotes(ctx context.Context, patientID, professionalID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+        SELECT COALESCE(attachment_meta #>> '{diary,note}', attachment_meta #>> '{diary,content}',
+            attachment_meta ->> 'note', attachment_meta ->> 'content', text)
+        FROM chat_messages
+        WHERE patient_id = $1 AND professional_id = $2 AND sender_id = patient_id
+          AND kind = 'diary' AND deleted_at IS NULL
+          AND EXISTS (SELECT 1 FROM users p WHERE p.id = $2 AND p.role = 'professional' AND p.disabled_at IS NULL)
+          AND NOT (COALESCE(attachment_meta,'{}'::jsonb) ? 'diary_id')
+    `, patientID, professionalID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var notes []string
+	for rows.Next() {
+		var note string
+		if err := rows.Scan(&note); err != nil {
+			return nil, err
+		}
+		notes = append(notes, note)
+	}
+	return notes, rows.Err()
+}
+
 type diaryAccessQueries interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
@@ -156,8 +175,8 @@ func getDiaryAccess(ctx context.Context, queries diaryAccessQueries, patientID, 
 	}
 	rows, err := queries.QueryContext(ctx, `SELECT l.professional_id, p.display_name
 		FROM `+diaryLinkedProfessionals+`
-		WHERE l.patient_id = $1 AND `+diaryActiveLink+`
-		ORDER BY p.display_name, l.professional_id`, patientID)
+		WHERE l.patient_id = $1 AND $2::uuid IS NOT NULL AND `+diaryActiveLink+` AND `+activeCareAccessSQL+`
+		ORDER BY p.display_name, l.professional_id`, patientID, diaryID, clock.Now())
 	if err != nil {
 		return DiaryAccess{}, err
 	}
@@ -192,8 +211,8 @@ func (s *Store) SetDiaryRecipient(ctx context.Context, patientID, diaryID, profe
 		var eligible bool
 		err := tx.QueryRowContext(ctx, `SELECT EXISTS (
 			SELECT 1 FROM `+diaryLinkedProfessionals+`
-			WHERE l.patient_id = $1 AND l.professional_id = $2 AND `+diaryActiveLink+`
-		)`, patientID, professionalID).Scan(&eligible)
+			WHERE l.patient_id = $1 AND l.professional_id = $2 AND `+diaryActiveLink+` AND `+activeCareAccessSQL+`
+		)`, patientID, professionalID, clock.Now()).Scan(&eligible)
 		if err != nil {
 			return DiaryAccess{}, false, err
 		}

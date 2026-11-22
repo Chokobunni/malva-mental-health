@@ -730,32 +730,56 @@ func (s *Store) ListPatientProfessionalLinks(ctx context.Context, userID, role s
 		return nil, errors.New("user_id is required")
 	}
 
-	where := "l.patient_id = $1"
+	ownerColumn := "patient_id"
 	if role == "professional" {
-		where = "l.professional_id = $1"
+		ownerColumn = "professional_id"
 	} else if role != "patient" {
 		return nil, errors.New("role must be patient or professional")
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT l.patient_id,
-		       l.professional_id,
-		       pp.professional_id,
-		       patient.display_name,
-		       professional.display_name,
-		       COALESCE((SELECT pc.photo_intro_url
-		                   FROM professional_credentials pc
-		                  WHERE pc.user_id = l.professional_id), '') AS professional_photo_url,
-		       l.status,
-		       l.created_at
-		FROM patient_professional_links l
-		JOIN users patient ON patient.id = l.patient_id
-		JOIN users professional ON professional.id = l.professional_id
-		JOIN professional_profiles pp ON pp.user_id = l.professional_id
-		WHERE `+where+`
-		  AND l.status = 'active'
-		ORDER BY l.created_at DESC
-	`, userID)
+        WITH evidence AS (
+            SELECT patient_id, professional_id, created_at FROM patient_professional_links
+            WHERE `+ownerColumn+` = $1 AND status IN ('active','inactive')
+            UNION ALL
+            SELECT patient_id, professional_id, created_at FROM care_sessions
+            WHERE `+ownerColumn+` = $1 AND status NOT IN ('pending_payment','expired_unpaid')
+            UNION ALL
+            SELECT patient_id, professional_id, created_at FROM care_packages
+            WHERE `+ownerColumn+` = $1 AND status NOT IN ('pending_payment','merged')
+            UNION ALL
+            SELECT patient_id, professional_id, created_at FROM chat_messages
+            WHERE `+ownerColumn+` = $1 AND deleted_at IS NULL
+        ), pairs AS (
+            SELECT patient_id, professional_id, MIN(created_at) AS created_at
+            FROM evidence GROUP BY patient_id, professional_id
+        )
+        SELECT l.patient_id, l.professional_id, pp.professional_id,
+               patient.display_name, professional.display_name,
+               COALESCE(pc.photo_intro_url, ''),
+               CASE WHEN `+activeCarePackageSQL+` OR EXISTS (`+openCareSessionSQL+`) THEN 'active'
+                    WHEN link.status = 'active' AND NOT (
+                        EXISTS (SELECT 1 FROM care_packages cp
+                            WHERE cp.patient_id = l.patient_id AND cp.professional_id = l.professional_id
+                            AND cp.status <> 'pending_payment')
+                        OR EXISTS (SELECT 1 FROM care_sessions cs
+                            WHERE cs.patient_id = l.patient_id AND cs.professional_id = l.professional_id
+                            AND cs.status NOT IN ('pending_payment','expired_unpaid'))
+                    ) THEN 'active'
+                    ELSE 'expired' END,
+               COALESCE(link.created_at, l.created_at)
+        FROM pairs l
+        LEFT JOIN patient_professional_links link USING (patient_id, professional_id)
+        JOIN users patient ON patient.id = l.patient_id
+        JOIN users professional ON professional.id = l.professional_id
+        JOIN professional_profiles pp ON pp.user_id = l.professional_id
+        LEFT JOIN professional_credentials pc ON pc.user_id = l.professional_id
+        WHERE ($2 IN ('patient','professional'))
+          AND COALESCE(link.status, 'inactive') IN ('active','inactive')
+          AND patient.role = 'patient' AND professional.role = 'professional'
+          AND patient.disabled_at IS NULL AND professional.disabled_at IS NULL
+        ORDER BY COALESCE(link.created_at, l.created_at) DESC, l.professional_id, l.patient_id
+    `, userID, role, clock.Now())
 	if err != nil {
 		return nil, err
 	}

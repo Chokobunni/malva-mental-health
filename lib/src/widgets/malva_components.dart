@@ -146,9 +146,11 @@ class SoftCard extends StatelessWidget {
     this.tone,
     this.radius = 18,
     this.bordered = false,
+    this.outline,
   });
 
   final Widget child;
+  final BorderSide? outline;
   final EdgeInsetsGeometry padding;
   final Color? color;
   final VoidCallback? onTap;
@@ -212,7 +214,8 @@ class SoftCard extends StatelessWidget {
       // Hanya perlu memotong saat ada aksen agar garis mengikuti sudut
       // membulat; tanpa aksen tetap Clip.none supaya tampilan lama identik.
       clipBehavior: accent != null ? Clip.antiAlias : Clip.none,
-      shape: RoundedRectangleBorder(borderRadius: radiusBorder),
+      shape: RoundedRectangleBorder(
+          borderRadius: radiusBorder, side: outline ?? BorderSide.none),
       child: body,
     );
     if (onTap == null) return card;

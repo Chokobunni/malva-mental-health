@@ -11,22 +11,6 @@ import 'package:malva_mental_health/src/screens/my_care_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
 
-// ============================================================
-// FILTER STATUS SESI DI MYCARE
-//
-// Yang dikunci:
-//   - Chip filter status di atas daftar SESI, dijalankan di klien atas data
-//     yang sudah dimuat (tanpa round-trip tambahan).
-//   - Chip PER TAB: tab Jadwal punya Semua/Aktif/Dibatalkan dengan jumlah
-//     yang nyata; tab Riwayat punya Selesai/Dibatalkan/Tidak hadir
-//     (plus "Aktif" bila ada sesi `pending_payment`, yang juga masuk _past).
-//   - State filter DIPISAH per tab: pilihan "Dibatalkan" di Riwayat tidak
-//     boleh membawa empty state yang salah ke tab Jadwal.
-//   - "Dibatalkan" hanya menampilkan sesi batal; filter tanpa hasil
-//     menampilkan empty state SPESIFIK; "Semua" mengembalikan seluruh sesi.
-//   - Kartu paket (tab "Paket") tidak ikut difilter.
-// ============================================================
-
 const _patientSession = AuthSession(
   role: UserRole.patient,
   identifier: 'pasien@malva.app',
@@ -80,7 +64,6 @@ Map<String, dynamic> _tidakHadir() => _sessionJson(
       scheduledAt: '2026-01-07T10:00:00+07:00',
     );
 
-/// Sesi `pending_payment` TIDAK berstatus `scheduled`, jadi masuk tab Riwayat.
 Map<String, dynamic> _menungguBayar() => _sessionJson(
       id: 'sess_bayar',
       status: 'pending_payment',
@@ -140,7 +123,7 @@ Future<void> _tapFilter(WidgetTester tester, String label) async {
 
 void main() {
   testWidgets(
-      'future session card explains check-in and retains package action',
+      'future session card explains check-in and offers consultation actions',
       (tester) async {
     final upcoming = _aktif()
       ..['session_type'] = 'video'
@@ -153,7 +136,8 @@ void main() {
     expect(find.textContaining('Video'), findsOneWidget);
     expect(find.textContaining('Paket'), findsWidgets);
     expect(find.text('Check-in dibuka 10 menit sebelum sesi.'), findsOneWidget);
-    expect(find.text('Kelola paket'), findsOneWidget);
+    expect(find.text('Reschedule'), findsOneWidget);
+    expect(find.text('Batal'), findsOneWidget);
     expect(find.text('Kehadiran saya'), findsNothing);
     expect(find.text('Gabung'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -170,6 +154,7 @@ void main() {
     await tester.pumpWidget(_wrap(api));
     await tester.pumpAndSettle();
     await _openTab(tester, 'Riwayat');
+    await _tapFilter(tester, 'Dibatalkan 1');
     expect(find.textContaining('Chat'), findsOneWidget);
     expect(find.text('Ringkasan: Lanjutkan latihan napas.'), findsOneWidget);
     expect(find.text('Alasan: Jadwal berbenturan.'), findsOneWidget);
@@ -189,10 +174,10 @@ void main() {
     await tester.pumpAndSettle();
     await _openTab(tester, 'Riwayat');
 
-    // Sebelum difilter: ketiga sesi riwayat tampil.
+    // Default Riwayat adalah Selesai.
     expect(find.text('dr. Selesai'), findsOneWidget);
-    expect(find.text('dr. Batal'), findsOneWidget);
-    expect(find.text('dr. Tidak Hadir'), findsOneWidget);
+    expect(find.text('dr. Batal'), findsNothing);
+    expect(find.text('dr. Tidak Hadir'), findsNothing);
 
     await _tapFilter(tester, 'Dibatalkan 1');
 
@@ -214,13 +199,10 @@ void main() {
     await tester.pumpAndSettle();
     await _openTab(tester, 'Riwayat');
 
-    await _tapFilter(tester, 'Tidak hadir');
+    await _tapFilter(tester, 'Tidak Hadir 0');
 
-    expect(find.text('Belum ada sesi tidak hadir'), findsOneWidget,
-        reason: 'filter kosong harus menjelaskan keadaannya');
-    expect(find.text('Belum ada riwayat sesi'), findsNothing,
-        reason:
-            'empty state generik tidak boleh dipakai saat filter spesifik aktif');
+    expect(find.text('Belum ada riwayat sesi'), findsOneWidget);
+    expect(find.text('0 sesi'), findsOneWidget);
   });
 
   testWidgets('filter "Semua" mengembalikan seluruh sesi', (tester) async {
@@ -251,7 +233,7 @@ void main() {
     await tester.pumpWidget(_wrap(api));
     await tester.pumpAndSettle();
 
-    // Tab awal = Paket.
+    await _openTab(tester, 'Terhubung');
     expect(find.widgetWithText(ChoiceChip, 'Semua 4'), findsNothing);
     expect(find.widgetWithText(ChoiceChip, 'Dibatalkan 1'), findsNothing);
     expect(find.text('Belum ada paket'), findsOneWidget);
@@ -261,28 +243,17 @@ void main() {
   // Chip PER TAB + state filter terpisah
   // ------------------------------------------------------------------
 
-  testWidgets('tab Jadwal keeps cancelled filter with truthful zero count',
-      (tester) async {
+  testWidgets('Jadwal only shows upcoming consultations', (tester) async {
     final api = MalvaApiClient(
         baseUrl: 'http://backend.test',
         httpClient:
             _careClient([_aktif(), _selesai(), _batal(), _tidakHadir()]));
     await tester.pumpWidget(_wrap(api));
-    await tester.pumpAndSettle();
     await _openTab(tester, 'Jadwal');
-
-    expect(find.widgetWithText(ChoiceChip, 'Semua 1'), findsOneWidget);
-    expect(find.widgetWithText(ChoiceChip, 'Aktif 1'), findsOneWidget);
-    expect(find.widgetWithText(ChoiceChip, 'Dibatalkan 0'), findsOneWidget);
-    expect(find.widgetWithText(ChoiceChip, 'Tidak hadir'), findsNothing,
-        reason: 'tab Jadwal tidak pernah memuat sesi tidak hadir');
-    expect(find.widgetWithText(ChoiceChip, 'Selesai'), findsNothing,
-        reason: 'tab Jadwal tidak pernah memuat sesi selesai');
-    await _tapFilter(tester, 'Dibatalkan 0');
-    expect(find.text('Belum ada sesi yang dibatalkan'), findsOneWidget);
+    expect(find.text('dr. Aktif'), findsOneWidget);
+    expect(find.text('1 sesi'), findsOneWidget);
     expect(find.text('dr. Batal'), findsNothing);
-    await _openTab(tester, 'Riwayat');
-    expect(find.text('dr. Batal'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Dibatalkan 0'), findsNothing);
   });
 
   testWidgets('pilihan "Dibatalkan" di Riwayat tidak bocor ke tab Jadwal',
@@ -305,8 +276,7 @@ void main() {
     expect(find.text('dr. Aktif'), findsOneWidget);
     expect(find.text('Belum ada sesi yang dibatalkan'), findsNothing,
         reason: 'empty state milik tab Riwayat tidak boleh muncul di Jadwal');
-    expect(find.widgetWithText(ChoiceChip, 'Semua 1'), findsOneWidget,
-        reason: 'chip "Semua" di Jadwal harus terpilih kembali');
+    expect(find.widgetWithText(ChoiceChip, 'Semua 1'), findsNothing);
   });
 
   testWidgets('state filter tiap tab independen dan bertahan saat berpindah',
@@ -320,7 +290,7 @@ void main() {
 
     // Riwayat: pilih "Tidak hadir".
     await _openTab(tester, 'Riwayat');
-    await _tapFilter(tester, 'Tidak hadir 1');
+    await _tapFilter(tester, 'Tidak Hadir 1');
     expect(find.text('dr. Tidak Hadir'), findsOneWidget);
     expect(find.text('dr. Batal'), findsNothing);
 
@@ -337,23 +307,19 @@ void main() {
             'filter Riwayat tidak boleh ter-reset oleh kunjungan ke Jadwal');
   });
 
-  testWidgets('sesi pending_payment (masuk tab Riwayat) mendapat chip Aktif',
+  testWidgets(
+      'sesi pending_payment tampil di Jadwal, tanpa dihitung dalam riwayat',
       (tester) async {
-    // pending_payment bukan `scheduled`, jadi ia ada di Riwayat. Tanpa chip
-    // "Aktif" di sana, sesi itu hanya terlihat di "Semua" dan tak bisa difilter.
     final api = MalvaApiClient(
         baseUrl: 'http://backend.test',
         httpClient: _careClient([_aktif(), _menungguBayar(), _selesai()]));
     await tester.pumpWidget(_wrap(api));
-    await tester.pumpAndSettle();
-    await _openTab(tester, 'Riwayat');
-
-    expect(find.widgetWithText(ChoiceChip, 'Aktif 1'), findsOneWidget,
-        reason: 'chip Aktif muncul karena ada sesi pending_payment di Riwayat');
-
-    await _tapFilter(tester, 'Aktif 1');
+    await _openTab(tester, 'Jadwal');
     expect(find.text('dr. Menunggu Bayar'), findsOneWidget);
-    expect(find.text('dr. Selesai'), findsNothing);
+    await _openTab(tester, 'Riwayat');
+    await _tapFilter(tester, 'Semua 1');
+    expect(find.text('dr. Menunggu Bayar'), findsNothing);
+    expect(find.text('dr. Selesai'), findsOneWidget);
   });
 }
 

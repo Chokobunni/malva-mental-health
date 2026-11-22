@@ -159,10 +159,11 @@ class _PatientShellState extends ConsumerState<PatientShell>
       final links = await apiClient.listPatientProfessionalLinks(
         accessToken: accessToken,
       );
-      if (links.isNotEmpty && mounted && generation == _realtimeGeneration) {
+      final active = links.where((link) => link.status == 'active').firstOrNull;
+      if (mounted && generation == _realtimeGeneration) {
         setState(() {
-          _professionalUserId = links.first.professionalUserId;
-          _professionalName = links.first.professionalDisplayName;
+          _professionalUserId = active?.professionalUserId ?? '';
+          _professionalName = active?.professionalDisplayName ?? 'Profesional';
         });
       }
     } on Object catch (_) {}

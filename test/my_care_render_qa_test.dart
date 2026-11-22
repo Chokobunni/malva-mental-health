@@ -186,18 +186,22 @@ void main() {
       });
     }
 
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
+    await tester.pumpAndSettle();
     await capture('terhubung');
     await tester.tap(find.widgetWithText(ChoiceChip, 'Jadwal'));
     await tester.pumpAndSettle();
     await capture('jadwal');
-    await tester.tap(find.text('Kelola paket').first);
+    await tester.tap(find.byTooltip('Paket saya'));
     await tester.pumpAndSettle();
     await capture('paket-saya');
     tester.view.physicalSize = const Size(390, 755);
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Jadwalkan Sesi'));
+    await tester.tap(find.byTooltip('Profesional terhubung'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Jadwalkan Sesi'));
+    await tester.ensureVisible(find.text('Jadwalkan Sesi').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Jadwalkan Sesi').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('14:00'));
     await tester.pumpAndSettle();

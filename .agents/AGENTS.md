@@ -414,6 +414,11 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Rujukan: [check-in](skills/health_checkin_module.md),
   [screening](skills/screening_module.md), [therapy/chat](skills/therapy_chat_module.md).
 
+## Kedaluwarsa relasi dan riwayat chat
+
+- Paket yang melewati `expires_at` langsung kehilangan hak berbagi dan tidak menjadi bukti relasi aktif. Sesi sekali bayar memberi hak berbagi dalam durasi jadwalnya.
+- Periksa kelayakan saat menampilkan dan menambah penerima diary. Riwayat Messages memakai pasangan percakapan dan mempertahankan foto atau sketsa yang pernah dikirim. Akses diary langsung tetap dapat dicabut oleh pasien.
+
 ## Commit
 
 - Format **Conventional Commits**: `feat|fix|refactor|chore|docs|perf|seo|infra: <ringkas>`.

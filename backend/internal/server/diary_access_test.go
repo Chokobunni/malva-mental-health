@@ -78,6 +78,9 @@ func TestDiaryRecipientAccessAndRevocation(t *testing.T) {
 	ctx := context.Background()
 	second := createIdentityTestUser(t, f.db, f.st, "professional", nil)
 	unconnected := createIdentityTestUser(t, f.db, f.st, "professional", nil)
+	secondCare := f
+	secondCare.prof = second
+	grantContinuousTherapyAccess(t, secondCare)
 	if _, err := f.st.LinkPatientToProfessional(ctx, f.patient.ID, second.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -296,6 +299,7 @@ func TestDiaryLegacyAccessConvertsOnRecipientChange(t *testing.T) {
 
 func TestDiaryAccessChangeRealtimeIsRecipientOnly(t *testing.T) {
 	f := newTherapyConsentFixture(t)
+	grantContinuousTherapyAccess(t, f)
 	connected := clinicalFixture{therapyConsentFixture: f}
 	recipientConn := clinicalSocket(t, connected, f.prof.ID, "professional")
 	patientConn := clinicalSocket(t, connected, f.patient.ID, "patient")

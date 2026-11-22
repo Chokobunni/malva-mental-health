@@ -101,7 +101,18 @@ class _Client extends http.BaseClient {
         ]
       };
     } else if (request.url.path == '/v1/care-packages') {
-      body = {'packages': []};
+      body = {
+        'packages': [
+          {
+            'id': 'review-package',
+            'professional_id': 'doctor',
+            'status': 'active',
+            'total_sessions': 8,
+            'remaining_sessions': 6,
+            'expires_at': '2099-12-18T10:00:00+07:00'
+          }
+        ]
+      };
     } else if (request.url.path == '/v1/patient-professional-links') {
       body = {
         'links': [
@@ -315,8 +326,8 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
     await tester.pumpAndSettle();
     expect(find.textContaining('4.5 / 5'), findsOneWidget);
-    expect(find.text('Lihat profil ›'), findsOneWidget);
-    await tester.tap(find.text('Lihat profil ›'));
+    expect(find.widgetWithText(TextButton, 'Dokter Uji'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Dokter Uji'));
     await tester.pumpAndSettle();
     expect(find.byType(DoctorProfileScreen), findsOneWidget);
     expect(

@@ -1,5 +1,18 @@
 # API Documentation
 
+### Kedaluwarsa relasi dan riwayat chat — 22 November 2026
+
+`GET /v1/patient-professional-links` mengembalikan `status: expired` untuk
+pasangan yang pernah berkonsultasi atau bertukar pesan ketika layanan yang
+mendukung relasi sudah berakhir. Paket yang melewati `expires_at` langsung
+kehilangan hak berbagi. Sesi sekali bayar memberi hak berbagi selama durasi sesi.
+
+Profesional yang kedaluwarsa hilang dari `eligible` pada
+`GET /v1/diary-entries/{diary_id}/access`. Grant lama tetap terlihat agar
+pasien dapat mencabutnya. `GET /v1/diary-media/{patient_id}/{filename}`
+juga melayani lampiran dari salinan diary lama yang dikirim ke profesional itu
+dalam pesan yang masih tersimpan.
+
 ### Media diary privat dan pengaman konsumsi — 15 November 2026
 
 `POST /v1/diary-media` menerima multipart `file` JPEG/PNG dari pasien terautentikasi, maksimal 5 MiB, 4096 piksel per sisi dan 16 megapiksel; isi gambar wajib valid. Respons 201 berisi `url`, `filename`, `size`, `mime`. `GET /v1/diary-media/{patient_id}/{filename}` hanya untuk pemilik atau profesional terhubung dengan consent `mood_diary` dan referensi pada diary yang dibagikan. Respons privat memakai `Cache-Control: private, no-store` dan `nosniff`.
