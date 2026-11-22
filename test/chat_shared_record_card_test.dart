@@ -358,18 +358,50 @@ void main() {
     await _show(tester, kind: 'goals', metadata: {
       'goals': [
         {'title': 'Jalan Pagi', 'done_this_week': 4, 'target_per_week': 3},
-        {'title': 'Tidur', 'target_per_week': 7}
+        {'title': 'Tidur', 'target_per_week': 7},
+        {
+          'title': 'Membaca buku',
+          'method': 'numeric',
+          'done_this_week': 0,
+          'target_per_week': 2,
+          'today_value': 0,
+          'daily_target': 7,
+          'unit': 'halaman',
+          'activity': 'Baca buku pilihan'
+        },
+        {
+          'title': 'Belanja',
+          'method': 'checklist',
+          'done_this_week': 1,
+          'target_per_week': 7,
+          'steps': [
+            {'label': 'Cek stok', 'done': true},
+            {'label': 'Buat daftar', 'done': false}
+          ]
+        },
+        {
+          'title': 'Jurnal',
+          'done_this_week': 3,
+          'target_per_week': 0,
+          'flexible_weekly_target': true,
+        }
       ]
     });
     expect(find.text('Progress Goals & Habits'), findsOneWidget);
-    expect(find.text('4/3 minggu ini'), findsOneWidget);
-    expect(find.text('—/7 minggu ini'), findsOneWidget);
+    expect(find.text('4/3'), findsOneWidget);
+    expect(find.text('—/7'), findsOneWidget);
+    expect(find.text('0/2'), findsNothing);
+    expect(find.text('0/7 halaman'), findsOneWidget);
+    expect(find.text('Baca buku pilihan'), findsOneWidget);
+    expect(find.text('1/2 selesai'), findsOneWidget);
+    expect(find.text('Cek stok'), findsOneWidget);
+    expect(find.text('3 kali'), findsOneWidget);
     final bars = tester
         .widgetList<LinearProgressIndicator>(
             find.byType(LinearProgressIndicator))
         .toList();
     expect(bars.first.value, 1);
-    expect(bars.length, 1);
+    expect(bars.length, 3);
   });
 
   testWidgets('diary bubble limits the note to three lines and shows dates',

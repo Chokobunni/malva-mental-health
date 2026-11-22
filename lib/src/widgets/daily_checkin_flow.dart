@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import 'care_reference_widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
@@ -145,53 +147,48 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
       ...queuedDates,
     ]);
     return Container(
-        decoration: const BoxDecoration(
-            gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xff4e266a),
-                  Color(0xff86509f),
-                  Color(0xffe4a0d5)
-                ]),
-            borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
-            boxShadow: [
-              BoxShadow(
-                  color: Color(0x18000000),
-                  blurRadius: 12,
-                  offset: Offset(0, 6))
-            ]),
+        decoration: careHeaderDecoration.copyWith(boxShadow: careSoftShadow),
         padding: const EdgeInsets.fromLTRB(23, 42, 23, 26),
         child: DefaultTextStyle(
             style: const TextStyle(fontFamily: 'Roboto', color: Colors.white),
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(children: [
-                    Image.asset('assets/checkin/flower-white.png',
-                        width: 29, height: 34),
-                    const Expanded(
-                        child: Text('Home',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                fontSize: 19, fontWeight: FontWeight.w500))),
-                    if (widget.trailing != null) widget.trailing!,
-                    InkWell(
-                        onTap: widget.onProfile,
-                        borderRadius: BorderRadius.circular(24),
-                        child: Container(
+                  Stack(alignment: Alignment.center, children: [
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 92),
+                      child: Text('Home',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 19, fontWeight: FontWeight.w500)),
+                    ),
+                    Row(children: [
+                      Image.asset('assets/checkin/flower-white.png',
+                          width: 29, height: 34),
+                      const Spacer(),
+                      if (widget.trailing != null) widget.trailing!,
+                      if (widget.trailing != null) const SizedBox(width: 4),
+                      Tooltip(
+                        message: 'Profil',
+                        child: InkWell(
+                          onTap: widget.onProfile,
+                          borderRadius: BorderRadius.circular(24),
+                          child: Container(
                             width: 40,
                             height: 40,
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: const Color(0xff810091),
-                                border: Border.all(
-                                    color: Colors.white54, width: 2)),
+                              shape: BoxShape.circle,
+                              border:
+                                  Border.all(color: Colors.white70, width: 2),
+                            ),
                             child: Text(initials,
                                 style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700))))
+                                    fontSize: 18, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ),
+                    ]),
                   ]),
                   const SizedBox(height: 24),
                   if (_step == 0 || done) ...[

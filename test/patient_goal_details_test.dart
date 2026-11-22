@@ -7,6 +7,31 @@ import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
 
 void main() {
+  test('weekly progress uses the dates of the selected week', () {
+    final goal = BackendGoal.fromJson({
+      'target_per_week': 7,
+      'details': {
+        'start_date': '2026-11-18',
+        'recurrence': 'weekly',
+        'interval': 2,
+        'weekdays': [1, 3, 5],
+      },
+    });
+    expect(goal.effectiveWeeklyTarget(wibFromParts(2026, 11, 18)), 2);
+    expect(goal.effectiveWeeklyTarget(wibFromParts(2026, 11, 25)), 0);
+    expect(goal.effectiveWeeklyTarget(wibFromParts(2026, 12, 2)), 3);
+
+    final flexible = BackendGoal.fromJson({
+      'target_per_week': 7,
+      'details': {
+        'start_date': '2026-11-18',
+        'recurrence': 'weekly',
+        'weekly_target': 0,
+      },
+    });
+    expect(flexible.effectiveWeeklyTarget(wibFromParts(2026, 11, 18)), 0);
+  });
+
   test(
       'today definition uses returned server weekly history after target change',
       () {

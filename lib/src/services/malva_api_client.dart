@@ -5552,6 +5552,11 @@ class BackendGoal {
   final bool isDue, failedToday;
   final DateTime? createdAt;
 
+  int effectiveWeeklyTarget(DateTime on) =>
+      details?.weeklyTarget ??
+      details?.scheduledWeekdaysInWeek(on).length ??
+      targetPerWeek;
+
   // Update responses summarize today. Keep the selected day's log when the
   // user edits from history, including when the subsequent refresh fails.
   BackendGoal withDefinition(BackendGoal saved, {required DateTime on}) {

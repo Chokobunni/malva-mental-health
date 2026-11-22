@@ -995,7 +995,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         }
         metadata = {'goals': goals};
         text = 'Goals & habits: '
-            '${goals.take(5).map((g) => '${g['title']} (${g['done_this_week']}/${g['target_per_week']} minggu ini)').join(', ')}.';
+            '${goals.take(5).map((goal) => goal['title']).join(', ')}.';
       case 'diary':
         final diaries = await _collectDiaries(
           token: token,
@@ -1527,22 +1527,40 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     required MalvaStoreState fallback,
   }) async {
     try {
-      final backendGoals = await api.listGoals(accessToken: token);
-      final active =
-          backendGoals.where((goal) => goal.isActive).toList(growable: false);
-      if (active.isNotEmpty) {
-        return [
-          for (final goal in active)
+      final on = ServerClock.now();
+      final backendGoals =
+          await api.listGoals(accessToken: token, on: wibDateKey(on));
+      return [
+        for (final goal in backendGoals)
+          if (goal.isActive)
             {
               'title': goal.title,
               'category': goal.category,
               'last_logged_on': goal.lastLoggedOn,
-              'target_per_week': goal.targetPerWeek,
+              'target_per_week': goal.effectiveWeeklyTarget(on),
               'done_this_week': goal.doneThisWeek,
               'is_active': goal.isActive,
+              if (goal.doneToday != null) 'done_today': goal.doneToday,
+              'today_value': goal.todayValue,
+              'streak_days': goal.streakDays,
+              if (goal.details case final details?) ...{
+                'method': details.method,
+                'daily_target': details.target,
+                'unit': details.unit,
+                'schedule_label': details.scheduleLabel,
+                if (details.weeklyTarget == 0) 'flexible_weekly_target': true,
+                if (details.note.trim().isNotEmpty) 'activity': details.note,
+                if (details.method == 'checklist')
+                  'steps': [
+                    for (final step in details.steps)
+                      {
+                        'label': step.label,
+                        'done': goal.todayCompletedStepIds.contains(step.id)
+                      },
+                  ],
+              },
             },
-        ];
-      }
+      ];
     } on Object {
       // Fallback di bawah.
     }
@@ -1550,8 +1568,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       for (final goal in fallback.goals)
         {
           'title': goal.title,
-          'target_per_week': 0,
-          'done_this_week': goal.completedToday ? 1 : 0,
+          'done_today': goal.completedToday,
           'is_active': true,
         },
     ];
@@ -1803,9 +1820,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                 'medication',
                                 'diary'
                               ].contains(msg.kind) ||
-                              (msg.kind == 'worksheet' &&
-                                  const ['who5', 'dass21']
-                                      .contains(msg.metadata?['module_id'])))
+                              msg.kind == 'worksheet')
                             Align(
                                 alignment: msg.isMine
                                     ? Alignment.centerRight
@@ -1817,7 +1832,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                             MediaQuery.sizeOf(context).width *
                                                 (const ['goals', 'habits']
                                                         .contains(msg.kind)
-                                                    ? .50
+                                                    ? .86
                                                     : const [
                                                         'medication',
                                                         'prescription',
@@ -1830,6 +1845,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                       child: ChatSharedRecordCard(
                                           key: ValueKey(msg.id),
                                           message: msg,
+                                          onOpenRecord: msg.kind == 'worksheet'
+                                              ? () => _openSharedRecord(msg)
+                                              : null,
                                           onOpenDiary: msg.kind == 'diary'
                                               ? () => _showDiaryDetail(msg)
                                               : null),
@@ -2217,7 +2235,7 @@ class _ChatBubble extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: isProfessional ? Colors.white : const Color(0xFFF9F5FF),
+          color: isProfessional ? Colors.white : const Color(0xFFF1E6FA),
           border: Border.all(color: const Color(0xFFECE4F5)),
           borderRadius: BorderRadius.circular(18),
           boxShadow: const [
@@ -2234,13 +2252,13 @@ class _ChatBubble extends StatelessWidget {
               children: [
                 if (isProfessional)
                   Padding(
-                      padding: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.only(bottom: 9),
                       child: Row(children: [
                         ProfessionalAvatar(
                             displayName: message.senderName,
                             photoUrl: senderPhotoUrl,
                             radius: 14,
-                            borderRadius: BorderRadius.circular(9)),
+                            borderRadius: BorderRadius.circular(14)),
                         const SizedBox(width: 8),
                         Expanded(
                             child: Text(message.senderName,
@@ -2289,9 +2307,9 @@ class _ChatBubble extends StatelessWidget {
                 Text(
                   message.text,
                   style: const TextStyle(
-                    color: Color(0xFF707782),
-                    height: 1.6,
-                    fontSize: 12,
+                    color: MalvaColors.ink,
+                    height: 1.4,
+                    fontSize: 14,
                   ),
                 ),
                 const SizedBox(height: 4),

@@ -45,7 +45,9 @@ Map<String, Object> _session(String type, int day) => {
     };
 
 Future<void> _mount(WidgetTester tester,
-    {bool professional = false, double textScale = 1}) async {
+    {bool professional = false,
+    double textScale = 1,
+    bool noSessions = false}) async {
   final session = professional ? _professional : _patient;
   final api = MalvaApiClient(
       baseUrl: 'https://synthetic.test',
@@ -88,7 +90,8 @@ Future<void> _mount(WidgetTester tester,
         }
         if (request.url.path == '/v1/care-sessions') {
           body = {
-            'sessions': request.url.queryParameters['scope'] == 'upcoming'
+            'sessions': !noSessions &&
+                    request.url.queryParameters['scope'] == 'upcoming'
                 ? [
                     for (final day in [6, 4, 2, 5, 1, 3])
                       _session('video', day),
@@ -171,20 +174,38 @@ void main() {
     });
   }
 
+  testWidgets('patient Home shows all illustrated empty session sections',
+      (tester) async {
+    await _mount(tester, noSessions: true);
+    expect(find.byTooltip('Notifikasi'), findsOneWidget);
+    for (final label in [
+      'Tidak ada sesi berjalan saat ini.',
+      'Tidak ada chat mendatang.',
+      'Tidak ada video call mendatang.'
+    ]) {
+      await tester.scrollUntilVisible(find.text(label), 120,
+          scrollable: find.byType(Scrollable).first);
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(tester.getTopLeft(find.text('Chat mendatang')).dy,
+        lessThan(tester.getTopLeft(find.text('Video call mendatang')).dy));
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
       'patient upcoming chats expand and collapse separately from video',
       (tester) async {
     await _mount(tester);
     await tester.scrollUntilVisible(find.text('Dokter chat 1'), 250,
         scrollable: find.byType(Scrollable).first);
-    expect(find.text('Sesi chat mendatang'), findsOneWidget);
+    expect(find.text('Chat mendatang'), findsOneWidget);
     expect(find.text('Dokter chat 1'), findsOneWidget);
-    expect(find.text('Chat mendatang'), findsNothing);
+    expect(find.text('Tidak ada chat mendatang.'), findsNothing);
     expect(find.text('Dokter chat 2'), findsNothing);
     await _tapDisclosure(tester, 'Tampilkan semua sesi chat');
     expect(find.text('Dokter chat 1'), findsOneWidget);
     expect(find.text('Dokter chat 2'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Dokter video 1'), -250,
+    await tester.scrollUntilVisible(find.text('Dokter video 1'), 250,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Dokter video 1'), findsOneWidget);
     expect(find.text('Dokter video 2'), findsNothing);

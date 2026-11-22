@@ -903,12 +903,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     if (details == null ||
         details.recurrence == 'weekly' ||
         (details.method == 'yes_no' && details.recurrence == 'daily')) {
-      final target = details == null
-          ? goal.targetPerWeek
-          : details.weeklyTarget ??
-              details
-                  .scheduledWeekdaysInWeek(DateTime.parse(_selectedDate))
-                  .length;
+      final target = goal.effectiveWeeklyTarget(DateTime.parse(_selectedDate));
       return Column(children: [
         Row(children: [
           const Expanded(

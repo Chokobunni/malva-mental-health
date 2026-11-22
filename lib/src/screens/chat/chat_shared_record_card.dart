@@ -9,6 +9,7 @@ import '../../models.dart';
 import '../../models/diary_content.dart';
 import '../../providers/auth_providers.dart';
 import '../../widgets/diary_body.dart';
+import '../../widgets/care_reference_widgets.dart';
 import '../../services/malva_api_client.dart';
 import '../../services/weekly_summary_service.dart';
 import '../../theme.dart';
@@ -44,10 +45,10 @@ Map _diaryData(ChatMessage message, BackendDiaryEntry? entry) {
 /// Compact saved clinical records stay readable in the conversation.
 class ChatSharedRecordCard extends ConsumerStatefulWidget {
   const ChatSharedRecordCard(
-      {super.key, required this.message, this.onOpenDiary});
+      {super.key, required this.message, this.onOpenDiary, this.onOpenRecord});
 
   final ChatMessage message;
-  final VoidCallback? onOpenDiary;
+  final VoidCallback? onOpenDiary, onOpenRecord;
 
   @override
   ConsumerState<ChatSharedRecordCard> createState() =>
@@ -285,12 +286,13 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
           {String? subtitle,
           Color color = _purple,
           bool compact = false,
-          double rotation = 0}) =>
+          double rotation = 0,
+          Widget? trailing}) =>
       Padding(
           padding: const EdgeInsets.only(bottom: 14),
           child: Column(children: [
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              _tile(icon, color, size: compact ? 24 : 26, rotation: rotation),
+            Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+              _tile(icon, color, size: compact ? 26 : 32, rotation: rotation),
               SizedBox(width: compact ? 6 : 8),
               Expanded(
                   child: Column(
@@ -304,8 +306,9 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
                     if (subtitle != null)
                       Text(subtitle,
                           style: TextStyle(
-                              color: _muted, fontSize: compact ? 9 : 9.5)),
+                              color: _muted, fontSize: compact ? 10 : 11)),
                   ])),
+              if (trailing != null) trailing,
             ]),
             if (subtitle != null) ...[
               const SizedBox(height: 10),
@@ -384,50 +387,145 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
   List<Widget> _goals() {
     final goals = _maps(_meta['goals'] ?? _meta['habits']);
     const colors = [
-      Color(0xFF8078CA),
-      Color(0xFF9D8ED3),
-      Color(0xFFE3A21F),
-      Color(0xFF20B5C6)
+      Color(0xff7a3de0),
+      Color(0xffa482d4),
+      Color(0xffd68a10),
+      Color(0xff12a7b5)
     ];
     return [
-      _heading('Progress Goals & Habits', Icons.adjust,
-          subtitle: 'Pembaruan Target Mingguan',
-          compact: true,
-          color: const Color(0xFF8478CF)),
-      for (var i = 0; i < goals.length; i++)
-        Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Builder(builder: (_) {
-              final goal = goals[i];
-              final done = _number(goal['done_this_week'], integer: true);
-              final target = _number(goal['target_per_week'], integer: true);
-              final color = colors[i % colors.length];
-              return Column(children: [
-                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Expanded(
-                      child: Text(_text(goal, 'title', 'Goal'),
-                          style: const TextStyle(color: _ink, fontSize: 11))),
-                  const SizedBox(width: 8),
-                  Text('${_numeric(done)}/${_numeric(target)} minggu ini',
-                      style: TextStyle(
-                          color: done != null && done > 0 ? color : _muted,
-                          fontSize: 10)),
-                ]),
-                const SizedBox(height: 6),
-                if (done != null && target != null && target > 0)
-                  LinearProgressIndicator(
-                      value: (done / target).clamp(0, 1).toDouble(),
-                      minHeight: 5,
-                      borderRadius: BorderRadius.circular(6),
-                      color: color,
-                      backgroundColor: const Color(0xFFEDE8F4)),
-              ]);
-            })),
+      _heading('Progress Goals & Habits', Icons.flag_outlined,
+          subtitle: 'Pembaruan Target Mingguan'),
+      for (final (index, goal) in goals.indexed) ...[
+        if (index > 0) const Divider(height: 19, color: Color(0xffe8def0)),
+        _goalProgress(goal, colors[index % colors.length]),
+      ],
       if (goals.isEmpty)
         const Text('Goals belum tersedia',
             style: TextStyle(color: _muted, fontSize: 12)),
     ];
   }
+
+  Widget _goalProgress(Map goal, Color color) {
+    final done = _number(goal['done_this_week'], integer: true);
+    final target = _number(goal['target_per_week'], integer: true);
+    final value = _number(goal['today_value'], integer: true);
+    final dailyTarget = _number(goal['daily_target'], integer: true);
+    final numeric =
+        goal['method'] == 'numeric' && dailyTarget != null && dailyTarget > 0;
+    final checklist = goal['method'] == 'checklist';
+    final streak = _number(goal['streak_days'], integer: true);
+    final tasks = _maps(goal['steps'])
+        .where((step) => _text(step, 'label').trim().isNotEmpty)
+        .toList();
+    final activities = _text(goal, 'activity')
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    final progress = numeric
+        ? (value == null ? null : value / dailyTarget)
+        : (done != null && target != null && target > 0 ? done / target : null);
+    final details = [
+      if (numeric && value != null)
+        '${_numeric(value)}/${_numeric(dailyTarget)} ${_text(goal, 'unit')}'
+            .trim(),
+      if (_text(goal, 'schedule_label').isNotEmpty)
+        _text(goal, 'schedule_label'),
+      if (goal['done_today'] == true) 'Selesai hari ini',
+      if (streak != null && streak > 1) '$streak hari berturut-turut',
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+            child: Text(_text(goal, 'title', 'Goal'),
+                style: const TextStyle(
+                    color: _ink, fontWeight: FontWeight.w800, fontSize: 13))),
+        if (!numeric && target != null && target > 0) ...[
+          const SizedBox(width: 7),
+          Text('${_numeric(done)}/${_numeric(target)}',
+              style: TextStyle(
+                  color: done != null && done > 0 ? color : _muted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700)),
+        ] else if (!numeric &&
+            goal['flexible_weekly_target'] == true &&
+            done != null) ...[
+          const SizedBox(width: 7),
+          Text('${_numeric(done)} kali',
+              style: const TextStyle(
+                  color: _muted, fontSize: 12, fontWeight: FontWeight.w700)),
+        ],
+      ]),
+      if (details.isNotEmpty)
+        Text(details.join(' • '),
+            style: const TextStyle(color: _muted, fontSize: 11)),
+      if (checklist && tasks.isNotEmpty)
+        _goalDetail(
+          'Daftar Langkah',
+          '${tasks.where((step) => step['done'] == true).length}/${tasks.length} selesai',
+          tasks
+              .map((step) => (_text(step, 'label'), step['done'] == true))
+              .toList(),
+        ),
+      if (progress != null) ...[
+        const SizedBox(height: 6),
+        LinearProgressIndicator(
+            value: progress.clamp(0.0, 1.0).toDouble(),
+            minHeight: 6,
+            color: color,
+            borderRadius: BorderRadius.circular(6),
+            backgroundColor: const Color(0xffecdef7)),
+      ],
+      if (!checklist && activities.isNotEmpty)
+        _goalDetail('Rincian Aktivitas', null,
+            [for (final activity in activities) (activity, null)]),
+    ]);
+  }
+
+  Widget _goalDetail(String title, String? count, List<(String, bool?)> rows) =>
+      Container(
+        margin: const EdgeInsets.only(top: 7),
+        padding: const EdgeInsets.all(9),
+        decoration: BoxDecoration(
+            color: const Color(0xfff0e6f8),
+            borderRadius: BorderRadius.circular(9)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+                child: Text(title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: _ink,
+                        fontSize: 12))),
+            if (count != null)
+              Text(count,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: _purple,
+                      fontSize: 11)),
+          ]),
+          for (final (label, done) in rows)
+            Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                          done == null
+                              ? Icons.circle
+                              : done
+                                  ? Icons.check_box_rounded
+                                  : Icons.check_box_outline_blank_rounded,
+                          color: _purple,
+                          size: done == null ? 6 : 15),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: Text(label,
+                              style:
+                                  const TextStyle(color: _ink, fontSize: 11))),
+                    ])),
+        ]),
+      );
 
   Widget _cf(String instrument, num? cf, {bool triage = false}) => Container(
       margin: const EdgeInsets.only(top: 9),
@@ -443,7 +541,9 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(
-              '$instrument · ${triage ? 'Dukungan aturan triage' : 'Dukungan rule internal'} (CF)',
+              triage
+                  ? '$instrument · Dukungan aturan triage (CF)'
+                  : 'Dukungan rule internal (CF)',
               style: const TextStyle(color: _muted, fontSize: 9)),
           Text.rich(TextSpan(children: [
             TextSpan(
@@ -458,47 +558,46 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
         ])),
       ]));
 
-  Widget _level(String level) => Container(
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.all(9),
-      decoration: BoxDecoration(
-          color: const Color(0xFFFBF6FF),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFF3EBF9))),
-      child: Row(children: [
-        _tile(Icons.health_and_safety_outlined, _purple, size: 28),
-        const SizedBox(width: 9),
-        Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('TINGKAT GEJALA',
-              style: TextStyle(
-                  color: _muted,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 9,
-                  letterSpacing: .5)),
-          const SizedBox(height: 3),
-          Text(level,
-              style: const TextStyle(
-                  color: _purple, fontSize: 12, fontWeight: FontWeight.w700)),
-        ])),
-      ]));
+  Widget _level(String level, {bool screening = false}) {
+    final color = switch (level.trim().toLowerCase()) {
+      'normal' || 'minimal' => _mint,
+      'sedang' => const Color(0xff9a5b04),
+      'berat' || 'sangat berat' => const Color(0xffaf333a),
+      _ => _purple,
+    };
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(top: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: screening && level.toLowerCase() == 'sedang'
+              ? const Color(0xffffedca)
+              : color.withValues(alpha: .11),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(level,
+            style: TextStyle(
+                color: color, fontSize: 11, fontWeight: FontWeight.w800)),
+      ),
+    );
+  }
 
   Widget _instrument(
           String name, String score, String level, String cfName, num? cf,
           {bool triage = false}) =>
-      _white(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
           Expanded(
               child: Text(name,
                   style: const TextStyle(
-                      color: _ink, fontSize: 12, fontWeight: FontWeight.w700))),
+                      color: _ink, fontSize: 12, fontWeight: FontWeight.w800))),
           const SizedBox(width: 6),
           _chip(score, _mint, score: true),
         ]),
         _level(level),
         _cf(cfName, cf, triage: triage),
-      ]));
+      ]);
 
   List<Widget> _assessment() {
     final header = _heading(
@@ -526,13 +625,13 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
         final score = complete ? scoreWho5(answers) : null;
         return [
           header,
-          _instrument(
+          _white(_instrument(
               'WHO-5 (Well-Being Index)',
               '${score?.raw ?? '—'} / 25',
               score?.level ?? 'Belum tersedia',
               'WHO-5',
               interpretation?.certaintyFactor,
-              triage: true),
+              triage: true)),
           if (_meta['crisis_flag'] == true) _safety(),
         ];
       }
@@ -557,7 +656,8 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
                           style: const TextStyle(color: _ink, fontSize: 12))),
                   _chip('${part.$2 ?? '—'} / 42', _mint, score: true),
                 ])),
-            _level(part.$3 ?? 'Belum tersedia'),
+            _level(part.$3 ?? 'Belum tersedia', screening: true),
+            const Divider(height: 14, color: Color(0xffece7f1)),
           ],
           _cf('DASS-21', interpretation?.certaintyFactor, triage: true),
         ])),
@@ -591,28 +691,36 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
     final gad = instrument('gad7');
     return [
       header,
-      for (final item in [
-        (AssessmentType.phq9, 'PHQ-9 (Depresi)', 'PHQ-9', 27, phq),
-        (AssessmentType.gad7, 'GAD-7 (Kecemasan)', 'GAD-7', 21, gad)
-      ])
-        Builder(builder: (_) {
-          final level = AssessmentEngine.levelFromScore(
-              item.$1, item.$5['score'],
-              maxScore: item.$5['max_score']);
-          final cf = AssessmentEngine.savedCertaintyFactor(
-              type: item.$1,
-              score: item.$5['score'],
-              maxScore: item.$5['max_score'],
-              cf: item.$5['cf'],
-              answers: AssessmentEngine.savedAnswers(item.$5['answers']),
-              crisisFlag: item.$5['crisis_flag'] == true);
-          return _instrument(
-              item.$2,
-              '${level == null ? '—' : _numeric(item.$5['score'] as num)} / ${item.$4}',
-              level?.label ?? 'Belum tersedia',
-              item.$3,
-              cf);
-        }),
+      _white(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        for (final item in [
+          (AssessmentType.phq9, 'PHQ-9 (Depresi)', 'PHQ-9', 27, phq),
+          (AssessmentType.gad7, 'GAD-7 (Kecemasan)', 'GAD-7', 21, gad)
+        ])
+          Builder(builder: (_) {
+            final level = AssessmentEngine.levelFromScore(
+                item.$1, item.$5['score'],
+                maxScore: item.$5['max_score']);
+            final cf = AssessmentEngine.savedCertaintyFactor(
+                type: item.$1,
+                score: item.$5['score'],
+                maxScore: item.$5['max_score'],
+                cf: item.$5['cf'],
+                answers: AssessmentEngine.savedAnswers(item.$5['answers']),
+                crisisFlag: item.$5['crisis_flag'] == true);
+            return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (item.$1 == AssessmentType.gad7)
+                    const Divider(height: 21, color: Color(0xffece7f1)),
+                  _instrument(
+                      item.$2,
+                      '${level == null ? '—' : _numeric(item.$5['score'] as num)} / ${item.$4}',
+                      level?.label ?? 'Belum tersedia',
+                      item.$3,
+                      cf),
+                ]);
+          }),
+      ])),
       if (_screening?.crisisFlag == true ||
           [_meta, data, phq, gad].any((value) => value['crisis_flag'] == true))
         _safety(),
@@ -715,12 +823,10 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
     ];
     final sent = widget.message.timestamp;
     return [
-      Row(children: [
-        Expanded(
-            child: _heading('Diary', Icons.menu_book_outlined,
-                color: const Color(0xFFC69F49))),
-        const Icon(Icons.chevron_right, color: MalvaColors.plum),
-      ]),
+      _heading('Diary', Icons.menu_book_outlined,
+          color: const Color(0xFFC69F49),
+          trailing:
+              const Icon(Icons.chevron_right_rounded, color: MalvaColors.plum)),
       if (_text(data, 'title').isNotEmpty)
         Text(_text(data, 'title'),
             maxLines: 2,
@@ -751,7 +857,9 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
             ])),
       const SizedBox(height: 8),
       Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-        Expanded(child: DiaryTags(tags: content.tags)),
+        Expanded(
+            child:
+                DiaryTags(tags: content.tags.take(3).toList(growable: false))),
         const SizedBox(width: 6),
         Text('${formatWibDate(sent)} · ${formatWibBubbleTime(sent)}',
             style: const TextStyle(color: Color(0xff625a6b), fontSize: 10)),
@@ -762,9 +870,32 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
   @override
   Widget build(BuildContext context) {
     if (!_ownerMatches) return const SizedBox.shrink();
+    final record = widget.message.kind == 'worksheet' && !_isAssessmentModule;
     final content = switch (widget.message.kind) {
       'summary' || 'progress' => _summary(),
       'goals' || 'habits' => _goals(),
+      'worksheet' when record => [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _tile(Icons.assignment_turned_in_outlined, _purple, size: 42),
+            const SizedBox(width: 11),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  const Text('Therapy Record',
+                      style: TextStyle(color: _ink, fontSize: 12)),
+                  const SizedBox(height: 3),
+                  Text(_text(_meta, 'title', widget.message.text),
+                      style: const TextStyle(
+                          color: _ink,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 8),
+                  const Text('Dibagikan',
+                      style: TextStyle(color: _ink, fontSize: 11)),
+                ])),
+          ]),
+        ],
       'assessment' || 'screening' || 'worksheet' => _assessment(),
       'prescription' || 'medication' => _medications(),
       'diary' => _diary(),
@@ -773,11 +904,12 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
     return Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-            color: const Color(0xFFF9F5FF),
+            color: const Color(0xFFF8F1FC),
+            boxShadow: widget.message.kind == 'diary' ? careSoftShadow : null,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: const Color(0xFFEDE4F7))),
         child: InkWell(
-            onTap: widget.onOpenDiary,
+            onTap: widget.onOpenDiary ?? (record ? widget.onOpenRecord : null),
             borderRadius: BorderRadius.circular(18),
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

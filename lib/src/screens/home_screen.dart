@@ -11,6 +11,8 @@ import '../widgets/session_attendance_actions.dart';
 import '../widgets/doctor_review_actions.dart';
 import '../services/medication_reminder_service.dart';
 import '../theme.dart';
+import '../widgets/care_reference_widgets.dart';
+import 'notifications_screen.dart';
 import '../widgets/crisis_hotline.dart';
 import '../widgets/daily_checkin_flow.dart';
 import '../widgets/malva_components.dart';
@@ -228,6 +230,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         !s.isVideo &&
         !ongoingIds.contains(s.id));
     return Scaffold(
+      backgroundColor: carePageColor,
       body: RefreshIndicator(
         onRefresh: _refreshAll,
         child: ListView(
@@ -235,7 +238,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           children: [
             if (_isInitialLoading) const LinearProgressIndicator(),
             DailyCheckInFlow(
-                onSaved: () => setState(() {}), onProfile: widget.onOpenMore),
+              onSaved: () => setState(() {}),
+              onProfile: widget.onOpenMore,
+              trailing: CareHeaderNotification(
+                  onPressed: () => _push(NotificationsScreen(
+                      session: auth, apiClient: widget.apiClient))),
+            ),
             const CrisisHotlineBanner(),
             const OfflineBanner(),
             Padding(
@@ -248,8 +256,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   if (_ongoingLoadFailed)
                     const Text('Sesi berjalan belum dapat dimuat.')
                   else if (ongoingSessions.isEmpty)
-                    const _HomeCard(
-                        child: Text('Tidak ada sesi berjalan saat ini.'))
+                    const _HomeSessionEmpty(
+                        asset: 'home-ongoing',
+                        text: 'Tidak ada sesi berjalan saat ini.')
                   else
                     for (final s in ongoingSessions)
                       Padding(
@@ -260,74 +269,64 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                             onChat: () => _joinSession(context, s),
                             onChanged: _loadUpcomingSession,
                           )),
-                  const SizedBox(height: 18),
-                  _HomeSectionLabel('Video call mendatang',
-                      icon: Icons.videocam_rounded,
-                      action: upcomingVideos.length > 1
+                  const SizedBox(height: 23),
+                  for (final (video, sessions, expanded) in [
+                    (false, upcomingChats, _showAllUpcomingChats),
+                    (true, upcomingVideos, _showAllUpcomingVideos),
+                  ]) ...[
+                    _HomeSectionLabel(
+                      video ? 'Video call mendatang' : 'Chat mendatang',
+                      icon: video
+                          ? Icons.videocam_rounded
+                          : Icons.chat_bubble_rounded,
+                      action: sessions.length > 1
                           ? IconButton(
-                              tooltip: _showAllUpcomingVideos
-                                  ? 'Tampilkan lebih sedikit sesi video'
-                                  : 'Tampilkan semua sesi video',
-                              onPressed: () => setState(() =>
-                                  _showAllUpcomingVideos =
-                                      !_showAllUpcomingVideos),
-                              icon: Icon(_showAllUpcomingVideos
+                              tooltip: expanded
+                                  ? 'Tampilkan lebih sedikit sesi ${video ? 'video' : 'chat'}'
+                                  : 'Tampilkan semua sesi ${video ? 'video' : 'chat'}',
+                              onPressed: () => setState(() {
+                                if (video) {
+                                  _showAllUpcomingVideos = !expanded;
+                                } else {
+                                  _showAllUpcomingChats = !expanded;
+                                }
+                              }),
+                              icon: Icon(expanded
                                   ? Icons.expand_less_rounded
-                                  : Icons.expand_more_rounded))
-                          : null),
-                  if (_upcomingLoadFailed)
-                    const Text('Video call mendatang belum dapat dimuat.')
-                  else if (upcomingVideos.isEmpty)
-                    const _HomeCard(
-                        child: Text('Tidak ada video call mendatang.'))
-                  else
-                    for (final s in _showAllUpcomingVideos
-                        ? upcomingVideos
-                        : upcomingVideos.take(1))
-                      Padding(
+                                  : Icons.expand_more_rounded),
+                            )
+                          : null,
+                    ),
+                    if (_upcomingLoadFailed)
+                      Text(video
+                          ? 'Video call mendatang belum dapat dimuat.'
+                          : 'Chat mendatang belum dapat dimuat.')
+                    else if (sessions.isEmpty)
+                      _HomeSessionEmpty(
+                        asset: video ? 'home-video' : 'home-chat',
+                        text: video
+                            ? 'Tidak ada video call mendatang.'
+                            : 'Tidak ada chat mendatang.',
+                      )
+                    else
+                      for (final session
+                          in expanded ? sessions : sessions.take(1))
+                        Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: _UpcomingSessionCard(
-                            session: s,
+                            session: session,
                             accessToken: auth?.accessToken ?? '',
-                            onJoin: () => _joinSession(context, s),
-                            onCancel: () => _cancelSession(context, s),
+                            onJoin: () => _joinSession(context, session),
+                            onCancel: () => _cancelSession(context, session),
                             onChanged: _loadUpcomingSession,
-                          )),
+                          ),
+                        ),
+                    const SizedBox(height: 23),
+                  ],
                   if (_ongoingLoadFailed || _upcomingLoadFailed)
                     TextButton(
                         onPressed: _loadUpcomingSession,
                         child: const Text('Coba lagi')),
-                  if (upcomingChats.isNotEmpty) ...[
-                    const SizedBox(height: 18),
-                    _HomeSectionLabel('Sesi chat mendatang',
-                        icon: Icons.chat_bubble_rounded,
-                        action: upcomingChats.length > 1
-                            ? IconButton(
-                                tooltip: _showAllUpcomingChats
-                                    ? 'Tampilkan lebih sedikit sesi chat'
-                                    : 'Tampilkan semua sesi chat',
-                                onPressed: () => setState(() =>
-                                    _showAllUpcomingChats =
-                                        !_showAllUpcomingChats),
-                                icon: Icon(_showAllUpcomingChats
-                                    ? Icons.expand_less_rounded
-                                    : Icons.expand_more_rounded))
-                            : null),
-                    for (final s in _showAllUpcomingChats
-                        ? upcomingChats
-                        : upcomingChats.take(1))
-                      Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _UpcomingSessionCard(
-                            session: s,
-                            accessToken: auth?.accessToken ?? '',
-                            onJoin: () => _joinSession(context, s),
-                            onCancel: () => _cancelSession(context, s),
-                            onChanged: _loadUpcomingSession,
-                          )),
-                  ],
-                  const SizedBox(height: 18),
-
                   const _HomeSectionLabel('Self-care', center: true),
                   _MoodMedicationBanner(
                       onTap: () => _push(MoodMedicationCheckinScreen(
@@ -542,10 +541,30 @@ class _HomeCard extends StatelessWidget {
       decoration: BoxDecoration(
           color: color ?? Colors.white,
           borderRadius: BorderRadius.circular(24),
+          boxShadow: careSoftShadow,
           border: accent == null
               ? null
               : Border(left: BorderSide(color: accent!, width: 3))),
       child: child);
+}
+
+class _HomeSessionEmpty extends StatelessWidget {
+  const _HomeSessionEmpty({required this.asset, required this.text});
+  final String asset, text;
+
+  @override
+  Widget build(BuildContext context) => _HomeCard(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+        child: Row(children: [
+          Image.asset('assets/care/$asset.png',
+              width: 43, height: 43, excludeFromSemantics: true),
+          const SizedBox(width: 18),
+          Expanded(
+              child: Text(text,
+                  style: const TextStyle(
+                      color: MalvaColors.ink, fontWeight: FontWeight.w500))),
+        ]),
+      );
 }
 
 class _UpcomingSessionCard extends StatelessWidget {
@@ -885,6 +904,8 @@ class _HomeGridTile extends StatelessWidget {
             fontWeight: FontWeight.w700));
     return Material(
         color: Colors.white,
+        elevation: 3,
+        shadowColor: const Color(0x3854206f),
         borderRadius: BorderRadius.circular(24),
         child: InkWell(
             onTap: item.onTap,
