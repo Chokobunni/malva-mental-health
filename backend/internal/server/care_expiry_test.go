@@ -28,6 +28,15 @@ func TestExpiredCarePreservesDiaryChatHistory(t *testing.T) {
 	if _, _, err := f.st.SetDiaryRecipient(t.Context(), f.patient.ID, entry.ID, f.prof.ID, true); err != nil {
 		t.Fatal(err)
 	}
+	refMetadata, _ := json.Marshal(map[string]string{"diary_id": entry.ID})
+	reference, err := f.st.CreateChatMessage(t.Context(), store.ChatMessage{
+		ID: generateChatMessageID(), PatientID: f.patient.ID, ProfessionalID: f.prof.ID,
+		SenderID: f.patient.ID, Kind: "diary", Metadata: refMetadata,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = f.db.Exec("DELETE FROM chat_messages WHERE id=$1", reference.ID) })
 	var marker string
 	if err := f.db.QueryRow(`INSERT INTO chat_messages (patient_id, professional_id, sender_id, sender_name, text, kind, attachment_meta, id)
         VALUES ($1,$2,$1,'Patient','Diary dibagikan','diary',jsonb_build_object('diary', jsonb_build_object('note', $3::text)),gen_random_uuid()::text)
@@ -80,6 +89,10 @@ func TestExpiredCarePreservesDiaryChatHistory(t *testing.T) {
 			t.Fatal("unable to load previous history page")
 		}
 	}
+	if _, err := f.db.Exec(`UPDATE patient_professional_links SET status='inactive' WHERE patient_id=$1 AND professional_id=$2`, f.patient.ID, f.prof.ID); err != nil {
+		t.Fatal(err)
+	}
+	call("GET", "/v1/diary-entries/"+entry.ID, professional, "", 200)
 	call("GET", media, owner, "", 200)
 	call("GET", media, professional, "", 200)
 	call("DELETE", access+"/"+f.prof.ID, owner, "", 200)

@@ -23,7 +23,8 @@ var ErrDiaryRecipientIneligible = errors.New("profesional tidak terhubung dengan
 const diaryLinkedProfessionals = `patient_professional_links l
 	JOIN users p ON p.id = l.professional_id`
 
-const diaryActiveLink = `l.status = 'active' AND p.role = 'professional' AND p.disabled_at IS NULL`
+const diaryProfessionalEnabled = `p.role = 'professional' AND p.disabled_at IS NULL`
+const diaryActiveLink = `l.status = 'active' AND ` + diaryProfessionalEnabled
 
 // Preserve the category consent and care window used by broad diary shares.
 const diaryLegacyAccess = `EXISTS (
@@ -36,10 +37,17 @@ const diaryLegacyAccess = `EXISTS (
 const diaryProfessionalAccess = `EXISTS (
 	SELECT 1 FROM ` + diaryLinkedProfessionals + `
 	LEFT JOIN diary_recipients r ON r.diary_id = d.id AND r.professional_id = l.professional_id
-	WHERE l.patient_id = d.patient_id AND l.professional_id = $2 AND ` + diaryActiveLink + `
+	WHERE l.patient_id = d.patient_id AND l.professional_id = $2 AND ` + diaryProfessionalEnabled + `
 	AND (
-		(r.professional_id IS NOT NULL AND NOT r.requires_legacy_consent)
-		OR ((d.shared_with_professionals OR r.requires_legacy_consent) AND ` + diaryLegacyAccess + `)
+		(r.professional_id IS NOT NULL AND NOT r.requires_legacy_consent AND (
+            l.status = 'active' OR (l.status = 'inactive' AND EXISTS (
+                SELECT 1 FROM chat_messages m
+                WHERE m.patient_id = l.patient_id AND m.professional_id = l.professional_id
+                  AND m.sender_id = l.patient_id AND m.kind = 'diary' AND m.deleted_at IS NULL
+                  AND m.attachment_meta ->> 'diary_id' = d.id::text
+            ))
+        ))
+		OR (l.status = 'active' AND (d.shared_with_professionals OR r.requires_legacy_consent) AND ` + diaryLegacyAccess + `)
 	)
 )`
 
