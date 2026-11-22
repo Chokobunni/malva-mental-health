@@ -11,7 +11,9 @@ Profesional yang kedaluwarsa hilang dari `eligible` pada
 `GET /v1/diary-entries/{diary_id}/access`. Grant lama tetap terlihat agar
 pasien dapat mencabutnya. `GET /v1/diary-media/{patient_id}/{filename}`
 juga melayani lampiran dari salinan diary lama yang dikirim ke profesional itu
-dalam pesan yang masih tersimpan.
+dalam pesan yang masih tersimpan. Untuk membaca riwayat lama, kirim ID pesan
+terakhir di halaman sebelumnya sebagai parameter `before` pada `GET /v1/messages`.
+Urutan tetap dari pesan terbaru ke terlama.
 
 ### Media diary privat dan pengaman konsumsi — 15 November 2026
 

@@ -2655,7 +2655,7 @@ func (s *Store) DeleteOwnChatMessage(ctx context.Context, id, senderID, role str
 	return patientID, professionalID, err
 }
 
-func (s *Store) ListChatMessages(ctx context.Context, patientID, professionalID string, limit int) ([]ChatMessage, error) {
+func (s *Store) ListChatMessages(ctx context.Context, patientID, professionalID, before string, limit int) ([]ChatMessage, error) {
 	patientID = strings.TrimSpace(patientID)
 	professionalID = strings.TrimSpace(professionalID)
 	if patientID == "" || professionalID == "" {
@@ -2667,9 +2667,13 @@ func (s *Store) ListChatMessages(ctx context.Context, patientID, professionalID 
 		       COALESCE(attachment_meta, '{}'::jsonb), created_at
 		FROM chat_messages
 		WHERE patient_id = $1 AND professional_id = $2 AND deleted_at IS NULL
+		  AND ($4 = '' OR (created_at, id) < (
+		    SELECT created_at, id FROM chat_messages
+		    WHERE id = $4 AND patient_id = $1 AND professional_id = $2
+		  ))
 		ORDER BY created_at DESC, id DESC
 		LIMIT $3
-	`, patientID, professionalID, limit)
+	`, patientID, professionalID, limit, before)
 	if err != nil {
 		return nil, err
 	}

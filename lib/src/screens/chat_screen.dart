@@ -71,6 +71,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   final _pendingMessageDeletes = <String>{};
   final _chatRevision = ValueNotifier<int>(0);
   int _historyRequest = 0;
+  String? _olderHistoryCursor;
+  bool _loadingOlderHistory = false;
   ChatService? _chatService;
   ChatState _chatState = ChatState.disconnected;
   bool _otherTyping = false;
@@ -269,8 +271,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   /// Muat riwayat chat dari server (GET /v1/messages) agar percakapan
   /// sebelumnya tidak hilang saat layar dibuka ulang.
-  Future<bool> _loadHistory() async {
+  Future<bool> _loadHistory({bool older = false}) async {
     if (!_ownerMatches) return false;
+    final cursor = older ? _olderHistoryCursor : null;
+    if (older && (cursor == null || _loadingOlderHistory)) return false;
     final session = ref.read(currentSessionProvider);
     final token = session?.accessToken;
     final myId = session?.backendUserId ?? session?.identifier;
@@ -281,19 +285,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final professionalId = isPatient ? widget.otherUserId : myId;
     final request = ++_historyRequest;
     final beforeLoad = _messages.map((message) => message.id).toSet();
-    if (beforeLoad.isEmpty) setState(() => _isLoadingHistory = true);
+    setState(() {
+      _isLoadingHistory = beforeLoad.isEmpty;
+      _loadingOlderHistory = older;
+    });
     try {
       final history = await ref.read(apiClientProvider).listMessages(
             accessToken: token,
             patientId: patientId,
             professionalId: professionalId,
             limit: _historyLimit,
+            before: cursor,
           );
       if (!mounted || !_ownerMatches || request != _historyRequest)
         return false;
       // Server mengembalikan terbaru dulu; tampilkan lama -> baru.
       final received = history.map((message) => message.id).toSet();
-      final disappeared = beforeLoad.difference(received);
+      final disappeared = older ? <String>{} : beforeLoad.difference(received);
       final oldest = history.length == _historyLimit ? history.last : null;
       final cutoff = oldest?.createdDateTime;
       setState(() {
@@ -328,7 +336,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           final order = first.timestamp.compareTo(second.timestamp);
           return order == 0 ? first.id.compareTo(second.id) : order;
         });
+        _olderHistoryCursor = oldest?.id;
         _isLoadingHistory = false;
+        _loadingOlderHistory = false;
       });
       if (disappeared.isNotEmpty) _chatRevision.value++;
       if (beforeLoad.isNotEmpty && !isPatient) {
@@ -341,7 +351,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       return true;
     } on Object {
       if (mounted && _ownerMatches && request == _historyRequest) {
-        setState(() => _isLoadingHistory = false);
+        setState(() {
+          _isLoadingHistory = false;
+          _loadingOlderHistory = false;
+        });
+        if (older) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Riwayat gagal dimuat. Coba lagi.')),
+          );
+        }
       }
       return false;
     }
@@ -1744,8 +1762,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 12),
-                    itemCount: _messages.length,
+                    itemCount: _messages.length +
+                        (_olderHistoryCursor == null ? 0 : 1),
                     itemBuilder: (context, index) {
+                      if (_olderHistoryCursor != null) {
+                        if (index == 0) {
+                          return Center(
+                              child: TextButton(
+                            onPressed: _loadingOlderHistory
+                                ? null
+                                : () => _loadHistory(older: true),
+                            child: Text(_loadingOlderHistory
+                                ? 'Memuat riwayat…'
+                                : 'Muat pesan sebelumnya'),
+                          ));
+                        }
+                        index--;
+                      }
                       final msg = _messages[index];
                       final onDelete = msg.isMine && msg.id.isNotEmpty
                           ? () => _confirmDeleteMessage(msg)

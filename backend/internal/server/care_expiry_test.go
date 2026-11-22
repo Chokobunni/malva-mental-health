@@ -39,6 +39,11 @@ func TestExpiredCarePreservesDiaryChatHistory(t *testing.T) {
         WHERE patient_id=$1 AND professional_id=$2`, f.patient.ID, f.prof.ID); err != nil {
 		t.Fatal(err)
 	}
+	newer, err := f.st.CreateChatMessage(t.Context(), store.ChatMessage{ID: generateChatMessageID(), PatientID: f.patient.ID, ProfessionalID: f.prof.ID, SenderID: f.patient.ID, Kind: "text", Text: "More recent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = f.db.Exec("DELETE FROM chat_messages WHERE id=$1", newer.ID) })
 	routes := f.srv.Routes()
 	call := func(method, path, token, body string, want int) string {
 		t.Helper()
@@ -65,9 +70,14 @@ func TestExpiredCarePreservesDiaryChatHistory(t *testing.T) {
 		if !strings.Contains(links, `"status":"expired"`) {
 			t.Fatal("ended pair was not returned as expired")
 		}
-		history := call("GET", "/v1/messages?patient_id="+f.patient.ID+"&professional_id="+f.prof.ID, token, "", 200)
-		if !strings.Contains(history, marker) {
-			t.Fatal("previous chat was lost")
+		path := "/v1/messages?patient_id=" + f.patient.ID + "&professional_id=" + f.prof.ID + "&limit=1"
+		newestPage := call("GET", path, token, "", 200)
+		if !strings.Contains(newestPage, newer.ID) || strings.Contains(newestPage, marker) {
+			t.Fatal("unexpected newest history page")
+		}
+		olderPage := call("GET", path+"&before="+newer.ID, token, "", 200)
+		if !strings.Contains(olderPage, marker) || strings.Contains(olderPage, newer.ID) {
+			t.Fatal("unable to load previous history page")
 		}
 	}
 	call("GET", media, owner, "", 200)
