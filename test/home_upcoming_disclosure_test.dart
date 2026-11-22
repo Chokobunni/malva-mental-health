@@ -73,6 +73,19 @@ Future<void> _mount(WidgetTester tester,
           'pricing': <String, Object>{},
           'count': 0,
         };
+        if (request.url.path == '/v1/patient-professional-links' &&
+            professional) {
+          body = {
+            'links': [
+              {
+                'professional_user_id': 'professional',
+                'patient_id': 'p-6',
+                'patient_display_name': 'Pasien video 6',
+                'status': 'active'
+              },
+            ]
+          };
+        }
         if (request.url.path == '/v1/care-sessions') {
           body = {
             'sessions': request.url.queryParameters['scope'] == 'upcoming'
@@ -324,25 +337,23 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Kamis, 1 Januari 2099 • 15:30'), findsOneWidget);
     expect(tester.takeException(), isNull);
-    await tester.tap(find.descendant(
-        of: find.byType(NavigationBar), matching: find.text('Messages')));
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is NavigationDestination && widget.label == 'Messages'));
     await tester.pumpAndSettle();
     expect(find.text('Pasien video 6'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('professional Quick Video Call scrolls with schedule content',
+  testWidgets(
+      'professional schedule retains its header and omits Quick Video Call',
       (tester) async {
     await _mount(tester, professional: true);
     await tester.tap(find.text('Jadwal'));
     await tester.pumpAndSettle();
-    expect(find.text('Quick Video Call').hitTestable(), findsOneWidget);
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, -650));
-    await tester.pumpAndSettle();
-    expect(find.text('Quick Video Call').hitTestable(), findsNothing,
-        reason:
-            'the meeting action must not stay pinned above a short schedule viewport');
+    expect(find.text('Lihat jadwal dan riwayat sesi Anda.'), findsOneWidget);
+    expect(find.text('Quick Video Call'), findsNothing);
+    expect(find.text('Sesi hari ini'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 }

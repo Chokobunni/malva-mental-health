@@ -105,7 +105,7 @@ func TestPatientChatDeletionWinsConcurrentSendRetry(t *testing.T) {
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		t.Fatal(err)
 	}
-	messages, err := f.st.ListChatMessages(t.Context(), f.patient.ID, f.prof.ID, 100)
+	messages, err := f.st.ListChatMessages(t.Context(), f.patient.ID, f.prof.ID, "", 100)
 	if err != nil || len(messages) != 0 {
 		t.Fatalf("delete and retry left visible messages: count=%d err=%v", len(messages), err)
 	}

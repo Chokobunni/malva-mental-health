@@ -57,8 +57,8 @@ void main() {
     // Tab Jadwal: tombol Quick Video Call (dipindah dari Dashboard) + sesi.
     await tester.tap(find.text('Jadwal'));
     await tester.pumpAndSettle();
-    expect(find.text('Quick Video Call'), findsOneWidget);
-    expect(find.text('Sesi hari ini'), findsOneWidget);
+    expect(find.text('Quick Video Call'), findsNothing);
+    expect(find.text('Lihat jadwal dan riwayat sesi Anda.'), findsOneWidget);
 
     // Tab Pasien: tanpa backend = empty state, tanpa pasien demo.
     await tester.tap(find.text('Pasien'));
@@ -78,11 +78,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Audit & export ringkasan'), findsNothing);
     expect(find.text('Crisis Incident Log'), findsNothing);
-    expect(find.text('Profil Profesional'), findsOneWidget);
+    expect(find.text('Akun Profesional'), findsOneWidget);
     expect(find.text('Portal Profesional'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Relasi pasien–profesional'), 200,
-        scrollable: find.byType(Scrollable).first);
-    expect(find.text('Relasi pasien–profesional'), findsOneWidget);
+    expect(find.text('Relasi pasien–profesional'), findsNothing);
 
     expect(tester.takeException(), isNull);
   });

@@ -12,6 +12,72 @@ import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
 
 void main() {
+  testWidgets(
+      'an ended conversation can load messages from before the latest page',
+      (tester) async {
+    initializeWib();
+    final cursors = <String?>[];
+    final at = wibNow();
+    final api = MalvaApiClient(
+      baseUrl: 'http://backend.test',
+      httpClient: MockClient((request) async {
+        if (request.url.path != '/v1/messages') return http.Response('{}', 200);
+        final before = request.url.queryParameters['before'];
+        cursors.add(before);
+        return http.Response(
+            jsonEncode({
+              'messages': before == null
+                  ? [
+                      for (var i = 0; i < 100; i++)
+                        {
+                          'id': 'recent-$i',
+                          'sender_id': 'pro1',
+                          'text': 'Pesan $i',
+                          'created_at':
+                              wibIso(at.subtract(Duration(minutes: i)))
+                        },
+                    ]
+                  : [
+                      {
+                        'id': 'older',
+                        'sender_id': 'pro1',
+                        'text': 'Pesan lebih lama',
+                        'created_at':
+                            wibIso(at.subtract(const Duration(days: 1)))
+                      },
+                    ],
+            }),
+            200);
+      }),
+    );
+    final container = ProviderContainer(
+        overrides: [apiClientProvider.overrideWithValue(api)]);
+    addTearDown(container.dispose);
+    container.read(authStateProvider.notifier).setSession(const AuthSession(
+          role: UserRole.patient,
+          identifier: 'p1',
+          backendUserId: 'p1',
+          displayName: 'Pasien',
+          accessToken: 'token',
+        ));
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(
+          home: ChatScreen(otherUserName: 'Profesional', otherUserId: 'pro1')),
+    ));
+    await tester.pump();
+    final loadOlder = find.text('Muat pesan sebelumnya');
+    await tester.scrollUntilVisible(loadOlder, -500,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(loadOlder);
+    await tester.pump();
+    expect(cursors.last, 'recent-99');
+    expect(find.text('Pesan lebih lama'), findsOneWidget);
+    expect(loadOlder, findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 100));
+  });
+
   testWidgets('only a sender can confirm deletion, even outside a session',
       (tester) async {
     initializeWib();

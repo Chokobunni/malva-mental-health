@@ -141,6 +141,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
+    await tester.tap(find.byTooltip('Paket saya'));
+    await tester.pumpAndSettle();
     expect(find.text('Dr. Sinta'), findsOneWidget);
     // UI merender SATU Text berisi sisa sesi + tanggal berlaku
     // (mis. '7/8 sesi tersisa • s/d 31/10/2026'), jadi pakai textContaining.
@@ -168,6 +170,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
+    await tester.tap(find.byTooltip('Paket saya'));
+    await tester.pumpAndSettle();
     expect(find.text('Dr. Sinta'), findsOneWidget);
     // Idem: satu Text berisi sisa sesi + tanggal berlaku.
     expect(find.textContaining('3/4 sesi tersisa'), findsOneWidget);
@@ -201,6 +205,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
+    await tester.tap(find.byTooltip('Paket saya'));
+    await tester.pumpAndSettle();
     // Kuota sah hanya dari paket yang masih berlaku: tidak ada kartu 7/8 dan
     // tidak ada label gabungan.
     expect(find.textContaining('7/8 sesi tersisa'), findsNothing);

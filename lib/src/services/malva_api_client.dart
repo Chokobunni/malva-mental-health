@@ -1514,6 +1514,7 @@ class MalvaApiClient {
     required String patientId,
     required String professionalId,
     int limit = 100,
+    String? before,
   }) async {
     final payload = await _sendUri(
       'GET',
@@ -1523,6 +1524,7 @@ class MalvaApiClient {
           'patient_id': patientId,
           'professional_id': professionalId,
           'limit': limit.toString(),
+          if (before != null) 'before': before,
         },
       ),
       accessToken: accessToken,

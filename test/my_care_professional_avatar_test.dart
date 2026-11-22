@@ -81,7 +81,16 @@ void main() {
   testWidgets(
       'kartu profesional memakai ProfessionalAvatar (foto), bukan ikon orang statis',
       (tester) async {
-    final api = _apiWith(_link());
+    final api = _apiWith(_link(), packages: [
+      {
+        'id': 'active-package',
+        'professional_id': 'pro_user_1',
+        'status': 'active',
+        'total_sessions': 8,
+        'remaining_sessions': 6,
+        'expires_at': '2099-12-18T10:00:00+07:00'
+      }
+    ]);
 
     await tester.pumpWidget(_buildApp(api));
     await tester.pumpAndSettle();
@@ -121,9 +130,19 @@ void main() {
         'used_sessions': 2,
         'remaining_sessions': 6,
         'expires_at': '2099-12-18T10:00:00+07:00',
+      },
+      {
+        'id': 'expired-package',
+        'professional_id': 'inactive-pro',
+        'status': 'active',
+        'total_sessions': 8,
+        'remaining_sessions': 6,
+        'expires_at': '2020-12-18T10:00:00+07:00'
       }
     ]);
     await tester.pumpWidget(_buildApp(api));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(ChoiceChip, 'Semua 2'), findsOneWidget);
     expect(find.widgetWithText(ChoiceChip, 'Aktif 1'), findsOneWidget);
@@ -138,6 +157,9 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, 'Tidak aktif 1'));
     await tester.pumpAndSettle();
     expect(find.text('Profesional berhenti'), findsOneWidget);
+    expect(find.text('0/8 sesi tersisa'), findsOneWidget);
+    expect(find.text('Bagikan data'), findsNothing);
+    expect(find.text('Jadwalkan Sesi'), findsNothing);
     expect(find.text('Dr. Sinta'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());

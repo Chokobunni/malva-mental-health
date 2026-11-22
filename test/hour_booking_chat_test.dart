@@ -211,20 +211,20 @@ void main() {
           expect(request.headers['authorization'], 'Bearer patient-token');
           Object body = <String, Object?>{};
           if (request.url.path == '/v1/patient-professional-links') {
-            body = {'links': []};
-          } else if (request.url.path == '/v1/care-sessions') {
             body = {
-              'sessions': [
+              'links': [
                 {
-                  'id': 's',
-                  'professional_id': 'pro',
+                  'professional_user_id': 'pro',
                   'patient_id': 'p',
-                  'professional_name': 'dr. Baru',
-                  'status': 'scheduled',
-                  'session_type': 'video',
-                  'duration_minutes': 60,
-                  'scheduled_at': wibIso(wibNow().add(const Duration(days: 2))),
-                }
+                  'professional_display_name': 'dr. Baru',
+                  'status': 'active'
+                },
+                {
+                  'professional_user_id': 'old-pro',
+                  'patient_id': 'p',
+                  'professional_display_name': 'dr. Lama',
+                  'status': 'expired'
+                },
               ]
             };
           }
@@ -239,6 +239,9 @@ void main() {
         child: const MaterialApp(home: MessagesListScreen())));
     await tester.pumpAndSettle();
     expect(find.text('dr. Baru'), findsOneWidget);
+    expect(find.text('Riwayat'), findsOneWidget);
+    expect(find.text('dr. Lama'), findsOneWidget);
+    expect(find.text('Expired'), findsOneWidget);
     expect(find.textContaining('Mode offline'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());

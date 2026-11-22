@@ -10,6 +10,7 @@ import '../widgets/session_attendance_actions.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
+import '../widgets/care_reference_widgets.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/meet_join_button.dart';
 import 'chat_screen.dart';
@@ -176,7 +177,6 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
                   const SizedBox(height: 10),
                 ],
               ],
-              const SectionLabel('Sesi hari ini', icon: Icons.today_rounded),
               if (_isLoading)
                 const Center(child: CircularProgressIndicator())
               else if (_error != null)
@@ -199,12 +199,15 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
                 )
               else ...[
                 if (today.isEmpty)
-                  const EmptyState(
-                    icon: Icons.event_available_outlined,
-                    title: 'Tidak ada sesi hari ini',
-                    subtitle: 'Sesi terjadwal hari ini muncul di sini.',
+                  const CareIllustratedCard(
+                    horizontal: true,
+                    imageHeight: 85,
+                    asset: 'pro-today',
+                    title: 'Sesi hari ini',
+                    subtitle: 'Tidak ada sesi hari ini',
                   )
-                else
+                else ...[
+                  const SectionLabel('Sesi hari ini'),
                   for (final s in today) ...[
                     _ProSessionCard(
                         key: ValueKey('today-${s.id}'),
@@ -212,16 +215,18 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
                         onChanged: _load),
                     const SizedBox(height: 10),
                   ],
-                const SizedBox(height: 10),
-                const SectionLabel('Mendatang', icon: Icons.event_rounded),
+                ],
+                const SizedBox(height: 14),
                 if (upcoming.isEmpty)
-                  const EmptyState(
-                    icon: Icons.calendar_month_outlined,
-                    title: 'Belum ada sesi mendatang',
-                    subtitle:
-                        'Pasien menjadwalkan sesi dari paket / quick consult.',
+                  const CareIllustratedCard(
+                    horizontal: true,
+                    imageHeight: 85,
+                    asset: 'pro-upcoming',
+                    title: 'Mendatang',
+                    subtitle: 'Belum ada sesi mendatang',
                   )
-                else
+                else ...[
+                  const SectionLabel('Mendatang'),
                   for (final s in upcoming) ...[
                     _ProSessionCard(
                         key: ValueKey('upcoming-${s.id}'),
@@ -229,20 +234,25 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
                         onChanged: _load),
                     const SizedBox(height: 10),
                   ],
-                const SizedBox(height: 10),
-                ListTile(
-                  key: const ValueKey('session-history-toggle'),
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.history_rounded),
-                  title: const Text('Riwayat sesi',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text('${past.length} sesi'),
-                  trailing: Icon(_historyExpanded
-                      ? Icons.expand_less_rounded
-                      : Icons.expand_more_rounded),
-                  onTap: () =>
-                      setState(() => _historyExpanded = !_historyExpanded),
-                ),
+                ],
+                const SizedBox(height: 14),
+                SoftCard(
+                    radius: 14,
+                    padding: EdgeInsets.zero,
+                    child: ListTile(
+                      key: const ValueKey('session-history-toggle'),
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 13),
+                      leading: const Icon(Icons.history_rounded),
+                      title: const Text('Riwayat sesi',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text('${past.length} sesi'),
+                      trailing: Icon(_historyExpanded
+                          ? Icons.expand_less_rounded
+                          : Icons.expand_more_rounded),
+                      onTap: () =>
+                          setState(() => _historyExpanded = !_historyExpanded),
+                    )),
                 if (_historyExpanded && past.isEmpty)
                   const EmptyState(
                     icon: Icons.history_rounded,

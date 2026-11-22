@@ -1744,7 +1744,12 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request, claims aut
 		canonicalPatientID, canonicalProfessionalID = patientID, professionalID
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	messages, err := s.store.ListChatMessages(r.Context(), canonicalPatientID, canonicalProfessionalID, limit)
+	before := strings.TrimSpace(r.URL.Query().Get("before"))
+	if len(before) > 256 {
+		writeError(w, http.StatusBadRequest, errors.New("cursor riwayat tidak valid"))
+		return
+	}
+	messages, err := s.store.ListChatMessages(r.Context(), canonicalPatientID, canonicalProfessionalID, before, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return

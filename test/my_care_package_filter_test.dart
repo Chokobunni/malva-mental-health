@@ -124,6 +124,8 @@ void main() {
               accessToken: 'test'),
         ))));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Paket saya'));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ChoiceChip, 'Menunggu pembayaran 1'));
     await tester.pumpAndSettle();
     expect(find.text('Profesional pending_payment'), findsOneWidget);

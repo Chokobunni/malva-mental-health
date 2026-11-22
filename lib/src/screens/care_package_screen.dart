@@ -513,7 +513,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
       ),
-      builder: (_) => _SessionSchedulerSheet(
+      builder: (_) => CareSessionSchedulerSheet(
         apiClient: apiClient,
         accessToken: token,
         professionalId: _package.professionalId,
@@ -900,8 +900,8 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
 
 /// Sheet pilih tanggal (hari praktik) + jam + tipe sesi.
 /// Mengembalikan "YYYY-MM-DDTHH:MM|chat|video".
-class _SessionSchedulerSheet extends StatefulWidget {
-  const _SessionSchedulerSheet({
+class CareSessionSchedulerSheet extends StatefulWidget {
+  const CareSessionSchedulerSheet({
     required this.apiClient,
     required this.accessToken,
     required this.professionalId,
@@ -916,10 +916,11 @@ class _SessionSchedulerSheet extends StatefulWidget {
   final String initialType;
 
   @override
-  State<_SessionSchedulerSheet> createState() => _SessionSchedulerSheetState();
+  State<CareSessionSchedulerSheet> createState() =>
+      CareSessionSchedulerSheetState();
 }
 
-class _SessionSchedulerSheetState extends State<_SessionSchedulerSheet> {
+class CareSessionSchedulerSheetState extends State<CareSessionSchedulerSheet> {
   List<BackendAvailabilityDay> _days = const [];
   String? _date;
   String? _slot;
@@ -1143,7 +1144,7 @@ class _SessionSchedulerSheetState extends State<_SessionSchedulerSheet> {
 }
 
 /// Sheet pilih slot sesi PERTAMA paket (dipakai saat pembayaran paket).
-/// Sama seperti _SessionSchedulerSheet tapi tanpa batas kedaluwarsa paket
+/// Sama seperti CareSessionSchedulerSheet tapi tanpa batas kedaluwarsa paket
 /// (paket baru aktif setelah bayar; expiry dihitung dari aktivasi).
 class PackageFirstSessionSheet extends StatefulWidget {
   const PackageFirstSessionSheet({

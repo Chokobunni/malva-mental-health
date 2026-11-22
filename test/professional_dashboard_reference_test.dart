@@ -168,7 +168,7 @@ void main() {
     expect(find.byTooltip('Profil Profesional'), findsOneWidget);
     await tester.tap(find.byTooltip('Profil Profesional'));
     await tester.pumpAndSettle();
-    expect(find.text('Profil Profesional'), findsOneWidget);
+    expect(find.text('Akun Profesional'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Keluar'), 180,
         scrollable: find.byType(Scrollable).first);
     await tester.ensureVisible(find.text('Keluar'));
@@ -226,9 +226,7 @@ void main() {
         size: const Size(320, 844), textScale: 1.4);
     expect(find.byTooltip('Profil Profesional').hitTestable(), findsOneWidget);
     expect(find.byTooltip('Refresh manual').hitTestable(), findsOneWidget);
-    expect(tester.getBottomRight(find.text('Dashboard')).dy,
-        lessThanOrEqualTo(844));
-    expect(tester.getBottomRight(find.text('Messages')).dy,
+    expect(tester.getBottomRight(find.byType(NavigationBar)).dy,
         lessThanOrEqualTo(844));
     await _capture(tester, 'professional-narrow-large-text.png');
     await tester.ensureVisible(find.text('Ketersediaan & harga'));
