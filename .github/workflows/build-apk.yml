@@ -28,11 +28,12 @@ on:
   workflow_dispatch:
     inputs:
       target_platform:
-        description: 'Target platform Flutter'
+        description: 'Target platform Flutter untuk build tanpa upload'
         required: true
         type: choice
-        default: android-arm64
+        default: universal
         options:
+          - universal
           - android-arm64
           - android-arm
           - android-x64
@@ -45,7 +46,7 @@ on:
     inputs:
       target_platform:
         type: string
-        default: android-arm64
+        default: universal
       deploy:
         type: boolean
         default: true
@@ -148,13 +149,40 @@ jobs:
         env:
           API_BASE_URL: ${{ vars.MALVA_API_BASE_URL || 'https://api.malva.web.id' }}
           GOOGLE_CLIENT_ID: ${{ vars.MALVA_GOOGLE_CLIENT_ID }}
-          TARGET_PLATFORM: ${{ inputs.target_platform || 'android-arm64' }}
+          TARGET_PLATFORM: ${{ inputs.deploy == false && inputs.target_platform || 'universal' }}
         run: |
           set -euo pipefail
+          output=build/app/outputs/flutter-apk
+          flags=()
+          case "$TARGET_PLATFORM" in
+            universal) TARGET_PLATFORM=android-arm,android-arm64,android-x64; expected="arm64-v8a armeabi-v7a x86_64" ;;
+            android-arm) expected=armeabi-v7a; flags+=(--split-per-abi) ;;
+            android-arm64) expected=arm64-v8a; flags+=(--split-per-abi) ;;
+            android-x64) expected=x86_64; flags+=(--split-per-abi) ;;
+            *) echo "::error::Unsupported target platform"; exit 1 ;;
+          esac
           flutter build apk --release \
             --target-platform "$TARGET_PLATFORM" \
+            "${flags[@]}" \
             --dart-define=MALVA_API_BASE_URL="$API_BASE_URL" \
             --dart-define=MALVA_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID"
+          if [ "${#flags[@]}" -ne 0 ]; then
+            cp "$output/app-$expected-release.apk" "$output/app-release.apk"
+          fi
+          entries=$(unzip -Z1 "$output/app-release.apk")
+          actual=$(awk -F/ '$1 == "lib" && $NF ~ /\.so$/ {print $2}' <<< "$entries" | LC_ALL=C sort -u | paste -sd' ' -)
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Expected native ABIs [$expected], found [$actual]"
+            exit 1
+          fi
+          for abi in $expected; do
+            for library in libflutter.so libapp.so; do
+              if ! grep -Fxq "lib/$abi/$library" <<< "$entries"; then
+                echo "::error::APK is missing $library for $abi"
+                exit 1
+              fi
+            done
+          done
 
       - name: Verify dart-define embedded
         env:
