@@ -378,8 +378,9 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                                             : 'Psikolog Klinis (M.Psi)')),
                                 _InfoLine(
                                     label: 'Lisensi',
-                                    value:
-                                        'STR ${cred.strNumber.isEmpty ? '-' : cred.strNumber}'),
+                                    value: cred.strNumber.isEmpty
+                                        ? '—'
+                                        : cred.strNumber),
                                 _InfoLine(
                                     label: 'SIP',
                                     value:
@@ -843,8 +844,24 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
         barrierColor: MalvaColors.plum.withValues(alpha: 0.65),
         builder: (context) => AlertDialog(
           backgroundColor: Colors.white,
-          title: Text(
-              package ? 'Jadwal Continuous Package' : 'Jadwal Quick Consult'),
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          contentPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(children: [
+            Icon(package ? Icons.calendar_month_outlined : Icons.timer_outlined,
+                color: MalvaColors.seed, size: 28),
+            const SizedBox(width: 10),
+            Expanded(
+                child: Text(
+                    package
+                        ? 'Jadwal Continuous Package'
+                        : 'Jadwal Quick Consult',
+                    style: const TextStyle(
+                        fontSize: 19, fontWeight: FontWeight.w900))),
+          ]),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1331,6 +1348,12 @@ class _SupportPlanCard extends StatelessWidget {
             Text(quota!, style: const TextStyle(color: MalvaColors.seed)),
           const SizedBox(height: 8),
           OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: MalvaColors.seed),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(11)),
+              textStyle: const TextStyle(fontWeight: FontWeight.w800),
+            ),
             onPressed: onSchedule,
             icon: const Icon(Icons.event_available_outlined),
             label: const Text('Lihat jadwal'),

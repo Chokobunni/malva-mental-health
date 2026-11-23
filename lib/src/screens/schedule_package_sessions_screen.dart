@@ -233,9 +233,10 @@ class _SchedulePackageSessionsScreenState
                         child: Text(name.isEmpty ? 'Profesional' : name,
                             style: title)),
                     const SizedBox(width: 6),
-                    Chip(
-                        label:
-                            Text(available ? 'Paket aktif' : 'Paket berakhir')),
+                    StatusPill(
+                      label: available ? 'Paket aktif' : 'Paket berakhir',
+                      color: available ? MalvaColors.mint : MalvaColors.plum,
+                    ),
                   ]),
                   const Divider(height: 24),
                   Row(children: [
@@ -285,7 +286,7 @@ class _SchedulePackageSessionsScreenState
             const SizedBox(height: 18),
             const Row(children: [
               Expanded(child: Text('Pilih jadwal', style: title)),
-              Chip(label: Text('WIB')),
+              StatusPill(label: 'WIB', color: MalvaColors.seed),
             ]),
             Text('Pilih hingga $_remaining sesi sesuai jam praktik.'),
             const SizedBox(height: 12),
@@ -301,12 +302,16 @@ class _SchedulePackageSessionsScreenState
                   if (number > _package.usedSessions + 1)
                     const Divider(height: 1, indent: 16, endIndent: 16),
                   ListTile(
-                    leading: Icon(
-                      _scheduled.contains(number) ||
-                              _selected.containsKey(number)
-                          ? Icons.check_circle_outline
-                          : Icons.event_outlined,
-                      color: MalvaColors.seed,
+                    leading: CircleAvatar(
+                      radius: 14,
+                      backgroundColor: const Color(0xfff3e8fa),
+                      child: Icon(
+                          _scheduled.contains(number) ||
+                                  _selected.containsKey(number)
+                              ? Icons.check_rounded
+                              : Icons.event_outlined,
+                          color: MalvaColors.seed,
+                          size: 17),
                     ),
                     title: Text('Sesi $number',
                         style: const TextStyle(fontWeight: FontWeight.w800)),

@@ -316,6 +316,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     });
     final patient = session?.role == UserRole.patient;
     final disabled = _loading || _saving;
+    final fieldBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: careCardBorder,
+    );
+    InputDecoration patientField({String? hint, Widget? suffix}) =>
+        InputDecoration(
+          filled: false,
+          enabledBorder: fieldBorder,
+          disabledBorder: fieldBorder,
+          focusedBorder: fieldBorder.copyWith(
+              borderSide: const BorderSide(color: MalvaColors.seed)),
+          hintText: hint,
+          suffixIcon: suffix,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        );
     return Scaffold(
       backgroundColor: carePageColor,
       appBar: AppBar(
@@ -331,7 +347,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 10),
             Center(
                 child: AccountAvatar(
-                    session: session, avatar: _avatarDraft, size: 112)),
+                    session: session, avatar: _avatarDraft, size: 120)),
             const SizedBox(height: 14),
             Center(
               child: OutlinedButton.icon(
@@ -352,25 +368,33 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SectionLabel('Name'),
-                TextField(
-                  controller: _name,
-                  enabled: !disabled,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Name'),
+                Semantics(
+                  label: 'Name',
+                  child: TextField(
+                    key: const ValueKey('profile.name'),
+                    controller: _name,
+                    enabled: !disabled,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: patientField(),
+                  ),
                 ),
                 const SizedBox(height: 18),
                 const SectionLabel('Date of Birth'),
-                TextField(
-                  controller: _dob,
-                  enabled: !disabled,
-                  keyboardType: TextInputType.datetime,
-                  decoration: InputDecoration(
-                    labelText: 'Date of Birth',
-                    hintText: 'DD/MM/YYYY',
-                    suffixIcon: IconButton(
-                      tooltip: 'Pilih tanggal lahir',
-                      onPressed: disabled ? null : _pickBirthDate,
-                      icon: const Icon(Icons.calendar_today_outlined),
+                Semantics(
+                  label: 'Date of Birth',
+                  child: TextField(
+                    key: const ValueKey('profile.dateOfBirth'),
+                    controller: _dob,
+                    enabled: !disabled,
+                    keyboardType: TextInputType.datetime,
+                    decoration: patientField(
+                      hint: 'DD/MM/YYYY',
+                      suffix: IconButton(
+                        tooltip: 'Pilih tanggal lahir',
+                        onPressed: disabled ? null : _pickBirthDate,
+                        icon: const Icon(Icons.calendar_today_outlined,
+                            color: MalvaColors.seed, size: 21),
+                      ),
                     ),
                   ),
                 ),
@@ -381,25 +405,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           if (_loading) const LinearProgressIndicator(),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(_error!,
-                    style: const TextStyle(color: MalvaColors.danger)),
+      bottomNavigationBar: Material(
+        color: Colors.white,
+        child: SafeArea(
+          minimum: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(_error!,
+                      style: const TextStyle(color: MalvaColors.danger)),
+                ),
+              FilledButton(
+                onPressed: disabled || session?.accessToken?.isNotEmpty != true
+                    ? null
+                    : _saveProfile,
+                child: Text(_saving ? 'Menyimpan...' : 'Save changes'),
               ),
-            FilledButton(
-              onPressed: disabled || session?.accessToken?.isNotEmpty != true
-                  ? null
-                  : _saveProfile,
-              child: Text(_saving ? 'Menyimpan...' : 'Save changes'),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -418,6 +445,10 @@ class _AvatarPicker extends ConsumerStatefulWidget {
 
 class _AvatarPickerState extends ConsumerState<_AvatarPicker> {
   late String selected = widget.initial ?? profileAvatarAssets.first;
+  late String? uploaded = widget.initial != defaultProfileAvatar &&
+          !profileAvatarAssets.contains(widget.initial)
+      ? widget.initial
+      : null;
   bool picking = false;
   String? error;
 
@@ -438,7 +469,10 @@ class _AvatarPickerState extends ConsumerState<_AvatarPicker> {
         setState(() => error = 'Ukuran foto masih terlalu besar.');
         return;
       }
-      setState(() => selected = base64Encode(file.bytes));
+      setState(() {
+        selected = base64Encode(file.bytes);
+        uploaded = selected;
+      });
     } on Object catch (failure) {
       if (mounted) setState(() => error = friendlyErrorMessage(failure));
     } finally {
@@ -449,56 +483,96 @@ class _AvatarPickerState extends ConsumerState<_AvatarPicker> {
   @override
   Widget build(BuildContext context) {
     final options = [
+      defaultProfileAvatar,
       ...profileAvatarAssets,
-      if (!profileAvatarAssets.contains(selected)) selected,
+      if (uploaded != null) uploaded!,
     ];
+    final shape =
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(10));
+    final outlineStyle = OutlinedButton.styleFrom(
+      shape: shape,
+      side: careCardBorder.copyWith(color: MalvaColors.seed),
+      minimumSize: const Size(0, 42),
+    );
     return AlertDialog(
       backgroundColor: Colors.white,
-      title: const Text('Change avatar'),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      titlePadding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+      contentPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      title: const Text('Change avatar',
+          style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
       content: SingleChildScrollView(
         child: SizedBox(
-          width: 280,
+          width: 320,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  for (final (i, option) in options.indexed)
-                    Semantics(
-                      selected: selected == option,
-                      button: true,
-                      label: 'Avatar ${i + 1}',
-                      child: InkWell(
-                        onTap: picking
-                            ? null
-                            : () => setState(() => selected = option),
-                        customBorder: const CircleBorder(),
-                        child: Container(
-                          padding: const EdgeInsets.all(3),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: selected == option
-                                  ? MalvaColors.seed
-                                  : Colors.transparent,
-                              width: 2,
+              LayoutBuilder(builder: (context, constraints) {
+                final cellWidth = (constraints.maxWidth - 20) / 3;
+                final avatarSize = (cellWidth - 8).clamp(36.0, 86.0).toDouble();
+                return Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final (i, option) in options.indexed)
+                      SizedBox(
+                        width: cellWidth,
+                        child: Center(
+                          child: Semantics(
+                            selected: selected == option,
+                            button: true,
+                            label: option == defaultProfileAvatar
+                                ? 'Avatar default'
+                                : 'Avatar $i',
+                            child: InkWell(
+                              onTap: picking
+                                  ? null
+                                  : () => setState(() => selected = option),
+                              customBorder: const CircleBorder(),
+                              child: Stack(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: selected == option
+                                            ? MalvaColors.seed
+                                            : Colors.transparent,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: AccountAvatar(
+                                        session: widget.session,
+                                        avatar: option,
+                                        size: avatarSize),
+                                  ),
+                                  if (selected == option)
+                                    const Positioned(
+                                      right: 1,
+                                      bottom: 2,
+                                      child: CircleAvatar(
+                                        radius: 9,
+                                        backgroundColor: MalvaColors.seed,
+                                        child: Icon(Icons.check_rounded,
+                                            size: 13, color: Colors.white),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
-                          child: AccountAvatar(
-                              session: widget.session,
-                              avatar: option,
-                              size: 52),
                         ),
                       ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 22),
+                  ],
+                );
+              }),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
+                  style: outlineStyle,
                   onPressed: picking ? null : _upload,
                   icon: const Icon(Icons.image_outlined),
                   label: const Text('Upload photo'),
@@ -506,20 +580,37 @@ class _AvatarPickerState extends ConsumerState<_AvatarPicker> {
               ),
               if (error != null)
                 Text(error!, style: const TextStyle(color: MalvaColors.danger)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: outlineStyle,
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        shape: shape,
+                        minimumSize: const Size(0, 42),
+                        backgroundColor: const Color(0xff77138d),
+                      ),
+                      onPressed: picking
+                          ? null
+                          : () => Navigator.pop(context, selected),
+                      child:
+                          const Text('Use avatar', textAlign: TextAlign.center),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
       ),
-      actions: [
-        OutlinedButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: picking ? null : () => Navigator.pop(context, selected),
-          child: const Text('Use avatar'),
-        ),
-      ],
     );
   }
 }

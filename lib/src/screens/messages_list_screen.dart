@@ -197,18 +197,27 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
                           title: 'Belum ada percakapan',
                           subtitle:
                               'Hubungkan akun dengan profesional untuk mulai chat.',
-                          action: FilledButton.icon(
-                            iconAlignment: IconAlignment.end,
-                            icon: const Icon(Icons.arrow_forward_rounded),
-                            label: const Text('Cari profesional'),
-                            onPressed: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => DoctorDiscoveryScreen(
-                                    session: _session,
-                                    apiClient: widget.apiClient,
-                                  ),
-                                )),
+                          action: Align(
+                            child: SizedBox(
+                              width: 224,
+                              child: FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xff681477),
+                                  minimumSize: const Size(0, 44),
+                                ),
+                                iconAlignment: IconAlignment.end,
+                                icon: const Icon(Icons.arrow_forward_rounded),
+                                label: const Text('Cari profesional'),
+                                onPressed: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => DoctorDiscoveryScreen(
+                                        session: _session,
+                                        apiClient: widget.apiClient,
+                                      ),
+                                    )),
+                              ),
+                            ),
                           ),
                         )
                       else if (_links.isEmpty)

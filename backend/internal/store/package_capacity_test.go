@@ -83,6 +83,36 @@ func TestPackagePatientCapacityAdmission(t *testing.T) {
 	if existing, err := s.CreatePayment(ctx, retry); err != nil || existing.Reference != winner.payment.Reference {
 		t.Fatalf("idempotent payment: %s, %v", existing.Reference, err)
 	}
+	writeCapacity(&capacity)
+	if _, err := db.ExecContext(ctx, "UPDATE payments SET created_at=$1 WHERE reference=$2",
+		clock.Now().AddDate(0, 0, -1), winner.payment.Reference); err != nil {
+		t.Fatal(err)
+	}
+	other, err := s.CreatePayment(ctx, options[loser.index])
+	if err != nil {
+		t.Fatalf("payment without a page kept an abandoned reservation: %v", err)
+	}
+	calls := 0
+	gateway := func() (string, string, error) {
+		calls++
+		return "snap-token", "https://payment.example.test", nil
+	}
+	if _, err := s.InitializePaymentGateway(ctx, winner.payment.Reference, "midtrans", gateway); !errors.Is(err, ErrPackageCapacity) || calls != 0 {
+		t.Fatalf("retry exceeded capacity: calls=%d err=%v", calls, err)
+	}
+	if _, err := s.InitializePaymentGateway(ctx, other.Reference, "midtrans", gateway); err != nil || calls != 1 {
+		t.Fatalf("admitted checkout did not get a payment page: calls=%d err=%v", calls, err)
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE payments SET created_at=$1 WHERE reference=$2",
+		clock.Now().AddDate(0, 0, -1), other.Reference); err != nil {
+		t.Fatal(err)
+	}
+	if remaining, _, resume, err := s.PackagePatientAvailability(ctx, professional, patients[loser.index]); err != nil || remaining == nil || *remaining != 0 || !resume {
+		t.Fatalf("checkout with a payment page lost its reservation: remaining=%v resume=%v err=%v", remaining, resume, err)
+	}
+	if err := s.SetPaymentTerminal(ctx, other.Reference, "expired"); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.SetPaymentTerminal(ctx, winner.payment.Reference, "expired"); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +120,9 @@ func TestPackagePatientCapacityAdmission(t *testing.T) {
 	if remaining, renew, resume, err := s.PackagePatientAvailability(ctx, professional, patients[winner.index]); err != nil || remaining == nil || *remaining != 1 || renew || resume {
 		t.Fatalf("released expired reservation: remaining=%v renew=%v resume=%v err=%v", remaining, renew, resume, err)
 	}
-	if _, err := s.CreatePayment(ctx, options[loser.index]); err != nil {
+	next := options[loser.index]
+	next.Reference += "-next"
+	if _, err := s.CreatePayment(ctx, next); err != nil {
 		t.Fatalf("released slot unavailable: %v", err)
 	}
 	if _, err := db.ExecContext(ctx, `UPDATE care_packages SET status='active' WHERE booking_id=$1`, options[loser.index].BookingID); err != nil {

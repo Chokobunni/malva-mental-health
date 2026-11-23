@@ -41,6 +41,9 @@ func (s *Server) validatePackageCheckoutSlots(ctx context.Context, pkg store.Car
 		base = active.ExpiresAt
 	}
 	expires := base.AddDate(0, 0, pkg.ValidityDays)
+	if !first.Before(expires) {
+		return nil, store.ErrCarePackageExpired
+	}
 	slots := make([]store.PackageCheckoutSlot, 0, len(requested))
 	for _, raw := range requested {
 		start, err := parseWIBDateTime(raw)

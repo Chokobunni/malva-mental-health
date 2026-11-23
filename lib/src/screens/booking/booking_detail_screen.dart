@@ -225,12 +225,28 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                 if (method == 'video') const SizedBox(width: 8),
                 Expanded(
                   child: ChoiceChip(
-                    avatar: Icon(icon, color: MalvaColors.seed),
-                    label: Text(label),
+                    showCheckmark: false,
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 7),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    label: Row(
+                      children: [
+                        Icon(icon, color: MalvaColors.seed),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(label)),
+                        if (_method == method)
+                          const Icon(Icons.check_circle,
+                              color: MalvaColors.seed, size: 19),
+                      ],
+                    ),
                     selected: _method == method,
                     selectedColor: const Color(0xFFF0DFF9),
                     backgroundColor: Colors.white,
-                    labelStyle: const TextStyle(fontWeight: FontWeight.w800),
+                    side: BorderSide(
+                        color: _method == method
+                            ? MalvaColors.seed
+                            : const Color(0xFFCCC3D0)),
+                    labelStyle: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 15),
                     onSelected: _priceFor(method) <= 0 || _isSubmitting
                         ? null
                         : (_) {
@@ -303,22 +319,33 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                   'Semua slot tanggal ini sudah terisi. Coba tanggal lain.',
             )
           else
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final slot in _slots)
-                  ChoiceChip(
-                    label: Text(slot.time,
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
-                    selected: _selectedSlot == slot.time,
-                    onSelected: slot.available && !_isSubmitting
-                        ? (_) => setState(() => _selectedSlot = slot.time)
-                        : null,
-                    selectedColor: MalvaColors.seed.withValues(alpha: 0.2),
-                  ),
-              ],
-            ),
+            LayoutBuilder(builder: (context, constraints) {
+              final count = _slots.length <= 3 ? 3 : 4;
+              final width = (constraints.maxWidth - 8 * (count - 1)) / count;
+              return Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final slot in _slots)
+                    SizedBox(
+                      width: width,
+                      child: ChoiceChip(
+                        showCheckmark: false,
+                        backgroundColor: Colors.white,
+                        label: Center(
+                            child: Text(slot.time,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800))),
+                        selected: _selectedSlot == slot.time,
+                        onSelected: slot.available && !_isSubmitting
+                            ? (_) => setState(() => _selectedSlot = slot.time)
+                            : null,
+                        selectedColor: MalvaColors.seed.withValues(alpha: 0.2),
+                      ),
+                    ),
+                ],
+              );
+            }),
           const SizedBox(height: 14),
           SoftCard(
             color: MalvaColors.plum,

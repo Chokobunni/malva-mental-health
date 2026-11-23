@@ -11,12 +11,15 @@ import (
 
 var ErrPackageCapacity = errors.New("kapasitas pasien paket penuh")
 
+const packagePaymentInitializationWindow = 2 * time.Minute
+
 func lockPackageCapacity(ctx context.Context, tx *sql.Tx, professionalID string) error {
 	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "care_capacity:"+professionalID)
 	return err
 }
 
-// The two sources form a single occupancy snapshot even while a paid package activates.
+// An unfinished gateway initialization reserves capacity briefly. A payable
+// checkout keeps its place until the gateway reports a terminal status.
 const packagePatientAvailabilityQuery = `
     WITH active AS (
         SELECT DISTINCT patient_id
@@ -31,7 +34,11 @@ const packagePatientAvailabilityQuery = `
           AND b.status IN ('pending', 'paid')
           AND EXISTS (
             SELECT 1 FROM payments p
-            WHERE p.booking_id = b.id AND p.status IN ('pending', 'paid')
+            WHERE p.booking_id = b.id AND (
+                p.status = 'paid' OR (p.status = 'pending' AND (
+                    p.gateway <> 'midtrans' OR NULLIF(p.snap_token, '') IS NOT NULL OR p.created_at > $4
+                ))
+            )
           )
     ), occupied AS (
         SELECT patient_id FROM active
@@ -51,7 +58,7 @@ type packageCapacityQueryer interface {
 func packagePatientAvailability(ctx context.Context, q packageCapacityQueryer, professionalID, patientID string, now time.Time) (remaining *int, canRenew, canResume bool, err error) {
 	var capacity *int
 	var occupied int
-	err = q.QueryRowContext(ctx, packagePatientAvailabilityQuery, professionalID, patientID, now).
+	err = q.QueryRowContext(ctx, packagePatientAvailabilityQuery, professionalID, patientID, now, now.Add(-packagePaymentInitializationWindow)).
 		Scan(&capacity, &occupied, &canRenew, &canResume)
 	if err != nil {
 		return nil, false, false, err

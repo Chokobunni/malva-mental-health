@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../models/goal_details.dart';
 import '../../services/goal_history.dart';
 import '../../services/malva_api_client.dart';
 import '../../time/wib.dart';
@@ -36,6 +37,14 @@ class GoalHistoryPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final selected = goals.where((goal) => goal.id == goalId).firstOrNull;
     final grouped = groupGoalHistory(goals, logs, goalId: selected?.id);
+    final start = wibDateKey(range.start), end = wibDateKey(range.end);
+    final sameMonth = range.start.year == range.end.year &&
+        range.start.month == range.end.month;
+    final rangeDate = start == end
+        ? goalDateLabel(end)
+        : sameMonth
+            ? '${range.start.day}–${goalDateLabel(end)}'
+            : '${goalDateLabel(start)} – ${goalDateLabel(end)}';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const Text('Riwayat progres',
           style: TextStyle(
@@ -67,8 +76,7 @@ class GoalHistoryPanel extends StatelessWidget {
         )),
       ]),
       const SizedBox(height: 8),
-      Text('${formatWibDate(range.start)} - ${formatWibDate(range.end)}',
-          style: const TextStyle(color: goalMuted)),
+      Text(rangeDate, style: const TextStyle(color: goalMuted)),
       const SizedBox(height: 16),
       if (loading)
         const Center(child: CircularProgressIndicator(color: goalPurple))
@@ -91,13 +99,13 @@ class GoalHistoryPanel extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: ExpansionTile(
               key: PageStorageKey('goal-history-${day.key}'),
-              backgroundColor: const Color(0xFFFCF8FF),
-              textColor: goalPurple,
+              backgroundColor: const Color(0xFFF5E8FA),
+              textColor: goalInk,
               shape: const Border(),
               collapsedShape: const Border(),
               title: Row(children: [
                 Expanded(
-                    child: Text(wibWeekdayDate(parseWibStored(day.key)!),
+                    child: Text(_historyDayLabel(day.key, short: true),
                         style: const TextStyle(
                             fontWeight: FontWeight.w800, fontSize: 14))),
                 const SizedBox(width: 8),
@@ -110,23 +118,40 @@ class GoalHistoryPanel extends StatelessWidget {
               ]),
               children: [
                 for (final entry in day.value)
-                  ListTile(
-                    title: Text(entry.goal.title),
-                    trailing: entry.goal.details?.method != 'numeric' &&
-                            entry.goal.details?.method != 'checklist' &&
-                            entry.log.done
-                        ? const GoalPill('Selesai',
-                            icon: Icons.check,
-                            color: Color(0xFF14865B),
-                            background: Color(0xFFE0F5EA))
-                        : ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 104),
-                            child: Text(goalHistoryResult(entry),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.end,
-                                style: const TextStyle(color: goalMuted))),
-                    onTap: () => _showDetails(context, entry),
+                  Material(
+                    color: Colors.white,
+                    child: Column(children: [
+                      if (entry != day.value.first)
+                        const Divider(
+                            height: 1,
+                            indent: 16,
+                            endIndent: 16,
+                            color: goalLine),
+                      ListTile(
+                        visualDensity: const VisualDensity(vertical: -2),
+                        title: Text(entry.goal.title,
+                            style: const TextStyle(
+                                fontFamily: 'PlusJakartaSans',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600)),
+                        trailing: entry.goal.details?.method != 'numeric' &&
+                                entry.goal.details?.method != 'checklist' &&
+                                entry.log.done
+                            ? const GoalPill('Selesai',
+                                icon: Icons.check,
+                                color: Color(0xFF14865B),
+                                background: Color(0xFFE0F5EA))
+                            : ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 104),
+                                child: Text(goalHistoryResult(entry),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.end,
+                                    style: const TextStyle(color: goalMuted))),
+                        onTap: () => _showDetails(context, entry),
+                      ),
+                    ]),
                   ),
               ],
             ),
@@ -172,7 +197,7 @@ class GoalHistoryPanel extends StatelessWidget {
                         style: const TextStyle(
                             fontSize: 18, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 4),
-                    Text(wibWeekdayDate(parseWibStored(entry.log.loggedOn)!),
+                    Text(_historyDayLabel(entry.log.loggedOn),
                         style: const TextStyle(color: goalMuted)),
                     const SizedBox(height: 14),
                     GoalSurface(
@@ -234,13 +259,25 @@ class GoalHistoryPanel extends StatelessWidget {
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: () => Navigator.pop(context),
-                      style:
-                          FilledButton.styleFrom(backgroundColor: goalPurple),
+                      style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF9711B3),
+                          textStyle: const TextStyle(
+                              fontFamily: 'PlusJakartaSans',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800)),
                       child: const Text('Tutup'),
                     )),
               ],
             ));
   }
+}
+
+String _historyDayLabel(String key, {bool short = false}) {
+  final date = parseWibStored(key)!;
+  final label = goalDateLabel(key);
+  if (!short) return '${wibWeekdayName(date)}, $label';
+  final month = label.split(' ')[1].substring(0, 3);
+  return '${wibWeekdayName(date)}, ${date.day} $month';
 }
 
 class _HistoryFilter<T> extends StatelessWidget {

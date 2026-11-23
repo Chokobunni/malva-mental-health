@@ -462,6 +462,7 @@ class _ProfessionalProfileEditorScreenState
 
   @override
   Widget build(BuildContext context) {
+    final light = Theme.of(context).brightness == Brightness.light;
     final busy = _isSaving || _isUploadingPhoto || _isUploadingVideo;
     final showForm = !_isLoading && _loadError == null;
     final visibleSpecialties = _showAllSpecialties
@@ -473,7 +474,7 @@ class _ProfessionalProfileEditorScreenState
     final hiddenSpecialtyCount =
         _availableSpecialties.length - visibleSpecialties.length;
     return Scaffold(
-      backgroundColor: const Color(0xFFF5EFF9),
+      backgroundColor: light ? const Color(0xFFF5EFF9) : null,
       appBar: AppBar(
         title: const Text('Edit Profil Profesional'),
         centerTitle: true,
@@ -505,6 +506,7 @@ class _ProfessionalProfileEditorScreenState
                     onPressed: busy ? null : () => _save(saveBirthDate: true),
                     style: FilledButton.styleFrom(
                       backgroundColor: MalvaColors.seed,
+                      minimumSize: const Size(0, 42),
                       foregroundColor: Colors.white,
                     ),
                     icon: _isSaving
@@ -548,25 +550,30 @@ class _ProfessionalProfileEditorScreenState
                           _buildPhotoPreview(),
                           const SizedBox(width: 16),
                           Flexible(
-                            child: OutlinedButton.icon(
-                              onPressed: busy ? null : _pickAndUploadPhoto,
-                              icon: const Icon(Icons.image_outlined, size: 19),
-                              label: Text(_isUploadingPhoto
-                                  ? 'Mengunggah...'
-                                  : 'Pilih dari Galeri'),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: busy ? null : _pickAndUploadPhoto,
+                                  style: _mediaButtonStyle,
+                                  icon: const Icon(Icons.image_outlined,
+                                      size: 19),
+                                  label: Text(_isUploadingPhoto
+                                      ? 'Mengunggah...'
+                                      : 'Pilih dari Galeri'),
+                                ),
+                                TextButton.icon(
+                                  onPressed: busy ? null : _generateAiAvatar,
+                                  icon: const Icon(Icons.auto_awesome_outlined,
+                                      size: 16),
+                                  label: const Text('Buat avatar'),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
-                          onPressed: busy ? null : _generateAiAvatar,
-                          icon:
-                              const Icon(Icons.auto_awesome_outlined, size: 16),
-                          label: const Text('Buat avatar'),
-                        ),
-                      ),
+                      const SizedBox(height: 10),
                       _field(
                         'Tanggal Lahir',
                         _birthDateController,
@@ -582,49 +589,57 @@ class _ProfessionalProfileEditorScreenState
                           child: const Text('Muat ulang tanggal lahir'),
                         ),
                     ]),
-                    _section('Bio / Overview', [
-                      _field(
-                        'Deskripsi profesional',
-                        _bioController,
-                        hint: 'Ceritakan pengalaman dan fokus keahlianmu',
-                        maxLines: 5,
-                      ),
-                    ]),
-                    _section('Video Perkenalan', [
-                      if (_hasLocalVideo || _videoUrlController.text.isNotEmpty)
-                        Container(
-                          width: double.infinity,
-                          constraints: const BoxConstraints(minHeight: 108),
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEFE3F7),
-                            borderRadius: BorderRadius.circular(12),
+                    _section(
+                        'Bio / Overview',
+                        [
+                          _field(
+                            'Deskripsi profesional',
+                            _bioController,
+                            hint: 'Ceritakan pengalaman dan fokus keahlianmu',
+                            maxLines: 5,
                           ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                Icons.video_file_outlined,
-                                size: 32,
-                                color: MalvaColors.plum,
+                        ],
+                        titleOutside: true),
+                    _section(
+                        'Video Perkenalan',
+                        [
+                          if (_hasLocalVideo ||
+                              _videoUrlController.text.isNotEmpty)
+                            Container(
+                              width: double.infinity,
+                              constraints: const BoxConstraints(minHeight: 108),
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFE3F7),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              const SizedBox(height: 4),
-                              Text(_isUploadingVideo
-                                  ? 'Mengunggah video...'
-                                  : 'Video perkenalan tersimpan'),
-                            ],
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.video_file_outlined,
+                                    size: 32,
+                                    color: MalvaColors.plum,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(_isUploadingVideo
+                                      ? 'Mengunggah video...'
+                                      : 'Video perkenalan tersimpan'),
+                                ],
+                              ),
+                            ),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: busy ? null : _pickAndUploadVideo,
+                              style: _mediaButtonStyle,
+                              icon: const Icon(Icons.videocam_outlined),
+                              label: const Text('Pilih Video dari Galeri'),
+                            ),
                           ),
-                        ),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: busy ? null : _pickAndUploadVideo,
-                          icon: const Icon(Icons.videocam_outlined),
-                          label: const Text('Pilih Video dari Galeri'),
-                        ),
-                      ),
-                    ]),
+                        ],
+                        titleOutside: true),
                     _section('Bidang Keahlian', [
                       if (visibleSpecialties.isNotEmpty)
                         Wrap(
@@ -634,6 +649,7 @@ class _ProfessionalProfileEditorScreenState
                             for (final (key, label) in visibleSpecialties)
                               FilterChip(
                                 label: Text(label),
+                                visualDensity: VisualDensity.compact,
                                 selected: _selectedSpecialties.contains(key),
                                 selectedColor: const Color(0xFFEFE3F7),
                                 checkmarkColor: MalvaColors.plum,
@@ -667,6 +683,18 @@ class _ProfessionalProfileEditorScreenState
                       ],
                     ]),
                     _section('Riwayat Pendidikan', [
+                      if (_education.isNotEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 8, bottom: 6),
+                          child: Row(children: [
+                            Expanded(flex: 2, child: Text('Gelar')),
+                            SizedBox(width: 8),
+                            Expanded(flex: 3, child: Text('Institusi')),
+                            SizedBox(width: 8),
+                            SizedBox(width: 72, child: Text('Tahun')),
+                            SizedBox(width: 45),
+                          ]),
+                        ),
                       for (var i = 0; i < _education.length; i++) ...[
                         _EducationRow(
                           key: ObjectKey(_education[i]),
@@ -719,35 +747,53 @@ class _ProfessionalProfileEditorScreenState
     );
   }
 
-  Widget _section(String title, List<Widget> children) {
+  Widget _section(String title, List<Widget> children,
+      {bool titleOutside = false}) {
+    final colors = Theme.of(context).colorScheme;
+    final heading = Text(title,
+        style: TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+            color: colors.onSurface));
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Card(
-        color: Colors.white,
-        elevation: 1,
-        margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w800,
-                  color: MalvaColors.ink,
-                ),
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (titleOutside)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+              child: heading,
+            ),
+          Card(
+            color: Theme.of(context).brightness == Brightness.light
+                ? Colors.white
+                : colors.surfaceContainerLow,
+            elevation: 1,
+            margin: EdgeInsets.zero,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!titleOutside) ...[heading, const SizedBox(height: 10)],
+                  ...children,
+                ],
               ),
-              const SizedBox(height: 12),
-              ...children,
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
+
+  ButtonStyle get _mediaButtonStyle => OutlinedButton.styleFrom(
+        foregroundColor: MalvaColors.seed,
+        side: const BorderSide(color: MalvaColors.seed),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      );
 
   Widget _field(
     String label,
@@ -862,7 +908,7 @@ InputDecoration _profileInput({
     isDense: true,
     filled: true,
     fillColor: Colors.white,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
     border: border,
     enabledBorder: border,
   );
@@ -923,8 +969,9 @@ class _EducationRowState extends State<_EducationRow> {
           flex: 2,
           child: TextField(
             controller: _degreeCtrl,
+            style: const TextStyle(fontSize: 14),
             onChanged: widget.onDegreeChanged,
-            decoration: _profileInput(labelText: 'Gelar'),
+            decoration: _profileInput(),
           ),
         ),
         const SizedBox(width: 8),
@@ -932,8 +979,9 @@ class _EducationRowState extends State<_EducationRow> {
           flex: 3,
           child: TextField(
             controller: _schoolCtrl,
+            style: const TextStyle(fontSize: 14),
             onChanged: widget.onSchoolChanged,
-            decoration: _profileInput(labelText: 'Institusi'),
+            decoration: _profileInput(),
           ),
         ),
         const SizedBox(width: 8),
@@ -941,9 +989,10 @@ class _EducationRowState extends State<_EducationRow> {
           width: 72,
           child: TextField(
             controller: _yearCtrl,
+            style: const TextStyle(fontSize: 14),
             onChanged: widget.onYearChanged,
             keyboardType: TextInputType.number,
-            decoration: _profileInput(labelText: 'Tahun'),
+            decoration: _profileInput(),
           ),
         ),
         IconButton(

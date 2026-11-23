@@ -775,16 +775,15 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 		Price:           price,
 	}
 	var slots []store.PackageCheckoutSlot
-	if req.AdditionalSessions != nil {
-		if selectedPackage == nil {
-			writeError(w, http.StatusBadRequest, errors.New("sesi tambahan hanya untuk paket"))
-			return
-		}
+	if selectedPackage != nil {
 		slots, err = s.validatePackageCheckoutSlots(r.Context(), *selectedPackage, target, duration, req.AdditionalSessions)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
+	} else if req.AdditionalSessions != nil {
+		writeError(w, http.StatusBadRequest, errors.New("sesi tambahan hanya untuk paket"))
+		return
 	}
 	var b store.Booking
 	if selectedPackage != nil {
@@ -878,6 +877,10 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, claims au
 			intent, err := s.payment.CreateTransaction(r.Context(), p.Reference, gross+serviceFee, customer)
 			return intent.Token, intent.RedirectURL, err
 		})
+		if errors.Is(gerr, store.ErrPackageCapacity) {
+			writeError(w, http.StatusConflict, gerr)
+			return
+		}
 		if gerr != nil {
 			s.logger.Warn("gateway belum mengembalikan halaman; payment tetap dapat direkonsiliasi", "reference", p.Reference)
 			if fresh, err := s.store.GetPaymentByReference(r.Context(), p.Reference); err == nil {

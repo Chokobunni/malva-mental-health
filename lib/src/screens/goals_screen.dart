@@ -345,8 +345,10 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
-                                        _tabs(),
-                                        const SizedBox(height: 12),
+                                        if (all.isNotEmpty || _history) ...[
+                                          _tabs(),
+                                          const SizedBox(height: 12),
+                                        ],
                                         if (_history)
                                           GoalHistoryPanel(
                                             goals: all,
@@ -381,7 +383,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                                   children: [
                                                     Row(children: [
                                                       Expanded(
-                                                          flex: 57,
+                                                          flex: 62,
                                                           child: InkWell(
                                                               onTap: _mutating
                                                                   ? null
@@ -409,7 +411,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                                                   verticalPadding:
                                                                       6))),
                                                       Expanded(
-                                                          flex: 43,
+                                                          flex: 38,
                                                           child: GoalPill(
                                                               '$streak Hari Beruntun',
                                                               icon: Icons
@@ -419,7 +421,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                                               background:
                                                                   const Color(
                                                                       0xFFFFF2CC),
-                                                              fontSize: 12,
+                                                              fontSize: 10.5,
                                                               verticalPadding:
                                                                   6)),
                                                     ]),
@@ -662,11 +664,14 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
               selected: _history == history,
               child: TextButton(
                 style: TextButton.styleFrom(
-                  minimumSize: const Size(0, 44),
+                  minimumSize: const Size(0, 34),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   backgroundColor:
                       _history == history ? Colors.white : Colors.transparent,
                   foregroundColor: _history == history ? goalPurple : goalInk,
                   textStyle: TextStyle(
+                      fontFamily: 'PlusJakartaSans',
+                      fontSize: 14,
                       fontWeight: _history == history
                           ? FontWeight.w800
                           : FontWeight.w500),
@@ -717,6 +722,11 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
         enabled: !_mutating,
         tooltip: 'Opsi goal',
         icon: const Icon(Icons.more_vert, size: 19, color: goalMuted),
+        color: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        position: PopupMenuPosition.under,
+        constraints: const BoxConstraints(maxWidth: 244),
         padding: EdgeInsets.zero,
         onSelected: (value) {
           if (value == 'delete') {
@@ -736,18 +746,23 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                           ? Icons.archive_outlined
                           : Icons.unarchive_outlined,
                       color: goalPurple),
-                  title: Text(goal.isActive ? 'Arsipkan' : 'Aktifkan kembali'),
+                  dense: true,
+                  title: Text(goal.isActive ? 'Arsipkan' : 'Aktifkan kembali',
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
                   subtitle: Text(goal.isActive
                       ? 'Sembunyikan dari Hari ini. Riwayat tetap tersimpan.'
                       : 'Tampilkan kembali di Hari ini.'),
                 )),
+          if (_server) const PopupMenuDivider(height: 1),
           const PopupMenuItem(
               value: 'delete',
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.delete_outline, color: Colors.red),
-                title:
-                    Text('Hapus permanen', style: TextStyle(color: Colors.red)),
+                dense: true,
+                title: Text('Hapus permanen',
+                    style: TextStyle(
+                        color: Color(0xFFAB252D), fontWeight: FontWeight.w700)),
                 subtitle: Text('Hapus target beserta riwayatnya.'),
               )),
         ],

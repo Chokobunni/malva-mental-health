@@ -898,12 +898,9 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
         _timeOff = results[2] as List<BackendTimeOff>;
         _savedPatientCapacity = pricing.patientCapacity;
         _patientCapacity = pricing.patientCapacity;
-        _chatPrice.text =
-            pricing.quickChatPrice > 0 ? '${pricing.quickChatPrice}' : '';
-        _videoPrice.text =
-            pricing.quickVideoPrice > 0 ? '${pricing.quickVideoPrice}' : '';
-        _packagePrice.text =
-            pricing.packagePrice > 0 ? '${pricing.packagePrice}' : '';
+        _chatPrice.text = formatProfessionalPrice(pricing.quickChatPrice);
+        _videoPrice.text = formatProfessionalPrice(pricing.quickVideoPrice);
+        _packagePrice.text = formatProfessionalPrice(pricing.packagePrice);
         _isLoading = false;
       });
     } on Object catch (e) {
@@ -968,7 +965,11 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                     children: [
                       const Row(
                         children: [
-                          Expanded(child: SectionLabel('Hari praktik')),
+                          Expanded(
+                              child: Text('Hari praktik',
+                                  style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w900))),
                           StatusPill(label: 'WIB', color: MalvaColors.seed),
                         ],
                       ),
@@ -989,25 +990,33 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                             const Text('Tambah jadwal',
                                 style: TextStyle(fontWeight: FontWeight.w900)),
                             const SizedBox(height: 10),
-                            _categoryDropdown(
-                                _newCategory,
-                                (value) =>
-                                    setState(() => _newCategory = value)),
-                            const SizedBox(height: 8),
-                            DropdownButtonFormField<int>(
-                              initialValue: _newDay,
-                              decoration:
-                                  const InputDecoration(labelText: 'Hari'),
-                              items: [
-                                for (var d = 0; d < 7; d++)
-                                  DropdownMenuItem(
-                                      value: d, child: Text(_dayNames[d])),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _categoryDropdown(
+                                      _newCategory,
+                                      (value) =>
+                                          setState(() => _newCategory = value)),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: DropdownButtonFormField<int>(
+                                    initialValue: _newDay,
+                                    isExpanded: true,
+                                    decoration: _scheduleField(context, 'Hari'),
+                                    items: [
+                                      for (final d in [1, 2, 3, 4, 5, 6, 0])
+                                        DropdownMenuItem(
+                                            value: d,
+                                            child: Text(_dayNames[d])),
+                                    ],
+                                    onChanged: (v) {
+                                      if (v != null)
+                                        setState(() => _newDay = v);
+                                    },
+                                  ),
+                                ),
                               ],
-                              onChanged: (v) {
-                                if (v != null) {
-                                  setState(() => _newDay = v);
-                                }
-                              },
                             ),
                             const SizedBox(height: 8),
                             Row(
@@ -1015,16 +1024,16 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                                 Expanded(
                                   child: TextField(
                                     controller: _newStart,
-                                    decoration: const InputDecoration(
-                                        labelText: 'Mulai (HH:MM)'),
+                                    decoration:
+                                        _scheduleField(context, 'Mulai'),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: TextField(
                                     controller: _newEnd,
-                                    decoration: const InputDecoration(
-                                        labelText: 'Selesai (HH:MM)'),
+                                    decoration:
+                                        _scheduleField(context, 'Selesai'),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -1032,8 +1041,8 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                                   child: TextField(
                                     controller: _newDuration,
                                     keyboardType: TextInputType.number,
-                                    decoration: const InputDecoration(
-                                        labelText: 'Slot (mnt)'),
+                                    decoration:
+                                        _scheduleField(context, 'Slot (mnt)'),
                                   ),
                                 ),
                               ],
@@ -1046,6 +1055,18 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                             ),
                           ],
                         ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text('Harga layanan',
+                          style: TextStyle(
+                              fontSize: 22, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 10),
+                      ProfessionalPriceCard(
+                        chat: _chatPrice,
+                        video: _videoPrice,
+                        package: _packagePrice,
+                        onSave: _savePricing,
+                        isSaving: _savingPricing || _savingCapacity,
                       ),
                       const SizedBox(height: 14),
                       const SectionLabel('Hari libur'),
@@ -1143,17 +1164,27 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                         ),
                       ),
                       const SizedBox(height: 14),
-                      const SectionLabel('Harga layanan'),
-                      ProfessionalPriceCard(
-                        chat: _chatPrice,
-                        video: _videoPrice,
-                        package: _packagePrice,
-                        onSave: _savePricing,
-                        isSaving: _savingPricing || _savingCapacity,
-                      ),
                     ],
                   ),
                 ),
+    );
+  }
+
+  InputDecoration _scheduleField(BuildContext context, String label) {
+    final colors = Theme.of(context).colorScheme;
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: colors.outlineVariant),
+    );
+    return InputDecoration(
+      labelText: label,
+      floatingLabelBehavior: FloatingLabelBehavior.always,
+      isDense: true,
+      filled: true,
+      fillColor: colors.surfaceContainerLowest,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 9, vertical: 11),
+      border: border,
+      enabledBorder: border,
     );
   }
 
@@ -1161,10 +1192,12 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     return DropdownButtonFormField<String>(
       initialValue: selected,
       isExpanded: true,
-      decoration: const InputDecoration(labelText: 'Kategori'),
+      decoration: _scheduleField(context, 'Kategori'),
       items: [
         for (final option in professionalServiceNames.entries)
-          DropdownMenuItem(value: option.key, child: Text(option.value)),
+          DropdownMenuItem(
+              value: option.key,
+              child: Text(option.value, overflow: TextOverflow.ellipsis)),
       ],
       onChanged: (value) {
         if (value != null) onChanged(value);
@@ -1184,12 +1217,31 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
         rows.isEmpty &&
         _schedules.any((slot) => slot.serviceCategory == 'shared');
     return SoftCard(
-      radius: 18,
+      radius: 14,
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SectionLabel(professionalServiceNames[category]!,
-              icon: professionalServiceIcons[category]),
+          Row(
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: MalvaColors.seed.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Icon(professionalServiceIcons[category],
+                      color: MalvaColors.seed, size: 19),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: Text(professionalServiceNames[category]!,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w900))),
+            ],
+          ),
           if (rows.isEmpty)
             Text(shared ? 'Mengikuti jadwal bersama.' : 'Belum ada jadwal.')
           else
@@ -1300,7 +1352,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   Widget _scheduleRow(BackendProfessionalSchedule schedule) {
     final day = _dayNames[schedule.dayOfWeek];
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 1),
       child: Row(
         children: [
           Expanded(
@@ -1324,16 +1376,26 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
           ),
           Semantics(
             label: 'Jadwal $day',
-            child: Switch(
-              value: schedule.isActive,
-              activeTrackColor: MalvaColors.seed,
-              onChanged:
-                  _savingSchedules ? null : (_) => _toggleSchedule(schedule),
+            child: Transform.scale(
+              scale: .80,
+              child: Switch(
+                value: schedule.isActive,
+                activeTrackColor: MalvaColors.seed,
+                inactiveThumbColor: Colors.white,
+                inactiveTrackColor: const Color(0xFFDDDCE1),
+                trackOutlineColor:
+                    const WidgetStatePropertyAll(Colors.transparent),
+                onChanged:
+                    _savingSchedules ? null : (_) => _toggleSchedule(schedule),
+              ),
             ),
           ),
           PopupMenuButton<bool>(
             tooltip: 'Opsi jadwal',
             enabled: !_savingSchedules,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            color: Theme.of(context).colorScheme.surface,
             onSelected: (edit) {
               if (edit) {
                 _editSchedule(schedule);
@@ -1377,7 +1439,15 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
         String? error;
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
-            title: const Text('Edit jadwal'),
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            title: const Text('Edit jadwal',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+            contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             scrollable: true,
             content: SizedBox(
               width: 430,
@@ -1390,7 +1460,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                   const SizedBox(height: 14),
                   DropdownButtonFormField<int>(
                     initialValue: day,
-                    decoration: const InputDecoration(labelText: 'Hari'),
+                    decoration: _scheduleField(context, 'Hari'),
                     items: [
                       for (final i in [1, 2, 3, 4, 5, 6, 0])
                         DropdownMenuItem(value: i, child: Text(_dayNames[i])),
@@ -1406,14 +1476,14 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                           child: TextFormField(
                         initialValue: start,
                         onChanged: (value) => start = value,
-                        decoration: const InputDecoration(labelText: 'Mulai'),
+                        decoration: _scheduleField(context, 'Mulai'),
                       )),
                       const SizedBox(width: 8),
                       Expanded(
                           child: TextFormField(
                         initialValue: end,
                         onChanged: (value) => end = value,
-                        decoration: const InputDecoration(labelText: 'Selesai'),
+                        decoration: _scheduleField(context, 'Selesai'),
                       )),
                       const SizedBox(width: 8),
                       Expanded(
@@ -1421,8 +1491,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                         initialValue: durationText,
                         onChanged: (value) => durationText = value,
                         keyboardType: TextInputType.number,
-                        decoration:
-                            const InputDecoration(labelText: 'Slot (mnt)'),
+                        decoration: _scheduleField(context, 'Slot (mnt)'),
                       )),
                     ],
                   ),
@@ -1435,48 +1504,61 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
               ),
             ),
             actions: [
-              OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Batal')),
-              FilledButton(
-                child: const Text('Simpan perubahan'),
-                onPressed: () {
-                  final duration = int.tryParse(durationText.trim()) ?? 0;
-                  final times = RegExp(r'^(?:[01][0-9]|2[0-3]):[0-5][0-9]$');
-                  final from = start.trim();
-                  final to = end.trim();
-                  if (!times.hasMatch(from) ||
-                      !times.hasMatch(to) ||
-                      from.compareTo(to) >= 0) {
-                    setDialogState(() => error =
-                        'Isi jam mulai dan selesai dalam urutan yang benar (HH:MM).');
-                    return;
-                  }
-                  if (duration < 60 || duration > 180) {
-                    setDialogState(() => error =
-                        'Slot minimal 60 menit dan maksimal 180 menit.');
-                    return;
-                  }
-                  if (_schedules.any((other) =>
-                      other.id != schedule.id &&
-                      other.serviceCategory == category &&
-                      other.dayOfWeek == day &&
-                      other.startTime == from &&
-                      other.endTime == to)) {
-                    setDialogState(() => error =
-                        'Jadwal dengan hari dan jam tersebut sudah ada.');
-                    return;
-                  }
-                  Navigator.pop(context, {
-                    'id': schedule.id,
-                    'service_category': category,
-                    'day_of_week': day,
-                    'start_time': from,
-                    'end_time': to,
-                    'slot_duration_minutes': duration,
-                    'is_active': schedule.isActive,
-                  });
-                },
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Batal'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton(
+                      child: const Text('Simpan perubahan',
+                          textAlign: TextAlign.center),
+                      onPressed: () {
+                        final duration = int.tryParse(durationText.trim()) ?? 0;
+                        final times =
+                            RegExp(r'^(?:[01][0-9]|2[0-3]):[0-5][0-9]$');
+                        final from = start.trim();
+                        final to = end.trim();
+                        if (!times.hasMatch(from) ||
+                            !times.hasMatch(to) ||
+                            from.compareTo(to) >= 0) {
+                          setDialogState(() => error =
+                              'Isi jam mulai dan selesai dalam urutan yang benar (HH:MM).');
+                          return;
+                        }
+                        if (duration < 60 || duration > 180) {
+                          setDialogState(() => error =
+                              'Slot minimal 60 menit dan maksimal 180 menit.');
+                          return;
+                        }
+                        if (_schedules.any((other) =>
+                            other.id != schedule.id &&
+                            other.serviceCategory == category &&
+                            other.dayOfWeek == day &&
+                            other.startTime == from &&
+                            other.endTime == to)) {
+                          setDialogState(() => error =
+                              'Jadwal dengan hari dan jam tersebut sudah ada.');
+                          return;
+                        }
+                        Navigator.pop(context, {
+                          'id': schedule.id,
+                          'service_category': category,
+                          'day_of_week': day,
+                          'start_time': from,
+                          'end_time': to,
+                          'slot_duration_minutes': duration,
+                          'is_active': schedule.isActive,
+                        });
+                      },
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1719,9 +1801,9 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     try {
       await _api.updatePricing(
         accessToken: token,
-        quickChatPrice: int.tryParse(_chatPrice.text.trim()) ?? 0,
-        quickVideoPrice: int.tryParse(_videoPrice.text.trim()) ?? 0,
-        packagePrice: int.tryParse(_packagePrice.text.trim()) ?? 0,
+        quickChatPrice: parseProfessionalPrice(_chatPrice.text),
+        quickVideoPrice: parseProfessionalPrice(_videoPrice.text),
+        packagePrice: parseProfessionalPrice(_packagePrice.text),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

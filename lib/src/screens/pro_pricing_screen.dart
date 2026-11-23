@@ -76,12 +76,9 @@ class _ProPricingScreenState extends ConsumerState<ProPricingScreen> {
       final pricing = await _api.getPricing(accessToken: token);
       if (!mounted) return;
       setState(() {
-        _chatPrice.text =
-            pricing.quickChatPrice > 0 ? '${pricing.quickChatPrice}' : '';
-        _videoPrice.text =
-            pricing.quickVideoPrice > 0 ? '${pricing.quickVideoPrice}' : '';
-        _packagePrice.text =
-            pricing.packagePrice > 0 ? '${pricing.packagePrice}' : '';
+        _chatPrice.text = formatProfessionalPrice(pricing.quickChatPrice);
+        _videoPrice.text = formatProfessionalPrice(pricing.quickVideoPrice);
+        _packagePrice.text = formatProfessionalPrice(pricing.packagePrice);
         _isLoading = false;
       });
     } on Object catch (e) {
@@ -100,9 +97,9 @@ class _ProPricingScreenState extends ConsumerState<ProPricingScreen> {
     try {
       await _api.updatePricing(
         accessToken: token,
-        quickChatPrice: int.tryParse(_chatPrice.text.trim()) ?? 0,
-        quickVideoPrice: int.tryParse(_videoPrice.text.trim()) ?? 0,
-        packagePrice: int.tryParse(_packagePrice.text.trim()) ?? 0,
+        quickChatPrice: parseProfessionalPrice(_chatPrice.text),
+        quickVideoPrice: parseProfessionalPrice(_videoPrice.text),
+        packagePrice: parseProfessionalPrice(_packagePrice.text),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

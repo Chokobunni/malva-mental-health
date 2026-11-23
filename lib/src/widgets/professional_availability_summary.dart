@@ -186,13 +186,20 @@ class ProfessionalPriceCard extends StatelessWidget {
                   controller: controllers[i],
                   enabled: !isSaving,
                   keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+                  ],
                   decoration: InputDecoration(
                     prefixText: 'Rp',
                     hintText: '0',
                     isDense: true,
                     contentPadding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(9),
+                      borderSide: BorderSide(
+                          color: Theme.of(context).colorScheme.outlineVariant),
+                    ),
                     border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(9)),
                   ),
@@ -277,3 +284,9 @@ class _ServicePriceRow extends StatelessWidget {
 
 String _groupDigits(String digits) => digits.replaceAllMapped(
     RegExp(r'([0-9])(?=(?:[0-9]{3})+$)'), (m) => '${m[1]}.');
+
+String formatProfessionalPrice(int value) =>
+    value > 0 ? _groupDigits(value.toString()) : '';
+
+int parseProfessionalPrice(String value) =>
+    int.tryParse(value.replaceAll('.', '').trim()) ?? 0;

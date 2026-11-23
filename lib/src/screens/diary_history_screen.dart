@@ -816,6 +816,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                             excludeFromSemantics: true),
                                         SizedBox(height: 12),
                                         Text('Belum ada catatan diary',
+                                            textAlign: TextAlign.center,
                                             style: TextStyle(
                                                 fontWeight: FontWeight.w700)),
                                         SizedBox(height: 8),

@@ -451,11 +451,12 @@ func (s *Store) InitializePaymentGateway(ctx context.Context, reference, gateway
 		return Payment{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var bookingID, bookingStatus string
+	var bookingID, bookingStatus, patientID, professionalID string
 	if err := tx.QueryRowContext(ctx, `SELECT booking_id FROM payments WHERE reference=$1`, reference).Scan(&bookingID); err != nil {
 		return Payment{}, err
 	}
-	if err := tx.QueryRowContext(ctx, `SELECT status FROM bookings WHERE id=$1 FOR UPDATE`, bookingID).Scan(&bookingStatus); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT status, patient_id, professional_id FROM bookings WHERE id=$1 FOR UPDATE`, bookingID).
+		Scan(&bookingStatus, &patientID, &professionalID); err != nil {
 		return Payment{}, err
 	}
 	var token, status string
@@ -466,6 +467,25 @@ func (s *Store) InitializePaymentGateway(ctx context.Context, reference, gateway
 		return Payment{}, ErrPurchaseConflict
 	}
 	if status == "pending" && token == "" {
+		var boundPackage bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
+            SELECT 1 FROM care_packages WHERE booking_id=$1 AND status='pending_payment'
+        )`, bookingID).Scan(&boundPackage); err != nil {
+			return Payment{}, err
+		}
+		if boundPackage {
+			// Recheck under the same lock as admission before giving the buyer a payable link.
+			if err := lockPackageCapacity(ctx, tx, professionalID); err != nil {
+				return Payment{}, err
+			}
+			remaining, canRenew, canResume, err := packagePatientAvailability(ctx, tx, professionalID, patientID, clock.Now())
+			if err != nil {
+				return Payment{}, err
+			}
+			if remaining != nil && *remaining == 0 && !canRenew && !canResume {
+				return Payment{}, ErrPackageCapacity
+			}
+		}
 		token, redirect, err := create()
 		if err != nil {
 			return Payment{}, err

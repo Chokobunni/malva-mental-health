@@ -17,6 +17,7 @@ const profileAvatarAssets = [
   'assets/reference/avatar-4.png',
   'assets/reference/avatar-5.png',
 ];
+const defaultProfileAvatar = 'default';
 
 String profileAvatarKey(String userId) => 'profile.avatar.$userId';
 
@@ -52,6 +53,13 @@ class AccountAvatar extends ConsumerWidget {
     final userId = current?.backendUserId;
     final token = current?.accessToken;
     final professional = current?.role == UserRole.professional;
+    final neutralAvatar = ColoredBox(
+      color: const Color(0xffecd7f4),
+      child: Center(
+        child: Icon(Icons.person_rounded,
+            color: MalvaColors.plum, size: size * .61),
+      ),
+    );
     final fallback = professional
         ? ColoredBox(
             color: const Color(0xfff3e9f8),
@@ -82,7 +90,9 @@ class AccountAvatar extends ConsumerWidget {
           (userId == null
               ? null
               : ref.watch(patientAvatarProvider(userId)).valueOrNull);
-      if (selected != null && profileAvatarAssets.contains(selected)) {
+      if (selected == defaultProfileAvatar) {
+        picture = neutralAvatar;
+      } else if (selected != null && profileAvatarAssets.contains(selected)) {
         picture = Image.asset(selected, fit: BoxFit.cover);
       } else if (selected != null) {
         try {

@@ -102,25 +102,27 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
           const SizedBox(height: 10),
           SoftCard(
             color: Colors.white,
+            padding: const EdgeInsets.all(12),
             child: Row(
               children: [
                 const Icon(Icons.calendar_month_outlined,
                     color: MalvaColors.seed, size: 38),
                 const SizedBox(width: 12),
-                Expanded(
+                const Expanded(
                     child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Continuous Package',
+                    Text('Continuous Package',
                         style: TextStyle(
                             fontSize: 18, fontWeight: FontWeight.w900)),
-                    const Text('4 sesi video • 6 minggu'),
-                    if (widget.remainingPatientSlots case final remaining?)
-                      StatusPill(
-                          label: '$remaining slot tersisa',
-                          color: MalvaColors.seed),
+                    Text('4 sesi video • 6 minggu'),
                   ],
                 )),
+                if (widget.remainingPatientSlots case final remaining?)
+                  StatusPill(
+                      label: '$remaining slot tersisa',
+                      icon: Icons.people_outline,
+                      color: MalvaColors.seed),
               ],
             ),
           ),
@@ -539,10 +541,41 @@ class _PackageSessionDialogState extends State<_PackageSessionDialog> {
     });
   }
 
+  Future<void> _openCalendar(List<BackendAvailabilityDay> days) async {
+    final dates = {
+      for (final day in days)
+        if (DateTime.tryParse(day.date) case final date?) date: day.date
+    };
+    if (dates.isEmpty) return;
+    final ordered = dates.keys.toList()..sort();
+    final initial = DateTime.tryParse(_date ?? '');
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: dates.containsKey(initial) ? initial! : ordered.first,
+      firstDate: ordered.first,
+      lastDate: ordered.last,
+      selectableDayPredicate: dates.containsKey,
+    );
+    if (mounted && selected != null) _selectDate(dates[selected]!);
+  }
+
   @override
   Widget build(BuildContext context) => AlertDialog(
         backgroundColor: Colors.white,
-        title: Text('Pilih jadwal sesi ${widget.index}'),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+        contentPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+        title: Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text('Pilih jadwal sesi ${widget.index}',
+                  style: const TextStyle(fontWeight: FontWeight.w900)),
+              StatusPill(
+                  label: widget.index == 1 ? 'Wajib' : 'Opsional',
+                  color: widget.index == 1 ? MalvaColors.seed : Colors.black54),
+            ]),
         content: SingleChildScrollView(
           child: SizedBox(
             width: 420,
@@ -554,7 +587,17 @@ class _PackageSessionDialogState extends State<_PackageSessionDialog> {
                 children: [
                   const Text('Sesi video • WIB'),
                   const SizedBox(height: 12),
-                  const SectionLabel('Pilih tanggal'),
+                  Row(children: [
+                    const Expanded(child: SectionLabel('Pilih tanggal')),
+                    if (days.connectionState == ConnectionState.done &&
+                        days.hasData &&
+                        days.data!.isNotEmpty)
+                      TextButton.icon(
+                          onPressed: () => _openCalendar(days.data!),
+                          icon: const Icon(Icons.calendar_today_outlined,
+                              size: 16),
+                          label: const Text('Kalender')),
+                  ]),
                   if (days.connectionState != ConnectionState.done)
                     const Center(child: CircularProgressIndicator())
                   else if (days.hasError)
@@ -573,8 +616,13 @@ class _PackageSessionDialogState extends State<_PackageSessionDialog> {
                             Padding(
                               padding: const EdgeInsets.only(right: 8),
                               child: ChoiceChip(
-                                label: Text(_displayDate(day.date, short: true),
-                                    textAlign: TextAlign.center),
+                                showCheckmark: false,
+                                label: Text(
+                                    _displayDate(day.date, short: true)
+                                        .replaceAll('\n', ' · '),
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700)),
                                 selected: day.date == _date,
                                 onSelected: (_) => _selectDate(day.date),
                               ),
@@ -634,7 +682,9 @@ class _PackageSessionDialogState extends State<_PackageSessionDialog> {
                             children: [
                               TextButton(
                                   onPressed: () => Navigator.pop(context),
-                                  child: const Text('Batal')),
+                                  child: const Text('Batal',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w800))),
                               Expanded(
                                   child: FilledButton(
                                 onPressed: canSave

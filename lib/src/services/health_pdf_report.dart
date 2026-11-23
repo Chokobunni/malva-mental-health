@@ -90,10 +90,10 @@ Future<Uint8List> buildHealthReportPdf({
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(title,
-                  style: pw.TextStyle(
+                  style: const pw.TextStyle(
                       fontSize: 19,
                       fontWeight: pw.FontWeight.bold,
-                      color: moods != null ? _teal : _ink)),
+                      color: _teal)),
               pw.SizedBox(height: 6),
               pw.Text('Diekspor: ${wibWeekdayDate(at)} ${_time(at)} WIB',
                   style: const pw.TextStyle(
@@ -153,7 +153,8 @@ pw.Widget _badge(String label, int rank) {
 pw.Widget _table(List<String> headers, List<List<pw.Widget>> rows,
         Map<int, pw.TableColumnWidth> widths,
         {pw.TableCellVerticalAlignment alignment =
-            pw.TableCellVerticalAlignment.middle}) =>
+            pw.TableCellVerticalAlignment.middle,
+        List<bool>? dayBands}) =>
     pw.Table(
       columnWidths: widths,
       border: pw.TableBorder.all(color: _border, width: .5),
@@ -166,10 +167,19 @@ pw.Widget _table(List<String> headers, List<List<pw.Widget>> rows,
             ]),
         for (var i = 0; i < rows.length; i++)
           pw.TableRow(
-              decoration:
-                  pw.BoxDecoration(color: i.isOdd ? _stripe : PdfColors.white),
+              decoration: pw.BoxDecoration(
+                  color: (dayBands?[i] ?? i.isOdd) ? _stripe : PdfColors.white),
               verticalAlignment: alignment,
-              children: [for (final child in rows[i]) _cell(child)]),
+              children: [
+                for (final child in rows[i])
+                  if (dayBands == null)
+                    _cell(child)
+                  else
+                    pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        child: child)
+              ]),
       ],
     );
 
@@ -417,21 +427,28 @@ Iterable<pw.Widget> _goalSection(
     return;
   }
   yield _heading('Riwayat progres');
-  yield _table([
-    'TANGGAL',
-    'TARGET / KEBIASAAN',
-    'JENIS',
-    'HASIL'
-  ], [
-    for (final day in days.entries)
-      for (final entry in day.value)
-        ..._goalRows(parseWibStored(day.key)!, entry),
-  ], {
-    0: const pw.FlexColumnWidth(1),
-    1: const pw.FlexColumnWidth(2.2),
-    2: const pw.FlexColumnWidth(1),
-    3: const pw.FlexColumnWidth(1),
-  }, alignment: pw.TableCellVerticalAlignment.top);
+  final rows = <List<pw.Widget>>[];
+  final bands = <bool>[];
+  var alternate = false;
+  for (final day in days.entries) {
+    for (final entry in day.value) {
+      final entryRows = _goalRows(parseWibStored(day.key)!, entry).toList();
+      rows.addAll(entryRows);
+      bands.addAll(List.filled(entryRows.length, alternate));
+    }
+    alternate = !alternate;
+  }
+  yield _table(
+      ['TANGGAL', 'TARGET / KEBIASAAN', 'JENIS', 'HASIL'],
+      rows,
+      {
+        0: const pw.FlexColumnWidth(1),
+        1: const pw.FlexColumnWidth(2.2),
+        2: const pw.FlexColumnWidth(1),
+        3: const pw.FlexColumnWidth(1),
+      },
+      alignment: pw.TableCellVerticalAlignment.top,
+      dayBands: bands);
 }
 
 Iterable<List<pw.Widget>> _goalRows(
@@ -449,7 +466,12 @@ Iterable<List<pw.Widget>> _goalRows(
       _text('${wibWeekdayName(date)}\n${formatWibDate(date)}', bold: true),
       pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
         _text(entry.goal.title, bold: true),
-        if (offset == 0 && details != null && !numeric && !checklist)
+        if (offset == 0 &&
+            details != null &&
+            !numeric &&
+            !checklist &&
+            details.weeklyTarget == null &&
+            details.recurrence == 'weekly')
           _text(details.scheduleLabel),
         if (steps.isNotEmpty) ...[
           pw.SizedBox(height: 3),
