@@ -233,7 +233,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ketersediaan & harga'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Paket 4 sesi / 6 minggu:'));
+    await tester.ensureVisible(find.text('Continuous Package'));
     await tester.pumpAndSettle();
     await _capture(tester, 'professional-narrow-availability.png');
     expect(tester.takeException(), isNull);

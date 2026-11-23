@@ -195,6 +195,22 @@ String medicationSourceLabel(String source) {
   }
 }
 
+/// Clinical source for a medication shared in chat. An older message may
+/// have no origin recorded.
+String sharedMedicationSourceLabel(Object? value) {
+  switch (value?.toString().trim().toLowerCase()) {
+    case 'prescription':
+    case 'professional':
+    case 'profesional':
+      return 'Profesional';
+    case 'patient':
+    case 'pasien':
+      return 'Pasien';
+    default:
+      return '';
+  }
+}
+
 /// Persisted psychiatrist routine. Weekdays use Dart's Monday=1 convention.
 class MedicationSchedule {
   const MedicationSchedule(

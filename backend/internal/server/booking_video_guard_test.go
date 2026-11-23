@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"malva/backend/internal/auth"
+	"malva/backend/internal/clock"
 	"malva/backend/internal/store"
 )
 
@@ -105,5 +106,37 @@ func TestCreateBookingAllowsVideoWhenMeetReady(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &payload)
 	if payload["code"] == "meet_belum_aktif" {
 		t.Fatalf("profesional yang sudah siap tidak boleh ditolak: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCreatePatientQuickChatUsesChatPricingWithoutMeet(t *testing.T) {
+	db, st := openOnboardingTestStore(t)
+	prof := verifiedProfessional(t, db, st)
+	patient := createIdentityTestUser(t, db, st, "patient", nil)
+	day := clock.Now().AddDate(0, 0, 3)
+	if _, err := db.Exec("INSERT INTO professional_pricing (professional_id,quick_chat_price,quick_video_price) VALUES ($1,300000,500000)", prof.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertSchedules(context.Background(), prof.ID, []store.ProfessionalSchedule{{
+		DayOfWeek: int(day.Weekday()), StartTime: "09:00", EndTime: "12:00",
+		SlotDurationMinutes: 60, IsActive: true,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	body := fmt.Sprintf("{\"professional_id\":%q,\"service_type\":\"quick_consult\",\"session_type\":\"chat\",\"booking_date\":%q,\"slot_time\":\"10:00\",\"duration_minutes\":60}", prof.ID, day.Format("2006-01-02"))
+	newOnboardingTestServer(db).createBooking(rec, httptest.NewRequest(http.MethodPost, "/v1/bookings", strings.NewReader(body)), auth.Claims{Subject: patient.ID, Role: "patient"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Booking store.Booking `json:"booking"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	booking := response.Booking
+	if booking.SessionType != "chat" || booking.Price != 300000 {
+		t.Fatalf("expected chat for Rp300000, got %q at %d", booking.SessionType, booking.Price)
 	}
 }

@@ -13,6 +13,7 @@ import '../widgets/friendly_error.dart';
 import '../widgets/care_reference_widgets.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/meet_join_button.dart';
+import '../widgets/professional_availability_summary.dart';
 import 'chat_screen.dart';
 import 'pro_patient_detail_screen.dart';
 import '../time/wib.dart';
@@ -838,6 +839,8 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   final _offReason = TextEditingController();
   DateTime? _offDate;
   bool _savingOff = false;
+  bool _savingSchedules = false;
+  bool _savingPricing = false;
 
   MalvaApiClient get _api => widget.apiClient ?? ref.read(apiClientProvider);
   String? get _token {
@@ -906,11 +909,22 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     }
   }
 
-  static const _dayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+  static const _dayNames = [
+    'Minggu',
+    'Senin',
+    'Selasa',
+    'Rabu',
+    'Kamis',
+    'Jumat',
+    'Sabtu'
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Theme.of(context).brightness == Brightness.light
+          ? const Color(0xFFF5EFF9)
+          : null,
       appBar: AppBar(
         title: const Text('Ketersediaan & Harga'),
         backgroundColor: MalvaColors.seed,
@@ -937,84 +951,45 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                   ),
                 )
               : RefreshIndicator(
-                  onRefresh: _load,
+                  onRefresh: () async {
+                    if (!_savingSchedules && !_savingPricing && !_savingOff)
+                      await _load();
+                  },
                   child: ListView(
                     padding: const EdgeInsets.all(18),
                     children: [
-                      const SectionLabel(
-                          'Hari praktik (yang muncul di sisi pasien)'),
-                      if (_schedules.isEmpty)
-                        const EmptyState(
-                          icon: Icons.event_busy_rounded,
-                          title: 'Belum ada jadwal',
-                          subtitle:
-                              'Tambahkan hari praktik agar pasien bisa booking.',
-                        )
-                      else
-                        for (final s in _schedules) ...[
-                          SoftCard(
-                            bordered: false,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Opacity(
-                                        opacity: s.isActive ? 1.0 : 0.5,
-                                        child: Text(
-                                          '${_dayNames[s.dayOfWeek]} • ${s.startTime}–${s.endTime} • ${s.slotDurationMinutes} mnt/slot',
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w800),
-                                        ),
-                                      ),
-                                    ),
-                                    if (!s.isActive)
-                                      const StatusPill(
-                                        label: 'Nonaktif',
-                                        color: MalvaColors.amber,
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    OutlinedButton.icon(
-                                      onPressed: () => _toggleSchedule(s),
-                                      icon: Icon(
-                                        s.isActive
-                                            ? Icons.pause_circle_outline_rounded
-                                            : Icons.play_circle_outline_rounded,
-                                        size: 16,
-                                      ),
-                                      label: Text(s.isActive
-                                          ? 'Nonaktifkan'
-                                          : 'Aktifkan'),
-                                    ),
-                                    // Hapus PERMANEN — sengaja bergaya teks
-                                    // merah (bukan outlined) agar jelas beda
-                                    // dari "Nonaktifkan" yang bisa dibalik.
-                                    TextButton.icon(
-                                      onPressed: () => _removeSchedule(s),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor: MalvaColors.danger,
-                                      ),
-                                      icon: const Icon(
-                                          Icons.delete_forever_rounded,
-                                          size: 16),
-                                      label: const Text('Hapus permanen'),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
+                      const Row(
+                        children: [
+                          Expanded(child: SectionLabel('Hari praktik')),
+                          StatusPill(label: 'WIB', color: MalvaColors.seed),
                         ],
+                      ),
+                      const Text(
+                          'Jadwal aktif berlaku untuk semua layanan dan tampil di sisi pasien.'),
+                      const SizedBox(height: 12),
+                      SoftCard(
+                        radius: 18,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const SectionLabel('Jadwal bersama',
+                                icon: Icons.calendar_month_outlined),
+                            if (_schedules.isEmpty)
+                              const EmptyState(
+                                icon: Icons.event_busy_rounded,
+                                title: 'Belum ada jadwal',
+                                subtitle:
+                                    'Tambahkan hari praktik agar pasien bisa booking.',
+                              )
+                            else
+                              for (var i = 0; i < _schedules.length; i++) ...[
+                                if (i > 0) const Divider(height: 1),
+                                _scheduleRow(_schedules[i]),
+                              ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       SoftCard(
                         bordered: false,
                         child: Column(
@@ -1069,7 +1044,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                             ),
                             const SizedBox(height: 10),
                             FilledButton.icon(
-                              onPressed: _addSchedule,
+                              onPressed: _savingSchedules ? null : _addSchedule,
                               icon: const Icon(Icons.add_rounded),
                               label: const Text('Tambah & Simpan'),
                             ),
@@ -1173,56 +1148,205 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                       ),
                       const SizedBox(height: 14),
                       const SectionLabel('Harga layanan'),
-                      SoftCard(
-                        bordered: false,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            TextField(
-                              controller: _chatPrice,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                  labelText: 'Quick chat 1 sesi (Rp)',
-                                  hintText: '150000'),
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: _videoPrice,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                  labelText: 'Quick video 1 sesi (Rp)',
-                                  hintText: '250000'),
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: _packagePrice,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                  labelText: 'Paket 4 sesi / 6 minggu (Rp)',
-                                  hintText: '799000'),
-                            ),
-                            const SizedBox(height: 10),
-                            FilledButton.icon(
-                              onPressed: _savePricing,
-                              icon: const Icon(Icons.save_rounded),
-                              label: const Text('Simpan harga'),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Jumlah sesi paket tetap 4 & masa berlaku 6 minggu; yang kamu atur hanya harga.',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant),
-                            ),
-                          ],
-                        ),
+                      ProfessionalPriceCard(
+                        chat: _chatPrice,
+                        video: _videoPrice,
+                        package: _packagePrice,
+                        onSave: _savePricing,
+                        isSaving: _savingPricing,
                       ),
                     ],
                   ),
                 ),
     );
+  }
+
+  Widget _scheduleRow(BackendProfessionalSchedule schedule) {
+    final day = _dayNames[schedule.dayOfWeek];
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  children: [
+                    Text(day,
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    if (!schedule.isActive)
+                      const StatusPill(label: 'Nonaktif', color: Colors.grey),
+                  ],
+                ),
+                Text(
+                    '${schedule.startTime}–${schedule.endTime} · ${schedule.slotDurationMinutes} mnt/slot'),
+              ],
+            ),
+          ),
+          Semantics(
+            label: 'Jadwal $day',
+            child: Switch(
+              value: schedule.isActive,
+              activeTrackColor: MalvaColors.seed,
+              onChanged:
+                  _savingSchedules ? null : (_) => _toggleSchedule(schedule),
+            ),
+          ),
+          PopupMenuButton<bool>(
+            tooltip: 'Opsi jadwal',
+            enabled: !_savingSchedules,
+            onSelected: (edit) {
+              if (edit) {
+                _editSchedule(schedule);
+              } else {
+                _removeSchedule(schedule);
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                  value: true,
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.edit_outlined, color: MalvaColors.seed),
+                    title: Text('Edit jadwal'),
+                  )),
+              PopupMenuItem(
+                  value: false,
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading:
+                        Icon(Icons.delete_outline, color: MalvaColors.danger),
+                    title: Text('Hapus permanen',
+                        style: TextStyle(color: MalvaColors.danger)),
+                  )),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editSchedule(BackendProfessionalSchedule schedule) async {
+    var day = schedule.dayOfWeek;
+    var start = schedule.startTime;
+    var end = schedule.endTime;
+    var durationText = '${schedule.slotDurationMinutes}';
+    final edited = await showDialog<Map<String, Object?>>(
+      context: context,
+      builder: (context) {
+        String? error;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Edit jadwal'),
+            scrollable: true,
+            content: SizedBox(
+              width: 430,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Jadwal bersama · WIB'),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<int>(
+                    initialValue: day,
+                    decoration: const InputDecoration(labelText: 'Hari'),
+                    items: [
+                      for (final i in [1, 2, 3, 4, 5, 6, 0])
+                        DropdownMenuItem(value: i, child: Text(_dayNames[i])),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) day = value;
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                          child: TextFormField(
+                        initialValue: start,
+                        onChanged: (value) => start = value,
+                        decoration: const InputDecoration(labelText: 'Mulai'),
+                      )),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: TextFormField(
+                        initialValue: end,
+                        onChanged: (value) => end = value,
+                        decoration: const InputDecoration(labelText: 'Selesai'),
+                      )),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: TextFormField(
+                        initialValue: durationText,
+                        onChanged: (value) => durationText = value,
+                        keyboardType: TextInputType.number,
+                        decoration:
+                            const InputDecoration(labelText: 'Slot (mnt)'),
+                      )),
+                    ],
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(error!,
+                        style: const TextStyle(color: MalvaColors.danger)),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Batal')),
+              FilledButton(
+                child: const Text('Simpan perubahan'),
+                onPressed: () {
+                  final duration = int.tryParse(durationText.trim()) ?? 0;
+                  final times = RegExp(r'^(?:[01][0-9]|2[0-3]):[0-5][0-9]$');
+                  final from = start.trim();
+                  final to = end.trim();
+                  if (!times.hasMatch(from) ||
+                      !times.hasMatch(to) ||
+                      from.compareTo(to) >= 0) {
+                    setDialogState(() => error =
+                        'Isi jam mulai dan selesai dalam urutan yang benar (HH:MM).');
+                    return;
+                  }
+                  if (duration < 60 || duration > 180) {
+                    setDialogState(() => error =
+                        'Slot minimal 60 menit dan maksimal 180 menit.');
+                    return;
+                  }
+                  if (_schedules.any((other) =>
+                      other.id != schedule.id &&
+                      other.dayOfWeek == day &&
+                      other.startTime == from &&
+                      other.endTime == to)) {
+                    setDialogState(() => error =
+                        'Jadwal dengan hari dan jam tersebut sudah ada.');
+                    return;
+                  }
+                  Navigator.pop(context, {
+                    'day_of_week': day,
+                    'start_time': from,
+                    'end_time': to,
+                    'slot_duration_minutes': duration,
+                    'is_active': schedule.isActive,
+                  });
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (!mounted || edited == null) return;
+    await _writeSchedules([
+      for (final row in _schedules)
+        if (row.id == schedule.id) edited else _scheduleToPayload(row),
+    ], 'Perubahan jadwal disimpan.');
   }
 
   // ==========================================================
@@ -1341,8 +1465,6 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
       };
 
   Future<void> _addSchedule() async {
-    final token = _token;
-    if (token == null) return;
     final duration = int.tryParse(_newDuration.text.trim()) ?? 0;
     if (duration < 60 || duration > 180) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -1359,23 +1481,29 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
         'is_active': true,
       },
     ];
+    await _writeSchedules(next, 'Jadwal tersimpan.');
+  }
+
+  Future<void> _writeSchedules(
+      List<Map<String, Object?>> schedules, String message) async {
+    final token = _token;
+    if (token == null || _savingSchedules) return;
+    setState(() => _savingSchedules = true);
     try {
       final updated = await _api.updateMySchedules(
-        accessToken: token,
-        schedules: next,
-      );
+          accessToken: token, schedules: schedules);
       if (!mounted) return;
       setState(() => _schedules = updated);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Jadwal tersimpan.')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     } on Object catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: MalvaColors.danger),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(friendlyErrorMessage(e)),
+        backgroundColor: MalvaColors.danger,
+      ));
+    } finally {
+      if (mounted) setState(() => _savingSchedules = false);
     }
   }
 
@@ -1408,7 +1536,8 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted || _savingSchedules) return;
+    setState(() => _savingSchedules = true);
     try {
       await _api.deleteMySchedule(accessToken: token, id: s.id);
       if (!mounted) return;
@@ -1426,50 +1555,24 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
             content: Text(friendlyErrorMessage(e)),
             backgroundColor: MalvaColors.danger),
       );
+    } finally {
+      if (mounted) setState(() => _savingSchedules = false);
     }
   }
 
   /// Aktifkan/nonaktifkan satu baris jadwal (toggle) tanpa menghapusnya,
   /// sehingga baris tetap tampil dan bisa diaktifkan kembali.
-  Future<void> _toggleSchedule(BackendProfessionalSchedule s) async {
-    final token = _token;
-    if (token == null) return;
-    final next = [
-      for (final e in _schedules)
-        _scheduleToPayload(
-          e,
-          isActive: (e.dayOfWeek == s.dayOfWeek &&
-                  e.startTime == s.startTime &&
-                  e.endTime == s.endTime)
-              ? !e.isActive
-              : e.isActive,
-        ),
-    ];
-    try {
-      final updated = await _api.updateMySchedules(
-        accessToken: token,
-        schedules: next,
-      );
-      if (!mounted) return;
-      setState(() => _schedules = updated);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(
-                s.isActive ? 'Jadwal dinonaktifkan.' : 'Jadwal diaktifkan.')),
-      );
-    } on Object catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: MalvaColors.danger),
-      );
-    }
-  }
+  Future<void> _toggleSchedule(BackendProfessionalSchedule s) =>
+      _writeSchedules([
+        for (final row in _schedules)
+          _scheduleToPayload(row,
+              isActive: row.id == s.id ? !row.isActive : null),
+      ], s.isActive ? 'Jadwal dinonaktifkan.' : 'Jadwal diaktifkan.');
 
   Future<void> _savePricing() async {
     final token = _token;
-    if (token == null) return;
+    if (token == null || _savingPricing) return;
+    setState(() => _savingPricing = true);
     try {
       await _api.updatePricing(
         accessToken: token,
@@ -1488,6 +1591,8 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
             content: Text(friendlyErrorMessage(e)),
             backgroundColor: MalvaColors.danger),
       );
+    } finally {
+      if (mounted) setState(() => _savingPricing = false);
     }
   }
 }

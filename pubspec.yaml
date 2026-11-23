@@ -70,4 +70,5 @@ flutter:
     - assets/checkin/
     - assets/care/
     - assets/prescription/
+    - assets/reference/
     - assets/data/mh_icd10_id_en.json

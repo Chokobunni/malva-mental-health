@@ -361,11 +361,11 @@ Rujukan: [spesifikasi](superpowers/specs/2026-11-09-clinical-experience-design.m
 
 ## Sesi satu jam dan rutinitas resep — 10 November 2026
 
-Sesi satu kali dan paket menggunakan Video pada booking baru pasien, dengan
-durasi default 60 menit dan minimum 60 menit. Paket menambah jumlah pertemuan
-dan masa berlaku; sesi satu kali tetap memiliki chat, worksheet dan lampiran
-profesional pada waktu yang diizinkan. Pilihan Chat dan durasi lama tidak lagi
-ditawarkan untuk booking baru; riwayat dan pembayaran lama tetap dipertahankan.
+Quick Consult menawarkan Chat dan Video sesuai tarif masing-masing. Paket
+menggunakan Video. Durasi mengikuti slot praktik dengan minimum 60 menit.
+Setiap perpanjangan pembayaran menambah 4 pertemuan dan 42 hari dari tanggal
+berakhir paket aktif. Sesi satu kali memiliki chat, worksheet dan lampiran
+profesional pada waktu yang diizinkan.
 
 Pasien dapat menentukan consent sebelum sesi. Tanpa paket aktif, berbagi dan
 akses record profesional berlangsung hanya sepanjang durasi sesi; paket aktif

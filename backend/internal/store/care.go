@@ -337,8 +337,8 @@ func mergePackageTotals(oldTotal, newTotal int, oldPrice, newPrice int64) (int, 
 // ActivatePendingPackage mengaktifkan paket pending terbaru milik pasangan
 // dan mengikatnya ke booking yang baru dibayar. Bila pasien sudah punya paket
 // aktif (belum kedaluwarsa) dengan profesional yang sama, paket pending
-// DIGABUNG ke paket aktif tersebut: total sesi & harga dijumlahkan, masa
-// berlaku diambil yang paling akhir, dan sesi lama tetap menunjuk paket target.
+// DIGABUNG ke paket aktif tersebut: sesi, harga, dan masa berlaku
+// ditambahkan. Sesi lama tetap menunjuk paket target.
 // Double-activation dijaga via advisory lock + SELECT FOR UPDATE. Nilai
 // kembalian bool = true bila terjadi penggabungan.
 func (s *Store) ActivatePendingPackage(ctx context.Context, patientID, professionalID, bookingID string) (CarePackage, bool, error) {
@@ -391,12 +391,12 @@ func (s *Store) ActivatePendingPackage(ctx context.Context, patientID, professio
 	var pendingID string
 	var pendingTotal int
 	var pendingPrice int64
-	var pendingExpires time.Time
-	err = tx.QueryRowContext(ctx, `SELECT id, total_sessions, price, expires_at FROM care_packages
+	var pendingValidity int
+	err = tx.QueryRowContext(ctx, `SELECT id, total_sessions, price, validity_days FROM care_packages
 		WHERE patient_id = $1 AND professional_id = $2 AND status = 'pending_payment'
 		AND (booking_id=$3 OR (booking_id IS NULL AND $4=''))
 		ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, patientID, professionalID, bookingID, linkedID).
-		Scan(&pendingID, &pendingTotal, &pendingPrice, &pendingExpires)
+		Scan(&pendingID, &pendingTotal, &pendingPrice, &pendingValidity)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CarePackage{}, false, errors.New("tidak ada paket pending untuk pasangan ini (mungkin sudah aktif/kedaluwarsa)")
 	}
@@ -411,13 +411,12 @@ func (s *Store) ActivatePendingPackage(ctx context.Context, patientID, professio
 	var activeID string
 	var activeTotal int
 	var activePrice int64
-	var activeExpires time.Time
-	err = tx.QueryRowContext(ctx, `SELECT id, total_sessions, price, expires_at FROM care_packages
+	err = tx.QueryRowContext(ctx, `SELECT id, total_sessions, price FROM care_packages
 		WHERE patient_id = $1 AND professional_id = $2
 		  AND status = 'active' AND expires_at > $3 AND id <> $4
 		ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
 		patientID, professionalID, now, pendingID).
-		Scan(&activeID, &activeTotal, &activePrice, &activeExpires)
+		Scan(&activeID, &activeTotal, &activePrice)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return CarePackage{}, false, err
 	}
@@ -426,8 +425,9 @@ func (s *Store) ActivatePendingPackage(ctx context.Context, patientID, professio
 	if merged {
 		newTotal, newPrice := mergePackageTotals(activeTotal, pendingTotal, activePrice, pendingPrice)
 		if _, err := tx.ExecContext(ctx, `UPDATE care_packages
-			SET total_sessions = $1, price = $2, expires_at = GREATEST(expires_at, $3), updated_at = now()
-			WHERE id = $4`, newTotal, newPrice, pendingExpires, activeID); err != nil {
+			SET total_sessions = $1, price = $2, validity_days = validity_days + $3,
+			    expires_at = expires_at + make_interval(days => $3), updated_at = now()
+			WHERE id = $4`, newTotal, newPrice, pendingValidity, activeID); err != nil {
 			return CarePackage{}, false, err
 		}
 		// Paket pending ditandai merged; booking_id tetap disimpan agar jejak

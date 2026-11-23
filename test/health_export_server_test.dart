@@ -13,6 +13,8 @@ import 'package:malva_mental_health/src/screens/assessment_history_screen.dart';
 import 'package:malva_mental_health/src/screens/more_screen.dart';
 import 'package:malva_mental_health/src/services/export_service.dart';
 import 'package:malva_mental_health/src/services/health_pdf_report.dart';
+import 'package:malva_mental_health/src/services/goal_history.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 
 class _UnusedPort implements FileExporter {
@@ -43,6 +45,10 @@ class _Capture extends ExportService {
       List<ScreeningPdfRow>? screenings,
       List<DiaryEntry>? diaryEntries,
       String? patientName,
+      DateTime? periodStart,
+      DateTime? periodEnd,
+      Map<String, List<GoalHistoryEntry>>? goalHistory,
+      Map<String, Uint8List> diaryThumbnails = const {},
       bool Function()? canShare}) async {
     if (canShare != null && !canShare()) return;
     calls++;
@@ -59,7 +65,7 @@ const _owner = AuthSession(
 
 void main() {
   testWidgets(
-      'cold diary export uses all server entries without visiting diary',
+      'cold diary export includes server entries within the 30-day WIB window',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -75,7 +81,15 @@ void main() {
                 'title': 'SERVER_DIARY',
                 'note': 'Isi lengkap',
                 'mood': 'sad',
-                'occurred_at': '2026-11-08T18:30:00+07:00'
+                'occurred_at': wibIso(wibNow()),
+              },
+              {
+                'id': 'older',
+                'title': 'OLDER_DIARY',
+                'note': 'Di luar periode',
+                'mood': 'sad',
+                'occurred_at':
+                    wibIso(wibNow().subtract(const Duration(days: 30))),
               }
             ]
           }),

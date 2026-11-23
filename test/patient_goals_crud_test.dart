@@ -12,6 +12,7 @@ import 'package:malva_mental_health/src/providers/providers.dart';
 import 'package:malva_mental_health/src/screens/goals_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 
 // Exercise the real screen/client; only the external HTTP boundary is replaced.
 class _GoalServer {
@@ -33,6 +34,7 @@ class _GoalServer {
     },
   ];
   final requests = <http.Request>[];
+  final logs = <Map<String, dynamic>>[];
   bool failSave = false;
   bool failDelete = false;
   bool failReload = false;
@@ -47,6 +49,7 @@ class _GoalServer {
   Future<http.Response> handle(http.Request request) async {
     requests.add(request);
     if (request.method == 'GET') {
+      if (request.url.path == '/v1/habit-logs') return json({'logs': logs});
       if (failReload && requests.any((r) => r.method != 'GET')) {
         return json({'error': 'Muat ulang gagal.'}, 503);
       }
@@ -123,15 +126,46 @@ Future<void> _tap(WidgetTester tester, Finder finder) async {
 }
 
 void main() {
+  testWidgets('archive hides a goal from today and keeps recorded history',
+      (tester) async {
+    final today = wibNow();
+    final date = wibDateKey(today);
+    final server = _GoalServer()
+      ..logs.addAll([
+        {'id': 'log-a', 'goal_id': 'goal-a', 'logged_on': date, 'done': true},
+        {'id': 'log-b', 'goal_id': 'goal-b', 'logged_on': date, 'done': false},
+      ]);
+    await _open(tester, server);
+    await _tap(tester, find.byTooltip('Opsi goal').first);
+    await _tap(tester, find.text('Arsipkan'));
+    expect(server.goals.first['is_active'], isFalse);
+    expect(server.writes('DELETE'), 0);
+    expect(find.text('Jalan pagi'), findsNothing);
+    await _tap(tester, find.text('Riwayat'));
+    final request =
+        server.requests.lastWhere((r) => r.url.path == '/v1/habit-logs');
+    expect(request.url.queryParameters['to'], date);
+    expect(request.url.queryParameters['from'],
+        wibDateKey(today.subtract(const Duration(days: 6))));
+    await _tap(tester, find.text('1/2 selesai'));
+    await _tap(tester, find.text('Jalan pagi'));
+    expect(find.text('Detail aktivitas'), findsOneWidget);
+    await _tap(tester, find.text('Tutup'));
+    await _tap(tester, find.text('Target diarsipkan'));
+    expect(find.text('Jalan pagi'), findsOneWidget);
+  });
+
   testWidgets('failed card delete preserves goal and permits retry',
       (tester) async {
     final server = _GoalServer()..failDelete = true;
     await _open(tester, server);
-    await _tap(tester, find.byTooltip('Hapus goal').first);
+    await _tap(tester, find.byTooltip('Opsi goal').first);
+    await _tap(tester, find.text('Hapus permanen'));
     await _tap(tester, find.widgetWithText(FilledButton, 'Hapus'));
     expect(find.text('Jalan pagi'), findsOneWidget);
     server.failDelete = false;
-    await _tap(tester, find.byTooltip('Hapus goal').first);
+    await _tap(tester, find.byTooltip('Opsi goal').first);
+    await _tap(tester, find.text('Hapus permanen'));
     await _tap(tester, find.widgetWithText(FilledButton, 'Hapus'));
     expect(find.text('Jalan pagi'), findsNothing);
     expect(find.text('Berenang'), findsOneWidget);
@@ -144,7 +178,8 @@ void main() {
       final server = _GoalServer()..failReload = true;
       await _open(tester, server);
       if (delete) {
-        await _tap(tester, find.byTooltip('Hapus goal').first);
+        await _tap(tester, find.byTooltip('Opsi goal').first);
+        await _tap(tester, find.text('Hapus permanen'));
         await _tap(tester, find.widgetWithText(FilledButton, 'Hapus'));
       } else {
         await _edit(tester);
@@ -161,7 +196,8 @@ void main() {
       (tester) async {
     final server = _GoalServer();
     final container = await _open(tester, server);
-    await _tap(tester, find.byTooltip('Hapus goal').first);
+    await _tap(tester, find.byTooltip('Opsi goal').first);
+    await _tap(tester, find.text('Hapus permanen'));
     container.read(authStateProvider.notifier).setSession(_nextPatient);
     await tester.pumpAndSettle();
     container.read(authStateProvider.notifier).setSession(_patient);
@@ -197,7 +233,8 @@ void main() {
     expect(saved.streakDays, 2);
     expect(saved.completedToday, isTrue);
     expect(saved.note, 'Catatan tersimpan');
-    await _tap(tester, find.byTooltip('Hapus goal'));
+    await _tap(tester, find.byTooltip('Opsi goal').first);
+    await _tap(tester, find.text('Hapus permanen'));
     await _tap(tester, find.widgetWithText(FilledButton, 'Hapus'));
     expect(container.read(malvaStoreProvider).goals, isEmpty);
     expect(server.requests, isEmpty);
@@ -208,11 +245,13 @@ void main() {
       (tester) async {
     final server = _GoalServer();
     await _open(tester, server);
-    await _tap(tester, find.byTooltip('Hapus goal').first);
+    await _tap(tester, find.byTooltip('Opsi goal').first);
+    await _tap(tester, find.text('Hapus permanen'));
     await _tap(tester, find.text('Batal'));
     expect(server.writes('DELETE'), 0);
     expect(find.text('Jalan pagi'), findsOneWidget);
-    await _tap(tester, find.byTooltip('Hapus goal').first);
+    await _tap(tester, find.byTooltip('Opsi goal').first);
+    await _tap(tester, find.text('Hapus permanen'));
     await _tap(tester, find.widgetWithText(FilledButton, 'Hapus'));
     expect(server.writes('DELETE'), 1);
     expect(server.requests.firstWhere((r) => r.method == 'DELETE').url.path,
@@ -296,7 +335,8 @@ void main() {
       (tester) async {
     final server = _GoalServer();
     final container = await _open(tester, server);
-    await _tap(tester, find.byTooltip('Hapus goal').first);
+    await _tap(tester, find.byTooltip('Opsi goal').first);
+    await _tap(tester, find.text('Hapus permanen'));
     container.read(authStateProvider.notifier).setSession(_nextPatient);
     await tester.pumpAndSettle();
     await _tap(tester, find.widgetWithText(FilledButton, 'Hapus'));

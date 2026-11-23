@@ -786,6 +786,13 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
                         style: const TextStyle(color: _muted, fontSize: 11))),
               ],
             ]),
+            if (sharedMedicationSourceLabel(med['source']).isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: _chip(
+                    sharedMedicationSourceLabel(med['source']), _purple,
+                    fontSize: 9),
+              ),
             if (_text(med, 'relation_to_meal').isNotEmpty)
               Padding(
                   padding: const EdgeInsets.only(top: 9),

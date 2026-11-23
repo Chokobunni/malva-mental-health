@@ -9,6 +9,7 @@ import '../models.dart';
 import '../models/diary_content.dart';
 import '../platform/contracts/ports.dart';
 import '../time/wib.dart';
+import 'goal_history.dart';
 import 'health_pdf_report.dart';
 
 // ============================================================
@@ -34,6 +35,10 @@ class ExportService {
     List<ScreeningPdfRow>? screenings,
     List<DiaryEntry>? diaryEntries,
     String? patientName,
+    DateTime? periodStart,
+    DateTime? periodEnd,
+    Map<String, List<GoalHistoryEntry>>? goalHistory,
+    Map<String, Uint8List> diaryThumbnails = const {},
     bool Function()? canShare,
   }) async {
     final bytes = await buildHealthReportPdf(
@@ -42,6 +47,10 @@ class ExportService {
         medicationLogs: medicationLogs,
         screenings: screenings,
         diaries: diaryEntries,
+        goalHistory: goalHistory,
+        diaryThumbnails: diaryThumbnails,
+        periodStart: periodStart,
+        periodEnd: periodEnd,
         patientName: patientName);
     if (canShare != null && !canShare()) return;
     await _exporter.saveBytes(

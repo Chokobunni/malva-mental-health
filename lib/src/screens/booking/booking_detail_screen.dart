@@ -9,6 +9,7 @@ import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 import '../../widgets/professional_avatar.dart';
 import 'payment_screen.dart';
+import 'booking_owner.dart';
 import 'consent_request_sheet.dart';
 import '../../time/wib.dart';
 
@@ -27,6 +28,9 @@ class BookingDetailScreen extends ConsumerStatefulWidget {
     required this.serviceType,
     required this.expectedPrice,
     required this.doctorPhotoUrl,
+    this.chatPrice,
+    this.videoPrice,
+    this.durationLabel,
     this.session,
     this.apiClient,
   });
@@ -40,6 +44,9 @@ class BookingDetailScreen extends ConsumerStatefulWidget {
 
   /// Harga yang tampil di profil (server menghitung ulang & memvalidasi).
   final int expectedPrice;
+  final int? chatPrice;
+  final int? videoPrice;
+  final String? durationLabel;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
@@ -49,6 +56,14 @@ class BookingDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
+  late final BookingOwner _owner;
+  late String _method;
+  int _slotsRequest = 0;
+
+  int _priceFor(String method) =>
+      (method == 'chat' ? widget.chatPrice : widget.videoPrice) ??
+      (widget.serviceType == method ? widget.expectedPrice : 0);
+
   List<BackendAvailabilityDay> _days = const [];
   String? _selectedDate;
   String? _selectedSlot;
@@ -61,14 +76,15 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _owner = BookingOwner(ref, widget.session);
+    _method = widget.serviceType;
     _loadDays();
   }
 
   Future<void> _loadDays() async {
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
-    final rawToken =
-        (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
+    final rawToken = _owner.session?.accessToken;
     final accessToken =
         (rawToken == null || rawToken.isEmpty) ? null : rawToken;
     setState(() {
@@ -83,7 +99,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
       if (!mounted) return;
       final bookable = days.where((d) => d.bookable).toList(growable: false);
       setState(() {
-        _days = days;
+        _days = bookable;
         _isLoadingDays = false;
         _selectedDate = bookable.isEmpty ? null : bookable.first.date;
       });
@@ -109,15 +125,16 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
   Future<void> _loadSlots() async {
     final date = _selectedDate;
     if (date == null) return;
+    final request = ++_slotsRequest;
     setState(() {
       _isLoadingSlots = true;
       _selectedSlot = null;
+      _error = null;
     });
     try {
       final MalvaApiClient apiClient =
           widget.apiClient ?? ref.read(apiClientProvider);
-      final rawToken =
-          (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
+      final rawToken = _owner.session?.accessToken;
       final accessToken =
           (rawToken == null || rawToken.isEmpty) ? null : rawToken;
       final slots = await apiClient.getDoctorAvailableSlots(
@@ -125,13 +142,13 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
         userId: widget.doctorUserId,
         date: date,
       );
-      if (!mounted) return;
+      if (!mounted || request != _slotsRequest) return;
       setState(() {
         _slots = slots;
         _isLoadingSlots = false;
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || request != _slotsRequest) return;
       setState(() {
         _slots = const [];
         _isLoadingSlots = false;
@@ -142,9 +159,11 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isVideo = widget.serviceType == 'video';
+    final isVideo = _method == 'video';
     return Scaffold(
+      backgroundColor: const Color(0xFFF9F3FD),
       appBar: AppBar(
+        centerTitle: true,
         title: const Text('Booking Detail'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
@@ -153,6 +172,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
         padding: const EdgeInsets.all(18),
         children: [
           SoftCard(
+            color: Colors.white,
             child: Row(
               children: [
                 ProfessionalAvatar(
@@ -169,14 +189,9 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                           style: const TextStyle(
                               fontWeight: FontWeight.w900, fontSize: 16)),
                       const SizedBox(height: 4),
-                      StatusPill(
-                        label: isVideo
-                            ? 'Video • sekali sesi'
-                            : 'Chat • sekali sesi',
-                        color: MalvaColors.orchid,
-                        icon: isVideo
-                            ? Icons.videocam_rounded
-                            : Icons.chat_bubble_rounded,
+                      const StatusPill(
+                        label: 'Quick Consult • 1 sesi',
+                        color: MalvaColors.seed,
                       ),
                     ],
                   ),
@@ -184,42 +199,39 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          SoftCard(
-            color: MalvaColors.seed.withValues(alpha: 0.06),
-            child: Row(
-              children: [
-                const Icon(Icons.event_available_rounded,
-                    color: MalvaColors.seed),
-                const SizedBox(width: 10),
+          const SizedBox(height: 18),
+          const SectionLabel('Pilih metode'),
+          Row(
+            children: [
+              for (final (method, label, icon) in const [
+                ('chat', 'Chat', Icons.chat_bubble_outline_rounded),
+                ('video', 'Video', Icons.videocam_outlined),
+              ]) ...[
+                if (method == 'video') const SizedBox(width: 8),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Sesi dimulai',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w900, fontSize: 13.5),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _selectedDate == null
-                            ? 'Pilih tanggal di bawah'
-                            : '${_prettyDate(_selectedDate!)}'
-                                '${_selectedSlot == null ? ' • pilih jam di bawah' : ' • pukul $_selectedSlot'}',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: Colors.black87),
-                      ),
-                    ],
+                  child: ChoiceChip(
+                    avatar: Icon(icon, color: MalvaColors.seed),
+                    label: Text(label),
+                    selected: _method == method,
+                    selectedColor: const Color(0xFFF0DFF9),
+                    backgroundColor: Colors.white,
+                    labelStyle: const TextStyle(fontWeight: FontWeight.w800),
+                    onSelected: _priceFor(method) <= 0 || _isSubmitting
+                        ? null
+                        : (_) {
+                            if (_method == method) return;
+                            setState(() => _method = method);
+                            _loadSlots();
+                          },
                   ),
                 ),
               ],
-            ),
+            ],
           ),
-          const SizedBox(height: 14),
-          const SectionLabel('Pilih Tanggal (hari praktik profesional)'),
+          const SizedBox(height: 18),
+          const SectionLabel('Pilih tanggal'),
+          const Text('Jadwal profesional • WIB'),
+          const SizedBox(height: 8),
           if (_isLoadingDays)
             const Center(child: CircularProgressIndicator())
           else if (_days.isEmpty || _selectedDate == null)
@@ -242,15 +254,24 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                         bookable: day.bookable,
                         freeSlots: day.freeSlots,
                         selected: _selectedDate == day.date,
-                        onTap:
-                            day.bookable ? () => _selectDate(day.date) : null,
+                        onTap: day.bookable && !_isSubmitting
+                            ? () => _selectDate(day.date)
+                            : null,
                       ),
                     ),
                 ],
               ),
             ),
           const SizedBox(height: 14),
-          const SectionLabel('Pilih Jam'),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(child: SectionLabel('Pilih jam')),
+              StatusPill(label: 'WIB', color: MalvaColors.seed),
+            ],
+          ),
+          if (_selectedDate != null) Text(_prettyDate(_selectedDate!)),
+          const SizedBox(height: 8),
           if (_isLoadingSlots)
             const Center(child: CircularProgressIndicator())
           else if (_selectedDate == null)
@@ -276,7 +297,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                     label: Text(slot.time,
                         style: const TextStyle(fontWeight: FontWeight.w700)),
                     selected: _selectedSlot == slot.time,
-                    onSelected: slot.available
+                    onSelected: slot.available && !_isSubmitting
                         ? (_) => setState(() => _selectedSlot = slot.time)
                         : null,
                     selectedColor: MalvaColors.seed.withValues(alpha: 0.2),
@@ -290,13 +311,13 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    isVideo ? 'Video session' : 'Chat session',
+                    isVideo ? 'Sesi Video' : 'Sesi Chat',
                     style: const TextStyle(
                         color: Colors.white, fontWeight: FontWeight.w700),
                   ),
                 ),
                 Text(
-                  'Rp ${_formatRupiah(widget.expectedPrice)}',
+                  'Rp ${_formatRupiah(_priceFor(_method))}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w900,
@@ -314,17 +335,21 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
           ],
           const SizedBox(height: 14),
           FilledButton.icon(
-            onPressed: (_selectedSlot == null || _isSubmitting)
+            onPressed: (_selectedSlot == null ||
+                    _isSubmitting ||
+                    _priceFor(_method) <= 0)
                 ? null
                 : _submitBooking,
             icon: const Icon(Icons.arrow_forward_rounded),
             label: Text(_isSubmitting ? 'Memproses...' : 'Proceed to Payment'),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Video, chat, berkas, dan berbagi data tersedia selama sesi satu jam.',
+          Text(
+            widget.durationLabel == null
+                ? 'Durasi mengikuti slot praktik'
+                : 'Durasi sesi ${widget.durationLabel}',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: Colors.black54),
+            style: const TextStyle(fontSize: 12, color: Colors.black54),
           ),
         ],
       ),
@@ -337,43 +362,49 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
     // bisa dikirim ke server.
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
-    final accessToken =
-        (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
+    final accessToken = _owner.session?.accessToken;
     if (accessToken == null || accessToken.isEmpty) {
       setState(() => _error = 'Mode offline aktif. '
           'Hubungkan ke server untuk membuat booking.');
       return;
     }
-    if (_selectedDate == null || _selectedSlot == null) return;
-    final granted = await showConsentRequestSheet(
-      context: context,
-      professionalId: widget.doctorUserId,
-      oneTime: true,
-    );
-    if (!granted || !mounted) return;
+    final date = _selectedDate;
+    final slot = _selectedSlot;
+    if (_isSubmitting || date == null || slot == null) return;
     setState(() {
       _isSubmitting = true;
       _error = null;
     });
     try {
-      final booking = await apiClient.createBooking(
-        accessToken: accessToken,
+      final granted = await showConsentRequestSheet(
+        context: context,
         professionalId: widget.doctorUserId,
-        serviceType: 'quick_consult_video',
-        sessionType: 'video',
-        bookingDate: _selectedDate!,
-        slotTime: _selectedSlot,
-        durationMinutes: 60,
-        price: widget.expectedPrice,
+        oneTime: true,
+        ownerSession: () => mounted ? _owner.session : null,
       );
-      if (!mounted) return;
-      Navigator.push(
+      if (!granted || !mounted) return;
+      final checkoutSession = _owner.session;
+      final checkoutToken = checkoutSession?.accessToken;
+      if (checkoutToken == null || checkoutToken.isEmpty) return;
+      final booking = await apiClient.createBooking(
+        accessToken: checkoutToken,
+        professionalId: widget.doctorUserId,
+        serviceType:
+            _method == 'video' ? 'quick_consult_video' : 'quick_consult',
+        sessionType: _method,
+        bookingDate: date,
+        slotTime: slot,
+        durationMinutes: 60,
+        price: _priceFor(_method),
+      );
+      if (!mounted || _owner.session == null) return;
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => PaymentScreen(
             booking: booking,
             doctorName: widget.doctorName,
-            session: widget.session ?? ref.read(currentSessionProvider),
+            session: _owner.session,
             apiClient: widget.apiClient,
           ),
         ),
@@ -481,12 +512,10 @@ class _DayChip extends StatelessWidget {
       child: Opacity(
         opacity: bookable ? 1 : 0.45,
         child: Container(
-          width: 66,
+          width: 76,
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: selected
-                ? MalvaColors.seed
-                : MalvaColors.seed.withValues(alpha: 0.06),
+            color: selected ? MalvaColors.seed : Colors.white,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: selected
@@ -506,9 +535,9 @@ class _DayChip extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${day.day}',
+                day.day.toString().padLeft(2, '0'),
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 23,
                   fontWeight: FontWeight.w900,
                   color: selected ? Colors.white : MalvaColors.plum,
                 ),

@@ -7,6 +7,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/care_reference_widgets.dart';
 
 // ============================================================
 // NOTIFICATIONS — daftar notifikasi + tandai baca
@@ -123,8 +124,13 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isPatient =
+        (widget.session ?? ref.watch(currentSessionProvider))?.role ==
+            UserRole.patient;
     return Scaffold(
+      backgroundColor: isPatient ? carePageColor : null,
       appBar: AppBar(
+        centerTitle: isPatient ? true : null,
         title: Text(
             _unreadCount > 0 ? 'Notifikasi ($_unreadCount)' : 'Notifikasi'),
         backgroundColor: MalvaColors.seed,
@@ -143,6 +149,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         onRefresh: _load,
         child: ListView(
           padding: const EdgeInsets.all(18),
+          physics: const AlwaysScrollableScrollPhysics(),
           children: [
             if (_isLoading)
               const Center(child: CircularProgressIndicator())
@@ -161,6 +168,17 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                       label: const Text('Coba Lagi'),
                     ),
                   ],
+                ),
+              )
+            else if (_items.isEmpty && isPatient)
+              const Padding(
+                padding: EdgeInsets.only(top: 76),
+                child: CareIllustratedCard(
+                  asset: 'assets/reference/notifications-empty.png',
+                  imageHeight: 135,
+                  title: 'Belum ada notifikasi',
+                  subtitle:
+                      'Update screening, chat, dan reminder akan muncul di sini.',
                 ),
               )
             else if (_items.isEmpty)

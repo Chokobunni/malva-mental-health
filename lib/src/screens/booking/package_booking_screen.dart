@@ -9,6 +9,7 @@ import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 import '../../widgets/professional_avatar.dart';
 import 'consent_request_sheet.dart';
+import 'booking_owner.dart';
 import 'payment_screen.dart';
 
 // ============================================================
@@ -24,6 +25,8 @@ class PackageBookingScreen extends ConsumerStatefulWidget {
     required this.doctorName,
     required this.price,
     required this.doctorPhotoUrl,
+    this.scheduleLines = const [],
+    this.durationLabel,
     this.session,
     this.apiClient,
   });
@@ -31,6 +34,8 @@ class PackageBookingScreen extends ConsumerStatefulWidget {
   final String doctorUserId;
   final String doctorName;
   final int price;
+  final List<String> scheduleLines;
+  final String? durationLabel;
 
   /// URL foto profil profesional. Kosong = pakai avatar gradien + inisial.
   final String doctorPhotoUrl;
@@ -43,101 +48,166 @@ class PackageBookingScreen extends ConsumerStatefulWidget {
 }
 
 class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
+  late final BookingOwner _owner;
   bool _isSubmitting = false;
   String? _error;
+  (String, String)? _firstSession;
+
+  @override
+  void initState() {
+    super.initState();
+    _owner = BookingOwner(ref, widget.session);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFFDFBFD),
       appBar: AppBar(
-        title: const Text('Paket Continuous'),
+        centerTitle: true,
+        title: const Text('Booking Detail'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),
       body: ListView(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(14),
         children: [
           SoftCard(
+            color: Colors.white,
             child: Row(
               children: [
                 ProfessionalAvatar(
-                  displayName: widget.doctorName,
-                  radius: 28,
-                  photoUrl: widget.doctorPhotoUrl,
-                ),
+                    displayName: widget.doctorName,
+                    radius: 27,
+                    photoUrl: widget.doctorPhotoUrl),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(widget.doctorName,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w900, fontSize: 16)),
-                      const SizedBox(height: 4),
-                      const StatusPill(
-                        label: 'Paket 4 Sesi • 6 Minggu',
-                        color: MalvaColors.mint,
-                        icon: Icons.handshake_rounded,
-                      ),
-                    ],
-                  ),
-                ),
+                    child: Text(widget.doctorName,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w900, fontSize: 18))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          const SoftCard(
+            color: Colors.white,
+            child: Row(
+              children: [
+                Icon(Icons.calendar_month_outlined,
+                    color: MalvaColors.seed, size: 38),
+                SizedBox(width: 12),
+                Expanded(
+                    child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Continuous Package',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w900)),
+                    Text('4 sesi video • 6 minggu'),
+                  ],
+                )),
               ],
             ),
           ),
           const SizedBox(height: 14),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(child: SectionLabel('Jadwal 4 sesi')),
+              StatusPill(label: 'WIB', color: MalvaColors.seed),
+            ],
+          ),
+          const Text(
+              'Pilih sesi pertama sebelum membayar. Sesi 2–4 dapat dijadwalkan di halaman Terhubung selama paket aktif.'),
+          const SizedBox(height: 10),
+          SoftCard(
+            color: Colors.white,
+            child: Column(
+              children: [
+                for (var index = 1; index <= 4; index++) ...[
+                  if (index > 1) const Divider(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text('Sesi $index',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 16)),
+                                StatusPill(
+                                    label: index == 1 ? 'Wajib' : 'Opsional',
+                                    color: index == 1
+                                        ? MalvaColors.seed
+                                        : Colors.black54),
+                              ],
+                            ),
+                            Text(index == 1 && _firstSession != null
+                                ? '${_displayDate(_firstSession!.$1)} • ${_firstSession!.$2}'
+                                : 'Belum dijadwalkan'),
+                          ],
+                        ),
+                      ),
+                      if (index == 1)
+                        TextButton(
+                          onPressed: _isSubmitting ? null : _pickFirstSession,
+                          child: Text(
+                              _firstSession == null ? 'Pilih jadwal' : 'Ubah'),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (widget.scheduleLines.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(widget.scheduleLines.join(' • ')),
+          ],
+          const SizedBox(height: 12),
           SoftCard(
             color: Colors.white,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Aturan paket',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
-                const SizedBox(height: 8),
-                for (final rule in const [
-                  '4 sesi video, masing-masing 1 jam dengan profesional ini.',
-                  'Berlaku 6 minggu sejak pembayaran — sisa sesi setelah itu hangus.',
-                  'Tidak hadir saat sesi = sesi hangus (tetap dihitung berkurang).',
-                  'Profesional membatalkan = kredit sesi kembali, bisa dijadwalkan ulang.',
-                  'Kamu bisa mengirim diary, goals, assessment & worksheet selama paket aktif.',
-                  'Profesional membahas kirimanmu saat sesi — tanpa kewajiban membalas di luar sesi.',
-                ])
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.check_circle_rounded,
-                            size: 16, color: MalvaColors.mint),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(rule)),
-                      ],
-                    ),
-                  ),
+                const SectionLabel('Aturan paket'),
+                _PackageRule(
+                    Icons.event_available_outlined,
+                    widget.durationLabel == null
+                        ? '4 sesi video per paket.'
+                        : '4 sesi video per paket, masing-masing ${widget.durationLabel}.'),
+                const _PackageRule(Icons.send_outlined,
+                    'Selama paket aktif, kirim diary, goals, assessment, dan worksheet. Termasuk monitoring data.'),
+                const _PackageRule(Icons.chat_bubble_outline_rounded,
+                    'Profesional membahas kiriman saat sesi, tanpa kewajiban membalas di luar sesi.'),
+                const _PackageRule(Icons.info_outline_rounded,
+                    'Tidak hadir: sesi hangus. Jika profesional membatalkan, kredit sesi kembali atau jadwal ulang.'),
+                const _PackageRule(Icons.event_outlined,
+                    'Setiap pembelian paket menambah 4 sesi dan 6 minggu masa aktif.'),
+                const _PackageRule(Icons.event_busy_outlined,
+                    'Sisa sesi hangus saat masa aktif berakhir. Tanpa perpanjangan otomatis.'),
               ],
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           SoftCard(
-            color: MalvaColors.plum,
+            color: Colors.white,
             child: Row(
               children: [
                 const Expanded(
-                  child: Text(
-                    'Paket 4 sesi / 6 minggu',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w700),
-                  ),
-                ),
-                Text(
-                  'Rp ${_formatRupiah(widget.price)}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 20,
-                  ),
-                ),
+                    child: Text('Total paket',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w900, fontSize: 18))),
+                Text('Rp ${_formatRupiah(widget.price)}',
+                    style: const TextStyle(
+                        color: MalvaColors.seed,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 20)),
               ],
             ),
           ),
@@ -147,23 +217,37 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
                 style: const TextStyle(
                     color: MalvaColors.danger, fontWeight: FontWeight.w700)),
           ],
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: _isSubmitting ? null : _submit,
-            icon: const Icon(Icons.handshake_rounded),
-            label: Text(_isSubmitting
-                ? 'Memproses...'
-                : 'Beli Paket — Rp ${_formatRupiah(widget.price)}'),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Setelah pembayaran, paket aktif 6 minggu dan kamu bisa menjadwalkan 4 sesi.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: Colors.black54),
+            onPressed: _isSubmitting || _firstSession == null ? null : _submit,
+            icon: const Icon(Icons.arrow_forward_rounded),
+            label:
+                Text(_isSubmitting ? 'Memproses...' : 'Lanjut ke pembayaran'),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _pickFirstSession() async {
+    final MalvaApiClient api = widget.apiClient ?? ref.read(apiClientProvider);
+    final session = _owner.session;
+    final choice = await showDialog<(String, String)>(
+      context: context,
+      barrierColor: MalvaColors.plum.withValues(alpha: .65),
+      builder: (_) => _PackageSessionDialog(
+        api: api,
+        accessToken: session?.accessToken,
+        professionalId: widget.doctorUserId,
+        initial: _firstSession,
+      ),
+    );
+    if (mounted && choice != null) {
+      setState(() {
+        _firstSession = choice;
+        _error = null;
+      });
+    }
   }
 
   Future<void> _submit() async {
@@ -171,36 +255,52 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
     // tidak dioper eksplisit (deep-link), konsisten dengan layar lain.
     final MalvaApiClient apiClient =
         widget.apiClient ?? ref.read(apiClientProvider);
-    final accessToken =
-        (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
+    final accessToken = _owner.session?.accessToken;
     if (accessToken == null || accessToken.isEmpty) {
       setState(() => _error = 'Mode offline aktif. '
           'Hubungkan ke server untuk membeli paket.');
       return;
     }
-    // Consent DULU (sebelum ada paket yatim di server).
-    final granted = await showConsentRequestSheet(
-      context: context,
-      professionalId: widget.doctorUserId,
-    );
-    if (!granted || !mounted) return;
+    final firstSession = _firstSession;
+    if (_isSubmitting || firstSession == null) return;
     setState(() {
       _isSubmitting = true;
       _error = null;
     });
     try {
+      final granted = await showConsentRequestSheet(
+        context: context,
+        professionalId: widget.doctorUserId,
+        ownerSession: () => mounted ? _owner.session : null,
+      );
+      if (!granted || !mounted) return;
+      final purchaseToken = _owner.session?.accessToken;
+      if (purchaseToken == null || purchaseToken.isEmpty) return;
       final pkg = await apiClient.createCarePackage(
-        accessToken: accessToken,
+        accessToken: purchaseToken,
         professionalId: widget.doctorUserId,
       );
-      if (!mounted) return;
-      Navigator.push(
+      if (!mounted || _owner.session == null) return;
+      BackendBooking? booking;
+      if (pkg.bookingId == null) {
+        final bookingToken = _owner.session?.accessToken;
+        if (bookingToken == null || bookingToken.isEmpty) return;
+        booking = await apiClient.createPackageSessionBooking(
+          accessToken: bookingToken,
+          packageId: pkg.id,
+          bookingDate: firstSession.$1,
+          slotTime: firstSession.$2,
+        );
+        if (!mounted || _owner.session == null) return;
+      }
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => PaymentScreen(
             package: pkg,
+            booking: booking,
             doctorName: widget.doctorName,
-            session: widget.session ?? ref.read(currentSessionProvider),
+            session: _owner.session,
             apiClient: widget.apiClient,
           ),
         ),
@@ -224,4 +324,227 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
     }
     return buf.toString();
   }
+}
+
+String _displayDate(String date, {bool short = false}) {
+  final parsed = DateTime.tryParse(date);
+  if (parsed == null) return date;
+  const weekdays = [
+    'Senin',
+    'Selasa',
+    'Rabu',
+    'Kamis',
+    'Jumat',
+    'Sabtu',
+    'Minggu'
+  ];
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'Mei',
+    'Jun',
+    'Jul',
+    'Agu',
+    'Sep',
+    'Okt',
+    'Nov',
+    'Des'
+  ];
+  final day = weekdays[parsed.weekday - 1];
+  final label = '${parsed.day} ${months[parsed.month - 1]}';
+  return short
+      ? '${day.substring(0, 3)}\n$label'
+      : '$day, $label ${parsed.year}';
+}
+
+class _PackageRule extends StatelessWidget {
+  const _PackageRule(this.icon, this.text);
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: MalvaColors.seed, size: 21),
+            const SizedBox(width: 10),
+            Expanded(child: Text(text)),
+          ],
+        ),
+      );
+}
+
+class _PackageSessionDialog extends StatefulWidget {
+  const _PackageSessionDialog({
+    required this.api,
+    required this.accessToken,
+    required this.professionalId,
+    required this.initial,
+  });
+
+  final MalvaApiClient api;
+  final String? accessToken;
+  final String professionalId;
+  final (String, String)? initial;
+
+  @override
+  State<_PackageSessionDialog> createState() => _PackageSessionDialogState();
+}
+
+class _PackageSessionDialogState extends State<_PackageSessionDialog> {
+  late Future<List<BackendAvailabilityDay>> _availability;
+  Future<List<BackendDoctorSlot>>? _slots;
+  String? _date;
+  String? _time;
+
+  @override
+  void initState() {
+    super.initState();
+    _availability = _loadDays();
+  }
+
+  Future<List<BackendAvailabilityDay>> _loadDays() async {
+    final days = (await widget.api.getDoctorAvailability(
+      accessToken: widget.accessToken,
+      userId: widget.professionalId,
+    ))
+        .where((day) => day.bookable)
+        .toList(growable: false);
+    if (mounted && days.isNotEmpty) {
+      final previous = widget.initial;
+      final canRestore =
+          previous != null && days.any((day) => day.date == previous.$1);
+      _selectDate(canRestore ? previous.$1 : days.first.date,
+          initialTime: canRestore ? previous.$2 : null);
+    }
+    return days;
+  }
+
+  void _selectDate(String date, {String? initialTime}) {
+    setState(() {
+      _date = date;
+      _time = initialTime;
+      _slots = widget.api.getDoctorAvailableSlots(
+        accessToken: widget.accessToken,
+        userId: widget.professionalId,
+        date: date,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: const Text('Pilih jadwal sesi 1'),
+        content: SingleChildScrollView(
+          child: SizedBox(
+            width: 420,
+            child: FutureBuilder<List<BackendAvailabilityDay>>(
+              future: _availability,
+              builder: (context, days) => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('Sesi video • WIB'),
+                  const SizedBox(height: 12),
+                  const SectionLabel('Pilih tanggal'),
+                  if (days.connectionState != ConnectionState.done)
+                    const Center(child: CircularProgressIndicator())
+                  else if (days.hasError)
+                    FriendlyErrorCard(
+                        error: days.error!,
+                        onRetry: () async =>
+                            setState(() => _availability = _loadDays()))
+                  else if (days.data!.isEmpty)
+                    const Text('Belum ada jadwal tersedia.')
+                  else ...[
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final day in days.data!)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                label: Text(_displayDate(day.date, short: true),
+                                    textAlign: TextAlign.center),
+                                selected: day.date == _date,
+                                onSelected: (_) => _selectDate(day.date),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const SectionLabel('Pilih jam'),
+                    if (_date != null) Text(_displayDate(_date!)),
+                  ],
+                  FutureBuilder<List<BackendDoctorSlot>>(
+                    future: _slots,
+                    builder: (context, slots) {
+                      final available = slots.data
+                              ?.where((slot) => slot.available)
+                              .toList() ??
+                          const <BackendDoctorSlot>[];
+                      final loaded =
+                          slots.connectionState == ConnectionState.done;
+                      final canSave =
+                          loaded && available.any((slot) => slot.time == _time);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (slots.connectionState == ConnectionState.waiting)
+                            const Center(child: CircularProgressIndicator())
+                          else if (slots.hasError)
+                            FriendlyErrorCard(
+                                error: slots.error!,
+                                onRetry: () async => _selectDate(_date!))
+                          else if (loaded && available.isEmpty)
+                            const Text('Tidak ada slot bebas pada tanggal ini.')
+                          else if (loaded)
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                for (final slot in available)
+                                  ChoiceChip(
+                                    label: Text(slot.time),
+                                    selected: slot.time == _time,
+                                    onSelected: (_) =>
+                                        setState(() => _time = slot.time),
+                                  ),
+                              ],
+                            ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Batal')),
+                              Expanded(
+                                  child: FilledButton(
+                                onPressed: canSave
+                                    ? () =>
+                                        Navigator.pop(context, (_date!, _time!))
+                                    : null,
+                                child: const Text('Simpan jadwal',
+                                    textAlign: TextAlign.center),
+                              )),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
 }

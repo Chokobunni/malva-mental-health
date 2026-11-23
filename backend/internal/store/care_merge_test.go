@@ -83,10 +83,11 @@ func TestActivatePendingPackageMerges(t *testing.T) {
 	}()
 
 	var targetID string
+	var priorExpiry time.Time
 	if err := db.QueryRowContext(ctx, `INSERT INTO care_packages
 		(patient_id, professional_id, total_sessions, validity_days, price, status, expires_at)
 		VALUES ($1, $2, 4, 42, 200000, 'active', now() + interval '30 days')
-		RETURNING id`, patient, prof).Scan(&targetID); err != nil {
+		RETURNING id, expires_at`, patient, prof).Scan(&targetID, &priorExpiry); err != nil {
 		t.Fatalf("insert paket target: %v", err)
 	}
 	// Sesi lama pada paket target.
@@ -123,6 +124,13 @@ func TestActivatePendingPackageMerges(t *testing.T) {
 	}
 	if pkg.Price != 400000 {
 		t.Fatalf("harga gabungan harus 400000, dapat %d", pkg.Price)
+	}
+	if pkg.ValidityDays != 84 || !pkg.ExpiresAt.Equal(priorExpiry.AddDate(0, 0, 42)) {
+		t.Fatalf("renewal must extend validity by 42 days, got %d days, expiry %s", pkg.ValidityDays, pkg.ExpiresAt)
+	}
+	replay, _, err := s.ActivatePendingPackage(ctx, patient, prof, bookingID)
+	if err != nil || replay.TotalSessions != 8 || !replay.ExpiresAt.Equal(pkg.ExpiresAt) {
+		t.Fatalf("retry must not extend package twice: %+v, %v", replay, err)
 	}
 	// Sesi lama tetap menunjuk paket target.
 	var sessionPkg string

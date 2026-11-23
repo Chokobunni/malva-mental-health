@@ -632,7 +632,7 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 		return
 	}
 	sessionType := strings.ToLower(strings.TrimSpace(req.SessionType))
-	if claims.Role == "patient" {
+	if claims.Role == "patient" && isPackageSession {
 		sessionType = "video"
 		if selectedPackage != nil {
 			legacy, found, err := s.store.PendingBookingForCarePackage(r.Context(), selectedPackage.ID)
@@ -644,6 +644,9 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 				sessionType = legacy.SessionType
 			}
 		}
+	}
+	if serviceType == "quick_consult_video" || (claims.Role == "patient" && sessionType == "") {
+		sessionType = "video"
 	}
 	switch sessionType {
 	case "video":

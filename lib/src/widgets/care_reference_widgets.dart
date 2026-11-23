@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import '../models.dart';
+import 'account_avatar.dart';
 import 'malva_components.dart';
 
 const carePageColor = Color(0xfff8f2fc);
@@ -39,19 +41,17 @@ class CarePageHeader extends StatelessWidget {
     super.key,
     required this.title,
     required this.subtitle,
-    required this.name,
+    this.session,
     required this.onNotifications,
     required this.onProfile,
-    this.extraAction,
   });
 
-  final String title, subtitle, name;
+  final String title, subtitle;
+  final AuthSession? session;
   final VoidCallback onNotifications, onProfile;
-  final Widget? extraAction;
 
   @override
   Widget build(BuildContext context) {
-    final trimmed = name.trim();
     return DecoratedBox(
       decoration: careHeaderDecoration,
       child: SafeArea(
@@ -65,7 +65,6 @@ class CarePageHeader extends StatelessWidget {
                 Image.asset('assets/checkin/flower-white.png',
                     width: 26, height: 30),
                 const Spacer(),
-                if (extraAction != null) extraAction!,
                 CareHeaderNotification(onPressed: onNotifications),
                 const SizedBox(width: 6),
                 IconButton.outlined(
@@ -75,14 +74,8 @@ class CarePageHeader extends StatelessWidget {
                     foregroundColor: Colors.white,
                     side: const BorderSide(color: Colors.white, width: 1.5),
                   ),
-                  icon: Text(
-                      trimmed.isEmpty
-                          ? '?'
-                          : trimmed.characters.first.toUpperCase(),
-                      style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white)),
+                  padding: const EdgeInsets.all(2),
+                  icon: AccountAvatar(session: session),
                 ),
               ]),
               const SizedBox(height: 13),
@@ -112,12 +105,14 @@ class CareIllustratedCard extends StatelessWidget {
     this.subtitle,
     this.horizontal = false,
     this.imageHeight,
+    this.action,
   });
 
   final String asset, title;
   final String? subtitle;
   final bool horizontal;
   final double? imageHeight;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -138,7 +133,7 @@ class CareIllustratedCard extends StatelessWidget {
             style: const TextStyle(color: Color(0xff535964), fontSize: 13),
           );
     final image = Image.asset(
-      'assets/care/$asset.png',
+      asset.startsWith('assets/') ? asset : 'assets/care/$asset.png',
       height: imageHeight ?? (horizontal ? 72 : 126),
       fit: BoxFit.contain,
       excludeFromSemantics: true,
@@ -173,6 +168,10 @@ class CareIllustratedCard extends StatelessWidget {
                 if (description != null) ...[
                   const SizedBox(height: 7),
                   description
+                ],
+                if (action != null) ...[
+                  const SizedBox(height: 20),
+                  action!,
                 ],
               ])),
     );

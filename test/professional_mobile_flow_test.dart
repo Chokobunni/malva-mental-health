@@ -177,9 +177,8 @@ void main() {
     await tester.tap(find.text('Ketersediaan & harga'));
     await tester.pumpAndSettle();
     expect(find.text('Jam praktik mingguan'), findsOneWidget);
-    expect(find.text('Hari libur:'), findsOneWidget);
-    expect(find.text('belum ada'), findsOneWidget);
-    expect(find.text('Paket 4 sesi / 6 minggu:'), findsOneWidget);
+    expect(find.text('Hari libur: belum ada'), findsOneWidget);
+    expect(find.text('Continuous Package'), findsOneWidget);
     expect(find.text('belum diatur'), findsNWidgets(3));
     client.requests.clear();
     await tester.tap(find.text('Jadwal'));
