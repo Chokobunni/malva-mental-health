@@ -231,8 +231,9 @@ Cukup `git push` ke `main`:
 Buka **Actions → Deploy All (manual) → Run workflow**, pilih `target`:
 `all`, `backend`, `web`, atau `apk`.
 
-Untuk APK, buka **Actions → Build & Deploy APK → Run workflow** bila ingin
-mengatur `target_platform` dan apakah APK diunggah ke server.
+Untuk APK, buka **Actions → Build & Deploy APK → Run workflow**. Unduhan
+publik selalu memuat ARM, ARM64, dan x86_64. Untuk artefak satu ABI, pilih
+`target_platform` dan matikan `deploy`.
 
 ## 9. Migrasi database
 
