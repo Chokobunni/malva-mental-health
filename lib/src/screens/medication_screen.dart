@@ -13,6 +13,7 @@ import '../time/wib.dart';
 import '../widgets/home_personalization.dart';
 import '../widgets/malva_components.dart';
 import 'medication_history_screen.dart';
+import 'portal/prescription_wizard_screen.dart';
 
 class MedicationScreen extends ConsumerStatefulWidget {
   const MedicationScreen({
@@ -475,7 +476,26 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
     );
   }
 
-  void _openMedicationForm(BuildContext context, [Medication? medication]) {
+  Future<void> _openMedicationForm(BuildContext context,
+      [Medication? medication]) async {
+    if (medication == null) {
+      final session = _session;
+      final value = await Navigator.of(context).push<Medication>(
+        MaterialPageRoute(
+          builder: (_) =>
+              EPrescriptionFormScreen(personal: true, session: session),
+        ),
+      );
+      if (!mounted ||
+          !context.mounted ||
+          value == null ||
+          _historyAccountInvalid ||
+          _owner(session) != _owner(_session)) return;
+      ref.read(malvaStoreProvider.notifier).upsertMedication(value);
+      unawaited(_reminderService?.scheduleMedicationReminder(value));
+      unawaited(_syncMedication(context, value, isNew: true));
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -484,16 +504,14 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
         initial: medication,
         onSave: (value) {
           ref.read(malvaStoreProvider.notifier).upsertMedication(value);
-          unawaited(_syncMedication(context, value, isNew: medication == null));
+          unawaited(_syncMedication(this.context, value, isNew: false));
           unawaited(_reminderService?.scheduleMedicationReminder(value));
           Navigator.pop(context);
         },
-        onDelete: medication != null
-            ? () {
-                Navigator.pop(context);
-                _deleteMedication(context, medication);
-              }
-            : null,
+        onDelete: () {
+          Navigator.pop(context);
+          _deleteMedication(this.context, medication);
+        },
       ),
     );
   }
@@ -715,7 +733,8 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
     Medication medication, {
     required bool isNew,
   }) async {
-    final accessToken = _session?.accessToken;
+    final owner = _session;
+    final accessToken = owner?.accessToken;
     final api = _apiClient;
     if (api == null || accessToken == null || accessToken.isEmpty) {
       return;
@@ -755,6 +774,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
       );
       // Simpan id dari server agar edit berikutnya memakai PUT, bukan POST
       // yang akan melahirkan baris baru lagi.
+      if (!mounted || _owner(owner) != _owner(_session)) return;
       ref
           .read(malvaStoreProvider.notifier)
           .rebindMedication(medication.id, medication.copyWith(id: created.id));

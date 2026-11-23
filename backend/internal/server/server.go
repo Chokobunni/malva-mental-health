@@ -293,10 +293,13 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/credentials/me", s.requireAuth(s.getMyCredentials))
 	// Unggah berkas media (foto/video profil profesional).
 	mux.HandleFunc("POST /v1/upload", s.requireAuth(s.uploadFile))
+	mux.HandleFunc("GET /v1/patient-avatar", s.requireAuth(s.getPatientAvatar))
+	mux.HandleFunc("PUT /v1/patient-avatar", s.requireAuth(s.putPatientAvatar))
 	mux.HandleFunc("POST /v1/chat-attachments", s.requireAuth(s.uploadChatAttachment))
 	mux.HandleFunc("GET /v1/chat-attachments/{attachment_id}", s.requireAuth(s.getChatAttachment))
 	// Sajikan berkas unggahan secara statis.
-	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(s.cfg.UploadDir))))
+	mux.HandleFunc("GET /uploads/.patient-avatars/", http.NotFound)
+	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(publicUploadsFS{http.Dir(s.cfg.UploadDir)})))
 	// Katalog tes psikologi (read-only; kosong bila admin belum mengisi).
 	mux.HandleFunc("GET /v1/psych-tests", s.public(s.listPsychTests))
 	// Direktori profesional bersifat publik (read-only) agar pasien bisa

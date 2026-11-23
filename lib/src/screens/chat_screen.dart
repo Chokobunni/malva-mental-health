@@ -17,6 +17,7 @@ import '../widgets/malva_components.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/mini_summary.dart';
 import '../widgets/professional_avatar.dart';
+import '../widgets/account_avatar.dart';
 import '../widgets/therapy_library.dart';
 import '../widgets/shared_record_detail.dart';
 import '../time/wib.dart';
@@ -35,6 +36,7 @@ class ChatScreen extends ConsumerStatefulWidget {
     required this.otherUserName,
     required this.otherUserId,
     this.otherUserPhotoUrl = '',
+    this.otherUserAvatar,
   });
 
   final String otherUserName;
@@ -42,6 +44,7 @@ class ChatScreen extends ConsumerStatefulWidget {
 
   /// URL foto lawan bicara (profesional). Kosong = pakai gradien + inisial.
   final String otherUserPhotoUrl;
+  final String? otherUserAvatar;
 
   /// Label pemisah tanggal pesan (`Hari ini HH:mm` / `dd/MM/yyyy HH:mm`).
   ///
@@ -99,6 +102,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   /// Foto lawan bicara; diisi dari parameter atau diambil dari server.
   String _photoUrl = '';
+  String? _patientAvatar;
+  int _avatarRequest = 0;
   String _professionalPhotoUrl = '';
   String _professionalRole = 'Profesional';
 
@@ -115,11 +120,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (mounted) _activePeer.state = widget.otherUserId;
     });
     _photoUrl = widget.otherUserPhotoUrl;
+    _patientAvatar = widget.otherUserAvatar;
     _initChat();
     _loadHistory();
     _loadAccess();
     // Best effort: lengkapi foto profesional bila pemanggil tidak membawanya.
     unawaited(_loadProfessionalPhoto());
+    unawaited(_loadPatientAvatar());
+  }
+
+  Future<void> _loadPatientAvatar() async {
+    final request = ++_avatarRequest;
+    final session = ref.read(currentSessionProvider);
+    final token = session?.accessToken;
+    if (session?.role != UserRole.professional ||
+        token == null ||
+        token.isEmpty) return;
+    try {
+      final avatar = await ref.read(apiClientProvider).fetchPatientAvatar(
+          accessToken: token, patientId: widget.otherUserId);
+      if (mounted && _ownerMatches && request == _avatarRequest) {
+        setState(() => _patientAvatar = avatar);
+      }
+    } on Object {
+      // Keep the identity fallback when the private avatar cannot be read.
+    }
   }
 
   /// Ambil foto profesional dari server (GET /v1/doctors/{userId}).
@@ -220,12 +245,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!_ownerMatches) return;
     if (state == AppLifecycleState.resumed) {
+      if (_chatService == null) {
+        _initChat();
+      } else {
+        _chatService!.connect();
+      }
+      unawaited(_loadPatientAvatar());
       _startAccessPoll();
       _expireAccess();
       unawaited(_loadAccess());
       unawaited(_loadHistory());
     } else {
       _accessPoll?.cancel();
+      _chatService?.disconnect();
+      setState(() {
+        _onlineUsers.clear();
+        _otherTyping = false;
+        _chatState = ChatState.disconnected;
+      });
     }
   }
 
@@ -455,6 +492,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final session = refreshedSession ?? ref.read(currentSessionProvider);
     final apiClient = ref.read(apiClientProvider);
     if (session?.accessToken == null || session!.accessToken!.isEmpty) return;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return;
 
     final baseUri = apiClient.baseUri;
     final wsScheme = baseUri.scheme == 'https' ? 'wss' : 'ws';
@@ -1659,12 +1698,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         ),
         title: Row(
           children: [
-            ProfessionalAvatar(
-              displayName: widget.otherUserName,
-              photoUrl: _photoUrl,
-              radius: 18,
-              borderRadius: BorderRadius.circular(11),
-            ),
+            if (_isPatient)
+              ProfessionalAvatar(
+                displayName: widget.otherUserName,
+                photoUrl: _photoUrl,
+                radius: 18,
+                borderRadius: BorderRadius.circular(11),
+              )
+            else
+              PatientAvatar(
+                displayName: widget.otherUserName,
+                avatar: _patientAvatar,
+                radius: 18,
+                borderRadius: BorderRadius.circular(11),
+              ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -1898,7 +1945,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                   _professionalPhotoUrl.isEmpty && _isPatient
                                       ? _photoUrl
                                       : _professionalPhotoUrl,
-                              senderRole: _professionalRole,
+                              senderPatientAvatar: _patientAvatar,
+                              senderRole: _isPatient != msg.isMine
+                                  ? _professionalRole
+                                  : 'Pasien',
                               onOpenRecord: msg.kind == 'worksheet'
                                   ? () => _openSharedRecord(msg)
                                   : null,
@@ -2214,6 +2264,7 @@ class _ChatBubble extends StatelessWidget {
       this.onDelete,
       this.isProfessional = false,
       this.senderPhotoUrl = '',
+      this.senderPatientAvatar,
       this.senderRole = 'Profesional'});
 
   final ChatMessage message;
@@ -2221,11 +2272,13 @@ class _ChatBubble extends StatelessWidget {
   final VoidCallback? onDelete;
   final bool isProfessional;
   final String senderPhotoUrl;
+  final String? senderPatientAvatar;
   final String senderRole;
 
   @override
   Widget build(BuildContext context) {
     final isMine = message.isMine;
+    final showIdentity = isProfessional || !isMine;
 
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
@@ -2236,7 +2289,7 @@ class _ChatBubble extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: isProfessional ? Colors.white : const Color(0xFFF1E6FA),
+          color: showIdentity ? Colors.white : const Color(0xFFF1E6FA),
           border: Border.all(color: const Color(0xFFECE4F5)),
           borderRadius: BorderRadius.circular(18),
           boxShadow: const [
@@ -2251,15 +2304,22 @@ class _ChatBubble extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (isProfessional)
+                if (showIdentity)
                   Padding(
                       padding: const EdgeInsets.only(bottom: 9),
                       child: Row(children: [
-                        ProfessionalAvatar(
-                            displayName: message.senderName,
-                            photoUrl: senderPhotoUrl,
-                            radius: 14,
-                            borderRadius: BorderRadius.circular(14)),
+                        if (isProfessional)
+                          ProfessionalAvatar(
+                              displayName: message.senderName,
+                              photoUrl: senderPhotoUrl,
+                              radius: 14,
+                              borderRadius: BorderRadius.circular(14))
+                        else
+                          PatientAvatar(
+                              displayName: message.senderName,
+                              avatar: senderPatientAvatar,
+                              radius: 14,
+                              borderRadius: BorderRadius.circular(8)),
                         const SizedBox(width: 8),
                         Expanded(
                             child: Text(message.senderName,
@@ -2279,22 +2339,7 @@ class _ChatBubble extends StatelessWidget {
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
                                     color: MalvaColors.seed))),
-                      ]))
-                else if (!isMine)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      message.senderName,
-                      // Nama pengirim tampil di latar terang (bubble lavender),
-                      // jadi wajib hitam agar terbaca. Bubble milik sendiri
-                      // (isMine) tidak menampilkan nama ini.
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ),
+                      ])),
                 if (message.kind == 'file') ...[
                   _FileBubble(message: message, isMine: false),
                   const SizedBox(height: 6),

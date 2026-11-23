@@ -1,5 +1,20 @@
 # API Documentation
 
+### Direktori profesional dan avatar chat — 24 November 2026
+
+Direktori menampilkan tarif Chat, Video, dan Continuous Package dari
+**quick_chat_price**, **quick_video_price**, dan **package_price**. Detail
+profesional terverifikasi menyertakan **age_years** jika tanggal lahir valid,
+dihitung dari tanggal kalender WIB. Tanggal lahir tetap tersimpan pada akun.
+
+**GET /v1/patient-avatar?patient_id=UUID** mengembalikan pilihan avatar pasien
+bagi pemilik atau profesional yang memiliki pasangan konsultasi, termasuk
+riwayat. **PUT /v1/patient-avatar** menerima pilihan **avatar** untuk pasien
+pemilik akun. **If-None-Match: *** hanya mengisi pilihan server yang belum ada
+saat sinkronisasi pilihan lama dari perangkat. Respons privat tidak disimpan
+di cache. Indikator online berasal dari koneksi realtime, terpisah dari status
+hubungan layanan.
+
 ### Kedaluwarsa relasi dan riwayat chat — 22 November 2026
 
 `GET /v1/patient-professional-links` mengembalikan `status: expired` untuk
@@ -1636,7 +1651,7 @@ GET jadwal praktisi dan slot harian menerima `service_category` dengan nilai
 yang sama dan menerima `id` saat mengedit baris yang sudah tersimpan.
 
 PUT harga profesional menerima `patient_capacity` berupa bilangan bulat
-nonnegatif atau `null` untuk kapasitas tak terbatas. Respons profil dokter
+nonnegatif; `null` mengembalikan batas bawaan 2 pasien. Nilai lama kosong juga memakai batas 2, sedangkan 0 menutup pasien baru. Respons profil dokter
 menyertakan `remaining_patient_slots`. Jika token pasien valid, respons juga
 menyertakan `can_renew_package` dan `can_resume_package`.
 

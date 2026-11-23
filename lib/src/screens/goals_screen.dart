@@ -33,7 +33,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   Timer? _midnight;
   bool _history = false, _historyLoading = false;
   String? _historyError;
-  String _historyGoal = '';
+  String _historyMethod = '';
   int _historyDays = 7, _historyRequest = 0;
   DateTimeRange? _customHistoryRange;
   List<BackendHabitLog> _historyLogs = const [];
@@ -359,9 +359,10 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                                 ? 'Tanggal pilihan'
                                                 : '$_historyDays hari terakhir',
                                             onRangeChanged: _setHistoryRange,
-                                            goalId: _historyGoal,
-                                            onGoalChanged: (id) => setState(
-                                                () => _historyGoal = id ?? ''),
+                                            method: _historyMethod,
+                                            onMethodChanged: (id) => setState(
+                                                () =>
+                                                    _historyMethod = id ?? ''),
                                             onArchive: () => Navigator.of(
                                                     context)
                                                 .push<void>(MaterialPageRoute(
@@ -690,8 +691,17 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   Widget _archiveScreen(List<BackendGoal> goals) {
     final archived = goals.where((goal) => !goal.isActive).toList();
     return Scaffold(
-      backgroundColor: goalPaper,
-      appBar: AppBar(title: const Text('Target diarsipkan')),
+      backgroundColor: const Color(0xFFF8F6FB),
+      appBar: AppBar(
+          title: const Text('Target diarsipkan',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 22)),
+          centerTitle: true,
+          foregroundColor: Colors.white,
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          flexibleSpace: const DecoratedBox(
+              decoration: BoxDecoration(gradient: goalGradient),
+              child: SizedBox.expand())),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -703,7 +713,18 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
             else if (_error != null)
               TextButton(onPressed: _load, child: Text('$_error. Coba lagi'))
             else if (archived.isEmpty)
-              const Center(child: Text('Belum ada target diarsipkan.'))
+              Padding(
+                padding: EdgeInsets.only(
+                    top: MediaQuery.sizeOf(context).height * .16),
+                child: Column(children: [
+                  Image.asset('assets/goals/archive-empty.png',
+                      width: 190, height: 160, excludeFromSemantics: true),
+                  const SizedBox(height: 16),
+                  const Text('Belum ada target diarsipkan.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Color(0xFF3C1648), fontSize: 17)),
+                ]),
+              )
             else
               for (final goal in archived)
                 Card(
@@ -1455,7 +1476,6 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
         if (!_current) return;
         setState(() {
           _serverGoals = _serverGoals.where((g) => g.id != goal.id).toList();
-          if (_historyGoal == goal.id) _historyGoal = '';
         });
         ref.read(acceptedGoalMutationProvider.notifier).state =
             GoalReminderMutation.delete(

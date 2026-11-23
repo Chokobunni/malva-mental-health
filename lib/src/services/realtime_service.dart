@@ -49,27 +49,36 @@ class RealtimeService {
 
   /// Mulai menyambung. Aman dipanggil berkali-kali.
   void connect() {
-    if (_disposed || _connected) return;
+    if (_disposed || _channel != null) return;
     _reconnectTimer?.cancel();
+    unawaited(_openConnection());
+  }
+
+  Future<void> _openConnection() async {
+    WebSocketChannel? channel;
     try {
       final wsScheme = baseUrl.startsWith('https') ? 'wss' : 'ws';
       final base = baseUrl.replaceFirst(RegExp(r'^https?'), wsScheme);
       final uri = Uri.parse('$base/v1/realtime/ws?access_token=$accessToken');
 
-      final channel = WebSocketChannel.connect(uri);
+      channel = WebSocketChannel.connect(uri);
       _channel = channel;
       _subscription = channel.stream.listen(
-        _onData,
-        onError: (_) => _handleDisconnect(),
-        onDone: _handleDisconnect,
+        (raw) {
+          if (_channel == channel) _onData(raw);
+        },
+        onError: (_) => _handleDisconnect(channel!),
+        onDone: () => _handleDisconnect(channel!),
         cancelOnError: true,
       );
 
+      await channel.ready;
+      if (_disposed || _channel != channel) return;
       _connected = true;
       _attempt = 0;
       _emitConnection(true);
     } on Object {
-      _handleDisconnect();
+      if (channel != null) _handleDisconnect(channel);
     }
   }
 
@@ -91,11 +100,10 @@ class RealtimeService {
     }
   }
 
-  void _handleDisconnect() {
-    if (_disposed) return;
-    final wasConnected = _connected;
+  void _handleDisconnect(WebSocketChannel channel) {
+    if (_disposed || _channel != channel) return;
     _connected = false;
-    if (wasConnected) _emitConnection(false);
+    _emitConnection(false);
     _subscription?.cancel();
     _subscription = null;
     _channel = null;

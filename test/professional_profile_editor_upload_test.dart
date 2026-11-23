@@ -16,6 +16,7 @@ import 'package:malva_mental_health/src/platform/io/file_picker_io.dart';
 import 'package:malva_mental_health/src/platform/platform_providers.dart';
 import 'package:malva_mental_health/src/screens/professional_profile_editor_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
+import 'record_render_capture.dart';
 
 /// Merekam parameter kompresi yang diteruskan ke port, lalu membatalkan
 /// pemilihan (return null) agar layar tidak lanjut ke unggah.
@@ -25,6 +26,7 @@ class _RecordingFilePickerPort implements FilePickerPort {
   int? maxWidth;
   int? maxHeight;
   int? imageQuality;
+  PickedFile? result;
 
   @override
   Future<PickedFile?> pick(
@@ -38,7 +40,7 @@ class _RecordingFilePickerPort implements FilePickerPort {
     this.maxWidth = maxWidth;
     this.maxHeight = maxHeight;
     this.imageQuality = imageQuality;
-    return null;
+    return result;
   }
 }
 
@@ -110,6 +112,9 @@ void main() {
 
     testWidgets('layar meneruskan 1024/1024/85 ke FilePickerPort',
         (tester) async {
+      tester.view.physicalSize = const Size(430, 1200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       final picker = _RecordingFilePickerPort();
       final api = _FakeApi();
       const session = AuthSession(
@@ -134,8 +139,11 @@ void main() {
 
       expect(find.text('21/03/1990'), findsOneWidget);
       expect(find.text('Simpan Profil'), findsOneWidget);
+      expect(find.text('Foto Profil & Identitas'), findsOneWidget);
+      expect(tester.getTopLeft(find.text('Video Perkenalan')).dy,
+          lessThan(tester.getTopLeft(find.text('Bio / Overview')).dy));
 
-      final gallery = find.text('Pilih dari Galeri');
+      final gallery = find.text('Pilih Foto dari Galeri');
       expect(gallery, findsOneWidget);
 
       await tester.tap(gallery);
@@ -150,11 +158,25 @@ void main() {
 
     testWidgets('saves the selected calendar day through the account API',
         (tester) async {
+      tester.view.physicalSize = const Size(430, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await loadRecordCaptureFonts();
+      final boundary = GlobalKey();
       String? savedBirthDate;
       var credentialSaves = 0;
+      Map<String, dynamic>? savedCredential;
+      final picker = _RecordingFilePickerPort()
+        ..result = PickedFile(
+            name: 'perkenalan-asli.mp4',
+            bytes: Uint8List.fromList([0, 1, 2]),
+            mimeType: 'video/mp4');
       final api = MalvaApiClient(
         baseUrl: 'http://backend.test',
         httpClient: MockClient((request) async {
+          if (request.url.path == '/v1/upload') {
+            return http.Response('{"url":"/uploads/new-video.mp4"}', 200);
+          }
           if (request.url.path == '/v1/me') {
             if (request.method == 'PATCH') {
               final body = jsonDecode(request.body) as Map<String, dynamic>;
@@ -169,12 +191,44 @@ void main() {
                 }),
                 200);
           }
-          if (request.method == 'POST') credentialSaves++;
+          if (request.method == 'POST') {
+            credentialSaves++;
+            savedCredential = jsonDecode(request.body) as Map<String, dynamic>;
+          }
           return http.Response(
               jsonEncode({
                 'credential': {
                   'id': 'test-credentials',
                   'user_id': 'test-professional',
+                  'str_number': 'STR-123',
+                  'sip_number': 'SIP-456',
+                  'sipp_number': 'SIPP-789',
+                  'video_intro_url': '/uploads/saved-video.mp4',
+                  'bio': 'Deskripsi profesional tersimpan.',
+                  'sub_specialties': [
+                    'depresi',
+                    'ansietas',
+                    'gangguan_tidur',
+                    'bipolar',
+                    'suicidal_ideation',
+                    'stress_pasca_trauma'
+                  ],
+                  'hospital_name': 'Klinik tersimpan',
+                  'address_details': 'Alamat faskes tersimpan',
+                  'years_experience': 12,
+                  'education': [
+                    {'degree': 'Sp.KJ', 'school': 'Universitas', 'year': 2012},
+                    {
+                      'degree': 'M.H',
+                      'school': 'Universitas kedua',
+                      'year': 2016
+                    },
+                    {
+                      'degree': 'Sertifikasi',
+                      'school': 'Institusi',
+                      'year': 2018
+                    }
+                  ],
                 },
               }),
               200);
@@ -182,20 +236,45 @@ void main() {
       );
       await tester.pumpWidget(
         ProviderScope(
+          overrides: [filePickerProvider.overrideWithValue(picker)],
           child: MaterialApp(
-            home: ProfessionalProfileEditorScreen(
-              session: const AuthSession(
-                role: UserRole.professional,
-                identifier: 'pro@malva.app',
-                displayName: 'dr. Malva',
-                accessToken: 'token_123',
-              ),
-              apiClient: api,
-            ),
+            home: RepaintBoundary(
+                key: boundary,
+                child: ProfessionalProfileEditorScreen(
+                  session: const AuthSession(
+                    role: UserRole.professional,
+                    identifier: 'pro@malva.app',
+                    displayName: 'dr. Malva',
+                    accessToken: 'token_123',
+                  ),
+                  apiClient: api,
+                )),
           ),
         ),
       );
       await tester.pumpAndSettle();
+      await captureRecord(tester, boundary, 'professional-edit-top.png');
+      final form = find.byType(ListView);
+      final scrollable =
+          find.descendant(of: form, matching: find.byType(Scrollable)).first;
+      await tester.scrollUntilVisible(find.text('PENDIDIKAN #1'), 300,
+          scrollable: scrollable);
+      await tester.ensureVisible(find.text('PENDIDIKAN #1'));
+      await tester.pumpAndSettle();
+      await captureRecord(tester, boundary, 'professional-edit-education.png');
+      await tester.scrollUntilVisible(find.text('Menerima BPJS'), 400,
+          scrollable: find
+              .descendant(of: form, matching: find.byType(Scrollable))
+              .first);
+      await tester.ensureVisible(find.text('Menerima BPJS'));
+      await tester.pumpAndSettle();
+      await captureRecord(tester, boundary, 'professional-edit-bottom.png');
+      await tester.tap(find.text('Menerima BPJS'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('21/03/1990'), -400,
+          scrollable: find
+              .descendant(of: form, matching: find.byType(Scrollable))
+              .first);
 
       await tester.tap(find.text('21/03/1990'));
       await tester.pumpAndSettle();
@@ -211,7 +290,21 @@ void main() {
       await tester.pumpAndSettle();
       expect(savedBirthDate, '1990-03-22');
       expect(credentialSaves, 1);
+      expect(savedCredential?['is_bpjs_supported'], true);
+      expect(savedCredential?['str_number'], 'STR-123');
+      expect(savedCredential?['sip_number'], 'SIP-456');
+      expect(savedCredential?['sipp_number'], 'SIPP-789');
       expect(find.text('Profil berhasil disimpan.'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Ganti Video dari Galeri'), 300,
+          scrollable: scrollable);
+      await tester.ensureVisible(find.text('Ganti Video dari Galeri'));
+      await tester.tap(find.text('Ganti Video dari Galeri'));
+      await tester.pumpAndSettle();
+      expect(picker.kind, 'video');
+      expect(find.text('perkenalan-asli.mp4'), findsOneWidget);
+      expect(find.textContaining('Durasi'), findsNothing);
+      expect(savedCredential?['video_intro_url'],
+          'http://backend.test/uploads/new-video.mp4');
     });
   });
 }

@@ -22,9 +22,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 2));
 
-    expect(find.text('Jadwal Profesional'), findsOneWidget);
-    expect(find.text('Urutkan'), findsOneWidget);
-    expect(find.text('Nama profesional'), findsOneWidget);
+    expect(find.text('Cari Profesional'), findsOneWidget);
+    expect(find.text('URUTKAN'), findsOneWidget);
+    expect(find.text('Nama profesional…'), findsOneWidget);
     // Tanpa backend: TIDAK ada lagi direktori demo — tampil error/empty.
     expect(find.text('Andi Wijaya, M.Psi'), findsNothing);
     expect(find.textContaining('direktori contoh'), findsNothing);

@@ -6,11 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
+import '../services/realtime_service.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/care_reference_widgets.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/professional_avatar.dart';
+import '../widgets/account_avatar.dart';
 import 'booking/doctor_discovery_screen.dart';
 import 'chat_screen.dart';
 import 'notifications_screen.dart';
@@ -37,6 +39,12 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
   String? _error;
   int _request = 0;
   Timer? _refreshTimer;
+  RealtimeService? _presenceService;
+  StreamSubscription<RealtimeEvent>? _presenceSub;
+  StreamSubscription<bool>? _connectionSub;
+  int _presenceGeneration = 0;
+  final _onlinePeers = <String, bool>{};
+  final _patientAvatars = <String, String?>{};
   AuthSession? get _session =>
       widget.session ?? ref.read(currentSessionProvider);
 
@@ -45,6 +53,7 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
+    _connectPresence();
     _refreshTimer =
         Timer.periodic(const Duration(seconds: 30), (_) => _load(silent: true));
   }
@@ -52,20 +61,80 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _disconnectPresence();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) unawaited(_load(silent: true));
+    if (state == AppLifecycleState.resumed) {
+      _connectPresence();
+      unawaited(_load(silent: true));
+      _refreshTimer?.cancel();
+      _refreshTimer = Timer.periodic(
+          const Duration(seconds: 30), (_) => _load(silent: true));
+    } else {
+      _refreshTimer?.cancel();
+      _disconnectPresence();
+      setState(_onlinePeers.clear);
+    }
+  }
+
+  void _disconnectPresence() {
+    _presenceGeneration++;
+    unawaited(_presenceSub?.cancel());
+    unawaited(_connectionSub?.cancel());
+    unawaited(_presenceService?.dispose());
+    _presenceService = null;
+    _presenceSub = null;
+    _connectionSub = null;
+  }
+
+  void _connectPresence() {
+    _disconnectPresence();
+    _onlinePeers.clear();
+    final auth = _session;
+    final token = auth?.accessToken;
+    if (auth?.role != UserRole.professional ||
+        token == null ||
+        token.isEmpty ||
+        WidgetsBinding.instance.lifecycleState != null &&
+            WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed)
+      return;
+    final generation = _presenceGeneration;
+    final MalvaApiClient api = widget.apiClient ?? ref.read(apiClientProvider);
+    final service =
+        RealtimeService(accessToken: token, baseUrl: api.baseUri.toString());
+    _presenceService = service;
+    bool ownsConnection() =>
+        mounted &&
+        generation == _presenceGeneration &&
+        _session?.accessToken == token;
+    _presenceSub = service.events.listen((event) {
+      if (!ownsConnection() ||
+          event.type != 'presence' ||
+          event.data['online'] is! bool) return;
+      final peer = event.stringValue('user_id');
+      if (peer.isEmpty || peer == (auth?.backendUserId ?? auth?.identifier))
+        return;
+      setState(() => _onlinePeers[peer] = event.data['online'] == true);
+    });
+    _connectionSub = service.connection.listen((connected) {
+      if (ownsConnection() && !connected) setState(_onlinePeers.clear);
+    });
+    service.connect();
   }
 
   @override
   void didUpdateWidget(covariant MessagesListScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.session?.accessToken != widget.session?.accessToken ||
-        oldWidget.apiClient != widget.apiClient) unawaited(_load());
+        oldWidget.apiClient != widget.apiClient) {
+      _patientAvatars.clear();
+      _connectPresence();
+      unawaited(_load());
+    }
   }
 
   Future<void> _load({bool silent = false}) async {
@@ -102,6 +171,21 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
         _error = null;
         _isLoading = false;
       });
+      if (auth?.role == UserRole.professional) {
+        await Future.wait(links.map((link) async {
+          try {
+            final avatar = await apiClient.fetchPatientAvatar(
+                accessToken: accessToken, patientId: link.patientId);
+            if (mounted &&
+                request == _request &&
+                _session?.accessToken == accessToken) {
+              setState(() => _patientAvatars[link.patientId] = avatar);
+            }
+          } on Object {
+            // Private avatar failures preserve the existing identity fallback.
+          }
+        }));
+      }
     } on Object catch (e) {
       if (!mounted ||
           request != _request ||
@@ -125,6 +209,8 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
       if (widget.session == null &&
           previous?.accessToken != next?.accessToken) {
         _links = const [];
+        _patientAvatars.clear();
+        _connectPresence();
         unawaited(_load());
       }
     });
@@ -245,9 +331,13 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
                                   : (link.professionalDisplayName.isEmpty
                                       ? 'Profesional'
                                       : link.professionalDisplayName),
-                              // Foto hanya milik profesional; sisi profesional tetap
-                              // memakai inisial pasien.
                               photoUrl: isPro ? '' : link.professionalPhotoUrl,
+                              patientAvatar: _patientAvatars[link.patientId],
+                              isPatient: isPro,
+                              online: _onlinePeers[isPro
+                                      ? link.patientId
+                                      : link.professionalUserId] ==
+                                  true,
                               status: link.status,
                               onTap: () {
                                 Navigator.push(
@@ -263,6 +353,9 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
                                       otherUserPhotoUrl: isPro
                                           ? ''
                                           : link.professionalPhotoUrl,
+                                      otherUserAvatar: isPro
+                                          ? _patientAvatars[link.patientId]
+                                          : null,
                                     ),
                                   ),
                                 ).then((_) {
@@ -287,6 +380,9 @@ class _ConversationCard extends StatelessWidget {
     required this.status,
     required this.onTap,
     this.photoUrl = '',
+    this.patientAvatar,
+    this.isPatient = false,
+    this.online = false,
   });
 
   final String name;
@@ -295,6 +391,9 @@ class _ConversationCard extends StatelessWidget {
 
   /// URL foto profesional; kosong = gradien + inisial.
   final String photoUrl;
+  final String? patientAvatar;
+  final bool isPatient;
+  final bool online;
 
   @override
   Widget build(BuildContext context) {
@@ -308,25 +407,27 @@ class _ConversationCard extends StatelessWidget {
         children: [
           Stack(
             children: [
-              // Foto profesional (bila ada) menggantikan inisial; fallback
-              // gradien + inisial tetap dipakai saat foto kosong/gagal.
-              ProfessionalAvatar(
-                displayName: name,
-                photoUrl: photoUrl,
-                radius: 26,
-              ),
-              if (status == 'active')
+              // Only authenticated profile data replaces the identity fallback.
+              if (isPatient)
+                PatientAvatar(
+                    displayName: name, avatar: patientAvatar, radius: 26)
+              else
+                ProfessionalAvatar(
+                  displayName: name,
+                  photoUrl: photoUrl,
+                  radius: 26,
+                ),
+              if (online)
                 Positioned(
                   right: 0,
                   bottom: 0,
                   child: Container(
+                    key: ValueKey('online-$name'),
                     width: 14,
                     height: 14,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: status == 'active'
-                          ? MalvaColors.mint
-                          : Colors.black26,
+                      color: MalvaColors.mint,
                       border: Border.all(color: Colors.white, width: 2),
                     ),
                   ),

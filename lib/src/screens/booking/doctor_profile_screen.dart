@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models.dart';
 import '../../professional_role.dart';
@@ -59,6 +60,14 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   bool _specialityExpanded = true;
   // 'quick' | 'continuous'
   String _selectedPlan = 'quick';
+  String? _selectedMethod;
+  String get _quickMethod =>
+      _selectedMethod ?? (_chatPrice() > 0 ? 'chat' : 'video');
+  int get _selectedPrice => _selectedPlan == 'continuous'
+      ? _packagePrice()
+      : _quickMethod == 'chat'
+          ? _chatPrice()
+          : _videoPrice();
 
   @override
   void initState() {
@@ -139,13 +148,72 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
     final cred = _profile?.credential;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F3FD),
+      backgroundColor: const Color(0xfff8f8fb),
       appBar: AppBar(
         centerTitle: true,
-        title: const Text('Profesional Info'),
+        title: const Text('Info Profesional'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),
+      bottomNavigationBar: !_isLoading && _error == null && cred != null
+          ? Material(
+              color: Colors.white,
+              elevation: 4,
+              child: SafeArea(
+                top: false,
+                minimum: const EdgeInsets.fromLTRB(18, 10, 18, 10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(children: [
+                      Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            const Text('Layanan dipilih',
+                                style: TextStyle(
+                                    color: Color(0xff647388), fontSize: 11)),
+                            Text(
+                                _selectedPlan == 'continuous'
+                                    ? 'Continuous Package'
+                                    : 'Quick Consult • ${_quickMethod == 'chat' ? 'Chat' : 'Video'}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800)),
+                          ])),
+                      Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text('Total biaya',
+                                style: TextStyle(
+                                    color: Color(0xff647388), fontSize: 11)),
+                            Text(
+                                _selectedPrice > 0
+                                    ? 'Rp ${_rupiah(_selectedPrice)}'
+                                    : 'Belum tersedia',
+                                style: const TextStyle(
+                                    color: MalvaColors.plum,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900)),
+                          ]),
+                    ]),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      onPressed: _selectedPrice > 0 ? _proceed : null,
+                      style: FilledButton.styleFrom(
+                          backgroundColor: MalvaColors.plum,
+                          minimumSize: const Size.fromHeight(48)),
+                      iconAlignment: IconAlignment.end,
+                      icon: const Icon(Icons.arrow_forward_rounded),
+                      label: Text(_selectedPlan == 'continuous'
+                          ? 'Beli Paket 4 Sesi'
+                          : 'Lanjutkan'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : null,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -162,76 +230,105 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                       child: ListView(
                         padding: const EdgeInsets.all(18),
                         children: [
-                          // ===== FOTO PROFIL (centered, besar) =====
-                          Center(
-                            child: _ProfessionalPhoto(
-                              photoUrl: cred.photoIntroUrl,
-                              displayName: _displayName,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-
-                          // ===== HEADER: nama + rating riil + spesialisasi =====
-                          Builder(builder: (context) {
-                            final reviews = _profile?.reviews ??
-                                const BackendDoctorReviews();
-                            final ratingLabel = reviews.reviewCount > 0
-                                ? '${reviews.averageStars.toStringAsFixed(1)} (${reviews.reviewCount})'
-                                : 'Belum ada ulasan';
-                            final specLabel =
-                                professionalRoleLabel(cred.specialization);
-                            return Column(
+                          SoftCard(
+                            radius: 24,
+                            color: Colors.white,
+                            outline: const BorderSide(color: Color(0xffe8e8ef)),
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                Text(
-                                  _displayName,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 18),
-                                ),
+                                Stack(clipBehavior: Clip.none, children: [
+                                  _ProfessionalPhoto(
+                                      photoUrl: cred.photoIntroUrl,
+                                      displayName: _shortName),
+                                  if (cred.verificationStatus == 'VERIFIED')
+                                    const Positioned(
+                                        right: 0,
+                                        bottom: 0,
+                                        child: CircleAvatar(
+                                          radius: 13,
+                                          backgroundColor: MalvaColors.plum,
+                                          child: Icon(Icons.verified_outlined,
+                                              color: Colors.white, size: 17),
+                                        )),
+                                ]),
+                                const SizedBox(height: 12),
+                                Text(_displayName,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 20)),
                                 const SizedBox(height: 4),
-                                Text(
-                                  specLabel,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                      color: Colors.black54,
-                                      fontWeight: FontWeight.w700),
-                                ),
-                                const SizedBox(height: 6),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.star_rounded,
-                                        size: 17, color: MalvaColors.amber),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      ratingLabel,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 13),
-                                    ),
-                                  ],
-                                ),
+                                Text(_specializationLabel(cred),
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                        color: MalvaColors.plum,
+                                        fontWeight: FontWeight.w700)),
+                                const SizedBox(height: 12),
+                                Wrap(
+                                    alignment: WrapAlignment.center,
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: [
+                                      StatusPill(
+                                          label: _profile!.reviews.reviewCount >
+                                                  0
+                                              ? '${_profile!.reviews.averageStars.toStringAsFixed(1)} (${_profile!.reviews.reviewCount})'
+                                              : 'Belum ada ulasan',
+                                          icon: Icons.star_rounded,
+                                          color: const Color(0xff955708)),
+                                      if (_profile!.ageYears case final age?)
+                                        StatusPill(
+                                            label: '$age tahun',
+                                            icon: Icons.person_outline_rounded,
+                                            color: MalvaColors.plum),
+                                      StatusPill(
+                                          label:
+                                              '${cred.yearsExperience} thn praktik',
+                                          icon: Icons.medical_services_outlined,
+                                          color: MalvaColors.plum),
+                                    ]),
                               ],
-                            );
-                          }),
-                          const SizedBox(height: 14),
-
+                            ),
+                          ),
+                          const SizedBox(height: 10),
                           SoftCard(
                             color: Colors.white,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const SectionLabel('Tarif konsultasi'),
+                                Row(children: [
+                                  const Icon(
+                                      Icons.account_balance_wallet_outlined,
+                                      size: 20,
+                                      color: MalvaColors.plum),
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                      child: SectionLabel('Tarif konsultasi')),
+                                  if ([_chatPrice(), _videoPrice()]
+                                      .any((price) => price > 0))
+                                    Text(
+                                        'Mulai Rp ${_rupiah(([
+                                          _chatPrice(),
+                                          _videoPrice()
+                                        ]..sort()).firstWhere((price) => price > 0))}',
+                                        style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Color(0xff647388))),
+                                ]),
                                 _PriceRow(
-                                    label: 'Chat session', price: _chatPrice()),
+                                    icon: Icons.chat_bubble_outline_rounded,
+                                    label: 'Chat session',
+                                    price: _chatPrice()),
                                 const Divider(height: 10),
                                 _PriceRow(
+                                    icon: Icons.videocam_outlined,
                                     label: 'Video session',
                                     price: _videoPrice()),
                                 const Divider(height: 10),
                                 _PriceRow(
+                                    icon: Icons.calendar_month_outlined,
+                                    isPackage: true,
                                     label: 'Paket 4 sesi / 6 minggu',
                                     price: _packagePrice()),
                               ],
@@ -286,43 +383,44 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                           ),
                           const SizedBox(height: 10),
                           if (cred.videoIntroUrl.trim().isNotEmpty) ...[
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(15),
-                              child: AspectRatio(
-                                aspectRatio: 2.35,
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    ProfessionalPhoto(
-                                      photoUrl: cred.photoIntroUrl,
-                                      fallback: const ColoredBox(
-                                          color: MalvaColors.plum),
-                                      fit: BoxFit.cover,
+                            SoftCard(
+                              color: Colors.white,
+                              radius: 22,
+                              padding: const EdgeInsets.all(10),
+                              child: Material(
+                                color: const Color(0xff350b5d),
+                                borderRadius: BorderRadius.circular(16),
+                                clipBehavior: Clip.antiAlias,
+                                child: InkWell(
+                                  key: const ValueKey(
+                                      'professional-intro-video'),
+                                  onTap: () =>
+                                      _playIntroduction(cred.videoIntroUrl),
+                                  child: AspectRatio(
+                                    aspectRatio: 1.95,
+                                    child: Center(
+                                      child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                                Icons
+                                                    .play_circle_outline_rounded,
+                                                size: 40,
+                                                color: Colors.white),
+                                            const SizedBox(height: 8),
+                                            Text('Video Perkenalan $_shortName',
+                                                textAlign: TextAlign.center,
+                                                style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight:
+                                                        FontWeight.w800)),
+                                          ]),
                                     ),
-                                    const Center(
-                                        child: Icon(
-                                            Icons.play_circle_fill_rounded,
-                                            size: 42,
-                                            color: Colors.white)),
-                                    Align(
-                                      alignment: Alignment.bottomCenter,
-                                      child: Container(
-                                        color: Colors.black54,
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.all(8),
-                                        child: Text(
-                                            'Video perkenalan $_shortName',
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w800)),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 10),
                           ],
                           // ===== DROPDOWN: Profile =====
                           _DropdownCard(
@@ -333,19 +431,30 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _InfoLine(
-                                    label: 'Pengalaman',
-                                    value:
-                                        '${cred.yearsExperience} tahun praktik'),
-                                _InfoLine(
-                                    label: 'Faskes',
-                                    value: cred.hospitalName.isEmpty
-                                        ? '-'
-                                        : cred.hospitalName),
-                                if (cred.addressDetails.isNotEmpty)
-                                  _InfoLine(
-                                      label: 'Alamat',
-                                      value: cred.addressDetails),
+                                Container(
+                                  decoration: BoxDecoration(
+                                      color: const Color(0xfff6f8fa),
+                                      borderRadius: BorderRadius.circular(14)),
+                                  padding: const EdgeInsets.all(10),
+                                  child: Column(children: [
+                                    if (_profile!.ageYears case final age?)
+                                      _InfoLine(
+                                          label: 'Usia', value: '$age tahun'),
+                                    _InfoLine(
+                                        label: 'Pengalaman',
+                                        value:
+                                            '${cred.yearsExperience} tahun praktik'),
+                                    _InfoLine(
+                                        label: 'Faskes',
+                                        value: cred.hospitalName.isEmpty
+                                            ? '—'
+                                            : cred.hospitalName),
+                                    if (cred.addressDetails.isNotEmpty)
+                                      _InfoLine(
+                                          label: 'Alamat',
+                                          value: cred.addressDetails),
+                                  ]),
+                                ),
                                 if (cred.bio.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 8),
@@ -531,23 +640,49 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                           if (_activePackage != null)
                             const SizedBox(height: 12),
 
-                          // ===== CHOOSE YOUR SUPPORT LEVEL =====
-                          Text(
-                            'Pilih layanan konsultasi',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w900),
+                          Text('Pilih layanan konsultasi',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineSmall
+                                  ?.copyWith(fontWeight: FontWeight.w900)),
+                          const SizedBox(height: 10),
+                          SoftCard(
+                            color: const Color(0xffeff4f8),
+                            radius: 16,
+                            child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.gpp_maybe_outlined,
+                                      size: 19, color: Color(0xff647388)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                      child: Text.rich(
+                                          TextSpan(children: [
+                                            const TextSpan(
+                                                text:
+                                                    'Layanan ini untuk dukungan berkelanjutan, bukan darurat. Jika dalam kondisi krisis, segera hubungi '),
+                                            WidgetSpan(
+                                                alignment:
+                                                    PlaceholderAlignment.middle,
+                                                child: InkWell(
+                                                  onTap: _callEmergency,
+                                                  child: const Text('112',
+                                                      style: TextStyle(
+                                                          color:
+                                                              MalvaColors.plum,
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          decoration:
+                                                              TextDecoration
+                                                                  .underline)),
+                                                )),
+                                            const TextSpan(text: '.'),
+                                          ]),
+                                          style: const TextStyle(
+                                              color: Color(0xff506074)))),
+                                ]),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Layanan ini untuk dukungan berkelanjutan, bukan darurat. Jika krisis, hubungi 112.',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: Colors.black54),
-                          ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 12),
 
                           // ===== OPSI 1: QUICK CONSULT (ONE-TIME) =====
                           _SupportPlanCard(
@@ -556,7 +691,12 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                                 setState(() => _selectedPlan = 'quick'),
                             title: 'Quick Consult',
                             subtitle: 'Satu sesi konsultasi terjadwal',
-                            price: '',
+                            price: 0,
+                            selectedMethod: _quickMethod,
+                            onMethod: (label) => setState(() {
+                              _selectedMethod = label.toLowerCase();
+                              _selectedPlan = 'quick';
+                            }),
                             featureIcon: Icons.timer_outlined,
                             methods: [
                               (
@@ -568,12 +708,12 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             ],
                             features: const [
                               (
-                                'Jadwal sesuai ketersediaan profesional',
+                                'Jadwal fleksibel sesuai ketersediaan profesional',
                                 Icons.event_available_outlined
                               ),
                               (
-                                'Berbagi data selama durasi sesi',
-                                Icons.people_outline_rounded
+                                'Berbagi data & catatan selama durasi sesi',
+                                Icons.share_outlined
                               ),
                             ],
                             onSchedule: () => _showSchedule(false),
@@ -592,15 +732,10 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                                             Text(_packageCapacityMessage))),
                             title: 'Continuous Package',
                             capacity: _profile?.remainingPatientSlots,
-                            subtitle: '4 sesi • 6 minggu',
+                            subtitle: '4 sesi • Masa aktif 6 minggu',
                             onSchedule: () => _showSchedule(true),
-                            badge: (
-                              '4 Sesi • 6 Minggu',
-                              Icons.handshake_rounded
-                            ),
-                            price: _packagePrice() > 0
-                                ? 'Rp. ${_rupiah(_packagePrice())} / paket'
-                                : 'Harga belum diatur',
+                            price: _packagePrice(),
+                            comparisonPrice: _videoPrice() * 4,
                             featureIcon: Icons.calendar_month_outlined,
                             features: [
                               (
@@ -624,22 +759,9 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                               ),
                             ],
                             footnote:
-                                'Sisa sesi setelah 6 minggu hangus. Tanpa perpanjangan otomatis.',
+                                'Sisa sesi setelah 6 minggu otomatis hangus. Tidak ada perpanjangan otomatis.',
                             quota:
                                 'Termasuk monitoring data selama paket aktif',
-                          ),
-                          const SizedBox(height: 16),
-
-                          // ===== CTA: 1 tombol per plan terpilih =====
-                          FilledButton.icon(
-                            onPressed: _proceed,
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size.fromHeight(52),
-                            ),
-                            icon: const Icon(Icons.arrow_forward_rounded),
-                            label: Text(_selectedPlan == 'continuous'
-                                ? 'Beli Paket 4 Sesi'
-                                : 'Lanjutkan'),
                           ),
                           const SizedBox(height: 16),
                         ],
@@ -657,12 +779,48 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   }
 
   String get _shortName {
-    final parts = _displayName.split(' ');
-    final name = parts
-        .skip(1)
-        .takeWhile((p) => !p.contains(','))
-        .toList(growable: false);
-    return name.isEmpty ? _displayName : name.first;
+    final parts = _displayName.split(',').first.split(RegExp(r'\s+'));
+    return parts.first.toLowerCase() == 'dr.' && parts.length > 1
+        ? parts.take(2).join(' ')
+        : parts.first;
+  }
+
+  String _specializationLabel(BackendProfessionalCredential credential) =>
+      isPsychiatristSpecialization(credential.specialization)
+          ? 'Psikiater • Spesialis Kedokteran Jiwa'
+          : professionalRoleLabel(credential.specialization);
+
+  Future<void> _playIntroduction(String rawUrl) async {
+    final MalvaApiClient api = widget.apiClient ?? ref.read(apiClientProvider);
+    final uri = api.baseUri.resolve(rawUrl.trim());
+    if (uri.hasAuthority && (uri.scheme == 'https' || uri.scheme == 'http')) {
+      try {
+        final mode = await supportsLaunchMode(LaunchMode.inAppBrowserView)
+            ? LaunchMode.inAppBrowserView
+            : LaunchMode.platformDefault;
+        if (await launchUrl(uri, mode: mode)) return;
+      } on Object catch (_) {
+        // Show a recoverable error if the platform cannot open the video.
+      }
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Video perkenalan belum bisa diputar.')),
+      );
+    }
+  }
+
+  Future<void> _callEmergency() async {
+    try {
+      if (await launchUrl(Uri(scheme: 'tel', path: '112'))) return;
+    } on Object catch (_) {
+      // Preserve the number on platforms without a dialer.
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Hubungi 112 melalui telepon.')),
+      );
+    }
   }
 
   /// Harga quick consult dari tarif profesional (tanpa angka dummy).
@@ -766,6 +924,8 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
             durationLabel: _durationLabel('package'),
             doctorUserId: widget.doctorUserId,
             doctorName: _displayName,
+            doctorSpecialization: _specializationLabel(cred),
+            doctorVerified: cred.verificationStatus == 'VERIFIED',
             price: _packagePrice(),
             scheduleLines: _scheduleLines('package'),
             remainingPatientSlots: _profile?.remainingPatientSlots,
@@ -778,8 +938,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
         ),
       );
     } else {
-      final isVideo = _videoPrice() > 0;
-      final price = isVideo ? _videoPrice() : _chatPrice();
+      final price = _selectedPrice;
       if (price <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -787,7 +946,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
         );
         return;
       }
-      _openBooking(context, price, isVideo ? 'video' : 'chat');
+      _openBooking(context, price, _quickMethod);
     }
   }
 
@@ -993,34 +1152,33 @@ class _ProfessionalPhoto extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (photoUrl.isNotEmpty) {
-      return Container(
-        width: 120,
-        height: 120,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(
-              color: MalvaColors.seed.withValues(alpha: 0.3), width: 3),
-          boxShadow: [
-            BoxShadow(
-              color: MalvaColors.seed.withValues(alpha: 0.15),
-              blurRadius: 12,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: ClipOval(
-          child: ProfessionalPhoto(
-            photoUrl: photoUrl,
-            width: 120,
-            height: 120,
-            fit: BoxFit.cover,
-            fallback: _fallbackAvatar(),
+    return Container(
+      width: 120,
+      height: 120,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+            color: MalvaColors.seed.withValues(alpha: 0.3), width: 3),
+        boxShadow: [
+          BoxShadow(
+            color: MalvaColors.seed.withValues(alpha: 0.15),
+            blurRadius: 12,
+            spreadRadius: 2,
           ),
-        ),
-      );
-    }
-    return _fallbackAvatar();
+        ],
+      ),
+      child: ClipOval(
+        child: photoUrl.isEmpty
+            ? _fallbackAvatar()
+            : ProfessionalPhoto(
+                photoUrl: photoUrl,
+                width: 120,
+                height: 120,
+                fit: BoxFit.cover,
+                fallback: _fallbackAvatar(),
+              ),
+      ),
+    );
   }
 
   Widget _fallbackAvatar() {
@@ -1028,11 +1186,11 @@ class _ProfessionalPhoto extends StatelessWidget {
       radius: 60,
       backgroundColor: MalvaColors.seed.withValues(alpha: 0.12),
       child: Text(
-        displayName.isEmpty ? '?' : displayName.characters.first.toUpperCase(),
+        displayName.isEmpty ? '?' : displayName,
         style: const TextStyle(
           color: MalvaColors.seed,
           fontWeight: FontWeight.w900,
-          fontSize: 36,
+          fontSize: 17,
         ),
       ),
     );
@@ -1042,26 +1200,37 @@ class _ProfessionalPhoto extends StatelessWidget {
 // ============================================================
 
 class _PriceRow extends StatelessWidget {
-  const _PriceRow({required this.label, required this.price});
+  const _PriceRow(
+      {required this.label,
+      required this.price,
+      required this.icon,
+      this.isPackage = false});
 
   final String label;
   final int price;
+  final IconData icon;
+  final bool isPackage;
 
   @override
   Widget build(BuildContext context) => Row(
         children: [
+          Icon(icon,
+              size: 17,
+              color: isPackage ? MalvaColors.plum : const Color(0xff718196)),
+          const SizedBox(width: 8),
           Expanded(
               child: Text(label,
-                  style: const TextStyle(
-                      color: Colors.black54, fontWeight: FontWeight.w700))),
+                  style: const TextStyle(color: Color(0xff4c5a6a)))),
           const SizedBox(width: 8),
           Flexible(
               child: Text(
             price > 0
                 ? 'Rp ${_DoctorProfileScreenState._rupiah(price)}'
-                : 'Belum tersedia',
+                : 'Belum diatur',
             textAlign: TextAlign.end,
-            style: const TextStyle(fontWeight: FontWeight.w900),
+            style: TextStyle(
+                fontWeight: FontWeight.w900,
+                color: isPackage ? MalvaColors.plum : null),
           )),
         ],
       );
@@ -1227,8 +1396,10 @@ class _SupportPlanCard extends StatelessWidget {
     required this.featureIcon,
     required this.onSchedule,
     this.methods = const [],
+    this.selectedMethod,
+    this.onMethod,
     this.capacity,
-    this.badge,
+    this.comparisonPrice = 0,
     this.footnote,
     this.quota,
   });
@@ -1240,125 +1411,227 @@ class _SupportPlanCard extends StatelessWidget {
   final List<(String, IconData)> features;
   final IconData featureIcon;
   final VoidCallback onSchedule;
-  final String price;
+  final int price;
+  final int comparisonPrice;
   final List<(String, int, IconData)> methods;
-  final (String, IconData)? badge;
+  final String? selectedMethod;
+  final ValueChanged<String>? onMethod;
   final String? footnote;
   final String? quota;
   final int? capacity;
 
+  static const _ink = Color(0xff222d3b);
+  static const _muted = Color(0xff576577);
+  static const _pale = Color(0xfff7f0fb);
+  String _price(int amount) =>
+      'Rp ${_DoctorProfileScreenState._rupiah(amount)}';
+
   @override
   Widget build(BuildContext context) {
+    final package = methods.isEmpty;
+    final showSaving = package && price > 0 && comparisonPrice > price;
     return SoftCard(
-      padding: const EdgeInsets.all(12),
-      color: selected ? const Color(0xFFF0E1FA) : Colors.white,
-      outline: selected ? const BorderSide(color: MalvaColors.plum) : null,
+      padding: const EdgeInsets.all(16),
+      radius: 22,
+      color: Colors.white,
+      outline: BorderSide(
+        width: selected ? 1.8 : 1,
+        color: selected ? MalvaColors.plum : const Color(0xffe6e8ef),
+      ),
       onTap: onSelect,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (showSaving) ...[
+            Align(
+                alignment: Alignment.centerLeft,
+                child: StatusPill(
+                    label:
+                        'Hemat ${_price(comparisonPrice - price)} • Pendampingan Intensif',
+                    color: const Color(0xff106e55),
+                    icon: Icons.trending_down_rounded)),
+            const SizedBox(height: 12),
+          ],
           Row(
             children: [
-              CircleAvatar(
-                backgroundColor: const Color(0xFFEBD7F8),
-                child: Icon(featureIcon, color: MalvaColors.seed),
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                    color: _pale, borderRadius: BorderRadius.circular(14)),
+                child: Icon(featureIcon, color: MalvaColors.plum, size: 27),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(title,
                         style: const TextStyle(
-                            fontWeight: FontWeight.w900, fontSize: 18)),
+                            color: _ink,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 18)),
                     Text(subtitle,
-                        style: const TextStyle(color: Colors.black54)),
+                        style: const TextStyle(color: _muted, fontSize: 12)),
                   ],
                 ),
               ),
+              const SizedBox(width: 6),
               Icon(
                   selected
                       ? Icons.check_circle_rounded
                       : Icons.radio_button_unchecked_rounded,
-                  color: selected ? MalvaColors.seed : Colors.black38),
+                  color: selected ? MalvaColors.plum : const Color(0xffc8d1dc)),
             ],
           ),
-          const SizedBox(height: 10),
-          if (capacity case final remaining?)
-            Align(
-                alignment: Alignment.centerLeft,
-                child: StatusPill(
-                    label: '$remaining slot tersisa', color: MalvaColors.seed)),
-          if (price.isNotEmpty)
-            Text(price,
-                style:
-                    const TextStyle(fontWeight: FontWeight.w900, fontSize: 19)),
-          if (methods.isNotEmpty)
-            Row(
-              children: [
-                for (final (label, amount, icon) in methods) ...[
-                  if (label == 'Video') const SizedBox(width: 8),
-                  Expanded(
-                    child: SoftCard(
-                      color: Colors.white.withValues(alpha: .65),
-                      radius: 12,
-                      padding: const EdgeInsets.all(8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 12),
+          if (package) ...[
+            SoftCard(
+              color: const Color(0xfff5f7fa),
+              radius: 14,
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (showSaving)
+                      Text(_price(comparisonPrice),
+                          style: const TextStyle(
+                              color: _muted,
+                              decoration: TextDecoration.lineThrough,
+                              fontSize: 12)),
+                    Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Text.rich(TextSpan(children: [
-                            WidgetSpan(
-                                child: Icon(icon,
-                                    size: 17, color: MalvaColors.seed)),
-                            TextSpan(
-                                text: '  $label',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w900)),
-                          ])),
-                          Text(amount > 0
-                              ? 'Rp ${_DoctorProfileScreenState._rupiah(amount)} / sesi'
-                              : 'Belum tersedia'),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ],
+                          Text(
+                              price > 0
+                                  ? '${_price(price)} / paket'
+                                  : 'Harga belum diatur',
+                              style: const TextStyle(
+                                  color: _ink,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 17)),
+                          if (price > 0)
+                            StatusPill(
+                                label: '${_price(price ~/ 4)} / sesi',
+                                color: MalvaColors.plum),
+                        ]),
+                  ]),
             ),
-          const SizedBox(height: 10),
+            if (capacity case final remaining?)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('$remaining slot tersisa',
+                    style: const TextStyle(color: _muted, fontSize: 11)),
+              ),
+          ] else ...[
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (final (label, amount, icon) in methods) ...[
+                if (label == 'Video') const SizedBox(width: 8),
+                Expanded(child: _method(label, amount, icon)),
+              ],
+            ]),
+            const Divider(height: 22),
+          ],
+          if (package) const SizedBox(height: 10),
           for (final (label, icon) in features)
             Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(icon, size: 18, color: MalvaColors.seed),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(label)),
-                ],
-              ),
+              padding: const EdgeInsets.only(bottom: 10),
+              child:
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Icon(icon, size: 18, color: MalvaColors.plum),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: Text(label, style: const TextStyle(color: _muted))),
+              ]),
             ),
-          if (badge != null)
-            const Text(
-                'Setiap pembelian paket menambah 4 sesi dan 6 minggu masa aktif.',
-                style: TextStyle(fontWeight: FontWeight.w800)),
           if (footnote != null)
-            Text(footnote!, style: const TextStyle(color: Colors.black54)),
-          if (quota != null)
-            Text(quota!, style: const TextStyle(color: MalvaColors.seed)),
+            SoftCard(
+              color: const Color(0xfffaf6fc),
+              padding: const EdgeInsets.all(12),
+              radius: 14,
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                        'Setiap pembelian paket menambah 4 sesi dan 6 minggu masa aktif.',
+                        style: TextStyle(
+                            color: _ink, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 5),
+                    Text(footnote!, style: const TextStyle(color: _muted)),
+                    if (quota != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.monitor_heart_outlined,
+                                size: 17, color: MalvaColors.plum),
+                            const SizedBox(width: 6),
+                            Expanded(
+                                child: Text(quota!,
+                                    style: const TextStyle(
+                                        color: MalvaColors.plum,
+                                        fontWeight: FontWeight.w700))),
+                          ]),
+                    ],
+                  ]),
+            ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: MalvaColors.seed),
+              backgroundColor: selected ? _pale : Colors.white,
+              foregroundColor: MalvaColors.plum,
+              side: const BorderSide(color: Color(0xffe4d7ee)),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(11)),
+                  borderRadius: BorderRadius.circular(12)),
               textStyle: const TextStyle(fontWeight: FontWeight.w800),
             ),
             onPressed: onSchedule,
-            icon: const Icon(Icons.event_available_outlined),
-            label: const Text('Lihat jadwal'),
+            icon: const Icon(Icons.calendar_today_outlined, size: 18),
+            label: const Text('Lihat ketersediaan jadwal'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _method(String label, int amount, IconData icon) {
+    final active = selected && selectedMethod == label.toLowerCase();
+    final border = BorderRadius.circular(13);
+    return Semantics(
+      selected: active,
+      button: true,
+      child: Material(
+        color: active ? _pale : const Color(0xfff7f8fa),
+        shape: RoundedRectangleBorder(
+            borderRadius: border,
+            side: BorderSide(
+                color: active ? MalvaColors.plum : const Color(0xffe6e8ef),
+                width: active ? 1.7 : 1)),
+        child: InkWell(
+          borderRadius: border,
+          onTap: amount > 0 ? () => onMethod?.call(label) : null,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(icon, size: 16, color: active ? MalvaColors.plum : _muted),
+                const SizedBox(width: 5),
+                Expanded(
+                    child: Text(label,
+                        style: const TextStyle(fontWeight: FontWeight.w800))),
+                if (active)
+                  const Icon(Icons.circle, size: 8, color: MalvaColors.plum),
+              ]),
+              const SizedBox(height: 6),
+              Text(amount > 0 ? '${_price(amount)} / sesi' : 'Belum tersedia',
+                  style: const TextStyle(
+                      color: _ink, fontWeight: FontWeight.w800, fontSize: 12)),
+            ]),
+          ),
+        ),
       ),
     );
   }

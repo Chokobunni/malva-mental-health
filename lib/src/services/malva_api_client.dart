@@ -125,6 +125,33 @@ class MalvaApiClient {
     );
   }
 
+  /// Private avatar for the patient owner or an existing consultation pair.
+  Future<String?> fetchPatientAvatar({
+    required String accessToken,
+    String? patientId,
+  }) async {
+    final payload = await _sendUri(
+        'GET',
+        baseUri.replace(
+            path: '/v1/patient-avatar',
+            queryParameters:
+                patientId == null ? null : {'patient_id': patientId}),
+        accessToken: accessToken);
+    return payload['avatar'] as String?;
+  }
+
+  Future<String> savePatientAvatar({
+    required String accessToken,
+    required String avatar,
+    bool onlyIfMissing = false,
+  }) async {
+    final payload = await _send('PUT', '/v1/patient-avatar',
+        accessToken: accessToken,
+        body: {'avatar': avatar},
+        extraHeaders: onlyIfMissing ? {'If-None-Match': '*'} : null);
+    return payload['avatar'] as String;
+  }
+
   /// Profil pengguna yang sedang login (GET /v1/me).
   Future<BackendUserProfile> fetchUserProfile({
     required String accessToken,
@@ -4813,6 +4840,9 @@ class BackendDoctorSearchResult {
     this.addressDetails = '',
     this.priceFrom = 0,
     this.photoIntroUrl = '',
+    this.quickChatPrice = 0,
+    this.quickVideoPrice = 0,
+    this.packagePrice = 0,
   });
 
   factory BackendDoctorSearchResult.fromJson(Map<String, dynamic> json) {
@@ -4827,7 +4857,8 @@ class BackendDoctorSearchResult {
       yearsExperience: (json['years_experience'] as num?)?.toInt() ?? 0,
       isBpjsSupported: json['is_bpjs_supported'] == true,
       distanceKm: (json['distance_km'] as num?)?.toDouble(),
-      isAvailableToday: json['is_available_today'] == 1,
+      isAvailableToday:
+          json['is_available_today'] == true || json['is_available_today'] == 1,
       hospitalName: json['hospital_name']?.toString() ?? '',
       bio: json['bio']?.toString() ?? '',
       hospitalLat: (json['hospital_lat'] as num?)?.toDouble(),
@@ -4835,6 +4866,9 @@ class BackendDoctorSearchResult {
       addressDetails: json['address_details']?.toString() ?? '',
       priceFrom: (json['price_from'] as num?)?.toInt() ?? 0,
       photoIntroUrl: json['photo_intro_url']?.toString() ?? '',
+      quickChatPrice: (json['quick_chat_price'] as num?)?.toInt() ?? 0,
+      quickVideoPrice: (json['quick_video_price'] as num?)?.toInt() ?? 0,
+      packagePrice: (json['package_price'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -4856,6 +4890,9 @@ class BackendDoctorSearchResult {
   final String addressDetails;
   final int priceFrom;
   final String photoIntroUrl;
+  final int quickChatPrice;
+  final int quickVideoPrice;
+  final int packagePrice;
 
   int get helpfulnessPercent => reviewCount <= 0
       ? 0
@@ -4885,6 +4922,9 @@ class BackendDoctorSearchResult {
       addressDetails: addressDetails,
       priceFrom: priceFrom,
       photoIntroUrl: photoIntroUrl,
+      quickChatPrice: quickChatPrice,
+      quickVideoPrice: quickVideoPrice,
+      packagePrice: packagePrice,
     );
   }
 }
@@ -5763,6 +5803,7 @@ class BackendDoctorProfile {
     this.pricing = const BackendProfessionalPricing(),
     this.reviews = const BackendDoctorReviews(),
     this.remainingPatientSlots,
+    this.ageYears,
     this.canRenewPackage = false,
     this.canResumePackage = false,
   });
@@ -5788,6 +5829,7 @@ class BackendDoctorProfile {
           (json['pricing'] as Map?)?.cast<String, dynamic>() ?? const {}),
       reviews: BackendDoctorReviews.fromJson(json),
       remainingPatientSlots: (json['remaining_patient_slots'] as num?)?.toInt(),
+      ageYears: (json['age_years'] as num?)?.toInt(),
       canRenewPackage: json['can_renew_package'] == true,
       canResumePackage: json['can_resume_package'] == true,
     );
@@ -5799,6 +5841,7 @@ class BackendDoctorProfile {
   final BackendProfessionalPricing pricing;
   final BackendDoctorReviews reviews;
   final int? remainingPatientSlots;
+  final int? ageYears;
   final bool canRenewPackage;
   final bool canResumePackage;
 }

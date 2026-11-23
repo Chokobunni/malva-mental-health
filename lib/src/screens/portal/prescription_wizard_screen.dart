@@ -18,12 +18,14 @@ class EPrescriptionFormScreen extends ConsumerStatefulWidget {
       this.links = const [],
       this.preselectedPatientId = '',
       this.preselectedPatientName = '',
-      this.onCreated});
+      this.onCreated,
+      this.personal = false});
   final AuthSession? session;
   final MalvaApiClient? apiClient;
   final List<BackendPatientProfessionalLink> links;
   final String preselectedPatientId, preselectedPatientName;
   final VoidCallback? onCreated;
+  final bool personal;
   @override
   ConsumerState<EPrescriptionFormScreen> createState() =>
       _PrescriptionWizardState();
@@ -54,8 +56,13 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
   DateTime _start = wibNow();
   final _times = <TimeOfDay>[const TimeOfDay(hour: 8, minute: 0)];
   final _weekdays = <int>{1, 2, 3, 4, 5, 6, 7};
-  String get _stockUnit =>
-      switch (_form) { 'Sirup' => 'ml', 'Injeksi' => 'ampul', _ => 'pil' };
+  String get _stockUnit => switch (_form) {
+        'Sirup' => 'ml',
+        'Injeksi' => 'ampul',
+        'Tablet' when widget.personal => 'tablet',
+        'Kapsul' when widget.personal => 'kapsul',
+        _ => 'pil'
+      };
   String get _frequency => switch (_mode) {
         _Routine.flexible => 'Fleksibel',
         _Routine.periodic => 'Setiap $_interval $_intervalUnit',
@@ -67,6 +74,7 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
         _Routine.periodic => 'Minum setiap $_interval $_intervalUnit',
         _Routine.precision => 'Minum $_precisionCount kali sehari',
         _Routine.weekdays => 'Minum di hari tertentu',
+        _Routine.daily when widget.personal => '$_dailyCount kali sehari',
         _ => _frequency
       };
 
@@ -171,11 +179,13 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
             backgroundColor: clinical ? Colors.white : _pale,
             appBar: AppBar(
               title: Text(
-                  _step == 0
-                      ? 'Detail Obat'
-                      : _step == 1
-                          ? 'Atur Rutinitas'
-                          : 'Atur Pengingat',
+                  switch (_step) {
+                    0 => widget.personal ? 'Tambah Obat' : 'Detail Obat',
+                    1 => 'Atur Rutinitas',
+                    2 when widget.personal => 'Pengingat Obat',
+                    3 when widget.personal => 'Pengingat Isi Ulang Obat',
+                    _ => 'Atur Pengingat',
+                  },
                   style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
@@ -285,6 +295,18 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                                                   Flexible(
                                                       child: Text(
                                                           switch (_step) {
+                                                            0
+                                                                when widget
+                                                                    .personal =>
+                                                              'Lanjut atur jadwal',
+                                                            2
+                                                                when widget
+                                                                    .personal =>
+                                                              'Lanjut ke pengingat stok',
+                                                            3
+                                                                when widget
+                                                                    .personal =>
+                                                              'Simpan obat',
                                                             0 =>
                                                               'Lanjut Atur Jadwal Resep',
                                                             1 =>
@@ -364,39 +386,46 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
               ? 'Pasien terpilih'
               : widget.preselectedPatientName);
     return [
-      _heading('Obat apa yang ingin\nkamu resepkan?'),
-      _label('Pasien'),
-      DropdownButtonFormField<String>(
-          initialValue: _patientId,
-          style: const TextStyle(
-              fontFamily: 'Roboto', fontSize: 16, height: 1.25, color: _ink),
-          isExpanded: true,
-          decoration: _decoration('Pilih pasien'),
-          icon: const Icon(Icons.arrow_drop_down_rounded,
-              color: Color(0xff9ca5b2)),
-          items: [
-            for (final p in patients.entries)
-              DropdownMenuItem(
-                  value: p.key,
-                  child: Text(p.value, overflow: TextOverflow.ellipsis))
-          ],
-          onChanged: (v) => setState(() => _patientId = v)),
-      if (patients.isEmpty)
-        const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text('Belum ada pasien terhubung.')),
-      _label('Nama Obat'),
+      _heading(widget.personal
+          ? 'Obat apa yang ingin\nkamu catat?'
+          : 'Obat apa yang ingin\nkamu resepkan?'),
+      if (!widget.personal) ...[
+        _label('Pasien'),
+        DropdownButtonFormField<String>(
+            initialValue: _patientId,
+            style: const TextStyle(
+                fontFamily: 'Roboto', fontSize: 16, height: 1.25, color: _ink),
+            isExpanded: true,
+            decoration: _decoration('Pilih pasien'),
+            icon: const Icon(Icons.arrow_drop_down_rounded,
+                color: Color(0xff9ca5b2)),
+            items: [
+              for (final p in patients.entries)
+                DropdownMenuItem(
+                    value: p.key,
+                    child: Text(p.value, overflow: TextOverflow.ellipsis))
+            ],
+            onChanged: (v) => setState(() => _patientId = v)),
+        if (patients.isEmpty)
+          const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text('Belum ada pasien terhubung.')),
+      ],
+      _label(widget.personal ? 'Nama obat' : 'Nama Obat'),
       TextField(
           key: const Key('rx-name'),
           controller: _name,
           style: const TextStyle(fontSize: 16, height: 1.25),
-          decoration: _decoration('Contoh: Aripiprazole, Paracetamol',
+          decoration: _decoration(
+              widget.personal
+                  ? 'Masukkan nama obat'
+                  : 'Contoh: Aripiprazole, Paracetamol',
               prefix: Padding(
                   padding: const EdgeInsets.all(15),
                   child: Image.asset('assets/prescription/capsule.png',
                       width: 20, height: 20, color: const Color(0xffa0a8b4)))),
           textCapitalization: TextCapitalization.words),
-      _label('Bentuk Obat'),
+      _label(widget.personal ? 'Bentuk obat' : 'Bentuk Obat'),
       LayoutBuilder(
           builder: (context, c) => Wrap(spacing: 12, runSpacing: 12, children: [
                 for (final form in [
@@ -440,7 +469,8 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600))))
               ])),
-      _label('Dosis per minum', top: 32),
+      _label(widget.personal ? 'Dosis per penggunaan' : 'Dosis per minum',
+          top: 32),
       Row(children: [
         Expanded(
             flex: 2,
@@ -451,7 +481,7 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                 textAlign: TextAlign.center,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
-                decoration: _decoration('0'))),
+                decoration: _decoration(widget.personal ? 'Jumlah' : '0'))),
         const SizedBox(width: 12),
         Expanded(
             child: DropdownButtonFormField<String>(
@@ -475,7 +505,11 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                 ],
                 onChanged: (v) => setState(() => _unit = v!)))
       ]),
-      _label('Catatan (opsional)', top: 32),
+      _label(
+          widget.personal
+              ? 'Catatan penggunaan (opsional)'
+              : 'Catatan (opsional)',
+          top: 32),
       TextField(
           controller: _notes,
           style: const TextStyle(fontSize: 15, height: 1.3),
@@ -650,7 +684,9 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
   List<Widget> _routine() => [
         _summary(),
         const SizedBox(height: 24),
-        _heading('Bagaimana rutinitas minum\nobat pasien?'),
+        _heading(widget.personal
+            ? 'Seberapa sering kamu menggunakan obat ini?'
+            : 'Bagaimana rutinitas minum\nobat pasien?'),
         const SizedBox(height: 24),
         for (var n = 1; n <= 3; n++)
           _frequencyRow(
@@ -908,7 +944,9 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
   }
 
   List<Widget> _timing() => [
-        ..._reminderHeading('Kapan pasien perlu diingatkan?'),
+        ..._reminderHeading(widget.personal
+            ? 'Kapan kamu ingin diingatkan?'
+            : 'Kapan pasien perlu diingatkan?'),
         const SizedBox(height: 12),
         Center(
             child: Container(
@@ -932,16 +970,17 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
         const SizedBox(height: 24),
         _settingsCard([
           _setting(
-              'Mulai tanggal',
+              widget.personal ? 'Tanggal mulai' : 'Mulai tanggal',
               formatWibDate(_start) == formatWibDate(wibNow())
                   ? 'Hari ini'
                   : formatWibDate(_start),
               _pickDate),
           if (_times.length == 1 && _mode != _Routine.weekdays) ...[
-            _setting(
-                'Dimulai pada', _timeLabel(_times.first), () => _pickTime(0),
+            _setting(widget.personal ? 'Jam pengingat' : 'Dimulai pada',
+                _timeLabel(_times.first), () => _pickTime(0),
                 key: const Key('rx-time-0')),
-            _setting('Dosis', '$_units $_stockUnit', _pickDose)
+            _setting(widget.personal ? 'Jumlah per penggunaan' : 'Dosis',
+                '$_units $_stockUnit', _pickDose)
           ] else
             for (var i = 0; i < _times.length; i++)
               Padding(
@@ -995,16 +1034,18 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
         ]),
       ];
   List<Widget> _refillSettings() => [
-        ..._reminderHeading(
-            'Apakah perlu pengingat isi ulang obat untuk pasien?'),
+        ..._reminderHeading(widget.personal
+            ? 'Mau diingatkan untuk isi ulang obatmu?'
+            : 'Apakah perlu pengingat isi ulang obat untuk pasien?'),
         const SizedBox(height: 24),
         _settingsCard([
           Padding(
               padding: const EdgeInsets.fromLTRB(16, 2, 12, 2),
               child: Row(children: [
-                const Expanded(
-                    child: Text('Ingatkan pasien',
-                        style: TextStyle(
+                Expanded(
+                    child: Text(
+                        widget.personal ? 'Ingatkan saya' : 'Ingatkan pasien',
+                        style: const TextStyle(
                             fontSize: 15, fontWeight: FontWeight.w700))),
                 Transform.scale(
                     scale: .85,
@@ -1019,21 +1060,28 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                         onChanged: (v) => setState(() => _refill = v)))
               ]))
         ]),
-        const Padding(
-            padding: EdgeInsets.only(top: 18, bottom: 10),
-            child: Text('Stok saat ini',
-                style: TextStyle(fontSize: 13, height: 1.2, color: _muted))),
+        Padding(
+            padding: const EdgeInsets.only(top: 18, bottom: 10),
+            child: Text(
+                widget.personal ? 'Stok obat saat ini' : 'Stok saat ini',
+                style:
+                    const TextStyle(fontSize: 13, height: 1.2, color: _muted))),
         _settingsCard([
-          _setting('Jumlah', '$_stock $_stockUnit', () async {
+          _setting(widget.personal ? 'Jumlah yang tersisa' : 'Jumlah',
+              '$_stock $_stockUnit', () async {
             final n = await _pickNumber('Stok saat ini ($_stockUnit)', _stock,
                 min: 0, max: 1000000000);
             if (n != null && mounted) setState(() => _stock = n);
           }, key: const Key('rx-stock'))
         ]),
-        const Padding(
-            padding: EdgeInsets.only(top: 18, bottom: 10),
-            child: Text('Ingatkan ketika:',
-                style: TextStyle(fontSize: 13, height: 1.2, color: _muted))),
+        Padding(
+            padding: const EdgeInsets.only(top: 18, bottom: 10),
+            child: Text(
+                widget.personal
+                    ? 'Ingatkan saat stok tersisa'
+                    : 'Ingatkan ketika:',
+                style:
+                    const TextStyle(fontSize: 13, height: 1.2, color: _muted))),
         _settingsCard([
           _setting('Batas minimum', '$_threshold $_stockUnit', () async {
             final n = await _pickNumber(
@@ -1095,13 +1143,14 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
   void _next() {
     if (_step == 0) {
       final dose = double.tryParse(_dose.text.replaceAll(',', '.'));
-      final error = _patientId == null || _patientId!.isEmpty
-          ? 'Pilih pasien terlebih dahulu.'
-          : _name.text.trim().isEmpty
-              ? 'Nama obat tidak boleh kosong.'
-              : dose == null || !dose.isFinite || dose <= 0
-                  ? 'Dosis harus lebih dari 0.'
-                  : null;
+      final error =
+          !widget.personal && (_patientId == null || _patientId!.isEmpty)
+              ? 'Pilih pasien terlebih dahulu.'
+              : _name.text.trim().isEmpty
+                  ? 'Nama obat tidak boleh kosong.'
+                  : dose == null || !dose.isFinite || dose <= 0
+                      ? 'Dosis harus lebih dari 0.'
+                      : null;
       if (error != null) {
         setState(() => _error = error);
         return;
@@ -1129,14 +1178,8 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
   }
 
   Future<void> _submit() async {
-    if (_stock < 1) {
+    if (!widget.personal && _stock < 1) {
       setState(() => _error = 'Stok yang diberikan harus lebih dari 0.');
-      return;
-    }
-    final api = widget.apiClient;
-    final token = _session?.accessToken;
-    if (api == null || token == null || token.isEmpty) {
-      setState(() => _error = 'Hubungkan ke server untuk menerbitkan resep.');
       return;
     }
     final times = _mode == _Routine.flexible
@@ -1163,6 +1206,28 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
       refillEnabled: _refill,
       instructions: _notes.text.trim(),
     );
+    if (widget.personal) {
+      Navigator.pop(
+          context,
+          Medication(
+            id: 'med_${wibNow().microsecondsSinceEpoch}',
+            name: _name.text.trim(),
+            dosage: '${_dose.text.trim()} $_unit',
+            form: _form,
+            reminders: schedule.reminders(''),
+            currentStock: _stock,
+            alertBelow: _threshold,
+            source: 'Pasien',
+            schedule: schedule,
+          ));
+      return;
+    }
+    final api = widget.apiClient;
+    final token = _session?.accessToken;
+    if (api == null || token == null || token.isEmpty) {
+      setState(() => _error = 'Hubungkan ke server untuk menerbitkan resep.');
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;

@@ -121,6 +121,9 @@ void main() {
       of: find.text('Lanjut ke pembayaran'),
       matching: find.bySubtype<FilledButton>(),
     );
+    expect(find.text('Pilih Sesi 1 dulu'), findsOneWidget);
+    expect(find.text('Total paket (4 Sesi)'), findsOneWidget);
+    expect(tester.getBottomRight(payment).dy, lessThan(1450));
     await tester.scrollUntilVisible(payment, 200,
         scrollable: find.byType(Scrollable).first);
     expect(tester.widget<FilledButton>(payment).onPressed, isNull);

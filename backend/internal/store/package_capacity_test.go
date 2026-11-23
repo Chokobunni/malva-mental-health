@@ -43,6 +43,13 @@ func TestPackagePatientCapacityAdmission(t *testing.T) {
 		return Payment{BookingID: booking, Reference: booking, PaymentMethod: "qris", Gateway: "midtrans", GrossAmount: 100000, ServiceFeeAmount: 2000, PlatformFeeAmount: 10000, NetAmount: 90000}
 	}
 	capacity := 1
+	pricingBefore, err := s.GetProfessionalPricing(ctx, professional)
+	if err != nil || pricingBefore.PatientCapacity == nil || *pricingBefore.PatientCapacity != 2 {
+		t.Fatalf("missing pricing should have finite default: %+v err=%v", pricingBefore, err)
+	}
+	if remaining, _, _, err := s.PackagePatientAvailability(ctx, professional, patients[0]); err != nil || remaining == nil || *remaining != 2 {
+		t.Fatalf("missing pricing admission: remaining=%v err=%v", remaining, err)
+	}
 	writeCapacity := func(value *int) {
 		t.Helper()
 		if _, err := s.UpsertProfessionalPricing(ctx, ProfessionalPricing{ProfessionalID: professional, PatientCapacity: value, PatientCapacitySet: true, KeepExistingPrices: true}); err != nil {
@@ -151,7 +158,17 @@ func TestPackagePatientCapacityAdmission(t *testing.T) {
 	}
 	writeCapacity(nil)
 	pricing, err = s.GetProfessionalPricing(ctx, professional)
-	if err != nil || pricing.PatientCapacity != nil || pricing.PackagePrice != 70000 {
+	if err != nil || pricing.PatientCapacity == nil || *pricing.PatientCapacity != 2 || pricing.PackagePrice != 70000 {
 		t.Fatalf("capacity clear changed price: %+v, %v", pricing, err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE professional_pricing SET patient_capacity=NULL WHERE professional_id=$1`, professional); err != nil {
+		t.Fatal(err)
+	}
+	pricing, err = s.GetProfessionalPricing(ctx, professional)
+	if err != nil || pricing.PatientCapacity == nil || *pricing.PatientCapacity != 2 {
+		t.Fatalf("legacy null pricing: %+v err=%v", pricing, err)
+	}
+	if remaining, _, _, err := s.PackagePatientAvailability(ctx, professional, patients[winner.index]); err != nil || remaining == nil || *remaining != 1 {
+		t.Fatalf("null capacity must apply finite default and count legacy patients: remaining=%v err=%v", remaining, err)
 	}
 }

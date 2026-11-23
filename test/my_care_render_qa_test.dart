@@ -192,12 +192,13 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, 'Jadwal'));
     await tester.pumpAndSettle();
     await capture('jadwal');
-    await tester.tap(find.byTooltip('Paket saya'));
+    expect(find.byTooltip('Paket saya'), findsNothing);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Riwayat'));
     await tester.pumpAndSettle();
-    await capture('paket-saya');
+    await capture('riwayat-paket');
     tester.view.physicalSize = const Size(390, 755);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Profesional terhubung'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Jadwalkan Sesi').first);
     await tester.pumpAndSettle();

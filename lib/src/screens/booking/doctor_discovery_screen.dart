@@ -48,7 +48,12 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
     ('distance', 'Terdekat'),
   ];
 
-  static const _specOptions = ['', 'Sp.KJ', 'M.Psi'];
+  static const _filters = [
+    ('', 'Semua'),
+    ('Sp.KJ', 'Sp.KJ'),
+    ('M.Psi', 'M.Psi'),
+    ('bpjs', 'BPJS (Offline)'),
+  ];
 
   @override
   void initState() {
@@ -125,8 +130,9 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
       }
     });
     return Scaffold(
+      backgroundColor: const Color(0xfff8f8fb),
       appBar: AppBar(
-        title: const Text('Jadwal Profesional'),
+        title: const Text('Cari Profesional'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),
@@ -136,82 +142,100 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
           padding: const EdgeInsets.all(18),
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _sortBy,
-                    decoration: const InputDecoration(
-                      labelText: 'Urutkan',
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  flex: 4,
+                  child: _LabeledControl(
+                    label: 'URUTKAN',
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _sortBy,
+                      isExpanded: true,
+                      decoration: _discoveryInput(),
+                      items: [
+                        for (final (value, label) in _sortOptions)
+                          DropdownMenuItem(
+                            value: value,
+                            child: Text(label, overflow: TextOverflow.ellipsis),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _sortBy = value);
+                        unawaited(_load());
+                      },
                     ),
-                    items: [
-                      for (final (value, label) in _sortOptions)
-                        DropdownMenuItem(value: value, child: Text(label)),
-                    ],
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => _sortBy = v);
-                      _load();
-                    },
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      labelText: 'Nama profesional',
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.search_rounded),
-                        onPressed: () => setState(() {}),
+                  flex: 6,
+                  child: _LabeledControl(
+                    label: 'CARI',
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: _discoveryInput(
+                        hintText: 'Nama profesional…',
+                        suffixIcon: const Icon(Icons.search_rounded),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
+                      onChanged: (_) => setState(() {}),
                     ),
-                    onSubmitted: (_) => setState(() {}),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final spec in _specOptions)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        label: Text(spec.isEmpty ? 'Semua' : spec),
-                        selected: _specialization == spec,
-                        onSelected: (_) {
-                          setState(() => _specialization = spec);
-                          _load();
+            const SizedBox(height: 14),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final wrap = constraints.maxWidth < 320 ||
+                    MediaQuery.textScalerOf(context).scale(1) > 1.3;
+                final selectedFilter =
+                    _bpjsOnly == true ? 'bpjs' : _specialization;
+                final buttons = [
+                  for (final (filter, label) in _filters)
+                    Semantics(
+                      selected: selectedFilter == filter,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          backgroundColor: selectedFilter == filter
+                              ? MalvaColors.plum
+                              : Colors.white,
+                          foregroundColor: selectedFilter == filter
+                              ? Colors.white
+                              : const Color(0xff4c5a6a),
+                          side: const BorderSide(color: Color(0xffe6e8ef)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          textStyle: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 12),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _specialization = filter == 'bpjs' ? '' : filter;
+                            _bpjsOnly = filter == 'bpjs' ? true : null;
+                          });
+                          unawaited(_load());
                         },
-                        selectedColor: MalvaColors.seed.withValues(alpha: 0.15),
-                        checkmarkColor: MalvaColors.seed,
+                        child: Text(
+                          selectedFilter.isEmpty && filter.isEmpty
+                              ? '✓ $label'
+                              : label,
+                          textAlign: TextAlign.center,
+                        ),
                       ),
                     ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      label: const Text('BPJS'),
-                      selected: _bpjsOnly == true,
-                      onSelected: (_) {
-                        setState(() {
-                          _bpjsOnly = _bpjsOnly == true ? null : true;
-                        });
-                        _load();
-                      },
-                      selectedColor: MalvaColors.mint.withValues(alpha: 0.2),
-                      checkmarkColor: MalvaColors.mint,
-                    ),
-                  ),
-                ],
-              ),
+                ];
+                if (wrap) {
+                  return Wrap(spacing: 6, runSpacing: 6, children: buttons);
+                }
+                return Row(spacing: 6, children: [
+                  for (final button in buttons) Expanded(child: button),
+                ]);
+              },
             ),
-            const SizedBox(height: 14),
+            const Divider(height: 28),
             if (ref.watch(patientLocationProvider).permissionDenied ||
                 ref.watch(patientLocationProvider).serviceDisabled) ...[
               InkWell(
@@ -276,6 +300,45 @@ class _DoctorDiscoveryScreenState extends ConsumerState<DoctorDiscoveryScreen> {
   }
 }
 
+InputDecoration _discoveryInput({String? hintText, Widget? suffixIcon}) {
+  final border = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(18),
+    borderSide: const BorderSide(color: Color(0xffe5e8ef)),
+  );
+  return InputDecoration(
+    hintText: hintText,
+    hintStyle: const TextStyle(color: Color(0xff8694a5)),
+    suffixIcon: suffixIcon,
+    suffixIconColor: const Color(0xff8694a5),
+    filled: true,
+    fillColor: const Color(0xfff5f7fa),
+    enabledBorder: border,
+    border: border,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+  );
+}
+
+class _LabeledControl extends StatelessWidget {
+  const _LabeledControl({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  color: Color(0xff738297),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800)),
+          const SizedBox(height: 5),
+          child,
+        ],
+      );
+}
+
 class _DoctorCard extends StatelessWidget {
   const _DoctorCard({
     required this.doctor,
@@ -289,123 +352,101 @@ class _DoctorCard extends StatelessWidget {
   final double? patientLat;
   final double? patientLng;
 
-  double? get _effectiveKm {
-    return distanceKmBetween(
+  @override
+  Widget build(BuildContext context) {
+    final km = distanceKmBetween(
       fromLat: patientLat,
       fromLng: patientLng,
       toLat: doctor.hospitalLat,
       toLng: doctor.hospitalLng,
     );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final helpful =
-        doctor.reviewCount == 0 ? 0 : doctor.helpfulnessPercent.clamp(0, 100);
-    final km = _effectiveKm;
+    final showInlineBpjs = doctor.isBpjsSupported &&
+        MediaQuery.sizeOf(context).width >= 380 &&
+        MediaQuery.textScalerOf(context).scale(1) <= 1.15;
+    const bpjs = StatusPill(label: 'BPJS (Offline)', color: Color(0xff107356));
     return SoftCard(
+      radius: 22,
+      color: Colors.white,
+      outline: const BorderSide(color: Color(0xffe8e8ef)),
       onTap: onTap,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ProfessionalAvatar(
-                displayName: doctor.displayName,
-                radius: 28,
-                photoUrl: doctor.photoIntroUrl.isNotEmpty
-                    ? doctor.photoIntroUrl
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            ProfessionalAvatar(
+              displayName: doctor.displayName,
+              radius: 26,
+              photoUrl: doctor.photoIntroUrl,
+              borderRadius: BorderRadius.circular(15),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      doctor.displayName,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w900, fontSize: 15.5),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    Row(spacing: 4, children: [
+                      Expanded(
+                        child: Text(doctor.displayName,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 16),
+                            maxLines: showInlineBpjs ? 1 : 2,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      if (showInlineBpjs) bpjs,
+                    ]),
                     const SizedBox(height: 3),
-                    Text(
-                      doctor.specialization.isEmpty
-                          ? 'Profesional kesehatan jiwa'
-                          : professionalRoleLabel(doctor.specialization),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.black54, fontWeight: FontWeight.w700),
-                    ),
+                    Text(professionalRoleLabel(doctor.specialization),
+                        style: const TextStyle(color: Color(0xff647388))),
+                    if (doctor.isBpjsSupported && !showInlineBpjs) ...[
+                      const SizedBox(height: 4),
+                      bpjs,
+                    ],
                     const SizedBox(height: 6),
                     Wrap(
-                      spacing: 4,
-                      children: [
-                        const Icon(Icons.star_rounded,
-                            size: 16, color: MalvaColors.amber),
-                        const SizedBox(width: 2),
-                        Text(
-                          doctor.reviewCount == 0
-                              ? 'Belum ada ulasan'
-                              : '${doctor.averageStars.toStringAsFixed(1)} / 5',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w900, fontSize: 12.5),
-                        ),
-                        const SizedBox(width: 4),
-                        if (doctor.reviewCount > 0)
+                        spacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Icon(
+                              doctor.reviewCount == 0
+                                  ? Icons.star_border_rounded
+                                  : Icons.star_rounded,
+                              size: 17,
+                              color: MalvaColors.amber),
                           Text(
-                            '($helpful% terbantu • ${doctor.reviewCount} ulasan)',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: Colors.black54),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Icon(Icons.local_hospital_rounded,
-                  size: 15, color: MalvaColors.seed),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  doctor.hospitalName.isEmpty
-                      ? 'Faskes tidak dicantumkan'
-                      : doctor.hospitalName,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w700, fontSize: 12.5),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (km != null) ...[
-                const SizedBox(width: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.near_me_rounded,
-                        size: 14, color: MalvaColors.orchid),
-                    const SizedBox(width: 3),
-                    Text(
-                      '${km.toStringAsFixed(1)} km',
-                      style: const TextStyle(
-                        color: MalvaColors.orchid,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
+                              doctor.reviewCount == 0
+                                  ? 'Belum ada ulasan'
+                                  : '${doctor.averageStars.toStringAsFixed(1)} / 5',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w800)),
+                          if (doctor.reviewCount > 0)
+                            Text(
+                                '(${doctor.helpfulnessPercent}% terbantu • ${doctor.reviewCount} ulasan)',
+                                style: const TextStyle(
+                                    color: Color(0xff708096), fontSize: 11)),
+                        ]),
+                  ]),
+            ),
+            const CircleAvatar(
+                radius: 13,
+                backgroundColor: Color(0xfff5f7fa),
+                child: Icon(Icons.chevron_right_rounded,
+                    size: 19, color: Color(0xff728296))),
+          ]),
+          const Divider(height: 22),
+          Row(children: [
+            const Icon(Icons.add_box_outlined,
+                size: 20, color: MalvaColors.plum),
+            const SizedBox(width: 8),
+            Expanded(
+                child: Text(doctor.hospitalName.isEmpty
+                    ? 'Faskes tidak dicantumkan'
+                    : doctor.hospitalName)),
+            if (km != null)
+              StatusPill(
+                  label: '${km.toStringAsFixed(1)} km',
+                  icon: Icons.near_me_rounded,
+                  color: MalvaColors.plum),
+          ]),
           if (km == null)
             Padding(
               padding: const EdgeInsets.only(top: 4),
@@ -416,62 +457,54 @@ class _DoctorCard extends StatelessWidget {
                       hospitalLng: doctor.hospitalLng),
                   style: Theme.of(context).textTheme.bodySmall),
             ),
-          const Divider(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Estimasi biaya',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: Colors.black54),
-                    ),
-                    Text(
-                      doctor.priceFrom > 0
-                          ? 'Rp ${_rupiah(doctor.priceFrom)}${doctor.isBpjsSupported ? ' • BPJS tersedia' : ''}'
-                          : (doctor.isBpjsSupported
-                              ? 'BPJS tersedia'
-                              : 'Harga saat booking'),
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w900, fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Lihat profil',
-                    style: TextStyle(
-                        color: MalvaColors.seed,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13),
-                  ),
-                  Icon(Icons.chevron_right_rounded,
-                      size: 20, color: MalvaColors.seed),
-                ],
-              ),
-            ],
-          ),
+          const Divider(height: 22),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(
+                child: _prices(const Color(0xfff6f7fa), [
+              const Text('Biaya Quick Consult',
+                  style: TextStyle(fontSize: 11, color: Color(0xff566980))),
+              _quick(Icons.chat_bubble_outline_rounded, doctor.quickChatPrice),
+              _quick(Icons.videocam_outlined, doctor.quickVideoPrice),
+            ])),
+            const SizedBox(width: 8),
+            Expanded(
+                child: _prices(const Color(0xffedf9f6), [
+              const Text('Continuous Package',
+                  style: TextStyle(fontSize: 11, color: Color(0xff177457))),
+              Text(_price(doctor.packagePrice),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800, color: Color(0xff12624d))),
+              const Text('4 sesi / 6 minggu',
+                  style: TextStyle(fontSize: 11, color: Color(0xff177457))),
+            ])),
+          ]),
         ],
       ),
     );
   }
 
-  static String _rupiah(int value) {
-    final s = value.toString();
-    final buf = StringBuffer();
-    for (var i = 0; i < s.length; i++) {
-      final pos = s.length - i;
-      buf.write(s[i]);
-      if (pos > 1 && pos % 3 == 1) buf.write('.');
-    }
-    return buf.toString();
-  }
+  Widget _quick(IconData icon, int price) => Row(children: [
+        Icon(icon, size: 14, color: MalvaColors.plum),
+        const SizedBox(width: 5),
+        Flexible(
+            child: Text(_price(price),
+                style: const TextStyle(fontWeight: FontWeight.w800))),
+      ]);
+
+  Widget _prices(Color color, List<Widget> children) => Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: color,
+          border: Border.all(color: const Color(0xffe9ebf0)),
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 4,
+            children: children),
+      );
+
+  static String _price(int amount) => amount <= 0
+      ? 'Belum tersedia'
+      : 'Rp ${amount.toString().replaceAllMapped(RegExp(r"(\d)(?=(\d{3})+$)"), (m) => "${m[1]}.")}';
 }

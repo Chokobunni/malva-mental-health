@@ -82,6 +82,15 @@ void main() {
                   },
                 '/v1/messages' => {
                     'messages': [
+                      if (!patient)
+                        {
+                          'id': 'incoming-patient',
+                          'sender_id': 'patient',
+                          'sender_name': 'Emilie R.',
+                          'text': 'Kondisi saya sedang kurang baik, dok',
+                          'kind': 'text',
+                          'created_at': wibIso(wibNow()),
+                        },
                       {
                         'id': 'reply',
                         'sender_id': 'professional',
@@ -145,6 +154,11 @@ void main() {
         expect(find.text('Status belum diketahui'), findsOneWidget);
         await tester.pumpAndSettle();
         expect(find.text(reply), findsOneWidget);
+        if (!patient) {
+          expect(find.text('Pasien'), findsOneWidget);
+          expect(find.text('Kondisi saya sedang kurang baik, dok'),
+              findsOneWidget);
+        }
         expect(find.text(specialty == 'Sp.KJ' ? 'Psikiater' : 'Psikolog'),
             findsWidgets);
         expect(find.text('Dokter'), findsNothing);

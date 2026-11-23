@@ -212,7 +212,8 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Ketersediaan & harga'));
     await tester.pumpAndSettle();
-    expect(find.text('09:00–16:00 (60 mnt)'), findsNWidgets(6));
+    expect(find.text('09:00–16:00'), findsNWidgets(6));
+    expect(find.text('60 mnt/sesi'), findsNWidgets(3));
     await tester.drag(find.byType(ListView).first, const Offset(0, 2000));
     await tester.pumpAndSettle();
     await _capture(tester, 'professional-reference.png');

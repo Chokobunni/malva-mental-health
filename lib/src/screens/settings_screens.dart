@@ -229,6 +229,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         throw const AuthFailure('Profil tidak sesuai dengan akun aktif.');
       }
       if (draft != null) {
+        await ref
+            .read(apiClientProvider)
+            .savePatientAvatar(accessToken: token, avatar: draft);
+        if (!_ownsRequest(session, generation)) return;
         await avatarStore.write(profileAvatarKey(profile.id), draft);
         if (!_ownsRequest(session, generation)) return;
         ref.invalidate(patientAvatarProvider(profile.id));

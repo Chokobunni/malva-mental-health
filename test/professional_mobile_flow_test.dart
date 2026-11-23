@@ -155,9 +155,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ketersediaan & harga'));
     await tester.pumpAndSettle();
-    expect(find.text('Sen:'), findsNWidgets(3));
-    expect(find.text('09:00–16:00 (30 mnt)'), findsNWidgets(3));
-    expect(find.text('18:00–21:00 (30 mnt)'), findsNWidgets(3));
+    expect(find.text('Senin'), findsNWidgets(3));
+    expect(find.text('09:00–16:00'), findsNWidgets(3));
+    expect(find.text('18:00–21:00'), findsNWidgets(3));
     expect(find.text('Nonaktif'), findsNWidgets(3));
     await tester.pumpWidget(const SizedBox());
   });
@@ -178,10 +178,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ketersediaan & harga'));
     await tester.pumpAndSettle();
-    expect(find.text('Jam praktik mingguan'), findsOneWidget);
-    expect(find.text('Hari libur: belum ada'), findsOneWidget);
+    expect(find.text('Jadwal & tarif'), findsOneWidget);
+    expect(find.text('Hari libur: belum ada'), findsNothing);
     expect(find.text('Continuous Package'), findsOneWidget);
-    expect(find.text('belum diatur'), findsNWidgets(3));
+    expect(find.text('Belum diatur'), findsNWidgets(3));
     client.requests.clear();
     await tester.tap(find.text('Jadwal'));
     await tester.pumpAndSettle();
@@ -207,7 +207,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
         find.text('Ketersediaan & harga belum dapat dimuat.'), findsOneWidget);
-    expect(find.text('belum diatur'), findsNothing);
+    expect(find.text('Belum diatur'), findsNothing);
     client.failAvailability = false;
     client.chatPrice = 123000;
     await Scrollable.ensureVisible(tester.element(find.text('Coba Lagi')),
@@ -215,7 +215,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Coba Lagi'));
     await tester.pumpAndSettle();
-    expect(find.text('Rp 123.000'), findsOneWidget);
+    expect(find.text('Rp123.000'), findsOneWidget);
     expect(find.text('Ketersediaan & harga belum dapat dimuat.'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
@@ -240,7 +240,7 @@ void main() {
     client.chatPrice = 456000;
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Rp 456.000'), findsOneWidget);
+    expect(find.text('Rp456.000'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -269,7 +269,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ketersediaan & harga'));
     await tester.pumpAndSettle();
-    expect(find.text('Rp 789.000'), findsOneWidget);
+    expect(find.text('Rp789.000'), findsOneWidget);
     expect(find.text('Rp 0'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());

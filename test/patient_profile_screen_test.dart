@@ -86,7 +86,17 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({
       'profile.avatar.ami': 'assets/reference/avatar-2.png',
     });
-    final container = await mount(tester, (_) async => _profile('ami', 'Ami'));
+    String? remoteAvatar;
+    final container = await mount(tester, (request) async {
+      if (request.url.path == '/v1/patient-avatar') {
+        expect(request.headers['authorization'], 'Bearer ami-token');
+        if (request.method == 'PUT') {
+          remoteAvatar = jsonDecode(request.body)['avatar'] as String;
+        }
+        return http.Response(jsonEncode({'avatar': remoteAvatar}), 200);
+      }
+      return _profile('ami', 'Ami');
+    });
     await tester.tap(find.text('Change avatar'));
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsLabel('Avatar default'));
@@ -98,6 +108,33 @@ void main() {
       await container.read(secureStoreProvider).read('profile.avatar.ami'),
       'default',
     );
+    expect(remoteAvatar, 'default');
+  });
+
+  testWidgets('failed avatar save preserves the last selected profile photo',
+      (tester) async {
+    FlutterSecureStorage.setMockInitialValues({
+      'profile.avatar.ami': 'assets/reference/avatar-2.png',
+    });
+    final container = await mount(tester, (request) async {
+      if (request.url.path == '/v1/patient-avatar') {
+        return request.method == 'PUT'
+            ? http.Response('{"error":"Foto belum dapat disimpan."}', 500)
+            : http.Response('{"avatar":"assets/reference/avatar-2.png"}', 200);
+      }
+      return _profile('ami', 'Ami');
+    });
+    await tester.tap(find.text('Change avatar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Avatar default'));
+    await tester.tap(find.text('Use avatar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    expect(await container.read(secureStoreProvider).read('profile.avatar.ami'),
+        'assets/reference/avatar-2.png');
+    expect(find.text('Perubahan profil tersimpan.'), findsNothing);
+    expect(find.byType(ProfileScreen), findsOneWidget);
   });
 
   testWidgets('saves real profile via PATCH and updates active identity',
