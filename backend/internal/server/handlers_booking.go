@@ -19,30 +19,6 @@ import (
 	"malva/backend/internal/store"
 )
 
-// validateSlot memastikan slot bisa dipesan pasien: masa depan, minimal 24 jam
-// ke depan (sama dengan aturan cancel/reschedule pasien), di dalam jam praktik,
-// bukan hari libur, dan belum terisi.
-func (s *Server) validateSlot(ctx context.Context, professionalID string, start time.Time, durationMinutes int, excludeSessionID ...string) error {
-	if start.Before(clock.Now().Add(-time.Minute)) {
-		return errors.New("slot harus di masa depan")
-	}
-	// Lead time 24 jam: sesi butuh persiapan kedua belah pihak.
-	// Sama dengan aturan cancel/reschedule pasien (<24 jam hangus).
-	if time.Until(start) < 24*time.Hour {
-		return errors.New("booking minimal 24 jam sebelum sesi")
-	}
-	return s.validateSlotFor(ctx, professionalID, "", start, durationMinutes, true, excludeSessionID...)
-}
-
-// validateSlotWindow memeriksa syarat slot yang berlaku untuk SEMUA peran:
-// masa depan, bukan hari libur, di dalam jam praktik, dan belum terisi.
-// Dipisahkan dari validateSlot supaya profesional tetap bisa menjadwalkan
-// atau memindahkan sesi secara mendadak (<24 jam) — mis. kendala di hari-H —
-// tanpa melewati aturan jam praktik/hari libur.
-func (s *Server) validateSlotWindow(ctx context.Context, professionalID string, start time.Time, durationMinutes int, excludeSessionID ...string) error {
-	return s.validateSlotFor(ctx, professionalID, "", start, durationMinutes, false, excludeSessionID...)
-}
-
 var errPracticeWindow = errors.New("slot di luar jam praktik profesional")
 var errPracticeDayOff = errors.New("profesional libur pada tanggal tersebut")
 

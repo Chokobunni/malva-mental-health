@@ -142,7 +142,8 @@ Future<_Client> _mount(WidgetTester tester,
 void main() {
   setUpAll(initializeWib);
 
-  testWidgets('availability summary marks disabled shared slots in each category',
+  testWidgets(
+      'availability summary marks disabled shared slots in each category',
       (tester) async {
     await _mount(tester, dashboard: true, includeSchedules: true);
     await tester.scrollUntilVisible(find.text('Ketersediaan & harga'), 250,
