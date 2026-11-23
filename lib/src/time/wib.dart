@@ -81,6 +81,15 @@ String formatWibDate(DateTime value) {
   return '${_two(d.day)}/${_two(d.month)}/${d.year}';
 }
 
+/// Nama hari dan tanggal di kalender WIB.
+String wibWeekdayDate(DateTime value) =>
+    '${wibWeekdayName(value)}, ${formatWibDate(value)}';
+
+String wibWeekdayName(DateTime value) {
+  const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+  return days[toWib(value).weekday - 1];
+}
+
 /// Tanggal + jam `dd/MM/yyyy HH:mm` dalam WIB.
 String formatWibDateTime(DateTime value) {
   final d = toWib(value);

@@ -14,6 +14,7 @@ build/
 !assets/prescription/*.png
 !assets/checkin/*.png
 !assets/care/*.png
+!assets/reference/*.png
 !docs/*.png
 !web/icons/*.png
 !android/app/src/main/res/**/*.png

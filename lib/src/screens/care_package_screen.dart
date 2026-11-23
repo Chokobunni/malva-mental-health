@@ -907,6 +907,8 @@ class CareSessionSchedulerSheet extends StatefulWidget {
     required this.professionalId,
     this.expiresAt,
     this.initialType = 'video',
+    this.serviceCategory = 'package',
+    this.excludedSlots = const {},
   });
 
   final MalvaApiClient apiClient;
@@ -914,6 +916,8 @@ class CareSessionSchedulerSheet extends StatefulWidget {
   final String professionalId;
   final DateTime? expiresAt;
   final String initialType;
+  final String serviceCategory;
+  final Set<String> excludedSlots;
 
   @override
   State<CareSessionSchedulerSheet> createState() =>
@@ -961,6 +965,7 @@ class CareSessionSchedulerSheetState extends State<CareSessionSchedulerSheet> {
       final days = await widget.apiClient.getDoctorAvailability(
         accessToken: widget.accessToken,
         userId: widget.professionalId,
+        serviceCategory: widget.serviceCategory,
       );
       if (!mounted) return;
       final exp = widget.expiresAt;
@@ -984,6 +989,32 @@ class CareSessionSchedulerSheetState extends State<CareSessionSchedulerSheet> {
         _error = friendlyErrorMessage(e);
       });
     }
+  }
+
+  Future<void> _pickCalendar() async {
+    final expires = widget.expiresAt;
+    if (expires == null) return;
+    final now = ServerClock.now();
+    final first = DateTime(now.year, now.month, now.day);
+    final wibExpiry = toWib(expires);
+    final last = DateTime(wibExpiry.year, wibExpiry.month, wibExpiry.day);
+    if (last.isBefore(first)) return;
+    final current = parseWibStored(_date);
+    final initial = current == null
+        ? first
+        : DateTime(current.year, current.month, current.day);
+    final chosen = await showDatePicker(
+      context: context,
+      firstDate: first,
+      lastDate: last,
+      initialDate:
+          initial.isBefore(first) || initial.isAfter(last) ? first : initial,
+    );
+    if (chosen == null || !mounted) return;
+    setState(() {
+      _date = wibDateKey(wibFromParts(chosen.year, chosen.month, chosen.day));
+      _slot = null;
+    });
   }
 
   @override
@@ -1046,18 +1077,24 @@ class CareSessionSchedulerSheetState extends State<CareSessionSchedulerSheet> {
                       style: TextStyle(fontSize: 11, color: Color(0xFF7E818D))),
                 ],
                 const SizedBox(height: 20),
-                const Text('PILIH HARI & TANGGAL',
-                    style: TextStyle(
-                        color: Color(0xFF999DA8),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: .4)),
+                Row(children: [
+                  const Expanded(
+                    child: Text('Pilih tanggal',
+                        style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                  if (widget.expiresAt != null)
+                    TextButton.icon(
+                      onPressed: _loadingDays ? null : _pickCalendar,
+                      icon: const Icon(Icons.calendar_today_outlined, size: 16),
+                      label: const Text('Kalender'),
+                    ),
+                ]),
                 const SizedBox(height: 10),
                 if (_loadingDays)
                   const Center(child: CircularProgressIndicator())
                 else if (_days.isEmpty)
                   const Text(
-                      'Tidak ada hari tersedia sebelum paket kedaluwarsa.')
+                      'Belum ada slot dalam daftar. Cek tanggal lain di kalender.')
                 else
                   SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -1101,12 +1138,16 @@ class CareSessionSchedulerSheetState extends State<CareSessionSchedulerSheet> {
                           fontWeight: FontWeight.w800,
                           letterSpacing: .4)),
                   const SizedBox(height: 10),
+                  Text(_shortDay(_date!)),
                   _FirstSessionSlots(
+                      key: ValueKey(_date),
                       apiClient: widget.apiClient,
                       accessToken: widget.accessToken,
                       professionalId: widget.professionalId,
                       date: _date!,
+                      serviceCategory: widget.serviceCategory,
                       expiresAt: widget.expiresAt,
+                      excludedSlots: widget.excludedSlots,
                       selected: _slot,
                       onSelect: (time) => setState(() => _slot = time)),
                 ],
@@ -1182,6 +1223,7 @@ class _PackageFirstSessionSheetState extends State<PackageFirstSessionSheet> {
       final days = await widget.apiClient.getDoctorAvailability(
         accessToken: widget.accessToken,
         userId: widget.professionalId,
+        serviceCategory: 'package',
       );
       if (!mounted) return;
       final filtered = days.where((d) => d.bookable).toList(growable: false);
@@ -1304,6 +1346,7 @@ class _PackageFirstSessionSheetState extends State<PackageFirstSessionSheet> {
 /// Item slot bebas pada hari terpilih (dipakai ulang di sheet ini).
 class _FirstSessionSlots extends StatefulWidget {
   const _FirstSessionSlots({
+    super.key,
     required this.apiClient,
     required this.accessToken,
     required this.professionalId,
@@ -1311,6 +1354,8 @@ class _FirstSessionSlots extends StatefulWidget {
     required this.selected,
     required this.onSelect,
     this.expiresAt,
+    this.serviceCategory = 'package',
+    this.excludedSlots = const {},
   });
 
   final MalvaApiClient apiClient;
@@ -1320,6 +1365,8 @@ class _FirstSessionSlots extends StatefulWidget {
   final String? selected;
   final ValueChanged<String> onSelect;
   final DateTime? expiresAt;
+  final String serviceCategory;
+  final Set<String> excludedSlots;
 
   @override
   State<_FirstSessionSlots> createState() => _FirstSessionSlotsState();
@@ -1343,6 +1390,7 @@ class _FirstSessionSlotsState extends State<_FirstSessionSlots> {
   }
 
   Future<void> _load() async {
+    final date = widget.date;
     setState(() {
       _loading = true;
       _error = null;
@@ -1351,15 +1399,16 @@ class _FirstSessionSlotsState extends State<_FirstSessionSlots> {
       final slots = await widget.apiClient.getDoctorAvailableSlots(
         accessToken: widget.accessToken,
         userId: widget.professionalId,
-        date: widget.date,
+        date: date,
+        serviceCategory: widget.serviceCategory,
       );
-      if (!mounted) return;
+      if (!mounted || date != widget.date) return;
       setState(() {
         _slots = slots;
         _loading = false;
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || date != widget.date) return;
       setState(() {
         _loading = false;
         _error = friendlyErrorMessage(e);
@@ -1376,7 +1425,9 @@ class _FirstSessionSlotsState extends State<_FirstSessionSlots> {
               color: MalvaColors.danger, fontWeight: FontWeight.w700));
     }
     final free = _slots.where((s) {
-      if (!s.available) return false;
+      if (!s.available ||
+          widget.excludedSlots.contains('${widget.date}T${s.time}'))
+        return false;
       final expires = widget.expiresAt;
       if (expires == null) return true;
       final starts = parseWibStored('${widget.date}T${s.time}');

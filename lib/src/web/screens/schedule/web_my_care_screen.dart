@@ -177,6 +177,11 @@ class _WebMyCareScreenState extends ConsumerState<WebMyCareScreen> {
       context: context,
       builder: (BuildContext dialogContext) => _WebRescheduleDialog(
         professionalId: session.professionalId,
+        serviceCategory: session.packageId != null
+            ? 'package'
+            : session.sessionType == 'chat'
+                ? 'quick_chat'
+                : 'quick_video',
       ),
     );
     if (picked == null || !mounted) return;
@@ -535,9 +540,11 @@ class _WebSessionCard extends StatelessWidget {
 
 /// Dialog pindah jadwal: pilih tanggal (7 hari) + slot tersedia.
 class _WebRescheduleDialog extends ConsumerStatefulWidget {
-  const _WebRescheduleDialog({required this.professionalId});
+  const _WebRescheduleDialog(
+      {required this.professionalId, required this.serviceCategory});
 
   final String professionalId;
+  final String serviceCategory;
 
   @override
   ConsumerState<_WebRescheduleDialog> createState() =>
@@ -569,6 +576,7 @@ class _WebRescheduleDialogState extends ConsumerState<_WebRescheduleDialog> {
             accessToken: _token.isEmpty ? null : _token,
             userId: widget.professionalId,
             date: _date,
+            serviceCategory: widget.serviceCategory,
           );
       if (!mounted) return;
       setState(() {

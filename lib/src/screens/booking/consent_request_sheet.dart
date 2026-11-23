@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models.dart';
 import '../../providers/providers.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
@@ -28,6 +29,7 @@ Future<bool> showConsentRequestSheet({
   required BuildContext context,
   required String professionalId,
   bool oneTime = false,
+  AuthSession? Function()? ownerSession,
 }) async {
   final result = await showModalBottomSheet<bool>(
     context: context,
@@ -37,18 +39,21 @@ Future<bool> showConsentRequestSheet({
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
     ),
-    builder: (sheetContext) =>
-        _ConsentRequestSheet(professionalId: professionalId, oneTime: oneTime),
+    builder: (sheetContext) => _ConsentRequestSheet(
+        professionalId: professionalId,
+        oneTime: oneTime,
+        ownerSession: ownerSession),
   );
   return result == true;
 }
 
 class _ConsentRequestSheet extends ConsumerStatefulWidget {
   const _ConsentRequestSheet(
-      {required this.professionalId, this.oneTime = false});
+      {required this.professionalId, this.oneTime = false, this.ownerSession});
 
   final String professionalId;
   final bool oneTime;
+  final AuthSession? Function()? ownerSession;
 
   @override
   ConsumerState<_ConsentRequestSheet> createState() =>
@@ -213,12 +218,21 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
     );
   }
 
+  bool get _ownerValid =>
+      widget.ownerSession == null || widget.ownerSession!() != null;
+
   Future<void> _save() async {
+    if (!_ownerValid) {
+      Navigator.pop(context, false);
+      return;
+    }
     setState(() {
       _isSaving = true;
       _error = null;
     });
-    final rawToken = ref.read(currentSessionProvider)?.accessToken;
+    final rawToken = widget.ownerSession == null
+        ? ref.read(currentSessionProvider)?.accessToken
+        : widget.ownerSession!()?.accessToken;
     final accessToken =
         (rawToken == null || rawToken.isEmpty) ? null : rawToken;
     if (accessToken == null || widget.professionalId.isEmpty) {
@@ -249,9 +263,15 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
             shareGoals: _goals,
             shareTherapyRecords: _therapyHistory,
           );
+      if (!mounted) return;
+      if (!_ownerValid) {
+        Navigator.pop(context, false);
+        return;
+      }
       await _saveLocalPreferences();
       if (!mounted) return;
-      Navigator.pop(context, true);
+      Navigator.pop(context, _ownerValid);
+      if (!_ownerValid) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(widget.oneTime

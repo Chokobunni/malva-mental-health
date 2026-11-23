@@ -58,6 +58,30 @@ func TestPackageBookingUsesSelectedPackageAndRetries(t *testing.T) {
 	}
 }
 
+func TestPackageBookingRejectsFirstSlotBeyondValidity(t *testing.T) {
+	db, st := openOnboardingTestStore(t)
+	ctx := context.Background()
+	patient := createIdentityTestUser(t, db, st, "patient", nil)
+	prof := verifiedProfessional(t, db, st)
+	srv := newOnboardingTestServer(db)
+	srv.calendar = &fakeMeetCalendar{}
+	pkg, err := st.CreateCarePackage(ctx, store.CarePackage{PatientID: patient.ID, ProfessionalID: prof.ID, Price: 100000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = db.Exec("DELETE FROM care_packages WHERE id=$1", pkg.ID) })
+	distant := clock.Now().AddDate(0, 0, pkg.ValidityDays+2)
+	if _, err := db.Exec(`INSERT INTO professional_schedules(professional_id,day_of_week,start_time,end_time) VALUES($1,$2,'09:00','13:00')`, prof.ID, int(distant.Weekday())); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"package_id":%q,"service_type":"package_session","session_type":"video","booking_date":%q,"slot_time":"10:00"}`, pkg.ID, distant.Format("2006-01-02"))
+	rec := httptest.NewRecorder()
+	srv.createBooking(rec, httptest.NewRequest("POST", "/v1/bookings", strings.NewReader(body)), auth.Claims{Subject: patient.ID, Role: "patient"})
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), store.ErrCarePackageExpired.Error()) {
+		t.Fatalf("out-of-validity booking = %d %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestLegacyResumeBindsSelectedPackageAmongDuplicatePendingPurchases(t *testing.T) {
 	db, st := openOnboardingTestStore(t)
 	patient := createIdentityTestUser(t, db, st, "patient", nil)

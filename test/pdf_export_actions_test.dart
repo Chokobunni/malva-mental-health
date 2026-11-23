@@ -33,7 +33,7 @@ class _PdfPort implements FileExporter {
 }
 
 void main() {
-  testWidgets('all five export actions generate actual PDF files',
+  testWidgets('all six export actions generate actual PDF files',
       (tester) async {
     final port = _PdfPort();
     await tester.pumpWidget(ProviderScope(
@@ -46,6 +46,7 @@ void main() {
       'Export Screening Results': 'screenings',
       'Export Medication Log': 'medication_log',
       'Export Diary Entries': 'diary',
+      'Export Goals & Habits': 'goals_habits',
       'Export All Data (PDF)': 'full_export',
     };
     for (final action in actions.entries) {
@@ -55,7 +56,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(port.names.last, 'malva_${action.value}.pdf');
     }
-    expect(port.names.length, 5);
+    expect(port.names.length, 6);
     expect(find.text('Pengaturan Privasi'), findsNothing);
     expect(find.byType(SwitchListTile), findsNothing);
     expect(find.text('Consent Management'), findsOneWidget);

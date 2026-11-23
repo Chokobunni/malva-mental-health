@@ -11,6 +11,7 @@ import '../widgets/friendly_error.dart';
 import '../widgets/care_reference_widgets.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/professional_avatar.dart';
+import 'booking/doctor_discovery_screen.dart';
 import 'chat_screen.dart';
 import 'notifications_screen.dart';
 import 'settings_screens.dart';
@@ -146,7 +147,7 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
               CarePageHeader(
                 title: 'Messages',
                 subtitle: 'Lihat percakapan aktif dan riwayat chat.',
-                name: _session?.displayName ?? '',
+                session: _session,
                 onNotifications: () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -188,6 +189,35 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
                                 label: const Text('Coba Lagi'),
                               ),
                             ],
+                          ),
+                        )
+                      else if (_links.isEmpty && !isPro)
+                        CareIllustratedCard(
+                          asset: 'assets/reference/messages-empty.png',
+                          title: 'Belum ada percakapan',
+                          subtitle:
+                              'Hubungkan akun dengan profesional untuk mulai chat.',
+                          action: Align(
+                            child: SizedBox(
+                              width: 224,
+                              child: FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xff681477),
+                                  minimumSize: const Size(0, 44),
+                                ),
+                                iconAlignment: IconAlignment.end,
+                                icon: const Icon(Icons.arrow_forward_rounded),
+                                label: const Text('Cari profesional'),
+                                onPressed: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => DoctorDiscoveryScreen(
+                                        session: _session,
+                                        apiClient: widget.apiClient,
+                                      ),
+                                    )),
+                              ),
+                            ),
                           ),
                         )
                       else if (_links.isEmpty)

@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 // `hide PickedFile`: platform interface mengekspor PickedFile-nya sendiri yang
 // bertabrakan dengan PickedFile (port) di contracts/ports.dart.
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart'
@@ -62,6 +65,18 @@ class _FakeApi extends MalvaApiClient {
   _FakeApi() : super(baseUrl: 'http://backend.test');
 
   @override
+  Future<BackendUserProfile> fetchUserProfile({
+    required String accessToken,
+  }) async =>
+      const BackendUserProfile(
+        id: 'test-professional',
+        email: 'pro@malva.app',
+        role: 'professional',
+        displayName: 'dr. Malva',
+        dateOfBirth: '1990-03-21',
+      );
+
+  @override
   Future<BackendProfessionalCredential?> getMyCredentials({
     required String accessToken,
   }) async =>
@@ -117,6 +132,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.text('21/03/1990'), findsOneWidget);
+      expect(find.text('Simpan Profil'), findsOneWidget);
+
       final gallery = find.text('Pilih dari Galeri');
       expect(gallery, findsOneWidget);
 
@@ -128,6 +146,72 @@ void main() {
       expect(picker.maxWidth, 1024);
       expect(picker.maxHeight, 1024);
       expect(picker.imageQuality, 85);
+    });
+
+    testWidgets('saves the selected calendar day through the account API',
+        (tester) async {
+      String? savedBirthDate;
+      var credentialSaves = 0;
+      final api = MalvaApiClient(
+        baseUrl: 'http://backend.test',
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/v1/me') {
+            if (request.method == 'PATCH') {
+              final body = jsonDecode(request.body) as Map<String, dynamic>;
+              savedBirthDate = body['date_of_birth'] as String?;
+            }
+            return http.Response(
+                jsonEncode({
+                  'user': {
+                    'id': 'test-professional',
+                    'date_of_birth': savedBirthDate ?? '1990-03-21',
+                  },
+                }),
+                200);
+          }
+          if (request.method == 'POST') credentialSaves++;
+          return http.Response(
+              jsonEncode({
+                'credential': {
+                  'id': 'test-credentials',
+                  'user_id': 'test-professional',
+                },
+              }),
+              200);
+        }),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: ProfessionalProfileEditorScreen(
+              session: const AuthSession(
+                role: UserRole.professional,
+                identifier: 'pro@malva.app',
+                displayName: 'dr. Malva',
+                accessToken: 'token_123',
+              ),
+              apiClient: api,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('21/03/1990'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('1990').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('22').last);
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('22/03/1990'), findsOneWidget);
+      expect(savedBirthDate, isNull);
+      await tester.tap(find.text('Simpan Profil'));
+      await tester.pumpAndSettle();
+      expect(savedBirthDate, '1990-03-22');
+      expect(credentialSaves, 1);
+      expect(find.text('Profil berhasil disimpan.'), findsOneWidget);
     });
   });
 }

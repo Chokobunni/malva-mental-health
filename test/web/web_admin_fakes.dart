@@ -477,6 +477,7 @@ class FakeAdminApi extends MalvaApiClient {
     String? accessToken,
     required String userId,
     required String date,
+    String? serviceCategory,
   }) async {
     _maybeFail();
     return slots;
@@ -516,6 +517,7 @@ class FakeAdminApi extends MalvaApiClient {
     required String slotTime,
     String sessionType = 'chat',
     int durationMinutes = 30,
+    List<String>? additionalSessions,
   }) async {
     _maybeFail();
     bookingCreates++;

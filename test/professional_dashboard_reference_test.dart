@@ -212,7 +212,7 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Ketersediaan & harga'));
     await tester.pumpAndSettle();
-    expect(find.text('09:00–16:00 (60 mnt)'), findsNWidgets(2));
+    expect(find.text('09:00–16:00 (60 mnt)'), findsNWidgets(6));
     await tester.drag(find.byType(ListView).first, const Offset(0, 2000));
     await tester.pumpAndSettle();
     await _capture(tester, 'professional-reference.png');
@@ -233,7 +233,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ketersediaan & harga'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Paket 4 sesi / 6 minggu:'));
+    await tester.ensureVisible(find.text('Continuous Package'));
     await tester.pumpAndSettle();
     await _capture(tester, 'professional-narrow-availability.png');
     expect(tester.takeException(), isNull);

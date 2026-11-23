@@ -1,11 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../time/wib.dart';
 import '../theme.dart';
+import '../widgets/account_avatar.dart';
+import '../widgets/care_reference_widgets.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/password_field.dart';
@@ -23,6 +28,7 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final active = session ?? ref.watch(currentSessionProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
@@ -56,25 +62,27 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 22),
           const SectionLabel('Account'),
-          ActionTile(
-            icon: Icons.notifications_outlined,
-            title: 'Notifications',
-            subtitle: 'Atur notifikasi aplikasi',
-            color: MalvaColors.orchid,
-            onTap: () => _soon(context),
-          ),
-          const SizedBox(height: 10),
-          ActionTile(
-            icon: Icons.edit_rounded,
-            title: 'Edit profile',
-            subtitle: 'Nama dan tanggal lahir',
-            color: MalvaColors.mint,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+          if (active?.role != UserRole.patient) ...[
+            ActionTile(
+              icon: Icons.notifications_outlined,
+              title: 'Notifications',
+              subtitle: 'Atur notifikasi aplikasi',
+              color: MalvaColors.orchid,
+              onTap: () => _soon(context),
             ),
-          ),
-          const SizedBox(height: 10),
+            const SizedBox(height: 10),
+            ActionTile(
+              icon: Icons.edit_rounded,
+              title: 'Edit profile',
+              subtitle: 'Nama dan tanggal lahir',
+              color: MalvaColors.mint,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           ActionTile(
             icon: Icons.security_rounded,
             title: 'Security',
@@ -83,14 +91,14 @@ class SettingsScreen extends ConsumerWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (_) => SecurityScreen(session: session)),
+                  builder: (_) => SecurityScreen(session: active)),
             ),
           ),
           const SizedBox(height: 10),
           // Kelola akun Google (pasien & profesional) — hubungkan Gmail,
           // dan untuk profesional aktifkan Google Meet.
-          if (session != null) ...[
-            _GoogleAccountTile(session: session!),
+          if (active != null) ...[
+            _GoogleAccountTile(session: active),
             const SizedBox(height: 10),
           ],
           ActionTile(
@@ -133,6 +141,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _loading = true;
   bool _saving = false;
   String? _error;
+  String? _avatarDraft;
 
   @override
   void initState() {
@@ -151,6 +160,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final generation = ++_generation;
     _name.text = session?.displayName ?? '';
     _dob.clear();
+    _avatarDraft = null;
     _error = null;
     _saving = false;
     _loading = true;
@@ -205,6 +215,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       dob = wibDateKey(date);
     }
     final generation = _generation;
+    final draft = _avatarDraft;
+    final avatarStore = ref.read(secureStoreProvider);
     setState(() {
       _saving = true;
       _error = null;
@@ -215,6 +227,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (!_ownsRequest(session, generation)) return;
       if (profile.id != session.backendUserId) {
         throw const AuthFailure('Profil tidak sesuai dengan akun aktif.');
+      }
+      if (draft != null) {
+        await avatarStore.write(profileAvatarKey(profile.id), draft);
+        if (!_ownsRequest(session, generation)) return;
+        ref.invalidate(patientAvatarProvider(profile.id));
       }
       final current = ref.read(currentSessionProvider)!;
       final updated = AuthSession(
@@ -244,6 +261,43 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
+  Future<void> _pickBirthDate() async {
+    final raw = _dob.text.split('/');
+    final current = raw.length == 3
+        ? parseWibStored('${raw[2]}-${raw[1]}-${raw[0]}')
+        : null;
+    final now = wibNow();
+    final generation = _generation;
+    final result = await showDatePicker(
+      context: context,
+      initialDate:
+          current != null && current.year >= 1900 && !current.isAfter(now)
+              ? DateTime(current.year, current.month, current.day)
+              : DateTime(now.year - 18, now.month, now.day),
+      firstDate: DateTime(1900),
+      lastDate: DateTime(now.year, now.month, now.day),
+    );
+    if (mounted && generation == _generation && result != null) {
+      _dob.text =
+          formatWibDate(wibFromParts(result.year, result.month, result.day));
+    }
+  }
+
+  Future<void> _chooseAvatar(AuthSession session) async {
+    final generation = _generation;
+    final current = session.backendUserId;
+    if (current == null) return;
+    final initial =
+        _avatarDraft ?? ref.read(patientAvatarProvider(current)).valueOrNull;
+    final chosen = await showDialog<String>(
+      context: context,
+      builder: (context) => _AvatarPicker(session: session, initial: initial),
+    );
+    if (chosen != null && _ownsRequest(session, generation)) {
+      setState(() => _avatarDraft = chosen);
+    }
+  }
+
   @override
   void dispose() {
     _name.dispose();
@@ -260,45 +314,302 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         _loadProfile(next);
       }
     });
+    final patient = session?.role == UserRole.patient;
+    final disabled = _loading || _saving;
+    final fieldBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: careCardBorder,
+    );
+    InputDecoration patientField({String? hint, Widget? suffix}) =>
+        InputDecoration(
+          filled: false,
+          enabledBorder: fieldBorder,
+          disabledBorder: fieldBorder,
+          focusedBorder: fieldBorder.copyWith(
+              borderSide: const BorderSide(color: MalvaColors.seed)),
+          hintText: hint,
+          suffixIcon: suffix,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        );
     return Scaffold(
+      backgroundColor: carePageColor,
       appBar: AppBar(
         title: const Text('Profile'),
+        centerTitle: true,
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          const SectionLabel('Name'),
-          TextField(
-            controller: _name,
-            enabled: !_loading && !_saving,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(labelText: 'Name'),
-          ),
-          const SizedBox(height: 10),
-          const SectionLabel('Date of Birth'),
-          TextField(
-            controller: _dob,
-            enabled: !_loading && !_saving,
-            keyboardType: TextInputType.datetime,
-            decoration: const InputDecoration(
-              labelText: 'Date of Birth',
-              hintText: 'DD/MM/YYYY',
+          if (patient) ...[
+            const SizedBox(height: 10),
+            Center(
+                child: AccountAvatar(
+                    session: session, avatar: _avatarDraft, size: 120)),
+            const SizedBox(height: 14),
+            Center(
+              child: OutlinedButton.icon(
+                onPressed: disabled || session?.backendUserId == null
+                    ? null
+                    : () => _chooseAvatar(session!),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Change avatar'),
+              ),
+            ),
+            const SizedBox(height: 28),
+          ],
+          SoftCard(
+            color: Colors.white,
+            outline: careCardBorder,
+            radius: 16,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SectionLabel('Name'),
+                Semantics(
+                  label: 'Name',
+                  child: TextField(
+                    key: const ValueKey('profile.name'),
+                    controller: _name,
+                    enabled: !disabled,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: patientField(),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const SectionLabel('Date of Birth'),
+                Semantics(
+                  label: 'Date of Birth',
+                  child: TextField(
+                    key: const ValueKey('profile.dateOfBirth'),
+                    controller: _dob,
+                    enabled: !disabled,
+                    keyboardType: TextInputType.datetime,
+                    decoration: patientField(
+                      hint: 'DD/MM/YYYY',
+                      suffix: IconButton(
+                        tooltip: 'Pilih tanggal lahir',
+                        onPressed: disabled ? null : _pickBirthDate,
+                        icon: const Icon(Icons.calendar_today_outlined,
+                            color: MalvaColors.seed, size: 21),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 18),
           if (_loading) const LinearProgressIndicator(),
-          if (_error != null)
-            Text(_error!, style: const TextStyle(color: MalvaColors.danger)),
-          FilledButton(
-            onPressed:
-                _loading || _saving || session?.accessToken?.isNotEmpty != true
+        ],
+      ),
+      bottomNavigationBar: Material(
+        color: Colors.white,
+        child: SafeArea(
+          minimum: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(_error!,
+                      style: const TextStyle(color: MalvaColors.danger)),
+                ),
+              FilledButton(
+                onPressed: disabled || session?.accessToken?.isNotEmpty != true
                     ? null
                     : _saveProfile,
-            child: Text(_saving ? 'Menyimpan...' : 'Save changes'),
+                child: Text(_saving ? 'Menyimpan...' : 'Save changes'),
+              ),
+            ],
           ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AvatarPicker extends ConsumerStatefulWidget {
+  const _AvatarPicker({required this.session, this.initial});
+
+  final AuthSession session;
+  final String? initial;
+
+  @override
+  ConsumerState<_AvatarPicker> createState() => _AvatarPickerState();
+}
+
+class _AvatarPickerState extends ConsumerState<_AvatarPicker> {
+  late String selected = widget.initial ?? profileAvatarAssets.first;
+  late String? uploaded = widget.initial != defaultProfileAvatar &&
+          !profileAvatarAssets.contains(widget.initial)
+      ? widget.initial
+      : null;
+  bool picking = false;
+  String? error;
+
+  Future<void> _upload() async {
+    setState(() {
+      picking = true;
+      error = null;
+    });
+    try {
+      final file = await ref.read(filePickerProvider).pick(
+            'image',
+            maxWidth: 256,
+            maxHeight: 256,
+            imageQuality: 78,
+          );
+      if (file == null || !mounted) return;
+      if (file.size > 192 * 1024) {
+        setState(() => error = 'Ukuran foto masih terlalu besar.');
+        return;
+      }
+      setState(() {
+        selected = base64Encode(file.bytes);
+        uploaded = selected;
+      });
+    } on Object catch (failure) {
+      if (mounted) setState(() => error = friendlyErrorMessage(failure));
+    } finally {
+      if (mounted) setState(() => picking = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final options = [
+      defaultProfileAvatar,
+      ...profileAvatarAssets,
+      if (uploaded != null) uploaded!,
+    ];
+    final shape =
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(10));
+    final outlineStyle = OutlinedButton.styleFrom(
+      shape: shape,
+      side: careCardBorder.copyWith(color: MalvaColors.seed),
+      minimumSize: const Size(0, 42),
+    );
+    return AlertDialog(
+      backgroundColor: Colors.white,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      titlePadding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+      contentPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      title: const Text('Change avatar',
+          style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: 320,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LayoutBuilder(builder: (context, constraints) {
+                final cellWidth = (constraints.maxWidth - 20) / 3;
+                final avatarSize = (cellWidth - 8).clamp(36.0, 86.0).toDouble();
+                return Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final (i, option) in options.indexed)
+                      SizedBox(
+                        width: cellWidth,
+                        child: Center(
+                          child: Semantics(
+                            selected: selected == option,
+                            button: true,
+                            label: option == defaultProfileAvatar
+                                ? 'Avatar default'
+                                : 'Avatar $i',
+                            child: InkWell(
+                              onTap: picking
+                                  ? null
+                                  : () => setState(() => selected = option),
+                              customBorder: const CircleBorder(),
+                              child: Stack(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: selected == option
+                                            ? MalvaColors.seed
+                                            : Colors.transparent,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: AccountAvatar(
+                                        session: widget.session,
+                                        avatar: option,
+                                        size: avatarSize),
+                                  ),
+                                  if (selected == option)
+                                    const Positioned(
+                                      right: 1,
+                                      bottom: 2,
+                                      child: CircleAvatar(
+                                        radius: 9,
+                                        backgroundColor: MalvaColors.seed,
+                                        child: Icon(Icons.check_rounded,
+                                            size: 13, color: Colors.white),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              }),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: outlineStyle,
+                  onPressed: picking ? null : _upload,
+                  icon: const Icon(Icons.image_outlined),
+                  label: const Text('Upload photo'),
+                ),
+              ),
+              if (error != null)
+                Text(error!, style: const TextStyle(color: MalvaColors.danger)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: outlineStyle,
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        shape: shape,
+                        minimumSize: const Size(0, 42),
+                        backgroundColor: const Color(0xff77138d),
+                      ),
+                      onPressed: picking
+                          ? null
+                          : () => Navigator.pop(context, selected),
+                      child:
+                          const Text('Use avatar', textAlign: TextAlign.center),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

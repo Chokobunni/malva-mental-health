@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../models.dart';
 import '../time/wib.dart';
+import 'goal_history.dart';
 import 'mood_insights.dart';
 
 class ScreeningPdfScore {
@@ -58,6 +59,10 @@ Future<Uint8List> buildHealthReportPdf({
   List<DiaryEntry>? diaries,
   String? patientName,
   DateTime? now,
+  DateTime? periodStart,
+  DateTime? periodEnd,
+  Map<String, List<GoalHistoryEntry>>? goalHistory,
+  Map<String, Uint8List> diaryThumbnails = const {},
 }) async {
   final at = now ?? wibNow();
   final font =
@@ -85,17 +90,20 @@ Future<Uint8List> buildHealthReportPdf({
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(title,
-                  style: pw.TextStyle(
+                  style: const pw.TextStyle(
                       fontSize: 19,
                       fontWeight: pw.FontWeight.bold,
-                      color: moods != null ? _teal : _ink)),
+                      color: _teal)),
               pw.SizedBox(height: 6),
-              pw.Text('Diekspor: ${formatWibDateTime(at)} WIB',
+              pw.Text('Diekspor: ${wibWeekdayDate(at)} ${_time(at)} WIB',
                   style: const pw.TextStyle(
                       fontSize: 9, color: PdfColors.blueGrey700)),
               if (patientName != null)
                 pw.Text('Nama: $patientName',
                     style: const pw.TextStyle(fontSize: 9)),
+              if (periodStart != null && periodEnd != null)
+                _text(
+                    'Periode (WIB): ${wibWeekdayDate(periodStart)} - ${wibWeekdayDate(periodEnd)}'),
               pw.SizedBox(height: 8),
               pw.Divider(color: _border),
             ])),
@@ -107,10 +115,11 @@ Future<Uint8List> buildHealthReportPdf({
           style: const pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey700))
     ]),
     build: (_) => [
-      if (moods != null) ..._moodSection(moods, emoji, at),
+      if (moods != null) ..._moodSection(moods, emoji, periodEnd ?? at),
       if (screenings != null) ..._screeningSection(screenings),
       if (medicationLogs != null) ..._medicationSection(medicationLogs),
-      if (diaries != null) ..._diarySection(diaries),
+      if (diaries != null) ..._diarySection(diaries, diaryThumbnails),
+      if (goalHistory != null) ..._goalSection(goalHistory),
     ],
   ));
   return document.save();
@@ -142,7 +151,10 @@ pw.Widget _badge(String label, int rank) {
 }
 
 pw.Widget _table(List<String> headers, List<List<pw.Widget>> rows,
-        Map<int, pw.TableColumnWidth> widths) =>
+        Map<int, pw.TableColumnWidth> widths,
+        {pw.TableCellVerticalAlignment alignment =
+            pw.TableCellVerticalAlignment.middle,
+        List<bool>? dayBands}) =>
     pw.Table(
       columnWidths: widths,
       border: pw.TableBorder.all(color: _border, width: .5),
@@ -155,10 +167,19 @@ pw.Widget _table(List<String> headers, List<List<pw.Widget>> rows,
             ]),
         for (var i = 0; i < rows.length; i++)
           pw.TableRow(
-              decoration:
-                  pw.BoxDecoration(color: i.isOdd ? _stripe : PdfColors.white),
-              verticalAlignment: pw.TableCellVerticalAlignment.middle,
-              children: [for (final child in rows[i]) _cell(child)]),
+              decoration: pw.BoxDecoration(
+                  color: (dayBands?[i] ?? i.isOdd) ? _stripe : PdfColors.white),
+              verticalAlignment: alignment,
+              children: [
+                for (final child in rows[i])
+                  if (dayBands == null)
+                    _cell(child)
+                  else
+                    pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        child: child)
+              ]),
       ],
     );
 
@@ -218,8 +239,7 @@ Iterable<pw.Widget> _screeningSection(List<ScreeningPdfRow> rows) sync* {
   ], [
     for (final row in rows)
       [
-        _text(
-            row.date == null ? 'Tidak tercatat' : formatWibDateTime(row.date!)),
+        _text(row.date == null ? 'Tidak tercatat' : _dateTime(row.date!)),
         _text(row.title),
         pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           for (final score in row.scores) ...[
@@ -262,7 +282,7 @@ Iterable<pw.Widget> _moodSection(List<MoodEntry> entries,
   ], [
     for (final entry in sorted)
       [
-        _text(formatWibDateTime(entry.date)),
+        _text(_dateTime(entry.date)),
         pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.Image(emoji[entry.mood]!, width: 19, height: 19),
           pw.SizedBox(height: 3),
@@ -294,7 +314,8 @@ Iterable<pw.Widget> _moodSection(List<MoodEntry> entries,
       'Rata-rata 7 hari. Mood dinormalisasi dari 1-5; energi, kecemasan, iritabilitas dari 0-10; tidur dari 0-12 jam. Kecemasan/iritabilitas lebih tinggi berarti gejala lebih kuat.');
 }
 
-Iterable<pw.Widget> _diarySection(List<DiaryEntry> entries) sync* {
+Iterable<pw.Widget> _diarySection(
+    List<DiaryEntry> entries, Map<String, Uint8List> thumbnails) sync* {
   yield _heading('Catatan Harian');
   final sorted = [...entries]
     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -307,18 +328,173 @@ Iterable<pw.Widget> _diarySection(List<DiaryEntry> entries) sync* {
     'JUDUL',
     'ISI DIARY'
   ], [
-    for (final entry in sorted)
-      for (final chunk in _chunks(DiaryContent.parse(entry.note).plainText))
-        [
-          _text(formatWibDateTime(entry.createdAt)),
-          _text(entry.title, bold: true),
-          _text(chunk),
-        ]
+    for (final entry in sorted) ..._diaryRows(entry, thumbnails),
   ], {
     0: const pw.FlexColumnWidth(1.1),
-    1: const pw.FlexColumnWidth(1.2),
-    2: const pw.FlexColumnWidth(3)
-  });
+    1: const pw.FlexColumnWidth(1.4),
+    2: const pw.FlexColumnWidth(3.5)
+  }, alignment: pw.TableCellVerticalAlignment.top);
+}
+
+Iterable<List<pw.Widget>> _diaryRows(
+    DiaryEntry entry, Map<String, Uint8List> thumbnails) sync* {
+  final diary = DiaryContent.parse(entry.note);
+  final text = [
+    if (diary.prompt != null) 'Pertanyaan: ${diary.prompt!.question}',
+    if (diary.text.isNotEmpty) diary.text,
+    if (diary.selfNote.isNotEmpty) 'Pesan penguat diri: ${diary.selfNote}',
+    if (diary.tags.isNotEmpty)
+      diary.tags.map((tag) => tag.startsWith('#') ? tag : '#$tag').join(' '),
+  ].join('\n\n');
+  final chunks = _chunks(text).toList();
+  final media = diary.media;
+  for (var index = 0; index < chunks.length; index++) {
+    yield [
+      _text(index == 0 ? _dateTime(entry.createdAt) : ''),
+      _text(index == 0 ? entry.title : '', bold: true),
+      pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        if (chunks[index].isNotEmpty) _text(chunks[index]),
+        if (index == chunks.length - 1 && media.isNotEmpty)
+          ..._diaryMedia(media.take(2), thumbnails, count: media.length),
+      ]),
+    ];
+  }
+  for (var index = 2; index < media.length; index += 2) {
+    yield [
+      _text(''),
+      _text(''),
+      pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: _diaryMedia(media.skip(index).take(2), thumbnails)),
+    ];
+  }
+}
+
+List<pw.Widget> _diaryMedia(
+        Iterable<DiaryMedia> media, Map<String, Uint8List> thumbnails,
+        {int? count}) =>
+    [
+      if (count != null) ...[
+        pw.SizedBox(height: 8),
+        _text('Lampiran ($count)', bold: true),
+        pw.SizedBox(height: 6),
+      ],
+      pw.Row(children: [
+        for (final item in media) ...[
+          pw.SizedBox(
+              width: 112,
+              child: pw.Column(children: [
+                pw.Container(
+                  width: 112,
+                  height: 78,
+                  alignment: pw.Alignment.center,
+                  padding: const pw.EdgeInsets.all(2),
+                  decoration:
+                      pw.BoxDecoration(border: pw.Border.all(color: _border)),
+                  child: thumbnails[item.url] == null
+                      ? pw.Center(child: _text('Pratinjau tidak tersedia'))
+                      : pw.Image(pw.MemoryImage(thumbnails[item.url]!),
+                          fit: pw.BoxFit.contain),
+                ),
+                pw.SizedBox(height: 3),
+                _text(item.kind == 'drawing' ? 'Gambar' : 'Foto'),
+              ])),
+          pw.SizedBox(width: 8),
+        ],
+      ]),
+    ];
+
+Iterable<pw.Widget> _goalSection(
+    Map<String, List<GoalHistoryEntry>> days) sync* {
+  yield _heading('Goals & Habits');
+  final records = days.values.expand((entries) => entries);
+  yield pw.Container(
+    padding: const pw.EdgeInsets.all(12),
+    decoration: pw.BoxDecoration(
+        color: PdfColors.teal50,
+        border: pw.Border.all(color: _teal, width: .5)),
+    child:
+        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+      _text('${days.length} hari tercatat', bold: true),
+      _text(
+          '${records.where((entry) => entry.log.done).length} dari ${records.length} catatan selesai',
+          bold: true),
+    ]),
+  );
+  if (days.isEmpty) {
+    yield pw.SizedBox(height: 8);
+    yield _text('Belum ada progres tercatat pada rentang ini.');
+    return;
+  }
+  yield _heading('Riwayat progres');
+  final rows = <List<pw.Widget>>[];
+  final bands = <bool>[];
+  var alternate = false;
+  for (final day in days.entries) {
+    for (final entry in day.value) {
+      final entryRows = _goalRows(parseWibStored(day.key)!, entry).toList();
+      rows.addAll(entryRows);
+      bands.addAll(List.filled(entryRows.length, alternate));
+    }
+    alternate = !alternate;
+  }
+  yield _table(
+      ['TANGGAL', 'TARGET / KEBIASAAN', 'JENIS', 'HASIL'],
+      rows,
+      {
+        0: const pw.FlexColumnWidth(1),
+        1: const pw.FlexColumnWidth(2.2),
+        2: const pw.FlexColumnWidth(1),
+        3: const pw.FlexColumnWidth(1),
+      },
+      alignment: pw.TableCellVerticalAlignment.top,
+      dayBands: bands);
+}
+
+Iterable<List<pw.Widget>> _goalRows(
+    DateTime date, GoalHistoryEntry entry) sync* {
+  final details = entry.goal.details;
+  final checklist = details?.method == 'checklist';
+  final numeric = details?.method == 'numeric';
+  final steps = details?.steps ?? [];
+  const stepsPerRow = 8;
+  // A table row must fit on a page even for the longest valid checklist.
+  for (var offset = 0;
+      offset < math.max(steps.length, 1);
+      offset += stepsPerRow) {
+    yield [
+      _text('${wibWeekdayName(date)}\n${formatWibDate(date)}', bold: true),
+      pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        _text(entry.goal.title, bold: true),
+        if (offset == 0 &&
+            details != null &&
+            !numeric &&
+            !checklist &&
+            details.weeklyTarget == null &&
+            details.recurrence == 'weekly')
+          _text(details.scheduleLabel),
+        if (steps.isNotEmpty) ...[
+          pw.SizedBox(height: 3),
+          _text(checklist ? 'Daftar langkah' : 'Rincian aktivitas', bold: true),
+          for (final step in steps.skip(offset).take(stepsPerRow))
+            _text(checklist
+                ? '${entry.log.completedStepIds.contains(step.id) ? "[x]" : "[ ]"} ${step.label}'
+                : '- ${step.label}'),
+        ],
+      ]),
+      _text(numeric
+          ? 'Dengan Nilai'
+          : checklist
+              ? 'Sub-Tugas'
+              : 'Ya / Tidak'),
+      _text(
+          !numeric && !checklist && !entry.log.done
+              ? 'Tidak dilakukan'
+              : goalHistoryResult(entry),
+          bold: entry.log.done,
+          color: entry.log.done ? _teal : null),
+    ];
+  }
 }
 
 Iterable<String> _chunks(String text) sync* {
@@ -331,7 +507,9 @@ Iterable<String> _chunks(String text) sync* {
   for (final rune in text.runes) {
     buffer.add(rune);
     if (rune == 10) breaks++;
-    if (buffer.length >= 350 || breaks >= 8) {
+    if (buffer.length >= 1400 ||
+        breaks >= 24 ||
+        (buffer.length >= 950 && (rune == 32 || rune == 10))) {
       yield String.fromCharCodes(buffer);
       buffer = [];
       breaks = 0;
@@ -339,6 +517,8 @@ Iterable<String> _chunks(String text) sync* {
   }
   if (buffer.isNotEmpty) yield String.fromCharCodes(buffer);
 }
+
+String _dateTime(DateTime time) => '${wibWeekdayDate(time)}\n${_time(time)}';
 
 String _date(DateTime time) {
   final d = toWib(time);
@@ -356,7 +536,7 @@ String _date(DateTime time) {
     'November',
     'Desember'
   ];
-  return '${d.day.toString().padLeft(2, '0')} ${months[d.month - 1]} ${d.year}';
+  return '${wibWeekdayName(d)}, ${d.day.toString().padLeft(2, '0')} ${months[d.month - 1]} ${d.year}';
 }
 
 String _time(DateTime time) {
@@ -430,7 +610,8 @@ pw.Widget _combo(List<MoodEntry> entries, Map<MoodValue, pw.MemoryImage> emoji,
             pw.Positioned(
                 left: 28 + i * 62,
                 top: 186,
-                child: _text('${days[i].date.day}/${days[i].date.month}')),
+                child: _text(
+                    '${wibWeekdayName(days[i].date).substring(0, 3)} ${days[i].date.day}/${days[i].date.month}')),
         ])),
   ]);
 }

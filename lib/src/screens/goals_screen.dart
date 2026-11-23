@@ -5,15 +5,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../models/goal_details.dart';
 import '../providers/providers.dart';
+import '../services/goal_history.dart';
 import '../services/malva_api_client.dart';
 import '../time/wib.dart';
 import '../widgets/friendly_error.dart';
 import 'goals/goal_editor.dart';
+import 'goals/goal_history_panel.dart';
 import 'goals/goal_reference_widgets.dart';
 
 class GoalsScreen extends ConsumerStatefulWidget {
-  const GoalsScreen({super.key, this.now = wibNow});
+  const GoalsScreen({super.key, this.now = wibNow, this.showArchive = false});
   final DateTime Function() now;
+  final bool showArchive;
   @override
   ConsumerState<GoalsScreen> createState() => _GoalsScreenState();
 }
@@ -28,6 +31,80 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   late String _selectedDate, _today, _screenOwner;
   int _loadRequest = 0;
   Timer? _midnight;
+  bool _history = false, _historyLoading = false;
+  String? _historyError;
+  String _historyGoal = '';
+  int _historyDays = 7, _historyRequest = 0;
+  DateTimeRange? _customHistoryRange;
+  List<BackendHabitLog> _historyLogs = const [];
+  late DateTimeRange _loadedHistoryRange;
+
+  DateTimeRange get _historyRange {
+    final end = parseWibStored(_today)!;
+    return _customHistoryRange ??
+        DateTimeRange(
+            start: end.subtract(Duration(days: _historyDays - 1)), end: end);
+  }
+
+  Future<void> _loadHistory() async {
+    if (!_current) return;
+    final token = ref.read(currentSessionProvider)?.accessToken;
+    if (token == null || token.isEmpty) return;
+    final request = ++_historyRequest;
+    final range = _historyRange;
+    setState(() {
+      _historyLoading = true;
+      _historyError = null;
+      _loadedHistoryRange = range;
+    });
+    try {
+      final logs = await loadGoalHistoryLogs(
+          ref.read(apiClientProvider), token, range.start, range.end);
+      if (_current && request == _historyRequest) {
+        setState(() => _historyLogs = logs);
+      }
+    } on Object catch (error) {
+      if (_current && request == _historyRequest) {
+        setState(() => _historyError = friendlyErrorMessage(error));
+      }
+    } finally {
+      if (_current && request == _historyRequest) {
+        setState(() => _historyLoading = false);
+      }
+    }
+  }
+
+  Future<void> _setHistoryRange(int days) async {
+    DateTimeRange? custom;
+    if (days == 0) {
+      final now = parseWibStored(_today)!;
+      final picked = await showDateRangePicker(
+          context: context,
+          firstDate: DateTime(2000),
+          lastDate: DateTime(now.year, now.month, now.day),
+          helpText: 'Rentang riwayat (WIB)');
+      if (picked == null || !_current) return;
+      custom = DateTimeRange(
+          start: wibFromParts(
+              picked.start.year, picked.start.month, picked.start.day),
+          end: wibFromParts(picked.end.year, picked.end.month, picked.end.day));
+    }
+    _customHistoryRange = custom;
+    _historyDays = days;
+    if (_server) {
+      await _loadHistory();
+    } else {
+      setState(() => _loadedHistoryRange = _historyRange);
+    }
+  }
+
+  Future<void> _refresh() async {
+    if (_history) {
+      await Future.wait([_load(), _loadHistory()]);
+    } else {
+      await _load();
+    }
+  }
 
   String _ownerKey(AuthSession? session) =>
       '${session?.role.name}:${session?.backendUserId ?? session?.identifier ?? ''}';
@@ -42,6 +119,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   void initState() {
     super.initState();
     _today = _selectedDate = wibDateKey(widget.now());
+    _loadedHistoryRange = _historyRange;
     _screenOwner = _ownerKey(ref.read(currentSessionProvider));
     ref.listenManual<AuthSession?>(currentSessionProvider, (_, session) {
       if (_ownerKey(session) != _screenOwner) {
@@ -65,7 +143,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _rollDate();
-      unawaited(_load());
+      unawaited(_refresh());
     }
   }
 
@@ -85,7 +163,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
         wibFromParts(now.year, now.month, now.day + 1).difference(now), () {
       if (!_current) return;
       _rollDate();
-      unawaited(_load());
+      unawaited(_refresh());
       _scheduleMidnight();
     });
   }
@@ -164,7 +242,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
   Widget build(BuildContext context) {
     ref.watch(currentSessionProvider);
     ref.listen<int>(clinicalDataRevisionProvider, (_, __) {
-      if (!_mutating) unawaited(_load());
+      if (!_mutating) unawaited(_refresh());
     });
     if (!_current)
       return const Scaffold(
@@ -172,6 +250,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
               child: Text('Sesi akun telah berubah. Buka kembali Goals.')));
     final local = ref.watch(malvaStoreProvider).goals;
     final all = _server ? _serverGoals : local.map(_fromLocal).toList();
+    if (widget.showArchive) return _archiveScreen(all);
     final goals =
         all.where((g) => g.isActive || _selectedDate != _today).toList();
     final due = goals.where((g) => g.isActive && g.isDue).toList();
@@ -186,7 +265,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     return Scaffold(
         backgroundColor: goalPaper,
         body: RefreshIndicator(
-            onRefresh: _load,
+            onRefresh: _refresh,
             child: SingleChildScrollView(
                 key: const Key('goals-scroll'),
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -266,251 +345,455 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
-                                        GoalSurface(
-                                            color: const Color(0xFFF3E9FB),
-                                            border: const Color(0xFFE8DAF2),
-                                            child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Row(children: [
-                                                    Expanded(
-                                                        flex: 57,
-                                                        child: InkWell(
-                                                            onTap: _mutating
-                                                                ? null
-                                                                : _selectDate,
+                                        if (all.isNotEmpty || _history) ...[
+                                          _tabs(),
+                                          const SizedBox(height: 12),
+                                        ],
+                                        if (_history)
+                                          GoalHistoryPanel(
+                                            goals: all,
+                                            logs: _historyLogs,
+                                            range: _loadedHistoryRange,
+                                            rangeLabel: _customHistoryRange !=
+                                                    null
+                                                ? 'Tanggal pilihan'
+                                                : '$_historyDays hari terakhir',
+                                            onRangeChanged: _setHistoryRange,
+                                            goalId: _historyGoal,
+                                            onGoalChanged: (id) => setState(
+                                                () => _historyGoal = id ?? ''),
+                                            onArchive: () => Navigator.of(
+                                                    context)
+                                                .push<void>(MaterialPageRoute(
+                                                    builder: (_) => GoalsScreen(
+                                                        now: widget.now,
+                                                        showArchive: true))),
+                                            loading:
+                                                _historyLoading || _loading,
+                                            error: _historyError ?? _error,
+                                            onRetry: _refresh,
+                                          )
+                                        else ...[
+                                          GoalSurface(
+                                              color: const Color(0xFFF3E9FB),
+                                              border: const Color(0xFFE8DAF2),
+                                              child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Row(children: [
+                                                      Expanded(
+                                                          flex: 62,
+                                                          child: InkWell(
+                                                              onTap: _mutating
+                                                                  ? null
+                                                                  : _selectDate,
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          99),
+                                                              child: GoalPill(
+                                                                  '${const [
+                                                                    'Senin',
+                                                                    'Selasa',
+                                                                    'Rabu',
+                                                                    'Kamis',
+                                                                    'Jumat',
+                                                                    'Sabtu',
+                                                                    'Minggu'
+                                                                  ][DateTime.parse(_selectedDate).weekday - 1]}, ${goalDateLabel(_selectedDate)}',
+                                                                  icon: Icons
+                                                                      .calendar_today_outlined,
+                                                                  background:
+                                                                      Colors
+                                                                          .white,
+                                                                  fontSize: 12,
+                                                                  verticalPadding:
+                                                                      6))),
+                                                      Expanded(
+                                                          flex: 38,
+                                                          child: GoalPill(
+                                                              '$streak Hari Beruntun',
+                                                              icon: Icons
+                                                                  .local_fire_department_rounded,
+                                                              color: const Color(
+                                                                  0xFFC68722),
+                                                              background:
+                                                                  const Color(
+                                                                      0xFFFFF2CC),
+                                                              fontSize: 10.5,
+                                                              verticalPadding:
+                                                                  6)),
+                                                    ]),
+                                                    const SizedBox(height: 20),
+                                                    Row(children: [
+                                                      Expanded(
+                                                          child: Column(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
+                                                              children: [
+                                                            const Text(
+                                                                'Capaian Kebiasaanmu',
+                                                                style: TextStyle(
+                                                                    fontFamily:
+                                                                        'PlusJakartaSans',
+                                                                    fontSize:
+                                                                        17,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w700,
+                                                                    color:
+                                                                        goalInk)),
+                                                            const SizedBox(
+                                                                height: 3),
+                                                            Text(
+                                                                '$completed dari ${due.length} target ${_selectedDate == _today ? 'hari ini' : 'pada tanggal ini'} telah selesai',
+                                                                style: const TextStyle(
+                                                                    fontFamily:
+                                                                        'PlusJakartaSans',
+                                                                    fontSize:
+                                                                        13,
+                                                                    color: Color(
+                                                                        0xFF7F8792))),
+                                                          ])),
+                                                      const SizedBox(width: 8),
+                                                      Text(
+                                                          '${(ratio * 100).round()}%',
+                                                          style: const TextStyle(
+                                                              fontFamily:
+                                                                  'PlusJakartaSans',
+                                                              color: goalPurple,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w800,
+                                                              fontSize: 21))
+                                                    ]),
+                                                    const SizedBox(height: 14),
+                                                    ClipRRect(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(99),
+                                                        child: LinearProgressIndicator(
+                                                            value: ratio,
+                                                            minHeight: 7,
+                                                            backgroundColor:
+                                                                Colors.white,
+                                                            color: goalPurple,
                                                             borderRadius:
                                                                 BorderRadius
                                                                     .circular(
-                                                                        99),
-                                                            child: GoalPill(
-                                                                '${const [
-                                                                  'Senin',
-                                                                  'Selasa',
-                                                                  'Rabu',
-                                                                  'Kamis',
-                                                                  'Jumat',
-                                                                  'Sabtu',
-                                                                  'Minggu'
-                                                                ][DateTime.parse(_selectedDate).weekday - 1]}, ${goalDateLabel(_selectedDate)}',
-                                                                icon: Icons
-                                                                    .calendar_today_outlined,
-                                                                background:
-                                                                    Colors
-                                                                        .white,
-                                                                fontSize: 12,
-                                                                verticalPadding:
-                                                                    6))),
-                                                    Expanded(
-                                                        flex: 43,
-                                                        child: GoalPill(
-                                                            '$streak Hari Beruntun',
-                                                            icon: Icons
-                                                                .local_fire_department_rounded,
-                                                            color: const Color(
-                                                                0xFFC68722),
-                                                            background:
-                                                                const Color(
-                                                                    0xFFFFF2CC),
-                                                            fontSize: 12,
-                                                            verticalPadding:
-                                                                6)),
-                                                  ]),
-                                                  const SizedBox(height: 20),
-                                                  Row(children: [
-                                                    Expanded(
-                                                        child: Column(
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .start,
-                                                            children: [
-                                                          const Text(
-                                                              'Capaian Kebiasaanmu',
-                                                              style: TextStyle(
-                                                                  fontFamily:
-                                                                      'PlusJakartaSans',
-                                                                  fontSize: 17,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w700,
-                                                                  color:
-                                                                      goalInk)),
-                                                          const SizedBox(
-                                                              height: 3),
-                                                          Text(
-                                                              '$completed dari ${due.length} target ${_selectedDate == _today ? 'hari ini' : 'pada tanggal ini'} telah selesai',
-                                                              style: const TextStyle(
-                                                                  fontFamily:
-                                                                      'PlusJakartaSans',
-                                                                  fontSize: 13,
-                                                                  color: Color(
-                                                                      0xFF7F8792))),
-                                                        ])),
-                                                    const SizedBox(width: 8),
-                                                    Text(
-                                                        '${(ratio * 100).round()}%',
-                                                        style: const TextStyle(
-                                                            fontFamily:
-                                                                'PlusJakartaSans',
-                                                            color: goalPurple,
-                                                            fontWeight:
-                                                                FontWeight.w800,
-                                                            fontSize: 21))
-                                                  ]),
-                                                  const SizedBox(height: 14),
-                                                  ClipRRect(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              99),
-                                                      child: LinearProgressIndicator(
-                                                          value: ratio,
-                                                          minHeight: 7,
-                                                          backgroundColor:
-                                                              Colors.white,
-                                                          color: goalPurple,
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(
-                                                                      99))),
-                                                ])),
-                                        const SizedBox(height: 20),
-                                        SingleChildScrollView(
-                                            scrollDirection: Axis.horizontal,
-                                            child: Row(children: [
-                                              for (final method in [
-                                                'all',
-                                                'yes_no',
-                                                'numeric',
-                                                'checklist'
-                                              ]) ...[
-                                                if (method != 'all')
-                                                  const SizedBox(width: 7),
-                                                ChoiceChip(
-                                                    materialTapTargetSize:
-                                                        MaterialTapTargetSize
-                                                            .shrinkWrap,
-                                                    key: Key(
-                                                        'goal-filter-$method'),
-                                                    showCheckmark: false,
-                                                    selected: _filter == method,
-                                                    onSelected: (_) => setState(
-                                                        () => _filter = method),
-                                                    backgroundColor:
-                                                        Colors.white,
-                                                    selectedColor: goalPurple,
-                                                    side: BorderSide(
-                                                        color: _filter == method
-                                                            ? goalPurple
-                                                            : const Color(
-                                                                0xFFE3E3E8)),
-                                                    shape:
-                                                        const StadiumBorder(),
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 5),
-                                                    label: Row(
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
-                                                        children: [
-                                                          if (method !=
-                                                              'all') ...[
-                                                            Icon(
-                                                                goalMethodIcon(
-                                                                    method),
-                                                                size: 13,
-                                                                color: _filter ==
-                                                                        method
-                                                                    ? Colors
-                                                                        .white
-                                                                    : method ==
-                                                                            'numeric'
-                                                                        ? const Color(
-                                                                            0xFFD4A12E)
-                                                                        : goalPurple),
-                                                            const SizedBox(
-                                                                width: 5)
-                                                          ],
-                                                          Text(
-                                                              method == 'all'
-                                                                  ? 'Semua ( ${goals.length} )'
-                                                                  : goalMethodLabel(
+                                                                        99))),
+                                                  ])),
+                                          const SizedBox(height: 20),
+                                          SingleChildScrollView(
+                                              scrollDirection: Axis.horizontal,
+                                              child: Row(children: [
+                                                for (final method in [
+                                                  'all',
+                                                  'yes_no',
+                                                  'numeric',
+                                                  'checklist'
+                                                ]) ...[
+                                                  if (method != 'all')
+                                                    const SizedBox(width: 7),
+                                                  ChoiceChip(
+                                                      materialTapTargetSize:
+                                                          MaterialTapTargetSize
+                                                              .shrinkWrap,
+                                                      key: Key(
+                                                          'goal-filter-$method'),
+                                                      showCheckmark: false,
+                                                      selected:
+                                                          _filter == method,
+                                                      onSelected: (_) =>
+                                                          setState(() =>
+                                                              _filter = method),
+                                                      backgroundColor:
+                                                          Colors.white,
+                                                      selectedColor: goalPurple,
+                                                      side: BorderSide(
+                                                          color: _filter ==
+                                                                  method
+                                                              ? goalPurple
+                                                              : const Color(
+                                                                  0xFFE3E3E8)),
+                                                      shape:
+                                                          const StadiumBorder(),
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 5),
+                                                      label: Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            if (method !=
+                                                                'all') ...[
+                                                              Icon(
+                                                                  goalMethodIcon(
                                                                       method),
-                                                              style: TextStyle(
-                                                                  fontFamily:
-                                                                      'PlusJakartaSans',
+                                                                  size: 13,
                                                                   color: _filter ==
                                                                           method
                                                                       ? Colors
                                                                           .white
-                                                                      : const Color(
-                                                                          0xFF53606D),
-                                                                  fontSize: 13,
-                                                                  fontWeight: _filter ==
-                                                                          method
-                                                                      ? FontWeight
-                                                                          .w700
-                                                                      : FontWeight
-                                                                          .w500)),
-                                                        ])),
-                                              ]
-                                            ])),
-                                        const SizedBox(height: 26),
-                                        if (_error != null &&
-                                            _serverGoals.isEmpty)
-                                          Padding(
-                                              padding: const EdgeInsets.only(
-                                                  bottom: 14),
-                                              child: Column(children: [
-                                                Text(
-                                                    'Gagal memuat dari server: $_error',
-                                                    style: TextStyle(
-                                                        fontFamily:
-                                                            'PlusJakartaSans',
-                                                        color: Theme.of(context)
-                                                            .colorScheme
-                                                            .error)),
-                                                TextButton(
-                                                    onPressed: _load,
-                                                    child:
-                                                        const Text('Coba lagi'))
+                                                                      : method ==
+                                                                              'numeric'
+                                                                          ? const Color(
+                                                                              0xFFD4A12E)
+                                                                          : goalPurple),
+                                                              const SizedBox(
+                                                                  width: 5)
+                                                            ],
+                                                            Text(
+                                                                method == 'all'
+                                                                    ? 'Semua ( ${goals.length} )'
+                                                                    : goalMethodLabel(
+                                                                        method),
+                                                                style: TextStyle(
+                                                                    fontFamily:
+                                                                        'PlusJakartaSans',
+                                                                    color: _filter ==
+                                                                            method
+                                                                        ? Colors
+                                                                            .white
+                                                                        : const Color(
+                                                                            0xFF53606D),
+                                                                    fontSize:
+                                                                        13,
+                                                                    fontWeight: _filter ==
+                                                                            method
+                                                                        ? FontWeight
+                                                                            .w700
+                                                                        : FontWeight
+                                                                            .w500)),
+                                                          ])),
+                                                ]
                                               ])),
-                                        if (_loading && _serverGoals.isEmpty)
-                                          const Center(
-                                              child: CircularProgressIndicator(
-                                                  color: goalPurple))
-                                        else if (filtered.isEmpty)
-                                          Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      vertical: 30),
-                                              child: Text(
-                                                  goals.isEmpty
-                                                      ? 'Belum ada target atau kebiasaan.\nMulai dari satu langkah kecil hari ini.'
-                                                      : 'Belum ada kebiasaan dengan metode ini.',
-                                                  textAlign: TextAlign.center,
-                                                  style: const TextStyle(
-                                                      fontFamily:
-                                                          'PlusJakartaSans',
-                                                      color: goalMuted,
-                                                      fontSize: 15)))
-                                        else
-                                          for (final goal in filtered) ...[
-                                            _card(goal),
-                                            const SizedBox(height: 14),
-                                          ],
-                                        const SizedBox(height: 22),
-                                        GoalButton(
-                                            'Tambah Target / Kebiasaan Baru',
-                                            icon: Icons.add_circle_outline,
-                                            primary: true,
-                                            onPressed: _mutating
-                                                ? null
-                                                : () => _edit()),
-                                        const SizedBox(height: 6),
+                                          const SizedBox(height: 26),
+                                          if (_error != null &&
+                                              _serverGoals.isEmpty)
+                                            Padding(
+                                                padding: const EdgeInsets.only(
+                                                    bottom: 14),
+                                                child: Column(children: [
+                                                  Text(
+                                                      'Gagal memuat dari server: $_error',
+                                                      style: TextStyle(
+                                                          fontFamily:
+                                                              'PlusJakartaSans',
+                                                          color:
+                                                              Theme.of(context)
+                                                                  .colorScheme
+                                                                  .error)),
+                                                  TextButton(
+                                                      onPressed: _load,
+                                                      child: const Text(
+                                                          'Coba lagi'))
+                                                ])),
+                                          if (_loading && _serverGoals.isEmpty)
+                                            const Center(
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        color: goalPurple))
+                                          else if (filtered.isEmpty)
+                                            Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        vertical: 30),
+                                                child: Column(children: [
+                                                  if (goals.isEmpty &&
+                                                      _error == null) ...[
+                                                    Image.asset(
+                                                        'assets/reference/goals-empty.png',
+                                                        width: 150,
+                                                        height: 130,
+                                                        fit: BoxFit.contain,
+                                                        excludeFromSemantics:
+                                                            true,
+                                                        errorBuilder: (_, __,
+                                                                ___) =>
+                                                            const Icon(
+                                                                Icons.task_alt,
+                                                                size: 92,
+                                                                color:
+                                                                    goalPurple)),
+                                                    const SizedBox(height: 10),
+                                                  ],
+                                                  Text(
+                                                      goals.isEmpty
+                                                          ? 'Belum ada target atau kebiasaan.\nMulai dari satu langkah kecil hari ini.'
+                                                          : 'Belum ada kebiasaan dengan metode ini.',
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                      style: const TextStyle(
+                                                          fontFamily:
+                                                              'PlusJakartaSans',
+                                                          color: goalMuted,
+                                                          fontSize: 15)),
+                                                ]))
+                                          else
+                                            for (final goal in filtered) ...[
+                                              _card(goal),
+                                              const SizedBox(height: 14),
+                                            ],
+                                          const SizedBox(height: 22),
+                                          GoalButton(
+                                              'Tambah Target / Kebiasaan Baru',
+                                              icon: Icons.add_circle_outline,
+                                              primary: true,
+                                              onPressed: _mutating
+                                                  ? null
+                                                  : () => _edit()),
+                                          const SizedBox(height: 6),
+                                        ],
                                       ])))),
                     ]))));
+  }
+
+  Widget _tabs() => Container(
+        decoration: BoxDecoration(
+            color: const Color(0xFFEEDDF4),
+            borderRadius: BorderRadius.circular(24)),
+        padding: const EdgeInsets.all(4),
+        child: Row(children: [
+          for (final history in [false, true])
+            Expanded(
+                child: Semantics(
+              selected: _history == history,
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 34),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  backgroundColor:
+                      _history == history ? Colors.white : Colors.transparent,
+                  foregroundColor: _history == history ? goalPurple : goalInk,
+                  textStyle: TextStyle(
+                      fontFamily: 'PlusJakartaSans',
+                      fontSize: 14,
+                      fontWeight: _history == history
+                          ? FontWeight.w800
+                          : FontWeight.w500),
+                ),
+                onPressed: () {
+                  if (_history == history) return;
+                  setState(() => _history = history);
+                  if (history) unawaited(_loadHistory());
+                },
+                child: Text(history ? 'Riwayat' : 'Hari ini'),
+              ),
+            )),
+        ]),
+      );
+
+  Widget _archiveScreen(List<BackendGoal> goals) {
+    final archived = goals.where((goal) => !goal.isActive).toList();
+    return Scaffold(
+      backgroundColor: goalPaper,
+      appBar: AppBar(title: const Text('Target diarsipkan')),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          children: [
+            if (_loading)
+              const Center(child: CircularProgressIndicator(color: goalPurple))
+            else if (_error != null)
+              TextButton(onPressed: _load, child: Text('$_error. Coba lagi'))
+            else if (archived.isEmpty)
+              const Center(child: Text('Belum ada target diarsipkan.'))
+            else
+              for (final goal in archived)
+                Card(
+                    child: ListTile(
+                        title: Text(goal.title),
+                        subtitle: Text(
+                            goalMethodLabel(goal.details?.method ?? 'yes_no')),
+                        trailing: _goalMenu(goal))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _goalMenu(BackendGoal goal) => PopupMenuButton<String>(
+        enabled: !_mutating,
+        tooltip: 'Opsi goal',
+        icon: const Icon(Icons.more_vert, size: 19, color: goalMuted),
+        color: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        position: PopupMenuPosition.under,
+        constraints: const BoxConstraints(maxWidth: 244),
+        padding: EdgeInsets.zero,
+        onSelected: (value) {
+          if (value == 'delete') {
+            unawaited(_delete(goal));
+          } else {
+            unawaited(_setArchived(goal));
+          }
+        },
+        itemBuilder: (_) => [
+          if (_server)
+            PopupMenuItem(
+                value: 'archive',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                      goal.isActive
+                          ? Icons.archive_outlined
+                          : Icons.unarchive_outlined,
+                      color: goalPurple),
+                  dense: true,
+                  title: Text(goal.isActive ? 'Arsipkan' : 'Aktifkan kembali',
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text(goal.isActive
+                      ? 'Sembunyikan dari Hari ini. Riwayat tetap tersimpan.'
+                      : 'Tampilkan kembali di Hari ini.'),
+                )),
+          if (_server) const PopupMenuDivider(height: 1),
+          const PopupMenuItem(
+              value: 'delete',
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.delete_outline, color: Colors.red),
+                dense: true,
+                title: Text('Hapus permanen',
+                    style: TextStyle(
+                        color: Color(0xFFAB252D), fontWeight: FontWeight.w700)),
+                subtitle: Text('Hapus target beserta riwayatnya.'),
+              )),
+        ],
+      );
+
+  Future<void> _setArchived(BackendGoal goal) async {
+    if (!_current || _mutating || !_server) return;
+    setState(() => _mutating = true);
+    try {
+      final session = ref.read(currentSessionProvider)!;
+      final saved = await ref.read(apiClientProvider).updateGoal(
+          accessToken: session.accessToken!,
+          goalId: goal.id,
+          isActive: !goal.isActive);
+      if (!_current) return;
+      final day = parseWibStored(_selectedDate)!;
+      setState(() => _serverGoals = [
+            for (final entry in _serverGoals)
+              entry.id == saved.id
+                  ? entry.withDefinition(saved, on: day)
+                  : entry
+          ]);
+      ref.read(acceptedGoalMutationProvider.notifier).state =
+          GoalReminderMutation.upsert(ref.read(currentSessionProvider)!, saved);
+      ref.read(clinicalDataRevisionProvider.notifier).state++;
+      await _refresh();
+    } on Object catch (error) {
+      if (_current) _showError(error);
+    } finally {
+      if (mounted) setState(() => _mutating = false);
+    }
   }
 
   Widget _card(BackendGoal goal) {
@@ -580,15 +863,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                     padding: EdgeInsets.zero,
                     icon: const Icon(Icons.edit_outlined,
                         size: 17, color: goalMuted))),
-            SizedBox(
-                width: 30,
-                height: 22,
-                child: IconButton(
-                    tooltip: 'Hapus goal',
-                    onPressed: _mutating ? null : () => _delete(goal),
-                    padding: EdgeInsets.zero,
-                    icon: const Icon(Icons.delete_outline,
-                        size: 17, color: goalMuted))),
+            _goalMenu(goal),
           ]),
           const SizedBox(height: 4),
           Text(goal.title,
@@ -1163,7 +1438,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
           builder: (ctx) => AlertDialog(
                   title: const Text('Hapus Goal?'),
                   content: const Text(
-                      'Tindakan ini tidak dapat dibatalkan. Apakah Anda yakin ingin menghapus goal ini?'),
+                      'Target dan seluruh riwayatnya akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.'),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(ctx, false),
@@ -1178,8 +1453,10 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
             accessToken: ref.read(currentSessionProvider)!.accessToken!,
             goalId: goal.id);
         if (!_current) return;
-        setState(() =>
-            _serverGoals = _serverGoals.where((g) => g.id != goal.id).toList());
+        setState(() {
+          _serverGoals = _serverGoals.where((g) => g.id != goal.id).toList();
+          if (_historyGoal == goal.id) _historyGoal = '';
+        });
         ref.read(acceptedGoalMutationProvider.notifier).state =
             GoalReminderMutation.delete(
                 ref.read(currentSessionProvider)!, goal.id);

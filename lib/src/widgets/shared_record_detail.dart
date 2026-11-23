@@ -292,6 +292,12 @@ class SharedRecordDetail extends StatelessWidget {
                                         color: _muted, fontSize: 13))),
                           ])),
                   ]),
+                  if (sharedMedicationSourceLabel(med['source']).isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _pill(
+                          sharedMedicationSourceLabel(med['source']), _purple),
+                    ),
                   if (_value(med, 'relation_to_meal').isNotEmpty)
                     Padding(
                         padding: const EdgeInsets.only(top: 10),

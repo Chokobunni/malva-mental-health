@@ -26,6 +26,11 @@ Paket care 4 sesi / 6 minggu (menggantikan Continuous Support 7 hari) dan penjad
 Status paket: `pending_payment` → `active` (saat booking dibayar) → `completed`/`expired`/`cancelled`.
 
 ## Pembelian paket dan retry
+- Pembayaran perpanjangan menambahkan 4 sesi dan 42 hari ke paket aktif pasangan yang sama. Masa berlaku dihitung dari kedaluwarsa paket aktif. Aktivasi ulang booking yang sudah diproses tidak menambah sesi atau hari lagi.
+- Quick Consult menerima metode Chat atau Video. Server menentukan tarif dari pengaturan profesional untuk metode yang dipilih.
+- API jadwal memakai `service_category` (`quick_chat`, `quick_video`, `package`, atau `shared`). Kategori khusus memakai jadwal bersama hanya sebelum profesional menetapkan barisnya. Konflik beririsan tetap diperiksa lintas kategori.
+- `patient_capacity` kosong memberi kapasitas tidak terbatas. Saat pembayaran baru dibuat, kuota dihitung atomik dari pasien unik dengan paket aktif atau pembayaran paket pending/paid yang belum diaktivasi. Pasien yang sudah terhitung dapat melanjutkan transaksi atau memperpanjang paket.
+- `additional_sessions` adalah hingga tiga waktu WIB setelah sesi pertama. Server menyimpan pilihan bersama booking. Saat lunas, setiap pilihan dikonfirmasi paling banyak sekali. Slot yang lewat, diubah, atau sudah ditempati meninggalkan kredit untuk dijadwalkan ulang dari My Care.
 - Pembelian identik yang masih pending digunakan ulang per pasien/profesional; perubahan harga/jumlah/validitas saat pembelian pending ditolak sebagai konflik.
 - Payload booking paket memakai `package_id`; server memvalidasi pemilik dan menurunkan profesional dari paket. Hubungan pembayaran adalah `care_packages.booking_id` (unik). Jangan pakai `bookings.package_id`, karena FK tersebut milik `service_packages` legacy.
 - Booking paket terkunci pada slot/jenis sesi/harga yang sama saat retry; resume Flutter memakai booking terikat, dan tidak membuat booking baru saat pembacaan daftar gagal. Legacy hanya diadopsi bila kandidat tunggal dan harga sesuai.

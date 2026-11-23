@@ -2057,6 +2057,7 @@ class MalvaApiClient {
     required String slotTime,
     String sessionType = 'video',
     int durationMinutes = 60,
+    List<String>? additionalSessions,
   }) async {
     final payload =
         await _send('POST', '/v1/bookings', accessToken: accessToken, body: {
@@ -2066,6 +2067,7 @@ class MalvaApiClient {
       'booking_date': bookingDate,
       'slot_time': slotTime,
       'duration_minutes': durationMinutes,
+      if (additionalSessions != null) 'additional_sessions': additionalSessions,
       'price': 0,
     });
     return BackendBooking.fromJson(
@@ -2360,6 +2362,8 @@ class MalvaApiClient {
     int? quickChatPrice,
     int? quickVideoPrice,
     int? packagePrice,
+    int? patientCapacity,
+    bool clearPatientCapacity = false,
   }) async {
     final payload = await _send('PUT', '/v1/professional/pricing',
         accessToken: accessToken,
@@ -2367,6 +2371,8 @@ class MalvaApiClient {
           if (quickChatPrice != null) 'quick_chat_price': quickChatPrice,
           if (quickVideoPrice != null) 'quick_video_price': quickVideoPrice,
           if (packagePrice != null) 'package_price': packagePrice,
+          if (patientCapacity != null || clearPatientCapacity)
+            'patient_capacity': patientCapacity,
         });
     return BackendProfessionalPricing.fromJson(
       _expectMap(payload['pricing'], 'Respons harga tidak valid.'),
@@ -2460,8 +2466,16 @@ class MalvaApiClient {
   Future<List<BackendAvailabilityDay>> getDoctorAvailability({
     String? accessToken,
     required String userId,
+    String? serviceCategory,
   }) async {
-    final payload = await _send('GET', '/v1/doctors/$userId/availability',
+    final payload = await _sendUri(
+        'GET',
+        baseUri.replace(
+          path: '/v1/doctors/$userId/availability',
+          queryParameters: {
+            if (serviceCategory != null) 'service_category': serviceCategory
+          },
+        ),
         accessToken: accessToken);
     return _expectList(payload['days'], 'Respons ketersediaan tidak valid.')
         .whereType<Map<String, dynamic>>()
@@ -2945,6 +2959,7 @@ class MalvaApiClient {
     String? accessToken,
     required String userId,
     required String date,
+    String? serviceCategory,
   }) async {
     // WAJIB pakai _sendUri dengan queryParameters — bukan _send dengan
     // "?date=$date" di path. _send memakai Uri.replace(path:) yang
@@ -2956,7 +2971,10 @@ class MalvaApiClient {
       'GET',
       baseUri.replace(
         path: '/v1/doctors/$userId/slots',
-        queryParameters: {'date': date},
+        queryParameters: {
+          'date': date,
+          if (serviceCategory != null) 'service_category': serviceCategory
+        },
       ),
       accessToken: accessToken,
     );
@@ -4919,6 +4937,7 @@ class BackendProfessionalSchedule {
     required this.endTime,
     required this.slotDurationMinutes,
     required this.isActive,
+    this.serviceCategory = 'shared',
   });
 
   factory BackendProfessionalSchedule.fromJson(Map<String, dynamic> json) {
@@ -4936,6 +4955,7 @@ class BackendProfessionalSchedule {
       slotDurationMinutes:
           (json['slot_duration_minutes'] as num?)?.toInt() ?? 60,
       isActive: json['is_active'] != false,
+      serviceCategory: json['service_category']?.toString() ?? 'shared',
     );
   }
 
@@ -4946,6 +4966,7 @@ class BackendProfessionalSchedule {
   final String endTime;
   final int slotDurationMinutes;
   final bool isActive;
+  final String serviceCategory;
 }
 
 class BackendTimeOff {
@@ -4976,6 +4997,7 @@ class BackendProfessionalPricing {
     this.quickChatPrice = 0,
     this.quickVideoPrice = 0,
     this.packagePrice = 0,
+    this.patientCapacity,
   });
 
   factory BackendProfessionalPricing.fromJson(Map<String, dynamic> json) {
@@ -4983,12 +5005,14 @@ class BackendProfessionalPricing {
       quickChatPrice: (json['quick_chat_price'] as num?)?.toInt() ?? 0,
       quickVideoPrice: (json['quick_video_price'] as num?)?.toInt() ?? 0,
       packagePrice: (json['package_price'] as num?)?.toInt() ?? 0,
+      patientCapacity: (json['patient_capacity'] as num?)?.toInt(),
     );
   }
 
   final int quickChatPrice;
   final int quickVideoPrice;
   final int packagePrice;
+  final int? patientCapacity;
 }
 
 class BackendPsychTest {
@@ -5738,6 +5762,9 @@ class BackendDoctorProfile {
     this.schedules = const [],
     this.pricing = const BackendProfessionalPricing(),
     this.reviews = const BackendDoctorReviews(),
+    this.remainingPatientSlots,
+    this.canRenewPackage = false,
+    this.canResumePackage = false,
   });
 
   factory BackendDoctorProfile.fromJson(Map<String, dynamic> json) {
@@ -5760,6 +5787,9 @@ class BackendDoctorProfile {
       pricing: BackendProfessionalPricing.fromJson(
           (json['pricing'] as Map?)?.cast<String, dynamic>() ?? const {}),
       reviews: BackendDoctorReviews.fromJson(json),
+      remainingPatientSlots: (json['remaining_patient_slots'] as num?)?.toInt(),
+      canRenewPackage: json['can_renew_package'] == true,
+      canResumePackage: json['can_resume_package'] == true,
     );
   }
 
@@ -5768,6 +5798,9 @@ class BackendDoctorProfile {
   final List<BackendProfessionalSchedule> schedules;
   final BackendProfessionalPricing pricing;
   final BackendDoctorReviews reviews;
+  final int? remainingPatientSlots;
+  final bool canRenewPackage;
+  final bool canResumePackage;
 }
 
 class BackendServicePackage {

@@ -265,8 +265,11 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
                   SoftCard(
                     child: Column(
                       children: [
-                        const Icon(Icons.medication_rounded,
-                            size: 48, color: MalvaColors.seed),
+                        const Image(
+                            image: AssetImage(
+                                'assets/reference/medication-empty.png'),
+                            height: 96,
+                            excludeFromSemantics: true),
                         const SizedBox(height: 12),
                         const Text(
                           'Belum ada obat',
@@ -274,7 +277,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Tambahkan obat pertama Anda untuk mulai melacak.',
+                          'Anda atau profesional yang terhubung dapat menambahkan obat.',
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 16),
@@ -311,6 +314,12 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
+                if (storeState.medications.isNotEmpty)
+                  FilledButton.icon(
+                    onPressed: () => _openMedicationForm(context),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Tambah Obat'),
+                  ),
                 const SizedBox(height: 22),
                 OutlinedButton.icon(
                     key: const Key('open-medication-history'),

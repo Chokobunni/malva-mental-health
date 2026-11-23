@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:malva_mental_health/src/models.dart';
+import 'package:malva_mental_health/src/platform/platform_providers.dart';
 import 'package:malva_mental_health/src/providers/providers.dart';
 import 'package:malva_mental_health/src/screens/settings_screens.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
@@ -70,14 +71,33 @@ void main() {
   }
 
   TextField field(WidgetTester tester, String label) =>
-      tester.widget<TextField>(find.byWidgetPredicate(
-          (w) => w is TextField && w.decoration?.labelText == label));
+      tester.widget<TextField>(find.byKey(
+          ValueKey(label == 'Name' ? 'profile.name' : 'profile.dateOfBirth')));
 
   testWidgets('shows the active profile and leaves unknown DOB empty',
       (tester) async {
     await mount(tester, (_) async => _profile('ami', 'Ami Google'));
     expect(field(tester, 'Name').controller!.text, 'Ami Google');
     expect(field(tester, 'Date of Birth').controller!.text, isEmpty);
+  });
+
+  testWidgets('can switch from an illustrated avatar to the default image',
+      (tester) async {
+    FlutterSecureStorage.setMockInitialValues({
+      'profile.avatar.ami': 'assets/reference/avatar-2.png',
+    });
+    final container = await mount(tester, (_) async => _profile('ami', 'Ami'));
+    await tester.tap(find.text('Change avatar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Avatar default'));
+    await tester.tap(find.text('Use avatar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    expect(
+      await container.read(secureStoreProvider).read('profile.avatar.ami'),
+      'default',
+    );
   });
 
   testWidgets('saves real profile via PATCH and updates active identity',
@@ -93,9 +113,9 @@ void main() {
     });
     expect(field(tester, 'Date of Birth').controller!.text, '02/01/2001');
     await tester.enterText(
-        find.widgetWithText(TextField, 'Name'), 'Ami Updated');
+        find.byKey(const ValueKey('profile.name')), 'Ami Updated');
     await tester.enterText(
-        find.widgetWithText(TextField, 'Date of Birth'), '31/12/2000');
+        find.byKey(const ValueKey('profile.dateOfBirth')), '31/12/2000');
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect(
@@ -120,11 +140,12 @@ void main() {
       return _profile('ami', 'Ami');
     });
     await tester.enterText(
-        find.widgetWithText(TextField, 'Date of Birth'), '31/02/2000');
+        find.byKey(const ValueKey('profile.dateOfBirth')), '31/02/2000');
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect(patches, 0);
-    await tester.enterText(find.widgetWithText(TextField, 'Date of Birth'), '');
+    await tester.enterText(
+        find.byKey(const ValueKey('profile.dateOfBirth')), '');
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect(patches, 1);
@@ -146,7 +167,8 @@ void main() {
                 request.headers['authorization'] == 'Bearer other-token'
                     ? 'Other'
                     : 'Ami'));
-    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Old save');
+    await tester.enterText(
+        find.byKey(const ValueKey('profile.name')), 'Old save');
     await tester.tap(find.text('Save changes'));
     await tester.pump();
     container.read(authStateProvider.notifier).setSession(_other);
@@ -191,7 +213,8 @@ void main() {
     container
         .read(authStateProvider.notifier)
         .updateTokens('rotated-access', 'rotated-refresh');
-    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Updated');
+    await tester.enterText(
+        find.byKey(const ValueKey('profile.name')), 'Updated');
     await tester.tap(find.text('Save changes'));
     await tester.pumpAndSettle();
     expect(sentToken, 'Bearer rotated-access');

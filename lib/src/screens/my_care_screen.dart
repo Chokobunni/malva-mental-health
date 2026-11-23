@@ -21,6 +21,7 @@ import 'care_package_screen.dart';
 import 'chat_screen.dart';
 import 'notifications_screen.dart';
 import 'settings_screens.dart';
+import 'schedule_package_sessions_screen.dart';
 import 'booking/doctor_profile_screen.dart';
 
 // ============================================================
@@ -212,9 +213,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
                   title: 'My Care',
                   subtitle:
                       'Lihat profesional terhubung, jadwal, dan riwayat sesi.',
-                  name: (widget.session ?? ref.watch(currentSessionProvider))
-                          ?.displayName ??
-                      '',
+                  session: widget.session ?? ref.watch(currentSessionProvider),
                   onNotifications: () => Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -223,20 +222,6 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
                               apiClient: widget.apiClient))),
                   onProfile: () => Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const ProfileScreen())),
-                  extraAction: IconButton(
-                    tooltip:
-                        _showPackages ? 'Profesional terhubung' : 'Paket saya',
-                    color: Colors.white,
-                    icon: Icon(
-                        _showPackages
-                            ? Icons.people_outline_rounded
-                            : Icons.inventory_2_outlined,
-                        size: 19),
-                    onPressed: () => setState(() {
-                      _tab = 'Terhubung';
-                      _showPackages = !_showPackages;
-                    }),
-                  ),
                 ),
                 Padding(
                     padding: const EdgeInsets.fromLTRB(15, 12, 15, 26),
@@ -287,6 +272,27 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
                             ],
                           ),
                         ),
+                        if (!_isLoading &&
+                            _error == null &&
+                            _packages.isNotEmpty)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Tooltip(
+                              message: _tab == 'Terhubung' && _showPackages
+                                  ? 'Profesional terhubung'
+                                  : 'Paket saya',
+                              child: TextButton(
+                                onPressed: () => setState(() {
+                                  _showPackages =
+                                      _tab != 'Terhubung' || !_showPackages;
+                                  _tab = 'Terhubung';
+                                }),
+                                child: Text(_tab == 'Terhubung' && _showPackages
+                                    ? 'Profesional terhubung'
+                                    : 'Paket saya'),
+                              ),
+                            ),
+                          ),
                         const SizedBox(height: 14),
                         if (_isLoading)
                           const Center(child: CircularProgressIndicator())
@@ -521,7 +527,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
           onChat: () => _openChatFor(pairs[package.professionalId]!),
           onManage: () => _openManageData(pairs[package.professionalId]!),
           onSchedule: package.remainingSessions > 0
-              ? () => _openScheduler(package: package)
+              ? () => _openPackageScheduler(package)
               : null,
         ),
         const SizedBox(height: 10),
@@ -669,6 +675,23 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
     ).then((_) => _load());
   }
 
+  Future<void> _openPackageScheduler(BackendCarePackage package) async {
+    final session = widget.session ?? ref.read(currentSessionProvider);
+    final api = widget.apiClient ?? ref.read(apiClientProvider);
+    if (session == null || api == null || !_isUsablePackage(package)) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SchedulePackageSessionsScreen(
+          package: package,
+          api: api,
+          session: session,
+        ),
+      ),
+    );
+    if (mounted) await _load();
+  }
+
   Future<void> _openScheduler({
     BackendCarePackage? package,
     BackendCareSession? existing,
@@ -693,6 +716,11 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
         professionalId: professionalId,
         expiresAt: expires,
         initialType: existing?.sessionType ?? 'video',
+        serviceCategory: package != null || existing?.packageId != null
+            ? 'package'
+            : existing?.sessionType == 'chat'
+                ? 'quick_chat'
+                : 'quick_video',
       ),
     );
     if (!mounted ||

@@ -7,6 +7,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/professional_availability_summary.dart';
 
 // ============================================================
 // PRO PRICING — katalog harga profesional (F-13 / WS-3).
@@ -75,12 +76,9 @@ class _ProPricingScreenState extends ConsumerState<ProPricingScreen> {
       final pricing = await _api.getPricing(accessToken: token);
       if (!mounted) return;
       setState(() {
-        _chatPrice.text =
-            pricing.quickChatPrice > 0 ? '${pricing.quickChatPrice}' : '';
-        _videoPrice.text =
-            pricing.quickVideoPrice > 0 ? '${pricing.quickVideoPrice}' : '';
-        _packagePrice.text =
-            pricing.packagePrice > 0 ? '${pricing.packagePrice}' : '';
+        _chatPrice.text = formatProfessionalPrice(pricing.quickChatPrice);
+        _videoPrice.text = formatProfessionalPrice(pricing.quickVideoPrice);
+        _packagePrice.text = formatProfessionalPrice(pricing.packagePrice);
         _isLoading = false;
       });
     } on Object catch (e) {
@@ -99,9 +97,9 @@ class _ProPricingScreenState extends ConsumerState<ProPricingScreen> {
     try {
       await _api.updatePricing(
         accessToken: token,
-        quickChatPrice: int.tryParse(_chatPrice.text.trim()) ?? 0,
-        quickVideoPrice: int.tryParse(_videoPrice.text.trim()) ?? 0,
-        packagePrice: int.tryParse(_packagePrice.text.trim()) ?? 0,
+        quickChatPrice: parseProfessionalPrice(_chatPrice.text),
+        quickVideoPrice: parseProfessionalPrice(_videoPrice.text),
+        packagePrice: parseProfessionalPrice(_packagePrice.text),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -155,87 +153,15 @@ class _ProPricingScreenState extends ConsumerState<ProPricingScreen> {
                   padding: const EdgeInsets.all(18),
                   children: [
                     const SectionLabel('Harga layanan'),
-                    SoftCard(
-                      bordered: true,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Harga ini dipakai saat pasien booking quick chat, '
-                            'quick video, atau paket 4 sesi.',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant),
-                          ),
-                          const SizedBox(height: 14),
-                          _PriceField(
-                            controller: _chatPrice,
-                            label: 'Quick chat (Rp)',
-                            icon: Icons.chat_bubble_rounded,
-                          ),
-                          const SizedBox(height: 12),
-                          _PriceField(
-                            controller: _videoPrice,
-                            label: 'Quick video (Rp)',
-                            icon: Icons.videocam_rounded,
-                          ),
-                          const SizedBox(height: 12),
-                          _PriceField(
-                            controller: _packagePrice,
-                            label: 'Paket 4 sesi / 6 minggu (Rp)',
-                            icon: Icons.card_membership_rounded,
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: _isSaving ? null : _save,
-                              icon: const Icon(Icons.save_rounded),
-                              label: Text(
-                                  _isSaving ? 'Menyimpan...' : 'Simpan harga'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Jumlah sesi paket tetap 4 & masa berlaku 6 minggu; '
-                      'yang kamu atur hanya harga.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant),
+                    ProfessionalPriceCard(
+                      chat: _chatPrice,
+                      video: _videoPrice,
+                      package: _packagePrice,
+                      onSave: _save,
+                      isSaving: _isSaving,
                     ),
                   ],
                 ),
-    );
-  }
-}
-
-class _PriceField extends StatelessWidget {
-  const _PriceField({
-    required this.controller,
-    required this.label,
-    required this.icon,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      keyboardType: TextInputType.number,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: MalvaColors.seed),
-      ),
     );
   }
 }

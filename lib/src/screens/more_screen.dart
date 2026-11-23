@@ -1,7 +1,13 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Uint8List;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../models/diary_content.dart';
+import '../services/goal_history.dart';
+import '../time/wib.dart';
 import '../ai/assessment_scoring.dart';
 import '../services/health_pdf_report.dart';
 import '../services/mood_insights.dart';
@@ -12,6 +18,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/care_reference_widgets.dart';
+import '../widgets/account_avatar.dart';
 import 'consent_management_screen.dart';
 import 'admin/admin_panel_screen.dart';
 import 'safety/emergency_contacts_screen.dart';
@@ -58,7 +65,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
           CarePageHeader(
             title: 'Lainnya',
             subtitle: 'Kelola profil, pengaturan, dan data.',
-            name: name,
+            session: session,
             onNotifications: openNotifications,
             onProfile: openProfile,
           ),
@@ -68,8 +75,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
               children: [
                 _MoreCard(
                     child: Row(children: [
-                  InitialAvatar(
-                      name: name, color: MalvaColors.seed, radius: 20),
+                  AccountAvatar(session: session, size: 40),
                   const SizedBox(width: 12),
                   Expanded(
                       child: Text(name,
@@ -200,6 +206,29 @@ class _MoreCard extends StatelessWidget {
       );
 }
 
+Future<Uint8List?> _exportThumbnail(Uint8List bytes) async {
+  final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+  final codec = await ui.instantiateImageCodecWithSize(buffer,
+      getTargetSize: (width, height) {
+    if (width <= 256 && height <= 256) return const ui.TargetImageSize();
+    return width >= height
+        ? const ui.TargetImageSize(width: 256)
+        : const ui.TargetImageSize(height: 256);
+  });
+  try {
+    final image = (await codec.getNextFrame()).image;
+    try {
+      return (await image.toByteData(format: ui.ImageByteFormat.png))
+          ?.buffer
+          .asUint8List();
+    } finally {
+      image.dispose();
+    }
+  } finally {
+    codec.dispose();
+  }
+}
+
 class _ExportSection extends ConsumerStatefulWidget {
   @override
   ConsumerState<_ExportSection> createState() => _ExportSectionState();
@@ -208,6 +237,42 @@ class _ExportSection extends ConsumerStatefulWidget {
 class _ExportSectionState extends ConsumerState<_ExportSection> {
   bool _exporting = false;
   int _accountGeneration = 0;
+  DateTimeRange? _selectedRange;
+
+  DateTimeRange get _period {
+    final now = wibNow();
+    final today = wibFromParts(now.year, now.month, now.day);
+    return _selectedRange ??
+        DateTimeRange(
+            start: today.subtract(const Duration(days: 29)), end: today);
+  }
+
+  Future<void> _selectPeriod() async {
+    final generation = _accountGeneration;
+    final now = wibNow();
+    final range = _period;
+    final selected = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(2000),
+        lastDate: DateTime(now.year, now.month, now.day),
+        initialDateRange: DateTimeRange(
+          start: DateTime(range.start.year, range.start.month, range.start.day),
+          end: DateTime(range.end.year, range.end.month, range.end.day),
+        ),
+        helpText: 'Periode ekspor (maks. 30 hari WIB)');
+    if (selected == null || !mounted || generation != _accountGeneration)
+      return;
+    final start = wibFromParts(
+        selected.start.year, selected.start.month, selected.start.day);
+    final end =
+        wibFromParts(selected.end.year, selected.end.month, selected.end.day);
+    if (end.difference(start).inDays >= 30) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Pilih rentang maksimal 30 hari kalender.')));
+      return;
+    }
+    setState(() => _selectedRange = DateTimeRange(start: start, end: end));
+  }
 
   String _identity(AuthSession? session) => session == null
       ? ''
@@ -218,6 +283,10 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
     final generation = _accountGeneration;
     final session = ref.read(currentSessionProvider);
     final store = ref.read(malvaStoreProvider);
+    final period = _period;
+    final endExclusive = period.end.add(const Duration(days: 1));
+    bool inPeriod(DateTime date) =>
+        !date.isBefore(period.start) && date.isBefore(endExclusive);
     bool isCurrent() => mounted && generation == _accountGeneration;
     setState(() => _exporting = true);
     try {
@@ -229,10 +298,25 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
       List<DiaryEntry>? diaries =
           all || category == 'diary' ? store.diaryEntries : null;
       List<ScreeningPdfRow>? screenings;
+      Map<String, List<GoalHistoryEntry>>? goalHistory;
       final api = ref.read(apiClientProvider);
       final token = session?.accessToken;
       final remote = token != null && token.isNotEmpty;
       final loads = <Future<void>>[];
+      if (all || category == 'goals_habits') {
+        if (remote) {
+          final goalLoad =
+              api.listGoals(accessToken: token, includeInactive: true);
+          final logLoad =
+              loadGoalHistoryLogs(api, token, period.start, period.end);
+          loads.add(Future.wait([goalLoad, logLoad]).then((data) {
+            goalHistory = groupGoalHistory(
+                data[0] as List<BackendGoal>, data[1] as List<BackendHabitLog>);
+          }));
+        } else {
+          goalHistory = {};
+        }
+      }
       if (remote && moods != null) {
         loads.add(
             api.listMoodCheckins(accessToken: token, limit: 0).then((rows) {
@@ -302,11 +386,39 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
       }
       await Future.wait(loads);
       if (!isCurrent()) return;
+      moods = moods?.where((entry) => inPeriod(entry.date)).toList();
+      medications =
+          medications?.where((entry) => inPeriod(entry.takenAt)).toList();
+      diaries = diaries?.where((entry) => inPeriod(entry.createdAt)).toList();
+      screenings = screenings
+          ?.where((entry) => entry.date != null && inPeriod(entry.date!))
+          .toList();
+      final thumbnails = <String, Uint8List>{};
+      if (remote && diaries != null) {
+        final urls = {
+          for (final entry in diaries!)
+            for (final media in DiaryContent.parse(entry.note).media) media.url,
+        };
+        for (final url in urls) {
+          if (!isCurrent()) return;
+          try {
+            final bytes =
+                await api.fetchDiaryImage(accessToken: token, url: url);
+            if (!isCurrent()) return;
+            final thumbnail = await _exportThumbnail(bytes);
+            if (thumbnail != null) thumbnails[url] = thumbnail;
+          } on Object {
+            // The report keeps the attachment caption when its preview is unavailable.
+          }
+        }
+      }
+      if (!isCurrent()) return;
       final title = switch (category) {
         'mood_history' => 'Laporan Riwayat Mood: MALVA',
         'screenings' => 'Hasil Screening Psikologis: MALVA',
         'medication_log' => 'Riwayat Konsumsi Obat: MALVA',
         'diary' => 'Catatan Harian: MALVA',
+        'goals_habits' => 'Laporan Goals & Habits: MALVA',
         _ => 'Ringkasan Data Pasien: MALVA',
       };
       await ref.read(exportServiceProvider).shareHealthReport(
@@ -316,6 +428,10 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
           medicationLogs: medications,
           diaryEntries: diaries,
           screenings: screenings,
+          periodStart: period.start,
+          periodEnd: period.end,
+          goalHistory: goalHistory,
+          diaryThumbnails: thumbnails,
           patientName: session?.displayName ?? store.patient.name,
           canShare: isCurrent);
     } catch (_) {
@@ -331,7 +447,10 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
   @override
   Widget build(BuildContext context) {
     ref.listen<AuthSession?>(currentSessionProvider, (previous, next) {
-      if (_identity(previous) != _identity(next)) _accountGeneration++;
+      if (_identity(previous) != _identity(next)) {
+        _accountGeneration++;
+        _selectedRange = null;
+      }
     });
     if (!ref.watch(capabilitiesProvider).canExportFiles) {
       return const SoftCard(
@@ -344,6 +463,15 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
         child: Column(
           children: [
             if (_exporting) const LinearProgressIndicator(),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              leading: const Icon(Icons.date_range_outlined),
+              title: const Text('Periode ekspor'),
+              subtitle: Text(
+                  '${formatWibDate(_period.start)} - ${formatWibDate(_period.end)} (WIB)'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _selectPeriod,
+            ),
             _ExportTile(
               icon: Icons.mood_rounded,
               title: 'Export Mood History',
@@ -374,6 +502,14 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
               subtitle: 'PDF catatan harian',
               color: MalvaColors.orchid,
               onTap: () => _export('diary'),
+            ),
+            const SizedBox(height: 8),
+            _ExportTile(
+              icon: Icons.task_alt_rounded,
+              title: 'Export Goals & Habits',
+              subtitle: 'PDF riwayat progres target dan kebiasaan',
+              color: MalvaColors.seed,
+              onTap: () => _export('goals_habits'),
             ),
             const Divider(height: 24),
             _ExportTile(

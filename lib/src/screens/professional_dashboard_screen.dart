@@ -16,6 +16,7 @@ import '../services/meeting_launcher.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/care_reference_widgets.dart';
+import '../widgets/account_avatar.dart';
 import '../widgets/meet_join_button.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/professional_avatar.dart';
@@ -149,9 +150,8 @@ class _ProfessionalDashboardScreenState
     final header = _ProfessionalHeader(
       title: title,
       subtitle: subtitle,
-      displayName: widget.session?.displayName ??
-          ref.watch(currentSessionProvider)?.displayName ??
-          '',
+      session: widget.session ?? ref.watch(currentSessionProvider),
+      apiClient: widget.apiClient,
       online: _lastSyncTime != null && _onlineError == null,
       syncing: _syncStatus == SyncStatus.syncing,
       onRefresh: _manualRefresh,
@@ -999,7 +999,8 @@ const _dashboardPurple = Color(0xFF9950AE);
 
 class _ProfessionalHeader extends StatelessWidget {
   const _ProfessionalHeader({
-    required this.displayName,
+    required this.session,
+    this.apiClient,
     required this.title,
     required this.subtitle,
     required this.online,
@@ -1008,7 +1009,9 @@ class _ProfessionalHeader extends StatelessWidget {
     required this.onProfile,
     required this.onNotifications,
   });
-  final String displayName, title, subtitle;
+  final String title, subtitle;
+  final AuthSession? session;
+  final MalvaApiClient? apiClient;
   final bool online;
   final bool syncing;
   final VoidCallback onRefresh;
@@ -1102,22 +1105,10 @@ class _ProfessionalHeader extends StatelessWidget {
                                               color: Colors.white
                                                   .withValues(alpha: .6),
                                               width: 2)),
-                                      child: Stack(children: [
-                                        Center(
-                                            child: Text(_initials(displayName),
-                                                style: const TextStyle(
-                                                    fontSize: 15,
-                                                    color: Colors.white,
-                                                    fontWeight:
-                                                        FontWeight.w600))),
-                                        if (online)
-                                          const Positioned(
-                                              right: 0,
-                                              bottom: 0,
-                                              child: Icon(Icons.circle,
-                                                  color: MalvaColors.mint,
-                                                  size: 8)),
-                                      ])))),
+                                      child: AccountAvatar(
+                                        session: session,
+                                        apiClient: apiClient,
+                                      )))),
                         ]),
                       ]),
                       const SizedBox(height: 24),
@@ -1146,13 +1137,6 @@ class _ProfessionalHeader extends StatelessWidget {
               padding: const EdgeInsets.all(7),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap),
           icon: icon);
-
-  String _initials(String name) {
-    final parts =
-        name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return '?';
-    return parts.take(2).map((p) => p[0]).join().toUpperCase();
-  }
 }
 
 class _DashboardSectionLabel extends StatelessWidget {

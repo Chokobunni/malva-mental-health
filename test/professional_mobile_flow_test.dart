@@ -142,7 +142,8 @@ Future<_Client> _mount(WidgetTester tester,
 void main() {
   setUpAll(initializeWib);
 
-  testWidgets('availability summary excludes disabled practice slots',
+  testWidgets(
+      'availability summary marks disabled shared slots in each category',
       (tester) async {
     await _mount(tester, dashboard: true, includeSchedules: true);
     await tester.scrollUntilVisible(find.text('Ketersediaan & harga'), 250,
@@ -154,9 +155,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ketersediaan & harga'));
     await tester.pumpAndSettle();
-    expect(find.text('Sen:'), findsOneWidget);
-    expect(find.text('09:00–16:00 (30 mnt)'), findsOneWidget);
-    expect(find.text('18:00–21:00 (30 mnt)'), findsNothing);
+    expect(find.text('Sen:'), findsNWidgets(3));
+    expect(find.text('09:00–16:00 (30 mnt)'), findsNWidgets(3));
+    expect(find.text('18:00–21:00 (30 mnt)'), findsNWidgets(3));
+    expect(find.text('Nonaktif'), findsNWidgets(3));
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -177,9 +179,8 @@ void main() {
     await tester.tap(find.text('Ketersediaan & harga'));
     await tester.pumpAndSettle();
     expect(find.text('Jam praktik mingguan'), findsOneWidget);
-    expect(find.text('Hari libur:'), findsOneWidget);
-    expect(find.text('belum ada'), findsOneWidget);
-    expect(find.text('Paket 4 sesi / 6 minggu:'), findsOneWidget);
+    expect(find.text('Hari libur: belum ada'), findsOneWidget);
+    expect(find.text('Continuous Package'), findsOneWidget);
     expect(find.text('belum diatur'), findsNWidgets(3));
     client.requests.clear();
     await tester.tap(find.text('Jadwal'));

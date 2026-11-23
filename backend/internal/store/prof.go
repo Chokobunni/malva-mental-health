@@ -528,6 +528,7 @@ type DoctorSearchParams struct {
 type ProfessionalSchedule struct {
 	ID                  string `json:"id"`
 	ProfessionalID      string `json:"professional_id"`
+	ServiceCategory     string `json:"service_category"`
 	DayOfWeek           int    `json:"day_of_week"`
 	StartTime           string `json:"start_time"`
 	EndTime             string `json:"end_time"`
@@ -539,33 +540,57 @@ type ProfessionalSchedule struct {
 // milik profesional (aktif maupun nonaktif) — dipakai untuk pengelolaan
 // jadwal di aplikasi profesional agar baris nonaktif tetap tampil.
 func (s *Store) ListSchedulesForProfessional(ctx context.Context, professionalID string) ([]ProfessionalSchedule, error) {
-	return s.listSchedules(ctx, professionalID, false)
+	return s.listSchedules(ctx, professionalID)
 }
 
 // ListActiveSchedulesForProfessional hanya mengembalikan jadwal aktif —
 // dipakai untuk penentuan slot booking & ketersediaan sisi pasien.
-func (s *Store) ListActiveSchedulesForProfessional(ctx context.Context, professionalID string) ([]ProfessionalSchedule, error) {
-	schedules, err := s.listSchedules(ctx, professionalID, true)
+func (s *Store) ListActiveSchedulesForProfessional(ctx context.Context, professionalID string, categories ...string) ([]ProfessionalSchedule, error) {
+	schedules, err := s.listSchedules(ctx, professionalID)
 	if err != nil {
 		return nil, err
 	}
-	// Logging debug: pastikan jadwal baru langsung terbaca setelah upsert.
-	// Cegah regresi bug #4 (jadwal profesional tidak muncul di sisi pasien).
-	if len(schedules) == 0 {
-		// Hanya log bila benar-benar kosong — bukan error, tapi indikasi
-		// bahwa upsert mungkin belum commit atau payload tidak sesuai.
-		_ = professionalID // hindari unused variable warning
-	}
-	return schedules, nil
+	return activeSchedulesForCategories(schedules, categories...), nil
 }
 
-func (s *Store) listSchedules(ctx context.Context, professionalID string, activeOnly bool) ([]ProfessionalSchedule, error) {
-	q := `SELECT id, professional_id, day_of_week, start_time::text, end_time::text, slot_duration_minutes, is_active
-		FROM professional_schedules WHERE professional_id = $1 ORDER BY day_of_week, start_time`
-	if activeOnly {
-		q = `SELECT id, professional_id, day_of_week, start_time::text, end_time::text, slot_duration_minutes, is_active
-			FROM professional_schedules WHERE professional_id = $1 AND is_active = true ORDER BY day_of_week, start_time`
+const ScheduleShared = "shared"
+
+func IsScheduleCategory(category string) bool {
+	switch category {
+	case ScheduleShared, "quick_chat", "quick_video", "package":
+		return true
 	}
+	return false
+}
+
+func activeSchedulesForCategories(schedules []ProfessionalSchedule, categories ...string) []ProfessionalSchedule {
+	if len(categories) == 0 || (len(categories) == 1 && categories[0] == "") {
+		categories = []string{"quick_chat", "quick_video", "package"}
+	}
+	configured := make(map[string]bool, len(categories))
+	for _, schedule := range schedules {
+		configured[schedule.ServiceCategory] = true
+	}
+	selected := make(map[string]bool, len(categories))
+	for _, category := range categories {
+		if configured[category] {
+			selected[category] = true
+		} else {
+			selected[ScheduleShared] = true
+		}
+	}
+	var out []ProfessionalSchedule
+	for _, schedule := range schedules {
+		if schedule.IsActive && selected[schedule.ServiceCategory] {
+			out = append(out, schedule)
+		}
+	}
+	return out
+}
+
+func (s *Store) listSchedules(ctx context.Context, professionalID string) ([]ProfessionalSchedule, error) {
+	const q = `SELECT id, professional_id, service_category, day_of_week, start_time::text, end_time::text, slot_duration_minutes, is_active
+		FROM professional_schedules WHERE professional_id = $1 ORDER BY day_of_week, start_time, end_time, service_category`
 	rows, err := s.db.QueryContext(ctx, q, professionalID)
 	if err != nil {
 		return nil, err
@@ -574,7 +599,7 @@ func (s *Store) listSchedules(ctx context.Context, professionalID string, active
 	var out []ProfessionalSchedule
 	for rows.Next() {
 		var sch ProfessionalSchedule
-		if err := rows.Scan(&sch.ID, &sch.ProfessionalID, &sch.DayOfWeek, &sch.StartTime, &sch.EndTime, &sch.SlotDurationMinutes, &sch.IsActive); err != nil {
+		if err := rows.Scan(&sch.ID, &sch.ProfessionalID, &sch.ServiceCategory, &sch.DayOfWeek, &sch.StartTime, &sch.EndTime, &sch.SlotDurationMinutes, &sch.IsActive); err != nil {
 			return nil, err
 		}
 		out = append(out, sch)
@@ -584,10 +609,8 @@ func (s *Store) listSchedules(ctx context.Context, professionalID string, active
 
 // UpsertSchedules menyimpan jadwal mingguan profesional (insert/update).
 //
-// KONTRAK: payload berisi SNAPSHOT penuh jadwal profesional — semua baris
-// (aktif maupun nonaktif), seperti yang dikirim aplikasi profesional dan
-// panel admin: keduanya memuat seluruh baris lebih dulu (ListSchedules…),
-// lalu mengirimnya kembali utuh.
+// Payload adalah snapshot untuk kategori yang dikirim. Kategori kosong
+// berarti shared, agar penyimpanan klien lama tidak menonaktifkan layanan lain.
 //
 // PERBAIKAN PENTING: baris yang benar-benar HILANG dari payload
 // dinonaktifkan secara TERARAH, bukan lewat pola "nonaktifkan SEMUA baris
@@ -604,12 +627,19 @@ func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, sche
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Dedup entri identik dalam satu batch (kunci: day_of_week|start|end).
+	// Dedup identik dalam kategori yang sama.
 	// Entri TERAKHIR untuk kunci yang sama yang menang (deterministik).
 	seen := make(map[string]ProfessionalSchedule, len(schedules))
 	order := make([]string, 0, len(schedules))
 	for _, sch := range schedules {
+		if sch.ServiceCategory == "" {
+			sch.ServiceCategory = ScheduleShared
+		}
+		if !IsScheduleCategory(sch.ServiceCategory) {
+			return errors.New("service_category tidak valid")
+		}
 		key := strings.Join([]string{
+			sch.ServiceCategory,
 			strconv.Itoa(sch.DayOfWeek),
 			strings.TrimSpace(sch.StartTime),
 			strings.TrimSpace(sch.EndTime),
@@ -633,26 +663,47 @@ func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, sche
 		seen[key] = sch
 	}
 
+	// Serialize snapshots for the same professional so omissions are applied
+	// to the complete set, including rows written by another request.
+	if len(order) > 0 {
+		if _, err := tx.ExecContext(ctx,
+			`SELECT pg_advisory_xact_lock(hashtextextended('professional_schedules:' || $1::text, 0))`,
+			professionalID); err != nil {
+			return err
+		}
+	}
+
 	// 1) Upsert setiap baris payload: perbarui baris identik yang sudah ada
 	//    (menghormati is_active dari payload), atau insert bila belum ada.
 	//    Mencegah penumpukan baris duplikat setiap kali menyimpan.
 	for _, key := range order {
 		sch := seen[key]
-		res, err := tx.ExecContext(ctx, `UPDATE professional_schedules
-			SET slot_duration_minutes = $4, is_active = $5
-			WHERE professional_id = $1 AND day_of_week = $2 AND start_time = $3::time AND end_time = $6::time`,
-			professionalID, sch.DayOfWeek, sch.StartTime, sch.SlotDurationMinutes, sch.IsActive, sch.EndTime)
-		if err != nil {
-			return err
-		}
-		if affected, _ := res.RowsAffected(); affected == 0 {
-			const q = `INSERT INTO professional_schedules
-				(professional_id, day_of_week, start_time, end_time, slot_duration_minutes, is_active)
-				VALUES ($1, $2, $3, $4, $5, $6)`
-			if _, err := tx.ExecContext(ctx, q,
-				professionalID, sch.DayOfWeek, sch.StartTime, sch.EndTime, sch.SlotDurationMinutes, sch.IsActive); err != nil {
+		if sch.ID != "" {
+			result, err := tx.ExecContext(ctx, `UPDATE professional_schedules
+				SET service_category=$3, day_of_week=$4, start_time=$5, end_time=$6,
+				    slot_duration_minutes=$7, is_active=$8 WHERE professional_id=$1 AND id=$2`,
+				professionalID, sch.ID, sch.ServiceCategory, sch.DayOfWeek, sch.StartTime,
+				sch.EndTime, sch.SlotDurationMinutes, sch.IsActive)
+			if err != nil {
 				return err
 			}
+			affected, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if affected == 0 {
+				return ErrScheduleNotFound
+			}
+			continue
+		}
+		const q = `INSERT INTO professional_schedules
+			(professional_id, service_category, day_of_week, start_time, end_time, slot_duration_minutes, is_active)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			ON CONFLICT (professional_id, service_category, day_of_week, start_time, end_time)
+			DO UPDATE SET slot_duration_minutes = EXCLUDED.slot_duration_minutes, is_active = EXCLUDED.is_active`
+		if _, err := tx.ExecContext(ctx, q, professionalID, sch.ServiceCategory,
+			sch.DayOfWeek, sch.StartTime, sch.EndTime, sch.SlotDurationMinutes, sch.IsActive); err != nil {
+			return err
 		}
 	}
 
@@ -660,18 +711,25 @@ func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, sche
 	//    Payload kosong = tidak mengubah apa pun (guard anti-wipe).
 	if len(order) > 0 {
 		placeholders := make([]string, 0, len(order))
-		args := make([]any, 0, 1+len(order)*3)
+		args := make([]any, 0, 1+len(order)*4)
+		categoryPlaceholders := make([]string, 0, 4)
+		present := make(map[string]bool, 4)
 		args = append(args, professionalID)
 		for i, key := range order {
 			sch := seen[key]
-			args = append(args, sch.DayOfWeek, sch.StartTime, sch.EndTime)
-			base := 2 + i*3
+			args = append(args, sch.ServiceCategory, sch.DayOfWeek, sch.StartTime, sch.EndTime)
+			base := 2 + i*4
+			if !present[sch.ServiceCategory] {
+				present[sch.ServiceCategory] = true
+				categoryPlaceholders = append(categoryPlaceholders, fmt.Sprintf("$%d", base))
+			}
 			placeholders = append(placeholders,
-				fmt.Sprintf("($%d, $%d::time, $%d::time)", base, base+1, base+2))
+				fmt.Sprintf("($%d, $%d, $%d::time, $%d::time)", base, base+1, base+2, base+3))
 		}
 		q := `UPDATE professional_schedules SET is_active = false
 			WHERE professional_id = $1
-			  AND (day_of_week, start_time, end_time) NOT IN (` + strings.Join(placeholders, ", ") + `)`
+			  AND service_category IN (` + strings.Join(categoryPlaceholders, ", ") + `)
+			  AND (service_category, day_of_week, start_time, end_time) NOT IN (` + strings.Join(placeholders, ", ") + `)`
 		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
 			return err
 		}

@@ -9,7 +9,6 @@ import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
-import '../widgets/malva_components.dart';
 import '../widgets/professional_avatar.dart';
 import '../time/wib.dart';
 
@@ -81,6 +80,12 @@ class _ProfessionalProfileEditorScreenState
   bool _isLoading = true;
   bool _isSaving = false;
   String? _error;
+  String? _loadError;
+  bool _showAllSpecialties = false;
+  bool _birthDateLoadError = false;
+  String? _savedBirthDateKey;
+  DateTime? _selectedBirthDate;
+  final _birthDateController = TextEditingController();
   String? _successMessage;
 
   // Form fields
@@ -121,6 +126,7 @@ class _ProfessionalProfileEditorScreenState
 
   @override
   void dispose() {
+    _birthDateController.dispose();
     _bioController.dispose();
     _hospitalNameController.dispose();
     _addressController.dispose();
@@ -134,16 +140,22 @@ class _ProfessionalProfileEditorScreenState
   }
 
   Future<void> _load() async {
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
     final token = _token;
     if (token == null || token.isEmpty) {
       setState(() {
         _isLoading = false;
-        _error = 'Login dulu untuk mengedit profil.';
+        _loadError = 'Login dulu untuk mengedit profil.';
       });
       return;
     }
     try {
       final cred = await _api.getMyCredentials(accessToken: token);
+      if (!mounted) return;
+      await _loadBirthDate();
       if (!mounted) return;
       setState(() {
         _cred = cred;
@@ -153,10 +165,60 @@ class _ProfessionalProfileEditorScreenState
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = friendlyErrorMessage(e);
+        _loadError = friendlyErrorMessage(e);
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _loadBirthDate() async {
+    final token = _token;
+    if (token == null || token.isEmpty) return;
+    try {
+      final profile = await _api.fetchUserProfile(accessToken: token);
+      if (!mounted) return;
+      setState(() {
+        final birthDate = profile.birthDateTime;
+        _savedBirthDateKey = birthDate == null ? null : wibDateKey(birthDate);
+        _selectedBirthDate = birthDate;
+        _birthDateController.text =
+            birthDate == null ? '' : formatWibDate(birthDate);
+        _birthDateLoadError = false;
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() => _birthDateLoadError = true);
+    }
+  }
+
+  Future<void> _pickBirthDate() async {
+    final today = wibNow();
+    final oldest = DateTime(1900);
+    final current = _selectedBirthDate;
+    final date = await showDatePicker(
+      context: context,
+      firstDate: oldest,
+      lastDate: today,
+      currentDate: today,
+      initialDate: current != null &&
+              !current.isBefore(oldest) &&
+              !current.isAfter(today)
+          ? DateTime(current.year, current.month, current.day)
+          : null,
+      initialDatePickerMode: DatePickerMode.year,
+      helpText: 'Pilih tanggal lahir',
+    );
+    if (date == null || !mounted) return;
+    // The picker returns calendar components in the device zone.
+    final birthDate = parseWibStored(
+      "${date.year}-${date.month.toString().padLeft(2, '0')}-"
+      "${date.day.toString().padLeft(2, '0')}",
+    );
+    if (birthDate == null) return;
+    setState(() {
+      _selectedBirthDate = birthDate;
+      _birthDateController.text = formatWibDate(birthDate);
+    });
   }
 
   void _populateFromCredential(BackendProfessionalCredential? cred) {
@@ -173,10 +235,10 @@ class _ProfessionalProfileEditorScreenState
     _sipController.text = cred.sipNumber;
     _sippController.text = cred.sippNumber;
     _selectedSpecialties = Set<String>.from(cred.subSpecialties);
-    _education = List<Map<String, dynamic>>.from(cred.education);
+    _education = cred.education.map((row) => {...row}).toList();
   }
 
-  Future<void> _save() async {
+  Future<void> _save({bool saveBirthDate = false}) async {
     final token = _token;
     if (token == null || token.isEmpty) return;
     setState(() {
@@ -185,6 +247,13 @@ class _ProfessionalProfileEditorScreenState
       _successMessage = null;
     });
     try {
+      final birthDate = _selectedBirthDate;
+      final dateKey = birthDate == null ? null : wibDateKey(birthDate);
+      if (saveBirthDate && dateKey != null && dateKey != _savedBirthDateKey) {
+        await _api.updateMe(accessToken: token, dateOfBirth: dateKey);
+        if (!mounted) return;
+        _savedBirthDateKey = dateKey;
+      }
       final updated = await _api.uploadProfessionalCredentials(
         accessToken: token,
         strNumber: _strController.text.trim(),
@@ -254,7 +323,7 @@ class _ProfessionalProfileEditorScreenState
         maxHeight: 1024,
         imageQuality: 85,
       );
-      if (picked == null) return;
+      if (picked == null || !mounted) return;
 
       // Validasi ekstensi sisi klien.
       final ext = '.' + picked.name.split('.').last.toLowerCase();
@@ -264,7 +333,6 @@ class _ProfessionalProfileEditorScreenState
         return;
       }
 
-      if (!mounted) return;
       setState(() {
         _isUploadingPhoto = true;
         _error = null;
@@ -291,12 +359,14 @@ class _ProfessionalProfileEditorScreenState
       if (!mounted) return;
       setState(() {
         _isUploadingPhoto = false;
+        _localPhotoBytes = null;
         _error = e.message;
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _isUploadingPhoto = false;
+        _localPhotoBytes = null;
         _error = friendlyErrorMessage(e);
       });
     }
@@ -312,7 +382,7 @@ class _ProfessionalProfileEditorScreenState
     try {
       final picker = ref.read(filePickerProvider);
       final picked = await picker.pick('video');
-      if (picked == null) return;
+      if (picked == null || !mounted) return;
 
       // Validasi ekstensi sisi klien.
       final ext = '.' + picked.name.split('.').last.toLowerCase();
@@ -321,7 +391,6 @@ class _ProfessionalProfileEditorScreenState
         return;
       }
 
-      if (!mounted) return;
       setState(() {
         _isUploadingVideo = true;
         _error = null;
@@ -347,12 +416,14 @@ class _ProfessionalProfileEditorScreenState
       if (!mounted) return;
       setState(() {
         _isUploadingVideo = false;
+        _hasLocalVideo = false;
         _error = e.message;
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _isUploadingVideo = false;
+        _hasLocalVideo = false;
         _error = friendlyErrorMessage(e);
       });
     }
@@ -386,41 +457,80 @@ class _ProfessionalProfileEditorScreenState
   }
 
   void _updateEducation(int index, String field, String value) {
-    setState(() {
-      _education[index] = {..._education[index], field: value};
-    });
+    _education[index][field] = value;
   }
 
   @override
   Widget build(BuildContext context) {
+    final light = Theme.of(context).brightness == Brightness.light;
+    final busy = _isSaving || _isUploadingPhoto || _isUploadingVideo;
+    final showForm = !_isLoading && _loadError == null;
+    final visibleSpecialties = _showAllSpecialties
+        ? _availableSpecialties
+        : _availableSpecialties
+            .where((entry) => _selectedSpecialties.contains(entry.$1))
+            .take(6)
+            .toList();
+    final hiddenSpecialtyCount =
+        _availableSpecialties.length - visibleSpecialties.length;
     return Scaffold(
+      backgroundColor: light ? const Color(0xFFF5EFF9) : null,
       appBar: AppBar(
         title: const Text('Edit Profil Profesional'),
+        centerTitle: true,
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
-        actions: [
-          if (_successMessage != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Center(
-                child: Text(
-                  _successMessage!,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                ),
-              ),
-            ),
-        ],
       ),
+      bottomNavigationBar: showForm
+          ? SafeArea(
+              top: false,
+              minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_error != null || _successMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        _error ?? _successMessage!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: _error == null
+                              ? MalvaColors.plum
+                              : MalvaColors.danger,
+                        ),
+                      ),
+                    ),
+                  FilledButton.icon(
+                    onPressed: busy ? null : () => _save(saveBirthDate: true),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: MalvaColors.seed,
+                      minimumSize: const Size(0, 42),
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: _isSaving
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save_outlined),
+                    label: Text(_isSaving ? 'Menyimpan...' : 'Simpan Profil'),
+                  ),
+                ],
+              ),
+            )
+          : null,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _error != null && _cred == null
+          : _loadError != null
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(_error!, textAlign: TextAlign.center),
+                        Text(_loadError!, textAlign: TextAlign.center),
                         const SizedBox(height: 10),
                         OutlinedButton.icon(
                           onPressed: _load,
@@ -432,265 +542,287 @@ class _ProfessionalProfileEditorScreenState
                   ),
                 )
               : ListView(
-                  padding: const EdgeInsets.all(18),
+                  padding: const EdgeInsets.all(16),
                   children: [
-                    // ── Foto Profil ──────────────────────────────────────
-                    const SectionLabel('Foto Profil'),
-                    SoftCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    _section('Foto Profil', [
+                      Row(
                         children: [
-                          // Pratinjau foto: berkas lokal > URL jaringan > kosong
-                          Center(
-                            child: _buildPhotoPreview(),
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Tombol aksi: pilih dari galeri + generate AI avatar
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            alignment: WrapAlignment.center,
-                            children: [
-                              OutlinedButton.icon(
-                                onPressed: _isUploadingPhoto
-                                    ? null
-                                    : _pickAndUploadPhoto,
-                                icon: _isUploadingPhoto
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      )
-                                    : const Icon(Icons.photo_library_rounded,
-                                        size: 18),
-                                label: Text(_isUploadingPhoto
-                                    ? 'Mengunggah...'
-                                    : 'Pilih dari Galeri'),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed: _generateAiAvatar,
-                                icon: const Icon(Icons.auto_awesome_rounded,
-                                    size: 18),
-                                label: const Text('Generate AI Avatar'),
-                              ),
-                            ],
+                          _buildPhotoPreview(),
+                          const SizedBox(width: 16),
+                          Flexible(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: busy ? null : _pickAndUploadPhoto,
+                                  style: _mediaButtonStyle,
+                                  icon: const Icon(Icons.image_outlined,
+                                      size: 19),
+                                  label: Text(_isUploadingPhoto
+                                      ? 'Mengunggah...'
+                                      : 'Pilih dari Galeri'),
+                                ),
+                                TextButton.icon(
+                                  onPressed: busy ? null : _generateAiAvatar,
+                                  icon: const Icon(Icons.auto_awesome_outlined,
+                                      size: 16),
+                                  label: const Text('Buat avatar'),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // ── Bio / Overview ───────────────────────────────────
-                    const SectionLabel('Bio / Overview'),
-                    SoftCard(
-                      child: TextField(
-                        controller: _bioController,
-                        maxLines: 5,
-                        decoration: const InputDecoration(
-                          labelText: 'Deskripsi profesional',
-                          hintText:
-                              'Ceritakan pengalaman, pendekatan terapi, dan fokus keahlianmu...',
+                      const SizedBox(height: 10),
+                      _field(
+                        'Tanggal Lahir',
+                        _birthDateController,
+                        hint: 'DD/MM/YYYY',
+                        readOnly: true,
+                        onTap:
+                            busy || _birthDateLoadError ? null : _pickBirthDate,
+                        suffixIcon: const Icon(Icons.calendar_today_outlined),
+                      ),
+                      if (_birthDateLoadError)
+                        TextButton(
+                          onPressed: busy ? null : _loadBirthDate,
+                          child: const Text('Muat ulang tanggal lahir'),
+                        ),
+                    ]),
+                    _section(
+                        'Bio / Overview',
+                        [
+                          _field(
+                            'Deskripsi profesional',
+                            _bioController,
+                            hint: 'Ceritakan pengalaman dan fokus keahlianmu',
+                            maxLines: 5,
+                          ),
+                        ],
+                        titleOutside: true),
+                    _section(
+                        'Video Perkenalan',
+                        [
+                          if (_hasLocalVideo ||
+                              _videoUrlController.text.isNotEmpty)
+                            Container(
+                              width: double.infinity,
+                              constraints: const BoxConstraints(minHeight: 108),
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFE3F7),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.video_file_outlined,
+                                    size: 32,
+                                    color: MalvaColors.plum,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(_isUploadingVideo
+                                      ? 'Mengunggah video...'
+                                      : 'Video perkenalan tersimpan'),
+                                ],
+                              ),
+                            ),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: busy ? null : _pickAndUploadVideo,
+                              style: _mediaButtonStyle,
+                              icon: const Icon(Icons.videocam_outlined),
+                              label: const Text('Pilih Video dari Galeri'),
+                            ),
+                          ),
+                        ],
+                        titleOutside: true),
+                    _section('Bidang Keahlian', [
+                      if (visibleSpecialties.isNotEmpty)
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            for (final (key, label) in visibleSpecialties)
+                              FilterChip(
+                                label: Text(label),
+                                visualDensity: VisualDensity.compact,
+                                selected: _selectedSpecialties.contains(key),
+                                selectedColor: const Color(0xFFEFE3F7),
+                                checkmarkColor: MalvaColors.plum,
+                                onSelected: busy
+                                    ? null
+                                    : (selected) => setState(() {
+                                          if (selected) {
+                                            _selectedSpecialties.add(key);
+                                          } else {
+                                            _selectedSpecialties.remove(key);
+                                          }
+                                        }),
+                              ),
+                          ],
+                        ),
+                      if (_showAllSpecialties || hiddenSpecialtyCount > 0) ...[
+                        const Divider(),
+                        Align(
+                          alignment: Alignment.center,
+                          child: TextButton.icon(
+                            onPressed: () => setState(() =>
+                                _showAllSpecialties = !_showAllSpecialties),
+                            icon: Icon(_showAllSpecialties
+                                ? Icons.expand_less
+                                : Icons.expand_more),
+                            label: Text(_showAllSpecialties
+                                ? 'Lihat lebih sedikit'
+                                : 'Lihat $hiddenSpecialtyCount lainnya'),
+                          ),
+                        ),
+                      ],
+                    ]),
+                    _section('Riwayat Pendidikan', [
+                      if (_education.isNotEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 8, bottom: 6),
+                          child: Row(children: [
+                            Expanded(flex: 2, child: Text('Gelar')),
+                            SizedBox(width: 8),
+                            Expanded(flex: 3, child: Text('Institusi')),
+                            SizedBox(width: 8),
+                            SizedBox(width: 72, child: Text('Tahun')),
+                            SizedBox(width: 45),
+                          ]),
+                        ),
+                      for (var i = 0; i < _education.length; i++) ...[
+                        _EducationRow(
+                          key: ObjectKey(_education[i]),
+                          degree: _education[i]['degree']?.toString() ?? '',
+                          school: _education[i]['school']?.toString() ?? '',
+                          year: _education[i]['year']?.toString() ?? '',
+                          onDegreeChanged: (v) =>
+                              _updateEducation(i, 'degree', v),
+                          onSchoolChanged: (v) =>
+                              _updateEducation(i, 'school', v),
+                          onYearChanged: (v) => _updateEducation(i, 'year', v),
+                          onRemove: () => _removeEducation(i),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      Align(
+                        alignment: Alignment.center,
+                        child: OutlinedButton.icon(
+                          onPressed: busy ? null : _addEducation,
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: const Text('Tambah Pendidikan'),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // ── Sub-spesialisasi ─────────────────────────────────
-                    const SectionLabel('Bidang Keahlian'),
-                    SoftCard(
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final (key, label) in _availableSpecialties)
-                            FilterChip(
-                              label: Text(label),
-                              selected: _selectedSpecialties.contains(key),
-                              onSelected: (selected) {
-                                setState(() {
-                                  if (selected) {
-                                    _selectedSpecialties.add(key);
-                                  } else {
-                                    _selectedSpecialties.remove(key);
-                                  }
-                                });
-                              },
-                              selectedColor:
-                                  MalvaColors.seed.withValues(alpha: 0.2),
-                            ),
-                        ],
+                    ]),
+                    _section('Pengalaman & Faskes', [
+                      _field(
+                        'Tahun pengalaman praktik',
+                        _yearsExpController,
+                        hint: 'Dikelola oleh admin',
+                        readOnly: true,
                       ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // ── Riwayat Pendidikan ───────────────────────────────
-                    const SectionLabel('Riwayat Pendidikan'),
-                    SoftCard(
-                      child: Column(
-                        children: [
-                          for (var i = 0; i < _education.length; i++) ...[
-                            _EducationRow(
-                              key: ValueKey('edu-$i-${_education[i].hashCode}'),
-                              degree: _education[i]['degree']?.toString() ?? '',
-                              school: _education[i]['school']?.toString() ?? '',
-                              year: _education[i]['year']?.toString() ?? '',
-                              onDegreeChanged: (v) =>
-                                  _updateEducation(i, 'degree', v),
-                              onSchoolChanged: (v) =>
-                                  _updateEducation(i, 'school', v),
-                              onYearChanged: (v) =>
-                                  _updateEducation(i, 'year', v),
-                              onRemove: () => _removeEducation(i),
-                            ),
-                            if (i < _education.length - 1)
-                              const Divider(height: 16),
-                          ],
-                          OutlinedButton.icon(
-                            onPressed: _addEducation,
-                            icon: const Icon(Icons.add_rounded, size: 16),
-                            label: const Text('Tambah Pendidikan'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // ── Pengalaman & Faskes ──────────────────────────────
-                    const SectionLabel('Pengalaman & Faskes'),
-                    SoftCard(
-                      child: Column(
-                        children: [
-                          TextField(
-                            controller: _yearsExpController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                                labelText: 'Tahun pengalaman praktik'),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _hospitalNameController,
-                            decoration: const InputDecoration(
-                                labelText: 'Nama faskes / tempat praktik'),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _addressController,
-                            decoration: const InputDecoration(
-                                labelText: 'Alamat faskes / tempat praktik'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // ── Lisensi ──────────────────────────────────────────
-                    const SectionLabel('Lisensi'),
-                    SoftCard(
-                      child: Column(
-                        children: [
-                          TextField(
-                            controller: _strController,
-                            decoration:
-                                const InputDecoration(labelText: 'Nomor STR'),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _sipController,
-                            decoration: const InputDecoration(
-                                labelText: 'Nomor SIP',
-                                hintText: 'SIP-1234567890'),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _sippController,
-                            decoration: const InputDecoration(
-                                labelText: 'Nomor SIPP (bila ada)',
-                                hintText: 'SIPP-1234567890'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // ── Video Perkenalan ─────────────────────────────────
-                    const SectionLabel('Video Perkenalan'),
-                    SoftCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Tombol pilih video dari galeri
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: _isUploadingVideo
-                                      ? null
-                                      : _pickAndUploadVideo,
-                                  icon: _isUploadingVideo
-                                      ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 2),
-                                        )
-                                      : const Icon(Icons.video_library_rounded,
-                                          size: 18),
-                                  label: Text(_isUploadingVideo
-                                      ? 'Mengunggah video...'
-                                      : 'Pilih Video dari Galeri'),
-                                ),
-                              ),
-                            ],
-                          ),
-                          // Pratinjau thumbnail video lokal
-                          if (_hasLocalVideo) ...[
-                            const SizedBox(height: 8),
-                            Center(
-                              child: Container(
-                                width: 120,
-                                height: 80,
-                                decoration: BoxDecoration(
-                                  color:
-                                      MalvaColors.seed.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Center(
-                                  child: Icon(Icons.videocam_rounded,
-                                      size: 32, color: MalvaColors.seed),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // ── Error & Save ─────────────────────────────────────
-                    if (_error != null) ...[
-                      Text(_error!,
-                          style: const TextStyle(
-                              color: MalvaColors.danger,
-                              fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 8),
-                    ],
-
-                    FilledButton.icon(
-                      onPressed: _isSaving ? null : _save,
-                      icon: _isSaving
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.save_rounded),
-                      label: Text(_isSaving ? 'Menyimpan...' : 'Simpan Profil'),
-                    ),
-                    const SizedBox(height: 24),
+                      const SizedBox(height: 10),
+                      _field('Nama faskes / tempat praktik',
+                          _hospitalNameController),
+                      const SizedBox(height: 10),
+                      _field(
+                          'Alamat faskes / tempat praktik', _addressController),
+                    ]),
+                    _section('Lisensi', [
+                      _field('Nomor STR', _strController),
+                      const SizedBox(height: 10),
+                      _field('Nomor SIP', _sipController,
+                          hint: 'Masukkan nomor SIP'),
+                      const SizedBox(height: 10),
+                      _field('Nomor SIPP (bila ada)', _sippController,
+                          hint: 'Masukkan nomor SIPP'),
+                    ]),
                   ],
                 ),
+    );
+  }
+
+  Widget _section(String title, List<Widget> children,
+      {bool titleOutside = false}) {
+    final colors = Theme.of(context).colorScheme;
+    final heading = Text(title,
+        style: TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+            color: colors.onSurface));
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (titleOutside)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+              child: heading,
+            ),
+          Card(
+            color: Theme.of(context).brightness == Brightness.light
+                ? Colors.white
+                : colors.surfaceContainerLow,
+            elevation: 1,
+            margin: EdgeInsets.zero,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!titleOutside) ...[heading, const SizedBox(height: 10)],
+                  ...children,
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  ButtonStyle get _mediaButtonStyle => OutlinedButton.styleFrom(
+        foregroundColor: MalvaColors.seed,
+        side: const BorderSide(color: MalvaColors.seed),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      );
+
+  Widget _field(
+    String label,
+    TextEditingController controller, {
+    String? hint,
+    bool readOnly = false,
+    VoidCallback? onTap,
+    Widget? suffixIcon,
+    int maxLines = 1,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 5),
+        Semantics(
+          label: label,
+          child: TextField(
+            controller: controller,
+            readOnly: readOnly,
+            onTap: onTap,
+            maxLines: maxLines,
+            decoration: _profileInput(
+              hintText: hint,
+              suffixIcon: suffixIcon,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -700,8 +832,8 @@ class _ProfessionalProfileEditorScreenState
     // Sedang mengunggah — tampilkan indikator loading.
     if (_isUploadingPhoto) {
       return Container(
-        width: 100,
-        height: 100,
+        width: 96,
+        height: 96,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: MalvaColors.seed.withValues(alpha: 0.1),
@@ -717,8 +849,8 @@ class _ProfessionalProfileEditorScreenState
       return ClipOval(
         child: Image.memory(
           _localPhotoBytes!,
-          width: 100,
-          height: 100,
+          width: 96,
+          height: 96,
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => _photoPlaceholder(),
         ),
@@ -731,8 +863,8 @@ class _ProfessionalProfileEditorScreenState
       return ClipOval(
         child: ProfessionalPhoto(
           photoUrl: url,
-          width: 100,
-          height: 100,
+          width: 96,
+          height: 96,
           fit: BoxFit.cover,
           fallback: _photoPlaceholder(),
         ),
@@ -745,8 +877,8 @@ class _ProfessionalProfileEditorScreenState
   /// Placeholder ketika belum ada foto.
   Widget _photoPlaceholder() {
     return Container(
-      width: 100,
-      height: 100,
+      width: 96,
+      height: 96,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: MalvaColors.seed.withValues(alpha: 0.1),
@@ -757,6 +889,29 @@ class _ProfessionalProfileEditorScreenState
       ),
     );
   }
+}
+
+InputDecoration _profileInput({
+  String? labelText,
+  String? hintText,
+  Widget? suffixIcon,
+}) {
+  final border = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(9),
+    borderSide: const BorderSide(color: Color(0xFF958C99)),
+  );
+  return InputDecoration(
+    labelText: labelText,
+    hintText: hintText,
+    suffixIcon: suffixIcon,
+    suffixIconColor: MalvaColors.plum,
+    isDense: true,
+    filled: true,
+    fillColor: Colors.white,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+    border: border,
+    enabledBorder: border,
+  );
 }
 
 /// Baris pendidikan dengan TextEditingController yang diinisialisasi sekali.
@@ -814,9 +969,9 @@ class _EducationRowState extends State<_EducationRow> {
           flex: 2,
           child: TextField(
             controller: _degreeCtrl,
+            style: const TextStyle(fontSize: 14),
             onChanged: widget.onDegreeChanged,
-            decoration: const InputDecoration(
-                labelText: 'Gelar', hintText: 'Sp.KJ, M.Psi, S.Psi'),
+            decoration: _profileInput(),
           ),
         ),
         const SizedBox(width: 8),
@@ -824,24 +979,26 @@ class _EducationRowState extends State<_EducationRow> {
           flex: 3,
           child: TextField(
             controller: _schoolCtrl,
+            style: const TextStyle(fontSize: 14),
             onChanged: widget.onSchoolChanged,
-            decoration: const InputDecoration(
-                labelText: 'Institusi', hintText: 'FKUI, UNPAD, UGM'),
+            decoration: _profileInput(),
           ),
         ),
         const SizedBox(width: 8),
         SizedBox(
-          width: 70,
+          width: 72,
           child: TextField(
             controller: _yearCtrl,
+            style: const TextStyle(fontSize: 14),
             onChanged: widget.onYearChanged,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Tahun'),
+            decoration: _profileInput(),
           ),
         ),
         IconButton(
           onPressed: widget.onRemove,
-          icon: const Icon(Icons.close_rounded, color: MalvaColors.danger),
+          tooltip: 'Hapus pendidikan',
+          icon: const Icon(Icons.delete_outline, color: MalvaColors.plum),
         ),
       ],
     );

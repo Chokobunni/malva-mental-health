@@ -145,7 +145,7 @@ func (s *Store) CreateBooking(ctx context.Context, b Booking) (Booking, error) {
 
 // CreatePackageBooking binds a care package to its payment booking; package_id
 // on bookings remains reserved for the legacy service_packages table.
-func (s *Store) CreatePackageBooking(ctx context.Context, packageID string, b Booking) (Booking, error) {
+func (s *Store) CreatePackageBooking(ctx context.Context, packageID string, b Booking, slots ...PackageCheckoutSlot) (Booking, error) {
 	if b.DurationMinutes == 0 {
 		b.DurationMinutes = 60
 	}
@@ -194,7 +194,8 @@ func (s *Store) CreatePackageBooking(ctx context.Context, packageID string, b Bo
 			bookingID = sql.NullString{String: ids[0], Valid: true}
 		}
 	}
-	if bookingID.Valid {
+	replay := bookingID.Valid
+	if replay {
 		if len(b.SlotTime) == 5 {
 			b.SlotTime += ":00"
 		}
@@ -214,6 +215,9 @@ func (s *Store) CreatePackageBooking(ctx context.Context, packageID string, b Bo
 		}
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE care_packages SET booking_id=$2,updated_at=now() WHERE id=$1`, packageID, b.ID); err != nil {
+		return Booking{}, err
+	}
+	if err := persistPackageCheckoutSlots(ctx, tx, b.ID, replay, slots); err != nil {
 		return Booking{}, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -369,8 +373,8 @@ func (s *Store) CreatePayment(ctx context.Context, p Payment) (Payment, error) {
 		return Payment{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var bookingStatus string
-	if err := tx.QueryRowContext(ctx, `SELECT status FROM bookings WHERE id=$1 FOR UPDATE`, p.BookingID).Scan(&bookingStatus); err != nil {
+	var bookingStatus, patientID, professionalID string
+	if err := tx.QueryRowContext(ctx, `SELECT status, patient_id, professional_id FROM bookings WHERE id=$1 FOR UPDATE`, p.BookingID).Scan(&bookingStatus, &patientID, &professionalID); err != nil {
 		return Payment{}, err
 	}
 	if bookingStatus != "pending" && bookingStatus != "paid" {
@@ -402,6 +406,25 @@ func (s *Store) CreatePayment(ctx context.Context, p Payment) (Payment, error) {
 	if bookingStatus != "pending" {
 		return Payment{}, ErrPurchaseConflict
 	}
+	var boundPackage bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
+        SELECT 1 FROM care_packages WHERE booking_id=$1 AND status='pending_payment'
+    )`, p.BookingID).Scan(&boundPackage); err != nil {
+		return Payment{}, err
+	}
+	if boundPackage {
+		if err := lockPackageCapacity(ctx, tx, professionalID); err != nil {
+			return Payment{}, err
+		}
+		remaining, canRenew, canResume, err := packagePatientAvailability(ctx, tx, professionalID, patientID, clock.Now())
+		if err != nil {
+			return Payment{}, err
+		}
+		if remaining != nil && *remaining == 0 && !canRenew && !canResume {
+			return Payment{}, ErrPackageCapacity
+		}
+	}
+
 	// platform_fee_pct SMALLINT (maks 32767): fee 10% disimpan sebagai 10,
 	// bukan nominal rupiah (nominal ada di platform_fee_amount BIGINT).
 	const q = `INSERT INTO payments
@@ -428,11 +451,12 @@ func (s *Store) InitializePaymentGateway(ctx context.Context, reference, gateway
 		return Payment{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var bookingID, bookingStatus string
+	var bookingID, bookingStatus, patientID, professionalID string
 	if err := tx.QueryRowContext(ctx, `SELECT booking_id FROM payments WHERE reference=$1`, reference).Scan(&bookingID); err != nil {
 		return Payment{}, err
 	}
-	if err := tx.QueryRowContext(ctx, `SELECT status FROM bookings WHERE id=$1 FOR UPDATE`, bookingID).Scan(&bookingStatus); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT status, patient_id, professional_id FROM bookings WHERE id=$1 FOR UPDATE`, bookingID).
+		Scan(&bookingStatus, &patientID, &professionalID); err != nil {
 		return Payment{}, err
 	}
 	var token, status string
@@ -443,6 +467,25 @@ func (s *Store) InitializePaymentGateway(ctx context.Context, reference, gateway
 		return Payment{}, ErrPurchaseConflict
 	}
 	if status == "pending" && token == "" {
+		var boundPackage bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
+            SELECT 1 FROM care_packages WHERE booking_id=$1 AND status='pending_payment'
+        )`, bookingID).Scan(&boundPackage); err != nil {
+			return Payment{}, err
+		}
+		if boundPackage {
+			// Recheck under the same lock as admission before giving the buyer a payable link.
+			if err := lockPackageCapacity(ctx, tx, professionalID); err != nil {
+				return Payment{}, err
+			}
+			remaining, canRenew, canResume, err := packagePatientAvailability(ctx, tx, professionalID, patientID, clock.Now())
+			if err != nil {
+				return Payment{}, err
+			}
+			if remaining != nil && *remaining == 0 && !canRenew && !canResume {
+				return Payment{}, ErrPackageCapacity
+			}
+		}
 		token, redirect, err := create()
 		if err != nil {
 			return Payment{}, err

@@ -137,7 +137,8 @@ void main() {
     final container = await open(tester, server, scheduler);
     final gate = Completer<void>();
     scheduler.block = gate;
-    await tap(tester, find.byTooltip('Hapus goal').first);
+    await tap(tester, find.byTooltip('Opsi goal').first);
+    await tap(tester, find.text('Hapus permanen'));
     await tap(tester, find.widgetWithText(FilledButton, 'Hapus'));
     expect(server.accepted, isTrue);
     expect(scheduler.block, isNull,
@@ -166,7 +167,8 @@ void main() {
           isTrue);
       expect(scheduler.pending.values.any((t) => t.hour == 18), isTrue);
       if (delete) {
-        await tap(tester, find.byTooltip('Hapus goal').first);
+        await tap(tester, find.byTooltip('Opsi goal').first);
+        await tap(tester, find.text('Hapus permanen'));
         await tap(tester, find.widgetWithText(FilledButton, 'Hapus'));
       } else {
         await tap(tester, find.byTooltip('Edit goal').first);

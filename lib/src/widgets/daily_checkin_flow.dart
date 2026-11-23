@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'care_reference_widgets.dart';
+import 'account_avatar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
@@ -132,14 +133,6 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
     final name = session?.displayName.trim().isNotEmpty == true
         ? session!.displayName
         : store.patient.name;
-    final initials = name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((p) => p.isNotEmpty)
-        .take(2)
-        .map((p) => p[0])
-        .join()
-        .toUpperCase();
     final done = _done ||
         (_step == 0 && (hasCheckedInToday(store.moodEntries) || queuedToday));
     final streak = _checkInDateStreak([
@@ -182,9 +175,7 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
                               border:
                                   Border.all(color: Colors.white70, width: 2),
                             ),
-                            child: Text(initials,
-                                style: const TextStyle(
-                                    fontSize: 18, fontWeight: FontWeight.w700)),
+                            child: AccountAvatar(session: session, size: 35),
                           ),
                         ),
                       ),

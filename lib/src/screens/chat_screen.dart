@@ -1516,6 +1516,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           'form': med.form,
           'reminder_time':
               med.reminders.isEmpty ? '' : med.reminders.first.label,
+          'source': med.source,
         },
     ];
   }
