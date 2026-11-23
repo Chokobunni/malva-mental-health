@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../models.dart';
 import '../platform/platform_providers.dart';
@@ -407,17 +406,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 }
 
-class _AvatarPicker extends StatefulWidget {
+class _AvatarPicker extends ConsumerStatefulWidget {
   const _AvatarPicker({required this.session, this.initial});
 
   final AuthSession session;
   final String? initial;
 
   @override
-  State<_AvatarPicker> createState() => _AvatarPickerState();
+  ConsumerState<_AvatarPicker> createState() => _AvatarPickerState();
 }
 
-class _AvatarPickerState extends State<_AvatarPicker> {
+class _AvatarPickerState extends ConsumerState<_AvatarPicker> {
   late String selected = widget.initial ?? profileAvatarAssets.first;
   bool picking = false;
   String? error;
@@ -428,20 +427,18 @@ class _AvatarPickerState extends State<_AvatarPicker> {
       error = null;
     });
     try {
-      final file = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 256,
-        maxHeight: 256,
-        imageQuality: 78,
-      );
+      final file = await ref.read(filePickerProvider).pick(
+            'image',
+            maxWidth: 256,
+            maxHeight: 256,
+            imageQuality: 78,
+          );
       if (file == null || !mounted) return;
-      if (await file.length() > 192 * 1024) {
-        if (mounted) setState(() => error = 'Ukuran foto masih terlalu besar.');
+      if (file.size > 192 * 1024) {
+        setState(() => error = 'Ukuran foto masih terlalu besar.');
         return;
       }
-      final bytes = await file.readAsBytes();
-      if (!mounted) return;
-      setState(() => selected = base64Encode(bytes));
+      setState(() => selected = base64Encode(file.bytes));
     } on Object catch (failure) {
       if (mounted) setState(() => error = friendlyErrorMessage(failure));
     } finally {
