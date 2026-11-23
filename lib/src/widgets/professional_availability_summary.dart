@@ -6,16 +6,31 @@ import '../theme.dart';
 import '../time/wib.dart';
 import 'malva_components.dart';
 
-const _services = [
-  (Icons.chat_bubble_outline, 'Quick Session (Chat)', '1 sesi', 'per sesi'),
-  (Icons.videocam_outlined, 'Quick Session (Video)', '1 sesi', 'per sesi'),
-  (
-    Icons.event_repeat_outlined,
-    'Continuous Package',
-    '4 sesi · berlaku 6 minggu',
-    '4 sesi · 6 minggu'
-  ),
-];
+const professionalServiceNames = {
+  'quick_chat': 'Quick Session (Chat)',
+  'quick_video': 'Quick Session (Video)',
+  'package': 'Continuous Package',
+  'shared': 'Jadwal bersama',
+};
+
+const professionalServiceIcons = {
+  'quick_chat': Icons.chat_bubble_outline,
+  'quick_video': Icons.videocam_outlined,
+  'package': Icons.event_repeat_outlined,
+  'shared': Icons.calendar_month_outlined,
+};
+
+const _serviceCategories = ['quick_chat', 'quick_video', 'package'];
+
+List<BackendProfessionalSchedule> professionalServiceSchedules(
+  Iterable<BackendProfessionalSchedule> schedules,
+  String category,
+) {
+  final configured =
+      schedules.where((slot) => slot.serviceCategory == category).toList();
+  if (configured.isNotEmpty) return configured;
+  return schedules.where((slot) => slot.serviceCategory == 'shared').toList();
+}
 
 const _days = ['Min:', 'Sen:', 'Sel:', 'Rab:', 'Kam:', 'Jum:', 'Sab:'];
 
@@ -33,11 +48,13 @@ class ProfessionalAvailabilitySummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = schedules.where((slot) => slot.isActive).toList()
-      ..sort((a, b) {
-        final day = ((a.dayOfWeek + 6) % 7).compareTo((b.dayOfWeek + 6) % 7);
-        return day == 0 ? a.startTime.compareTo(b.startTime) : day;
-      });
+    List<BackendProfessionalSchedule> sortedSlots(String category) =>
+        professionalServiceSchedules(schedules, category)
+          ..sort((a, b) {
+            final day =
+                ((a.dayOfWeek + 6) % 7).compareTo((b.dayOfWeek + 6) % 7);
+            return day == 0 ? a.startTime.compareTo(b.startTime) : day;
+          });
     final today = wibDateKey(wibNow());
     final upcomingOff = timeOff
         .where((t) => t.offDate.compareTo(today) >= 0)
@@ -56,28 +73,6 @@ class ProfessionalAvailabilitySummary extends StatelessWidget {
         Text('WIB'),
       ]),
       const SizedBox(height: 8),
-      if (active.isEmpty)
-        const Text('Belum ada jadwal aktif.',
-            style: TextStyle(color: MalvaColors.danger))
-      else
-        for (final slot in active)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 49,
-                  child: Text(_days[slot.dayOfWeek],
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
-                ),
-                Expanded(
-                    child: Text(
-                        '${slot.startTime}–${slot.endTime} (${slot.slotDurationMinutes} mnt)')),
-              ],
-            ),
-          ),
-      const SizedBox(height: 8),
       Text(upcomingOff.isEmpty
           ? 'Hari libur: belum ada'
           : 'Hari libur: ${upcomingOff.map((day) {
@@ -85,7 +80,24 @@ class ProfessionalAvailabilitySummary extends StatelessWidget {
               return date == null ? day.offDate : formatWibDate(date);
             }).join(', ')}'),
       const Divider(height: 24),
-      for (var i = 0; i < prices.length; i++) ...[
+      for (var i = 0; i < prices.length; i++)
+        ..._serviceSummary(
+            context, i, prices[i], sortedSlots(_serviceCategories[i])),
+      const SizedBox(height: 10),
+      StatusPill(
+        label: pricing.patientCapacity == null
+            ? 'Slot pasien paket: tanpa batas'
+            : (pricing.patientCapacity == 0
+                ? 'Slot pasien paket: ditutup'
+                : 'Slot pasien paket: maks. ${pricing.patientCapacity} pasien aktif'),
+        color: MalvaColors.seed,
+      ),
+    ]);
+  }
+
+  List<Widget> _serviceSummary(BuildContext context, int i, int price,
+          List<BackendProfessionalSchedule> slots) =>
+      [
         if (i > 0) const Divider(height: 18),
         _ServicePriceRow(
           index: i,
@@ -100,20 +112,42 @@ class ProfessionalAvailabilitySummary extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                      prices[i] <= 0
+                      price <= 0
                           ? 'belum diatur'
-                          : 'Rp ${_groupDigits(prices[i].toString())}',
+                          : 'Rp ${_groupDigits(price.toString())}',
                       style: const TextStyle(fontWeight: FontWeight.w800)),
-                  Text(_services[i].$4,
+                  Text(i == 2 ? '4 sesi · 6 minggu' : 'per sesi',
                       style: Theme.of(context).textTheme.bodySmall),
                 ],
               ),
             ),
           ),
         ),
-      ],
-    ]);
-  }
+        const SizedBox(height: 8),
+        if (slots.isEmpty)
+          const Text('Belum ada jadwal.',
+              style: TextStyle(color: MalvaColors.danger))
+        else
+          for (final slot in slots)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 49,
+                    child: Text(_days[slot.dayOfWeek],
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                  Expanded(
+                      child: Text(
+                          '${slot.startTime}–${slot.endTime} (${slot.slotDurationMinutes} mnt)')),
+                  if (!slot.isActive)
+                    const StatusPill(label: 'Nonaktif', color: Colors.grey),
+                ],
+              ),
+            ),
+      ];
 }
 
 class ProfessionalPriceCard extends StatelessWidget {
@@ -144,9 +178,10 @@ class ProfessionalPriceCard extends StatelessWidget {
             if (i > 0) const Divider(height: 16),
             _ServicePriceRow(
               index: i,
-              subtitle: _services[i].$3,
+              subtitle: i == 2 ? '4 sesi · berlaku 6 minggu' : '1 sesi',
               trailing: Semantics(
-                label: 'Harga ${_services[i].$2}',
+                label:
+                    'Harga ${professionalServiceNames[_serviceCategories[i]]}',
                 child: TextField(
                   controller: controllers[i],
                   enabled: !isSaving,
@@ -199,7 +234,7 @@ class _ServicePriceRow extends StatelessWidget {
           ),
           child: Padding(
             padding: const EdgeInsets.all(8),
-            child: Icon(_services[index].$1,
+            child: Icon(professionalServiceIcons[_serviceCategories[index]],
                 color: Theme.of(context).colorScheme.primary, size: 20),
           ),
         ),
@@ -208,7 +243,7 @@ class _ServicePriceRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(_services[index].$2,
+              Text(professionalServiceNames[_serviceCategories[index]]!,
                   style: const TextStyle(fontWeight: FontWeight.w800)),
               if (subtitle != null)
                 Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),

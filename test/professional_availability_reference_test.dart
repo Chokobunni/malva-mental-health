@@ -4,9 +4,24 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/screens/pro_schedule_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
+import 'package:malva_mental_health/src/widgets/professional_availability_summary.dart';
 
 void main() {
-  testWidgets('editing a shared slot preserves inactive state and other slots',
+  test(
+      'inactive category rows suppress the shared schedule only for that service',
+      () {
+    final api = _AvailabilityApi();
+    expect(professionalServiceSchedules(api.slots, 'quick_chat').single.id,
+        'monday');
+    expect(
+        professionalServiceSchedules(api.slots, 'quick_chat').single.isActive,
+        isFalse);
+    expect(professionalServiceSchedules(api.slots, 'quick_video').single.id,
+        'friday');
+  });
+
+  testWidgets(
+      'editing a categorized slot preserves inactive state and other slots',
       (tester) async {
     final api = _AvailabilityApi();
     await tester.pumpWidget(ProviderScope(
@@ -37,7 +52,51 @@ void main() {
     expect(api.saved, hasLength(2));
     expect(api.saved!.first['slot_duration_minutes'], 75);
     expect(api.saved!.first['is_active'], false);
+    expect(api.saved!.first['id'], 'monday');
+    expect(api.saved!.first['service_category'], 'quick_chat');
     expect(api.saved!.last['day_of_week'], 5);
+    expect(api.saved!.last['service_category'], 'shared');
+  });
+
+  testWidgets('capacity can close new packages and restore unlimited',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _AvailabilityApi();
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        home: ProAvailabilityScreen(
+          apiClient: api,
+          session: const AuthSession(
+            role: UserRole.professional,
+            identifier: 'pro',
+            displayName: 'Pro',
+            accessToken: 'token',
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    final decrease = find.byTooltip('Kurangi kapasitas');
+    await tester.tap(decrease);
+    await tester.pumpAndSettle();
+    var save = find.text('Simpan kapasitas');
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+
+    expect(api.savedCapacity, 0);
+    expect(api.clearedCapacity, isFalse);
+    expect(find.text('Ditutup untuk pasien baru'), findsOneWidget);
+
+    final unlimited = find.text('Tanpa batas');
+    await tester.tap(unlimited);
+    await tester.pumpAndSettle();
+    save = find.text('Simpan kapasitas');
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+
+    expect(api.clearedCapacity, isTrue);
+    expect(find.text('Tanpa batas pasien aktif'), findsOneWidget);
   });
 }
 
@@ -45,6 +104,7 @@ class _AvailabilityApi extends MalvaApiClient {
   final slots = [
     BackendProfessionalSchedule.fromJson({
       'id': 'monday',
+      'service_category': 'quick_chat',
       'day_of_week': 1,
       'start_time': '09:00',
       'end_time': '12:00',
@@ -62,6 +122,8 @@ class _AvailabilityApi extends MalvaApiClient {
   ];
 
   List<Map<String, Object?>>? saved;
+  int? savedCapacity;
+  bool clearedCapacity = false;
 
   @override
   Future<List<BackendProfessionalSchedule>> listMySchedules({
@@ -74,7 +136,22 @@ class _AvailabilityApi extends MalvaApiClient {
     required String accessToken,
     String? professionalId,
   }) async =>
-      BackendProfessionalPricing.fromJson({});
+      BackendProfessionalPricing.fromJson({'patient_capacity': 1});
+
+  @override
+  Future<BackendProfessionalPricing> updatePricing({
+    required String accessToken,
+    int? quickChatPrice,
+    int? quickVideoPrice,
+    int? packagePrice,
+    int? patientCapacity,
+    bool clearPatientCapacity = false,
+  }) async {
+    savedCapacity = patientCapacity;
+    clearedCapacity = clearPatientCapacity;
+    return BackendProfessionalPricing.fromJson(
+        {'patient_capacity': patientCapacity});
+  }
 
   @override
   Future<List<BackendTimeOff>> listTimeOff({

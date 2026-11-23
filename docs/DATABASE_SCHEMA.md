@@ -1114,3 +1114,12 @@ dan deleted mengosongkan signature. Pasokan legacy nol tidak diinferensikan.
 Normalisasi 036 tidak menggeser jadwal legacy yang berdekatan. Durasi lebih
 panjang dapat menghasilkan irisan yang perlu direkonsiliasi sebelum rilis;
 penjadwalan dan reschedule baru memblokir konflik berdasarkan seluruh durasi.
+
+## Jadwal layanan dan kapasitas paket
+
+Migrasi 044 menambahkan `professional_schedules.service_category` dengan nilai
+awal `shared`. Indeks unik baru menyertakan kategori agar rentang yang sama
+dapat berlaku pada beberapa layanan. Migrasi 045 menambahkan batas opsional
+`professional_pricing.patient_capacity`. Migrasi 046 menyimpan pilihan jadwal
+tambahan checkout di `package_checkout_slots`, unik per booking dan waktu
+mulai, dengan hasil pemrosesan dan ID sesi yang dibuat.

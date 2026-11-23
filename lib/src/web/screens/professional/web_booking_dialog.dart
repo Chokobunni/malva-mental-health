@@ -47,6 +47,7 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
   String? _slot;
   List<BackendDoctorSlot> _slots = const <BackendDoctorSlot>[];
   bool _slotsLoading = false;
+  int _slotsRequest = 0;
   Object? _slotsError;
 
   bool _agreed = false;
@@ -77,6 +78,7 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
   }
 
   Future<void> _loadSlots() async {
+    final request = ++_slotsRequest;
     setState(() {
       _slotsLoading = true;
       _slotsError = null;
@@ -87,14 +89,19 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
             accessToken: _token.isEmpty ? null : _token,
             userId: widget.doctor.userId,
             date: _date,
+            serviceCategory: _service.isPackage
+                ? 'package'
+                : _service.sessionType == 'chat'
+                    ? 'quick_chat'
+                    : 'quick_video',
           );
-      if (!mounted) return;
+      if (!mounted || request != _slotsRequest) return;
       setState(() {
         _slots = slots.where((BackendDoctorSlot s) => s.available).toList();
         _slotsLoading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || request != _slotsRequest) return;
       setState(() {
         _slotsError = error;
         _slotsLoading = false;
@@ -359,7 +366,11 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
           InkWell(
             key: Key('web-booking-service-${option.id}'),
             borderRadius: BorderRadius.circular(12),
-            onTap: () => setState(() => _service = option),
+            onTap: () {
+              if (_service.id == option.id) return;
+              setState(() => _service = option);
+              unawaited(_loadSlots());
+            },
             child: Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(14),

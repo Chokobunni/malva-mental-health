@@ -527,3 +527,9 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 
 - Profesional terverifikasi yang terhubung dan menerima izin Health Record dapat mengubah diagnosis selama paket multisesi aktif dan berlaku, termasuk sebelum sesi pertama. Untuk sesi satu kali, akses tulis berlaku dari waktu mulai sampai sebelum akhir sesi terjadwal.
 - Isi Diagnosis di Info Pasien dan editor Health Record di chat menggunakan katalog ICD-10 offline dengan pilihan jamak. Urutan baris `kode - judul` di `diagnosis_summary` menetapkan Primary dan Secondary. Diagnosis teks lama tetap terbaca hingga diganti. Rujukan: [care session](skills/care_session_module.md).
+
+## Jadwal layanan dan kuota paket (2026-11-23)
+
+- Quick Chat, Quick Video, dan Continuous Package memiliki kategori jadwal. Jadwal bersama berlaku untuk kategori yang belum memiliki baris khusus. Baris khusus nonaktif tetap menonaktifkan fallback kategori. Bentrok sesi berlaku lintas kategori.
+- Kapasitas profesional menghitung pasien unik dengan paket aktif atau transaksi paket pending yang masih berlaku. Perpanjangan dan kelanjutan pembayaran milik pasien yang sudah memakai tempat tetap tersedia saat kapasitas penuh.
+- Checkout menyimpan hingga tiga jadwal tambahan di booking paket. Saat lunas, jadwal diproses satu kali. Jika jadwal tidak bisa dipakai, kredit tersisa dapat dijadwalkan dari My Care.

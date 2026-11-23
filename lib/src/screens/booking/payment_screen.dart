@@ -50,6 +50,7 @@ class PaymentScreen extends ConsumerStatefulWidget {
     this.package,
     this.reference,
     this.doctorName = 'Profesional',
+    this.packageScheduleSummary = const [],
     this.session,
     this.apiClient,
   }) : assert(booking != null || package != null || reference != null,
@@ -66,6 +67,7 @@ class PaymentScreen extends ConsumerStatefulWidget {
   /// Return from the gateway only resumes authenticated server verification.
   final String? reference;
   final String doctorName;
+  final List<String> packageScheduleSummary;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
@@ -261,6 +263,20 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
+          if (widget.reference == null &&
+              widget.packageScheduleSummary.isNotEmpty) ...[
+            const SectionLabel('Jadwal pilihan • WIB'),
+            SoftCard(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                  for (final date in widget.packageScheduleSummary)
+                    Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Text(date)),
+                ])),
+            const SizedBox(height: 8),
+          ],
           if (widget.reference == null) ...[
             const SectionLabel('Payment Detail'),
             SoftCard(

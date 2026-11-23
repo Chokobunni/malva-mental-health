@@ -61,8 +61,14 @@ class _SchedulePackageSessionsScreenState
         userId: _package.professionalId,
       );
       if (mounted && _token != null) {
-        setState(() => _practiceHours =
-            profile.schedules.where((s) => s.isActive).toList());
+        final explicit = profile.schedules
+            .where((s) => s.serviceCategory == 'package')
+            .toList();
+        final schedules = explicit.isNotEmpty
+            ? explicit
+            : profile.schedules.where((s) => s.serviceCategory == 'shared');
+        setState(
+            () => _practiceHours = schedules.where((s) => s.isActive).toList());
       }
     } on Object {
       // Availability inside the picker is loaded from the slots API.

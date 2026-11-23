@@ -87,7 +87,8 @@ type CareSession struct {
 	// disimpan/dibaca dari database): izinkan sesi video dibuat tanpa link
 	// Meet, dengan status "menunggu link". Lihat komentar invarian di
 	// CreateCareSession untuk alasannya.
-	AllowPendingMeet bool `json:"-"`
+	AllowPendingMeet bool   `json:"-"`
+	CheckoutSlotID   string `json:"-"`
 }
 
 // scanCarePackage membaca satu baris paket (kolom harus mengikuti urutan
@@ -567,6 +568,18 @@ func (s *Store) CreateCareSession(ctx context.Context, cs CareSession) (CareSess
 	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "care_slot:"+cs.ProfessionalID); err != nil {
 		return CareSession{}, err
 	}
+	if cs.CheckoutSlotID != "" {
+		var resolved bool
+		if err := tx.QueryRowContext(ctx, `SELECT slot.resolved_at IS NOT NULL FROM package_checkout_slots slot
+			JOIN bookings b ON b.id=slot.booking_id
+			WHERE slot.id=$1 AND b.patient_id=$2 AND b.professional_id=$3 AND b.status='paid'
+			FOR UPDATE OF slot`, cs.CheckoutSlotID, cs.PatientID, cs.ProfessionalID).Scan(&resolved); err != nil {
+			return CareSession{}, err
+		}
+		if resolved {
+			return CareSession{}, ErrCheckoutSlotResolved
+		}
+	}
 	// Blokir bila sudah ada sesi aktif di jam yang sama.
 	var clash int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM care_sessions
@@ -576,7 +589,7 @@ func (s *Store) CreateCareSession(ctx context.Context, cs CareSession) (CareSess
 		return CareSession{}, err
 	}
 	if clash > 0 {
-		return CareSession{}, errors.New("slot sudah terisi, pilih jam lain")
+		return CareSession{}, ErrCareSlotTaken
 	}
 	if cs.PackageID != nil && *cs.PackageID != "" {
 		var pkg CarePackage
@@ -592,13 +605,13 @@ func (s *Store) CreateCareSession(ctx context.Context, cs CareSession) (CareSess
 			return CareSession{}, err
 		}
 		if pkg.Status != "active" {
-			return CareSession{}, errors.New("paket tidak aktif, tidak bisa menjadwalkan sesi")
+			return CareSession{}, ErrCarePackageInactive
 		}
 		if !start.Before(pkg.ExpiresAt) {
-			return CareSession{}, errors.New("sesi harus dijadwalkan sebelum paket kedaluwarsa")
+			return CareSession{}, ErrCarePackageExpired
 		}
 		if pkg.UsedSessions >= pkg.TotalSessions {
-			return CareSession{}, errors.New("sisa sesi paket sudah habis")
+			return CareSession{}, ErrCarePackageExhausted
 		}
 	}
 	var packageID, bookingID any
@@ -624,12 +637,18 @@ func (s *Store) CreateCareSession(ctx context.Context, cs CareSession) (CareSess
 	if err != nil {
 		// Race terakhir: unique index slot.
 		if strings.Contains(strings.ToLower(err.Error()), "care_sessions_slot_uidx") {
-			return CareSession{}, errors.New("slot sudah terisi, pilih jam lain")
+			return CareSession{}, ErrCareSlotTaken
 		}
 		return CareSession{}, err
 	}
 	cs.Status = status
 	cs.ScheduledAt = start
+	if cs.CheckoutSlotID != "" {
+		if _, err := tx.ExecContext(ctx, `UPDATE package_checkout_slots SET session_id=$2,resolved_at=$3 WHERE id=$1`,
+			cs.CheckoutSlotID, cs.ID, clock.Now()); err != nil {
+			return CareSession{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return CareSession{}, err
 	}
@@ -1164,10 +1183,13 @@ type ProfessionalTimeOff struct {
 }
 
 type ProfessionalPricing struct {
-	ProfessionalID  string `json:"professional_id"`
-	QuickChatPrice  int64  `json:"quick_chat_price"`
-	QuickVideoPrice int64  `json:"quick_video_price"`
-	PackagePrice    int64  `json:"package_price"`
+	ProfessionalID     string `json:"professional_id"`
+	QuickChatPrice     int64  `json:"quick_chat_price"`
+	QuickVideoPrice    int64  `json:"quick_video_price"`
+	PackagePrice       int64  `json:"package_price"`
+	PatientCapacity    *int   `json:"patient_capacity"`
+	PatientCapacitySet bool   `json:"-"`
+	KeepExistingPrices bool   `json:"-"`
 }
 
 func (s *Store) ListTimeOff(ctx context.Context, professionalID string, from, to string) ([]ProfessionalTimeOff, error) {
@@ -1234,9 +1256,9 @@ func (s *Store) DeleteTimeOff(ctx context.Context, professionalID, timeOffID str
 
 func (s *Store) GetProfessionalPricing(ctx context.Context, professionalID string) (ProfessionalPricing, error) {
 	var p ProfessionalPricing
-	err := s.db.QueryRowContext(ctx, `SELECT professional_id, quick_chat_price, quick_video_price, package_price
+	err := s.db.QueryRowContext(ctx, `SELECT professional_id, quick_chat_price, quick_video_price, package_price, patient_capacity
 		FROM professional_pricing WHERE professional_id = $1`, professionalID).
-		Scan(&p.ProfessionalID, &p.QuickChatPrice, &p.QuickVideoPrice, &p.PackagePrice)
+		Scan(&p.ProfessionalID, &p.QuickChatPrice, &p.QuickVideoPrice, &p.PackagePrice, &p.PatientCapacity)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Fallback dari service_packages lama agar harga tetap tampil.
 		var chat, video, pkg sql.NullInt64
@@ -1265,19 +1287,40 @@ func (s *Store) UpsertProfessionalPricing(ctx context.Context, p ProfessionalPri
 	if p.QuickChatPrice < 0 || p.QuickVideoPrice < 0 || p.PackagePrice < 0 {
 		return ProfessionalPricing{}, errors.New("harga tidak boleh negatif")
 	}
+	if p.PatientCapacitySet && p.PatientCapacity != nil && (*p.PatientCapacity < 0 || *p.PatientCapacity > 2147483647) {
+		return ProfessionalPricing{}, errors.New("kapasitas pasien harus antara 0 dan 2147483647")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ProfessionalPricing{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if p.PatientCapacitySet {
+		if err := lockPackageCapacity(ctx, tx, p.ProfessionalID); err != nil {
+			return ProfessionalPricing{}, err
+		}
+	}
 	const q = `INSERT INTO professional_pricing
-		(professional_id, quick_chat_price, quick_video_price, package_price, updated_at)
-		VALUES ($1, $2, $3, $4, now())
-		ON CONFLICT (professional_id) DO UPDATE SET
-			quick_chat_price = EXCLUDED.quick_chat_price,
-			quick_video_price = EXCLUDED.quick_video_price,
-			package_price = EXCLUDED.package_price,
-			updated_at = now()
-		RETURNING professional_id, quick_chat_price, quick_video_price, package_price`
+        (professional_id, quick_chat_price, quick_video_price, package_price, patient_capacity, updated_at)
+        VALUES ($1, $2, $3, $4, CASE WHEN $6 THEN $5::integer ELSE NULL END, $8)
+        ON CONFLICT (professional_id) DO UPDATE SET
+            quick_chat_price = CASE WHEN $7 THEN professional_pricing.quick_chat_price ELSE EXCLUDED.quick_chat_price END,
+            quick_video_price = CASE WHEN $7 THEN professional_pricing.quick_video_price ELSE EXCLUDED.quick_video_price END,
+            package_price = CASE WHEN $7 THEN professional_pricing.package_price ELSE EXCLUDED.package_price END,
+            patient_capacity = CASE WHEN $6 THEN EXCLUDED.patient_capacity ELSE professional_pricing.patient_capacity END,
+            updated_at = EXCLUDED.updated_at
+        RETURNING professional_id, quick_chat_price, quick_video_price, package_price, patient_capacity`
 	var out ProfessionalPricing
-	err := s.db.QueryRowContext(ctx, q, p.ProfessionalID, p.QuickChatPrice, p.QuickVideoPrice, p.PackagePrice).
-		Scan(&out.ProfessionalID, &out.QuickChatPrice, &out.QuickVideoPrice, &out.PackagePrice)
-	return out, err
+	err = tx.QueryRowContext(ctx, q, p.ProfessionalID, p.QuickChatPrice, p.QuickVideoPrice, p.PackagePrice,
+		p.PatientCapacity, p.PatientCapacitySet, p.KeepExistingPrices, clock.Now()).
+		Scan(&out.ProfessionalID, &out.QuickChatPrice, &out.QuickVideoPrice, &out.PackagePrice, &out.PatientCapacity)
+	if err != nil {
+		return ProfessionalPricing{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return ProfessionalPricing{}, err
+	}
+	return out, nil
 }
 
 // IsSlotBooked true bila slot jam sudah ditempati sesi aktif.

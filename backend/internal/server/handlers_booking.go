@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -30,7 +31,7 @@ func (s *Server) validateSlot(ctx context.Context, professionalID string, start 
 	if time.Until(start) < 24*time.Hour {
 		return errors.New("booking minimal 24 jam sebelum sesi")
 	}
-	return s.validateSlotWindow(ctx, professionalID, start, durationMinutes, excludeSessionID...)
+	return s.validateSlotFor(ctx, professionalID, "", start, durationMinutes, true, excludeSessionID...)
 }
 
 // validateSlotWindow memeriksa syarat slot yang berlaku untuk SEMUA peran:
@@ -39,6 +40,16 @@ func (s *Server) validateSlot(ctx context.Context, professionalID string, start 
 // atau memindahkan sesi secara mendadak (<24 jam) — mis. kendala di hari-H —
 // tanpa melewati aturan jam praktik/hari libur.
 func (s *Server) validateSlotWindow(ctx context.Context, professionalID string, start time.Time, durationMinutes int, excludeSessionID ...string) error {
+	return s.validateSlotFor(ctx, professionalID, "", start, durationMinutes, false, excludeSessionID...)
+}
+
+var errPracticeWindow = errors.New("slot di luar jam praktik profesional")
+var errPracticeDayOff = errors.New("profesional libur pada tanggal tersebut")
+
+func (s *Server) validateSlotFor(ctx context.Context, professionalID, category string, start time.Time, durationMinutes int, leadTime bool, excludeSessionID ...string) error {
+	if leadTime && start.Sub(clock.Now()) < 24*time.Hour {
+		return errors.New("booking minimal 24 jam sebelum sesi")
+	}
 	if start.Before(clock.Now().Add(-time.Minute)) {
 		return errors.New("slot harus di masa depan")
 	}
@@ -50,11 +61,17 @@ func (s *Server) validateSlotWindow(ctx context.Context, professionalID string, 
 		return err
 	}
 	if len(off) > 0 {
-		return errors.New("profesional libur pada tanggal tersebut")
+		return errPracticeDayOff
 	}
-	schedules, err := s.store.ListActiveSchedulesForProfessional(ctx, professionalID)
+	schedules, err := s.store.ListActiveSchedulesForProfessional(ctx, professionalID, category)
 	if err != nil {
 		return err
+	}
+	if category != "" && len(schedules) > 0 && schedules[0].ServiceCategory == category {
+		starts, _ := scheduleSlotStarts(schedules, wibStart, false)
+		if !slices.ContainsFunc(starts, func(at time.Time) bool { return at.Equal(wibStart) }) {
+			return errPracticeWindow
+		}
 	}
 	clock := wibStart.Format("15:04")
 	fits := false
@@ -82,7 +99,7 @@ func (s *Server) validateSlotWindow(ctx context.Context, professionalID string, 
 		}
 	}
 	if !fits {
-		return errors.New("slot di luar jam praktik profesional")
+		return errPracticeWindow
 	}
 	excluded := ""
 	if len(excludeSessionID) > 0 {
@@ -93,19 +110,25 @@ func (s *Server) validateSlotWindow(ctx context.Context, professionalID string, 
 		return err
 	}
 	if booked {
-		return errors.New("slot sudah terisi, pilih jam lain")
+		return store.ErrCareSlotTaken
 	}
 	return nil
 }
 
 // slotDurationFor mengambil durasi slot jadwal profesional pada hari tsb.
-func (s *Server) slotDurationFor(ctx context.Context, professionalID string, start time.Time) int {
+func (s *Server) slotDurationFor(ctx context.Context, professionalID string, start time.Time, category ...string) int {
 	wibStart := start.In(wibLoc)
 	dayOfWeek := int(wibStart.Weekday())
 	clock := wibStart.Format("15:04")
-	schedules, err := s.store.ListActiveSchedulesForProfessional(ctx, professionalID)
+	schedules, err := s.store.ListActiveSchedulesForProfessional(ctx, professionalID, category...)
 	if err != nil {
 		return 60
+	}
+	starts, durations := scheduleSlotStarts(schedules, wibStart, len(category) == 0)
+	for i, at := range starts {
+		if at.Equal(wibStart) {
+			return durations[i]
+		}
 	}
 	for _, sch := range schedules {
 		if sch.DayOfWeek != dayOfWeek {
@@ -288,10 +311,19 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 	// 5xx (mis. Google sedang gagal saat membuat link Meet). Bila booking ini
 	// sudah punya sesi, jangan buat sesi kedua — unique index slot akan
 	// menolaknya dan pengulangan berikutnya gagal selamanya.
-	if existing, serr := s.store.GetCareSessionByBookingID(ctx, booking.ID); serr == nil && existing.ID != "" {
-		return "", nil
-	} else if serr != nil && !errors.Is(serr, sql.ErrNoRows) {
+	existing, serr := s.store.GetCareSessionByBookingID(ctx, booking.ID)
+	if serr != nil && !errors.Is(serr, sql.ErrNoRows) {
 		return "", serr
+	}
+	if existing.ID != "" {
+		if booking.ServiceType == "package_session" && existing.PackageID != nil {
+			pkg, err := s.store.GetCarePackage(ctx, *existing.PackageID)
+			if err != nil {
+				return "", err
+			}
+			return "", s.activatePackageCheckoutSlots(r, booking, pkg)
+		}
+		return "", nil
 	}
 	// Paket: aktifkan paket pending milik pasangan + link + jadwalkan sesi
 	// pertama dari slot booking. (bookings.package_id tidak dipakai karena
@@ -310,18 +342,18 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 			// jam memang ada. Paket sudah aktif di atas; sesi pertama tidak bisa
 			// dijadwalkan tanpa menebak jam. Terminal — bukan 5xx selamanya.
 			s.handlePaidBookingNoSchedule(ctx, booking, p.ID, pkg)
-			return "", nil
+			return "", s.activatePackageCheckoutSlots(r, booking, pkg)
 		}
 		duration := booking.DurationMinutes
 		if duration < 60 {
-			duration = s.slotDurationFor(ctx, booking.ProfessionalID, start)
+			duration = s.slotDurationFor(ctx, booking.ProfessionalID, start, bookingServiceCategory(booking.ServiceType, booking.SessionType))
 		}
 		// Slot sesi pertama paket bisa sudah lewat saat pembayaran settle (VA/
 		// QRIS lunas beberapa menit setelah jam mulai). Paket sudah diaktifkan
 		// di atas dan tetap utuh; hanya sesi pertamanya yang tidak dibuat.
 		if slotAlreadyPassed(start) {
 			s.handlePaidBookingSlotUnusable(ctx, booking, p.ID, start, slotCausePassed, "Paket Anda tetap aktif. ")
-			return "", nil
+			return "", s.activatePackageCheckoutSlots(r, booking, pkg)
 		}
 		// Sesi pertama paket bisa bertipe video. Link Google Meet dibuat
 		// SEBELUM baris sesi disimpan, tetapi kegagalan Google TIDAK boleh
@@ -399,7 +431,12 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 			// (notifikasi + 200) alih-alih 5xx yang diulang selamanya.
 			if booked, berr := s.store.IsSlotBooked(ctx, booking.ProfessionalID, start, duration); berr == nil && booked {
 				s.handlePaidBookingSlotUnusable(ctx, booking, p.ID, start, slotCauseTaken, "Paket Anda tetap aktif. ")
-				return "", nil
+				return "", s.activatePackageCheckoutSlots(r, booking, pkg)
+			}
+			if errors.Is(cerr, store.ErrCarePackageInactive) ||
+				errors.Is(cerr, store.ErrCarePackageExpired) || errors.Is(cerr, store.ErrCarePackageExhausted) {
+				s.handlePaidBookingNoSchedule(ctx, booking, p.ID, pkg)
+				return "", s.activatePackageCheckoutSlots(r, booking, pkg)
 			}
 			return "", cerr
 		}
@@ -430,7 +467,7 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 		if merged {
 			mergedID = pkg.ID
 		}
-		return mergedID, nil
+		return mergedID, s.activatePackageCheckoutSlots(r, booking, pkg)
 	}
 	start, perr := parseWIBDateTime(booking.BookingDate + "T" + booking.SlotTime)
 	if perr != nil || booking.SlotTime == "" {
@@ -448,7 +485,7 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 	}
 	duration := booking.DurationMinutes
 	if duration < 60 {
-		duration = s.slotDurationFor(ctx, booking.ProfessionalID, start)
+		duration = s.slotDurationFor(ctx, booking.ProfessionalID, start, bookingServiceCategory(booking.ServiceType, booking.SessionType))
 	}
 	// Slot sudah lewat saat pembayaran settle: terminal, bukan 5xx (lihat
 	// handlePaidBookingSlotUnusable). Sesi bertanggal masa lalu TIDAK dibuat.
@@ -548,15 +585,16 @@ func (s *Server) activatePaidBooking(r *http.Request, p store.Payment) (string, 
 // ============================================================
 
 type createBookingRequest struct {
-	PatientID       string  `json:"patient_id"`
-	ProfessionalID  string  `json:"professional_id"`
-	PackageID       *string `json:"package_id,omitempty"`
-	ServiceType     string  `json:"service_type"`
-	SessionType     string  `json:"session_type"`
-	BookingDate     string  `json:"booking_date"`
-	SlotTime        string  `json:"slot_time"`
-	DurationMinutes int     `json:"duration_minutes"`
-	Price           int64   `json:"price"`
+	PatientID          string   `json:"patient_id"`
+	ProfessionalID     string   `json:"professional_id"`
+	PackageID          *string  `json:"package_id,omitempty"`
+	ServiceType        string   `json:"service_type"`
+	SessionType        string   `json:"session_type"`
+	BookingDate        string   `json:"booking_date"`
+	SlotTime           string   `json:"slot_time"`
+	DurationMinutes    int      `json:"duration_minutes"`
+	AdditionalSessions []string `json:"additional_sessions,omitempty"`
+	Price              int64    `json:"price"`
 }
 
 type createPaymentRequest struct {
@@ -743,8 +781,9 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 	}
 	// Validasi slot: masuk jadwal mingguan, bukan hari libur, belum terisi.
 	// Durasi sesi = durasi slot jadwal profesional hari itu.
-	duration = s.slotDurationFor(r.Context(), professionalID, target)
-	if err := s.validateSlot(r.Context(), professionalID, target, duration); err != nil {
+	category := bookingServiceCategory(serviceType, sessionType)
+	duration = s.slotDurationFor(r.Context(), professionalID, target, category)
+	if err := s.validateSlotFor(r.Context(), professionalID, category, target, duration, true); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -759,9 +798,21 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 		DurationMinutes: duration,
 		Price:           price,
 	}
+	var slots []store.PackageCheckoutSlot
+	if req.AdditionalSessions != nil {
+		if selectedPackage == nil {
+			writeError(w, http.StatusBadRequest, errors.New("sesi tambahan hanya untuk paket"))
+			return
+		}
+		slots, err = s.validatePackageCheckoutSlots(r.Context(), *selectedPackage, target, duration, req.AdditionalSessions)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+	}
 	var b store.Booking
 	if selectedPackage != nil {
-		b, err = s.store.CreatePackageBooking(r.Context(), selectedPackage.ID, input)
+		b, err = s.store.CreatePackageBooking(r.Context(), selectedPackage.ID, input, slots...)
 	} else {
 		b, err = s.store.CreateBooking(r.Context(), input)
 	}
@@ -824,7 +875,7 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, claims au
 		Gateway:           gatewayName,
 	})
 	if err != nil {
-		if errors.Is(err, store.ErrPurchaseConflict) {
+		if errors.Is(err, store.ErrPurchaseConflict) || errors.Is(err, store.ErrPackageCapacity) {
 			writeError(w, http.StatusConflict, err)
 			return
 		}

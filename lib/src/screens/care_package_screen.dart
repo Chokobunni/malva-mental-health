@@ -907,6 +907,7 @@ class CareSessionSchedulerSheet extends StatefulWidget {
     required this.professionalId,
     this.expiresAt,
     this.initialType = 'video',
+    this.serviceCategory = 'package',
     this.excludedSlots = const {},
   });
 
@@ -915,6 +916,7 @@ class CareSessionSchedulerSheet extends StatefulWidget {
   final String professionalId;
   final DateTime? expiresAt;
   final String initialType;
+  final String serviceCategory;
   final Set<String> excludedSlots;
 
   @override
@@ -963,6 +965,7 @@ class CareSessionSchedulerSheetState extends State<CareSessionSchedulerSheet> {
       final days = await widget.apiClient.getDoctorAvailability(
         accessToken: widget.accessToken,
         userId: widget.professionalId,
+        serviceCategory: widget.serviceCategory,
       );
       if (!mounted) return;
       final exp = widget.expiresAt;
@@ -1142,6 +1145,7 @@ class CareSessionSchedulerSheetState extends State<CareSessionSchedulerSheet> {
                       accessToken: widget.accessToken,
                       professionalId: widget.professionalId,
                       date: _date!,
+                      serviceCategory: widget.serviceCategory,
                       expiresAt: widget.expiresAt,
                       excludedSlots: widget.excludedSlots,
                       selected: _slot,
@@ -1219,6 +1223,7 @@ class _PackageFirstSessionSheetState extends State<PackageFirstSessionSheet> {
       final days = await widget.apiClient.getDoctorAvailability(
         accessToken: widget.accessToken,
         userId: widget.professionalId,
+        serviceCategory: 'package',
       );
       if (!mounted) return;
       final filtered = days.where((d) => d.bookable).toList(growable: false);
@@ -1349,6 +1354,7 @@ class _FirstSessionSlots extends StatefulWidget {
     required this.selected,
     required this.onSelect,
     this.expiresAt,
+    this.serviceCategory = 'package',
     this.excludedSlots = const {},
   });
 
@@ -1359,6 +1365,7 @@ class _FirstSessionSlots extends StatefulWidget {
   final String? selected;
   final ValueChanged<String> onSelect;
   final DateTime? expiresAt;
+  final String serviceCategory;
   final Set<String> excludedSlots;
 
   @override
@@ -1393,6 +1400,7 @@ class _FirstSessionSlotsState extends State<_FirstSessionSlots> {
         accessToken: widget.accessToken,
         userId: widget.professionalId,
         date: date,
+        serviceCategory: widget.serviceCategory,
       );
       if (!mounted || date != widget.date) return;
       setState(() {

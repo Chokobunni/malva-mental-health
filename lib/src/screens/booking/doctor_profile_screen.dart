@@ -582,14 +582,15 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                           // ===== OPSI 2: PAKET CONTINUOUS (4 SESI / 6 MINGGU) =====
                           _SupportPlanCard(
                             selected: _selectedPlan == 'continuous',
-                            onSelect: _packagePrice() > 0
+                            onSelect: _packagePrice() > 0 && _canBookPackage
                                 ? () =>
                                     setState(() => _selectedPlan = 'continuous')
                                 : () => ScaffoldMessenger.of(context)
-                                    .showSnackBar(const SnackBar(
-                                        content: Text(
-                                            'Profesional belum mengatur harga paket.'))),
+                                    .showSnackBar(SnackBar(
+                                        content:
+                                            Text(_packageCapacityMessage))),
                             title: 'Continuous Package',
+                            capacity: _profile?.remainingPatientSlots,
                             subtitle: '4 sesi • 6 minggu',
                             onSchedule: () => _showSchedule(true),
                             badge: (
@@ -603,9 +604,9 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             features: [
                               (
                                 '4 sesi video terjadwal' +
-                                    (_durationLabel == null
+                                    (_durationLabel('package') == null
                                         ? ''
-                                        : ' • $_durationLabel per sesi'),
+                                        : " • ${_durationLabel('package')} per sesi"),
                                 Icons.event_available_rounded
                               ),
                               (
@@ -686,37 +687,53 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   }
 
   static const _dayNamesId = [
-    '',
+    'Minggu',
     'Senin',
     'Selasa',
     'Rabu',
     'Kamis',
     'Jumat',
     'Sabtu',
-    'Minggu',
   ];
 
   /// Ringkasan jadwal mingguan profesional dari server.
-  String? get _durationLabel {
-    final durations = _profile?.schedules
-        .where((slot) => slot.isActive)
+  String? _durationLabel(String category) {
+    final durations = _schedulesFor(category)
         .map((slot) => slot.slotDurationMinutes.clamp(60, 180))
         .toSet();
-    if (durations?.length != 1) return null;
-    final minutes = durations!.single;
+    if (durations.length != 1) return null;
+    final minutes = durations.single;
     return minutes == 60 ? '1 jam' : '$minutes menit';
   }
 
-  List<String> _scheduleLines() {
-    final schedules = _profile?.schedules ?? const [];
+  List<BackendProfessionalSchedule> _schedulesFor(String category) {
+    final schedules =
+        _profile?.schedules ?? const <BackendProfessionalSchedule>[];
+    final explicit =
+        schedules.where((s) => s.serviceCategory == category).toList();
+    return (explicit.isEmpty
+            ? schedules.where((s) => s.serviceCategory == 'shared')
+            : explicit)
+        .where((s) => s.isActive)
+        .toList();
+  }
+
+  bool get _canBookPackage =>
+      _profile?.remainingPatientSlots != 0 ||
+      _profile?.canRenewPackage == true ||
+      _profile?.canResumePackage == true;
+
+  List<String> _scheduleLines(String category) {
+    final schedules = _schedulesFor(category);
     if (schedules.isEmpty) {
       return const ['Jadwal belum diatur profesional'];
     }
     final byDay = <int, List<BackendProfessionalSchedule>>{};
     for (final s in schedules) {
-      (byDay[s.dayOfWeek] ??= []).add(s);
+      (byDay[s.dayOfWeek % 7] ??= []).add(s);
     }
-    final days = byDay.keys.toList()..sort();
+    final days = byDay.keys.toList()
+      ..sort((a, b) => ((a + 6) % 7).compareTo((b + 6) % 7));
     return [
       for (final d in days)
         '${_dayNamesId[d]}: ${byDay[d]!.map((s) => '${s.startTime}–${s.endTime}').join(', ')}',
@@ -727,15 +744,17 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   List<BackendAvailabilityDay> get _bookableDays =>
       _availability.where((d) => d.bookable).toList(growable: false);
 
+  String get _packageCapacityMessage => _canBookPackage
+      ? 'Profesional belum mengatur harga paket.'
+      : 'Kuota pasien untuk paket ini penuh.';
+
   void _proceed() {
     final cred = _profile?.credential;
     if (cred == null) return;
     if (_selectedPlan == 'continuous') {
-      if (_packagePrice() <= 0) {
+      if (_packagePrice() <= 0 || !_canBookPackage) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  'Profesional belum mengatur harga paket. Pilih Quick Consult.')),
+          SnackBar(content: Text(_packageCapacityMessage)),
         );
         return;
       }
@@ -743,11 +762,14 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => PackageBookingScreen(
-            durationLabel: _durationLabel,
+            durationLabel: _durationLabel('package'),
             doctorUserId: widget.doctorUserId,
             doctorName: _displayName,
             price: _packagePrice(),
-            scheduleLines: _scheduleLines(),
+            scheduleLines: _scheduleLines('package'),
+            remainingPatientSlots: _profile?.remainingPatientSlots,
+            canRenewPackage: _profile?.canRenewPackage == true,
+            canResumePackage: _profile?.canResumePackage == true,
             doctorPhotoUrl: cred.photoIntroUrl,
             session: widget.session ?? ref.read(currentSessionProvider),
             apiClient: widget.apiClient,
@@ -800,7 +822,8 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => BookingDetailScreen(
-          durationLabel: _durationLabel,
+          chatDurationLabel: _durationLabel('quick_chat'),
+          videoDurationLabel: _durationLabel('quick_video'),
           doctorUserId: widget.doctorUserId,
           doctorName: _displayName,
           serviceType: method,
@@ -831,28 +854,38 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                     ? 'Jadwal mingguan • WIB\n4 sesi video • 6 minggu'
                     : 'Jadwal mingguan • WIB'),
                 const SizedBox(height: 12),
-                SoftCard(
-                  color: const Color(0xFFF2E6FA),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (!package && (_chatPrice() > 0 || _videoPrice() > 0))
-                        Text(
-                            _chatPrice() > 0 && _videoPrice() > 0
-                                ? 'Chat dan Video'
-                                : _chatPrice() > 0
-                                    ? 'Chat'
-                                    : 'Video',
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w900)),
-                      for (final line in _scheduleLines())
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Text(line),
-                        ),
-                    ],
+                for (final (label, category) in [
+                  if (package)
+                    ('Video', 'package')
+                  else ...[
+                    if (_chatPrice() > 0) ('Chat', 'quick_chat'),
+                    if (_videoPrice() > 0) ('Video', 'quick_video'),
+                  ],
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: SoftCard(
+                      color: const Color(0xFFF2E6FA),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (!package)
+                            Text(label,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w900)),
+                          for (final line in _scheduleLines(category))
+                            Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 4),
+                                child: Text(line)),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                if (package && _profile?.remainingPatientSlots != null)
+                  StatusPill(
+                      label: '${_profile!.remainingPatientSlots} slot tersisa',
+                      color: MalvaColors.seed),
                 const SizedBox(height: 12),
                 FilledButton(
                     onPressed: () => Navigator.pop(context),
@@ -1177,6 +1210,7 @@ class _SupportPlanCard extends StatelessWidget {
     required this.featureIcon,
     required this.onSchedule,
     this.methods = const [],
+    this.capacity,
     this.badge,
     this.footnote,
     this.quota,
@@ -1194,6 +1228,7 @@ class _SupportPlanCard extends StatelessWidget {
   final (String, IconData)? badge;
   final String? footnote;
   final String? quota;
+  final int? capacity;
 
   @override
   Widget build(BuildContext context) {
@@ -1232,6 +1267,11 @@ class _SupportPlanCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
+          if (capacity case final remaining?)
+            Align(
+                alignment: Alignment.centerLeft,
+                child: StatusPill(
+                    label: '$remaining slot tersisa', color: MalvaColors.seed)),
           if (price.isNotEmpty)
             Text(price,
                 style:

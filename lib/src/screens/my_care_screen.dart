@@ -716,6 +716,11 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
         professionalId: professionalId,
         expiresAt: expires,
         initialType: existing?.sessionType ?? 'video',
+        serviceCategory: package != null || existing?.packageId != null
+            ? 'package'
+            : existing?.sessionType == 'chat'
+                ? 'quick_chat'
+                : 'quick_video',
       ),
     );
     if (!mounted ||

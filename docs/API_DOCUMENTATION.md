@@ -1629,3 +1629,18 @@ and enabled dates use the same effective schedule, clipped at the start date.
 Reminder bells require a configured time and at least one offset (including 0).
 The reminder dialog omits range helper text but still rejects values outside
 0–10080. Existing payloads and schema remain unchanged.
+## Jadwal dan checkout paket
+
+GET jadwal praktisi dan slot harian menerima `service_category` dengan nilai
+`quick_chat`, `quick_video`, `package`, atau `shared`. PUT jadwal memakai field
+yang sama dan menerima `id` saat mengedit baris yang sudah tersimpan.
+
+PUT harga profesional menerima `patient_capacity` berupa bilangan bulat
+nonnegatif atau `null` untuk kapasitas tak terbatas. Respons profil dokter
+menyertakan `remaining_patient_slots`. Jika token pasien valid, respons juga
+menyertakan `can_renew_package` dan `can_resume_package`.
+
+POST booking paket menerima `additional_sessions`, paling banyak tiga waktu
+`YYYY-MM-DDTHH:mm` WIB sesudah sesi pertama. Pilihan diproses setelah pembayaran.
+Perubahan status jadwal atau bentrok yang muncul setelah checkout meninggalkan
+kredit pasien untuk dijadwalkan kembali.

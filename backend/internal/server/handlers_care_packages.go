@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -48,9 +49,10 @@ type timeOffRequest struct {
 }
 
 type pricingRequest struct {
-	QuickChatPrice  *int64 `json:"quick_chat_price"`
-	QuickVideoPrice *int64 `json:"quick_video_price"`
-	PackagePrice    *int64 `json:"package_price"`
+	QuickChatPrice  *int64          `json:"quick_chat_price"`
+	QuickVideoPrice *int64          `json:"quick_video_price"`
+	PackagePrice    *int64          `json:"package_price"`
+	PatientCapacity json.RawMessage `json:"patient_capacity"`
 }
 
 // wibLoc zona waktu sesi (WIB), bersumber tunggal dari paket clock.
@@ -245,18 +247,18 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 		return
 	}
 	// Durasi sesi = durasi slot jadwal profesional hari itu (bukan input bebas).
-	duration := s.slotDurationFor(r.Context(), pkg.ProfessionalID, at)
+	duration := s.slotDurationFor(r.Context(), pkg.ProfessionalID, at, "package")
 	// Validasi slot: sebelumnya endpoint ini sama sekali tidak memvalidasi,
 	// sehingga sesi paket bisa dijadwalkan di luar jam praktik, pada hari
 	// libur profesional, bahkan di masa lalu — dan tetap memotong kuota paket.
 	// Aturan sama dengan createBooking; lead time 24 jam hanya untuk pasien
 	// agar profesional masih bisa menjadwalkan sesi mendadak (<24 jam).
 	if isProf {
-		if verr := s.validateSlotWindow(r.Context(), pkg.ProfessionalID, at, duration); verr != nil {
+		if verr := s.validateSlotFor(r.Context(), pkg.ProfessionalID, "package", at, duration, false); verr != nil {
 			writeError(w, http.StatusBadRequest, verr)
 			return
 		}
-	} else if verr := s.validateSlot(r.Context(), pkg.ProfessionalID, at, duration); verr != nil {
+	} else if verr := s.validateSlotFor(r.Context(), pkg.ProfessionalID, "package", at, duration, true); verr != nil {
 		writeError(w, http.StatusBadRequest, verr)
 		return
 	}
@@ -575,11 +577,11 @@ func (s *Server) rescheduleCareSession(w http.ResponseWriter, r *http.Request, c
 	// reschedule profesional sendiri meminta "pilih slot dalam jam praktikmu").
 	// Lead time 24 jam untuk jadwal BARU hanya diterapkan ke pasien.
 	if isProf {
-		if verr := s.validateSlotWindow(r.Context(), cs.ProfessionalID, at, max(60, cs.DurationMinutes), sessionID); verr != nil {
+		if verr := s.validateSlotFor(r.Context(), cs.ProfessionalID, sessionServiceCategory(cs), at, max(60, cs.DurationMinutes), false, sessionID); verr != nil {
 			writeError(w, http.StatusBadRequest, verr)
 			return
 		}
-	} else if verr := s.validateSlot(r.Context(), cs.ProfessionalID, at, max(60, cs.DurationMinutes), sessionID); verr != nil {
+	} else if verr := s.validateSlotFor(r.Context(), cs.ProfessionalID, sessionServiceCategory(cs), at, max(60, cs.DurationMinutes), true, sessionID); verr != nil {
 		writeError(w, http.StatusBadRequest, verr)
 		return
 	}
@@ -760,6 +762,15 @@ func (s *Server) updatePricing(w http.ResponseWriter, r *http.Request, claims au
 		current.PackagePrice = *req.PackagePrice
 	}
 	current.ProfessionalID = claims.Subject
+	if req.PatientCapacity != nil {
+		current.PatientCapacity = nil
+		if err := json.Unmarshal(req.PatientCapacity, &current.PatientCapacity); err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("patient_capacity harus bilangan bulat atau null"))
+			return
+		}
+		current.PatientCapacitySet = true
+		current.KeepExistingPrices = req.QuickChatPrice == nil && req.QuickVideoPrice == nil && req.PackagePrice == nil
+	}
 	updated, err := s.store.UpsertProfessionalPricing(r.Context(), current)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)

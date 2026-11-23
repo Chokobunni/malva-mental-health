@@ -31,6 +31,8 @@ class BookingDetailScreen extends ConsumerStatefulWidget {
     this.chatPrice,
     this.videoPrice,
     this.durationLabel,
+    this.chatDurationLabel,
+    this.videoDurationLabel,
     this.session,
     this.apiClient,
   });
@@ -47,6 +49,8 @@ class BookingDetailScreen extends ConsumerStatefulWidget {
   final int? chatPrice;
   final int? videoPrice;
   final String? durationLabel;
+  final String? chatDurationLabel;
+  final String? videoDurationLabel;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
@@ -59,6 +63,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
   late final BookingOwner _owner;
   late String _method;
   int _slotsRequest = 0;
+  String get _category => _method == 'chat' ? 'quick_chat' : 'quick_video';
 
   int _priceFor(String method) =>
       (method == 'chat' ? widget.chatPrice : widget.videoPrice) ??
@@ -87,16 +92,22 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
     final rawToken = _owner.session?.accessToken;
     final accessToken =
         (rawToken == null || rawToken.isEmpty) ? null : rawToken;
+    final request = ++_slotsRequest;
     setState(() {
       _isLoadingDays = true;
+      _isLoadingSlots = false;
+      _selectedDate = null;
+      _selectedSlot = null;
+      _slots = const [];
       _error = null;
     });
     try {
       final days = await apiClient.getDoctorAvailability(
         accessToken: accessToken,
         userId: widget.doctorUserId,
+        serviceCategory: _category,
       );
-      if (!mounted) return;
+      if (!mounted || request != _slotsRequest) return;
       final bookable = days.where((d) => d.bookable).toList(growable: false);
       setState(() {
         _days = bookable;
@@ -105,7 +116,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
       });
       if (_selectedDate != null) _loadSlots();
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || request != _slotsRequest) return;
       setState(() {
         _isLoadingDays = false;
         _error = friendlyErrorMessage(e);
@@ -141,6 +152,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
         accessToken: accessToken,
         userId: widget.doctorUserId,
         date: date,
+        serviceCategory: _category,
       );
       if (!mounted || request != _slotsRequest) return;
       setState(() {
@@ -160,6 +172,9 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final isVideo = _method == 'video';
+    final durationLabel =
+        (isVideo ? widget.videoDurationLabel : widget.chatDurationLabel) ??
+            widget.durationLabel;
     return Scaffold(
       backgroundColor: const Color(0xFFF9F3FD),
       appBar: AppBar(
@@ -221,7 +236,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                         : (_) {
                             if (_method == method) return;
                             setState(() => _method = method);
-                            _loadSlots();
+                            _loadDays();
                           },
                   ),
                 ),
@@ -345,9 +360,9 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            widget.durationLabel == null
+            durationLabel == null
                 ? 'Durasi mengikuti slot praktik'
-                : 'Durasi sesi ${widget.durationLabel}',
+                : 'Durasi sesi $durationLabel',
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 12, color: Colors.black54),
           ),

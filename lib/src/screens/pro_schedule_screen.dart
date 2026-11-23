@@ -833,6 +833,10 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   final _videoPrice = TextEditingController();
   final _packagePrice = TextEditingController();
   int _newDay = 1;
+  String _newCategory = 'quick_chat';
+  int? _patientCapacity;
+  int? _savedPatientCapacity;
+  bool _savingCapacity = false;
   final _newStart = TextEditingController(text: '09:00');
   final _newEnd = TextEditingController(text: '16:00');
   final _newDuration = TextEditingController(text: '60');
@@ -892,6 +896,8 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
       setState(() {
         _schedules = results[0] as List<BackendProfessionalSchedule>;
         _timeOff = results[2] as List<BackendTimeOff>;
+        _savedPatientCapacity = pricing.patientCapacity;
+        _patientCapacity = pricing.patientCapacity;
         _chatPrice.text =
             pricing.quickChatPrice > 0 ? '${pricing.quickChatPrice}' : '';
         _videoPrice.text =
@@ -952,8 +958,10 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                 )
               : RefreshIndicator(
                   onRefresh: () async {
-                    if (!_savingSchedules && !_savingPricing && !_savingOff)
-                      await _load();
+                    if (!_savingSchedules &&
+                        !_savingPricing &&
+                        !_savingOff &&
+                        !_savingCapacity) await _load();
                   },
                   child: ListView(
                     padding: const EdgeInsets.all(18),
@@ -964,32 +972,15 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                           StatusPill(label: 'WIB', color: MalvaColors.seed),
                         ],
                       ),
-                      const Text(
-                          'Jadwal aktif berlaku untuk semua layanan dan tampil di sisi pasien.'),
+                      const Text('Jadwal aktif tampil di sisi pasien.'),
                       const SizedBox(height: 12),
-                      SoftCard(
-                        radius: 18,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const SectionLabel('Jadwal bersama',
-                                icon: Icons.calendar_month_outlined),
-                            if (_schedules.isEmpty)
-                              const EmptyState(
-                                icon: Icons.event_busy_rounded,
-                                title: 'Belum ada jadwal',
-                                subtitle:
-                                    'Tambahkan hari praktik agar pasien bisa booking.',
-                              )
-                            else
-                              for (var i = 0; i < _schedules.length; i++) ...[
-                                if (i > 0) const Divider(height: 1),
-                                _scheduleRow(_schedules[i]),
-                              ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
+                      for (final category in professionalServiceNames.keys)
+                        if (category != 'shared' ||
+                            _schedules.any((slot) =>
+                                slot.serviceCategory == 'shared')) ...[
+                          _categoryCard(category),
+                          const SizedBox(height: 12),
+                        ],
                       SoftCard(
                         bordered: false,
                         child: Column(
@@ -998,6 +989,11 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                             const Text('Tambah jadwal',
                                 style: TextStyle(fontWeight: FontWeight.w900)),
                             const SizedBox(height: 10),
+                            _categoryDropdown(
+                                _newCategory,
+                                (value) =>
+                                    setState(() => _newCategory = value)),
+                            const SizedBox(height: 8),
                             DropdownButtonFormField<int>(
                               initialValue: _newDay,
                               decoration:
@@ -1153,12 +1149,152 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                         video: _videoPrice,
                         package: _packagePrice,
                         onSave: _savePricing,
-                        isSaving: _savingPricing,
+                        isSaving: _savingPricing || _savingCapacity,
                       ),
                     ],
                   ),
                 ),
     );
+  }
+
+  Widget _categoryDropdown(String selected, ValueChanged<String> onChanged) {
+    return DropdownButtonFormField<String>(
+      initialValue: selected,
+      isExpanded: true,
+      decoration: const InputDecoration(labelText: 'Kategori'),
+      items: [
+        for (final option in professionalServiceNames.entries)
+          DropdownMenuItem(value: option.key, child: Text(option.value)),
+      ],
+      onChanged: (value) {
+        if (value != null) onChanged(value);
+      },
+    );
+  }
+
+  Widget _categoryCard(String category) {
+    final rows = _schedules
+        .where((slot) => slot.serviceCategory == category)
+        .toList()
+      ..sort((a, b) {
+        final day = ((a.dayOfWeek + 6) % 7).compareTo((b.dayOfWeek + 6) % 7);
+        return day == 0 ? a.startTime.compareTo(b.startTime) : day;
+      });
+    final shared = category != 'shared' &&
+        rows.isEmpty &&
+        _schedules.any((slot) => slot.serviceCategory == 'shared');
+    return SoftCard(
+      radius: 18,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SectionLabel(professionalServiceNames[category]!,
+              icon: professionalServiceIcons[category]),
+          if (rows.isEmpty)
+            Text(shared ? 'Mengikuti jadwal bersama.' : 'Belum ada jadwal.')
+          else
+            for (var i = 0; i < rows.length; i++) ...[
+              if (i > 0) const Divider(height: 1),
+              _scheduleRow(rows[i]),
+            ],
+          if (category == 'package') ...[
+            const SizedBox(height: 12),
+            _capacityControls(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _capacityControls() {
+    final capacity = _patientCapacity;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: MalvaColors.seed.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Slot pasien',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            Text(capacity == null
+                ? 'Tanpa batas pasien aktif'
+                : capacity == 0
+                    ? 'Ditutup untuk pasien baru'
+                    : 'Maks. $capacity pasien aktif'),
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                IconButton(
+                  tooltip: 'Kurangi kapasitas',
+                  onPressed: _savingCapacity ||
+                          capacity == null ||
+                          capacity == 0
+                      ? null
+                      : () => setState(() => _patientCapacity = capacity - 1),
+                  icon: const Icon(Icons.remove),
+                ),
+                Text(capacity?.toString() ?? '∞'),
+                IconButton(
+                  tooltip: 'Tambah kapasitas',
+                  onPressed: _savingCapacity || (capacity ?? 0) >= 2147483647
+                      ? null
+                      : () => setState(
+                          () => _patientCapacity = (capacity ?? 0) + 1),
+                  icon: const Icon(Icons.add),
+                ),
+                if (capacity != null)
+                  TextButton(
+                    onPressed: _savingCapacity
+                        ? null
+                        : () => setState(() => _patientCapacity = null),
+                    child: const Text('Tanpa batas'),
+                  ),
+              ],
+            ),
+            if (_savingCapacity || capacity != _savedPatientCapacity)
+              FilledButton(
+                onPressed:
+                    _savingCapacity || _savingPricing ? null : _saveCapacity,
+                child:
+                    Text(_savingCapacity ? 'Menyimpan...' : 'Simpan kapasitas'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveCapacity() async {
+    final token = _token;
+    if (token == null || _savingCapacity || _savingPricing) return;
+    final capacity = _patientCapacity;
+    setState(() => _savingCapacity = true);
+    try {
+      final updated = await _api.updatePricing(
+        accessToken: token,
+        patientCapacity: capacity,
+        clearPatientCapacity: capacity == null,
+      );
+      if (!mounted) return;
+      setState(() {
+        _savedPatientCapacity = updated.patientCapacity;
+        _patientCapacity = updated.patientCapacity;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kapasitas tersimpan.')),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyErrorMessage(error))),
+      );
+    } finally {
+      if (mounted) setState(() => _savingCapacity = false);
+    }
   }
 
   Widget _scheduleRow(BackendProfessionalSchedule schedule) {
@@ -1231,6 +1367,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
 
   Future<void> _editSchedule(BackendProfessionalSchedule schedule) async {
     var day = schedule.dayOfWeek;
+    var category = schedule.serviceCategory;
     var start = schedule.startTime;
     var end = schedule.endTime;
     var durationText = '${schedule.slotDurationMinutes}';
@@ -1248,7 +1385,8 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Jadwal bersama · WIB'),
+                  _categoryDropdown(category,
+                      (value) => setDialogState(() => category = value)),
                   const SizedBox(height: 14),
                   DropdownButtonFormField<int>(
                     initialValue: day,
@@ -1321,6 +1459,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                   }
                   if (_schedules.any((other) =>
                       other.id != schedule.id &&
+                      other.serviceCategory == category &&
                       other.dayOfWeek == day &&
                       other.startTime == from &&
                       other.endTime == to)) {
@@ -1329,6 +1468,8 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                     return;
                   }
                   Navigator.pop(context, {
+                    'id': schedule.id,
+                    'service_category': category,
                     'day_of_week': day,
                     'start_time': from,
                     'end_time': to,
@@ -1457,6 +1598,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     bool? isActive,
   }) =>
       {
+        'service_category': s.serviceCategory,
         'day_of_week': s.dayOfWeek,
         'start_time': s.startTime,
         'end_time': s.endTime,
@@ -1474,6 +1616,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     final next = [
       ..._schedules.map(_scheduleToPayload),
       {
+        'service_category': _newCategory,
         'day_of_week': _newDay,
         'start_time': _newStart.text.trim(),
         'end_time': _newEnd.text.trim(),
@@ -1571,7 +1714,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
 
   Future<void> _savePricing() async {
     final token = _token;
-    if (token == null || _savingPricing) return;
+    if (token == null || _savingPricing || _savingCapacity) return;
     setState(() => _savingPricing = true);
     try {
       await _api.updatePricing(

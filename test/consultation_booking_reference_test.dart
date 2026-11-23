@@ -18,23 +18,31 @@ void main() {
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(393, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    final categories = <String?>[];
     final api = MalvaApiClient(
       baseUrl: 'https://example.test',
-      httpClient: MockClient((request) async => http.Response(
-          jsonEncode(
-            request.url.path.endsWith('/availability')
-                ? {
-                    'days': [
-                      {'date': '2099-11-25', 'free_slots': 1, 'bookable': true}
-                    ]
-                  }
-                : {
-                    'slots': [
-                      {'time': '09:00', 'available': true}
-                    ]
-                  },
-          ),
-          200)),
+      httpClient: MockClient((request) async {
+        categories.add(request.url.queryParameters['service_category']);
+        return http.Response(
+            jsonEncode(
+              request.url.path.endsWith('/availability')
+                  ? {
+                      'days': [
+                        {
+                          'date': '2099-11-25',
+                          'free_slots': 1,
+                          'bookable': true
+                        }
+                      ]
+                    }
+                  : {
+                      'slots': [
+                        {'time': '09:00', 'available': true}
+                      ]
+                    },
+            ),
+            200);
+      }),
     );
     await tester.pumpWidget(ProviderScope(
         child: MaterialApp(
@@ -64,6 +72,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Rp 300.000'), findsOneWidget);
     expect(
+        categories, ['quick_video', 'quick_video', 'quick_chat', 'quick_chat']);
+    expect(
         tester
             .widget<FilledButton>(find.ancestor(
               of: find.text('Proceed to Payment'),
@@ -89,7 +99,8 @@ void main() {
                   }
                 : {
                     'slots': [
-                      {'time': '09:00', 'available': true}
+                      {'time': '09:00', 'available': true},
+                      {'time': '10:00', 'available': true}
                     ]
                   },
           ),
@@ -113,16 +124,29 @@ void main() {
     await tester.scrollUntilVisible(payment, 200,
         scrollable: find.byType(Scrollable).first);
     expect(tester.widget<FilledButton>(payment).onPressed, isNull);
-    await tester.scrollUntilVisible(find.text('Pilih jadwal'), -200,
+    final firstPicker = find.byKey(const ValueKey('package-session-1'));
+    await tester.scrollUntilVisible(firstPicker, -200,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Opsional'), findsNWidgets(3));
-    await tester.tap(find.text('Pilih jadwal'));
+    await tester.tap(firstPicker);
     await tester.pumpAndSettle();
     await tester.tap(find.text('09:00'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Simpan jadwal'));
     await tester.pumpAndSettle();
     expect(find.textContaining('2099 • 09:00'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('package-session-2')));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ChoiceChip, '09:00'), findsNothing);
+    expect(find.text('10:00'), findsOneWidget);
+    await tester.tap(find.text('10:00'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Simpan jadwal'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2099 • 10:00'), findsOneWidget);
+    await tester.tap(find.byTooltip('Hapus jadwal sesi 2'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2099 • 10:00'), findsNothing);
     await tester.scrollUntilVisible(payment, 200,
         scrollable: find.byType(Scrollable).first);
     expect(tester.widget<FilledButton>(payment).onPressed, isNotNull);

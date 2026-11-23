@@ -26,6 +26,9 @@ class PackageBookingScreen extends ConsumerStatefulWidget {
     required this.price,
     required this.doctorPhotoUrl,
     this.scheduleLines = const [],
+    this.remainingPatientSlots,
+    this.canRenewPackage = false,
+    this.canResumePackage = false,
     this.durationLabel,
     this.session,
     this.apiClient,
@@ -35,6 +38,9 @@ class PackageBookingScreen extends ConsumerStatefulWidget {
   final String doctorName;
   final int price;
   final List<String> scheduleLines;
+  final int? remainingPatientSlots;
+  final bool canRenewPackage;
+  final bool canResumePackage;
   final String? durationLabel;
 
   /// URL foto profil profesional. Kosong = pakai avatar gradien + inisial.
@@ -51,7 +57,12 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
   late final BookingOwner _owner;
   bool _isSubmitting = false;
   String? _error;
-  (String, String)? _firstSession;
+  final _sessions = <int, (String, String)>{};
+
+  bool get _hasCapacity =>
+      widget.remainingPatientSlots != 0 ||
+      widget.canRenewPackage ||
+      widget.canResumePackage;
 
   @override
   void initState() {
@@ -89,21 +100,25 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          const SoftCard(
+          SoftCard(
             color: Colors.white,
             child: Row(
               children: [
-                Icon(Icons.calendar_month_outlined,
+                const Icon(Icons.calendar_month_outlined,
                     color: MalvaColors.seed, size: 38),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 Expanded(
                     child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Continuous Package',
+                    const Text('Continuous Package',
                         style: TextStyle(
                             fontSize: 18, fontWeight: FontWeight.w900)),
-                    Text('4 sesi video • 6 minggu'),
+                    const Text('4 sesi video • 6 minggu'),
+                    if (widget.remainingPatientSlots case final remaining?)
+                      StatusPill(
+                          label: '$remaining slot tersisa',
+                          color: MalvaColors.seed),
                   ],
                 )),
               ],
@@ -117,8 +132,9 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
               StatusPill(label: 'WIB', color: MalvaColors.seed),
             ],
           ),
-          const Text(
-              'Pilih sesi pertama sebelum membayar. Sesi 2–4 dapat dijadwalkan di halaman Terhubung selama paket aktif.'),
+          Text(widget.canResumePackage
+              ? 'Lanjutkan pembayaran untuk jadwal yang sudah dipilih.'
+              : 'Sesi 1 wajib dipilih. Sesi 2–4 opsional dan juga dapat dijadwalkan dari Terhubung selama paket aktif.'),
           const SizedBox(height: 10),
           SoftCard(
             color: Colors.white,
@@ -147,18 +163,33 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
                                         : Colors.black54),
                               ],
                             ),
-                            Text(index == 1 && _firstSession != null
-                                ? '${_displayDate(_firstSession!.$1)} • ${_firstSession!.$2}'
-                                : 'Belum dijadwalkan'),
+                            if (_sessions[index] case (final date, final time))
+                              Text('${_displayDate(date)} • $time')
+                            else
+                              const Text('Belum dijadwalkan'),
                           ],
                         ),
                       ),
-                      if (index == 1)
-                        TextButton(
-                          onPressed: _isSubmitting ? null : _pickFirstSession,
-                          child: Text(
-                              _firstSession == null ? 'Pilih jadwal' : 'Ubah'),
+                      if (index > 1 && _sessions.containsKey(index))
+                        IconButton(
+                          tooltip: 'Hapus jadwal sesi $index',
+                          onPressed: _isSubmitting
+                              ? null
+                              : () => setState(() => _sessions.remove(index)),
+                          icon: const Icon(Icons.close_rounded),
                         ),
+                      TextButton(
+                        key: ValueKey('package-session-$index'),
+                        onPressed: _isSubmitting ||
+                                !_hasCapacity ||
+                                widget.canResumePackage ||
+                                (index > 1 && !_sessions.containsKey(1))
+                            ? null
+                            : () => _pickSession(index),
+                        child: Text(_sessions.containsKey(index)
+                            ? 'Ubah'
+                            : 'Pilih jadwal'),
+                      ),
                     ],
                   ),
                 ],
@@ -219,17 +250,24 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
           ],
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: _isSubmitting || _firstSession == null ? null : _submit,
+            onPressed: _isSubmitting ||
+                    !_hasCapacity ||
+                    (!_sessions.containsKey(1) && !widget.canResumePackage)
+                ? null
+                : _submit,
             icon: const Icon(Icons.arrow_forward_rounded),
-            label:
-                Text(_isSubmitting ? 'Memproses...' : 'Lanjut ke pembayaran'),
+            label: Text(_isSubmitting
+                ? 'Memproses...'
+                : widget.canResumePackage
+                    ? 'Lanjutkan pembayaran'
+                    : 'Lanjut ke pembayaran'),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _pickFirstSession() async {
+  Future<void> _pickSession(int index) async {
     final MalvaApiClient api = widget.apiClient ?? ref.read(apiClientProvider);
     final session = _owner.session;
     final choice = await showDialog<(String, String)>(
@@ -239,13 +277,26 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
         api: api,
         accessToken: session?.accessToken,
         professionalId: widget.doctorUserId,
-        initial: _firstSession,
+        index: index,
+        initial: _sessions[index],
+        first: index > 1 ? _sessions[1] : null,
+        excluded: _sessions.entries
+            .where((entry) => entry.key != index)
+            .map((entry) => entry.value)
+            .toSet(),
       ),
     );
     if (mounted && choice != null) {
       setState(() {
-        _firstSession = choice;
-        _error = null;
+        _sessions[index] = choice;
+        if (index == 1 &&
+            _sessions.entries.any((entry) =>
+                entry.key > 1 && _compareSlots(entry.value, choice) <= 0)) {
+          _error =
+              'Sesi opsional harus setelah sesi pertama. Ubah jadwal sesi opsional sebelum melanjutkan.';
+        } else {
+          _error = null;
+        }
       });
     }
   }
@@ -261,28 +312,56 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
           'Hubungkan ke server untuk membeli paket.');
       return;
     }
-    final firstSession = _firstSession;
-    if (_isSubmitting || firstSession == null) return;
+    final firstSession = _sessions[1];
+    if (_isSubmitting ||
+        !_hasCapacity ||
+        (firstSession == null && !widget.canResumePackage)) return;
+    if (firstSession != null &&
+        _sessions.entries.any((entry) =>
+            entry.key > 1 && _compareSlots(entry.value, firstSession) <= 0)) {
+      setState(() => _error =
+          'Sesi opsional harus setelah sesi pertama. Ubah jadwal sesi opsional sebelum melanjutkan.');
+      return;
+    }
+    final additional = _sessions.entries
+        .where((entry) => entry.key > 1)
+        .map((entry) => '${entry.value.$1}T${entry.value.$2}')
+        .toList()
+      ..sort();
     setState(() {
       _isSubmitting = true;
       _error = null;
     });
     try {
-      final granted = await showConsentRequestSheet(
-        context: context,
-        professionalId: widget.doctorUserId,
-        ownerSession: () => mounted ? _owner.session : null,
-      );
+      final granted = widget.canResumePackage ||
+          await showConsentRequestSheet(
+            context: context,
+            professionalId: widget.doctorUserId,
+            ownerSession: () => mounted ? _owner.session : null,
+          );
       if (!granted || !mounted) return;
       final purchaseToken = _owner.session?.accessToken;
       if (purchaseToken == null || purchaseToken.isEmpty) return;
-      final pkg = await apiClient.createCarePackage(
-        accessToken: purchaseToken,
-        professionalId: widget.doctorUserId,
-      );
+      final BackendCarePackage pkg;
+      if (widget.canResumePackage) {
+        final pending =
+            (await apiClient.listCarePackages(accessToken: purchaseToken))
+                .where((p) =>
+                    p.professionalId == widget.doctorUserId &&
+                    p.status == 'pending_payment' &&
+                    p.bookingId != null)
+                .firstOrNull;
+        if (pending == null)
+          throw const MalvaApiException(
+              'Pesanan menunggu pembayaran sudah berubah. Buka kembali profil untuk memperbarui informasi.');
+        pkg = pending;
+      } else {
+        pkg = await apiClient.createCarePackage(
+            accessToken: purchaseToken, professionalId: widget.doctorUserId);
+      }
       if (!mounted || _owner.session == null) return;
       BackendBooking? booking;
-      if (pkg.bookingId == null) {
+      if (pkg.bookingId == null && firstSession != null) {
         final bookingToken = _owner.session?.accessToken;
         if (bookingToken == null || bookingToken.isEmpty) return;
         booking = await apiClient.createPackageSessionBooking(
@@ -290,6 +369,7 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
           packageId: pkg.id,
           bookingDate: firstSession.$1,
           slotTime: firstSession.$2,
+          additionalSessions: additional,
         );
         if (!mounted || _owner.session == null) return;
       }
@@ -299,6 +379,15 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
           builder: (_) => PaymentScreen(
             package: pkg,
             booking: booking,
+            packageScheduleSummary: booking == null
+                ? const []
+                : [
+                    for (final stamp in [
+                      '${firstSession!.$1}T${firstSession.$2}',
+                      ...additional
+                    ])
+                      '${_displayDate(stamp.split('T').first)} • ${stamp.split('T').last}',
+                  ],
             doctorName: widget.doctorName,
             session: _owner.session,
             apiClient: widget.apiClient,
@@ -325,6 +414,9 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
     return buf.toString();
   }
 }
+
+int _compareSlots((String, String) a, (String, String) b) =>
+    '${a.$1}T${a.$2}'.compareTo('${b.$1}T${b.$2}');
 
 String _displayDate(String date, {bool short = false}) {
   final parsed = DateTime.tryParse(date);
@@ -385,8 +477,14 @@ class _PackageSessionDialog extends StatefulWidget {
     required this.accessToken,
     required this.professionalId,
     required this.initial,
+    required this.index,
+    required this.excluded,
+    this.first,
   });
 
+  final int index;
+  final (String, String)? first;
+  final Set<(String, String)> excluded;
   final MalvaApiClient api;
   final String? accessToken;
   final String professionalId;
@@ -412,8 +510,11 @@ class _PackageSessionDialogState extends State<_PackageSessionDialog> {
     final days = (await widget.api.getDoctorAvailability(
       accessToken: widget.accessToken,
       userId: widget.professionalId,
+      serviceCategory: 'package',
     ))
-        .where((day) => day.bookable)
+        .where((day) =>
+            day.bookable &&
+            (widget.first == null || day.date.compareTo(widget.first!.$1) >= 0))
         .toList(growable: false);
     if (mounted && days.isNotEmpty) {
       final previous = widget.initial;
@@ -433,6 +534,7 @@ class _PackageSessionDialogState extends State<_PackageSessionDialog> {
         accessToken: widget.accessToken,
         userId: widget.professionalId,
         date: date,
+        serviceCategory: 'package',
       );
     });
   }
@@ -440,7 +542,7 @@ class _PackageSessionDialogState extends State<_PackageSessionDialog> {
   @override
   Widget build(BuildContext context) => AlertDialog(
         backgroundColor: Colors.white,
-        title: const Text('Pilih jadwal sesi 1'),
+        title: Text('Pilih jadwal sesi ${widget.index}'),
         content: SingleChildScrollView(
           child: SizedBox(
             width: 420,
@@ -488,7 +590,14 @@ class _PackageSessionDialogState extends State<_PackageSessionDialog> {
                     future: _slots,
                     builder: (context, slots) {
                       final available = slots.data
-                              ?.where((slot) => slot.available)
+                              ?.where((slot) =>
+                                  slot.available &&
+                                  !widget.excluded
+                                      .contains((_date!, slot.time)) &&
+                                  (widget.first == null ||
+                                      _compareSlots((_date!, slot.time),
+                                              widget.first!) >
+                                          0))
                               .toList() ??
                           const <BackendDoctorSlot>[];
                       final loaded =
