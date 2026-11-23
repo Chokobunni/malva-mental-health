@@ -23,8 +23,82 @@ String profileAvatarKey(String userId) => 'profile.avatar.$userId';
 
 final patientAvatarProvider =
     FutureProvider.family<String?, String>((ref, userId) async {
-  return ref.watch(secureStoreProvider).read(profileAvatarKey(userId));
+  final storage = ref.watch(secureStoreProvider);
+  final session = ref.watch(currentSessionProvider);
+  final api = ref.watch(apiClientProvider);
+  var active = true;
+  ref.onDispose(() => active = false);
+  bool ownsRequest() {
+    if (!active) return false;
+    final current = ref.read(currentSessionProvider);
+    return current?.role == UserRole.patient &&
+        current?.backendUserId == userId &&
+        current?.accessToken == session?.accessToken;
+  }
+
+  final local = await storage.read(profileAvatarKey(userId));
+  if (!active) return local;
+  final token = session?.accessToken;
+  if (session?.role != UserRole.patient ||
+      session?.backendUserId != userId ||
+      token == null ||
+      token.isEmpty ||
+      !ownsRequest()) return local;
+  try {
+    var remote = await api.fetchPatientAvatar(accessToken: token);
+    // A legacy device may initialize an absent avatar, never overwrite one
+    // selected more recently on another device.
+    if (!ownsRequest()) return local;
+    if (remote == null && local != null) {
+      remote = await api.savePatientAvatar(
+          accessToken: token, avatar: local, onlyIfMissing: true);
+    }
+    return remote ?? local;
+  } on Object {
+    return local;
+  }
 });
+
+/// A patient identity shared only through authenticated pair-scoped reads.
+class PatientAvatar extends StatelessWidget {
+  const PatientAvatar(
+      {super.key,
+      required this.displayName,
+      this.avatar,
+      this.radius = 26,
+      this.borderRadius});
+  final String displayName;
+  final String? avatar;
+  final double radius;
+  final BorderRadius? borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget fallback = ProfessionalAvatar(
+        displayName: displayName, radius: radius, borderRadius: borderRadius);
+    Widget picture = fallback;
+    if (avatar == defaultProfileAvatar) {
+      picture = ColoredBox(
+          color: const Color(0xffecd7f4),
+          child: Icon(Icons.person_rounded,
+              color: MalvaColors.plum, size: radius * 1.2));
+    } else if (profileAvatarAssets.contains(avatar)) {
+      picture = Image.asset(avatar!, fit: BoxFit.cover);
+    } else if (avatar != null) {
+      try {
+        picture = Image.memory(base64Decode(avatar!),
+            fit: BoxFit.cover, errorBuilder: (_, __, ___) => fallback);
+      } on FormatException {
+        picture = fallback;
+      }
+    }
+    return SizedBox.square(
+        dimension: radius * 2,
+        child: ClipRRect(
+            borderRadius: borderRadius ?? BorderRadius.circular(radius),
+            child: picture));
+  }
+}
 
 final _professionalPhotoProvider = FutureProvider.autoDispose
     .family<String?, (MalvaApiClient, String)>((ref, request) async {

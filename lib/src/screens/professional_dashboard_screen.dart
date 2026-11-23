@@ -1233,7 +1233,6 @@ class _ProfessionalToolsSectionState
         : Future.wait<Object>([
             client.listMySchedules(accessToken: token),
             client.getPricing(accessToken: token),
-            client.listTimeOff(accessToken: token),
           ]);
   }
 
@@ -1317,36 +1316,6 @@ class _ProfessionalToolsSectionState
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Row(children: [
-                                const Expanded(
-                                    child: Text('PENGATURAN',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 11.5,
-                                            color: Color(0xFF9AA7B1)))),
-                                TextButton.icon(
-                                  onPressed: () async {
-                                    await open(ProAvailabilityScreen(
-                                        session: session,
-                                        apiClient: apiClient));
-                                    if (mounted) setState(_reload);
-                                  },
-                                  icon: const Icon(Icons.edit_calendar_rounded,
-                                      size: 18),
-                                  style: TextButton.styleFrom(
-                                      foregroundColor: _dashboardPurple,
-                                      minimumSize: Size.zero,
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 4, horizontal: 2),
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap),
-                                  label: const Text('Atur',
-                                      style: TextStyle(
-                                          fontFamily: 'Roboto', fontSize: 13)),
-                                ),
-                              ]),
-                              const Divider(
-                                  height: 18, color: Color(0xFFEDEFF2)),
                               Builder(
                                 builder: (context) {
                                   if (_availability == null) {
@@ -1371,11 +1340,16 @@ class _ProfessionalToolsSectionState
                                   }
                                   final data = snapshot.requireData;
                                   return ProfessionalAvailabilitySummary(
+                                    onConfigure: () async {
+                                      await open(ProAvailabilityScreen(
+                                          session: session,
+                                          apiClient: apiClient));
+                                      if (mounted) setState(_reload);
+                                    },
                                     schedules: data[0]
                                         as List<BackendProfessionalSchedule>,
                                     pricing:
                                         data[1] as BackendProfessionalPricing,
-                                    timeOff: data[2] as List<BackendTimeOff>,
                                   );
                                 },
                               ),

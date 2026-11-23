@@ -1254,6 +1254,11 @@ func (s *Store) DeleteTimeOff(ctx context.Context, professionalID, timeOffID str
 	return nil
 }
 
+const legacyServicePrices = `
+	MAX(price) FILTER (WHERE package_sessions = 1 AND label ILIKE '%chat%') AS quick_chat_price,
+	MAX(price) FILTER (WHERE package_sessions = 1 AND label ILIKE '%video%') AS quick_video_price,
+	MAX(price) FILTER (WHERE package_sessions >= 4) AS package_price`
+
 func (s *Store) GetProfessionalPricing(ctx context.Context, professionalID string) (ProfessionalPricing, error) {
 	var p ProfessionalPricing
 	err := s.db.QueryRowContext(ctx, `SELECT professional_id, quick_chat_price, quick_video_price, package_price, patient_capacity
@@ -1262,13 +1267,11 @@ func (s *Store) GetProfessionalPricing(ctx context.Context, professionalID strin
 	if errors.Is(err, sql.ErrNoRows) {
 		// Fallback dari service_packages lama agar harga tetap tampil.
 		var chat, video, pkg sql.NullInt64
-		_ = s.db.QueryRowContext(ctx, `SELECT
-			MAX(price) FILTER (WHERE package_sessions = 1 AND label ILIKE '%chat%'),
-			MAX(price) FILTER (WHERE package_sessions = 1 AND label ILIKE '%video%'),
-			MAX(price) FILTER (WHERE package_sessions >= 4)
-			FROM service_packages WHERE professional_id = $1 AND is_active`,
+		_ = s.db.QueryRowContext(ctx, `SELECT`+legacyServicePrices+
+			` FROM service_packages WHERE professional_id = $1 AND is_active`,
 			professionalID).Scan(&chat, &video, &pkg)
-		p = ProfessionalPricing{ProfessionalID: professionalID}
+		capacity := effectivePackagePatientCapacity(nil)
+		p = ProfessionalPricing{ProfessionalID: professionalID, PatientCapacity: &capacity}
 		if chat.Valid {
 			p.QuickChatPrice = chat.Int64
 		}
@@ -1280,10 +1283,18 @@ func (s *Store) GetProfessionalPricing(ctx context.Context, professionalID strin
 		}
 		return p, nil
 	}
+	if err == nil && p.PatientCapacity == nil {
+		capacity := effectivePackagePatientCapacity(nil)
+		p.PatientCapacity = &capacity
+	}
 	return p, err
 }
 
 func (s *Store) UpsertProfessionalPricing(ctx context.Context, p ProfessionalPricing) (ProfessionalPricing, error) {
+	if p.PatientCapacitySet && p.PatientCapacity == nil {
+		capacity := effectivePackagePatientCapacity(nil)
+		p.PatientCapacity = &capacity
+	}
 	if p.QuickChatPrice < 0 || p.QuickVideoPrice < 0 || p.PackagePrice < 0 {
 		return ProfessionalPricing{}, errors.New("harga tidak boleh negatif")
 	}
@@ -1319,6 +1330,10 @@ func (s *Store) UpsertProfessionalPricing(ctx context.Context, p ProfessionalPri
 	}
 	if err := tx.Commit(); err != nil {
 		return ProfessionalPricing{}, err
+	}
+	if out.PatientCapacity == nil {
+		capacity := effectivePackagePatientCapacity(nil)
+		out.PatientCapacity = &capacity
 	}
 	return out, nil
 }

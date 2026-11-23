@@ -42,7 +42,6 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
     with WidgetsBindingObserver {
   String _tab = 'Jadwal';
   String _filterLinks = 'aktif';
-  bool _showPackages = false;
 
   String _filterPast = 'selesai';
   String _filterPackage = 'semua';
@@ -272,27 +271,6 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
                             ],
                           ),
                         ),
-                        if (!_isLoading &&
-                            _error == null &&
-                            _packages.isNotEmpty)
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: Tooltip(
-                              message: _tab == 'Terhubung' && _showPackages
-                                  ? 'Profesional terhubung'
-                                  : 'Paket saya',
-                              child: TextButton(
-                                onPressed: () => setState(() {
-                                  _showPackages =
-                                      _tab != 'Terhubung' || !_showPackages;
-                                  _tab = 'Terhubung';
-                                }),
-                                child: Text(_tab == 'Terhubung' && _showPackages
-                                    ? 'Profesional terhubung'
-                                    : 'Paket saya'),
-                              ),
-                            ),
-                          ),
                         const SizedBox(height: 14),
                         if (_isLoading)
                           const Center(child: CircularProgressIndicator())
@@ -314,15 +292,31 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
                               ],
                             ),
                           )
-                        else if (_tab == 'Terhubung') ...[
-                          if (_showPackages)
-                            ..._packagesBody()
-                          else
-                            ..._professionalsBody(),
-                        ] else if (_tab == 'Jadwal')
-                          ..._scheduleBody(upcoming: true)
-                        else
+                        else if (_tab == 'Terhubung')
+                          ..._professionalsBody()
+                        else if (_tab == 'Jadwal') ...[
+                          ..._scheduleBody(upcoming: true),
+                          if (_packages
+                              .any((p) => p.status == 'pending_payment')) ...[
+                            const SizedBox(height: 14),
+                            const SectionLabel('Menunggu pembayaran'),
+                            for (final package in _packages.where(
+                                (p) => p.status == 'pending_payment')) ...[
+                              _PackageCard(
+                                package: package,
+                                onOpen: () => _openPackage(package),
+                              ),
+                              const SizedBox(height: 10),
+                            ],
+                          ],
+                        ] else ...[
                           ..._scheduleBody(upcoming: false),
+                          if (_packages.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            const SectionLabel('Riwayat paket'),
+                            ..._packagesBody(),
+                          ],
+                        ],
                       ],
                     )),
               ],
@@ -1027,7 +1021,9 @@ class _PackageCard extends StatelessWidget {
                 ),
               ),
               StatusPill(
-                label: package.status,
+                label: package.status == 'pending_payment'
+                    ? 'Menunggu pembayaran'
+                    : package.status,
                 color: package.isActive
                     ? MalvaColors.mint
                     : Theme.of(context).colorScheme.onSurfaceVariant,

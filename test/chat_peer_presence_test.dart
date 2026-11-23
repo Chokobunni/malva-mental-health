@@ -210,6 +210,35 @@ void main() {
         socket.listen((_) {});
         await presence('peer', false);
         expect(find.text('Offline'), findsOneWidget);
+        await presence('peer', true);
+        tester.binding
+            .handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        for (var attempt = 0;
+            attempt < 100 && socket.closeCode == null;
+            attempt++) {
+          await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 20)));
+        }
+        expect(socket.closeCode, isNotNull,
+            reason: 'Background chat must close its presence socket.');
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+        tester.binding
+            .handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+        tester.binding
+            .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        for (var attempt = 0; attempt < 100 && sockets.length < 4; attempt++) {
+          await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 20)));
+          await tester.pump();
+        }
+        expect(sockets, hasLength(4));
+        expect(find.text('Online'), findsNothing);
+        socket = sockets.last;
+        socket.listen((_) {});
+        await presence('peer', false);
+        expect(find.text('Offline'), findsOneWidget);
         unawaited(socket.close());
         await waitFor(find.text('Menghubungkan ulang...'));
       } finally {

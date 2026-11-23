@@ -756,7 +756,7 @@ func (s *Server) getDoctorProfile(w http.ResponseWriter, r *http.Request, claims
 		reviews = []store.DoctorReview{}
 	}
 	rating, _ := s.store.DoctorRating(r.Context(), userID)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	profile := map[string]interface{}{
 		"credential":              cred,
 		"packages":                packages,
 		"schedules":               schedules,
@@ -766,7 +766,25 @@ func (s *Server) getDoctorProfile(w http.ResponseWriter, r *http.Request, claims
 		"remaining_patient_slots": remainingSlots,
 		"can_renew_package":       canRenew,
 		"can_resume_package":      canResume,
-	})
+	}
+	if birth, err := s.store.ProfessionalBirthDate(r.Context(), userID); err == nil && birth != "" {
+		if years, ok := professionalAge(birth, clock.Now()); ok {
+			profile["age_years"] = years
+		}
+	}
+	writeJSON(w, http.StatusOK, profile)
+}
+
+func professionalAge(date string, today time.Time) (int, bool) {
+	birth, err := time.ParseInLocation("2006-01-02", date, clock.Location())
+	if err != nil || birth.After(today) {
+		return 0, false
+	}
+	years := today.Year() - birth.Year()
+	if today.Month() < birth.Month() || (today.Month() == birth.Month() && today.Day() < birth.Day()) {
+		years--
+	}
+	return years, true
 }
 
 func (s *Server) getDoctorAvailableSlots(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
@@ -1033,7 +1051,9 @@ func (s *Server) updateMySchedules(w http.ResponseWriter, r *http.Request, claim
 		if duration <= 0 {
 			duration = 60
 		}
-		if duration < 60 || duration > 180 {
+		// The store accepts below-hour timing only for an unchanged saved
+		// legacy row owned by this professional (including status toggles).
+		if duration > 180 {
 			writeError(w, http.StatusBadRequest, errors.New("slot_duration_minutes harus 60-180"))
 			return
 		}

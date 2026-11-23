@@ -91,6 +91,8 @@ class _PatientShellState extends ConsumerState<PatientShell>
     _realtime = null;
     _realtimeSub = null;
     if (apiClient == null || token == null || token.isEmpty) return;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return;
 
     final service = RealtimeService(
       accessToken: token,
@@ -145,6 +147,12 @@ class _PatientShellState extends ConsumerState<PatientShell>
     if (state == AppLifecycleState.resumed) {
       _refreshClinicalData();
       _connectRealtime();
+    } else {
+      _realtimeGeneration++;
+      unawaited(_realtimeSub?.cancel());
+      unawaited(_realtime?.dispose());
+      _realtimeSub = null;
+      _realtime = null;
     }
   }
 

@@ -24,6 +24,14 @@ func TestDoctorReviewPersistsStarsIndependentOfHelpfulAndSearchUsesRealTotals(t 
 	if _, err := db.ExecContext(ctx, `INSERT INTO professional_credentials(user_id,specialization,verification_status,review_count,helpfulness_count) VALUES($1,$2,'VERIFIED',4,3)`, professional, suffix); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO professional_pricing(professional_id,quick_chat_price,quick_video_price,package_price) VALUES($1,200000,500000,1300000)`, professional); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := db.ExecContext(ctx, `DELETE FROM professional_pricing WHERE professional_id=$1`, professional); err != nil {
+			t.Errorf("cleanup professional pricing: %v", err)
+		}
+	})
 	rv, err := s.CreateDoctorReview(ctx, professional, patient, 4, "  Penjelasan jelas  ", false)
 	if err != nil {
 		t.Fatal(err)
@@ -51,6 +59,35 @@ func TestDoctorReviewPersistsStarsIndependentOfHelpfulAndSearchUsesRealTotals(t 
 	}
 	if len(doctors) != 1 || doctors[0].ReviewCount != 1 || doctors[0].HelpfulnessCount != 0 {
 		t.Fatalf("search must ignore seeded counters: %+v", doctors)
+	}
+	got := doctors[0]
+	if got.QuickChatPrice != 200000 || got.QuickVideoPrice != 500000 || got.PackagePrice != 1300000 {
+		t.Fatalf("directory prices = %d, %d, %d", got.QuickChatPrice, got.QuickVideoPrice, got.PackagePrice)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO service_packages
+		(professional_id,package_sessions,package_duration_days,price,label)
+		VALUES($1,1,1,175000,'Quick chat'),($1,1,1,475000,'Quick video'),($1,4,42,1200000,'Continuous')`, professional); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := db.ExecContext(ctx, `DELETE FROM service_packages WHERE professional_id=$1`, professional); err != nil {
+			t.Errorf("cleanup legacy pricing: %v", err)
+		}
+	})
+	if _, err := db.ExecContext(ctx, `UPDATE professional_pricing SET quick_chat_price=0 WHERE professional_id=$1`, professional); err != nil {
+		t.Fatal(err)
+	}
+	doctors, err = s.SearchDoctors(ctx, DoctorSearchParams{Specialization: suffix})
+	if err != nil || len(doctors) != 1 || doctors[0].QuickChatPrice != 0 {
+		t.Fatalf("explicit zero must hide legacy quick chat price: %+v, %v", doctors, err)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM professional_pricing WHERE professional_id=$1`, professional); err != nil {
+		t.Fatal(err)
+	}
+	doctors, err = s.SearchDoctors(ctx, DoctorSearchParams{Specialization: suffix})
+	if err != nil || len(doctors) != 1 || doctors[0].QuickChatPrice != 175000 ||
+		doctors[0].QuickVideoPrice != 475000 || doctors[0].PackagePrice != 1200000 {
+		t.Fatalf("missing legacy prices: %+v, %v", doctors, err)
 	}
 }
 

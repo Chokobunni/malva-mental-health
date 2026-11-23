@@ -81,6 +81,10 @@ void main() {
   });
   testWidgets('package filters retain pending, active and cancelled purchases',
       (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final api = MalvaApiClient(
         baseUrl: 'http://backend.test',
         httpClient: MockClient((request) async {
@@ -124,8 +128,11 @@ void main() {
               accessToken: 'test'),
         ))));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Paket saya'));
+    expect(find.byTooltip('Paket saya'), findsNothing);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Riwayat'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(
+        find.widgetWithText(ChoiceChip, 'Menunggu pembayaran 1'));
     await tester.tap(find.widgetWithText(ChoiceChip, 'Menunggu pembayaran 1'));
     await tester.pumpAndSettle();
     expect(find.text('Profesional pending_payment'), findsOneWidget);

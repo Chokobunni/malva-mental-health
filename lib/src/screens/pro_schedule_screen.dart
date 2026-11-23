@@ -16,7 +16,6 @@ import '../widgets/meet_join_button.dart';
 import '../widgets/professional_availability_summary.dart';
 import 'chat_screen.dart';
 import 'pro_patient_detail_screen.dart';
-import '../time/wib.dart';
 
 // ============================================================
 // PRO SCHEDULE — tab "Jadwal" dashboard profesional:
@@ -779,39 +778,6 @@ class _ProSessionCard extends ConsumerWidget {
   }
 }
 
-// ============================================================
-// Helper tanggal untuk hari libur. YYYY-MM-DD dipakai karena itu
-// format yang diminta/dikembalikan API (kolom DATE) sekaligus
-// urut secara leksikografis sehingga perbandingan string aman.
-// ============================================================
-
-const _monthShort = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'Mei',
-  'Jun',
-  'Jul',
-  'Agu',
-  'Sep',
-  'Okt',
-  'Nov',
-  'Des',
-];
-
-/// `yyyy-MM-dd` dari instant apa pun, selalu dalam kalender WIB
-/// (hari libur adalah tanggal kalender di zona waktu profesional).
-String _ymdFrom(DateTime d) => wibDateKey(d);
-
-/// "2026-11-03" -> "Sen, 3 Nov 2026".
-String _formatYmdId(String ymd) {
-  final d = DateTime.tryParse(ymd);
-  if (d == null) return ymd;
-  const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-  return '${days[d.weekday - 1]}, ${d.day} ${_monthShort[d.month - 1]} ${d.year}';
-}
-
 class ProAvailabilityScreen extends ConsumerStatefulWidget {
   const ProAvailabilityScreen({super.key, this.session, this.apiClient});
 
@@ -825,7 +791,6 @@ class ProAvailabilityScreen extends ConsumerStatefulWidget {
 
 class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   List<BackendProfessionalSchedule> _schedules = const [];
-  List<BackendTimeOff> _timeOff = const [];
   bool _isLoading = true;
   String? _error;
 
@@ -834,15 +799,12 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   final _packagePrice = TextEditingController();
   int _newDay = 1;
   String _newCategory = 'quick_chat';
-  int? _patientCapacity;
-  int? _savedPatientCapacity;
+  int _patientCapacity = 2;
+  int _savedPatientCapacity = 2;
   bool _savingCapacity = false;
   final _newStart = TextEditingController(text: '09:00');
   final _newEnd = TextEditingController(text: '16:00');
   final _newDuration = TextEditingController(text: '60');
-  final _offReason = TextEditingController();
-  DateTime? _offDate;
-  bool _savingOff = false;
   bool _savingSchedules = false;
   bool _savingPricing = false;
 
@@ -866,7 +828,6 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     _newStart.dispose();
     _newEnd.dispose();
     _newDuration.dispose();
-    _offReason.dispose();
     super.dispose();
   }
 
@@ -889,15 +850,13 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
       final results = await Future.wait([
         _api.listMySchedules(accessToken: token),
         _api.getPricing(accessToken: token),
-        _api.listTimeOff(accessToken: token),
       ]);
       if (!mounted) return;
       final pricing = results[1] as BackendProfessionalPricing;
       setState(() {
         _schedules = results[0] as List<BackendProfessionalSchedule>;
-        _timeOff = results[2] as List<BackendTimeOff>;
-        _savedPatientCapacity = pricing.patientCapacity;
-        _patientCapacity = pricing.patientCapacity;
+        _savedPatientCapacity = pricing.patientCapacity ?? 2;
+        _patientCapacity = pricing.patientCapacity ?? 2;
         _chatPrice.text = formatProfessionalPrice(pricing.quickChatPrice);
         _videoPrice.text = formatProfessionalPrice(pricing.quickVideoPrice);
         _packagePrice.text = formatProfessionalPrice(pricing.packagePrice);
@@ -926,10 +885,11 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).brightness == Brightness.light
-          ? const Color(0xFFF5EFF9)
+          ? const Color(0xFFFAF9FC)
           : null,
       appBar: AppBar(
-        title: const Text('Ketersediaan & Harga'),
+        title: const Text('Ketersediaan & Harga',
+            style: TextStyle(fontFamily: 'Roboto')),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),
@@ -957,7 +917,6 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                   onRefresh: () async {
                     if (!_savingSchedules &&
                         !_savingPricing &&
-                        !_savingOff &&
                         !_savingCapacity) await _load();
                   },
                   child: ListView(
@@ -973,15 +932,17 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                           StatusPill(label: 'WIB', color: MalvaColors.seed),
                         ],
                       ),
-                      const Text('Jadwal aktif tampil di sisi pasien.'),
+                      const Text(
+                          'Jadwal aktif tampil otomatis di sisi pasien.'),
                       const SizedBox(height: 12),
-                      for (final category in professionalServiceNames.keys)
-                        if (category != 'shared' ||
-                            _schedules.any((slot) =>
-                                slot.serviceCategory == 'shared')) ...[
-                          _categoryCard(category),
-                          const SizedBox(height: 12),
-                        ],
+                      for (final category in [
+                        'quick_chat',
+                        'quick_video',
+                        'package'
+                      ]) ...[
+                        _categoryCard(category),
+                        const SizedBox(height: 12),
+                      ],
                       SoftCard(
                         bordered: false,
                         child: Column(
@@ -1051,7 +1012,8 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                             FilledButton.icon(
                               onPressed: _savingSchedules ? null : _addSchedule,
                               icon: const Icon(Icons.add_rounded),
-                              label: const Text('Tambah & Simpan'),
+                              label: const Text('Tambah & Simpan',
+                                  style: TextStyle(fontFamily: 'Roboto')),
                             ),
                           ],
                         ),
@@ -1069,101 +1031,6 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                         isSaving: _savingPricing || _savingCapacity,
                       ),
                       const SizedBox(height: 14),
-                      const SectionLabel('Hari libur'),
-                      SoftCard(
-                        bordered: false,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              'Tanggal libur tidak bisa dipilih pasien saat '
-                              'booking. Sesi yang sudah terlanjur terjadwal '
-                              'pada tanggal itu TIDAK otomatis dibatalkan — '
-                              'batalkan atau reschedule dari tab Jadwal.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            if (_upcomingTimeOff.isEmpty)
-                              const EmptyState(
-                                icon: Icons.beach_access_outlined,
-                                title: 'Belum ada hari libur',
-                                subtitle:
-                                    'Tambahkan tanggal saat kamu tidak praktik.',
-                              )
-                            else
-                              for (final t in _upcomingTimeOff) ...[
-                                Row(
-                                  children: [
-                                    const Icon(Icons.event_busy_rounded,
-                                        size: 18, color: MalvaColors.amber),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _formatYmdId(t.offDate),
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.w800),
-                                          ),
-                                          if (t.reason.isNotEmpty)
-                                            Text(
-                                              t.reason,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall,
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                    IconButton(
-                                      tooltip: 'Hapus hari libur',
-                                      onPressed: () => _removeTimeOff(t),
-                                      icon: const Icon(
-                                        Icons.delete_outline_rounded,
-                                        color: MalvaColors.danger,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            const SizedBox(height: 8),
-                            OutlinedButton.icon(
-                              onPressed: _pickOffDate,
-                              icon: const Icon(Icons.calendar_month_rounded,
-                                  size: 18),
-                              label: Text(
-                                _offDate == null
-                                    ? 'Pilih tanggal libur'
-                                    : _formatYmdId(_ymdFrom(_offDate!)),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: _offReason,
-                              decoration: const InputDecoration(
-                                labelText: 'Alasan (opsional)',
-                                hintText: 'Cuti, seminar, hari besar',
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            FilledButton.icon(
-                              onPressed: _savingOff ? null : _addTimeOff,
-                              icon: const Icon(Icons.add_rounded),
-                              label: Text(_savingOff
-                                  ? 'Menyimpan…'
-                                  : 'Tambah hari libur'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
                     ],
                   ),
                 ),
@@ -1173,7 +1040,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   InputDecoration _scheduleField(BuildContext context, String label) {
     final colors = Theme.of(context).colorScheme;
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(18),
       borderSide: BorderSide(color: colors.outlineVariant),
     );
     return InputDecoration(
@@ -1194,7 +1061,11 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
       isExpanded: true,
       decoration: _scheduleField(context, 'Kategori'),
       items: [
-        for (final option in professionalServiceNames.entries)
+        for (final option in const {
+          'quick_chat': 'Chat',
+          'quick_video': 'Video',
+          'package': 'Continuous Package',
+        }.entries)
           DropdownMenuItem(
               value: option.key,
               child: Text(option.value, overflow: TextOverflow.ellipsis)),
@@ -1206,19 +1077,16 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   }
 
   Widget _categoryCard(String category) {
-    final rows = _schedules
-        .where((slot) => slot.serviceCategory == category)
-        .toList()
+    final rows = professionalServiceSchedules(_schedules, category)
       ..sort((a, b) {
         final day = ((a.dayOfWeek + 6) % 7).compareTo((b.dayOfWeek + 6) % 7);
         return day == 0 ? a.startTime.compareTo(b.startTime) : day;
       });
-    final shared = category != 'shared' &&
-        rows.isEmpty &&
-        _schedules.any((slot) => slot.serviceCategory == 'shared');
+    final color =
+        category == 'package' ? const Color(0xFF168369) : MalvaColors.seed;
     return SoftCard(
-      radius: 14,
-      padding: const EdgeInsets.all(12),
+      radius: 24,
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1226,28 +1094,46 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
             children: [
               DecoratedBox(
                 decoration: BoxDecoration(
-                  color: MalvaColors.seed.withValues(alpha: .12),
-                  borderRadius: BorderRadius.circular(9),
+                  color: color.withValues(alpha: .10),
+                  borderRadius: BorderRadius.circular(15),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(8),
                   child: Icon(professionalServiceIcons[category],
-                      color: MalvaColors.seed, size: 19),
+                      color: color, size: 23),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                  child: Text(professionalServiceNames[category]!,
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w900))),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(professionalServiceNames[category]!,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w800)),
+                    Text(
+                        switch (category) {
+                          'quick_chat' => 'Konsultasi teks terjadwal',
+                          'quick_video' => 'Konsultasi tatap muka daring',
+                          _ => 'Paket pendampingan 4 sesi',
+                        },
+                        style: const TextStyle(
+                            fontSize: 12, color: Color(0xFF98A2AD))),
+                  ])),
+              const SizedBox(width: 6),
+              StatusPill(
+                  label: '${rows.where((row) => row.isActive).length} aktif',
+                  color: color),
             ],
           ),
           if (rows.isEmpty)
-            Text(shared ? 'Mengikuti jadwal bersama.' : 'Belum ada jadwal.')
+            const Padding(
+                padding: EdgeInsets.only(top: 16),
+                child: Text('Belum ada jadwal.'))
           else
             for (var i = 0; i < rows.length; i++) ...[
               if (i > 0) const Divider(height: 1),
-              _scheduleRow(rows[i]),
+              _scheduleRow(rows[i], category),
             ],
           if (category == 'package') ...[
             const SizedBox(height: 12),
@@ -1270,49 +1156,55 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Slot pasien',
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            Text(capacity == null
-                ? 'Tanpa batas pasien aktif'
-                : capacity == 0
-                    ? 'Ditutup untuk pasien baru'
-                    : 'Maks. $capacity pasien aktif'),
-            Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                IconButton(
-                  tooltip: 'Kurangi kapasitas',
-                  onPressed: _savingCapacity ||
-                          capacity == null ||
-                          capacity == 0
-                      ? null
-                      : () => setState(() => _patientCapacity = capacity - 1),
-                  icon: const Icon(Icons.remove),
-                ),
-                Text(capacity?.toString() ?? '∞'),
-                IconButton(
-                  tooltip: 'Tambah kapasitas',
-                  onPressed: _savingCapacity || (capacity ?? 0) >= 2147483647
-                      ? null
-                      : () => setState(
-                          () => _patientCapacity = (capacity ?? 0) + 1),
-                  icon: const Icon(Icons.add),
-                ),
-                if (capacity != null)
-                  TextButton(
-                    onPressed: _savingCapacity
-                        ? null
-                        : () => setState(() => _patientCapacity = null),
-                    child: const Text('Tanpa batas'),
-                  ),
-              ],
-            ),
+            Row(children: [
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    const Text('Slot pasien',
+                        style: TextStyle(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 3),
+                    Text(
+                        capacity == 0
+                            ? 'Ditutup untuk pasien baru'
+                            : 'Maks. $capacity pasien aktif',
+                        style: const TextStyle(
+                            fontSize: 12, color: Color(0xFF87939E))),
+                  ])),
+              const SizedBox(width: 8),
+              Container(
+                  decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFEDE8F2))),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    IconButton(
+                      tooltip: 'Kurangi kapasitas',
+                      onPressed: _savingCapacity || capacity == 0
+                          ? null
+                          : () =>
+                              setState(() => _patientCapacity = capacity - 1),
+                      icon: const Icon(Icons.remove),
+                    ),
+                    Text('$capacity',
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    IconButton(
+                      tooltip: 'Tambah kapasitas',
+                      onPressed: _savingCapacity || capacity >= 2147483647
+                          ? null
+                          : () =>
+                              setState(() => _patientCapacity = capacity + 1),
+                      icon: const Icon(Icons.add),
+                    ),
+                  ])),
+            ]),
             if (_savingCapacity || capacity != _savedPatientCapacity)
               FilledButton(
                 onPressed:
                     _savingCapacity || _savingPricing ? null : _saveCapacity,
-                child:
-                    Text(_savingCapacity ? 'Menyimpan...' : 'Simpan kapasitas'),
+                child: Text(
+                    _savingCapacity ? 'Menyimpan...' : 'Simpan kapasitas',
+                    style: const TextStyle(fontFamily: 'Roboto')),
               ),
           ],
         ),
@@ -1329,12 +1221,11 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
       final updated = await _api.updatePricing(
         accessToken: token,
         patientCapacity: capacity,
-        clearPatientCapacity: capacity == null,
       );
       if (!mounted) return;
       setState(() {
-        _savedPatientCapacity = updated.patientCapacity;
-        _patientCapacity = updated.patientCapacity;
+        _savedPatientCapacity = updated.patientCapacity ?? 2;
+        _patientCapacity = updated.patientCapacity ?? 2;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Kapasitas tersimpan.')),
@@ -1349,10 +1240,10 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     }
   }
 
-  Widget _scheduleRow(BackendProfessionalSchedule schedule) {
+  Widget _scheduleRow(BackendProfessionalSchedule schedule, String category) {
     final day = _dayNames[schedule.dayOfWeek];
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         children: [
           Expanded(
@@ -1364,7 +1255,11 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                   spacing: 8,
                   children: [
                     Text(day,
-                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: schedule.isActive
+                                ? null
+                                : const Color(0xFF98A2AD))),
                     if (!schedule.isActive)
                       const StatusPill(label: 'Nonaktif', color: Colors.grey),
                   ],
@@ -1385,8 +1280,9 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                 inactiveTrackColor: const Color(0xFFDDDCE1),
                 trackOutlineColor:
                     const WidgetStatePropertyAll(Colors.transparent),
-                onChanged:
-                    _savingSchedules ? null : (_) => _toggleSchedule(schedule),
+                onChanged: _savingSchedules
+                    ? null
+                    : (_) => _toggleSchedule(schedule, category),
               ),
             ),
           ),
@@ -1398,9 +1294,9 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
             color: Theme.of(context).colorScheme.surface,
             onSelected: (edit) {
               if (edit) {
-                _editSchedule(schedule);
+                _editSchedule(schedule, category);
               } else {
-                _removeSchedule(schedule);
+                _removeSchedule(schedule, category);
               }
             },
             itemBuilder: (context) => const [
@@ -1427,250 +1323,211 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     );
   }
 
-  Future<void> _editSchedule(BackendProfessionalSchedule schedule) async {
+  Future<void> _editSchedule(
+      BackendProfessionalSchedule schedule, String category) async {
     var day = schedule.dayOfWeek;
-    var category = schedule.serviceCategory;
     var start = schedule.startTime;
     var end = schedule.endTime;
-    var durationText = '${schedule.slotDurationMinutes}';
-    final edited = await showDialog<Map<String, Object?>>(
+    var durationText =
+        '${schedule.slotDurationMinutes < 60 ? 60 : schedule.slotDurationMinutes}';
+    String? error;
+    final edited = await showModalBottomSheet<Map<String, Object?>>(
       context: context,
-      builder: (context) {
-        String? error;
-        return StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            insetPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            title: const Text('Edit jadwal',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-            contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            scrollable: true,
-            content: SizedBox(
-              width: 430,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _categoryDropdown(category,
-                      (value) => setDialogState(() => category = value)),
-                  const SizedBox(height: 14),
-                  DropdownButtonFormField<int>(
-                    initialValue: day,
-                    decoration: _scheduleField(context, 'Hari'),
-                    items: [
-                      for (final i in [1, 2, 3, 4, 5, 6, 0])
-                        DropdownMenuItem(value: i, child: Text(_dayNames[i])),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) day = value;
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                          child: TextFormField(
-                        initialValue: start,
-                        onChanged: (value) => start = value,
-                        decoration: _scheduleField(context, 'Mulai'),
-                      )),
-                      const SizedBox(width: 8),
-                      Expanded(
-                          child: TextFormField(
-                        initialValue: end,
-                        onChanged: (value) => end = value,
-                        decoration: _scheduleField(context, 'Selesai'),
-                      )),
-                      const SizedBox(width: 8),
-                      Expanded(
-                          child: TextFormField(
-                        initialValue: durationText,
-                        onChanged: (value) => durationText = value,
-                        keyboardType: TextInputType.number,
-                        decoration: _scheduleField(context, 'Slot (mnt)'),
-                      )),
-                    ],
-                  ),
-                  if (error != null) ...[
-                    const SizedBox(height: 8),
-                    Text(error!,
-                        style: const TextStyle(color: MalvaColors.danger)),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Batal'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: FilledButton(
-                      child: const Text('Simpan perubahan',
-                          textAlign: TextAlign.center),
-                      onPressed: () {
-                        final duration = int.tryParse(durationText.trim()) ?? 0;
-                        final times =
-                            RegExp(r'^(?:[01][0-9]|2[0-3]):[0-5][0-9]$');
-                        final from = start.trim();
-                        final to = end.trim();
-                        if (!times.hasMatch(from) ||
-                            !times.hasMatch(to) ||
-                            from.compareTo(to) >= 0) {
-                          setDialogState(() => error =
-                              'Isi jam mulai dan selesai dalam urutan yang benar (HH:MM).');
-                          return;
-                        }
-                        if (duration < 60 || duration > 180) {
-                          setDialogState(() => error =
-                              'Slot minimal 60 menit dan maksimal 180 menit.');
-                          return;
-                        }
-                        if (_schedules.any((other) =>
-                            other.id != schedule.id &&
-                            other.serviceCategory == category &&
-                            other.dayOfWeek == day &&
-                            other.startTime == from &&
-                            other.endTime == to)) {
-                          setDialogState(() => error =
-                              'Jadwal dengan hari dan jam tersebut sudah ada.');
-                          return;
-                        }
-                        Navigator.pop(context, {
-                          'id': schedule.id,
-                          'service_category': category,
-                          'day_of_week': day,
-                          'start_time': from,
-                          'end_time': to,
-                          'slot_duration_minutes': duration,
-                          'is_active': schedule.isActive,
-                        });
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (context) => StatefulBuilder(
+          builder: (context, setSheetState) => Padding(
+                padding: EdgeInsets.fromLTRB(
+                    20, 0, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
+                child: SingleChildScrollView(
+                    child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                      Row(children: [
+                        Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                                color: MalvaColors.seed.withValues(alpha: .10),
+                                borderRadius: BorderRadius.circular(18)),
+                            child: const Icon(Icons.edit_calendar_outlined,
+                                color: MalvaColors.seed, size: 28)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                              const Text('Edit jadwal',
+                                  style: TextStyle(
+                                      fontSize: 23,
+                                      fontWeight: FontWeight.w900)),
+                              Text(
+                                  '${professionalServiceNames[category]} · WIB',
+                                  style: const TextStyle(
+                                      color: MalvaColors.seed,
+                                      fontWeight: FontWeight.w700)),
+                            ])),
+                        IconButton(
+                            onPressed: () => Navigator.pop(context),
+                            tooltip: 'Tutup',
+                            icon: const Icon(Icons.close)),
+                      ]),
+                      const SizedBox(height: 24),
+                      DropdownButtonFormField<int>(
+                          initialValue: day,
+                          decoration: _scheduleField(context, 'Hari praktik'),
+                          items: [
+                            for (final i in [1, 2, 3, 4, 5, 6, 0])
+                              DropdownMenuItem(
+                                  value: i, child: Text(_dayNames[i]))
+                          ],
+                          onChanged: (value) {
+                            if (value != null) day = value;
+                          }),
+                      const SizedBox(height: 18),
+                      Row(children: [
+                        Expanded(
+                            child: TextFormField(
+                                initialValue: start,
+                                onChanged: (value) => start = value,
+                                decoration: _scheduleField(context, 'Mulai'))),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            child: TextFormField(
+                                initialValue: end,
+                                onChanged: (value) => end = value,
+                                decoration:
+                                    _scheduleField(context, 'Selesai'))),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            child: TextFormField(
+                                initialValue: durationText,
+                                onChanged: (value) => durationText = value,
+                                keyboardType: TextInputType.number,
+                                decoration:
+                                    _scheduleField(context, 'Slot (mnt)'))),
+                      ]),
+                      if (error != null)
+                        Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Text(error!,
+                                style: const TextStyle(
+                                    color: MalvaColors.danger))),
+                      const SizedBox(height: 22),
+                      Row(children: [
+                        Expanded(
+                            child: OutlinedButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Batal'))),
+                        const SizedBox(width: 10),
+                        Expanded(
+                            flex: 2,
+                            child: FilledButton.icon(
+                                icon: const Icon(Icons.check, size: 18),
+                                label: const Text('Simpan perubahan',
+                                    style: TextStyle(fontFamily: 'Roboto'),
+                                    textAlign: TextAlign.center),
+                                onPressed: () {
+                                  final duration =
+                                      int.tryParse(durationText.trim()) ?? 0;
+                                  final from = start.trim();
+                                  final to = end.trim();
+                                  final invalid =
+                                      _scheduleValidation(from, to, duration);
+                                  if (invalid != null) {
+                                    setSheetState(() => error = invalid);
+                                    return;
+                                  }
+                                  if (professionalServiceSchedules(
+                                          _schedules, category)
+                                      .any((other) =>
+                                          other.id != schedule.id &&
+                                          other.dayOfWeek == day &&
+                                          other.startTime == from &&
+                                          other.endTime == to)) {
+                                    setSheetState(() => error =
+                                        'Jadwal dengan hari dan jam tersebut sudah ada.');
+                                    return;
+                                  }
+                                  Navigator.pop(context, {
+                                    if (schedule.serviceCategory == category)
+                                      'id': schedule.id,
+                                    'service_category': category,
+                                    'day_of_week': day,
+                                    'start_time': from,
+                                    'end_time': to,
+                                    'slot_duration_minutes': duration,
+                                    'is_active': schedule.isActive,
+                                  });
+                                })),
+                      ]),
+                    ])),
+              )),
     );
     if (!mounted || edited == null) return;
-    await _writeSchedules([
-      for (final row in _schedules)
-        if (row.id == schedule.id) edited else _scheduleToPayload(row),
-    ], 'Perubahan jadwal disimpan.');
+    await _writeSchedules(_replaceCategoryRow(schedule, category, edited),
+        'Perubahan jadwal disimpan.');
   }
 
-  // ==========================================================
-  // Hari libur (professional_time_off)
-  // Sisi server sudah lama mendukung GET/POST/DELETE time-off dan
-  // memakainya saat menghitung slot, tetapi belum ada layar untuk
-  // mengisinya — sehingga profesional hanya bisa "menutup" hari
-  // dengan menghapus jadwal mingguan (yang menghapus polanya juga).
-  // ==========================================================
-
-  /// Hari libur hari ini dan yang akan datang, urut terdekat.
-  /// Tanggal lampau tidak ditampilkan karena tidak lagi berguna
-  /// (tidak memblokir slot apa pun).
-  List<BackendTimeOff> get _upcomingTimeOff {
-    final today = _ymdFrom(wibNow());
-    return _timeOff.where((t) => t.offDate.compareTo(today) >= 0).toList()
-      ..sort((a, b) => a.offDate.compareTo(b.offDate));
-  }
-
-  Future<void> _pickOffDate() async {
-    final now = wibNow();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _offDate ?? now,
-      firstDate: DateTime(now.year, now.month, now.day),
-      lastDate: DateTime(now.year + 1, now.month, now.day),
-      helpText: 'Pilih tanggal libur',
-    );
-    if (picked != null && mounted) setState(() => _offDate = picked);
-  }
-
-  Future<void> _addTimeOff() async {
-    final token = _token;
-    if (token == null) return;
-    final date = _offDate;
-    if (date == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pilih tanggal libur dulu.'),
-          backgroundColor: MalvaColors.amber,
-        ),
-      );
-      return;
+  String? _scheduleValidation(String from, String to, int duration) {
+    if (duration < 60 || duration > 180)
+      return 'Slot minimal 60 menit dan maksimal 180 menit.';
+    final times = RegExp(r'^(?:[01][0-9]|2[0-3]):[0-5][0-9]$');
+    if (!times.hasMatch(from) ||
+        !times.hasMatch(to) ||
+        from.compareTo(to) >= 0) {
+      return 'Isi jam mulai dan selesai dalam urutan yang benar (HH:MM).';
     }
-    setState(() => _savingOff = true);
-    try {
-      final created = await _api.addTimeOff(
-        accessToken: token,
-        offDate: _ymdFrom(date),
-        reason: _offReason.text.trim(),
-      );
-      if (!mounted) return;
-      setState(() {
-        // Server memakai ON CONFLICT (professional_id, off_date), jadi tanggal
-        // yang sama menimpa baris lama: buang entri lama agar tidak dobel.
-        final next = [
-          ..._timeOff.where((e) => e.offDate != created.offDate),
-          created,
-        ]..sort((a, b) => a.offDate.compareTo(b.offDate));
-        _timeOff = next;
-        _offDate = null;
-        _offReason.clear();
-        _savingOff = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Hari libur disimpan.')),
-      );
-    } on Object catch (e) {
-      if (!mounted) return;
-      setState(() => _savingOff = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorMessage(e)),
-          backgroundColor: MalvaColors.danger,
-        ),
-      );
-    }
+    int minutes(String text) =>
+        int.parse(text.substring(0, 2)) * 60 + int.parse(text.substring(3));
+    if (minutes(to) - minutes(from) < duration)
+      return 'Rentang jadwal harus memuat setidaknya satu slot sesi.';
+    return null;
   }
 
-  Future<void> _removeTimeOff(BackendTimeOff item) async {
-    final token = _token;
-    if (token == null) return;
-    try {
-      await _api.deleteTimeOff(accessToken: token, id: item.id);
-      if (!mounted) return;
-      setState(() {
-        _timeOff =
-            _timeOff.where((e) => e.id != item.id).toList(growable: false);
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Hari libur dihapus.')),
-      );
-    } on Object catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorMessage(e)),
-          backgroundColor: MalvaColors.danger,
-        ),
-      );
+  // A category inherits shared rows until its first change. Copy its full effective
+  // schedule so editing one service never changes the other services.
+  List<Map<String, Object?>> _replaceCategoryRow(
+      BackendProfessionalSchedule target,
+      String category,
+      Map<String, Object?>? replacement) {
+    if (target.serviceCategory == category) {
+      return [
+        for (final row in _schedules)
+          if (row.id == target.id) ...[
+            if (replacement != null) replacement
+          ] else
+            _scheduleToPayload(row)
+      ];
     }
+    final effective = professionalServiceSchedules(_schedules, category);
+    return [
+      ..._schedules.map(_scheduleToPayload),
+      for (final row in effective)
+        if (row.id != target.id)
+          {
+            ..._scheduleToPayload(row),
+            'id': null,
+            'service_category': category,
+            'slot_duration_minutes':
+                row.slotDurationMinutes < 60 ? 60 : row.slotDurationMinutes,
+          }
+        else if (replacement != null)
+          replacement
+        else if (effective.length == 1)
+          {
+            ..._scheduleToPayload(row),
+            'id': null,
+            'service_category': category,
+            'slot_duration_minutes':
+                row.slotDurationMinutes < 60 ? 60 : row.slotDurationMinutes,
+            'is_active': false,
+          },
+    ];
   }
 
   /// Payload satu baris jadwal untuk PUT /v1/professional/schedules.
@@ -1680,6 +1537,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     bool? isActive,
   }) =>
       {
+        'id': s.id,
         'service_category': s.serviceCategory,
         'day_of_week': s.dayOfWeek,
         'start_time': s.startTime,
@@ -1690,9 +1548,11 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
 
   Future<void> _addSchedule() async {
     final duration = int.tryParse(_newDuration.text.trim()) ?? 0;
-    if (duration < 60 || duration > 180) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Slot minimal 60 menit dan maksimal 180 menit.')));
+    final invalid = _scheduleValidation(
+        _newStart.text.trim(), _newEnd.text.trim(), duration);
+    if (invalid != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(invalid)));
       return;
     }
     final next = [
@@ -1732,7 +1592,8 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     }
   }
 
-  Future<void> _removeSchedule(BackendProfessionalSchedule s) async {
+  Future<void> _removeSchedule(
+      BackendProfessionalSchedule s, String category) async {
     final token = _token;
     if (token == null) return;
     // Konfirmasi dulu: hapus permanen tidak bisa dibatalkan.
@@ -1742,10 +1603,9 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
         icon:
             const Icon(Icons.delete_forever_rounded, color: MalvaColors.danger),
         title: const Text('Hapus jadwal permanen?'),
-        content: const Text(
-            'Jadwal ini akan dihapus permanen dan tidak bisa dikembalikan. '
-            'Bila hanya ingin menyembunyikan sementara, gunakan '
-            '"Nonaktifkan" — jadwal tetap tersimpan dan bisa diaktifkan lagi.'),
+        content: Text(s.serviceCategory == category
+            ? 'Jadwal ini akan dihapus permanen. Jadwal lama yang masih berlaku dapat kembali tampil jika kategori ini tidak memiliki jadwal khusus.'
+            : 'Jadwal ini dihapus dari layanan ${professionalServiceNames[category]}. Layanan lain tetap memakai jadwal sebelumnya. Jika ini jadwal terakhir, baris nonaktif disimpan agar layanan tetap ditutup.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -1762,6 +1622,11 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
       ),
     );
     if (confirmed != true || !mounted || _savingSchedules) return;
+    if (s.serviceCategory != category) {
+      await _writeSchedules(
+          _replaceCategoryRow(s, category, null), 'Jadwal layanan dihapus.');
+      return;
+    }
     setState(() => _savingSchedules = true);
     try {
       await _api.deleteMySchedule(accessToken: token, id: s.id);
@@ -1787,12 +1652,17 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
 
   /// Aktifkan/nonaktifkan satu baris jadwal (toggle) tanpa menghapusnya,
   /// sehingga baris tetap tampil dan bisa diaktifkan kembali.
-  Future<void> _toggleSchedule(BackendProfessionalSchedule s) =>
-      _writeSchedules([
-        for (final row in _schedules)
-          _scheduleToPayload(row,
-              isActive: row.id == s.id ? !row.isActive : null),
-      ], s.isActive ? 'Jadwal dinonaktifkan.' : 'Jadwal diaktifkan.');
+  Future<void> _toggleSchedule(
+          BackendProfessionalSchedule s, String category) =>
+      _writeSchedules(
+          _replaceCategoryRow(s, category, {
+            ..._scheduleToPayload(s, isActive: !s.isActive),
+            if (s.serviceCategory != category) 'id': null,
+            'service_category': category,
+            if (s.serviceCategory != category && s.slotDurationMinutes < 60)
+              'slot_duration_minutes': 60,
+          }),
+          s.isActive ? 'Jadwal dinonaktifkan.' : 'Jadwal diaktifkan.');
 
   Future<void> _savePricing() async {
     final token = _token;

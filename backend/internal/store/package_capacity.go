@@ -63,11 +63,17 @@ func packagePatientAvailability(ctx context.Context, q packageCapacityQueryer, p
 	if err != nil {
 		return nil, false, false, err
 	}
-	if capacity != nil {
-		left := max(0, *capacity-occupied)
-		remaining = &left
-	}
+	left := max(0, effectivePackagePatientCapacity(capacity)-occupied)
+	remaining = &left
 	return remaining, canRenew, canResume, nil
+}
+
+// A missing legacy value uses the same finite default as the editor.
+func effectivePackagePatientCapacity(capacity *int) int {
+	if capacity == nil {
+		return 2
+	}
+	return *capacity
 }
 
 func (s *Store) PackagePatientAvailability(ctx context.Context, professionalID, patientID string) (remaining *int, canRenew, canResume bool, err error) {

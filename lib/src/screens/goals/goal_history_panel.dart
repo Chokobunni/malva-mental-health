@@ -14,8 +14,8 @@ class GoalHistoryPanel extends StatelessWidget {
     required this.range,
     required this.rangeLabel,
     required this.onRangeChanged,
-    required this.goalId,
-    required this.onGoalChanged,
+    required this.method,
+    required this.onMethodChanged,
     required this.onArchive,
     required this.loading,
     required this.error,
@@ -27,16 +27,23 @@ class GoalHistoryPanel extends StatelessWidget {
   final DateTimeRange range;
   final String rangeLabel;
   final ValueChanged<int> onRangeChanged;
-  final String goalId;
-  final ValueChanged<String?> onGoalChanged;
+  final String method;
+  final ValueChanged<String?> onMethodChanged;
   final VoidCallback onArchive, onRetry;
   final bool loading;
   final String? error;
 
   @override
   Widget build(BuildContext context) {
-    final selected = goals.where((goal) => goal.id == goalId).firstOrNull;
-    final grouped = groupGoalHistory(goals, logs, goalId: selected?.id);
+    const methods = {
+      '': 'Semua Target',
+      'yes_no': 'Ya/Tidak',
+      'numeric': 'Dengan Nilai',
+      'checklist': 'Sub-Tugas',
+    };
+    final filteredGoals = goals.where((goal) =>
+        method.isEmpty || (goal.details?.method ?? 'yes_no') == method);
+    final grouped = groupGoalHistory(filteredGoals.toList(), logs);
     final start = wibDateKey(range.start), end = wibDateKey(range.end);
     final sameMonth = range.start.year == range.end.year &&
         range.start.month == range.end.month;
@@ -66,12 +73,11 @@ class GoalHistoryPanel extends StatelessWidget {
         Expanded(
             child: _HistoryFilter(
           icon: Icons.adjust_rounded,
-          label: selected?.title ?? 'Semua target',
-          onSelected: onGoalChanged,
+          label: methods[method] ?? methods['']!,
+          onSelected: onMethodChanged,
           items: [
-            const PopupMenuItem(value: '', child: Text('Semua target')),
-            for (final goal in goals)
-              PopupMenuItem(value: goal.id, child: Text(goal.title)),
+            for (final method in methods.entries)
+              PopupMenuItem(value: method.key, child: Text(method.value)),
           ],
         )),
       ]),

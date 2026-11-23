@@ -533,3 +533,9 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 - Quick Chat, Quick Video, dan Continuous Package memiliki kategori jadwal. Jadwal bersama berlaku untuk kategori yang belum memiliki baris khusus. Baris khusus nonaktif tetap menonaktifkan fallback kategori. Bentrok sesi berlaku lintas kategori.
 - Kapasitas profesional menghitung pasien unik dengan paket aktif atau transaksi paket pending yang masih berlaku. Perpanjangan dan kelanjutan pembayaran milik pasien yang sudah memakai tempat tetap tersedia saat kapasitas penuh.
 - Checkout menyimpan hingga tiga jadwal tambahan di booking paket. Saat lunas, jadwal diproses satu kali. Jika jadwal tidak bisa dipakai, kredit tersisa dapat dijadwalkan dari My Care.
+
+## Penyempurnaan jadwal layanan (2026-11-24)
+
+- Editor dan Home menampilkan tiga kategori layanan dari aturan fallback yang sama, tanpa bagian jadwal bersama/hari libur. Data bersama dan hari libur lama tetap berlaku. Mutasi jadwal warisan hanya menyalin kategori terpilih; penghapusan warisan terakhir menyimpan baris nonaktif agar fallback tidak membuka kembali layanan.
+- Jadwal baru/perubahan waktu wajib slot 60–180 menit dan rentang cukup. Snapshot/status toggle baris legacy milik profesional dengan ID, kategori, hari, waktu dan durasi persis sama tetap diterima. Booking tetap memakai sesi minimal 60 menit.
+- Kapasitas pasien selalu terbatas: nilai kosong/null memakai 2, nilai 0 menutup pasien baru. Pasien unik aktif/pending tetap dihitung, renew/resume yang sudah memiliki tempat tetap tersedia. Tanpa perubahan skema.

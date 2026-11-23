@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/providers/providers.dart';
+import 'package:malva_mental_health/src/screens/booking/booking_detail_screen.dart';
 import 'package:malva_mental_health/src/screens/booking/doctor_discovery_screen.dart';
 import 'package:malva_mental_health/src/screens/booking/doctor_profile_screen.dart';
 import 'package:malva_mental_health/src/screens/my_care_screen.dart';
@@ -48,6 +49,9 @@ class _Client extends http.BaseClient {
               'helpfulness_count': 1,
               'hospital_lat': -7.3,
               'hospital_lng': 112.7,
+              'quick_chat_price': 200000,
+              'quick_video_price': 500000,
+              'package_price': 1300000,
               'distance_km': 999
             },
           {'user_id': 'unknown', 'display_name': 'Dokter Tanpa Koordinat'}
@@ -72,7 +76,15 @@ class _Client extends http.BaseClient {
         'credential': {
           'user_id': 'doctor',
           'hospital_lat': -7.3,
-          'hospital_lng': 112.7
+          'hospital_lng': 112.7,
+          'video_intro_url': '/uploads/pro-intro.mp4',
+          'verification_status': 'VERIFIED',
+        },
+        'age_years': 40,
+        'pricing': {
+          'quick_chat_price': 200000,
+          'quick_video_price': 500000,
+          'package_price': 1300000,
         },
         'rating': {
           'average_stars': reviewed ? 4 : 4.5,
@@ -311,6 +323,48 @@ void main() {
     expect(
         find.textContaining('Lokasi praktik belum tersedia'), findsOneWidget);
     expect(find.text('999.0 km'), findsNothing);
+    expect(find.text('Rp 200.000'), findsOneWidget);
+    expect(find.text('Rp 500.000'), findsOneWidget);
+    expect(find.text('Rp 1.300.000'), findsOneWidget);
+  });
+
+  testWidgets('profile shows age and uploaded video and books chosen modality',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final api = MalvaApiClient(
+        baseUrl: 'https://fixture.invalid', httpClient: _Client());
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        home: DoctorProfileScreen(
+          doctorUserId: 'doctor',
+          doctorName: 'dr. Uji',
+          session: _session,
+          apiClient: api,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('40 tahun'), findsOneWidget);
+    final intro = find.byKey(const ValueKey('professional-intro-video'));
+    await tester.scrollUntilVisible(intro, 250);
+    expect(tester.widget<InkWell>(intro).onTap, isNotNull);
+    final video = find.text('Rp 500.000 / sesi');
+    await tester.scrollUntilVisible(video, 260);
+    await tester.ensureVisible(video);
+    await tester.pumpAndSettle();
+    await tester.tap(video);
+    await tester.pumpAndSettle();
+    expect(find.text('Quick Consult • Video'), findsOneWidget);
+    await tester.tap(find.text('Lanjutkan'));
+    await tester.pumpAndSettle();
+    final booking =
+        tester.widget<BookingDetailScreen>(find.byType(BookingDetailScreen));
+    expect(booking.serviceType, 'video');
+    expect(booking.expectedPrice, 500000);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('MyCare professional cards use the same live rating and profile',

@@ -82,6 +82,8 @@ class _ProfessionalProfileEditorScreenState
   String? _error;
   String? _loadError;
   bool _showAllSpecialties = false;
+  bool _isBpjsSupported = false;
+  String? _uploadedVideoName;
   bool _birthDateLoadError = false;
   String? _savedBirthDateKey;
   DateTime? _selectedBirthDate;
@@ -236,6 +238,7 @@ class _ProfessionalProfileEditorScreenState
     _sippController.text = cred.sippNumber;
     _selectedSpecialties = Set<String>.from(cred.subSpecialties);
     _education = cred.education.map((row) => {...row}).toList();
+    _isBpjsSupported = cred.isBpjsSupported;
   }
 
   Future<void> _save({bool saveBirthDate = false}) async {
@@ -269,7 +272,7 @@ class _ProfessionalProfileEditorScreenState
         hospitalLng: _cred?.hospitalLng,
         hospitalName: _hospitalNameController.text.trim(),
         addressDetails: _addressController.text.trim(),
-        isBpjsSupported: _cred?.isBpjsSupported ?? false,
+        isBpjsSupported: _isBpjsSupported,
         bio: _bioController.text.trim(),
         photoIntroUrl: _photoUrlController.text.trim(),
         videoIntroUrl: _videoUrlController.text.trim(),
@@ -407,6 +410,7 @@ class _ProfessionalProfileEditorScreenState
       if (!mounted) return;
       setState(() {
         _videoUrlController.text = url;
+        _uploadedVideoName = picked.name;
         _isUploadingVideo = false;
         _hasLocalVideo = false;
       });
@@ -474,7 +478,7 @@ class _ProfessionalProfileEditorScreenState
     final hiddenSpecialtyCount =
         _availableSpecialties.length - visibleSpecialties.length;
     return Scaffold(
-      backgroundColor: light ? const Color(0xFFF5EFF9) : null,
+      backgroundColor: light ? const Color(0xFFF8F7FB) : null,
       appBar: AppBar(
         title: const Text('Edit Profil Profesional'),
         centerTitle: true,
@@ -506,7 +510,7 @@ class _ProfessionalProfileEditorScreenState
                     onPressed: busy ? null : () => _save(saveBirthDate: true),
                     style: FilledButton.styleFrom(
                       backgroundColor: MalvaColors.seed,
-                      minimumSize: const Size(0, 42),
+                      minimumSize: const Size(0, 50),
                       foregroundColor: Colors.white,
                     ),
                     icon: _isSaving
@@ -542,38 +546,69 @@ class _ProfessionalProfileEditorScreenState
                   ),
                 )
               : ListView(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(18),
                   children: [
-                    _section('Foto Profil', [
-                      Row(
-                        children: [
-                          _buildPhotoPreview(),
-                          const SizedBox(width: 16),
-                          Flexible(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                OutlinedButton.icon(
-                                  onPressed: busy ? null : _pickAndUploadPhoto,
-                                  style: _mediaButtonStyle,
-                                  icon: const Icon(Icons.image_outlined,
-                                      size: 19),
-                                  label: Text(_isUploadingPhoto
-                                      ? 'Mengunggah...'
-                                      : 'Pilih dari Galeri'),
-                                ),
-                                TextButton.icon(
-                                  onPressed: busy ? null : _generateAiAvatar,
-                                  icon: const Icon(Icons.auto_awesome_outlined,
-                                      size: 16),
-                                  label: const Text('Buat avatar'),
-                                ),
-                              ],
+                    _section('Foto Profil & Identitas', [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF9FAFC),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFFEEF0F3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Stack(clipBehavior: Clip.none, children: [
+                              _buildPhotoPreview(),
+                              Positioned(
+                                  right: -3,
+                                  bottom: -3,
+                                  child: Container(
+                                      padding: const EdgeInsets.all(5),
+                                      decoration: BoxDecoration(
+                                          color: MalvaColors.plum,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                              color: Colors.white, width: 2)),
+                                      child: const Icon(
+                                          Icons.camera_alt_outlined,
+                                          color: Colors.white,
+                                          size: 13))),
+                            ]),
+                            const SizedBox(width: 12),
+                            Flexible(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed:
+                                        busy ? null : _pickAndUploadPhoto,
+                                    style: _mediaButtonStyle,
+                                    icon: const Icon(Icons.image_outlined,
+                                        size: 19),
+                                    label: Text(_isUploadingPhoto
+                                        ? 'Mengunggah...'
+                                        : 'Pilih Foto dari Galeri'),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  const Text('JPG, PNG, WebP • maks. 5 MB',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: Color(0xFF98A2AE))),
+                                  TextButton.icon(
+                                    onPressed: busy ? null : _generateAiAvatar,
+                                    icon: const Icon(
+                                        Icons.auto_awesome_outlined,
+                                        size: 16),
+                                    label: const Text('Buat avatar'),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 18),
                       _field(
                         'Tanggal Lahir',
                         _birthDateController,
@@ -581,7 +616,7 @@ class _ProfessionalProfileEditorScreenState
                         readOnly: true,
                         onTap:
                             busy || _birthDateLoadError ? null : _pickBirthDate,
-                        suffixIcon: const Icon(Icons.calendar_today_outlined),
+                        suffixIcon: const Icon(Icons.expand_more_rounded),
                       ),
                       if (_birthDateLoadError)
                         TextButton(
@@ -589,6 +624,74 @@ class _ProfessionalProfileEditorScreenState
                           child: const Text('Muat ulang tanggal lahir'),
                         ),
                     ]),
+                    _section(
+                        'Video Perkenalan',
+                        [
+                          if (_hasLocalVideo ||
+                              _videoUrlController.text.isNotEmpty)
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8F9FB),
+                                border:
+                                    Border.all(color: const Color(0xFFE9EDF1)),
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Row(children: [
+                                Container(
+                                    width: 80,
+                                    height: 52,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                        color: const Color(0xFF3D0961),
+                                        borderRadius:
+                                            BorderRadius.circular(12)),
+                                    child: const Text('Video',
+                                        style: TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white))),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                    child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                      Text(
+                                          _uploadedVideoName ??
+                                              'Video perkenalan',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w700)),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                          _isUploadingVideo
+                                              ? 'Mengunggah video...'
+                                              : 'Tersimpan • Siap tampil',
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF98A2AE))),
+                                    ])),
+                              ]),
+                            ),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: busy ? null : _pickAndUploadVideo,
+                              style: _mediaButtonStyle,
+                              icon: const Icon(Icons.videocam_outlined),
+                              label: Text(_videoUrlController.text.isNotEmpty
+                                  ? 'Ganti Video dari Galeri'
+                                  : 'Pilih Video dari Galeri'),
+                            ),
+                          ),
+                        ],
+                        trailing: _videoUrlController.text.isNotEmpty
+                            ? _statusPill('Terunggah', green: true)
+                            : null),
                     _section(
                         'Bio / Overview',
                         [
@@ -599,105 +702,72 @@ class _ProfessionalProfileEditorScreenState
                             maxLines: 5,
                           ),
                         ],
-                        titleOutside: true),
+                        trailing: const Text('Publik',
+                            style: TextStyle(
+                                color: Color(0xFF98A2AE), fontSize: 12))),
                     _section(
-                        'Video Perkenalan',
+                        'Bidang Keahlian',
                         [
-                          if (_hasLocalVideo ||
-                              _videoUrlController.text.isNotEmpty)
-                            Container(
-                              width: double.infinity,
-                              constraints: const BoxConstraints(minHeight: 108),
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEFE3F7),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(
-                                    Icons.video_file_outlined,
-                                    size: 32,
-                                    color: MalvaColors.plum,
+                          if (visibleSpecialties.isNotEmpty)
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              children: [
+                                for (final (key, label) in visibleSpecialties)
+                                  FilterChip(
+                                    label: Text(label),
+                                    visualDensity: VisualDensity.compact,
+                                    selected:
+                                        _selectedSpecialties.contains(key),
+                                    selectedColor: const Color(0xFFEFE3F7),
+                                    checkmarkColor: MalvaColors.plum,
+                                    labelStyle: const TextStyle(
+                                        color: MalvaColors.plum,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12),
+                                    side: const BorderSide(
+                                        color: Color(0xFFEADDF3)),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(14)),
+                                    onSelected: busy
+                                        ? null
+                                        : (selected) => setState(() {
+                                              if (selected) {
+                                                _selectedSpecialties.add(key);
+                                              } else {
+                                                _selectedSpecialties
+                                                    .remove(key);
+                                              }
+                                            }),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(_isUploadingVideo
-                                      ? 'Mengunggah video...'
-                                      : 'Video perkenalan tersimpan'),
-                                ],
+                              ],
+                            ),
+                          if (_showAllSpecialties ||
+                              hiddenSpecialtyCount > 0) ...[
+                            const Divider(),
+                            Align(
+                              alignment: Alignment.center,
+                              child: TextButton.icon(
+                                onPressed: () => setState(() =>
+                                    _showAllSpecialties = !_showAllSpecialties),
+                                icon: Icon(_showAllSpecialties
+                                    ? Icons.expand_less
+                                    : Icons.expand_more),
+                                label: Text(_showAllSpecialties
+                                    ? 'Lihat lebih sedikit'
+                                    : 'Lihat $hiddenSpecialtyCount lainnya'),
                               ),
                             ),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: busy ? null : _pickAndUploadVideo,
-                              style: _mediaButtonStyle,
-                              icon: const Icon(Icons.videocam_outlined),
-                              label: const Text('Pilih Video dari Galeri'),
-                            ),
-                          ),
-                        ],
-                        titleOutside: true),
-                    _section('Bidang Keahlian', [
-                      if (visibleSpecialties.isNotEmpty)
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          children: [
-                            for (final (key, label) in visibleSpecialties)
-                              FilterChip(
-                                label: Text(label),
-                                visualDensity: VisualDensity.compact,
-                                selected: _selectedSpecialties.contains(key),
-                                selectedColor: const Color(0xFFEFE3F7),
-                                checkmarkColor: MalvaColors.plum,
-                                onSelected: busy
-                                    ? null
-                                    : (selected) => setState(() {
-                                          if (selected) {
-                                            _selectedSpecialties.add(key);
-                                          } else {
-                                            _selectedSpecialties.remove(key);
-                                          }
-                                        }),
-                              ),
                           ],
-                        ),
-                      if (_showAllSpecialties || hiddenSpecialtyCount > 0) ...[
-                        const Divider(),
-                        Align(
-                          alignment: Alignment.center,
-                          child: TextButton.icon(
-                            onPressed: () => setState(() =>
-                                _showAllSpecialties = !_showAllSpecialties),
-                            icon: Icon(_showAllSpecialties
-                                ? Icons.expand_less
-                                : Icons.expand_more),
-                            label: Text(_showAllSpecialties
-                                ? 'Lihat lebih sedikit'
-                                : 'Lihat $hiddenSpecialtyCount lainnya'),
-                          ),
-                        ),
-                      ],
-                    ]),
+                        ],
+                        trailing: _statusPill(
+                            '${_selectedSpecialties.length} dipilih')),
                     _section('Riwayat Pendidikan', [
-                      if (_education.isNotEmpty)
-                        const Padding(
-                          padding: EdgeInsets.only(left: 8, bottom: 6),
-                          child: Row(children: [
-                            Expanded(flex: 2, child: Text('Gelar')),
-                            SizedBox(width: 8),
-                            Expanded(flex: 3, child: Text('Institusi')),
-                            SizedBox(width: 8),
-                            SizedBox(width: 72, child: Text('Tahun')),
-                            SizedBox(width: 45),
-                          ]),
-                        ),
                       for (var i = 0; i < _education.length; i++) ...[
                         _EducationRow(
                           key: ObjectKey(_education[i]),
+                          index: i + 1,
                           degree: _education[i]['degree']?.toString() ?? '',
                           school: _education[i]['school']?.toString() ?? '',
                           year: _education[i]['year']?.toString() ?? '',
@@ -710,11 +780,12 @@ class _ProfessionalProfileEditorScreenState
                         ),
                         const SizedBox(height: 8),
                       ],
-                      Align(
-                        alignment: Alignment.center,
+                      SizedBox(
+                        width: double.infinity,
                         child: OutlinedButton.icon(
                           onPressed: busy ? null : _addEducation,
                           icon: const Icon(Icons.add_rounded, size: 18),
+                          style: _mediaButtonStyle,
                           label: const Text('Tambah Pendidikan'),
                         ),
                       ),
@@ -731,9 +802,30 @@ class _ProfessionalProfileEditorScreenState
                           _hospitalNameController),
                       const SizedBox(height: 10),
                       _field(
-                          'Alamat faskes / tempat praktik', _addressController),
+                          'Alamat faskes / tempat praktik', _addressController,
+                          maxLines: 2),
+                      const SizedBox(height: 18),
+                      const Divider(color: Color(0xFFEEF0F3)),
+                      const SizedBox(height: 6),
+                      const Text('Layanan BPJS Kesehatan (Offline)',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 8),
+                      const Text(
+                          'Cantumkan apakah Anda menerima pasien BPJS untuk pemeriksaan tatap muka langsung di fasilitas kesehatan di atas.',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF82909D),
+                              height: 1.6)),
+                      const SizedBox(height: 12),
+                      Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: _bpjsChoice(true, busy)),
+                            const SizedBox(width: 10),
+                            Expanded(child: _bpjsChoice(false, busy)),
+                          ]),
                     ]),
-                    _section('Lisensi', [
+                    _section('Lisensi & Legalitas', [
                       _field('Nomor STR', _strController),
                       const SizedBox(height: 10),
                       _field('Nomor SIP', _sipController,
@@ -747,52 +839,123 @@ class _ProfessionalProfileEditorScreenState
     );
   }
 
-  Widget _section(String title, List<Widget> children,
-      {bool titleOutside = false}) {
-    final colors = Theme.of(context).colorScheme;
-    final heading = Text(title,
-        style: TextStyle(
-            fontSize: 19,
-            fontWeight: FontWeight.w800,
-            color: colors.onSurface));
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (titleOutside)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
-              child: heading,
-            ),
-          Card(
-            color: Theme.of(context).brightness == Brightness.light
-                ? Colors.white
-                : colors.surfaceContainerLow,
-            elevation: 1,
-            margin: EdgeInsets.zero,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (!titleOutside) ...[heading, const SizedBox(height: 10)],
-                  ...children,
-                ],
-              ),
-            ),
+  Widget _statusPill(String label, {bool green = false}) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+          color: green ? const Color(0xFFECFBF5) : const Color(0xFFFAF4FD),
+          borderRadius: BorderRadius.circular(30)),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: green ? const Color(0xFF167A64) : MalvaColors.plum)));
+
+  Widget _bpjsChoice(bool value, bool busy) {
+    final selected = _isBpjsSupported == value;
+    return Semantics(
+        selected: selected,
+        button: true,
+        child: InkWell(
+          onTap: busy ? null : () => setState(() => _isBpjsSupported = value),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 90),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+                color: selected
+                    ? const Color(0xFFF0FCF8)
+                    : const Color(0xFFF9FAFC),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    width: selected ? 1.5 : 1,
+                    color: selected
+                        ? const Color(0xFF36AD91)
+                        : const Color(0xFFE7EAF0))),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(selected ? Icons.check_circle : Icons.circle_outlined,
+                  size: 19,
+                  color: selected
+                      ? const Color(0xFF119775)
+                      : const Color(0xFFCBD3DB)),
+              const SizedBox(width: 7),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(value ? 'Menerima BPJS' : 'Tidak Menerima',
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 3),
+                    Text(
+                        value
+                            ? 'Tampil lencana BPJS (Offline)'
+                            : 'Hanya pasien umum/asuransi',
+                        style: const TextStyle(
+                            fontSize: 10,
+                            height: 1.5,
+                            color: Color(0xFF82909D))),
+                  ])),
+            ]),
           ),
-        ],
+        ));
+  }
+
+  Widget _section(String title, List<Widget> children, {Widget? trailing}) {
+    final colors = Theme.of(context).colorScheme;
+    final icon = switch (title) {
+      'Foto Profil & Identitas' => Icons.account_circle_outlined,
+      'Video Perkenalan' => Icons.videocam_outlined,
+      'Bio / Overview' => Icons.description_outlined,
+      'Bidang Keahlian' => Icons.auto_awesome_outlined,
+      'Riwayat Pendidikan' => Icons.school_outlined,
+      'Pengalaman & Faskes' => Icons.apartment_outlined,
+      _ => Icons.verified_user_outlined,
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Card(
+        color: Theme.of(context).brightness == Brightness.light
+            ? Colors.white
+            : colors.surfaceContainerLow,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(26),
+            side: const BorderSide(color: Color(0xFFECEBF2))),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                      color: const Color(0xFFFBF5FE),
+                      borderRadius: BorderRadius.circular(13)),
+                  child: Icon(icon, size: 20, color: MalvaColors.plum)),
+              const SizedBox(width: 9),
+              Expanded(
+                  child: Text(title,
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: colors.onSurface))),
+              if (trailing != null) ...[const SizedBox(width: 6), trailing],
+            ]),
+            const SizedBox(height: 16),
+            ...children,
+          ]),
+        ),
       ),
     );
   }
 
   ButtonStyle get _mediaButtonStyle => OutlinedButton.styleFrom(
         foregroundColor: MalvaColors.seed,
-        side: const BorderSide(color: MalvaColors.seed),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        side: const BorderSide(color: Color(0xFFE6D6F0)),
+        minimumSize: const Size(0, 42),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
       );
 
   Widget _field(
@@ -832,10 +995,10 @@ class _ProfessionalProfileEditorScreenState
     // Sedang mengunggah — tampilkan indikator loading.
     if (_isUploadingPhoto) {
       return Container(
-        width: 96,
-        height: 96,
+        width: 72,
+        height: 72,
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
+          borderRadius: BorderRadius.circular(18),
           color: MalvaColors.seed.withValues(alpha: 0.1),
         ),
         child: const Center(
@@ -846,11 +1009,12 @@ class _ProfessionalProfileEditorScreenState
 
     // Berkas lokal yang baru dipilih (sebelum/sesudah upload).
     if (_localPhotoBytes != null) {
-      return ClipOval(
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(18),
         child: Image.memory(
           _localPhotoBytes!,
-          width: 96,
-          height: 96,
+          width: 72,
+          height: 72,
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => _photoPlaceholder(),
         ),
@@ -860,11 +1024,12 @@ class _ProfessionalProfileEditorScreenState
     // URL jaringan (dari server atau DiceBear).
     final url = _photoUrlController.text.trim();
     if (url.isNotEmpty) {
-      return ClipOval(
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(18),
         child: ProfessionalPhoto(
           photoUrl: url,
-          width: 96,
-          height: 96,
+          width: 72,
+          height: 72,
           fit: BoxFit.cover,
           fallback: _photoPlaceholder(),
         ),
@@ -877,15 +1042,26 @@ class _ProfessionalProfileEditorScreenState
   /// Placeholder ketika belum ada foto.
   Widget _photoPlaceholder() {
     return Container(
-      width: 96,
-      height: 96,
+      width: 72,
+      height: 72,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
+        borderRadius: BorderRadius.circular(18),
         color: MalvaColors.seed.withValues(alpha: 0.1),
       ),
-      child: const Center(
-        child: Icon(Icons.person_outline_rounded,
-            size: 40, color: MalvaColors.seed),
+      child: Center(
+        child: (widget.session?.displayName ?? '').trim().isEmpty
+            ? const Icon(Icons.person_outline_rounded,
+                size: 36, color: MalvaColors.seed)
+            : Padding(
+                padding: const EdgeInsets.all(7),
+                child: Text(widget.session!.displayName,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: MalvaColors.plum,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12))),
       ),
     );
   }
@@ -897,8 +1073,8 @@ InputDecoration _profileInput({
   Widget? suffixIcon,
 }) {
   final border = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(9),
-    borderSide: const BorderSide(color: Color(0xFF958C99)),
+    borderRadius: BorderRadius.circular(17),
+    borderSide: const BorderSide(color: Color(0xFFE4E9EE)),
   );
   return InputDecoration(
     labelText: labelText,
@@ -907,8 +1083,8 @@ InputDecoration _profileInput({
     suffixIconColor: MalvaColors.plum,
     isDense: true,
     filled: true,
-    fillColor: Colors.white,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+    fillColor: const Color(0xFFF8F9FB),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
     border: border,
     enabledBorder: border,
   );
@@ -918,6 +1094,7 @@ InputDecoration _profileInput({
 class _EducationRow extends StatefulWidget {
   const _EducationRow({
     super.key,
+    required this.index,
     required this.degree,
     required this.school,
     required this.year,
@@ -927,6 +1104,7 @@ class _EducationRow extends StatefulWidget {
     required this.onRemove,
   });
 
+  final int index;
   final String degree;
   final String school;
   final String year;
@@ -962,45 +1140,53 @@ class _EducationRowState extends State<_EducationRow> {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          flex: 2,
-          child: TextField(
-            controller: _degreeCtrl,
-            style: const TextStyle(fontSize: 14),
-            onChanged: widget.onDegreeChanged,
-            decoration: _profileInput(),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 3,
-          child: TextField(
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+          color: const Color(0xFFF9FAFC),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFECEEF2))),
+      child: Column(children: [
+        Row(children: [
+          Expanded(
+              child: Text('PENDIDIKAN #${widget.index}',
+                  style: const TextStyle(
+                      fontSize: 11,
+                      color: MalvaColors.plum,
+                      fontWeight: FontWeight.w700))),
+          IconButton(
+              onPressed: widget.onRemove,
+              tooltip: 'Hapus pendidikan',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.delete_outline,
+                  size: 18, color: Color(0xFF98A2AE))),
+        ]),
+        const SizedBox(height: 4),
+        Row(children: [
+          Expanded(
+              flex: 3,
+              child: TextField(
+                  controller: _degreeCtrl,
+                  style: const TextStyle(fontSize: 13),
+                  onChanged: widget.onDegreeChanged,
+                  decoration: _profileInput(hintText: 'Gelar'))),
+          const SizedBox(width: 8),
+          Expanded(
+              child: TextField(
+                  controller: _yearCtrl,
+                  style: const TextStyle(fontSize: 13),
+                  onChanged: widget.onYearChanged,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  decoration: _profileInput(hintText: 'Tahun'))),
+        ]),
+        const SizedBox(height: 8),
+        TextField(
             controller: _schoolCtrl,
-            style: const TextStyle(fontSize: 14),
+            style: const TextStyle(fontSize: 13),
             onChanged: widget.onSchoolChanged,
-            decoration: _profileInput(),
-          ),
-        ),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 72,
-          child: TextField(
-            controller: _yearCtrl,
-            style: const TextStyle(fontSize: 14),
-            onChanged: widget.onYearChanged,
-            keyboardType: TextInputType.number,
-            decoration: _profileInput(),
-          ),
-        ),
-        IconButton(
-          onPressed: widget.onRemove,
-          tooltip: 'Hapus pendidikan',
-          icon: const Icon(Icons.delete_outline, color: MalvaColors.plum),
-        ),
-      ],
+            decoration: _profileInput(hintText: 'Institusi')),
+      ]),
     );
   }
 }

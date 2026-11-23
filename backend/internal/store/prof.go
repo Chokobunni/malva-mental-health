@@ -53,6 +53,9 @@ type DoctorSearchResult struct {
 	DistanceKM       *float64 `json:"distance_km,omitempty"`
 	IsAvailableToday bool     `json:"is_available_today"`
 	AverageStars     float64  `json:"average_stars"`
+	QuickChatPrice   int64    `json:"quick_chat_price"`
+	QuickVideoPrice  int64    `json:"quick_video_price"`
+	PackagePrice     int64    `json:"package_price"`
 }
 
 // parsePGTextArray parses Postgres text[] literals like {a,"b,c"} into []string.
@@ -478,13 +481,21 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 		(SELECT COUNT(*) FROM patient_professional_links WHERE professional_id = pc.user_id AND status='active') AS patient_count,
 		CASE WHEN EXISTS (SELECT 1 FROM professional_schedules ps WHERE ps.professional_id = pc.user_id AND ps.day_of_week = EXTRACT(dow FROM CURRENT_DATE)::int AND ps.is_active = true) THEN 1 ELSE 0 END AS is_available_today,
 		%s,
-		(SELECT COALESCE(AVG((dr.helpfulness_percent+19)/20),0) FROM doctor_reviews dr WHERE dr.professional_id=pc.user_id) AS average_stars
+		(SELECT COALESCE(AVG((dr.helpfulness_percent+19)/20),0) FROM doctor_reviews dr WHERE dr.professional_id=pc.user_id) AS average_stars,
+		COALESCE(pp.quick_chat_price, legacy.quick_chat_price, 0),
+		COALESCE(pp.quick_video_price, legacy.quick_video_price, 0),
+		COALESCE(pp.package_price, legacy.package_price, 0)
 		FROM professional_credentials pc
 		JOIN users u ON u.id = pc.user_id
+		LEFT JOIN professional_pricing pp ON pp.professional_id = pc.user_id
+		LEFT JOIN LATERAL (
+			SELECT %s FROM service_packages
+			WHERE professional_id = pc.user_id AND is_active AND pp.professional_id IS NULL
+		) legacy ON true
 		WHERE %s
 		ORDER BY %s
 		LIMIT %d`,
-		distanceCol, whereClause, orderBy, limit,
+		distanceCol, legacyServicePrices, whereClause, orderBy, limit,
 	)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -501,7 +512,7 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 			&r.Specialization, &sub, &r.HospitalLat, &r.HospitalLng, &r.HospitalName, &r.AddressDetails,
 			&r.IsBPJSSupported, &r.PhotoIntroURL, &r.VideoIntroURL, &r.Bio, &edu, &r.LegacyCount,
 			&r.HelpfulnessCount, &r.ReviewCount, &r.YearsExperience, &r.PriceFrom, &r.PatientCount, &available,
-			&r.DistanceKM, &r.AverageStars); err != nil {
+			&r.DistanceKM, &r.AverageStars, &r.QuickChatPrice, &r.QuickVideoPrice, &r.PackagePrice); err != nil {
 			return nil, err
 		}
 		r.IsAvailableToday = available == 1
@@ -510,6 +521,13 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// ProfessionalBirthDate reads the calendar date without loading account secrets.
+func (s *Store) ProfessionalBirthDate(ctx context.Context, userID string) (string, error) {
+	var date string
+	err := s.db.QueryRowContext(ctx, "SELECT COALESCE(to_char(date_of_birth, 'YYYY-MM-DD'), '') FROM users WHERE id=$1 AND role='professional' AND disabled_at IS NULL", userID).Scan(&date)
+	return date, err
 }
 
 type DoctorSearchParams struct {
@@ -627,6 +645,14 @@ func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, sche
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Validate legacy pass-through under the same lock as the snapshot write.
+	if len(schedules) > 0 {
+		if _, err := tx.ExecContext(ctx,
+			`SELECT pg_advisory_xact_lock(hashtextextended('professional_schedules:' || $1::text, 0))`, professionalID); err != nil {
+			return err
+		}
+	}
+
 	// Dedup identik dalam kategori yang sama.
 	// Entri TERAKHIR untuk kunci yang sama yang menang (deterministik).
 	seen := make(map[string]ProfessionalSchedule, len(schedules))
@@ -650,27 +676,33 @@ func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, sche
 		if sch.SlotDurationMinutes <= 0 {
 			sch.SlotDurationMinutes = 60
 		}
-		if sch.SlotDurationMinutes < 60 || sch.SlotDurationMinutes > 180 {
+		if sch.SlotDurationMinutes > 180 {
 			return errors.New("slot_duration_minutes harus 60-180")
 		}
 		startText := strings.TrimSpace(sch.StartTime)
 		endText := strings.TrimSpace(sch.EndTime)
 		start, startErr := time.ParseInLocation("15:04", startText[:min(5, len(startText))], clock.Location())
 		end, endErr := time.ParseInLocation("15:04", endText[:min(5, len(endText))], clock.Location())
-		if startErr != nil || endErr != nil || end.Sub(start) < time.Duration(sch.SlotDurationMinutes)*time.Minute {
+		if startErr != nil || endErr != nil || !end.After(start) {
 			return errors.New("rentang jadwal harus memuat setidaknya satu slot sesi")
 		}
-		seen[key] = sch
-	}
-
-	// Serialize snapshots for the same professional so omissions are applied
-	// to the complete set, including rows written by another request.
-	if len(order) > 0 {
-		if _, err := tx.ExecContext(ctx,
-			`SELECT pg_advisory_xact_lock(hashtextextended('professional_schedules:' || $1::text, 0))`,
-			professionalID); err != nil {
-			return err
+		if sch.SlotDurationMinutes < 60 || end.Sub(start) < time.Duration(sch.SlotDurationMinutes)*time.Minute {
+			// A snapshot may retain or toggle a saved legacy row. Changing its
+			// timing/category, or creating a row, still requires a full-hour slot.
+			var savedID string
+			err := tx.QueryRowContext(ctx, `SELECT id FROM professional_schedules
+				WHERE professional_id=$1 AND id::text=$2 AND service_category=$3
+				AND day_of_week=$4 AND start_time=$5 AND end_time=$6
+				AND slot_duration_minutes=$7 FOR UPDATE`, professionalID, sch.ID,
+				sch.ServiceCategory, sch.DayOfWeek, sch.StartTime, sch.EndTime, sch.SlotDurationMinutes).Scan(&savedID)
+			if errors.Is(err, sql.ErrNoRows) {
+				return errors.New("jadwal baru atau perubahan jadwal memerlukan slot 60-180 menit dalam rentang praktik")
+			}
+			if err != nil {
+				return err
+			}
 		}
+		seen[key] = sch
 	}
 
 	// 1) Upsert setiap baris payload: perbarui baris identik yang sudah ada

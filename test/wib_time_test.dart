@@ -141,7 +141,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
-    await tester.tap(find.byTooltip('Paket saya'));
+    expect(find.byTooltip('Paket saya'), findsNothing);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Riwayat'));
     await tester.pumpAndSettle();
     expect(find.text('Dr. Sinta'), findsOneWidget);
     // UI merender SATU Text berisi sisa sesi + tanggal berlaku
@@ -170,7 +171,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
-    await tester.tap(find.byTooltip('Paket saya'));
+    expect(find.byTooltip('Paket saya'), findsNothing);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Riwayat'));
     await tester.pumpAndSettle();
     expect(find.text('Dr. Sinta'), findsOneWidget);
     // Idem: satu Text berisi sisa sesi + tanggal berlaku.
@@ -205,7 +207,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
-    await tester.tap(find.byTooltip('Paket saya'));
+    expect(find.byTooltip('Paket saya'), findsNothing);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Riwayat'));
     await tester.pumpAndSettle();
     // Kuota sah hanya dari paket yang masih berlaku: tidak ada kartu 7/8 dan
     // tidak ada label gabungan.

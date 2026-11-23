@@ -79,49 +79,64 @@ Future<Uint8List> buildHealthReportPdf({
     }
   }
   final document = pw.Document(title: title, author: 'MALVA');
-  document.addPage(pw.MultiPage(
-    pageFormat: PdfPageFormat.a4,
-    margin: const pw.EdgeInsets.fromLTRB(36, 40, 36, 36),
-    maxPages: 10000,
-    theme: pw.ThemeData.withFont(base: font, bold: bold),
-    header: (_) => pw.Container(
-        padding: const pw.EdgeInsets.only(bottom: 16),
-        child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(title,
-                  style: const pw.TextStyle(
-                      fontSize: 19,
-                      fontWeight: pw.FontWeight.bold,
-                      color: _teal)),
-              pw.SizedBox(height: 6),
-              pw.Text('Diekspor: ${wibWeekdayDate(at)} ${_time(at)} WIB',
-                  style: const pw.TextStyle(
-                      fontSize: 9, color: PdfColors.blueGrey700)),
-              if (patientName != null)
-                pw.Text('Nama: $patientName',
-                    style: const pw.TextStyle(fontSize: 9)),
-              if (periodStart != null && periodEnd != null)
-                _text(
-                    'Periode (WIB): ${wibWeekdayDate(periodStart)} - ${wibWeekdayDate(periodEnd)}'),
-              pw.SizedBox(height: 8),
-              pw.Divider(color: _border),
-            ])),
-    footer: (context) =>
-        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-      pw.Text('Pribadi - MALVA',
-          style: const pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey700)),
-      pw.Text('Halaman ${context.pageNumber} dari ${context.pagesCount}',
-          style: const pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey700))
-    ]),
-    build: (_) => [
-      if (moods != null) ..._moodSection(moods, emoji, periodEnd ?? at),
-      if (screenings != null) ..._screeningSection(screenings),
-      if (medicationLogs != null) ..._medicationSection(medicationLogs),
-      if (diaries != null) ..._diarySection(diaries, diaryThumbnails),
-      if (goalHistory != null) ..._goalSection(goalHistory),
-    ],
-  ));
+  void addCategory(String category, Iterable<pw.Widget> contents) {
+    document.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.fromLTRB(36, 40, 36, 36),
+      maxPages: 10000,
+      theme: pw.ThemeData.withFont(base: font, bold: bold),
+      header: (_) => pw.Container(
+          padding: const pw.EdgeInsets.only(bottom: 16),
+          child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(title,
+                    style: const pw.TextStyle(
+                        fontSize: 19,
+                        fontWeight: pw.FontWeight.bold,
+                        color: _teal)),
+                pw.SizedBox(height: 6),
+                pw.Text('Diekspor: ${wibWeekdayDate(at)} ${_time(at)} WIB',
+                    style: const pw.TextStyle(
+                        fontSize: 9, color: PdfColors.blueGrey700)),
+                if (patientName != null)
+                  pw.Text('Nama: $patientName',
+                      style: const pw.TextStyle(fontSize: 9)),
+                if (periodStart != null && periodEnd != null)
+                  _text(
+                      'Periode (WIB): ${wibWeekdayDate(periodStart)} - ${wibWeekdayDate(periodEnd)}'),
+                pw.SizedBox(height: 8),
+                pw.Divider(color: _border),
+                _heading(category),
+              ])),
+      footer: (context) => pw
+          .Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+        pw.Text('Pribadi - MALVA',
+            style:
+                const pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey700)),
+        pw.Text('Halaman ${context.pageNumber} dari ${context.pagesCount}',
+            style:
+                const pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey700))
+      ]),
+      build: (_) => contents.toList(),
+    ));
+  }
+
+  if (moods != null) {
+    addCategory('Riwayat Mood', _moodSection(moods, emoji, periodEnd ?? at));
+  }
+  if (screenings != null) {
+    addCategory('Hasil Screening Psikologis', _screeningSection(screenings));
+  }
+  if (medicationLogs != null) {
+    addCategory('Riwayat Konsumsi Obat', _medicationSection(medicationLogs));
+  }
+  if (diaries != null) {
+    addCategory('Catatan Harian', _diarySection(diaries, diaryThumbnails));
+  }
+  if (goalHistory != null) {
+    addCategory('Goals & Habits', _goalSection(goalHistory));
+  }
   return document.save();
 }
 
@@ -184,7 +199,6 @@ pw.Widget _table(List<String> headers, List<List<pw.Widget>> rows,
     );
 
 Iterable<pw.Widget> _medicationSection(List<MedicationLog> logs) sync* {
-  yield _heading('Riwayat Konsumsi Obat');
   yield pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 10),
       child: _text(
@@ -223,7 +237,6 @@ Iterable<pw.Widget> _medicationSection(List<MedicationLog> logs) sync* {
 }
 
 Iterable<pw.Widget> _screeningSection(List<ScreeningPdfRow> rows) sync* {
-  yield _heading('Hasil Screening Psikologis');
   yield pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 10),
       child: _text(
@@ -262,7 +275,6 @@ Iterable<pw.Widget> _screeningSection(List<ScreeningPdfRow> rows) sync* {
 
 Iterable<pw.Widget> _moodSection(List<MoodEntry> entries,
     Map<MoodValue, pw.MemoryImage> emoji, DateTime at) sync* {
-  yield _heading('Riwayat Mood');
   yield pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 10),
       child: _text(
@@ -316,7 +328,6 @@ Iterable<pw.Widget> _moodSection(List<MoodEntry> entries,
 
 Iterable<pw.Widget> _diarySection(
     List<DiaryEntry> entries, Map<String, Uint8List> thumbnails) sync* {
-  yield _heading('Catatan Harian');
   final sorted = [...entries]
     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   if (sorted.isEmpty) {
@@ -406,7 +417,6 @@ List<pw.Widget> _diaryMedia(
 
 Iterable<pw.Widget> _goalSection(
     Map<String, List<GoalHistoryEntry>> days) sync* {
-  yield _heading('Goals & Habits');
   final records = days.values.expand((entries) => entries);
   yield pw.Container(
     padding: const pw.EdgeInsets.all(12),
