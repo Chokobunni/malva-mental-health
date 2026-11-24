@@ -2408,26 +2408,50 @@ class MalvaApiClient {
 
   Future<List<BackendProfessionalSchedule>> listMySchedules({
     required String accessToken,
+  }) async =>
+      (await getMyScheduleSettings(accessToken: accessToken)).schedules;
+
+  Future<BackendProfessionalScheduleSettings> getMyScheduleSettings({
+    required String accessToken,
   }) async {
     final payload = await _send('GET', '/v1/professional/schedules',
         accessToken: accessToken);
-    return _expectList(payload['schedules'], 'Respons jadwal tidak valid.')
-        .whereType<Map<String, dynamic>>()
-        .map(BackendProfessionalSchedule.fromJson)
-        .toList(growable: false);
+    return _parseScheduleSettings(payload);
   }
 
   Future<List<BackendProfessionalSchedule>> updateMySchedules({
     required String accessToken,
     required List<Map<String, Object?>> schedules,
+  }) async =>
+      (await updateMyScheduleSettings(
+              accessToken: accessToken, schedules: schedules))
+          .schedules;
+
+  Future<BackendProfessionalScheduleSettings> updateMyScheduleSettings({
+    required String accessToken,
+    List<Map<String, Object?>>? schedules,
+    Map<String, bool>? usePrimarySchedule,
   }) async {
     final payload = await _send('PUT', '/v1/professional/schedules',
-        accessToken: accessToken, body: {'schedules': schedules});
-    return _expectList(payload['schedules'], 'Respons jadwal tidak valid.')
-        .whereType<Map<String, dynamic>>()
-        .map(BackendProfessionalSchedule.fromJson)
-        .toList(growable: false);
+        accessToken: accessToken,
+        body: {
+          if (schedules != null) 'schedules': schedules,
+          if (usePrimarySchedule != null)
+            'use_primary_schedule': usePrimarySchedule,
+        });
+    return _parseScheduleSettings(payload);
   }
+
+  BackendProfessionalScheduleSettings _parseScheduleSettings(
+          Map<String, dynamic> payload) =>
+      (
+        schedules:
+            _expectList(payload['schedules'], 'Respons jadwal tidak valid.')
+                .whereType<Map<String, dynamic>>()
+                .map(BackendProfessionalSchedule.fromJson)
+                .toList(growable: false),
+        usePrimarySchedule: _parseSchedulePreferences(payload),
+      );
 
   /// Hapus PERMANEN satu jadwal mingguan milik profesional
   /// (DELETE /v1/professional/schedules/{id}).
@@ -2777,6 +2801,7 @@ class MalvaApiClient {
     String hospitalName = '',
     String addressDetails = '',
     bool isBpjsSupported = false,
+    List<BackendPracticeLocation>? practiceLocations,
     String bio = '',
     String photoIntroUrl = '',
     String videoIntroUrl = '',
@@ -2794,6 +2819,9 @@ class MalvaApiClient {
       'hospital_name': hospitalName,
       'address_details': addressDetails,
       'is_bpjs_supported': isBpjsSupported,
+      if (practiceLocations != null)
+        'practice_locations':
+            practiceLocations.map((place) => place.toJson()).toList(),
       'bio': bio,
       if (photoIntroUrl.isNotEmpty) 'photo_intro_url': photoIntroUrl,
       if (videoIntroUrl.isNotEmpty) 'video_intro_url': videoIntroUrl,
@@ -4326,6 +4354,31 @@ class BackendSOSBlastStatus {
   final int failed;
 }
 
+class BackendPracticeLocation {
+  const BackendPracticeLocation({
+    required this.name,
+    required this.address,
+    required this.acceptsBpjs,
+  });
+
+  factory BackendPracticeLocation.fromJson(Map<String, dynamic> json) =>
+      BackendPracticeLocation(
+        name: json['name'] as String? ?? '',
+        address: json['address'] as String? ?? '',
+        acceptsBpjs: json['accepts_bpjs'] == true,
+      );
+
+  final String name;
+  final String address;
+  final bool acceptsBpjs;
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'address': address,
+        'accepts_bpjs': acceptsBpjs,
+      };
+}
+
 class BackendProfessionalCredential {
   const BackendProfessionalCredential({
     required this.id,
@@ -4338,6 +4391,7 @@ class BackendProfessionalCredential {
     this.hospitalName = '',
     this.bio = '',
     this.isBpjsSupported = false,
+    this.practiceLocations,
     this.yearsExperience = 0,
     this.addressDetails = '',
     this.priceFrom = 0,
@@ -4362,6 +4416,10 @@ class BackendProfessionalCredential {
       hospitalName: json['hospital_name']?.toString() ?? '',
       bio: json['bio']?.toString() ?? '',
       isBpjsSupported: json['is_bpjs_supported'] == true,
+      practiceLocations: (json['practice_locations'] as List?)
+          ?.whereType<Map<String, dynamic>>()
+          .map(BackendPracticeLocation.fromJson)
+          .toList(growable: false),
       yearsExperience: (json['years_experience'] as num?)?.toInt() ?? 0,
       addressDetails: json['address_details']?.toString() ?? '',
       priceFrom: (json['price_from'] as num?)?.toInt() ?? 0,
@@ -4392,6 +4450,19 @@ class BackendProfessionalCredential {
   final String hospitalName;
   final String bio;
   final bool isBpjsSupported;
+  final List<BackendPracticeLocation>? practiceLocations;
+
+  List<BackendPracticeLocation> get effectivePracticeLocations =>
+      practiceLocations ??
+      (hospitalName.trim().isNotEmpty || addressDetails.trim().isNotEmpty
+          ? [
+              BackendPracticeLocation(
+                name: hospitalName,
+                address: addressDetails,
+                acceptsBpjs: isBpjsSupported,
+              ),
+            ]
+          : const []);
   final int yearsExperience;
   final String addressDetails;
   final int priceFrom;
@@ -4967,6 +5038,14 @@ class BackendAvailabilityDay {
 
   bool get bookable => !off && freeSlots > 0;
 }
+
+typedef BackendProfessionalScheduleSettings = ({
+  List<BackendProfessionalSchedule> schedules,
+  Map<String, bool> usePrimarySchedule,
+});
+
+Map<String, bool> _parseSchedulePreferences(Map<String, dynamic> payload) =>
+    (payload['use_primary_schedule'] as Map?)?.cast<String, bool>() ?? const {};
 
 class BackendProfessionalSchedule {
   const BackendProfessionalSchedule({
@@ -5800,6 +5879,7 @@ class BackendDoctorProfile {
     required this.credential,
     this.packages = const [],
     this.schedules = const [],
+    this.usePrimarySchedule = const {},
     this.pricing = const BackendProfessionalPricing(),
     this.reviews = const BackendDoctorReviews(),
     this.remainingPatientSlots,
@@ -5825,6 +5905,7 @@ class BackendDoctorProfile {
       credential: cred,
       packages: pkgs,
       schedules: sch,
+      usePrimarySchedule: _parseSchedulePreferences(json),
       pricing: BackendProfessionalPricing.fromJson(
           (json['pricing'] as Map?)?.cast<String, dynamic>() ?? const {}),
       reviews: BackendDoctorReviews.fromJson(json),
@@ -5838,6 +5919,7 @@ class BackendDoctorProfile {
   final BackendProfessionalCredential credential;
   final List<BackendServicePackage> packages;
   final List<BackendProfessionalSchedule> schedules;
+  final Map<String, bool> usePrimarySchedule;
   final BackendProfessionalPricing pricing;
   final BackendDoctorReviews reviews;
   final int? remainingPatientSlots;

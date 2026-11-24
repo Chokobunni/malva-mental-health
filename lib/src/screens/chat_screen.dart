@@ -420,33 +420,78 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     try {
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (dialog) => _ownedOverlay(AlertDialog(
+        builder: (dialog) => _ownedOverlay(Dialog(
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          constraints: const BoxConstraints(maxWidth: 420),
+          backgroundColor: Colors.white,
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          icon: const CircleAvatar(
-            radius: 24,
-            backgroundColor: Color(0xFFFCE8E8),
-            child:
-                Icon(Icons.delete_outline_rounded, color: MalvaColors.danger),
-          ),
-          title: const Text('Hapus pesan ini?', textAlign: TextAlign.center),
-          content: const Text(
-            'Pesan ini akan dihapus dari riwayat chat semua peserta.',
-            textAlign: TextAlign.center,
-          ),
-          actionsAlignment: MainAxisAlignment.center,
-          actions: [
-            OutlinedButton(
-              onPressed: () => Navigator.pop(dialog, false),
-              child: const Text('Batal'),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircleAvatar(
+                  radius: 27,
+                  backgroundColor: Color(0xFFFCE6E6),
+                  foregroundColor: Color(0xFFA41919),
+                  child: Icon(Icons.delete_outline_rounded, size: 29),
+                ),
+                const SizedBox(height: 10),
+                const Text('Hapus pesan ini?',
+                    textAlign: TextAlign.center,
+                    style:
+                        TextStyle(fontSize: 23, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 10),
+                const Text(
+                  'Pesan ini akan dihapus dari riwayat chat semua peserta.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 15),
+                ),
+                const SizedBox(height: 22),
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: 8,
+                    children: [
+                      Expanded(
+                        flex: 4,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            foregroundColor: const Color(0xFF292731),
+                            side: const BorderSide(color: Color(0xFF292731)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(11)),
+                          ),
+                          onPressed: () => Navigator.pop(dialog, false),
+                          child: const Text('Batal'),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 6,
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            backgroundColor: const Color(0xFFC81C1C),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(11)),
+                          ),
+                          onPressed: () => Navigator.pop(dialog, true),
+                          child: const Text('Hapus untuk semua',
+                              textAlign: TextAlign.center),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            FilledButton(
-              style:
-                  FilledButton.styleFrom(backgroundColor: MalvaColors.danger),
-              onPressed: () => Navigator.pop(dialog, true),
-              child: const Text('Hapus untuk semua'),
-            ),
-          ],
+          ),
         )),
       );
       if (confirmed != true ||

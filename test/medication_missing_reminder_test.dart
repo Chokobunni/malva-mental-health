@@ -107,7 +107,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(take);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Taken'));
+      await tester.tap(find.text('Sudah diminum'));
       await tester.pumpAndSettle();
       expect(logged, isTrue);
       expect(tester.takeException(), isNull);
@@ -118,11 +118,14 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(edit);
       await tester.pumpAndSettle();
-      expect(find.text('Edit Medication'), findsOneWidget);
-      expect(find.text('Reminder belum diatur'), findsOneWidget);
+      expect(find.text('Edit Obat'), findsOneWidget);
       expect(tester.takeException(), isNull);
-      await tester.ensureVisible(find.text('Simpan'));
-      await tester.tap(find.text('Simpan'));
+      await tester.tap(find.text('Lanjut atur jadwal'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit Rutinitas'), findsOneWidget);
+      await tester.tap(find.text('Lanjutkan Kebiasaan'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Simpan perubahan'));
       await tester.pumpAndSettle();
       expect(saved?['reminder_time'], '');
       expect(tester.takeException(), isNull);

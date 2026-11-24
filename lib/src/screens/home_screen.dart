@@ -7,7 +7,6 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/care_session_refresh.dart';
-import '../widgets/session_attendance_actions.dart';
 import '../widgets/doctor_review_actions.dart';
 import '../services/medication_reminder_service.dart';
 import '../theme.dart';
@@ -216,19 +215,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       }
     });
     final auth = _session;
-    final ongoingSessions =
-        _ongoingSessions.where((s) => s.canJoinNow).toList();
-    final ongoingIds = ongoingSessions.map((s) => s.id).toSet();
+    final liveSessions = {
+      for (final s in [..._upcomingSessions, ..._ongoingSessions])
+        if (s.canJoinNow) s.id: s,
+    };
+    final ongoingChats = liveSessions.values.where((s) => !s.isVideo);
+    final ongoingVideos = liveSessions.values.where((s) => s.isVideo);
     final upcomingVideos = _upcomingSessions.where((s) =>
         s.isScheduled &&
         !s.isAfterJoinWindow &&
         s.isVideo &&
-        !ongoingIds.contains(s.id));
+        !liveSessions.containsKey(s.id));
     final upcomingChats = _upcomingSessions.where((s) =>
         s.isScheduled &&
         !s.isAfterJoinWindow &&
         !s.isVideo &&
-        !ongoingIds.contains(s.id));
+        !liveSessions.containsKey(s.id));
     return Scaffold(
       backgroundColor: carePageColor,
       body: RefreshIndicator(
@@ -255,19 +257,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       icon: Icons.play_circle_rounded),
                   if (_ongoingLoadFailed)
                     const Text('Sesi berjalan belum dapat dimuat.')
-                  else if (ongoingSessions.isEmpty)
+                  else if (ongoingChats.isEmpty)
                     const _HomeSessionEmpty(
                         asset: 'home-ongoing',
                         text: 'Tidak ada sesi berjalan saat ini.')
                   else
-                    for (final s in ongoingSessions)
+                    for (final s in ongoingChats)
                       Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: _OngoingSessionCard(
                             session: s,
-                            accessToken: auth?.accessToken ?? '',
                             onChat: () => _joinSession(context, s),
-                            onChanged: _loadUpcomingSession,
                           )),
                   const SizedBox(height: 23),
                   for (final (video, sessions, expanded) in [
@@ -297,11 +297,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                             )
                           : null,
                     ),
+                    if (video)
+                      for (final session in ongoingVideos)
+                        _upcomingCard(session, auth),
                     if (_upcomingLoadFailed)
                       Text(video
                           ? 'Video call mendatang belum dapat dimuat.'
                           : 'Chat mendatang belum dapat dimuat.')
-                    else if (sessions.isEmpty)
+                    else if (sessions.isEmpty &&
+                        (!video || ongoingVideos.isEmpty))
                       _HomeSessionEmpty(
                         asset: video ? 'home-video' : 'home-chat',
                         text: video
@@ -311,16 +315,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     else
                       for (final session
                           in expanded ? sessions : sessions.take(1))
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _UpcomingSessionCard(
-                            session: session,
-                            accessToken: auth?.accessToken ?? '',
-                            onJoin: () => _joinSession(context, session),
-                            onCancel: () => _cancelSession(context, session),
-                            onChanged: _loadUpcomingSession,
-                          ),
-                        ),
+                        _upcomingCard(session, auth),
                     const SizedBox(height: 23),
                   ],
                   if (_ongoingLoadFailed || _upcomingLoadFailed)
@@ -415,6 +410,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       MaterialPageRoute(builder: (_) => screen),
     );
   }
+
+  Widget _upcomingCard(BackendCareSession session, AuthSession? auth) =>
+      Padding(
+        key: ValueKey(session.id),
+        padding: const EdgeInsets.only(bottom: 12),
+        child: _UpcomingSessionCard(
+          session: session,
+          accessToken: auth?.accessToken ?? '',
+          onJoin: () => _joinSession(context, session),
+          onCancel: () => _cancelSession(context, session),
+          onChanged: _loadUpcomingSession,
+          onConfirmAttendance: () async {
+            final token = auth?.accessToken;
+            if (token == null ||
+                token.isEmpty ||
+                _session?.accessToken != token) {
+              return null;
+            }
+            final updated = await _api.updateCareSession(
+                accessToken: token, sessionId: session.id, status: 'attended');
+            return mounted && _session?.accessToken == token ? updated : null;
+          },
+        ),
+      );
 
   void _joinSession(BuildContext context, BackendCareSession session) {
     if (session.professionalId.isEmpty) return;
@@ -574,6 +593,7 @@ class _UpcomingSessionCard extends StatelessWidget {
     required this.onCancel,
     required this.accessToken,
     required this.onChanged,
+    required this.onConfirmAttendance,
   });
 
   final BackendCareSession session;
@@ -581,6 +601,7 @@ class _UpcomingSessionCard extends StatelessWidget {
   final VoidCallback onCancel;
   final String accessToken;
   final Future<void> Function() onChanged;
+  final Future<BackendCareSession?> Function() onConfirmAttendance;
 
   static const _days = [
     'Senin',
@@ -669,7 +690,7 @@ class _UpcomingSessionCard extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
           ),
           const SizedBox(height: 16),
-          if (isVideo) ...[
+          if (isVideo && session.canJoinNow) ...[
             Theme(
                 data: Theme.of(context).copyWith(
                     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -688,6 +709,7 @@ class _UpcomingSessionCard extends StatelessWidget {
                     accessToken: accessToken,
                     expanded: true,
                     canCreateLink: false,
+                    onConfirmAttendance: onConfirmAttendance,
                     onSessionChanged: (_) => onChanged())),
             const SizedBox(height: 18),
           ],
@@ -930,15 +952,11 @@ class _HomeGridTile extends StatelessWidget {
 class _OngoingSessionCard extends StatelessWidget {
   const _OngoingSessionCard({
     required this.session,
-    required this.accessToken,
     required this.onChat,
-    required this.onChanged,
   });
 
   final BackendCareSession session;
-  final String accessToken;
   final VoidCallback onChat;
-  final Future<void> Function() onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -986,16 +1004,6 @@ class _OngoingSessionCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          if (session.isVideo) ...[
-            MeetJoinButton(
-              session: session,
-              accessToken: accessToken,
-              expanded: true,
-              canCreateLink: false,
-              onSessionChanged: (_) => onChanged(),
-            ),
-            const SizedBox(height: 8),
-          ],
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -1007,12 +1015,6 @@ class _OngoingSessionCard extends StatelessWidget {
                       fontFamily: 'Roboto', fontWeight: FontWeight.w700)),
             ),
           ),
-          const SizedBox(height: 10),
-          SessionAttendanceActions(
-              session: session,
-              role: UserRole.patient,
-              accessToken: accessToken,
-              onChanged: onChanged),
         ],
       ),
     );

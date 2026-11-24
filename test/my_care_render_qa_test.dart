@@ -77,7 +77,18 @@ void main() {
           'status': 'scheduled',
           'scheduled_at': wibIso(now.add(Duration(hours: 13 + i * 24))),
           'meeting_url': 'https://meet.google.com/abc-defg-hij',
-        }
+        },
+      {
+        'id': 'cancelled-session',
+        'patient_id': 'patient',
+        'professional_id': 'pro-1',
+        'professional_name': 'dr. Sinta Maharani, Sp.KJ',
+        'session_type': 'video',
+        'duration_minutes': 60,
+        'status': 'cancelled_by_patient',
+        'scheduled_at': wibIso(now.subtract(const Duration(days: 1))),
+        'package_id': 'package-1',
+      },
     ];
     final api = MalvaApiClient(
         baseUrl: 'https://fixture.invalid',
@@ -195,7 +206,9 @@ void main() {
     expect(find.byTooltip('Paket saya'), findsNothing);
     await tester.tap(find.widgetWithText(ChoiceChip, 'Riwayat'));
     await tester.pumpAndSettle();
-    await capture('riwayat-paket');
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Dibatalkan 1'));
+    await tester.pumpAndSettle();
+    await capture('riwayat-konsultasi');
     tester.view.physicalSize = const Size(390, 755);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));

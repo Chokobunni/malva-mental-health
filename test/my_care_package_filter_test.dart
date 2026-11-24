@@ -79,7 +79,8 @@ void main() {
     expect(screen.package?.id, 'package',
         reason: 'package context must survive resume');
   });
-  testWidgets('package filters retain pending, active and cancelled purchases',
+  testWidgets(
+      'consultation history excludes packages while Jadwal keeps checkout',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -131,20 +132,18 @@ void main() {
     expect(find.byTooltip('Paket saya'), findsNothing);
     await tester.tap(find.widgetWithText(ChoiceChip, 'Riwayat'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(
-        find.widgetWithText(ChoiceChip, 'Menunggu pembayaran 1'));
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Menunggu pembayaran 1'));
+    expect(find.text('Riwayat konsultasi'), findsOneWidget);
+    expect(find.text('Riwayat paket'), findsNothing);
+    expect(find.text('Profesional pending_payment'), findsNothing);
+    expect(find.text('Profesional active'), findsNothing);
+    expect(find.text('Profesional cancelled'), findsNothing);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Jadwal'));
     await tester.pumpAndSettle();
     expect(find.text('Profesional pending_payment'), findsOneWidget);
-    expect(find.text('Profesional active'), findsNothing);
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Aktif 1'));
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
     await tester.pumpAndSettle();
     expect(find.text('Profesional active'), findsOneWidget);
-    expect(find.text('Profesional pending_payment'), findsNothing);
-    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Dibatalkan 1'));
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Dibatalkan 1'));
-    await tester.pumpAndSettle();
-    expect(find.text('Profesional cancelled'), findsOneWidget);
-    expect(find.text('Profesional active'), findsNothing);
   });
 }

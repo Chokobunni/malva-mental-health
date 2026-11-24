@@ -16,11 +16,11 @@ func TestActiveSchedulesForCategories(t *testing.T) {
 	}{
 		{"quick_chat", ""},
 		{"quick_video", "video"},
-		{"package", "shared"},
+		{"package", ""},
 		{ScheduleShared, "shared"},
 	} {
 		t.Run(test.category, func(t *testing.T) {
-			got := activeSchedulesForCategories(rows, test.category)
+			got := activeSchedulesForCategories(rows, nil, test.category)
 			if test.want == "" {
 				if len(got) != 0 {
 					t.Fatalf("inactive override fell back: %+v", got)
@@ -29,6 +29,16 @@ func TestActiveSchedulesForCategories(t *testing.T) {
 				t.Fatalf("got %+v, want %q", got, test.want)
 			}
 		})
+	}
+	got := activeSchedulesForCategories(rows, map[string]bool{
+		"quick_chat": true, "quick_video": false, "package": true,
+	})
+	if len(got) != 2 || got[0].ID != "shared" || got[1].ID != "video" {
+		t.Fatalf("explicit preferences must deduplicate shared schedules: %+v", got)
+	}
+	got = activeSchedulesForCategories(rows, map[string]bool{"quick_chat": false}, "quick_chat")
+	if len(got) != 0 {
+		t.Fatalf("custom mode must keep inactive rows inactive: %+v", got)
 	}
 }
 
@@ -118,5 +128,71 @@ func TestScheduleSnapshotPreservesLegacyTimingButRejectsNewShortSlots(t *testing
 	legacy.EndTime = "10:00"
 	if err := s.UpsertSchedules(ctx, prof, []ProfessionalSchedule{legacy}); err != nil {
 		t.Fatalf("upgrading legacy schedule: %v", err)
+	}
+}
+
+func TestSchedulePreferenceRestoresStoredCategoryRows(t *testing.T) {
+	s, db := openGoalTestStore(t)
+	ctx := t.Context()
+	prof := insertTestUser(t, db, ctx, "professional", "Schedule preference", "schedule-preference")
+	schedules := []ProfessionalSchedule{
+		{ServiceCategory: ScheduleShared, DayOfWeek: 1, StartTime: "10:00", EndTime: "12:00", IsActive: true},
+		{ServiceCategory: "quick_chat", DayOfWeek: 2, StartTime: "10:00", EndTime: "12:00", IsActive: true},
+	}
+	if err := s.UpsertSchedules(ctx, prof, schedules); err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range []struct {
+		preferences map[string]bool
+		category    string
+		want        string
+	}{
+		{nil, "package", ""},
+		{map[string]bool{"package": true, "quick_chat": true}, "quick_chat", ScheduleShared},
+		{nil, "package", ScheduleShared},
+		{map[string]bool{"quick_chat": false}, "quick_chat", "quick_chat"},
+	} {
+		if err := s.UpsertScheduleSettings(ctx, prof, nil, step.preferences); err != nil {
+			t.Fatal(err)
+		}
+		active, err := s.ListActiveSchedulesForProfessional(ctx, prof, step.category)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if step.want == "" {
+			if len(active) != 0 {
+				t.Fatalf("new package should start in custom mode: %+v", active)
+			}
+		} else if len(active) != 1 || active[0].ServiceCategory != step.want {
+			t.Fatalf("%s selected %+v, want %s", step.category, active, step.want)
+		}
+	}
+	settings, err := s.GetProfessionalScheduleSettings(ctx, prof)
+	if err != nil || len(settings.Schedules) != 2 || !settings.UsePrimarySchedule["package"] {
+		t.Fatalf("partial preference update discarded settings: %+v, error %v", settings, err)
+	}
+}
+
+func TestLegacyScheduleWriteCanOverrideMigratedFallback(t *testing.T) {
+	s, db := openGoalTestStore(t)
+	ctx := t.Context()
+	prof := insertTestUser(t, db, ctx, "professional", "Legacy schedule preference", "legacy-schedule-preference")
+	if _, err := db.ExecContext(ctx, `INSERT INTO professional_schedule_preferences
+		(professional_id, service_category, use_primary_schedule, is_explicit)
+		VALUES ($1, 'package', true, false), ($1, 'quick_chat', true, true)`, prof); err != nil {
+		t.Fatal(err)
+	}
+	slot := ProfessionalSchedule{DayOfWeek: 1, StartTime: "10:00", EndTime: "12:00", IsActive: true}
+	packageSlot, chatSlot := slot, slot
+	packageSlot.ServiceCategory = "package"
+	chatSlot.ServiceCategory = "quick_chat"
+	if err := s.UpsertSchedules(ctx, prof, []ProfessionalSchedule{slot, packageSlot, chatSlot}); err != nil {
+		t.Fatal(err)
+	}
+	for category, want := range map[string]string{"package": "package", "quick_chat": ScheduleShared} {
+		got, err := s.ListActiveSchedulesForProfessional(ctx, prof, category)
+		if err != nil || len(got) != 1 || got[0].ServiceCategory != want {
+			t.Fatalf("%s selected %+v, err %v, want %s", category, got, err, want)
+		}
 	}
 }

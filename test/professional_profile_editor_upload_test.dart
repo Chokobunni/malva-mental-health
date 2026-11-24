@@ -86,6 +86,81 @@ class _FakeApi extends MalvaApiClient {
 }
 
 void main() {
+  testWidgets('stores BPJS acceptance separately for each practice location',
+      (tester) async {
+    tester.view.physicalSize = const Size(430, 2600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    List<Object?>? savedLocations;
+    final api = MalvaApiClient(
+      baseUrl: 'http://backend.test',
+      httpClient: MockClient((request) async {
+        if (request.url.path == '/v1/me') {
+          return http.Response('{"user":{"id":"pro"}}', 200);
+        }
+        if (request.method == 'POST') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          savedLocations = body['practice_locations'] as List<Object?>?;
+        }
+        return http.Response(
+          jsonEncode({
+            'credential': {
+              'id': 'credential',
+              'user_id': 'pro',
+              'hospital_name': 'RS Contoh Utama',
+              'address_details': 'Jl. Rumah Sakit',
+              'is_bpjs_supported': true,
+              if (savedLocations != null) 'practice_locations': savedLocations,
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: ProfessionalProfileEditorScreen(
+            apiClient: api,
+            session: const AuthSession(
+              role: UserRole.professional,
+              identifier: 'pro@malva.test',
+              displayName: 'Profesional Uji',
+              accessToken: 'token',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('RS Contoh Utama'), findsOneWidget);
+    await tester.tap(find.text('Tambah tempat praktik'));
+    await tester.pumpAndSettle();
+    Finder practiceField(String label) => find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.labelText == label,
+        );
+    await tester.enterText(
+        practiceField('Nama tempat praktik').last, 'Klinik Contoh Mandiri');
+    await tester.enterText(
+        practiceField('Alamat tempat praktik').last, 'Jl. Klinik');
+    await tester.tap(find.text('Tidak menerima BPJS').last);
+    await tester.tap(find.text('Simpan Profil'));
+    await tester.pumpAndSettle();
+    expect(savedLocations, [
+      {
+        'name': 'RS Contoh Utama',
+        'address': 'Jl. Rumah Sakit',
+        'accepts_bpjs': true,
+      },
+      {
+        'name': 'Klinik Contoh Mandiri',
+        'address': 'Jl. Klinik',
+        'accepts_bpjs': false,
+      },
+    ]);
+  });
+
   group('kompresi foto', () {
     late ImagePickerPlatform originalPlatform;
     setUp(() => originalPlatform = ImagePickerPlatform.instance);

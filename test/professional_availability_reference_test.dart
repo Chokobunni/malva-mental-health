@@ -38,7 +38,9 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Opsi jadwal').first);
+    final chatOption = find.byTooltip('Opsi jadwal').last;
+    await tester.ensureVisible(chatOption);
+    await tester.tap(chatOption);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit jadwal'));
     await tester.pumpAndSettle();
@@ -49,13 +51,11 @@ void main() {
     );
     await tester.tap(find.text('Simpan perubahan'));
     await tester.pumpAndSettle();
-    expect(api.saved, hasLength(2));
+    expect(api.saved, hasLength(1));
     expect(api.saved!.first['slot_duration_minutes'], 75);
     expect(api.saved!.first['is_active'], false);
     expect(api.saved!.first['id'], 'monday');
     expect(api.saved!.first['service_category'], 'quick_chat');
-    expect(api.saved!.last['day_of_week'], 5);
-    expect(api.saved!.last['service_category'], 'shared');
   });
 
   testWidgets('capacity can close new packages and stays finite',
@@ -78,6 +78,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     final decrease = find.byTooltip('Kurangi kapasitas');
+    await tester.scrollUntilVisible(decrease.hitTestable(), 180);
     await tester.tap(decrease);
     await tester.pumpAndSettle();
     var save = find.text('Simpan kapasitas');
@@ -92,7 +93,6 @@ void main() {
     expect(find.text('Jadwal bersama'), findsNothing);
     expect(find.text('Hari libur'), findsNothing);
     expect(find.text('Mengikuti jadwal bersama.'), findsNothing);
-    expect(find.text('Jumat'), findsNWidgets(2));
   });
 
   testWidgets('summary shows effective rows, real durations and finite default',
@@ -132,67 +132,59 @@ void main() {
     expect(find.text('Simpan kapasitas'), findsNothing);
   });
 
-  testWidgets('inherited toggle copies every row only into selected category',
-      (tester) async {
-    final api = _AvailabilityApi();
-    api.slots.removeAt(0);
-    api.slots.add(BackendProfessionalSchedule.fromJson({
-      'id': 'shared-saturday',
-      'day_of_week': 6,
-      'start_time': '10:00',
-      'end_time': '12:00',
-      'slot_duration_minutes': 60,
-      'is_active': true,
-    }));
-    await tester.pumpWidget(ProviderScope(
-        child: MaterialApp(
-            home: ProAvailabilityScreen(
-                apiClient: api,
-                session: const AuthSession(
-                    role: UserRole.professional,
-                    identifier: 'pro',
-                    displayName: 'Pro',
-                    accessToken: 'token')))));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(Switch).first);
-    await tester.pumpAndSettle();
-    final rows = api.saved!;
-    expect(rows.where((r) => r['service_category'] == 'shared'), hasLength(2));
-    final chat =
-        rows.where((r) => r['service_category'] == 'quick_chat').toList();
-    expect(chat, hasLength(2));
-    expect(chat.first['is_active'], false);
-    expect(chat.last['is_active'], true);
-    expect(rows.any((r) => r['service_category'] == 'quick_video'), false);
-  });
-
   testWidgets(
-      'last inherited deletion keeps category closed and other services intact',
+      'package warning responds to effective schedule and draft overlap',
       (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1300));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final api = _AvailabilityApi();
-    api.slots.removeAt(0);
     await tester.pumpWidget(ProviderScope(
-        child: MaterialApp(
-            home: ProAvailabilityScreen(
-                apiClient: api,
-                session: const AuthSession(
-                    role: UserRole.professional,
-                    identifier: 'pro',
-                    displayName: 'Pro',
-                    accessToken: 'token')))));
+      child: MaterialApp(
+        home: ProAvailabilityScreen(
+          apiClient: api,
+          session: const AuthSession(
+            role: UserRole.professional,
+            identifier: 'pro',
+            displayName: 'Pro',
+            accessToken: 'token',
+          ),
+        ),
+      ),
+    ));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Opsi jadwal').first);
+
+    expect(find.text('Jadwal praktik utama'), findsOneWidget);
+    final warning =
+        find.textContaining('Jam ini juga tersedia untuk Quick Session.');
+    expect(warning, findsNothing);
+    final packageSwitch = find
+        .widgetWithText(SwitchListTile, 'Gunakan jadwal praktik utama')
+        .last;
+    await tester.ensureVisible(packageSwitch);
+    await tester.tap(packageSwitch);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Hapus permanen'));
+    expect(api.preferences['package'], isTrue);
+    expect(api.saved, isNull);
+    expect(warning, findsOneWidget);
+    expect(api.slots.map((slot) => slot.id), ['monday', 'friday']);
+    await tester.tap(packageSwitch);
     await tester.pumpAndSettle();
-    expect(find.textContaining('baris nonaktif disimpan'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Hapus permanen'));
+    expect(api.preferences['package'], isFalse);
+    expect(warning, findsNothing);
+
+    final add = find.text('Tambah jadwal khusus').last;
+    await tester.ensureVisible(add);
+    await tester.tap(add);
     await tester.pumpAndSettle();
-    expect(api.saved, hasLength(2));
-    expect(api.saved!.first['id'], 'friday');
-    expect(api.saved!.first['is_active'], true);
-    expect(api.saved!.last['service_category'], 'quick_chat');
-    expect(api.saved!.last['is_active'], false);
+    await tester.tap(find.text('Senin').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Jumat').last);
+    await tester.pumpAndSettle();
+    expect(warning, findsOneWidget);
+    final active = find.widgetWithText(SwitchListTile, 'Aktif');
+    await tester.tap(active);
+    await tester.pumpAndSettle();
+    expect(warning, findsNothing);
   });
 }
 
@@ -222,12 +214,17 @@ class _AvailabilityApi extends MalvaApiClient {
   List<Map<String, Object?>>? saved;
   int? savedCapacity;
   bool clearedCapacity = false;
+  final preferences = {
+    'quick_chat': false,
+    'quick_video': true,
+    'package': false
+  };
 
   @override
-  Future<List<BackendProfessionalSchedule>> listMySchedules({
+  Future<BackendProfessionalScheduleSettings> getMyScheduleSettings({
     required String accessToken,
   }) async =>
-      slots;
+      (schedules: slots, usePrimarySchedule: Map.of(preferences));
 
   @override
   Future<BackendProfessionalPricing> getPricing({
@@ -261,11 +258,13 @@ class _AvailabilityApi extends MalvaApiClient {
       [];
 
   @override
-  Future<List<BackendProfessionalSchedule>> updateMySchedules({
+  Future<BackendProfessionalScheduleSettings> updateMyScheduleSettings({
     required String accessToken,
-    required List<Map<String, Object?>> schedules,
+    List<Map<String, Object?>>? schedules,
+    Map<String, bool>? usePrimarySchedule,
   }) async {
     saved = schedules;
-    return slots;
+    if (usePrimarySchedule != null) preferences.addAll(usePrimarySchedule);
+    return getMyScheduleSettings(accessToken: accessToken);
   }
 }

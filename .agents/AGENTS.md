@@ -530,12 +530,18 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 
 ## Jadwal layanan dan kuota paket (2026-11-23)
 
-- Quick Chat, Quick Video, dan Continuous Package memiliki kategori jadwal. Jadwal bersama berlaku untuk kategori yang belum memiliki baris khusus. Baris khusus nonaktif tetap menonaktifkan fallback kategori. Bentrok sesi berlaku lintas kategori.
+- Quick Chat, Quick Video, dan Continuous Package memiliki pilihan jadwal utama atau khusus yang tersimpan. Quick baru memakai jadwal utama, paket baru memakai jadwal khusus, dan jadwal efektif lama dipertahankan. Satu kalender profesional memblokir irisan waktu lintas kategori.
 - Kapasitas profesional menghitung pasien unik dengan paket aktif atau transaksi paket pending yang masih berlaku. Perpanjangan dan kelanjutan pembayaran milik pasien yang sudah memakai tempat tetap tersedia saat kapasitas penuh.
 - Checkout menyimpan hingga tiga jadwal tambahan di booking paket. Saat lunas, jadwal diproses satu kali. Jika jadwal tidak bisa dipakai, kredit tersisa dapat dijadwalkan dari My Care.
 
 ## Penyempurnaan jadwal layanan (2026-11-24)
 
-- Editor dan Home menampilkan tiga kategori layanan dari aturan fallback yang sama, tanpa bagian jadwal bersama/hari libur. Data bersama dan hari libur lama tetap berlaku. Mutasi jadwal warisan hanya menyalin kategori terpilih; penghapusan warisan terakhir menyimpan baris nonaktif agar fallback tidak membuka kembali layanan.
+- Editor menempatkan jadwal utama di atas kartu layanan dan memperingatkan saat jadwal efektif paket beririsan dengan jam Quick. Home pasien menampilkan Join Meeting pada kartu video mulai 10 menit sebelum sesi hingga akhir durasi. Join Meeting dan Hadir My Care menulis konfirmasi pasien yang sama.
 - Jadwal baru/perubahan waktu wajib slot 60–180 menit dan rentang cukup. Snapshot/status toggle baris legacy milik profesional dengan ID, kategori, hari, waktu dan durasi persis sama tetap diterima. Booking tetap memakai sesi minimal 60 menit.
 - Kapasitas pasien selalu terbatas: nilai kosong/null memakai 2, nilai 0 menutup pasien baru. Pasien unik aktif/pending tetap dihitung, renew/resume yang sudah memiliki tempat tetap tersedia. Tanpa perubahan skema.
+
+## Tempat praktik profesional
+
+- Editor profesional menyimpan daftar tempat praktik dengan nama, alamat, dan status penerimaan BPJS offline tiap lokasi. Detail profil pasien menampilkan status tiap lokasi. Filter direktori cocok bila sedikitnya satu lokasi menerima BPJS.
+- Migrasi 049 menambah `professional_credentials.practice_locations` nullable. Data lama tampil dari nama, alamat, dan status BPJS faskes tunggal yang tersimpan. Lokasi pertama memproyeksikan nama dan alamat lama. Koordinat tetap merujuk lokasi pertama, dan ikut kosong saat lokasi pertama diganti tanpa koordinat baru.
+- Permintaan kredensial tanpa daftar mempertahankan daftar yang sudah tersimpan. Daftar kosong menghapus lokasi. Unggah media otomatis mempertahankan perubahan lokasi yang masih berupa draf.

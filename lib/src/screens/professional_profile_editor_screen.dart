@@ -82,7 +82,7 @@ class _ProfessionalProfileEditorScreenState
   String? _error;
   String? _loadError;
   bool _showAllSpecialties = false;
-  bool _isBpjsSupported = false;
+  final _practiceLocations = <_PracticeLocationDraft>[];
   String? _uploadedVideoName;
   bool _birthDateLoadError = false;
   String? _savedBirthDateKey;
@@ -92,8 +92,6 @@ class _ProfessionalProfileEditorScreenState
 
   // Form fields
   final _bioController = TextEditingController();
-  final _hospitalNameController = TextEditingController();
-  final _addressController = TextEditingController();
   final _photoUrlController = TextEditingController();
   final _videoUrlController = TextEditingController();
   final _yearsExpController = TextEditingController();
@@ -130,8 +128,6 @@ class _ProfessionalProfileEditorScreenState
   void dispose() {
     _birthDateController.dispose();
     _bioController.dispose();
-    _hospitalNameController.dispose();
-    _addressController.dispose();
     _photoUrlController.dispose();
     _videoUrlController.dispose();
     _yearsExpController.dispose();
@@ -226,8 +222,9 @@ class _ProfessionalProfileEditorScreenState
   void _populateFromCredential(BackendProfessionalCredential? cred) {
     if (cred == null) return;
     _bioController.text = cred.bio;
-    _hospitalNameController.text = cred.hospitalName;
-    _addressController.text = cred.addressDetails;
+    _practiceLocations
+      ..clear()
+      ..addAll(cred.effectivePracticeLocations.map(_PracticeLocationDraft.new));
     _photoUrlController.text = cred.photoIntroUrl;
     _videoUrlController.text = cred.videoIntroUrl;
     _yearsExpController.text =
@@ -238,7 +235,6 @@ class _ProfessionalProfileEditorScreenState
     _sippController.text = cred.sippNumber;
     _selectedSpecialties = Set<String>.from(cred.subSpecialties);
     _education = cred.education.map((row) => {...row}).toList();
-    _isBpjsSupported = cred.isBpjsSupported;
   }
 
   Future<void> _save({bool saveBirthDate = false}) async {
@@ -250,6 +246,24 @@ class _ProfessionalProfileEditorScreenState
       _successMessage = null;
     });
     try {
+      final credential = _cred;
+      final locations = saveBirthDate &&
+              (_practiceLocations.isNotEmpty ||
+                  credential?.effectivePracticeLocations.isNotEmpty == true)
+          ? _practiceLocations.map((draft) => draft.toLocation()).toList()
+          : null;
+      if (locations != null &&
+          locations.any((location) =>
+              (location.name.isEmpty || location.address.isEmpty) &&
+              !(location == locations.first &&
+                  location.name == credential?.hospitalName.trim() &&
+                  location.address == credential?.addressDetails.trim()))) {
+        setState(() {
+          _isSaving = false;
+          _error = 'Isi nama dan alamat untuk setiap tempat praktik.';
+        });
+        return;
+      }
       final birthDate = _selectedBirthDate;
       final dateKey = birthDate == null ? null : wibDateKey(birthDate);
       if (saveBirthDate && dateKey != null && dateKey != _savedBirthDateKey) {
@@ -257,6 +271,7 @@ class _ProfessionalProfileEditorScreenState
         if (!mounted) return;
         _savedBirthDateKey = dateKey;
       }
+      final primary = locations?.firstOrNull;
       final updated = await _api.uploadProfessionalCredentials(
         accessToken: token,
         strNumber: _strController.text.trim(),
@@ -264,15 +279,16 @@ class _ProfessionalProfileEditorScreenState
         sippNumber: _sippController.text.trim(),
         specialization: _cred?.specialization ?? 'M.Psi',
         subSpecialties: _selectedSpecialties.toList(),
-        // Kirim balik koordinat faskes yang sudah ada. Form editor tidak
-        // punya kolom koordinat; tanpa ini setiap simpan mengosongkan
-        // hospital_lat/lng (pertahanan berlapis di sisi klien — server juga
-        // mempertahankan nilai lama bila field tidak dikirim).
-        hospitalLat: _cred?.hospitalLat,
-        hospitalLng: _cred?.hospitalLng,
-        hospitalName: _hospitalNameController.text.trim(),
-        addressDetails: _addressController.text.trim(),
-        isBpjsSupported: _isBpjsSupported,
+        hospitalName: locations == null
+            ? credential?.hospitalName ?? ''
+            : primary?.name ?? '',
+        addressDetails: locations == null
+            ? credential?.addressDetails ?? ''
+            : primary?.address ?? '',
+        isBpjsSupported: locations?.any((location) => location.acceptsBpjs) ??
+            credential?.isBpjsSupported ??
+            false,
+        practiceLocations: locations,
         bio: _bioController.text.trim(),
         photoIntroUrl: _photoUrlController.text.trim(),
         videoIntroUrl: _videoUrlController.text.trim(),
@@ -797,33 +813,21 @@ class _ProfessionalProfileEditorScreenState
                         hint: 'Dikelola oleh admin',
                         readOnly: true,
                       ),
-                      const SizedBox(height: 10),
-                      _field('Nama faskes / tempat praktik',
-                          _hospitalNameController),
-                      const SizedBox(height: 10),
-                      _field(
-                          'Alamat faskes / tempat praktik', _addressController,
-                          maxLines: 2),
-                      const SizedBox(height: 18),
-                      const Divider(color: Color(0xFFEEF0F3)),
-                      const SizedBox(height: 6),
-                      const Text('Layanan BPJS Kesehatan (Offline)',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 8),
-                      const Text(
-                          'Cantumkan apakah Anda menerima pasien BPJS untuk pemeriksaan tatap muka langsung di fasilitas kesehatan di atas.',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF82909D),
-                              height: 1.6)),
+                      for (final location in _practiceLocations)
+                        _practiceLocation(location, busy),
                       const SizedBox(height: 12),
-                      Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: _bpjsChoice(true, busy)),
-                            const SizedBox(width: 10),
-                            Expanded(child: _bpjsChoice(false, busy)),
-                          ]),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: busy || _practiceLocations.length >= 20
+                              ? null
+                              : () => setState(() => _practiceLocations
+                                  .add(_PracticeLocationDraft())),
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: const Text('Tambah tempat praktik'),
+                          style: _mediaButtonStyle,
+                        ),
+                      ),
                     ]),
                     _section('Lisensi & Legalitas', [
                       _field('Nomor STR', _strController),
@@ -850,13 +854,63 @@ class _ProfessionalProfileEditorScreenState
               fontWeight: FontWeight.w700,
               color: green ? const Color(0xFF167A64) : MalvaColors.plum)));
 
-  Widget _bpjsChoice(bool value, bool busy) {
-    final selected = _isBpjsSupported == value;
+  Widget _practiceLocation(_PracticeLocationDraft location, bool busy) {
+    return Column(
+      key: ObjectKey(location),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 22),
+        Row(
+          children: [
+            const Expanded(
+                child: Text('Tempat praktik',
+                    style: TextStyle(fontWeight: FontWeight.w700))),
+            IconButton(
+              tooltip: 'Hapus tempat praktik',
+              onPressed: busy
+                  ? null
+                  : () => setState(() => _practiceLocations.remove(location)),
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
+        ),
+        TextFormField(
+          initialValue: location.name,
+          enabled: !busy,
+          onChanged: (value) => location.name = value,
+          decoration:
+              _profileInput().copyWith(labelText: 'Nama tempat praktik'),
+        ),
+        const SizedBox(height: 10),
+        TextFormField(
+          initialValue: location.address,
+          enabled: !busy,
+          onChanged: (value) => location.address = value,
+          maxLines: 2,
+          decoration:
+              _profileInput().copyWith(labelText: 'Alamat tempat praktik'),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _bpjsChoice(location, true, busy)),
+            const SizedBox(width: 10),
+            Expanded(child: _bpjsChoice(location, false, busy)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _bpjsChoice(_PracticeLocationDraft location, bool value, bool busy) {
+    final selected = location.acceptsBpjs == value;
     return Semantics(
         selected: selected,
         button: true,
         child: InkWell(
-          onTap: busy ? null : () => setState(() => _isBpjsSupported = value),
+          onTap:
+              busy ? null : () => setState(() => location.acceptsBpjs = value),
           borderRadius: BorderRadius.circular(16),
           child: Container(
             constraints: const BoxConstraints(minHeight: 90),
@@ -882,7 +936,7 @@ class _ProfessionalProfileEditorScreenState
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                    Text(value ? 'Menerima BPJS' : 'Tidak Menerima',
+                    Text(value ? 'Menerima BPJS' : 'Tidak menerima BPJS',
                         style: const TextStyle(
                             fontSize: 12, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 3),
@@ -1065,6 +1119,23 @@ class _ProfessionalProfileEditorScreenState
       ),
     );
   }
+}
+
+class _PracticeLocationDraft {
+  _PracticeLocationDraft([BackendPracticeLocation? location])
+      : name = location?.name ?? '',
+        address = location?.address ?? '',
+        acceptsBpjs = location?.acceptsBpjs ?? false;
+
+  String name;
+  String address;
+  bool acceptsBpjs;
+
+  BackendPracticeLocation toLocation() => BackendPracticeLocation(
+        name: name.trim(),
+        address: address.trim(),
+        acceptsBpjs: acceptsBpjs,
+      );
 }
 
 InputDecoration _profileInput({

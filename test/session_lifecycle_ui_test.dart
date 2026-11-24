@@ -187,14 +187,27 @@ void main() {
                           onChanged: () async {})))));
       await mount(_session());
       await tester.pumpAndSettle();
-      expect(find.text('Kehadiran saya'), findsOneWidget);
-      expect(find.text('Hadir'), findsOneWidget);
-      expect(find.text('Tidak hadir'), findsOneWidget);
+      expect(
+          find.text(role == UserRole.patient
+              ? 'Check-in kehadiran'
+              : 'Kehadiran saya'),
+          findsOneWidget);
+      expect(
+          role == UserRole.patient
+              ? find.widgetWithText(FilledButton, 'Hadir')
+              : find.widgetWithText(OutlinedButton, 'Hadir'),
+          findsOneWidget);
+      expect(
+          find.widgetWithText(OutlinedButton, 'Tidak hadir'), findsOneWidget);
       expect(find.text('Selesaikan sesi'), findsNothing);
       await mount(_session(ended: true));
       await tester.pumpAndSettle();
       expect(find.text('Selesaikan sesi'),
           role == UserRole.professional ? findsOneWidget : findsNothing);
+      if (role == UserRole.patient) {
+        expect(find.text('Check-in kehadiran'), findsNothing);
+        expect(find.text('Tidak hadir'), findsNothing);
+      }
       await mount(_session(ended: true, completed: true));
       await tester.pumpAndSettle();
       expect(find.byType(OutlinedButton), findsNothing);

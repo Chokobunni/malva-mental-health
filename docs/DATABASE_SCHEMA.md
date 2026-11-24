@@ -670,7 +670,7 @@ Status pemakan kuota: scheduled, completed, no_show.
 **Index:** `care_sessions_slot_uidx` UNIQUE (professional_id, scheduled_at)
 WHERE status IN ('scheduled','pending_payment') — anti double-book.
 
-Kehadiran dan status terminal diserialkan dengan row lock sesi. Hadir tidak mencatat pendapatan; pasien tidak hadir menjadi `no_show` (kuota terpakai), profesional tidak hadir menjadi `cancelled_by_professional` (kuota kembali dan ledger kredit idempoten). `completed` baru boleh disimpan setelah jadwal+durasi, atomik dengan pengakuan pendapatan yang tetap satu baris per pembayaran. Reschedule sesi terjadwal membersihkan konfirmasi kehadiran jadwal sebelumnya; status terminal tidak dapat dibuka ulang. Kolom `private_note` hanya dikirim kepada profesional.
+Kehadiran dan status terminal diserialkan dengan row lock sesi. Join Meeting dan Hadir My Care mengisi `patient_attendance`. Sesudah jadwal dan durasi lewat, sesi dengan konfirmasi pasien menjadi `completed` secara atomik dengan ledger pendapatan. Sesi lainnya menjadi `no_show` dan memakai kuota. Ketidakhadiran profesional yang diisi dalam jendela check-in menjadi `cancelled_by_professional` dan memicu kredit idempoten. Reschedule membersihkan konfirmasi lama. Kolom `private_note` hanya dikirim kepada profesional.
 
 ### 3.23 professional_pricing (migrasi 012)
 

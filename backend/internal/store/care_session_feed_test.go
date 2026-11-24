@@ -55,13 +55,12 @@ func TestCareSessionFeedKeepsScheduleAndBoundsHistory(t *testing.T) {
 				}
 			})
 			for _, scope := range []string{"past", "all"} {
-				t.Run(scope+" keeps actionable before bounded history", func(t *testing.T) {
+				t.Run(scope+" finalizes ended sessions and bounds history", func(t *testing.T) {
 					items, err := st.ListCareSessionFeed(ctx, actor.id, actor.role, scope, actor.patient, 100)
 					if err != nil {
 						t.Fatal(err)
 					}
 					scheduled, terminal := 0, 0
-					foundOld := false
 					for _, item := range items {
 						if item.PatientID != patientID {
 							t.Fatal("feed included another patient's session")
@@ -74,14 +73,17 @@ func TestCareSessionFeedKeepsScheduleAndBoundsHistory(t *testing.T) {
 						} else {
 							terminal++
 						}
-						foundOld = foundOld || item.ID == oldScheduledID
 					}
-					wantScheduled := 1
+					wantScheduled := 0
 					if scope == "all" {
-						wantScheduled = 102
+						wantScheduled = 101
 					}
-					if !foundOld || scheduled != wantScheduled || terminal != 100 {
-						t.Fatalf("%s: old=%t scheduled=%d terminal=%d, want old=true scheduled=%d terminal=100", scope, foundOld, scheduled, terminal, wantScheduled)
+					if scheduled != wantScheduled || terminal != 100 {
+						t.Fatalf("%s: scheduled=%d terminal=%d, want scheduled=%d terminal=100", scope, scheduled, terminal, wantScheduled)
+					}
+					old, err := st.GetCareSession(ctx, oldScheduledID)
+					if err != nil || old.Status != "no_show" || old.PatientAttendance != "absent" {
+						t.Fatalf("ended session not finalized: %+v %v", old, err)
 					}
 				})
 			}

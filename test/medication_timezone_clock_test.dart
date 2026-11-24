@@ -440,7 +440,7 @@ void main() {
 
     await tester.tap(find.text('Take Now'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Taken'));
+    await tester.tap(find.text('Sudah diminum'));
     await tester.pumpAndSettle();
 
     expect(syncService.queue, hasLength(1),

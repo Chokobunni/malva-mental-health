@@ -432,7 +432,7 @@ class _DoctorCard extends StatelessWidget {
                 child: Icon(Icons.chevron_right_rounded,
                     size: 19, color: Color(0xff728296))),
           ]),
-          const Divider(height: 22),
+          const Divider(height: 22, color: Color(0xFFF0EDF2)),
           Row(children: [
             const Icon(Icons.add_box_outlined,
                 size: 20, color: MalvaColors.plum),
@@ -457,7 +457,7 @@ class _DoctorCard extends StatelessWidget {
                       hospitalLng: doctor.hospitalLng),
                   style: Theme.of(context).textTheme.bodySmall),
             ),
-          const Divider(height: 22),
+          const Divider(height: 22, color: Color(0xFFF0EDF2)),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
                 child: _prices(const Color(0xfff6f7fa), [

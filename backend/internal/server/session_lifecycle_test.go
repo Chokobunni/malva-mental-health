@@ -105,7 +105,7 @@ func TestManualCompletionAfterEndAndReplay(t *testing.T) {
 	professional := createIdentityTestUser(t, db, st, "professional", nil)
 	id := insertManualLinkSession(t, db, patient.ID, professional.ID, "chat", "scheduled", "")
 	t.Cleanup(func() { _, _ = db.ExecContext(context.Background(), `DELETE FROM care_sessions WHERE id=$1`, id) })
-	if _, err := db.ExecContext(context.Background(), `UPDATE care_sessions SET scheduled_at=$2 WHERE id=$1`, id, clock.Now().Add(-time.Hour)); err != nil {
+	if _, err := db.ExecContext(context.Background(), `UPDATE care_sessions SET scheduled_at=$2, patient_attendance='attended' WHERE id=$1`, id, clock.Now().Add(-time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	srv := newOnboardingTestServer(db)
@@ -122,8 +122,63 @@ func TestManualCompletionAfterEndAndReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if session.Status != "completed" || session.PatientAttendance != "" || session.ProfessionalAttendance != "" {
+	if session.Status != "completed" || session.PatientAttendance != "attended" || session.ProfessionalAttendance != "" {
 		t.Fatalf("completion fabricated attendance: %+v", session)
+	}
+}
+
+func TestPatientAttendanceDeadlineAndHistory(t *testing.T) {
+	db, st := openOnboardingTestStore(t)
+	ctx := context.Background()
+	patient := createIdentityTestUser(t, db, st, "patient", nil)
+	professional := createIdentityTestUser(t, db, st, "professional", nil)
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(ctx, `DELETE FROM care_sessions WHERE patient_id=$1`, patient.ID)
+	})
+	create := func(offset time.Duration) string {
+		id := insertManualLinkSession(t, db, patient.ID, professional.ID, "video", "scheduled", "https://meet.google.com/abc-defg-hij")
+		if _, err := db.ExecContext(ctx, `UPDATE care_sessions SET scheduled_at=$2,duration_minutes=60 WHERE id=$1`, id, clock.Now().Add(offset)); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	tooEarly := create(11 * time.Minute)
+	if _, err := st.MarkCareSessionAttendance(ctx, tooEarly, "patient", patient.ID, "attended"); err == nil {
+		t.Fatal("patient check-in accepted eleven minutes early")
+	}
+	confirmed := create(9 * time.Minute)
+	if _, err := st.MarkCareSessionAttendance(ctx, confirmed, "patient", patient.ID, "attended"); err != nil {
+		t.Fatalf("patient check-in rejected during early join: %v", err)
+	}
+	missed := create(-70 * time.Minute)
+	if _, err := db.ExecContext(ctx, `UPDATE care_sessions SET scheduled_at=$2 WHERE id=$1`, confirmed, clock.Now().Add(-65*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.MarkCareSessionAttendance(ctx, missed, "patient", patient.ID, "attended"); err == nil {
+		t.Fatal("patient check-in accepted after end")
+	}
+	srv := newOnboardingTestServer(db)
+	w := httptest.NewRecorder()
+	srv.listCareSessions(w, httptest.NewRequest(http.MethodGet, "/v1/care-sessions?scope=past", nil),
+		auth.Claims{Role: "patient", Subject: patient.ID})
+	var history struct {
+		Sessions []store.CareSession `json:"sessions"`
+	}
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &history) != nil {
+		t.Fatalf("session history: %d %s", w.Code, w.Body.String())
+	}
+	got := make(map[string]store.CareSession)
+	for _, session := range history.Sessions {
+		got[session.ID] = session
+	}
+	if got[confirmed].Status != "completed" || got[confirmed].PatientAttendance != "attended" {
+		t.Fatalf("confirmed session: %+v", got[confirmed])
+	}
+	if got[missed].Status != "no_show" || got[missed].PatientAttendance != "absent" {
+		t.Fatalf("missed session: %+v", got[missed])
+	}
+	if _, err := st.MarkCareSessionAttendance(ctx, confirmed, "patient", patient.ID, "attended"); err != nil {
+		t.Fatalf("same attendance must remain idempotent: %v", err)
 	}
 }
 
@@ -156,7 +211,7 @@ func TestChatAccessChoosesActiveSessionBeforeEndedOrFuture(t *testing.T) {
 	}
 }
 
-func TestSessionCompletionAndAbsenceSerialize(t *testing.T) {
+func TestSessionClosureAndLateAttendanceSerialize(t *testing.T) {
 	db, st := openOnboardingTestStore(t)
 	patient := createIdentityTestUser(t, db, st, "patient", nil)
 	professional := createIdentityTestUser(t, db, st, "professional", nil)
@@ -169,12 +224,12 @@ func TestSessionCompletionAndAbsenceSerialize(t *testing.T) {
 	results := make(chan error, 2)
 	go func() {
 		<-start
-		_, err := st.UpdateCareSessionStatus(context.Background(), id, "completed", "", professional.ID)
+		_, err := st.UpdateCareSessionStatus(context.Background(), id, "no_show", "", professional.ID)
 		results <- err
 	}()
 	go func() {
 		<-start
-		_, err := st.MarkCareSessionAttendance(context.Background(), id, "patient", patient.ID, "absent")
+		_, err := st.MarkCareSessionAttendance(context.Background(), id, "patient", patient.ID, "attended")
 		results <- err
 	}()
 	close(start)
@@ -196,11 +251,8 @@ func TestSessionCompletionAndAbsenceSerialize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if session.Status != "completed" && session.Status != "no_show" {
+	if session.Status != "no_show" {
 		t.Fatalf("concurrent terminal updates left status %q", session.Status)
-	}
-	if session.Status == "completed" && session.PatientAttendance != "" {
-		t.Fatal("losing absence changed a completed session")
 	}
 	if session.Status == "no_show" && session.PatientAttendance != "absent" {
 		t.Fatal("winning absence did not preserve participant attendance")

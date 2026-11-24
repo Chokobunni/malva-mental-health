@@ -423,6 +423,7 @@ func (s *Server) updateAdminDoctor(w http.ResponseWriter, r *http.Request, claim
 		return
 	}
 	merged := existing
+	merged.PracticeLocations = nil
 	if strings.TrimSpace(req.Credentials.Specialization) != "" {
 		merged.Specialization = strings.TrimSpace(req.Credentials.Specialization)
 	}

@@ -19,12 +19,22 @@ class EPrescriptionFormScreen extends ConsumerStatefulWidget {
       this.preselectedPatientId = '',
       this.preselectedPatientName = '',
       this.onCreated,
+      this.initialMedication,
+      this.prescription,
+      this.itemIndex = 0,
+      this.onSaveMedication,
+      this.onDelete,
       this.personal = false});
   final AuthSession? session;
   final MalvaApiClient? apiClient;
   final List<BackendPatientProfessionalLink> links;
   final String preselectedPatientId, preselectedPatientName;
   final VoidCallback? onCreated;
+  final Medication? initialMedication;
+  final BackendEPrescription? prescription;
+  final int itemIndex;
+  final Future<void> Function(Medication)? onSaveMedication;
+  final VoidCallback? onDelete;
   final bool personal;
   @override
   ConsumerState<EPrescriptionFormScreen> createState() =>
@@ -56,6 +66,29 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
   DateTime _start = wibNow();
   final _times = <TimeOfDay>[const TimeOfDay(hour: 8, minute: 0)];
   final _weekdays = <int>{1, 2, 3, 4, 5, 6, 7};
+  static const _doseUnits = ['mg', 'mcg', 'g', 'ml', 'IU'];
+  bool get _editing =>
+      widget.initialMedication != null || widget.prescription != null;
+  BackendEPrescriptionItem? get _item =>
+      widget.prescription?.items[widget.itemIndex];
+  int get _stockOffset {
+    final item = _item;
+    // Prescription updates apply the supply difference to the patient's stock.
+    return item == null
+        ? 0
+        : item.currentStock - (item.remainingStock ?? item.currentStock);
+  }
+
+  MedicationSchedule? get _initialSchedule =>
+      widget.initialMedication?.schedule ?? _item?.schedule;
+  String get _meal =>
+      _initialSchedule?.relationToMeal ??
+      widget.initialMedication?.reminders.firstOrNull?.relationToMeal ??
+      '';
+  String? _initialDose;
+  String? _initialUnit;
+  bool _routineChanged = false;
+  bool _timingChanged = false;
   String get _stockUnit => switch (_form) {
         'Sirup' => 'ml',
         'Injeksi' => 'ampul',
@@ -85,6 +118,66 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
         widget.session, ref.read(authStateProvider).session);
     if (widget.preselectedPatientId.isNotEmpty)
       _patientId = widget.preselectedPatientId;
+    if (!_editing) return;
+    final medication = widget.initialMedication;
+    final item = _item;
+    final dosage = medication?.dosage ?? item!.dosage;
+    final parts =
+        RegExp(r'^([0-9]+(?:[.,][0-9]+)?)\s*(.*)$').firstMatch(dosage.trim());
+    _name.text = medication?.name ?? item!.name;
+    _dose.text = _initialDose = parts?.group(1) ?? dosage;
+    final suffix = parts?.group(2);
+    _unit = _initialUnit = item != null && item.unit.isNotEmpty
+        ? item.unit
+        : suffix != null && suffix.isNotEmpty
+            ? suffix
+            : 'mg';
+    _form = medication?.form ?? item!.form;
+    _stock =
+        medication?.currentStock ?? (item!.remainingStock ?? item.currentStock);
+    _threshold = medication?.alertBelow ?? item!.alertBelow;
+    final schedule = _initialSchedule;
+    final reminders = schedule?.reminders(_meal) ?? medication?.reminders;
+    _times
+      ..clear()
+      ..addAll(reminders?.map((r) => r.time) ?? const []);
+    if (schedule != null) {
+      _start = toWib(schedule.startAt);
+      _weekdays
+        ..clear()
+        ..addAll(schedule.weekdays);
+      _units = schedule.unitsPerDose;
+      _refill = schedule.refillEnabled;
+      _notes.text = schedule.instructions;
+      if (schedule.intervalHours > 0) {
+        _interval = schedule.intervalHours;
+      } else if (schedule.intervalDays > 0) {
+        _interval = schedule.intervalDays;
+        _intervalUnit = 'hari';
+      } else if (schedule.intervalMonths > 0) {
+        _interval = schedule.intervalMonths;
+        _intervalUnit = 'bulan';
+      }
+    }
+    _mode = switch (schedule) {
+      _ when _times.isEmpty => _Routine.flexible,
+      MedicationSchedule(
+        :final intervalHours,
+        :final intervalDays,
+        :final intervalMonths
+      )
+          when intervalHours > 0 || intervalDays > 0 || intervalMonths > 0 =>
+        _Routine.periodic,
+      _ when _weekdays.length < 7 || item?.frequency == 'Hari tertentu' =>
+        _Routine.weekdays,
+      _
+          when _times.length > 3 ||
+              (item?.frequency.contains(' kali sehari') ?? false) =>
+        _Routine.precision,
+      _ => _Routine.daily,
+    };
+    if (_mode == _Routine.daily) _dailyCount = _times.length;
+    if (_mode == _Routine.precision) _precisionCount = _times.length;
   }
 
   @override
@@ -126,6 +219,10 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
   }
 
   void _select(_Routine mode, [int? count]) => setState(() {
+        if (_editing &&
+            mode == _mode &&
+            (count == null || count == _dailyCount)) return;
+        _routineChanged = true;
         _mode = mode;
         _error = null;
         if (count != null) _dailyCount = count;
@@ -152,6 +249,7 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
               child: Text('Sesi akun berubah. Buka kembali halaman resep.')));
     }
     final clinical = _step < 2;
+    final purpleHeader = clinical || _editing;
     return Theme(
         data: Theme.of(context).copyWith(
           textTheme: Theme.of(context)
@@ -180,6 +278,10 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
             appBar: AppBar(
               title: Text(
                   switch (_step) {
+                    0 when _editing => 'Edit Obat',
+                    1 when _editing => 'Edit Rutinitas',
+                    2 when _editing => 'Edit Pengingat Obat',
+                    3 when _editing => 'Edit Pengingat Stok',
                     0 => widget.personal ? 'Tambah Obat' : 'Detail Obat',
                     1 => 'Atur Rutinitas',
                     2 when widget.personal => 'Pengingat Obat',
@@ -189,19 +291,19 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                   style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
-                      color: clinical ? Colors.white : _ink)),
+                      color: purpleHeader ? Colors.white : _ink)),
               centerTitle: true,
               toolbarHeight: _step == 0
                   ? 88
                   : _step == 1
                       ? 66
                       : 60,
-              backgroundColor: clinical ? _purple : Colors.white,
-              foregroundColor: clinical ? Colors.white : _muted,
+              backgroundColor: purpleHeader ? _purple : Colors.white,
+              foregroundColor: purpleHeader ? Colors.white : _muted,
               surfaceTintColor: Colors.transparent,
-              elevation: clinical ? 3 : 0,
-              shadowColor: clinical ? Colors.black26 : Colors.transparent,
-              shape: clinical
+              elevation: purpleHeader ? 3 : 0,
+              shadowColor: purpleHeader ? Colors.black26 : Colors.transparent,
+              shape: purpleHeader
                   ? RoundedRectangleBorder(
                       borderRadius: BorderRadius.vertical(
                           bottom: Radius.circular(_step == 0 ? 38 : 12)))
@@ -210,6 +312,16 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                   tooltip: 'Kembali',
                   onPressed: _saving ? null : _back,
                   icon: const Icon(Icons.arrow_back_rounded, size: 24)),
+              actions: [
+                if (_step == 0 && widget.onDelete != null)
+                  IconButton(
+                      tooltip: 'Hapus obat',
+                      onPressed: () {
+                        Navigator.pop(context);
+                        widget.onDelete!();
+                      },
+                      icon: const Icon(Icons.delete_outline_rounded)),
+              ],
             ),
             body: SafeArea(
                 bottom: false,
@@ -295,6 +407,10 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                                                   Flexible(
                                                       child: Text(
                                                           switch (_step) {
+                                                            3 when _editing =>
+                                                              widget.personal
+                                                                  ? 'Simpan perubahan'
+                                                                  : 'Simpan dan Kirim Perubahan',
                                                             0
                                                                 when widget
                                                                     .personal =>
@@ -386,10 +502,12 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
               ? 'Pasien terpilih'
               : widget.preselectedPatientName);
     return [
-      _heading(widget.personal
-          ? 'Obat apa yang ingin\nkamu catat?'
-          : 'Obat apa yang ingin\nkamu resepkan?'),
-      if (!widget.personal) ...[
+      _heading(_editing
+          ? 'Detail Obat'
+          : widget.personal
+              ? 'Obat apa yang ingin\nkamu catat?'
+              : 'Obat apa yang ingin\nkamu resepkan?'),
+      if (!widget.personal && !_editing) ...[
         _label('Pasien'),
         DropdownButtonFormField<String>(
             initialValue: _patientId,
@@ -496,7 +614,7 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                 icon: const Icon(Icons.arrow_drop_down_rounded,
                     color: Color(0xff9ca5b2)),
                 items: [
-                  for (final u in ['mg', 'mcg', 'g', 'ml', 'IU'])
+                  for (final u in {..._doseUnits, _unit})
                     DropdownMenuItem(
                         value: u,
                         child: Text(u.toUpperCase(),
@@ -918,13 +1036,18 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
       ];
   Future<void> _pickDate() async {
     final now = wibNow();
+    final first = _start.isBefore(now) ? _start : now;
+    final lastYear = _start.year > now.year + 5 ? _start.year : now.year + 5;
     final date = await showDatePicker(
         context: context,
         initialDate: _start,
-        firstDate: wibFromParts(now.year, now.month, now.day),
-        lastDate: wibFromParts(now.year + 5, 12, 31));
+        firstDate: wibFromParts(first.year, first.month, first.day),
+        lastDate: wibFromParts(lastYear, 12, 31));
     if (date != null && mounted)
-      setState(() => _start = wibFromParts(date.year, date.month, date.day));
+      setState(() {
+        _start = wibFromParts(date.year, date.month, date.day);
+        _timingChanged = true;
+      });
   }
 
   Future<void> _pickTime(int index) async {
@@ -934,13 +1057,21 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
         builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
             child: child!));
-    if (time != null && mounted) setState(() => _times[index] = time);
+    if (time != null && mounted)
+      setState(() {
+        _times[index] = time;
+        _timingChanged = true;
+      });
   }
 
   Future<void> _pickDose() async {
     final n = await _pickNumber('Dosis per konsumsi ($_stockUnit)', _units,
         max: 1000, help: 'Berlaku untuk setiap waktu minum obat ini.');
-    if (n != null && mounted) setState(() => _units = n);
+    if (n != null && mounted)
+      setState(() {
+        _units = n;
+        _timingChanged = true;
+      });
   }
 
   List<Widget> _timing() => [
@@ -1070,7 +1201,8 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
           _setting(widget.personal ? 'Jumlah yang tersisa' : 'Jumlah',
               '$_stock $_stockUnit', () async {
             final n = await _pickNumber('Stok saat ini ($_stockUnit)', _stock,
-                min: 0, max: 1000000000);
+                min: _stockOffset < 0 ? -_stockOffset : 0,
+                max: _stockOffset > 0 ? 1000000000 - _stockOffset : 1000000000);
             if (n != null && mounted) setState(() => _stock = n);
           }, key: const Key('rx-stock'))
         ]),
@@ -1143,14 +1275,15 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
   void _next() {
     if (_step == 0) {
       final dose = double.tryParse(_dose.text.replaceAll(',', '.'));
-      final error =
-          !widget.personal && (_patientId == null || _patientId!.isEmpty)
-              ? 'Pilih pasien terlebih dahulu.'
-              : _name.text.trim().isEmpty
-                  ? 'Nama obat tidak boleh kosong.'
-                  : dose == null || !dose.isFinite || dose <= 0
-                      ? 'Dosis harus lebih dari 0.'
-                      : null;
+      final error = !widget.personal &&
+              !_editing &&
+              (_patientId == null || _patientId!.isEmpty)
+          ? 'Pilih pasien terlebih dahulu.'
+          : _name.text.trim().isEmpty
+              ? 'Nama obat tidak boleh kosong.'
+              : !_doseUnchanged && (dose == null || !dose.isFinite || dose <= 0)
+                  ? 'Dosis harus lebih dari 0.'
+                  : null;
       if (error != null) {
         setState(() => _error = error);
         return;
@@ -1177,8 +1310,11 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
     _submit();
   }
 
+  bool get _doseUnchanged =>
+      _dose.text == _initialDose && _unit == _initialUnit;
+
   Future<void> _submit() async {
-    if (!widget.personal && _stock < 1) {
+    if (!widget.personal && !_editing && _stock < 1) {
       setState(() => _error = 'Stok yang diberikan harus lebih dari 0.');
       return;
     }
@@ -1186,15 +1322,21 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
         ? <String>[]
         : (_times.map(_timeLabel).toList()..sort());
     final first = times.isEmpty ? null : times.first.split(':');
+    final originalSchedule = _initialSchedule;
+    final unchangedTiming = originalSchedule != null &&
+        _start == toWib(originalSchedule.startAt) &&
+        times.join(',') == originalSchedule.times.join(',');
     final schedule = MedicationSchedule(
       times: times,
       weekdays: _weekdays.toList()..sort(),
-      startAt: wibFromParts(
-          _start.year,
-          _start.month,
-          _start.day,
-          first == null ? 0 : int.parse(first[0]),
-          first == null ? 0 : int.parse(first[1])),
+      startAt: unchangedTiming
+          ? originalSchedule.startAt
+          : wibFromParts(
+              _start.year,
+              _start.month,
+              _start.day,
+              first == null ? 0 : int.parse(first[0]),
+              first == null ? 0 : int.parse(first[1])),
       intervalHours:
           _mode == _Routine.periodic && _intervalUnit == 'jam' ? _interval : 0,
       intervalDays:
@@ -1204,15 +1346,59 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
           : 0,
       unitsPerDose: _units,
       refillEnabled: _refill,
+      relationToMeal: _meal,
       instructions: _notes.text.trim(),
+      additional: originalSchedule?.additional ?? const {},
     );
+    final initialMedication = widget.initialMedication;
+    final item = _item;
+    final dosage = _doseUnchanged
+        ? initialMedication?.dosage ?? item!.dosage
+        : '${_dose.text.trim()} $_unit';
+    if (initialMedication != null) {
+      final keepLegacy = originalSchedule == null &&
+          !_routineChanged &&
+          !_timingChanged &&
+          _refill &&
+          _notes.text.trim().isEmpty;
+      final medication = initialMedication.copyWith(
+        name: _name.text.trim(),
+        dosage: dosage,
+        form: _form,
+        reminders: keepLegacy
+            ? initialMedication.reminders
+            : schedule.reminders(_meal),
+        currentStock: _stock,
+        alertBelow: _threshold,
+        schedule: keepLegacy ? null : schedule,
+      );
+      final save = widget.onSaveMedication;
+      if (save == null) {
+        Navigator.pop(context, medication);
+        return;
+      }
+      setState(() {
+        _saving = true;
+        _error = null;
+      });
+      try {
+        await save(medication);
+        if (mounted && _session != null) Navigator.pop(context, true);
+      } on Object catch (e) {
+        if (mounted && _session != null)
+          setState(() => _error = friendlyErrorMessage(e));
+      } finally {
+        if (mounted) setState(() => _saving = false);
+      }
+      return;
+    }
     if (widget.personal) {
       Navigator.pop(
           context,
           Medication(
             id: 'med_${wibNow().microsecondsSinceEpoch}',
             name: _name.text.trim(),
-            dosage: '${_dose.text.trim()} $_unit',
+            dosage: dosage,
             form: _form,
             reminders: schedule.reminders(''),
             currentStock: _stock,
@@ -1233,24 +1419,47 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
       _error = null;
     });
     try {
+      final rx = widget.prescription;
+      final legacy = item != null &&
+          item.schedule == null &&
+          !_routineChanged &&
+          _refill &&
+          _notes.text.trim().isEmpty;
+      final updated = BackendEPrescriptionItem(
+          id: item?.id ?? '',
+          medicationId: item?.medicationId,
+          name: _name.text.trim(),
+          dosage: dosage,
+          form: _form,
+          unit: legacy && _doseUnchanged ? item.unit : _unit,
+          frequency: legacy ? item.frequency : _frequency,
+          days: item?.days ?? 30,
+          unitsPerDay: legacy
+              ? item.unitsPerDay
+              : _units * (times.isEmpty ? 1 : times.length),
+          currentStock: _stock + _stockOffset,
+          alertBelow: _threshold,
+          schedule: legacy ? null : schedule);
+      if (rx != null) {
+        await api.updateEPrescription(
+            accessToken: token,
+            prescriptionId: rx.id,
+            patientId: rx.patientId,
+            status: rx.status == 'draft' ? 'draft' : 'issued',
+            notes: rx.notes,
+            instructions: rx.instructions,
+            diagnosis: rx.diagnosis,
+            items: [...rx.items]..[widget.itemIndex] = updated);
+        if (mounted && _session != null) Navigator.pop(context, true);
+        return;
+      }
       await api.createEPrescription(
           accessToken: token,
           patientId: _patientId!,
           status: 'issued',
           instructions: _notes.text.trim(),
           notes: _notes.text.trim(),
-          items: [
-            BackendEPrescriptionItem(
-                name: _name.text.trim(),
-                dosage: '${_dose.text.trim()} $_unit',
-                form: _form,
-                unit: _unit,
-                frequency: _frequency,
-                unitsPerDay: _units * (times.isEmpty ? 1 : times.length),
-                currentStock: _stock,
-                alertBelow: _threshold,
-                schedule: schedule)
-          ]);
+          items: [updated]);
       if (!mounted || _session == null) return;
       widget.onCreated?.call();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

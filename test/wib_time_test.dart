@@ -21,8 +21,7 @@ import 'package:malva_mental_health/src/time/wib.dart';
 // Aturan bisnis: bila pasien membeli paket kedua dari profesional yang sama
 // dan paket lama masih aktif, kuota digabung dan MyCare menampilkan SATU
 // kartu gabungan (total/terpakai/sisa dijumlahkan). Regresi untuk kasus
-// 4 + 4 pertemuan dengan 1 dipakai -> kartu `7/8 sesi tersisa` +
-// catatan `Digabung dari 2 paket`.
+// 4 + 4 pertemuan dengan 1 dipakai -> kartu `7/8 sesi tersisa`.
 // ============================================================
 
 const _session = AuthSession(
@@ -142,17 +141,15 @@ void main() {
     }
 
     expect(find.byTooltip('Paket saya'), findsNothing);
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Riwayat'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
     await tester.pumpAndSettle();
     expect(find.text('Dr. Sinta'), findsOneWidget);
     // UI merender SATU Text berisi sisa sesi + tanggal berlaku
     // (mis. '7/8 sesi tersisa • s/d 31/10/2026'), jadi pakai textContaining.
     expect(find.textContaining('7/8 sesi tersisa'), findsOneWidget);
-    expect(find.text('Digabung dari 2 paket'), findsOneWidget);
   });
 
-  testWidgets('satu paket aktif tampil normal tanpa label gabungan',
-      (tester) async {
+  testWidgets('satu paket aktif menampilkan kuotanya sendiri', (tester) async {
     tester.view.physicalSize = const Size(1200, 4000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -172,12 +169,11 @@ void main() {
     }
 
     expect(find.byTooltip('Paket saya'), findsNothing);
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Riwayat'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
     await tester.pumpAndSettle();
     expect(find.text('Dr. Sinta'), findsOneWidget);
     // Idem: satu Text berisi sisa sesi + tanggal berlaku.
     expect(find.textContaining('3/4 sesi tersisa'), findsOneWidget);
-    expect(find.textContaining('Digabung'), findsNothing);
   });
 
   testWidgets('paket aktif yang sudah kedaluwarsa TIDAK ikut digabung ke kartu',
@@ -208,15 +204,12 @@ void main() {
     }
 
     expect(find.byTooltip('Paket saya'), findsNothing);
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Riwayat'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
     await tester.pumpAndSettle();
-    // Kuota sah hanya dari paket yang masih berlaku: tidak ada kartu 7/8 dan
-    // tidak ada label gabungan.
+    // Kuota sah hanya dari paket yang masih berlaku.
     expect(find.textContaining('7/8 sesi tersisa'), findsNothing);
-    expect(find.textContaining('Digabung dari 2 paket'), findsNothing);
     expect(find.textContaining('4/4 sesi tersisa'), findsOneWidget);
-    // Paket kedaluwarsa tetap tampil sebagai kartu terpisah (riwayat pasien).
-    expect(find.textContaining('3/4 sesi tersisa'), findsOneWidget);
+    expect(find.textContaining('3/4 sesi tersisa'), findsNothing);
   });
 
   test('toWib mengubah ...Z menjadi WIB tanpa bergantung zona perangkat', () {

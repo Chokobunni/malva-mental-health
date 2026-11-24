@@ -11,6 +11,7 @@ import '../widgets/care_reference_widgets.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/professional_avatar.dart';
+import '../widgets/professional_availability_summary.dart';
 import 'booking/booking_owner.dart';
 import 'care_package_screen.dart';
 
@@ -61,12 +62,9 @@ class _SchedulePackageSessionsScreenState
         userId: _package.professionalId,
       );
       if (mounted && _token != null) {
-        final explicit = profile.schedules
-            .where((s) => s.serviceCategory == 'package')
-            .toList();
-        final schedules = explicit.isNotEmpty
-            ? explicit
-            : profile.schedules.where((s) => s.serviceCategory == 'shared');
+        final schedules = professionalServiceSchedules(
+            profile.schedules, 'package',
+            usePrimarySchedule: profile.usePrimarySchedule);
         setState(
             () => _practiceHours = schedules.where((s) => s.isActive).toList());
       }

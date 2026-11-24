@@ -478,42 +478,34 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
 
   Future<void> _openMedicationForm(BuildContext context,
       [Medication? medication]) async {
-    if (medication == null) {
-      final session = _session;
-      final value = await Navigator.of(context).push<Medication>(
-        MaterialPageRoute(
-          builder: (_) =>
-              EPrescriptionFormScreen(personal: true, session: session),
+    final session = _session;
+    final value = await Navigator.of(context).push<Medication>(
+      MaterialPageRoute(
+        builder: (_) => EPrescriptionFormScreen(
+          personal: true,
+          session: session,
+          initialMedication: medication,
+          onDelete: medication == null
+              ? null
+              : () {
+                  if (mounted &&
+                      context.mounted &&
+                      !_historyAccountInvalid &&
+                      _owner(session) == _owner(_session)) {
+                    _deleteMedication(context, medication);
+                  }
+                },
         ),
-      );
-      if (!mounted ||
-          !context.mounted ||
-          value == null ||
-          _historyAccountInvalid ||
-          _owner(session) != _owner(_session)) return;
-      ref.read(malvaStoreProvider.notifier).upsertMedication(value);
-      unawaited(_reminderService?.scheduleMedicationReminder(value));
-      unawaited(_syncMedication(context, value, isNew: true));
-      return;
-    }
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => MedicationFormSheet(
-        initial: medication,
-        onSave: (value) {
-          ref.read(malvaStoreProvider.notifier).upsertMedication(value);
-          unawaited(_syncMedication(this.context, value, isNew: false));
-          unawaited(_reminderService?.scheduleMedicationReminder(value));
-          Navigator.pop(context);
-        },
-        onDelete: () {
-          Navigator.pop(context);
-          _deleteMedication(this.context, medication);
-        },
       ),
     );
+    if (!mounted ||
+        !context.mounted ||
+        value == null ||
+        _historyAccountInvalid ||
+        _owner(session) != _owner(_session)) return;
+    ref.read(malvaStoreProvider.notifier).upsertMedication(value);
+    unawaited(_reminderService?.scheduleMedicationReminder(value));
+    unawaited(_syncMedication(context, value, isNew: medication == null));
   }
 
   void _deleteMedication(BuildContext context, Medication medication) {
@@ -549,62 +541,111 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
   void _takeMedication(BuildContext context, Medication medication) {
     if (_pendingLogs.contains(medication.id) ||
         !_looksLikeServerId(medication.id)) return;
-    showDialog<void>(
+    showModalBottomSheet<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Log ${medication.name}'),
-        scrollable: true,
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.check_circle_rounded,
-                  color: MalvaColors.mint),
-              title: const Text('Taken'),
-              subtitle: const Text('Obat sudah diminum'),
-              onTap: () {
-                Navigator.pop(dialogContext);
-                unawaited(_logMedication(context, medication, 'taken'));
-              },
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.skip_next_rounded, color: MalvaColors.amber),
-              title: const Text('Skipped'),
-              subtitle: const Text('Dilewati dengan sengaja'),
-              onTap: () {
-                Navigator.pop(dialogContext);
-                unawaited(_logMedication(context, medication, 'skipped'));
-              },
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.cancel_rounded, color: MalvaColors.danger),
-              title: const Text('Missed'),
-              subtitle: const Text('Terlewat tanpa sengaja'),
-              onTap: () {
-                Navigator.pop(dialogContext);
-                unawaited(_logMedication(context, medication, 'missed'));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.hourglass_bottom_rounded,
-                  color: MalvaColors.orchid),
-              title: const Text('Partial'),
-              subtitle: const Text('Sebagian diminum'),
-              onTap: () {
-                Navigator.pop(dialogContext);
-                unawaited(_logMedication(context, medication, 'partial'));
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Batal'),
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      barrierColor: Colors.black54,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheet) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(17, 0, 17, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 3, top: 7),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Log minum obat',
+                              style: TextStyle(
+                                  fontSize: 25, fontWeight: FontWeight.w900)),
+                          Text(medication.name,
+                              style: const TextStyle(
+                                  fontSize: 20,
+                                  color: MalvaColors.seed,
+                                  fontWeight: FontWeight.w800)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    tooltip: 'Tutup',
+                    onPressed: () => Navigator.pop(sheet),
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFFF1E5F7),
+                      foregroundColor: MalvaColors.seed,
+                    ),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              for (final (status, label, description, icon, color, tint)
+                  in const [
+                (
+                  'taken',
+                  'Sudah diminum',
+                  'Seluruh dosis diminum',
+                  Icons.check_circle_rounded,
+                  MalvaColors.mint,
+                  Color(0xFFEAF9F5)
+                ),
+                (
+                  'skipped',
+                  'Dilewati',
+                  'Sengaja tidak diminum',
+                  Icons.skip_next_rounded,
+                  MalvaColors.amber,
+                  Color(0xFFFFF3E1)
+                ),
+                (
+                  'missed',
+                  'Terlewat',
+                  'Terlewat tanpa sengaja',
+                  Icons.access_time_rounded,
+                  MalvaColors.danger,
+                  Color(0xFFFCE6E6)
+                ),
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    shape: RoundedRectangleBorder(
+                      side: const BorderSide(color: Color(0xFFC5B1CD)),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    leading: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: tint,
+                      foregroundColor: color,
+                      child: Icon(icon, size: 29),
+                    ),
+                    title: Text(label,
+                        style: const TextStyle(fontWeight: FontWeight.w900)),
+                    subtitle: Text(description),
+                    onTap: () {
+                      Navigator.pop(sheet);
+                      unawaited(_logMedication(context, medication, status));
+                    },
+                  ),
+                ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

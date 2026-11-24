@@ -156,6 +156,7 @@ class _WebProfessionalCatalogScreenState
                 credential: profile.credential,
                 packages: profile.packages,
                 schedules: profile.schedules,
+                usePrimarySchedule: profile.usePrimarySchedule,
                 pricing: profile.pricing,
                 reviews: reviews,
               );
@@ -689,6 +690,28 @@ class _WebProfessionalCatalogScreenState
             credential?.bio ?? doctor.bio,
             style: const TextStyle(fontSize: 12.5, height: 1.6),
           ),
+        ],
+        if (credential != null &&
+            credential.effectivePracticeLocations.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 12),
+          const Text('Tempat praktik',
+              style: TextStyle(fontWeight: FontWeight.w800)),
+          for (final location in credential.effectivePracticeLocations) ...[
+            const SizedBox(height: 8),
+            if (location.name.isNotEmpty) Text(location.name),
+            if (location.address.isNotEmpty) Text(location.address),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: WebStatusPill(
+                label: location.acceptsBpjs
+                    ? 'Menerima BPJS'
+                    : 'Tidak menerima BPJS',
+                color: location.acceptsBpjs
+                    ? MalvaColors.mint
+                    : const Color(0xff647388),
+              ),
+            ),
+          ],
         ],
         if (education.isNotEmpty) ...<Widget>[
           const SizedBox(height: 12),

@@ -486,21 +486,22 @@ func (s *Server) listBlastStatus(w http.ResponseWriter, r *http.Request, claims 
 // ============================================================
 
 type uploadCredentialsRequest struct {
-	STRNumber       string        `json:"str_number"`
-	SIPNumber       string        `json:"sip_number"`
-	SIPPNumber      string        `json:"sipp_number"`
-	Specialization  string        `json:"specialization"`
-	SubSpecialties  []string      `json:"sub_specialties"`
-	HospitalLat     *float64      `json:"hospital_lat"`
-	HospitalLng     *float64      `json:"hospital_lng"`
-	HospitalName    string        `json:"hospital_name"`
-	AddressDetails  string        `json:"address_details"`
-	IsBPJSSupported bool          `json:"is_bpjs_supported"`
-	PhotoIntroURL   string        `json:"photo_intro_url"`
-	VideoIntroURL   string        `json:"video_intro_url"`
-	Bio             string        `json:"bio"`
-	Education       []interface{} `json:"education"`
-	DocumentURL     string        `json:"document_url"`
+	STRNumber         string                   `json:"str_number"`
+	SIPNumber         string                   `json:"sip_number"`
+	SIPPNumber        string                   `json:"sipp_number"`
+	Specialization    string                   `json:"specialization"`
+	SubSpecialties    []string                 `json:"sub_specialties"`
+	HospitalLat       *float64                 `json:"hospital_lat"`
+	HospitalLng       *float64                 `json:"hospital_lng"`
+	HospitalName      string                   `json:"hospital_name"`
+	AddressDetails    string                   `json:"address_details"`
+	IsBPJSSupported   bool                     `json:"is_bpjs_supported"`
+	PracticeLocations []store.PracticeLocation `json:"practice_locations"`
+	PhotoIntroURL     string                   `json:"photo_intro_url"`
+	VideoIntroURL     string                   `json:"video_intro_url"`
+	Bio               string                   `json:"bio"`
+	Education         []interface{}            `json:"education"`
+	DocumentURL       string                   `json:"document_url"`
 }
 
 // mergeCredentialPreserving menyusun kredensial yang akan disimpan dari
@@ -551,6 +552,22 @@ func mergeCredentialPreserving(existing store.ProfessionalCredential, req upload
 	if merged.HospitalLng == nil {
 		merged.HospitalLng = existing.HospitalLng
 	}
+	if req.PracticeLocations != nil {
+		merged.PracticeLocations = req.PracticeLocations
+		merged.HospitalName, merged.AddressDetails, merged.IsBPJSSupported = "", "", false
+		if len(req.PracticeLocations) > 0 {
+			primary := req.PracticeLocations[0]
+			merged.HospitalName, merged.AddressDetails = primary.Name, primary.Address
+			for _, location := range req.PracticeLocations {
+				merged.IsBPJSSupported = merged.IsBPJSSupported || location.AcceptsBPJS
+			}
+		}
+		if len(req.PracticeLocations) == 0 || (req.HospitalLat == nil &&
+			(strings.TrimSpace(existing.HospitalName) != merged.HospitalName ||
+				strings.TrimSpace(existing.AddressDetails) != merged.AddressDetails)) {
+			merged.HospitalLat, merged.HospitalLng = nil, nil
+		}
+	}
 	// Dokumen lisensi: pertahankan bila request mengosongkannya.
 	if strings.TrimSpace(merged.DocumentURL) == "" {
 		merged.DocumentURL = existing.DocumentURL
@@ -593,6 +610,23 @@ func (s *Server) uploadCredentials(w http.ResponseWriter, r *http.Request, claim
 	if cur, err := s.store.GetProfessionalCredential(r.Context(), claims.Subject); err == nil {
 		existing = cur
 		hasExisting = true
+	}
+	if len(req.PracticeLocations) > 20 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Maksimal 20 tempat praktik."})
+		return
+	}
+	for i := range req.PracticeLocations {
+		location := &req.PracticeLocations[i]
+		location.Name = strings.TrimSpace(location.Name)
+		location.Address = strings.TrimSpace(location.Address)
+		legacyLocation := i == 0 && (location.Name != "" || location.Address != "") &&
+			location.Name == strings.TrimSpace(existing.HospitalName) &&
+			location.Address == strings.TrimSpace(existing.AddressDetails)
+		if (!legacyLocation && (location.Name == "" || location.Address == "")) ||
+			len(location.Name) > 500 || len(location.Address) > 2000 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Isi nama dan alamat untuk setiap tempat praktik."})
+			return
+		}
 	}
 
 	// ------------------------------------------------------------
@@ -744,7 +778,11 @@ func (s *Server) getDoctorProfile(w http.ResponseWriter, r *http.Request, claims
 		return
 	}
 	packages, _ := s.store.ListServicePackages(r.Context(), userID)
-	schedules, _ := s.store.ListSchedulesForProfessional(r.Context(), userID)
+	scheduleSettings, err := s.store.GetProfessionalScheduleSettings(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
 	pricing, _ := s.store.GetProfessionalPricing(r.Context(), userID)
 	remainingSlots, canRenew, canResume, err := s.store.PackagePatientAvailability(r.Context(), userID, patientID)
 	if err != nil {
@@ -759,7 +797,8 @@ func (s *Server) getDoctorProfile(w http.ResponseWriter, r *http.Request, claims
 	profile := map[string]interface{}{
 		"credential":              cred,
 		"packages":                packages,
-		"schedules":               schedules,
+		"schedules":               scheduleSettings.Schedules,
+		"use_primary_schedule":    scheduleSettings.UsePrimarySchedule,
 		"pricing":                 pricing,
 		"reviews":                 reviews,
 		"rating":                  rating,
@@ -986,7 +1025,8 @@ type scheduleInput struct {
 }
 
 type updateSchedulesRequest struct {
-	Schedules []scheduleInput `json:"schedules"`
+	Schedules          []scheduleInput `json:"schedules"`
+	UsePrimarySchedule map[string]bool `json:"use_primary_schedule"`
 }
 
 // listMySchedules jadwal mingguan milik profesional yang login.
@@ -995,15 +1035,12 @@ func (s *Server) listMySchedules(w http.ResponseWriter, r *http.Request, claims 
 		writeError(w, http.StatusForbidden, errors.New("only professionals can view own schedules"))
 		return
 	}
-	schedules, err := s.store.ListSchedulesForProfessional(r.Context(), claims.Subject)
+	settings, err := s.store.GetProfessionalScheduleSettings(r.Context(), claims.Subject)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if schedules == nil {
-		schedules = []store.ProfessionalSchedule{}
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"schedules": schedules})
+	writeJSON(w, http.StatusOK, settings)
 }
 
 // updateMySchedules profesional menentukan hari apa saja available.
@@ -1072,16 +1109,16 @@ func (s *Server) updateMySchedules(w http.ResponseWriter, r *http.Request, claim
 			IsActive:            isActive,
 		})
 	}
-	if err := s.store.UpsertSchedules(r.Context(), claims.Subject, schedules); err != nil {
+	if err := s.store.UpsertScheduleSettings(r.Context(), claims.Subject, schedules, req.UsePrimarySchedule); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	updated, err := s.store.ListSchedulesForProfessional(r.Context(), claims.Subject)
+	updated, err := s.store.GetProfessionalScheduleSettings(r.Context(), claims.Subject)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"schedules": updated})
+	writeJSON(w, http.StatusOK, updated)
 }
 
 // deleteMySchedule menghapus PERMANEN satu jadwal mingguan milik profesional

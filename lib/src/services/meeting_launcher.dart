@@ -25,7 +25,7 @@ enum MeetLaunchResult {
 /// Alih-alih memeriksa lebih dulu, kita langsung mencoba `launchUrl` dan
 /// menangani kegagalan lewat fallback.
 Future<MeetLaunchResult> openMeetLink(String rawUrl) async {
-  final uri = _validMeetUri(rawUrl);
+  final uri = validMeetUri(rawUrl);
   if (uri == null) return MeetLaunchResult.invalid;
 
   // Jalur utama: buka di aplikasi eksternal (aplikasi Meet / browser default).
@@ -56,7 +56,7 @@ Future<void> copyMeetLink(String url) async {
 
 /// Memvalidasi tautan Meet: wajib `https` dan host `meet.google.com`.
 /// Mengembalikan `null` bila tidak valid.
-Uri? _validMeetUri(String rawUrl) {
+Uri? validMeetUri(String rawUrl) {
   final trimmed = rawUrl.trim();
   if (trimmed.isEmpty) return null;
   final uri = Uri.tryParse(trimmed);
