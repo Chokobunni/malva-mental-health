@@ -864,11 +864,12 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 		return CareSession{}, errors.New("status sesi tidak valid")
 	}
 	setAttended := ""
-	if status == "completed" {
+	switch status {
+	case "completed":
 		// COALESCE: jangan timpa waktu hadir asli yang sudah dicatat lewat
 		// "attended" sebelum sesi diselesaikan.
 		setAttended = ", attended_marked_at = COALESCE(attended_marked_at, now())"
-	} else if status == "no_show" {
+	case "no_show":
 		setAttended = ", patient_attendance='absent', patient_attendance_marked_at=COALESCE(patient_attendance_marked_at,now())"
 	}
 	setCancelledBy := ""
