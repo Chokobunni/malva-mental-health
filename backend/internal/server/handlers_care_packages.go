@@ -352,7 +352,7 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 
 func (s *Server) listCareSessions(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	// scope: upcoming | ongoing | today | past | all (diteruskan apa adanya ke
-	// store; store yang memvalidasi). "ongoing" = sesi scheduled/completed yang
+	// store; store yang memvalidasi). "ongoing" = sesi scheduled yang
 	// masih di dalam jendela waktu chat/Meet.
 	scope := r.URL.Query().Get("scope")
 	if scope == "" {
@@ -450,10 +450,6 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 		writeJSON(w, http.StatusOK, map[string]any{"session": careSessionForRole(updated, claims.Role)})
 		return
 	case isProf && (status == "completed" || status == "no_show"):
-		if time.Now().Before(cs.ScheduledAt.Add(-10 * time.Minute)) {
-			writeError(w, http.StatusBadRequest, errors.New("kehadiran baru bisa ditandai sejak 10 menit sebelum sesi"))
-			return
-		}
 		updated, err := s.store.UpdateCareSessionStatus(r.Context(), sessionID, status, "", claims.Subject)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)

@@ -13,7 +13,50 @@ import (
 	"time"
 
 	"malva/backend/internal/auth"
+	"malva/backend/internal/store"
 )
+
+func TestUploadCredentialsPracticeLocationsAndBPJSSearch(t *testing.T) {
+	db, _ := openOnboardingTestStore(t)
+	userID := seedProfessionalWithCoordinates(t, db)
+	srv := newOnboardingTestServer(db)
+	post := func(body string, want int) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/credentials", strings.NewReader(body))
+		srv.uploadCredentials(rec, req, auth.Claims{Subject: userID, Role: "professional"})
+		if rec.Code != want {
+			t.Fatalf("want status %d, got %d: %s", want, rec.Code, rec.Body)
+		}
+	}
+	post(`{"practice_locations":[{"name":"  Klinik Contoh Mandiri  ","address":"Jl. Klinik","accepts_bpjs":false},{"name":"RS Contoh Utama","address":"Jl. Rumah Sakit","accepts_bpjs":true}]}`, http.StatusCreated)
+	post(`{"hospital_name":"Faskes dari klien lama","is_bpjs_supported":false,"bio":"Bio dari klien lama"}`, http.StatusCreated)
+	post(`{"practice_locations":[{"name":"Tanpa alamat","accepts_bpjs":true}]}`, http.StatusBadRequest)
+
+	credential, err := srv.store.GetProfessionalCredential(context.Background(), userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if credential.VerificationStatus != "VERIFIED" || credential.DocumentURL != "/uploads/dokumen-lama.pdf" ||
+		credential.Bio != "Bio dari klien lama" || credential.HospitalName != "Klinik Contoh Mandiri" ||
+		len(credential.PracticeLocations) != 2 || credential.PracticeLocations[0].AcceptsBPJS ||
+		credential.PracticeLocations[1].Name != "RS Contoh Utama" || !credential.PracticeLocations[1].AcceptsBPJS {
+		t.Fatalf("locations or unrelated credential fields incorrect: %+v", credential)
+	}
+	bpjs := true
+	found, err := srv.store.SearchDoctors(context.Background(), store.DoctorSearchParams{
+		Specialization: "M.Psi", IsBPJSSupported: &bpjs, Limit: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, result := range found {
+		if result.UserID == userID && result.IsBPJSSupported {
+			return
+		}
+	}
+	t.Fatal("professional with a BPJS-accepting secondary location missing from search")
+}
 
 // ============================================================
 // Regresi BUG C1 — menyimpan profil profesional dari form editor

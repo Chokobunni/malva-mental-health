@@ -13,6 +13,7 @@ import '../../time/wib.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
 import '../../widgets/professional_avatar.dart';
+import '../../widgets/professional_availability_summary.dart';
 import '../../widgets/doctor_review_actions.dart';
 import 'booking_detail_screen.dart';
 import 'package_booking_screen.dart';
@@ -52,7 +53,6 @@ class DoctorProfileScreen extends ConsumerStatefulWidget {
 
 class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   BackendDoctorProfile? _profile;
-  List<BackendAvailabilityDay> _availability = const [];
   BackendCarePackage? _activePackage;
   bool _isLoading = true;
   Object? _error;
@@ -95,15 +95,6 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
         accessToken: accessToken,
         userId: widget.doctorUserId,
       );
-      List<BackendAvailabilityDay> availability = const [];
-      try {
-        availability = await apiClient.getDoctorAvailability(
-          accessToken: accessToken,
-          userId: widget.doctorUserId,
-        );
-      } on Object catch (_) {
-        // Ketersediaan opsional — profil tetap tampil.
-      }
       BackendCarePackage? activePackage;
       if (accessToken != null) {
         try {
@@ -122,7 +113,6 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
       if (!mounted) return;
       setState(() {
         _profile = profile;
-        _availability = availability;
         _activePackage = activePackage;
         _isLoading = false;
       });
@@ -340,43 +330,41 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  children: [
-                                    const Icon(Icons.local_hospital_rounded,
-                                        color: MalvaColors.seed),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                        child: Text(_faskesDistanceLabel(cred),
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.w800))),
-                                  ],
-                                ),
-                                if (_bookableDays.isNotEmpty) ...[
+                                const Row(children: [
+                                  Icon(Icons.local_hospital_rounded,
+                                      color: MalvaColors.seed),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                      child: SectionLabel('Tempat praktik')),
+                                ]),
+                                if (cred.effectivePracticeLocations.isEmpty)
+                                  const Text('Faskes tidak dicantumkan'),
+                                for (final (index, location) in cred
+                                    .effectivePracticeLocations.indexed) ...[
+                                  if (index > 0) const Divider(),
                                   const SizedBox(height: 8),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 4,
-                                    crossAxisAlignment:
-                                        WrapCrossAlignment.center,
-                                    children: [
-                                      const Text('Tersedia:'),
-                                      for (final day in _bookableDays.take(3))
-                                        StatusPill(
-                                            label: _shortDate(day.date),
-                                            color: MalvaColors.seed),
-                                    ],
+                                  Text(
+                                    location.name.isNotEmpty
+                                        ? location.name
+                                        : 'Nama faskes tidak dicantumkan',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w800),
                                   ),
-                                ],
-                                if (cred.isBpjsSupported) ...[
-                                  const SizedBox(height: 8),
-                                  const Row(children: [
-                                    Icon(Icons.check_circle_rounded,
-                                        size: 18, color: MalvaColors.mint),
-                                    SizedBox(width: 6),
-                                    Text('BPJS',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.w900)),
-                                  ]),
+                                  if (location.address.isNotEmpty)
+                                    Text(location.address),
+                                  if (index == 0 &&
+                                      cred.hospitalLat != null &&
+                                      cred.hospitalLng != null)
+                                    Text(_faskesDistanceLabel(cred)),
+                                  const SizedBox(height: 4),
+                                  StatusPill(
+                                    label: location.acceptsBpjs
+                                        ? 'Menerima BPJS'
+                                        : 'Tidak menerima BPJS',
+                                    color: location.acceptsBpjs
+                                        ? const Color(0xff107356)
+                                        : const Color(0xff647388),
+                                  ),
                                 ],
                               ],
                             ),
@@ -832,9 +820,6 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   int _packagePrice() => _profile?.pricing.packagePrice ?? 0;
 
   String _faskesDistanceLabel(BackendProfessionalCredential cred) {
-    final faskes = cred.hospitalName.isEmpty
-        ? 'Faskes tidak dicantumkan'
-        : cred.hospitalName;
     final pos = ref.watch(patientLocationProvider).position;
     final km = distanceKmBetween(
       fromLat: pos?.latitude,
@@ -842,7 +827,11 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
       toLat: cred.hospitalLat,
       toLng: cred.hospitalLng,
     );
-    return '$faskes · ${professionalDistanceLabel(km: km, hospitalLat: cred.hospitalLat, hospitalLng: cred.hospitalLng)}';
+    return professionalDistanceLabel(
+      km: km,
+      hospitalLat: cred.hospitalLat,
+      hospitalLng: cred.hospitalLng,
+    );
   }
 
   static const _dayNamesId = [
@@ -868,11 +857,8 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
   List<BackendProfessionalSchedule> _schedulesFor(String category) {
     final schedules =
         _profile?.schedules ?? const <BackendProfessionalSchedule>[];
-    final explicit =
-        schedules.where((s) => s.serviceCategory == category).toList();
-    return (explicit.isEmpty
-            ? schedules.where((s) => s.serviceCategory == 'shared')
-            : explicit)
+    return professionalServiceSchedules(schedules, category,
+            usePrimarySchedule: _profile?.usePrimarySchedule ?? const {})
         .where((s) => s.isActive)
         .toList();
   }
@@ -898,10 +884,6 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
         '${_dayNamesId[d]}: ${byDay[d]!.map((s) => '${s.startTime}–${s.endTime}').join(', ')}',
     ];
   }
-
-  /// Hari-hari ke depan yang bisa di-booking (dari availability server).
-  List<BackendAvailabilityDay> get _bookableDays =>
-      _availability.where((d) => d.bookable).toList(growable: false);
 
   String get _packageCapacityMessage => _canBookPackage
       ? 'Profesional belum mengatur harga paket.'
@@ -955,26 +937,6 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
     final d = toWibOrNull(DateTime.tryParse(iso));
     if (d == null) return '';
     return '${d.day}/${d.month}/${d.year}';
-  }
-
-  static String _shortDate(String yyyyMmDd) {
-    final d = DateTime.tryParse(yyyyMmDd);
-    if (d == null) return yyyyMmDd;
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'Mei',
-      'Jun',
-      'Jul',
-      'Agu',
-      'Sep',
-      'Okt',
-      'Nov',
-      'Des'
-    ];
-    return '${d.day} ${months[d.month - 1]}';
   }
 
   void _openBooking(BuildContext context, int price, String method) {

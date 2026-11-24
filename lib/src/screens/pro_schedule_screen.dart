@@ -791,20 +791,16 @@ class ProAvailabilityScreen extends ConsumerStatefulWidget {
 
 class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   List<BackendProfessionalSchedule> _schedules = const [];
+  Map<String, bool> _usePrimarySchedule = const {};
   bool _isLoading = true;
   String? _error;
 
   final _chatPrice = TextEditingController();
   final _videoPrice = TextEditingController();
   final _packagePrice = TextEditingController();
-  int _newDay = 1;
-  String _newCategory = 'quick_chat';
   int _patientCapacity = 2;
   int _savedPatientCapacity = 2;
   bool _savingCapacity = false;
-  final _newStart = TextEditingController(text: '09:00');
-  final _newEnd = TextEditingController(text: '16:00');
-  final _newDuration = TextEditingController(text: '60');
   bool _savingSchedules = false;
   bool _savingPricing = false;
 
@@ -825,9 +821,6 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     _chatPrice.dispose();
     _videoPrice.dispose();
     _packagePrice.dispose();
-    _newStart.dispose();
-    _newEnd.dispose();
-    _newDuration.dispose();
     super.dispose();
   }
 
@@ -848,13 +841,15 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     });
     try {
       final results = await Future.wait([
-        _api.listMySchedules(accessToken: token),
+        _api.getMyScheduleSettings(accessToken: token),
         _api.getPricing(accessToken: token),
       ]);
       if (!mounted) return;
+      final settings = results[0] as BackendProfessionalScheduleSettings;
       final pricing = results[1] as BackendProfessionalPricing;
       setState(() {
-        _schedules = results[0] as List<BackendProfessionalSchedule>;
+        _schedules = settings.schedules;
+        _usePrimarySchedule = settings.usePrimarySchedule;
         _savedPatientCapacity = pricing.patientCapacity ?? 2;
         _patientCapacity = pricing.patientCapacity ?? 2;
         _chatPrice.text = formatProfessionalPrice(pricing.quickChatPrice);
@@ -936,6 +931,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                           'Jadwal aktif tampil otomatis di sisi pasien.'),
                       const SizedBox(height: 12),
                       for (final category in [
+                        'shared',
                         'quick_chat',
                         'quick_video',
                         'package'
@@ -943,82 +939,6 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                         _categoryCard(category),
                         const SizedBox(height: 12),
                       ],
-                      SoftCard(
-                        bordered: false,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const Text('Tambah jadwal',
-                                style: TextStyle(fontWeight: FontWeight.w900)),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _categoryDropdown(
-                                      _newCategory,
-                                      (value) =>
-                                          setState(() => _newCategory = value)),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: DropdownButtonFormField<int>(
-                                    initialValue: _newDay,
-                                    isExpanded: true,
-                                    decoration: _scheduleField(context, 'Hari'),
-                                    items: [
-                                      for (final d in [1, 2, 3, 4, 5, 6, 0])
-                                        DropdownMenuItem(
-                                            value: d,
-                                            child: Text(_dayNames[d])),
-                                    ],
-                                    onChanged: (v) {
-                                      if (v != null)
-                                        setState(() => _newDay = v);
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: _newStart,
-                                    decoration:
-                                        _scheduleField(context, 'Mulai'),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextField(
-                                    controller: _newEnd,
-                                    decoration:
-                                        _scheduleField(context, 'Selesai'),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextField(
-                                    controller: _newDuration,
-                                    keyboardType: TextInputType.number,
-                                    decoration:
-                                        _scheduleField(context, 'Slot (mnt)'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            FilledButton.icon(
-                              onPressed: _savingSchedules ? null : _addSchedule,
-                              icon: const Icon(Icons.add_rounded),
-                              label: const Text('Tambah & Simpan',
-                                  style: TextStyle(fontFamily: 'Roboto')),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
                       const Text('Harga layanan',
                           style: TextStyle(
                               fontSize: 22, fontWeight: FontWeight.w900)),
@@ -1055,29 +975,40 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     );
   }
 
-  Widget _categoryDropdown(String selected, ValueChanged<String> onChanged) {
-    return DropdownButtonFormField<String>(
-      initialValue: selected,
-      isExpanded: true,
-      decoration: _scheduleField(context, 'Kategori'),
-      items: [
-        for (final option in const {
-          'quick_chat': 'Chat',
-          'quick_video': 'Video',
-          'package': 'Continuous Package',
-        }.entries)
-          DropdownMenuItem(
-              value: option.key,
-              child: Text(option.value, overflow: TextOverflow.ellipsis)),
-      ],
-      onChanged: (value) {
-        if (value != null) onChanged(value);
-      },
-    );
+  bool _usesPrimary(String category) =>
+      _usePrimarySchedule[category] ??
+      (category != 'package' &&
+          !_schedules.any((row) => row.serviceCategory == category));
+
+  List<BackendProfessionalSchedule> _storedRows(String category) =>
+      _schedules.where((row) => row.serviceCategory == category).toList();
+
+  List<BackendProfessionalSchedule> _effectiveRows(String category) =>
+      _storedRows(_usesPrimary(category) ? 'shared' : category);
+
+  bool _overlapsQuick(int day, String start, String end) {
+    return [..._effectiveRows('quick_chat'), ..._effectiveRows('quick_video')]
+        .any((quick) =>
+            quick.isActive &&
+            quick.dayOfWeek == day &&
+            start.compareTo(quick.endTime) < 0 &&
+            quick.startTime.compareTo(end) < 0);
   }
 
+  Widget _scheduleWarning() => Padding(
+        padding: const EdgeInsets.only(top: 10),
+        child: Text(
+          'Jam ini juga tersedia untuk Quick Session. Sebaiknya pilih jam lain '
+          'agar lebih mudah menyediakan slot untuk 4 sesi dalam 6 minggu.',
+          style:
+              TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+      );
+
   Widget _categoryCard(String category) {
-    final rows = professionalServiceSchedules(_schedules, category)
+    final primary = category == 'shared';
+    final inherited = !primary && _usesPrimary(category);
+    final rows = _effectiveRows(category)
       ..sort((a, b) {
         final day = ((a.dayOfWeek + 6) % 7).compareTo((b.dayOfWeek + 6) % 7);
         return day == 0 ? a.startTime.compareTo(b.startTime) : day;
@@ -1115,7 +1046,9 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                         switch (category) {
                           'quick_chat' => 'Konsultasi teks terjadwal',
                           'quick_video' => 'Konsultasi tatap muka daring',
-                          _ => 'Paket pendampingan 4 sesi',
+                          'package' => 'Paket pendampingan 4 sesi',
+                          _ =>
+                            'Atur jam praktik mingguan yang bisa digunakan oleh beberapa layanan.',
                         },
                         style: const TextStyle(
                             fontSize: 12, color: Color(0xFF98A2AD))),
@@ -1126,15 +1059,46 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                   color: color),
             ],
           ),
-          if (rows.isEmpty)
-            const Padding(
-                padding: EdgeInsets.only(top: 16),
-                child: Text('Belum ada jadwal.'))
-          else
-            for (var i = 0; i < rows.length; i++) ...[
-              if (i > 0) const Divider(height: 1),
-              _scheduleRow(rows[i], category),
-            ],
+          if (!primary)
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Gunakan jadwal praktik utama'),
+              value: inherited,
+              onChanged: _savingSchedules
+                  ? null
+                  : (usePrimary) => _writeSchedules(
+                        'Pilihan jadwal disimpan.',
+                        usePrimarySchedule: {category: usePrimary},
+                      ),
+            ),
+          if (!inherited) ...[
+            if (rows.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(category == 'package'
+                    ? 'Tambahkan jadwal khusus untuk membuka pemesanan paket.'
+                    : 'Belum ada jadwal.'),
+              )
+            else
+              for (var i = 0; i < rows.length; i++) ...[
+                if (i > 0) const Divider(height: 1),
+                _scheduleRow(rows[i], category),
+              ],
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed:
+                    _savingSchedules ? null : () => _editSchedule(category),
+                icon: const Icon(Icons.add_rounded),
+                label: Text(primary ? 'Tambah jadwal' : 'Tambah jadwal khusus'),
+              ),
+            ),
+          ],
+          if (category == 'package' &&
+              rows.any((row) =>
+                  row.isActive &&
+                  _overlapsQuick(row.dayOfWeek, row.startTime, row.endTime)))
+            _scheduleWarning(),
           if (category == 'package') ...[
             const SizedBox(height: 12),
             _capacityControls(),
@@ -1294,9 +1258,9 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
             color: Theme.of(context).colorScheme.surface,
             onSelected: (edit) {
               if (edit) {
-                _editSchedule(schedule, category);
+                _editSchedule(category, schedule);
               } else {
-                _removeSchedule(schedule, category);
+                _removeSchedule(schedule);
               }
             },
             itemBuilder: (context) => const [
@@ -1323,13 +1287,14 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     );
   }
 
-  Future<void> _editSchedule(
-      BackendProfessionalSchedule schedule, String category) async {
-    var day = schedule.dayOfWeek;
-    var start = schedule.startTime;
-    var end = schedule.endTime;
-    var durationText =
-        '${schedule.slotDurationMinutes < 60 ? 60 : schedule.slotDurationMinutes}';
+  Future<void> _editSchedule(String category,
+      [BackendProfessionalSchedule? schedule]) async {
+    var day = schedule?.dayOfWeek ?? 1;
+    var start = schedule?.startTime ?? '09:00';
+    var end = schedule?.endTime ?? '16:00';
+    final currentDuration = schedule?.slotDurationMinutes ?? 60;
+    var durationText = '${currentDuration < 60 ? 60 : currentDuration}';
+    var isActive = schedule?.isActive ?? true;
     String? error;
     final edited = await showModalBottomSheet<Map<String, Object?>>(
       context: context,
@@ -1361,8 +1326,11 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                             child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                              const Text('Edit jadwal',
-                                  style: TextStyle(
+                              Text(
+                                  schedule == null
+                                      ? 'Tambah jadwal'
+                                      : 'Edit jadwal',
+                                  style: const TextStyle(
                                       fontSize: 23,
                                       fontWeight: FontWeight.w900)),
                               Text(
@@ -1386,20 +1354,22 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                                   value: i, child: Text(_dayNames[i]))
                           ],
                           onChanged: (value) {
-                            if (value != null) day = value;
+                            if (value != null) setSheetState(() => day = value);
                           }),
                       const SizedBox(height: 18),
                       Row(children: [
                         Expanded(
                             child: TextFormField(
                                 initialValue: start,
-                                onChanged: (value) => start = value,
+                                onChanged: (value) =>
+                                    setSheetState(() => start = value),
                                 decoration: _scheduleField(context, 'Mulai'))),
                         const SizedBox(width: 8),
                         Expanded(
                             child: TextFormField(
                                 initialValue: end,
-                                onChanged: (value) => end = value,
+                                onChanged: (value) =>
+                                    setSheetState(() => end = value),
                                 decoration:
                                     _scheduleField(context, 'Selesai'))),
                         const SizedBox(width: 8),
@@ -1411,6 +1381,18 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                                 decoration:
                                     _scheduleField(context, 'Slot (mnt)'))),
                       ]),
+                      if (category == 'package' &&
+                          isActive &&
+                          _validScheduleTimes(start.trim(), end.trim()) &&
+                          _overlapsQuick(day, start.trim(), end.trim()))
+                        _scheduleWarning(),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Aktif'),
+                        value: isActive,
+                        onChanged: (value) =>
+                            setSheetState(() => isActive = value),
+                      ),
                       if (error != null)
                         Padding(
                             padding: const EdgeInsets.only(top: 10),
@@ -1428,8 +1410,12 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                             flex: 2,
                             child: FilledButton.icon(
                                 icon: const Icon(Icons.check, size: 18),
-                                label: const Text('Simpan perubahan',
-                                    style: TextStyle(fontFamily: 'Roboto'),
+                                label: Text(
+                                    schedule == null
+                                        ? 'Simpan jadwal'
+                                        : 'Simpan perubahan',
+                                    style:
+                                        const TextStyle(fontFamily: 'Roboto'),
                                     textAlign: TextAlign.center),
                                 onPressed: () {
                                   final duration =
@@ -1442,26 +1428,23 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
                                     setSheetState(() => error = invalid);
                                     return;
                                   }
-                                  if (professionalServiceSchedules(
-                                          _schedules, category)
-                                      .any((other) =>
-                                          other.id != schedule.id &&
-                                          other.dayOfWeek == day &&
-                                          other.startTime == from &&
-                                          other.endTime == to)) {
+                                  if (_storedRows(category).any((other) =>
+                                      other.id != schedule?.id &&
+                                      other.dayOfWeek == day &&
+                                      other.startTime == from &&
+                                      other.endTime == to)) {
                                     setSheetState(() => error =
                                         'Jadwal dengan hari dan jam tersebut sudah ada.');
                                     return;
                                   }
                                   Navigator.pop(context, {
-                                    if (schedule.serviceCategory == category)
-                                      'id': schedule.id,
+                                    if (schedule != null) 'id': schedule.id,
                                     'service_category': category,
                                     'day_of_week': day,
                                     'start_time': from,
                                     'end_time': to,
                                     'slot_duration_minutes': duration,
-                                    'is_active': schedule.isActive,
+                                    'is_active': isActive,
                                   });
                                 })),
                       ]),
@@ -1469,17 +1452,21 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
               )),
     );
     if (!mounted || edited == null) return;
-    await _writeSchedules(_replaceCategoryRow(schedule, category, edited),
-        'Perubahan jadwal disimpan.');
+    await _writeSchedules(
+      schedule == null ? 'Jadwal tersimpan.' : 'Perubahan jadwal disimpan.',
+      schedules: _replaceScheduleRow(category, edited, schedule?.id),
+    );
+  }
+
+  bool _validScheduleTimes(String from, String to) {
+    final times = RegExp(r'^(?:[01][0-9]|2[0-3]):[0-5][0-9]$');
+    return times.hasMatch(from) && times.hasMatch(to) && from.compareTo(to) < 0;
   }
 
   String? _scheduleValidation(String from, String to, int duration) {
     if (duration < 60 || duration > 180)
       return 'Slot minimal 60 menit dan maksimal 180 menit.';
-    final times = RegExp(r'^(?:[01][0-9]|2[0-3]):[0-5][0-9]$');
-    if (!times.hasMatch(from) ||
-        !times.hasMatch(to) ||
-        from.compareTo(to) >= 0) {
+    if (!_validScheduleTimes(from, to)) {
       return 'Isi jam mulai dan selesai dalam urutan yang benar (HH:MM).';
     }
     int minutes(String text) =>
@@ -1489,46 +1476,13 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     return null;
   }
 
-  // A category inherits shared rows until its first change. Copy its full effective
-  // schedule so editing one service never changes the other services.
-  List<Map<String, Object?>> _replaceCategoryRow(
-      BackendProfessionalSchedule target,
-      String category,
-      Map<String, Object?>? replacement) {
-    if (target.serviceCategory == category) {
-      return [
-        for (final row in _schedules)
-          if (row.id == target.id) ...[
-            if (replacement != null) replacement
-          ] else
-            _scheduleToPayload(row)
+  List<Map<String, Object?>> _replaceScheduleRow(
+          String category, Map<String, Object?> replacement, String? id) =>
+      [
+        for (final row in _storedRows(category))
+          if (row.id == id) replacement else _scheduleToPayload(row),
+        if (id == null) replacement,
       ];
-    }
-    final effective = professionalServiceSchedules(_schedules, category);
-    return [
-      ..._schedules.map(_scheduleToPayload),
-      for (final row in effective)
-        if (row.id != target.id)
-          {
-            ..._scheduleToPayload(row),
-            'id': null,
-            'service_category': category,
-            'slot_duration_minutes':
-                row.slotDurationMinutes < 60 ? 60 : row.slotDurationMinutes,
-          }
-        else if (replacement != null)
-          replacement
-        else if (effective.length == 1)
-          {
-            ..._scheduleToPayload(row),
-            'id': null,
-            'service_category': category,
-            'slot_duration_minutes':
-                row.slotDurationMinutes < 60 ? 60 : row.slotDurationMinutes,
-            'is_active': false,
-          },
-    ];
-  }
 
   /// Payload satu baris jadwal untuk PUT /v1/professional/schedules.
   /// `is_active` selalu dikirim eksplisit; bila null pakai status baris.
@@ -1546,39 +1500,24 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
         'is_active': isActive ?? s.isActive,
       };
 
-  Future<void> _addSchedule() async {
-    final duration = int.tryParse(_newDuration.text.trim()) ?? 0;
-    final invalid = _scheduleValidation(
-        _newStart.text.trim(), _newEnd.text.trim(), duration);
-    if (invalid != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(invalid)));
-      return;
-    }
-    final next = [
-      ..._schedules.map(_scheduleToPayload),
-      {
-        'service_category': _newCategory,
-        'day_of_week': _newDay,
-        'start_time': _newStart.text.trim(),
-        'end_time': _newEnd.text.trim(),
-        'slot_duration_minutes': duration,
-        'is_active': true,
-      },
-    ];
-    await _writeSchedules(next, 'Jadwal tersimpan.');
-  }
-
   Future<void> _writeSchedules(
-      List<Map<String, Object?>> schedules, String message) async {
+    String message, {
+    List<Map<String, Object?>>? schedules,
+    Map<String, bool>? usePrimarySchedule,
+  }) async {
     final token = _token;
     if (token == null || _savingSchedules) return;
     setState(() => _savingSchedules = true);
     try {
-      final updated = await _api.updateMySchedules(
-          accessToken: token, schedules: schedules);
+      final updated = await _api.updateMyScheduleSettings(
+          accessToken: token,
+          schedules: schedules,
+          usePrimarySchedule: usePrimarySchedule);
       if (!mounted) return;
-      setState(() => _schedules = updated);
+      setState(() {
+        _schedules = updated.schedules;
+        _usePrimarySchedule = updated.usePrimarySchedule;
+      });
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
     } on Object catch (e) {
@@ -1592,8 +1531,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     }
   }
 
-  Future<void> _removeSchedule(
-      BackendProfessionalSchedule s, String category) async {
+  Future<void> _removeSchedule(BackendProfessionalSchedule s) async {
     final token = _token;
     if (token == null) return;
     // Konfirmasi dulu: hapus permanen tidak bisa dibatalkan.
@@ -1603,9 +1541,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
         icon:
             const Icon(Icons.delete_forever_rounded, color: MalvaColors.danger),
         title: const Text('Hapus jadwal permanen?'),
-        content: Text(s.serviceCategory == category
-            ? 'Jadwal ini akan dihapus permanen. Jadwal lama yang masih berlaku dapat kembali tampil jika kategori ini tidak memiliki jadwal khusus.'
-            : 'Jadwal ini dihapus dari layanan ${professionalServiceNames[category]}. Layanan lain tetap memakai jadwal sebelumnya. Jika ini jadwal terakhir, baris nonaktif disimpan agar layanan tetap ditutup.'),
+        content: const Text('Jadwal ini akan dihapus permanen.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -1622,11 +1558,6 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
       ),
     );
     if (confirmed != true || !mounted || _savingSchedules) return;
-    if (s.serviceCategory != category) {
-      await _writeSchedules(
-          _replaceCategoryRow(s, category, null), 'Jadwal layanan dihapus.');
-      return;
-    }
     setState(() => _savingSchedules = true);
     try {
       await _api.deleteMySchedule(accessToken: token, id: s.id);
@@ -1655,14 +1586,10 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
   Future<void> _toggleSchedule(
           BackendProfessionalSchedule s, String category) =>
       _writeSchedules(
-          _replaceCategoryRow(s, category, {
-            ..._scheduleToPayload(s, isActive: !s.isActive),
-            if (s.serviceCategory != category) 'id': null,
-            'service_category': category,
-            if (s.serviceCategory != category && s.slotDurationMinutes < 60)
-              'slot_duration_minutes': 60,
-          }),
-          s.isActive ? 'Jadwal dinonaktifkan.' : 'Jadwal diaktifkan.');
+        s.isActive ? 'Jadwal dinonaktifkan.' : 'Jadwal diaktifkan.',
+        schedules: _replaceScheduleRow(
+            category, _scheduleToPayload(s, isActive: !s.isActive), s.id),
+      );
 
   Future<void> _savePricing() async {
     final token = _token;

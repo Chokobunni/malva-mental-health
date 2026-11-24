@@ -62,6 +62,7 @@ func newScheduleFixture(t *testing.T, db *sql.DB, st *store.Store, cal meetCalen
 	at := time.Date(base.Year(), base.Month(), base.Day(), 10, 0, 0, 0, wibLoc)
 
 	if err := st.UpsertSchedules(ctx, prof.ID, []store.ProfessionalSchedule{{
+		ServiceCategory:     "package",
 		DayOfWeek:           int(at.Weekday()),
 		StartTime:           "09:00",
 		EndTime:             "17:00",

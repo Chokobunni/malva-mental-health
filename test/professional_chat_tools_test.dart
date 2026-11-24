@@ -412,12 +412,13 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('edit-medication-med-1')));
     await tester.tap(find.byKey(const Key('edit-medication-med-1')));
     await tester.pumpAndSettle();
-    await tester.enterText(
-        find.byKey(const Key('medication-name')), 'Obat diperbarui');
-    await tester.scrollUntilVisible(
-        find.byKey(const Key('save-medication')), 180,
-        scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.byKey(const Key('save-medication')));
+    expect(find.text('Edit Obat'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('rx-name')), 'Obat diperbarui');
+    for (var i = 0; i < 3; i++) {
+      await tester.tap(find.byKey(const Key('rx-next')));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.text('Simpan dan Kirim Perubahan'));
     await tester.pumpAndSettle();
     final request = backend.requests.singleWhere(
         (r) => r.method == 'PUT' && r.url.path == '/v1/medications/med-1');

@@ -15,7 +15,7 @@ import (
 // Invariant yang dijaga:
 //   - UpdateCareSessionStatus("attended") TIDAK mengubah status (tetap
 //     scheduled), mengisi attended_marked_at, dan TIDAK membuat baris earnings.
-//   - completeAttendedSessions menyelesaikan sesi yang sudah hadir & lewat
+//   - finalizeEndedCareSessions menyelesaikan sesi yang sudah hadir & lewat
 //     durasi (status -> completed) dan mencatat earnings bila ada pembayaran.
 //
 // Test ini butuh Postgres nyata; di-SKIP tanpa MALVA_TEST_DATABASE_URL.
@@ -115,8 +115,8 @@ func TestCompleteAttendedSessions(t *testing.T) {
 	// menit) -> scheduled_at + 30m <= now().
 	var sessionID string
 	if err := db.QueryRowContext(ctx, `INSERT INTO care_sessions
-		(booking_id, patient_id, professional_id, session_type, scheduled_at, duration_minutes, status, attended_marked_at)
-		VALUES ($1,$2,$3,'chat', now() - interval '60 minutes', 30, 'scheduled', now())
+	(booking_id, patient_id, professional_id, session_type, scheduled_at, duration_minutes, status, patient_attendance)
+	VALUES ($1,$2,$3,'chat', now() - interval '60 minutes', 30, 'scheduled', 'attended')
 		RETURNING id::text`, bookingID, patientID, profID).Scan(&sessionID); err != nil {
 		t.Fatalf("seed care_session: %v", err)
 	}
@@ -131,8 +131,8 @@ func TestCompleteAttendedSessions(t *testing.T) {
 		_, _ = db.ExecContext(cctx, `DELETE FROM users WHERE id IN ($1,$2)`, patientID, profID)
 	})
 
-	if _, err := s.completeAttendedSessions(ctx); err != nil {
-		t.Fatalf("completeAttendedSessions: %v", err)
+	if _, err := s.finalizeEndedCareSessions(ctx, " AND patient_id=$2", patientID); err != nil {
+		t.Fatalf("finalizeEndedCareSessions: %v", err)
 	}
 
 	var status string

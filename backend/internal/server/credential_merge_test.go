@@ -18,6 +18,25 @@ import (
 
 func f64(v float64) *float64 { return &v }
 
+func TestMergeCredentialPracticeLocations(t *testing.T) {
+	existing := existingCredential()
+	merged := mergeCredentialPreserving(existing, uploadCredentialsRequest{
+		PracticeLocations: []store.PracticeLocation{
+			{Name: "Klinik Contoh Mandiri", Address: "Jl. Klinik", AcceptsBPJS: false},
+			{Name: "RS Contoh Utama", Address: "Jl. Rumah Sakit", AcceptsBPJS: true},
+		},
+	})
+	if len(merged.PracticeLocations) != 2 || merged.HospitalName != "Klinik Contoh Mandiri" ||
+		merged.AddressDetails != "Jl. Klinik" || !merged.IsBPJSSupported {
+		t.Fatalf("incorrect practice location projection: %+v", merged)
+	}
+	cleared := mergeCredentialPreserving(merged, uploadCredentialsRequest{PracticeLocations: []store.PracticeLocation{}})
+	if cleared.PracticeLocations == nil || len(cleared.PracticeLocations) != 0 || cleared.HospitalName != "" ||
+		cleared.AddressDetails != "" || cleared.IsBPJSSupported {
+		t.Fatalf("explicit empty list must clear practice locations: %+v", cleared)
+	}
+}
+
 // existingCredential adalah kondisi "sudah punya data lengkap" di database.
 func existingCredential() store.ProfessionalCredential {
 	return store.ProfessionalCredential{

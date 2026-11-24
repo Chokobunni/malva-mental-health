@@ -124,6 +124,50 @@ void main() {
             (_) async => ['wifi']);
   });
 
+  testWidgets('early Join Meeting records attendance before opening Meet',
+      (tester) async {
+    const url = 'https://meet.google.com/abc-defg-hij';
+    final session = _session('join', 'dr. Video')
+      ..['scheduled_at'] = wibIso(wibNow().add(const Duration(minutes: 8)))
+      ..['meeting_url'] = url;
+    final actions = <String>[];
+    const launcher = MethodChannel('plugins.flutter.io/url_launcher');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(launcher, (call) async {
+      actions.add(call.arguments['url'] as String);
+      return true;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(launcher, null));
+    final api = MalvaApiClient(
+      baseUrl: 'https://backend.test',
+      httpClient: MockClient((request) async {
+        if (request.method == 'PATCH' &&
+            request.url.path == '/v1/care-sessions/join') {
+          actions.add(jsonDecode(request.body)['status'] as String);
+          session['patient_attendance'] = 'attended';
+          return _json({'session': session});
+        }
+        if (request.url.path == '/v1/care-sessions') {
+          return _json({
+            'sessions': [session]
+          });
+        }
+        return _json({'notifications': [], 'count': 0});
+      }),
+    );
+    await _pumpHome(tester, api);
+    final join = find.widgetWithText(FilledButton, 'Join Meeting');
+    await tester.scrollUntilVisible(join, 180,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(tester.getCenter(join).dy,
+        lessThan(tester.getCenter(find.text('Cancel')).dy));
+    await tester.tap(join);
+    await tester.pumpAndSettle();
+    expect(actions, ['attended', url]);
+  });
+
   testWidgets('future session Chat opens peer before the live window',
       (tester) async {
     final server = (await tester

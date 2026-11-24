@@ -34,6 +34,7 @@ class MeetJoinButton extends ConsumerStatefulWidget {
     required this.onSessionChanged,
     this.expanded = false,
     this.canCreateLink = true,
+    this.onConfirmAttendance,
   });
 
   final BackendCareSession session;
@@ -49,6 +50,8 @@ class MeetJoinButton extends ConsumerStatefulWidget {
   /// (profesional). False = tampilkan keterangan "Menunggu link video"
   /// (pasien) tanpa aksi yang pasti gagal.
   final bool canCreateLink;
+
+  final Future<BackendCareSession?> Function()? onConfirmAttendance;
 
   @override
   ConsumerState<MeetJoinButton> createState() => _MeetJoinButtonState();
@@ -190,9 +193,37 @@ class _MeetJoinButtonState extends ConsumerState<MeetJoinButton> {
   }
 
   Future<void> _join() async {
-    if (!widget.session.canJoinNow) return;
-    final url = widget.session.meetingUrl.trim();
-    if (url.isEmpty) return;
+    if (_busy || !widget.session.canJoinNow) return;
+    var url = widget.session.meetingUrl.trim();
+    final confirm = widget.onConfirmAttendance;
+    if (confirm != null) {
+      if (validMeetUri(url) == null) {
+        setState(() => _error = 'Link video call tidak valid.');
+        return;
+      }
+      final id = widget.session.id;
+      setState(() {
+        _busy = true;
+        _error = null;
+      });
+      try {
+        final updated = await confirm();
+        if (!mounted || widget.session.id != id || updated == null) return;
+        widget.onSessionChanged(updated);
+        if (!updated.canJoinNow) {
+          setState(() => _error = 'Sesi sudah berakhir atau dibatalkan.');
+          return;
+        }
+        url = updated.meetingUrl.trim();
+      } on Object catch (error) {
+        if (mounted && widget.session.id == id) {
+          setState(() => _error = friendlyErrorMessage(error));
+        }
+        return;
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+    }
     final result = await openMeetLink(url);
     if (!mounted) return;
     switch (result) {
@@ -329,9 +360,11 @@ class _MeetJoinButtonState extends ConsumerState<MeetJoinButton> {
       );
     }
     return FilledButton.icon(
-      onPressed: _join,
+      onPressed: _busy ? null : _join,
       icon: const Icon(Icons.videocam_rounded, size: 18),
-      label: const Text('Gabung video call'),
+      label: Text(widget.onConfirmAttendance == null
+          ? 'Gabung video call'
+          : 'Join Meeting'),
       style: FilledButton.styleFrom(
         backgroundColor: MalvaColors.mint,
         foregroundColor: Colors.white,

@@ -445,6 +445,22 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
                                     ?.accessToken ??
                                 '',
                         onSessionChanged: (_) => _load(silent: true),
+                        onConfirmAttendance: () async {
+                          String? ownerToken() => (widget.session ??
+                                  ref.read(currentSessionProvider))
+                              ?.accessToken;
+                          final token = ownerToken();
+                          if (token == null || token.isEmpty) return null;
+                          final MalvaApiClient api =
+                              widget.apiClient ?? ref.read(apiClientProvider);
+                          final updated = await api.updateCareSession(
+                              accessToken: token,
+                              sessionId: s.id,
+                              status: 'attended');
+                          return mounted && ownerToken() == token
+                              ? updated
+                              : null;
+                        },
                       ),
                       const SizedBox(height: 10),
                     ],
@@ -1482,6 +1498,7 @@ class _PackageSessionCard extends StatelessWidget {
     this.onRequestRefund,
     this.accessToken = '',
     this.onSessionChanged,
+    this.onConfirmAttendance,
   });
 
   final BackendCareSession session;
@@ -1496,6 +1513,7 @@ class _PackageSessionCard extends StatelessWidget {
 
   /// Dipanggil setelah link Meet berhasil dibuat agar data disegarkan.
   final ValueChanged<BackendCareSession>? onSessionChanged;
+  final Future<BackendCareSession?> Function()? onConfirmAttendance;
 
   @override
   Widget build(BuildContext context) {
@@ -1601,6 +1619,7 @@ class _PackageSessionCard extends StatelessWidget {
                 accessToken: accessToken,
                 expanded: true,
                 canCreateLink: false,
+                onConfirmAttendance: onConfirmAttendance,
                 onSessionChanged: (updated) => onSessionChanged?.call(updated),
               ),
               const SizedBox(height: 8),

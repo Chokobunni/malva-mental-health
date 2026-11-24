@@ -18,33 +18,40 @@ import (
 // PROFESSIONAL: Credentials, Discovery, Schedules, Packages
 // ============================================================
 
+type PracticeLocation struct {
+	Name        string `json:"name"`
+	Address     string `json:"address"`
+	AcceptsBPJS bool   `json:"accepts_bpjs"`
+}
+
 type ProfessionalCredential struct {
-	ID                 string        `json:"id"`
-	UserID             string        `json:"user_id"`
-	STRNumber          string        `json:"str_number"`
-	SIPNumber          string        `json:"sip_number"`
-	SIPPNumber         string        `json:"sipp_number"`
-	Specialization     string        `json:"specialization"`
-	SubSpecialties     []string      `json:"sub_specialties"`
-	HospitalLat        *float64      `json:"hospital_lat,omitempty"`
-	HospitalLng        *float64      `json:"hospital_lng,omitempty"`
-	HospitalName       string        `json:"hospital_name"`
-	AddressDetails     string        `json:"address_details"`
-	IsBPJSSupported    bool          `json:"is_bpjs_supported"`
-	PhotoIntroURL      string        `json:"photo_intro_url,omitempty"`
-	VideoIntroURL      string        `json:"video_intro_url,omitempty"`
-	Bio                string        `json:"bio,omitempty"`
-	Education          []interface{} `json:"education"`
-	VerificationStatus string        `json:"verification_status"`
-	RejectionReason    string        `json:"rejection_reason,omitempty"`
-	DocumentURL        string        `json:"document_url,omitempty"`
-	LegacyCount        int           `json:"legacy_count"`
-	HelpfulnessCount   int           `json:"helpfulness_count"`
-	ReviewCount        int           `json:"review_count"`
-	YearsExperience    int           `json:"years_experience"`
-	PatientCount       int           `json:"patient_count"`
-	PriceFrom          int64         `json:"price_from"`
-	CreatedAt          time.Time     `json:"created_at"`
+	ID                 string             `json:"id"`
+	UserID             string             `json:"user_id"`
+	STRNumber          string             `json:"str_number"`
+	SIPNumber          string             `json:"sip_number"`
+	SIPPNumber         string             `json:"sipp_number"`
+	Specialization     string             `json:"specialization"`
+	SubSpecialties     []string           `json:"sub_specialties"`
+	HospitalLat        *float64           `json:"hospital_lat,omitempty"`
+	HospitalLng        *float64           `json:"hospital_lng,omitempty"`
+	HospitalName       string             `json:"hospital_name"`
+	AddressDetails     string             `json:"address_details"`
+	IsBPJSSupported    bool               `json:"is_bpjs_supported"`
+	PracticeLocations  []PracticeLocation `json:"practice_locations"`
+	PhotoIntroURL      string             `json:"photo_intro_url,omitempty"`
+	VideoIntroURL      string             `json:"video_intro_url,omitempty"`
+	Bio                string             `json:"bio,omitempty"`
+	Education          []interface{}      `json:"education"`
+	VerificationStatus string             `json:"verification_status"`
+	RejectionReason    string             `json:"rejection_reason,omitempty"`
+	DocumentURL        string             `json:"document_url,omitempty"`
+	LegacyCount        int                `json:"legacy_count"`
+	HelpfulnessCount   int                `json:"helpfulness_count"`
+	ReviewCount        int                `json:"review_count"`
+	YearsExperience    int                `json:"years_experience"`
+	PatientCount       int                `json:"patient_count"`
+	PriceFrom          int64              `json:"price_from"`
+	CreatedAt          time.Time          `json:"created_at"`
 }
 
 type DoctorSearchResult struct {
@@ -155,18 +162,31 @@ func writeProfessionalCredential(ctx context.Context, db interface {
 			edu = b
 		}
 	}
+	var locations []byte
+	if c.PracticeLocations != nil {
+		var err error
+		locations, err = json.Marshal(c.PracticeLocations)
+		if err != nil {
+			return err
+		}
+	}
 	// UPDATE dulu; bila 0 baris, INSERT (hindari ON CONFLICT tanpa unique constraint).
+	// Klien lama mengirim faskes tunggal. Setelah daftar disimpan, proyeksinya
+	// hanya berubah bersama daftar agar status BPJS tetap konsisten.
 	// CATATAN: verification_status & verified_at sengaja TIDAK diikutkan di sini
 	// agar penyimpanan profil mandiri tidak mencabut status VERIFIED.
 	const upd = `UPDATE professional_credentials SET
 		str_number=$2, sip_number=$3, sipp_number=$4, specialization=$5, sub_specialties=$6,
-		hospital_lat=$7, hospital_lng=$8, hospital_name=$9, address_details=$10, is_bpjs_supported=$11,
+		hospital_lat=$7, hospital_lng=$8,
+		hospital_name=CASE WHEN $19::jsonb IS NULL AND practice_locations IS NOT NULL THEN hospital_name ELSE $9 END,
+		address_details=CASE WHEN $19::jsonb IS NULL AND practice_locations IS NOT NULL THEN address_details ELSE $10 END,
+		is_bpjs_supported=CASE WHEN $19::jsonb IS NULL AND practice_locations IS NOT NULL THEN is_bpjs_supported ELSE $11 END,
 		photo_intro_url=$12, video_intro_url=$13, bio=$14, education=$15::jsonb, document_url=$16,
-		years_experience=$17, price_from=$18
+		years_experience=$17, price_from=$18, practice_locations=COALESCE($19::jsonb, practice_locations)
 		WHERE user_id = $1`
 	res, err := db.ExecContext(ctx, upd, c.UserID, c.STRNumber, c.SIPNumber, c.SIPPNumber, c.Specialization, sub,
 		c.HospitalLat, c.HospitalLng, c.HospitalName, c.AddressDetails, c.IsBPJSSupported,
-		c.PhotoIntroURL, c.VideoIntroURL, c.Bio, edu, c.DocumentURL, c.YearsExperience, c.PriceFrom)
+		c.PhotoIntroURL, c.VideoIntroURL, c.Bio, edu, c.DocumentURL, c.YearsExperience, c.PriceFrom, locations)
 	if err != nil {
 		return err
 	}
@@ -174,11 +194,11 @@ func writeProfessionalCredential(ctx context.Context, db interface {
 		const ins = `INSERT INTO professional_credentials
 			(user_id, str_number, sip_number, sipp_number, specialization, sub_specialties,
 			 hospital_lat, hospital_lng, hospital_name, address_details, is_bpjs_supported,
-			 photo_intro_url, video_intro_url, bio, education, document_url, years_experience, price_from, verification_status)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16,$17,$18,'PENDING')`
+			 photo_intro_url, video_intro_url, bio, education, document_url, years_experience, price_from, practice_locations, verification_status)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16,$17,$18,$19::jsonb,'PENDING')`
 		if _, err := db.ExecContext(ctx, ins, c.UserID, c.STRNumber, c.SIPNumber, c.SIPPNumber, c.Specialization, sub,
 			c.HospitalLat, c.HospitalLng, c.HospitalName, c.AddressDetails, c.IsBPJSSupported,
-			c.PhotoIntroURL, c.VideoIntroURL, c.Bio, edu, c.DocumentURL, c.YearsExperience, c.PriceFrom); err != nil {
+			c.PhotoIntroURL, c.VideoIntroURL, c.Bio, edu, c.DocumentURL, c.YearsExperience, c.PriceFrom, locations); err != nil {
 			return err
 		}
 	}
@@ -277,19 +297,24 @@ func (s *Store) GetProfessionalCredential(ctx context.Context, userID string) (P
 		COALESCE(bio,''), COALESCE(education,'[]'::jsonb), verification_status, COALESCE(rejection_reason,''),
 		COALESCE(document_url,''), legacy_count, helpfulness_count, review_count, years_experience, COALESCE(price_from, 0),
 		(SELECT COUNT(*) FROM patient_professional_links WHERE professional_id = professional_credentials.user_id AND status='active') AS patient_count,
-		created_at
+		created_at, practice_locations
 		FROM professional_credentials WHERE user_id = $1`
 	var c ProfessionalCredential
-	var sub, edu []byte
+	var sub, edu, locations []byte
 	err := s.db.QueryRowContext(ctx, q, userID).Scan(&c.ID, &c.UserID, &c.STRNumber, &c.SIPNumber, &c.SIPPNumber,
 		&c.Specialization, &sub, &c.HospitalLat, &c.HospitalLng, &c.HospitalName, &c.AddressDetails, &c.IsBPJSSupported,
 		&c.PhotoIntroURL, &c.VideoIntroURL, &c.Bio, &edu, &c.VerificationStatus, &c.RejectionReason, &c.DocumentURL,
-		&c.LegacyCount, &c.HelpfulnessCount, &c.ReviewCount, &c.YearsExperience, &c.PriceFrom, &c.PatientCount, &c.CreatedAt)
+		&c.LegacyCount, &c.HelpfulnessCount, &c.ReviewCount, &c.YearsExperience, &c.PriceFrom, &c.PatientCount, &c.CreatedAt, &locations)
 	if err != nil {
 		return ProfessionalCredential{}, err
 	}
 	parsePGTextArray(sub, &c.SubSpecialties)
 	_ = json.Unmarshal(edu, &c.Education)
+	if locations != nil {
+		if err := json.Unmarshal(locations, &c.PracticeLocations); err != nil {
+			return ProfessionalCredential{}, err
+		}
+	}
 	return c, nil
 }
 
@@ -479,7 +504,19 @@ func (s *Store) SearchDoctors(ctx context.Context, params DoctorSearchParams) ([
 		(SELECT COUNT(*) FROM doctor_reviews dr WHERE dr.professional_id=pc.user_id) AS review_count, pc.years_experience,
 		COALESCE(pc.price_from, 0),
 		(SELECT COUNT(*) FROM patient_professional_links WHERE professional_id = pc.user_id AND status='active') AS patient_count,
-		CASE WHEN EXISTS (SELECT 1 FROM professional_schedules ps WHERE ps.professional_id = pc.user_id AND ps.day_of_week = EXTRACT(dow FROM CURRENT_DATE)::int AND ps.is_active = true) THEN 1 ELSE 0 END AS is_available_today,
+		CASE WHEN EXISTS (
+			SELECT 1 FROM professional_schedules ps
+			CROSS JOIN (VALUES ('quick_chat'), ('quick_video'), ('package')) category(name)
+			LEFT JOIN professional_schedule_preferences pref
+			  ON pref.professional_id = ps.professional_id AND pref.service_category = category.name
+			WHERE ps.professional_id = pc.user_id AND ps.day_of_week = EXTRACT(dow FROM CURRENT_DATE)::int
+			  AND ps.is_active AND ps.service_category = CASE WHEN CASE WHEN pref.is_explicit
+			    THEN pref.use_primary_schedule
+			    ELSE COALESCE(pref.use_primary_schedule, category.name <> 'package') AND NOT EXISTS (
+			      SELECT 1 FROM professional_schedules custom
+			      WHERE custom.professional_id = ps.professional_id AND custom.service_category = category.name
+			    ) END THEN 'shared' ELSE category.name END
+		) THEN 1 ELSE 0 END AS is_available_today,
 		%s,
 		(SELECT COALESCE(AVG((dr.helpfulness_percent+19)/20),0) FROM doctor_reviews dr WHERE dr.professional_id=pc.user_id) AS average_stars,
 		COALESCE(pp.quick_chat_price, legacy.quick_chat_price, 0),
@@ -564,14 +601,68 @@ func (s *Store) ListSchedulesForProfessional(ctx context.Context, professionalID
 // ListActiveSchedulesForProfessional hanya mengembalikan jadwal aktif —
 // dipakai untuk penentuan slot booking & ketersediaan sisi pasien.
 func (s *Store) ListActiveSchedulesForProfessional(ctx context.Context, professionalID string, categories ...string) ([]ProfessionalSchedule, error) {
-	schedules, err := s.listSchedules(ctx, professionalID)
+	settings, err := s.GetProfessionalScheduleSettings(ctx, professionalID)
 	if err != nil {
 		return nil, err
 	}
-	return activeSchedulesForCategories(schedules, categories...), nil
+	return activeSchedulesForCategories(settings.Schedules, settings.UsePrimarySchedule, categories...), nil
 }
 
 const ScheduleShared = "shared"
+
+var scheduleServiceCategories = []string{"quick_chat", "quick_video", "package"}
+
+type ProfessionalScheduleSettings struct {
+	Schedules          []ProfessionalSchedule `json:"schedules"`
+	UsePrimarySchedule map[string]bool        `json:"use_primary_schedule"`
+}
+
+func (s *Store) GetProfessionalScheduleSettings(ctx context.Context, professionalID string) (ProfessionalScheduleSettings, error) {
+	schedules, err := s.listSchedules(ctx, professionalID)
+	if err != nil {
+		return ProfessionalScheduleSettings{}, err
+	}
+	if schedules == nil {
+		schedules = []ProfessionalSchedule{}
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT service_category, use_primary_schedule, is_explicit
+		FROM professional_schedule_preferences WHERE professional_id = $1`, professionalID)
+	if err != nil {
+		return ProfessionalScheduleSettings{}, err
+	}
+	defer func() { _ = rows.Close() }()
+	preferences := defaultSchedulePreferences(schedules)
+	for rows.Next() {
+		var category string
+		var usePrimary, explicit bool
+		if err := rows.Scan(&category, &usePrimary, &explicit); err != nil {
+			return ProfessionalScheduleSettings{}, err
+		}
+		if explicit {
+			preferences[category] = usePrimary
+		} else {
+			// Legacy package fallback yields to any custom row, including inactive rows.
+			preferences[category] = usePrimary
+			for _, schedule := range schedules {
+				if schedule.ServiceCategory == category {
+					preferences[category] = false
+					break
+				}
+			}
+		}
+	}
+	return ProfessionalScheduleSettings{Schedules: schedules, UsePrimarySchedule: preferences}, rows.Err()
+}
+
+func defaultSchedulePreferences(schedules []ProfessionalSchedule) map[string]bool {
+	preferences := map[string]bool{"quick_chat": true, "quick_video": true, "package": false}
+	for _, schedule := range schedules {
+		if schedule.ServiceCategory != ScheduleShared {
+			preferences[schedule.ServiceCategory] = false
+		}
+	}
+	return preferences
+}
 
 func IsScheduleCategory(category string) bool {
 	switch category {
@@ -581,20 +672,21 @@ func IsScheduleCategory(category string) bool {
 	return false
 }
 
-func activeSchedulesForCategories(schedules []ProfessionalSchedule, categories ...string) []ProfessionalSchedule {
+func activeSchedulesForCategories(schedules []ProfessionalSchedule, preferences map[string]bool, categories ...string) []ProfessionalSchedule {
 	if len(categories) == 0 || (len(categories) == 1 && categories[0] == "") {
-		categories = []string{"quick_chat", "quick_video", "package"}
+		categories = scheduleServiceCategories
 	}
-	configured := make(map[string]bool, len(categories))
-	for _, schedule := range schedules {
-		configured[schedule.ServiceCategory] = true
+	defaults := defaultSchedulePreferences(schedules)
+	if preferences == nil {
+		preferences = defaults
 	}
 	selected := make(map[string]bool, len(categories))
 	for _, category := range categories {
-		if configured[category] {
-			selected[category] = true
-		} else {
+		usePrimary, explicit := preferences[category]
+		if usePrimary || (!explicit && defaults[category]) {
 			selected[ScheduleShared] = true
+		} else {
+			selected[category] = true
 		}
 	}
 	var out []ProfessionalSchedule
@@ -639,6 +731,10 @@ func (s *Store) listSchedules(ctx context.Context, professionalID string) ([]Pro
 // jadwal dr. Hafid Algistian (a1111111) hanya menyisakan satu hari aktif.
 // Guard `len(order) > 0` menjamin payload kosong tidak menghapus apa pun.
 func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, schedules []ProfessionalSchedule) error {
+	return s.UpsertScheduleSettings(ctx, professionalID, schedules, nil)
+}
+
+func (s *Store) UpsertScheduleSettings(ctx context.Context, professionalID string, schedules []ProfessionalSchedule, preferences map[string]bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -646,9 +742,20 @@ func (s *Store) UpsertSchedules(ctx context.Context, professionalID string, sche
 	defer func() { _ = tx.Rollback() }()
 
 	// Validate legacy pass-through under the same lock as the snapshot write.
-	if len(schedules) > 0 {
+	if len(schedules) > 0 || len(preferences) > 0 {
 		if _, err := tx.ExecContext(ctx,
 			`SELECT pg_advisory_xact_lock(hashtextextended('professional_schedules:' || $1::text, 0))`, professionalID); err != nil {
+			return err
+		}
+	}
+	for category, usePrimary := range preferences {
+		if !IsScheduleCategory(category) || category == ScheduleShared {
+			return errors.New("use_primary_schedule memuat kategori yang tidak valid")
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO professional_schedule_preferences
+			(professional_id, service_category, use_primary_schedule) VALUES ($1, $2, $3)
+			ON CONFLICT (professional_id, service_category) DO UPDATE
+			SET use_primary_schedule = EXCLUDED.use_primary_schedule, is_explicit = true`, professionalID, category, usePrimary); err != nil {
 			return err
 		}
 	}

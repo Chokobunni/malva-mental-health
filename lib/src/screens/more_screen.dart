@@ -94,13 +94,6 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                       onTap: openProfile),
                   const Divider(height: 12),
                   _ExportTile(
-                      icon: Icons.notifications_rounded,
-                      title: 'Notifikasi',
-                      subtitle: 'Lihat notifikasi Malva',
-                      color: MalvaColors.seed,
-                      onTap: openNotifications),
-                  const Divider(height: 12),
-                  _ExportTile(
                       icon: Icons.contact_emergency_rounded,
                       title: 'Kontak Darurat',
                       subtitle: 'Kelola kontak untuk Silent SOS',

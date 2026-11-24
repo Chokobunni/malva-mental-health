@@ -517,9 +517,15 @@ void main() {
           'professional_id': 'pro-1',
         },
       }));
-      await Future<void>.delayed(const Duration(milliseconds: 35));
     });
-    await tester.pumpAndSettle();
+    final unavailable = find.text('Akses diary tidak tersedia.');
+    for (var attempt = 0;
+        attempt < 100 && unavailable.evaluate().isEmpty;
+        attempt++) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pumpAndSettle();
+    }
     expect(find.text('Isi lama lengkap'), findsNothing);
     expect(find.text('Snapshot yang harus diabaikan'), findsNothing);
     expect(find.text('Akses diary tidak tersedia.'), findsWidgets);

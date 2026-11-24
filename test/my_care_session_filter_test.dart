@@ -122,6 +122,32 @@ Future<void> _tapFilter(WidgetTester tester, String label) async {
 }
 
 void main() {
+  testWidgets('history filters stay in one row on a narrow phone',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 860);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = MalvaApiClient(
+        baseUrl: 'http://backend.test',
+        httpClient: _careClient([_selesai(), _batal(), _tidakHadir()]));
+    await tester.pumpWidget(_wrap(api));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Riwayat'));
+    await tester.pumpAndSettle();
+
+    final labels = ['Selesai 1', 'Dibatalkan 1', 'Tidak Hadir 1', 'Semua 3'];
+    final chips = labels.map((label) => find.widgetWithText(ChoiceChip, label));
+    final first = tester.getCenter(chips.first).dy;
+    for (final chip in chips.skip(1)) {
+      expect(tester.getCenter(chip).dy, first);
+    }
+    await tester.ensureVisible(chips.last);
+    await tester.pumpAndSettle();
+    await tester.tap(chips.last);
+    await tester.pumpAndSettle();
+    expect(find.text('3 sesi'), findsOneWidget);
+  });
+
   testWidgets(
       'future session card explains check-in and offers consultation actions',
       (tester) async {

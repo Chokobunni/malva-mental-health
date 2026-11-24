@@ -9,7 +9,7 @@ const professionalServiceNames = {
   'quick_chat': 'Quick Session (Chat)',
   'quick_video': 'Quick Session (Video)',
   'package': 'Continuous Package',
-  'shared': 'Jadwal bersama',
+  'shared': 'Jadwal praktik utama',
 };
 
 const professionalServiceIcons = {
@@ -23,11 +23,12 @@ const _serviceCategories = ['quick_chat', 'quick_video', 'package'];
 
 List<BackendProfessionalSchedule> professionalServiceSchedules(
   Iterable<BackendProfessionalSchedule> schedules,
-  String category,
-) {
+  String category, {
+  Map<String, bool> usePrimarySchedule = const {},
+}) {
   final configured =
       schedules.where((slot) => slot.serviceCategory == category).toList();
-  if (configured.isNotEmpty) return configured;
+  if (!(usePrimarySchedule[category] ?? configured.isEmpty)) return configured;
   return schedules.where((slot) => slot.serviceCategory == 'shared').toList();
 }
 
@@ -37,10 +38,12 @@ class ProfessionalAvailabilitySummary extends StatelessWidget {
   const ProfessionalAvailabilitySummary(
       {super.key,
       required this.schedules,
+      this.usePrimarySchedule = const {},
       required this.pricing,
       this.onConfigure});
 
   final List<BackendProfessionalSchedule> schedules;
+  final Map<String, bool> usePrimarySchedule;
   final BackendProfessionalPricing pricing;
   final VoidCallback? onConfigure;
 
@@ -110,13 +113,13 @@ class ProfessionalAvailabilitySummary extends StatelessWidget {
   }
 
   Widget _serviceSummary(BuildContext context, int index, int price) {
-    final slots =
-        professionalServiceSchedules(schedules, _serviceCategories[index])
-          ..sort((a, b) {
-            final day =
-                ((a.dayOfWeek + 6) % 7).compareTo((b.dayOfWeek + 6) % 7);
-            return day == 0 ? a.startTime.compareTo(b.startTime) : day;
-          });
+    final slots = professionalServiceSchedules(
+        schedules, _serviceCategories[index],
+        usePrimarySchedule: usePrimarySchedule)
+      ..sort((a, b) {
+        final day = ((a.dayOfWeek + 6) % 7).compareTo((b.dayOfWeek + 6) % 7);
+        return day == 0 ? a.startTime.compareTo(b.startTime) : day;
+      });
     final durations = slots
         .map((s) => s.slotDurationMinutes < 60 ? 60 : s.slotDurationMinutes)
         .toSet()

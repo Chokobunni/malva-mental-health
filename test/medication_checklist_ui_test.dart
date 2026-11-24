@@ -92,7 +92,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Take Now'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Taken'));
+    await tester.tap(find.text('Sudah diminum'));
     await tester.pumpAndSettle();
     expect(queue.queue, isEmpty);
     expect(find.text('Coba simpan'), findsOneWidget);
@@ -163,7 +163,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Take Now'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Taken'));
+    await tester.tap(find.text('Sudah diminum'));
     await tester.pumpAndSettle();
     expect(container.read(malvaStoreProvider).medicationLogs, hasLength(1));
     expect(container.read(malvaStoreProvider).medications.single.lastTakenAt,
@@ -228,7 +228,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Take Now'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Taken'));
+    await tester.tap(find.text('Sudah diminum'));
     await tester.pumpAndSettle();
     expect(posts, 1);
     expect(find.text('Belum pernah diminum'), findsNothing);
@@ -328,7 +328,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Take Now'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Taken'));
+    await tester.tap(find.text('Sudah diminum'));
     await tester.pump();
     container.read(authStateProvider.notifier).updateTokens('new', 'refresh');
     pending.complete(http.Response('{"medication_log":{}}', 200));
@@ -434,7 +434,7 @@ void main() {
     await tester.tap(find.text('Take Now').first);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.tap(find.text('Taken'));
+    await tester.tap(find.text('Sudah diminum'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(posts, 1);

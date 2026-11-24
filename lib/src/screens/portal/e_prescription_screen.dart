@@ -724,6 +724,33 @@ class _EPrescriptionDetailScreenState
                                             10, 4, 10, 8),
                                         child: Text(
                                             'Catatan: ${rx.items[i].schedule!.instructions}')),
+                                  if (canEdit)
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: TextButton.icon(
+                                        onPressed: _busy
+                                            ? null
+                                            : () async {
+                                                await Navigator.push<bool>(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) =>
+                                                        EPrescriptionFormScreen(
+                                                      session: _session,
+                                                      apiClient:
+                                                          widget.apiClient,
+                                                      prescription: rx,
+                                                      itemIndex: i,
+                                                    ),
+                                                  ),
+                                                );
+                                                if (mounted && _session != null)
+                                                  await _load();
+                                              },
+                                        icon: const Icon(Icons.edit_outlined),
+                                        label: const Text('Edit Obat'),
+                                      ),
+                                    ),
                                   const SizedBox(height: 12)
                                 ],
                                 if (canEdit) ...[

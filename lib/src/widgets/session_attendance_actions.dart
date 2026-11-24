@@ -5,6 +5,7 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/server_clock.dart';
+import '../theme.dart';
 import 'malva_components.dart';
 import 'friendly_error.dart';
 
@@ -102,6 +103,58 @@ class _SessionAttendanceActionsState
     final ended = start != null &&
         !now.isBefore(start.add(Duration(minutes: session.durationMinutes)));
     if (!session.isScheduled || !opened) return const SizedBox.shrink();
+    if (!professional) {
+      if (ended) return const SizedBox.shrink();
+      if (attendance.isNotEmpty) {
+        return Text(
+          attendance == 'attended'
+              ? 'Kehadiran saya: Hadir'
+              : 'Kehadiran saya: Tidak hadir',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        );
+      }
+      final shape =
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12));
+      const padding = EdgeInsets.symmetric(horizontal: 8, vertical: 10);
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('Check-in kehadiran',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 8),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 7,
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _busy ? null : () => _mark('attended'),
+                  style: FilledButton.styleFrom(
+                    shape: shape,
+                    padding: padding,
+                    backgroundColor: MalvaColors.seed,
+                  ),
+                  icon: const Icon(Icons.check_rounded, size: 20),
+                  label: const Text('Hadir', textAlign: TextAlign.center),
+                ),
+              ),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : () => _mark('absent'),
+                  style: OutlinedButton.styleFrom(
+                    shape: shape,
+                    padding: padding,
+                    foregroundColor: MalvaColors.seed,
+                    side: const BorderSide(color: MalvaColors.seed),
+                  ),
+                  icon: const Icon(Icons.person_off_rounded, size: 19),
+                  label: const Text('Tidak hadir', textAlign: TextAlign.center),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ]);
+    }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(
           'Kehadiran saya${attendance.isEmpty ? '' : ': ${attendance == 'attended' ? 'Hadir' : 'Tidak hadir'}'}',
@@ -118,7 +171,7 @@ class _SessionAttendanceActionsState
                 icon: const Icon(Icons.person_off_rounded, size: 16),
                 label: const Text('Tidak hadir')),
           ],
-          if (professional && ended)
+          if (ended)
             FilledButton.icon(
                 style: compactFilledButtonStyle,
                 onPressed: _busy ? null : () => _mark('completed'),

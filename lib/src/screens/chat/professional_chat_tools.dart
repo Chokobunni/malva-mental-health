@@ -17,6 +17,7 @@ import '../../services/malva_api_client.dart';
 import '../../services/server_clock.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
+import '../portal/prescription_wizard_screen.dart';
 
 /// Professional actions remain scoped to the patient and live session supplied
 /// by ChatScreen. The server rechecks session eligibility and consent on writes.
@@ -69,7 +70,6 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
   String? _medicationFingerprint, _medicationIntent;
   bool _psychiatrist = false;
   bool _showMedicationEditor = false;
-  BackendMedication? _editingMedication;
   final _medName = TextEditingController();
   final _medDosage = TextEditingController();
   final _medForm = TextEditingController(text: 'Tablet');
@@ -374,17 +374,51 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
     });
   }
 
-  void _editMedication([BackendMedication? medication]) {
+  Future<void> _editMedication(BackendMedication medication) async {
+    if (!_ownsAccount || !_psychiatrist) return;
+    BackendMedication? updated;
+    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => EPrescriptionFormScreen(
+        session: widget.session,
+        initialMedication: medication.toMedication(),
+        onSaveMedication: (value) async {
+          final reminder = value.reminders.firstOrNull;
+          updated = await widget.apiClient.updateMedication(
+            accessToken: _token,
+            patientId: widget.patientId,
+            medicationId: medication.id,
+            name: value.name,
+            dosage: value.dosage,
+            form: value.form,
+            reminderTime: reminder?.label ?? '',
+            relationToMeal:
+                reminder?.relationToMeal ?? medication.relationToMeal,
+            currentStock: value.currentStock,
+            alertBelow: value.alertBelow,
+            source: medication.source,
+            schedule: value.schedule,
+          );
+        },
+      ),
+    ));
+    if (saved != true || updated == null || !_ownsAccount) return;
+    setState(() => _medications = [
+          ...?_medications?.where((item) => item.id != medication.id),
+          updated!,
+        ]);
+    _notice('Obat tersimpan.');
+  }
+
+  void _addMedication() {
     setState(() {
-      _editingMedication = medication;
       _showMedicationEditor = true;
-      _medName.text = medication?.name ?? '';
-      _medDosage.text = medication?.dosage ?? '';
-      _medForm.text = medication?.form ?? 'Tablet';
-      _medTime.text = medication?.reminderTime ?? '08:00';
-      _medMeal.text = medication?.relationToMeal ?? '';
-      _medStock.text = '${medication?.currentStock ?? 0}';
-      _medAlert.text = '${medication?.alertBelow ?? 5}';
+      _medName.clear();
+      _medDosage.clear();
+      _medForm.text = 'Tablet';
+      _medTime.text = '08:00';
+      _medMeal.clear();
+      _medStock.text = '0';
+      _medAlert.text = '5';
     });
   }
 
@@ -399,44 +433,30 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
       _invalid('Isi nama obat serta stok dan batas pengingat yang valid.');
       return;
     }
-    final current = _editingMedication;
     final name = _medName.text.trim(),
         dosage = _medDosage.text.trim(),
         form = _medForm.text.trim();
     final reminder = _medTime.text.trim(), meal = _medMeal.text.trim();
     final fingerprint =
         jsonEncode([name, dosage, form, reminder, meal, stock, alert]);
-    if (current == null && _medicationFingerprint != fingerprint) {
+    if (_medicationFingerprint != fingerprint) {
       _medicationFingerprint = fingerprint;
       _medicationIntent = newClientIntentId();
     }
     final intent = _medicationIntent;
     _run(() async {
-      final medication = current == null
-          ? await widget.apiClient.createMedication(
-              accessToken: _token,
-              patientId: widget.patientId,
-              name: name,
-              dosage: dosage,
-              form: form,
-              reminderTime: reminder,
-              relationToMeal: meal,
-              currentStock: stock,
-              alertBelow: alert,
-              source: 'Profesional',
-              idempotencyKey: intent)
-          : await widget.apiClient.updateMedication(
-              accessToken: _token,
-              patientId: widget.patientId,
-              medicationId: current.id,
-              name: name,
-              dosage: dosage,
-              form: form,
-              reminderTime: reminder,
-              relationToMeal: meal,
-              currentStock: stock,
-              alertBelow: alert,
-              source: current.source);
+      final medication = await widget.apiClient.createMedication(
+          accessToken: _token,
+          patientId: widget.patientId,
+          name: name,
+          dosage: dosage,
+          form: form,
+          reminderTime: reminder,
+          relationToMeal: meal,
+          currentStock: stock,
+          alertBelow: alert,
+          source: 'Profesional',
+          idempotencyKey: intent);
       if (!_ownsAccount) return;
       setState(() {
         _medications = [
@@ -807,7 +827,7 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
       if (_psychiatrist)
         OutlinedButton.icon(
             key: const Key('add-medication'),
-            onPressed: _busy ? null : () => _editMedication(),
+            onPressed: _busy ? null : _addMedication,
             icon: const Icon(Icons.add),
             label: const Text('Tambah obat')),
       if (_psychiatrist && _showMedicationEditor) ...[

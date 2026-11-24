@@ -32,7 +32,7 @@ func TestReviewRenewalWaitsForEarlierAttendanceAndCreditReplacement(t *testing.T
 	if err := db.QueryRowContext(ctx, `INSERT INTO care_packages(patient_id,professional_id,status,total_sessions,price,expires_at,merged_into,merged_at) VALUES($1,$2,'merged',4,200000,now()+interval '30 days',$3,now()) RETURNING id`, patient, professional, original).Scan(&renewal); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO care_sessions(package_id,patient_id,professional_id,scheduled_at,status) SELECT $1,$2,$3,now()-(10-i)*interval '1 hour',CASE WHEN i=1 THEN 'scheduled' ELSE 'completed' END FROM generate_series(1,8)i`, original, patient, professional); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT INTO care_sessions(package_id,patient_id,professional_id,scheduled_at,status,duration_minutes) SELECT $1,$2,$3,now()-(10-i)*interval '5 minutes',CASE WHEN i=1 THEN 'scheduled' ELSE 'completed' END,60 FROM generate_series(1,8)i`, original, patient, professional); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.QueryRowContext(ctx, `SELECT id FROM care_sessions WHERE package_id=$1 AND status='scheduled'`, original).Scan(&delayed); err != nil {
@@ -67,7 +67,7 @@ func TestReviewRenewalWaitsForEarlierAttendanceAndCreditReplacement(t *testing.T
 		t.Fatalf("unfinished replacement allowed renewal: %+v %v", items, err)
 	}
 	// Advance only the fixture schedule to exercise real terminal completion.
-	if _, err := db.ExecContext(ctx, `UPDATE care_sessions SET scheduled_at=now()-interval '1 hour' WHERE id=$1`, replacement.ID); err != nil {
+	if _, err := db.ExecContext(ctx, `UPDATE care_sessions SET scheduled_at=now()-interval '1 hour',patient_attendance='attended' WHERE id=$1`, replacement.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.UpdateCareSessionStatus(ctx, replacement.ID, "completed", "", professional); err != nil {

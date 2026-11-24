@@ -1231,7 +1231,7 @@ class _ProfessionalToolsSectionState
     _availability = token == null || token.isEmpty
         ? null
         : Future.wait<Object>([
-            client.listMySchedules(accessToken: token),
+            client.getMyScheduleSettings(accessToken: token),
             client.getPricing(accessToken: token),
           ]);
   }
@@ -1339,6 +1339,8 @@ class _ProfessionalToolsSectionState
                                     ]);
                                   }
                                   final data = snapshot.requireData;
+                                  final settings = data[0]
+                                      as BackendProfessionalScheduleSettings;
                                   return ProfessionalAvailabilitySummary(
                                     onConfigure: () async {
                                       await open(ProAvailabilityScreen(
@@ -1346,8 +1348,9 @@ class _ProfessionalToolsSectionState
                                           apiClient: apiClient));
                                       if (mounted) setState(_reload);
                                     },
-                                    schedules: data[0]
-                                        as List<BackendProfessionalSchedule>,
+                                    schedules: settings.schedules,
+                                    usePrimarySchedule:
+                                        settings.usePrimarySchedule,
                                     pricing:
                                         data[1] as BackendProfessionalPricing,
                                   );

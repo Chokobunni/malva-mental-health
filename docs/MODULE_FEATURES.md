@@ -168,7 +168,7 @@ Home pasien: sesi berjalan dan video mendatang dengan foto profesional. Profesio
 
 | Modul | Pasien | Profesional |
 |---|---|---|
-| Kehadiran sesi | Hadir/Tidak hadir sendiri; no-show memakai kuota | Hadir/Tidak hadir sendiri; absen mengembalikan kuota |
+| Kehadiran sesi | Join Meeting atau Hadir di Jadwal My Care. Ketidakhadiran setelah akhir sesi memakai kuota. | Check-in sendiri. Ketidakhadiran yang dikonfirmasi sebelum akhir sesi mengembalikan kuota pasien. |
 | Penyelesaian | Riwayat sesudah akhir, chat ditutup tepat waktu | Sesi selesai hanya sesudah akhir jadwal |
 | Attachment chat | Isi assessment saat sesi; buka goals/rangkuman; unduh file privat | Goals/habits dan tambah goal; permintaan assessment; diagnosis; Medication psikiater; file/gambar; rangkuman homework/insight |
 | Sinkronisasi | Obat dari profesional masuk Medication Check-in lewat event in-app dan dipulihkan saat resume/reconnect | Perubahan memakai scope sesi aktif dan consent |

@@ -694,6 +694,21 @@ func (s *Store) ListCareSessions(ctx context.Context, userID, role, scope, patie
 
 // ListCareSessionFeed keeps every scheduled session visible while bounding history.
 func (s *Store) ListCareSessionFeed(ctx context.Context, userID, role, scope, patientID string, historyLimit int) ([]CareSession, error) {
+	scope = strings.ToLower(strings.TrimSpace(scope))
+	if scope == "all" || scope == "past" || scope == "" {
+		ownerFilter := " AND patient_id=$2"
+		args := []any{userID}
+		if role == "professional" {
+			ownerFilter = " AND professional_id=$2"
+			if patientID = strings.TrimSpace(patientID); patientID != "" {
+				ownerFilter += " AND patient_id=$3"
+				args = append(args, patientID)
+			}
+		}
+		if _, err := s.finalizeEndedCareSessions(ctx, ownerFilter, args...); err != nil {
+			return nil, err
+		}
+	}
 	return s.listCareSessions(ctx, userID, role, scope, patientID, historyLimit, true)
 }
 
@@ -733,7 +748,11 @@ func (s *Store) listCareSessions(ctx context.Context, userID, role, scope, patie
 		where = append(where, `(cs.scheduled_at AT TIME ZONE 'Asia/Jakarta')::date = (now() AT TIME ZONE 'Asia/Jakarta')::date
 			AND cs.status = 'scheduled'`)
 	case "past":
-		where = append(where, "(cs.status IN ('completed','no_show','cancelled_by_professional','cancelled_by_patient','expired_unpaid') OR (cs.status='scheduled' AND cs.scheduled_at + (cs.duration_minutes || ' minutes')::interval <= now()))")
+		past := "cs.status IN ('completed','no_show','cancelled_by_professional','cancelled_by_patient','expired_unpaid')"
+		if !completeSchedule {
+			past = "(" + past + " OR (cs.status='scheduled' AND cs.scheduled_at + make_interval(mins => cs.duration_minutes) <= now()))"
+		}
+		where = append(where, past)
 	case "", "all":
 	default:
 		return nil, errors.New("scope harus upcoming, ongoing, today, past, atau all")
@@ -783,10 +802,10 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 		return CareSession{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var current string
+	var current, patientAttendance string
 	var start time.Time
 	var duration int
-	if err := tx.QueryRowContext(ctx, `SELECT status, scheduled_at, duration_minutes FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&current, &start, &duration); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT status, scheduled_at, duration_minutes, patient_attendance FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&current, &start, &duration, &patientAttendance); err != nil {
 		return CareSession{}, err
 	}
 	if current == status && current != "scheduled" {
@@ -798,8 +817,21 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 	if current != "scheduled" {
 		return CareSession{}, ErrCareSessionTerminal
 	}
-	if status == "completed" && clock.Now().Before(start.Add(time.Duration(duration)*time.Minute)) {
-		return CareSession{}, errors.New("sesi baru bisa diselesaikan setelah durasi terjadwal berakhir")
+	if status == "finalize" || status == "completed" || status == "no_show" {
+		if clock.Now().Before(start.Add(time.Duration(duration) * time.Minute)) {
+			return CareSession{}, errCareSessionNotEnded
+		}
+		switch {
+		case status == "finalize":
+			status = "no_show"
+			if patientAttendance == "attended" {
+				status = "completed"
+			}
+		case status == "completed" && patientAttendance != "attended":
+			return CareSession{}, errors.New("pasien belum mengonfirmasi kehadiran")
+		case status == "no_show" && patientAttendance == "attended":
+			return CareSession{}, errors.New("pasien sudah mengonfirmasi kehadiran")
+		}
 	}
 
 	// "attended" hanya MENANDAI kehadiran: status sesi TIDAK berubah dan
@@ -832,10 +864,13 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 		return CareSession{}, errors.New("status sesi tidak valid")
 	}
 	setAttended := ""
-	if status == "completed" {
+	switch status {
+	case "completed":
 		// COALESCE: jangan timpa waktu hadir asli yang sudah dicatat lewat
 		// "attended" sebelum sesi diselesaikan.
 		setAttended = ", attended_marked_at = COALESCE(attended_marked_at, now())"
+	case "no_show":
+		setAttended = ", patient_attendance='absent', patient_attendance_marked_at=COALESCE(patient_attendance_marked_at,now())"
 	}
 	setCancelledBy := ""
 	args := []any{status, strings.TrimSpace(cancelReason), sessionID}
@@ -888,6 +923,7 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 }
 
 var ErrCareSessionTerminal = errors.New("sesi sudah berakhir atau dibatalkan")
+var errCareSessionNotEnded = errors.New("status sesi baru bisa ditetapkan setelah durasi terjadwal berakhir")
 
 // A cancelled one-time appointment must not leave a permanent care link.
 // Other unfinished appointments and purchases retain the relationship.
@@ -918,8 +954,9 @@ func (s *Store) MarkCareSessionAttendance(ctx context.Context, sessionID, role, 
 	defer func() { _ = tx.Rollback() }()
 	var patient, professional, status, previous string
 	var start time.Time
+	var duration int
 	// role is selected from the allowlist above; it is never request SQL.
-	if err := tx.QueryRowContext(ctx, `SELECT patient_id,professional_id,status,scheduled_at,`+role+`_attendance FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&patient, &professional, &status, &start, &previous); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT patient_id,professional_id,status,scheduled_at,duration_minutes,`+role+`_attendance FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&patient, &professional, &status, &start, &duration, &previous); err != nil {
 		return CareSession{}, err
 	}
 	if (role == "patient" && actorID != patient) || (role == "professional" && actorID != professional) {
@@ -934,7 +971,11 @@ func (s *Store) MarkCareSessionAttendance(ctx context.Context, sessionID, role, 
 	if status != "scheduled" {
 		return CareSession{}, ErrCareSessionTerminal
 	}
-	if clock.Now().Before(start.Add(-10 * time.Minute)) {
+	now := clock.Now()
+	if (role == "patient" || attendance == "absent") && !now.Before(start.Add(time.Duration(duration)*time.Minute)) {
+		return CareSession{}, ErrCareSessionTerminal
+	}
+	if now.Before(start.Add(-10 * time.Minute)) {
 		return CareSession{}, errors.New("kehadiran baru bisa ditandai sejak 10 menit sebelum sesi")
 	}
 	if previous != "" {
@@ -1567,17 +1608,16 @@ func (s *Store) careTablesReady(ctx context.Context) bool {
 	return n == 4
 }
 
-// completeAttendedSessions menyelesaikan sesi yang sudah ditandai hadir
-// ("attended") dan sudah melewati durasinya. Per sesi, status diubah ke
-// "completed" lewat UpdateCareSessionStatus agar earnings tercatat dalam
-// transaksi yang sama (idempoten). Mengembalikan jumlah sesi yang berhasil
-// diselesaikan; berhenti dan mengembalikan error pada kegagalan pertama agar
-// terlihat di log sweeper.
-func (s *Store) completeAttendedSessions(ctx context.Context) (int64, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM care_sessions
-		WHERE status = 'scheduled' AND attended_marked_at IS NOT NULL
-		  AND scheduled_at + ((duration_minutes) || ' minutes')::interval <= now()
-		ORDER BY scheduled_at ASC LIMIT 200`)
+// Finalization rechecks the deadline and attendance under the session lock.
+// ownerFilter is a static SQL fragment supplied by the session feed.
+func (s *Store) finalizeEndedCareSessions(ctx context.Context, ownerFilter string, args ...any) (int64, error) {
+	query := `SELECT id FROM care_sessions WHERE status='scheduled'
+		AND scheduled_at + make_interval(mins => duration_minutes) <= $1` + ownerFilter + `
+		ORDER BY scheduled_at ASC`
+	if ownerFilter == "" {
+		query += " LIMIT 200"
+	}
+	rows, err := s.db.QueryContext(ctx, query, append([]any{clock.Now()}, args...)...)
 	if err != nil {
 		return 0, err
 	}
@@ -1598,8 +1638,8 @@ func (s *Store) completeAttendedSessions(ctx context.Context) (int64, error) {
 
 	var done int64
 	for _, id := range ids {
-		if _, err := s.UpdateCareSessionStatus(ctx, id, "completed", "", ""); err != nil {
-			if errors.Is(err, ErrCareSessionTerminal) {
+		if _, err := s.UpdateCareSessionStatus(ctx, id, "finalize", "", ""); err != nil {
+			if errors.Is(err, ErrCareSessionTerminal) || errors.Is(err, errCareSessionNotEnded) || errors.Is(err, sql.ErrNoRows) {
 				continue
 			}
 			return done, err
@@ -1614,10 +1654,7 @@ func (s *Store) SweepCareState(ctx context.Context) (expiredPackages int64, expi
 	if !s.careTablesReady(ctx) {
 		return 0, 0, 0, nil
 	}
-	// Selesaikan dulu sesi yang sudah ditandai hadir dan sudah melewati
-	// durasinya. Ini mencatat earnings (lewat UpdateCareSessionStatus) sehingga
-	// sesi yang hadir tetap dibayar walau profesional tidak menekan "Selesai".
-	autoCompleted, autoErr := s.completeAttendedSessions(ctx)
+	autoCompleted, autoErr := s.finalizeEndedCareSessions(ctx, "")
 	if autoErr != nil {
 		err = autoErr
 		return
@@ -1635,21 +1672,6 @@ func (s *Store) SweepCareState(ctx context.Context) (expiredPackages int64, expi
 		SET status = 'expired_unpaid', updated_at = now()
 		WHERE status = 'pending_payment' AND created_at <= now() - interval '30 minutes'`); e == nil {
 		expiredSessions, _ = res.RowsAffected()
-	} else {
-		err = e
-		return
-	}
-	// Sesi terjadwal yang lewat >24 jam tanpa konfirmasi profesional ditandai
-	// no_show (kuota tetap terpakai sesuai aturan no-show/hangus yang disetujui
-	// pasien saat membeli paket), BUKAN completed — sesi yang benar-benar
-	// berlangsung sudah diselesaikan lewat jalur "attended" di atas, dan
-	// completed manual tetap hanya dari profesional.
-	if res, e := s.db.ExecContext(ctx, `UPDATE care_sessions
-		SET status = 'no_show', updated_at = now()
-		WHERE status = 'scheduled'
-		  AND scheduled_at <= now() - interval '24 hours'`); e == nil {
-		n, _ := res.RowsAffected()
-		completedSessions += n
 	} else {
 		err = e
 		return

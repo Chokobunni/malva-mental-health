@@ -24,7 +24,7 @@ func TestPackageBookingUsesSelectedPackageAndRetries(t *testing.T) {
 	srv := newOnboardingTestServer(db)
 	srv.calendar = &fakeMeetCalendar{}
 	start := clock.Now().AddDate(0, 0, 4)
-	if _, err := db.Exec(`INSERT INTO professional_schedules(professional_id,day_of_week,start_time,end_time) VALUES($1,$2,'00:00','23:59')`, prof.ID, int(start.Weekday())); err != nil {
+	if _, err := db.Exec(`INSERT INTO professional_schedules(professional_id,service_category,day_of_week,start_time,end_time) VALUES($1,'package',$2,'00:00','23:59')`, prof.ID, int(start.Weekday())); err != nil {
 		t.Fatal(err)
 	}
 	pkg, err := st.CreateCarePackage(context.Background(), store.CarePackage{PatientID: patient.ID, ProfessionalID: prof.ID, Price: 100000})
@@ -71,7 +71,7 @@ func TestPackageBookingRejectsFirstSlotBeyondValidity(t *testing.T) {
 	}
 	t.Cleanup(func() { _, _ = db.Exec("DELETE FROM care_packages WHERE id=$1", pkg.ID) })
 	distant := clock.Now().AddDate(0, 0, pkg.ValidityDays+2)
-	if _, err := db.Exec(`INSERT INTO professional_schedules(professional_id,day_of_week,start_time,end_time) VALUES($1,$2,'09:00','13:00')`, prof.ID, int(distant.Weekday())); err != nil {
+	if _, err := db.Exec(`INSERT INTO professional_schedules(professional_id,service_category,day_of_week,start_time,end_time) VALUES($1,'package',$2,'09:00','13:00')`, prof.ID, int(distant.Weekday())); err != nil {
 		t.Fatal(err)
 	}
 	body := fmt.Sprintf(`{"package_id":%q,"service_type":"package_session","session_type":"video","booking_date":%q,"slot_time":"10:00"}`, pkg.ID, distant.Format("2006-01-02"))
@@ -89,7 +89,7 @@ func TestLegacyResumeBindsSelectedPackageAmongDuplicatePendingPurchases(t *testi
 	day := clock.Now().AddDate(0, 0, 4)
 	// Keep the full session inside practice hours, even when tests run near midnight.
 	start := time.Date(day.Year(), day.Month(), day.Day(), 10, 0, 0, 0, clock.Location())
-	if _, err := db.Exec(`INSERT INTO professional_schedules(professional_id,day_of_week,start_time,end_time) VALUES($1,$2,'00:00','23:59')`, prof.ID, int(start.Weekday())); err != nil {
+	if _, err := db.Exec(`INSERT INTO professional_schedules(professional_id,service_category,day_of_week,start_time,end_time) VALUES($1,'package',$2,'00:00','23:59')`, prof.ID, int(start.Weekday())); err != nil {
 		t.Fatal(err)
 	}
 	booking, pay := createPendingBookingAt(t, db, st, patient.ID, prof.ID, "package_session", "chat", start)

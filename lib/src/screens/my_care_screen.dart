@@ -10,7 +10,6 @@ import '../services/server_clock.dart';
 import '../widgets/session_attendance_actions.dart';
 import '../widgets/doctor_review_actions.dart';
 import '../services/malva_api_client.dart';
-import '../services/meeting_launcher.dart';
 import '../theme.dart';
 import '../time/wib.dart';
 import '../widgets/friendly_error.dart';
@@ -44,7 +43,6 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
   String _filterLinks = 'aktif';
 
   String _filterPast = 'selesai';
-  String _filterPackage = 'semua';
   bool _loadInProgress = false;
   List<BackendCarePackage> _packages = const [];
   List<BackendCareSession> _sessions = const [];
@@ -160,9 +158,13 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
         .compareTo(b.scheduledDateTime?.millisecondsSinceEpoch ?? 0));
 
   List<BackendCareSession> get _past => _sessions
-      .where((session) =>
-          session.status != 'pending_payment' &&
-          (!session.isScheduled || session.isAfterJoinWindow))
+      .where((session) => const {
+            'completed',
+            'cancelled_by_patient',
+            'cancelled_by_professional',
+            'expired_unpaid',
+            'no_show',
+          }.contains(session.status))
       .toList()
     ..sort((a, b) => (b.scheduledDateTime?.millisecondsSinceEpoch ?? 0)
         .compareTo(a.scheduledDateTime?.millisecondsSinceEpoch ?? 0));
@@ -311,11 +313,6 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
                           ],
                         ] else ...[
                           ..._scheduleBody(upcoming: false),
-                          if (_packages.isNotEmpty) ...[
-                            const SizedBox(height: 14),
-                            const SectionLabel('Riwayat paket'),
-                            ..._packagesBody(),
-                          ],
                         ],
                       ],
                     )),
@@ -325,64 +322,6 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
         ));
   }
 
-  List<Widget> _packagesBody() {
-    if (_packages.isEmpty) {
-      return [
-        const EmptyState(
-          icon: Icons.card_membership_outlined,
-          title: 'Belum ada paket',
-          subtitle:
-              'Beli paket 4 sesi / 6 minggu dari profil profesional untuk mulai.',
-        ),
-      ];
-    }
-    return [
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(children: [
-          for (final (status, label) in const [
-            ('semua', 'Semua'),
-            ('pending_payment', 'Menunggu pembayaran'),
-            ('active', 'Aktif'),
-            ('cancelled', 'Dibatalkan'),
-            ('completed', 'Selesai'),
-            ('expired', 'Kedaluwarsa')
-          ])
-            if (status == 'semua' || _packages.any((p) => p.status == status))
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(
-                    label: Text(
-                        '$label ${_packages.where((p) => status == 'semua' || p.status == status).length}'),
-                    selected: _filterPackage == status,
-                    onSelected: (_) => setState(() => _filterPackage = status)),
-              ),
-        ]),
-      ),
-      const SizedBox(height: 10),
-      if (_packageGroups.isEmpty)
-        const EmptyState(
-            icon: Icons.card_membership_outlined,
-            title: 'Tidak ada paket pada status ini',
-            subtitle: 'Pilih status lain untuk melihat paketmu.'),
-      for (final group in _packageGroups) ...[
-        if (group.merged)
-          _MergedPackageCard(
-            package: group.display,
-            primary: group.primary,
-            count: group.count,
-            onOpen: () => _openPackage(group.primary),
-          )
-        else
-          _PackageCard(
-            package: group.primary,
-            onOpen: () => _openPackage(group.primary),
-          ),
-        const SizedBox(height: 10),
-      ],
-    ];
-  }
-
   List<Widget> _scheduleBody({required bool upcoming}) {
     final base = upcoming ? _upcoming : _past;
     final filtered = upcoming
@@ -390,16 +329,25 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
         : base.where((s) => _matchesSessionFilter(s, _filterPast)).toList();
     return [
       if (!upcoming) ...[
-        _careFilters([
-          for (final (value, label) in _historyFilters)
-            _careFilterChip(
-              label: Text(base.isEmpty
-                  ? label
-                  : '$label ${base.where((s) => _matchesSessionFilter(s, value)).length}'),
-              selected: _filterPast == value,
-              onSelected: (_) => setState(() => _filterPast = value),
+        Center(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: 6,
+              children: [
+                for (final (value, label) in _historyFilters)
+                  _careFilterChip(
+                    label: Text(base.isEmpty
+                        ? label
+                        : '$label ${base.where((s) => _matchesSessionFilter(s, value)).length}'),
+                    selected: _filterPast == value,
+                    onSelected: (_) => setState(() => _filterPast = value),
+                  ),
+              ],
             ),
-        ]),
+          ),
+        ),
         const SizedBox(height: 14),
       ],
       _careSectionLabel(
@@ -419,7 +367,9 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
             session: session,
             onChanged: _load,
             onOpenChat: () => _openChat(session),
-            onJoin: () => _joinSession(session),
+            accessToken: (widget.session ?? ref.read(currentSessionProvider))
+                ?.accessToken,
+            apiClient: widget.apiClient,
             onCancel: () => _cancelSession(session),
             onReschedule: () => _openScheduler(existing: session),
           ),
@@ -546,45 +496,6 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
     if (!p.isActive) return false;
     final expires = p.expiresDateTime;
     return expires == null || expires.isAfter(ServerClock.now());
-  }
-
-  List<_PackageDisplay> get _packageGroups {
-    final order = <String>[];
-    final byPro = <String, List<BackendCarePackage>>{};
-    for (final p in _packages.where(
-        (p) => _filterPackage == 'semua' || p.status == _filterPackage)) {
-      if (!byPro.containsKey(p.professionalId)) {
-        order.add(p.professionalId);
-        byPro[p.professionalId] = [];
-      }
-      byPro[p.professionalId]!.add(p);
-    }
-    final out = <_PackageDisplay>[];
-    for (final proId in order) {
-      final list = byPro[proId]!;
-      final active = list.where(_isUsablePackage).toList(growable: false);
-      if (active.length > 1) {
-        out.add(_PackageDisplay(
-            primary: active.reduce(
-                (a, b) => b.remainingSessions > a.remainingSessions ? b : a),
-            display: _mergedAggregate(active),
-            count: active.length));
-        for (final p in list.where((p) => !_isUsablePackage(p))) {
-          out.add(_PackageDisplay(primary: p, display: p, count: 1));
-        }
-      } else {
-        final sorted = List<BackendCarePackage>.from(list)
-          ..sort((a, b) => switch ((_isUsablePackage(a), _isUsablePackage(b))) {
-                (true, false) => -1,
-                (false, true) => 1,
-                _ => (b.createdAt ?? '').compareTo(a.createdAt ?? ''),
-              });
-        for (final p in sorted) {
-          out.add(_PackageDisplay(primary: p, display: p, count: 1));
-        }
-      }
-    }
-    return out;
   }
 
   /// Paket untuk kartu Professionals: seluruh paket AKTIF profesional yang
@@ -825,61 +736,6 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
     );
   }
 
-  Future<void> _joinSession(BackendCareSession s) async {
-    if (s.isVideo) {
-      if (s.meetingUrl.trim().isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Link video belum tersedia. Profesional akan membuatnya '
-                'sebelum sesi dimulai.',
-              ),
-            ),
-          );
-        }
-        return;
-      }
-      if (s.isBeforeJoinWindow) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text('Belum bisa bergabung — ${s.joinStateLabel}.')),
-          );
-        }
-        return;
-      }
-      final url = s.meetingUrl.trim();
-      final result = await openMeetLink(url);
-      if (!mounted) return;
-      switch (result) {
-        case MeetLaunchResult.openedExternal:
-        case MeetLaunchResult.openedInApp:
-          return;
-        case MeetLaunchResult.invalid:
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Link Google Meet tidak valid.')),
-          );
-          return;
-        case MeetLaunchResult.failed:
-          // Aplikasi Meet tidak terbuka: salin tautan agar pengguna bisa
-          // menempelnya manual di browser.
-          await copyMeetLink(url);
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Link Google Meet disalin. Tempel di browser bila aplikasi '
-                'Meet tidak terbuka.',
-              ),
-            ),
-          );
-          return;
-      }
-    }
-    _openChat(s);
-  }
-
   void _openManageData(BackendPatientProfessionalLink link) {
     final name = link.professionalDisplayName.isEmpty
         ? 'Profesional'
@@ -898,28 +754,13 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
   }
 }
 
-/// Satu baris tampilan paket: paket utama (untuk navigasi) + paket yang
-/// ditampilkan (bisa hasil gabungan beberapa paket aktif) + jumlah paket.
-class _PackageDisplay {
-  const _PackageDisplay({
-    required this.primary,
-    required this.display,
-    required this.count,
-  });
-
-  final BackendCarePackage primary;
-  final BackendCarePackage display;
-  final int count;
-
-  bool get merged => count > 1;
-}
-
 Widget _careFilterChip(
         {required Widget label,
         required bool selected,
         required ValueChanged<bool> onSelected}) =>
     ChoiceChip(
       label: label,
+      labelPadding: const EdgeInsets.symmetric(horizontal: 3),
       selected: selected,
       onSelected: onSelected,
       showCheckmark: false,
@@ -982,14 +823,12 @@ class _PackageCard extends StatelessWidget {
   const _PackageCard({
     required this.package,
     required this.onOpen,
-    this.footerNote,
   });
 
   final BackendCarePackage package;
   final VoidCallback onOpen;
 
   /// Catatan kecil di bawah kartu (dipakai kartu gabungan).
-  final String? footerNote;
 
   @override
   Widget build(BuildContext context) {
@@ -1044,16 +883,6 @@ class _PackageCard extends StatelessWidget {
             '${expires == null ? '' : ' • s/d ${expires.day}/${expires.month}/${expires.year}'}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          if (footerNote != null && footerNote!.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              footerNote!,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(fontWeight: FontWeight.w700),
-            ),
-          ],
           // F-12: ringkasan kredit/refund bila ada dana yang dikembalikan.
           if (package.refundedAmount > 0) ...[
             const SizedBox(height: 4),
@@ -1071,37 +900,6 @@ class _PackageCard extends StatelessWidget {
   }
 }
 
-/// Kartu paket gabungan: total/terpakai/sisa dijumlahkan dari beberapa paket
-/// aktif profesional yang sama. Ketuk membuka paket utama (sisa terbanyak).
-class _MergedPackageCard extends StatelessWidget {
-  const _MergedPackageCard({
-    required this.package,
-    required this.primary,
-    required this.count,
-    required this.onOpen,
-  });
-
-  /// Baris agregat (total/terpakai/sisa/expired hasil penjumlahan).
-  final BackendCarePackage package;
-  final BackendCarePackage primary;
-
-  /// Jumlah paket yang digabung.
-  final int count;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    return _PackageCard(
-      package: package,
-      onOpen: onOpen,
-      footerNote: 'Digabung dari $count paket',
-    );
-  }
-}
-
-/// Expiry agregat dihitung di `_mergedAggregate`; helper ini hanya menegaskan
-/// tipe agar tidak ada logika baru tersembunyi di sini.
-
 /// Format nilai rupiah sederhana (tanpa pemisah ribuan berlebih).
 String _rupiah(int value) => 'Rp ${value.toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+$)'),
@@ -1113,14 +911,17 @@ class _SessionCard extends StatelessWidget {
     required this.session,
     required this.onChanged,
     required this.onOpenChat,
-    required this.onJoin,
+    this.accessToken,
+    this.apiClient,
     required this.onCancel,
     required this.onReschedule,
   });
 
   final BackendCareSession session;
   final Future<void> Function() onChanged;
-  final VoidCallback onOpenChat, onJoin, onCancel, onReschedule;
+  final VoidCallback onOpenChat, onCancel, onReschedule;
+  final String? accessToken;
+  final MalvaApiClient? apiClient;
 
   @override
   Widget build(BuildContext context) {
@@ -1211,14 +1012,27 @@ class _SessionCard extends StatelessWidget {
             const SizedBox(height: 12),
             _sessionStrip(Icons.calendar_today_outlined, dateLabel,
                 const Color(0xfff6f2f8), MalvaColors.ink),
-            if (session.isBeforeJoinWindow) ...[
+            if (before != null && before > Duration.zero) ...[
               const SizedBox(height: 6),
               _sessionStrip(Icons.schedule_rounded, 'Mulai dalam $remaining',
                   const Color(0xfff3e8fa), MalvaColors.seed),
+            ],
+            if (session.isBeforeJoinWindow) ...[
               const SizedBox(height: 6),
               const Text('Check-in dibuka 10 menit sebelum sesi.'),
             ],
             const SizedBox(height: 12),
+            if (live) ...[
+              SessionAttendanceActions(
+                  session: session,
+                  role: UserRole.patient,
+                  accessToken: accessToken,
+                  apiClient: apiClient,
+                  onChanged: onChanged),
+              const SizedBox(height: 6),
+              const Divider(color: Color(0xFFECE4EF)),
+              const SizedBox(height: 4),
+            ],
             LayoutBuilder(builder: (context, constraints) {
               final primary = FilledButton.icon(
                 onPressed: onOpenChat,
@@ -1244,17 +1058,11 @@ class _SessionCard extends StatelessWidget {
               );
               final actions = [
                 primary,
-                if (live)
+                if (live && !session.isVideo)
                   FilledButton(
-                    onPressed:
-                        session.isVideo && session.meetingUrl.trim().isEmpty
-                            ? null
-                            : onJoin,
+                    onPressed: onOpenChat,
                     style: compactFilledButtonStyle,
-                    child: Text(
-                        session.isVideo && session.meetingUrl.trim().isEmpty
-                            ? 'Menunggu link video'
-                            : 'Gabung'),
+                    child: const Text('Gabung'),
                   )
                 else ...[
                   OutlinedButton(
@@ -1273,7 +1081,7 @@ class _SessionCard extends StatelessWidget {
                   ),
                 ],
               ];
-              if (live ||
+              if ((live && !session.isVideo) ||
                   constraints.maxWidth < 260 ||
                   MediaQuery.textScalerOf(context).scale(12) > 16) {
                 return Wrap(spacing: 7, runSpacing: 4, children: actions);
@@ -1301,8 +1109,6 @@ class _SessionCard extends StatelessWidget {
             Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text('Alasan: ${session.cancelReason}')),
-          SessionAttendanceActions(
-              session: session, role: UserRole.patient, onChanged: onChanged),
         ],
       ),
     );
