@@ -155,7 +155,7 @@ void main() {
                     accessToken: 'token')))));
     await tester.pumpAndSettle();
     expect(loads, 1);
-    await tester.tap(find.text('Add Mood Entry'));
+    await tester.tap(find.text('Tambah Catatan Mood'));
     await tester.pumpAndSettle();
     expect(find.text('Catatan singkat'), findsNothing);
     await tester.ensureVisible(find.byKey(const Key('save-mood-entry')));
@@ -164,6 +164,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(saved, isTrue);
     expect(loads, 2);
-    expect(find.text('Mood entry tersimpan.'), findsOneWidget);
+    expect(find.text('Catatan Mood tersimpan.'), findsOneWidget);
   });
 }

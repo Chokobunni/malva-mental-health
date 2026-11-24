@@ -144,6 +144,7 @@ class _ProfessionalDashboardScreenState
     final (title, subtitle) = switch (_tabIndex) {
       1 => ('Jadwal', 'Lihat jadwal dan riwayat sesi Anda.'),
       2 => ('Pasien', 'Lihat pasien terhubung dan data yang dibagikan.'),
+      3 => ('Percakapan', 'Lihat pesan dan riwayat chat dengan pasien.'),
       4 => ('Akun Profesional', 'Kelola profil dan akun.'),
       _ => ('Professional', 'Prioritas pasien, screening, sesi, dan paket'),
     };
@@ -197,6 +198,7 @@ class _ProfessionalDashboardScreenState
                 child: _tabIndex == 3
                     ? MessagesListScreen(
                         key: ObjectKey(widget.session),
+                        showProfessionalHeader: false,
                         session: widget.session,
                         apiClient: widget.apiClient,
                       )
@@ -284,10 +286,7 @@ class _ProfessionalDashboardScreenState
                                                             .expand_less_rounded
                                                         : Icons
                                                             .expand_more_rounded))
-                                                : const Icon(
-                                                    Icons.expand_more_rounded,
-                                                    color: Color(0xFF7F8993),
-                                                    size: 18)),
+                                                : null),
                                       if (_tabIndex == 0)
                                         _UpcomingSessionsSection(
                                           sessions: _showAllUpcomingVideos
@@ -474,7 +473,7 @@ class _ProfessionalDashboardScreenState
                 NavigationDestination(
                     icon: Icon(Icons.chat_bubble_outline_rounded),
                     selectedIcon: Icon(Icons.chat_bubble_rounded),
-                    label: 'Messages'),
+                    label: 'Pesan'),
                 NavigationDestination(
                     icon: Icon(Icons.grid_view_outlined),
                     selectedIcon: Icon(Icons.grid_view_rounded),
@@ -1596,7 +1595,7 @@ class _UpcomingSessionsSectionState
                     Expanded(
                         child: Text(
                             s.isVideo
-                                ? 'Video Session, ${s.durationMinutes} menit'
+                                ? 'Sesi video, ${s.durationMinutes} menit'
                                 : 'Chat • ${s.durationMinutes} menit',
                             style: const TextStyle(
                                 fontSize: 13, color: Color(0xFF7D8993)))),
@@ -1611,7 +1610,7 @@ class _UpcomingSessionsSectionState
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF303A45))),
           const SizedBox(height: 12),
-          if (s.isVideo && (s.canJoinNow || s.meetingUrl.trim().isEmpty))
+          if (s.isVideo && s.canJoinNow)
             MeetJoinButton(
                 session: s,
                 accessToken: widget.accessToken,
@@ -1662,28 +1661,41 @@ class _UpcomingSessionsSectionState
                             borderRadius: BorderRadius.circular(13))),
                     icon: const Icon(Icons.chat_bubble_rounded, size: 15),
                     label: const Text('Chat'))),
-            const SizedBox(width: 12),
-            Expanded(
-                child: OutlinedButton(
-                    onPressed: _canCancel(s) && !_cancelling.contains(s.id)
-                        ? () => _cancel(s)
-                        : null,
-                    style: OutlinedButton.styleFrom(
-                        foregroundColor: _dashboardPurple,
-                        minimumSize: const Size.fromHeight(40),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        side: const BorderSide(color: Color(0xFFE5E7EB)),
-                        textStyle: const TextStyle(
-                            fontSize: 14,
-                            fontFamily: 'Roboto',
-                            fontWeight: FontWeight.w500),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(13))),
-                    child: Text(_cancelling.contains(s.id)
-                        ? 'Membatalkan...'
-                        : 'Cancel'))),
+            if (!s.isVideo) ...[
+              const SizedBox(width: 12),
+              Expanded(
+                  child: OutlinedButton(
+                      onPressed: _canCancel(s) && !_cancelling.contains(s.id)
+                          ? () => _cancel(s)
+                          : null,
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: _dashboardPurple,
+                          minimumSize: const Size.fromHeight(40),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          side: const BorderSide(color: Color(0xFFE5E7EB)),
+                          textStyle: const TextStyle(
+                              fontSize: 14,
+                              fontFamily: 'Roboto',
+                              fontWeight: FontWeight.w500),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(13))),
+                      child: Text(_cancelling.contains(s.id)
+                          ? 'Membatalkan...'
+                          : 'Batal'))),
+            ],
           ]),
+          if (s.isVideo) ...[
+            const SizedBox(height: 8),
+            ProfessionalSessionActions(
+              key: ValueKey('home-actions-${s.id}'),
+              session: s,
+              accessToken: widget.accessToken,
+              apiClient: widget.apiClient,
+              onChanged: widget.onChanged,
+              futureCancellationOnly: true,
+            ),
+          ],
         ])),
         if (s != widget.sessions.last) const SizedBox(height: 12),
       ],

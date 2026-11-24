@@ -276,8 +276,8 @@ Future<void> _close(WidgetTester tester) async {
 Future<void> _chooseTherapy(WidgetTester tester) async {
   await tester.tap(find.byIcon(Icons.add_rounded));
   await tester.pumpAndSettle();
-  expect(find.text('Therapy Record'), findsOneWidget);
-  await tester.tap(find.text('Therapy Record'));
+  expect(find.text('Riwayat Terapi'), findsOneWidget);
+  await tester.tap(find.text('Riwayat Terapi'));
   await tester.pumpAndSettle();
 }
 
@@ -316,7 +316,7 @@ void main() {
         ));
     await tester.tap(find.byIcon(Icons.add_rounded));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Assessment Record'));
+    await tester.tap(find.text('Riwayat Asesmen'));
     await tester.pumpAndSettle();
     expect(backend.sentShare?['metadata']['source'], 'screening');
     expect(backend.sentShare?['metadata']['phq9']['score'], 23);
@@ -358,10 +358,10 @@ void main() {
     await _open(tester, backend);
     await tester.tap(find.byIcon(Icons.add_rounded));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Diary'));
+    await tester.tap(find.text('Jurnal'));
     await tester.pumpAndSettle();
     expect(backend.sentShare, isNull);
-    expect(find.text('Pilih diary'), findsOneWidget);
+    expect(find.text('Pilih jurnal'), findsOneWidget);
     await tester.tap(find.text('Diary lama'));
     await tester.pumpAndSettle();
     expect(backend.sentShare?['metadata'], {'diary_id': 'old'});
@@ -383,7 +383,7 @@ void main() {
       expect(find.text('Detail skrining lama terverifikasi'), findsNothing);
       expect(find.text('12 / 27'), findsOneWidget);
       expect(find.text('7 / 21'), findsOneWidget);
-      expect(find.text('Hasil Screening Klinis'), findsOneWidget);
+      expect(find.text('Hasil Skrining Klinis'), findsOneWidget);
       expect(find.byType(SharedRecordDetail), findsNothing);
       await _close(tester);
     });
@@ -393,7 +393,7 @@ void main() {
     final backend = _ChatBackend();
     await _open(tester, backend);
     await _chooseTherapy(tester);
-    expect(find.text('Pilih therapy record'), findsOneWidget);
+    expect(find.text('Pilih riwayat Terapi'), findsOneWidget);
     expect(find.text('who5 hasil asesmen'), findsNothing);
     await tester.tap(find.text('Latihan ABCDE'));
     await tester.pumpAndSettle();
@@ -410,7 +410,7 @@ void main() {
     await _open(tester, backend);
     await _chooseTherapy(tester);
     expect(
-        find.text('Belum ada therapy record untuk dibagikan.'), findsOneWidget);
+        find.text('Belum ada riwayat Terapi untuk dibagikan.'), findsOneWidget);
     expect(backend.shareCalls, 0);
     await _close(tester);
   });
@@ -420,7 +420,7 @@ void main() {
     final backend = _ChatBackend()..failList = true;
     await _open(tester, backend);
     await _chooseTherapy(tester);
-    expect(find.textContaining('Gagal memuat therapy record'), findsOneWidget);
+    expect(find.textContaining('Gagal memuat riwayat Terapi'), findsOneWidget);
     expect(backend.shareCalls, 0);
     await _close(tester);
   });
@@ -436,7 +436,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Latihan ABCDE'), findsOneWidget);
     expect(find.text('2026-11-05T09:00:00+07:00'), findsNothing);
-    expect(find.text('Detail Record'), findsOneWidget);
+    expect(find.text('Rincian Hasil'), findsOneWidget);
     await tester.tap(find.text('Latihan ABCDE'));
     await tester.pumpAndSettle();
     expect(find.text('Situasi latihan'), findsOneWidget);
@@ -469,10 +469,10 @@ void main() {
       expect(find.textContaining('Isi diary terakhir.'), findsNothing);
       await tester.tap(find.text('Catatan lengkap'));
       await tester.pumpAndSettle();
-      expect(find.text('Detail Diary'), findsOneWidget);
+      expect(find.text('Detail Jurnal'), findsOneWidget);
       expect(find.text(note), findsOneWidget);
       expect(find.byType(BottomSheet), findsOneWidget);
-      await tester.tap(find.byTooltip('Tutup detail diary'));
+      await tester.tap(find.byTooltip('Tutup detail jurnal'));
       await tester.pumpAndSettle();
       expect(find.text(note), findsNothing);
       await tester.tap(find.text('Catatan lengkap'));
@@ -506,7 +506,7 @@ void main() {
     expect(find.text('Isi lama lengkap'), findsOneWidget);
     await tester.tap(find.text('Diary lama'));
     await tester.pumpAndSettle();
-    expect(find.text('Detail Diary'), findsOneWidget);
+    expect(find.text('Detail Jurnal'), findsOneWidget);
     backend.diaryReadable = false;
     await tester.runAsync(() async {
       _sockets.last.add(jsonEncode({
@@ -518,7 +518,7 @@ void main() {
         },
       }));
     });
-    final unavailable = find.text('Akses diary tidak tersedia.');
+    final unavailable = find.text('Akses jurnal tidak tersedia.');
     for (var attempt = 0;
         attempt < 100 && unavailable.evaluate().isEmpty;
         attempt++) {
@@ -528,7 +528,7 @@ void main() {
     }
     expect(find.text('Isi lama lengkap'), findsNothing);
     expect(find.text('Snapshot yang harus diabaikan'), findsNothing);
-    expect(find.text('Akses diary tidak tersedia.'), findsWidgets);
+    expect(find.text('Akses jurnal tidak tersedia.'), findsWidgets);
     await _close(tester);
   });
 
@@ -540,7 +540,7 @@ void main() {
       await _open(tester, backend);
       await tester.tap(find.byIcon(Icons.add_rounded));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Assessment Record'));
+      await tester.tap(find.text('Riwayat Asesmen'));
       await tester.pumpAndSettle();
       expect(backend.shareCalls, 1);
       expect(backend.genericSendCalls, 0);
@@ -602,7 +602,7 @@ void main() {
         };
         await _open(tester, backend, professional: true);
         expect(find.byType(TherapySubmissionView), findsNothing);
-        expect(find.text('Assessment belum tersedia'), findsOneWidget);
+        expect(find.text('Asesmen belum tersedia'), findsOneWidget);
         expect(
             find.text(module == 'who5' ? '10 / 25' : '28 / 42'), findsNothing);
         await _close(tester);

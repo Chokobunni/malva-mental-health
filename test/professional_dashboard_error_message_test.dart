@@ -43,7 +43,7 @@ void main() {
     test('Health Record yang sudah Indonesia dipertahankan', () {
       const msg = 'pasien belum membagikan Health Record';
       expect(
-          friendlyServerMessage(msg), 'Pasien belum membagikan Health Record.');
+          friendlyServerMessage(msg), 'Pasien belum membagikan Rekam Medis.');
     });
 
     test('users are not linked → Indonesia', () {

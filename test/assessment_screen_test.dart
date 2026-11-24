@@ -47,11 +47,9 @@ void main() {
 
     final detail = find.byType(SharedRecordDetail);
     expect(detail, findsOneWidget);
-    expect(
-        find.descendant(of: detail, matching: find.text('PHQ-9 Total Score')),
+    expect(find.descendant(of: detail, matching: find.text('Skor Total PHQ-9')),
         findsOneWidget);
-    expect(
-        find.descendant(of: detail, matching: find.text('GAD-7 Total Score')),
+    expect(find.descendant(of: detail, matching: find.text('Skor Total GAD-7')),
         findsOneWidget);
     expect(find.descendant(of: detail, matching: find.text('5')),
         findsNWidgets(2));
@@ -60,12 +58,12 @@ void main() {
     expect(
         find.descendant(
             of: detail,
-            matching: find.text('PHQ-9 · Dukungan rule internal (CF)')),
+            matching: find.text('PHQ-9 · Dukungan aturan internal (CF)')),
         findsOneWidget);
     expect(
         find.descendant(
             of: detail,
-            matching: find.text('GAD-7 · Dukungan rule internal (CF)')),
+            matching: find.text('GAD-7 · Dukungan aturan internal (CF)')),
         findsOneWidget);
     expect(
         find.descendant(
@@ -82,8 +80,8 @@ void main() {
         find.textContaining(
             'CF menunjukkan dukungan aturan dalam model, bukan probabilitas diagnosis'),
         findsNothing);
-    expect(find.text('Total Score: 5/27 (Ringan)'), findsOneWidget);
-    expect(find.text('Total Score: 5/21 (Ringan)'), findsOneWidget);
+    expect(find.text('PHQ-9 (Depresi) — 5/27'), findsOneWidget);
+    expect(find.text('GAD-7 (Kecemasan) — 5/21'), findsOneWidget);
   });
 
   testWidgets('shows PHQ-9, GAD-7, then submit in one long page',

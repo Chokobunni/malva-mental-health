@@ -320,7 +320,7 @@ void main() {
         () async => Future<void>.delayed(const Duration(milliseconds: 150)));
     await tester.pumpAndSettle();
     expect(find.text('Editor'), findsOneWidget);
-    expect(find.text('Home'), findsNothing);
+    expect(find.text('Beranda'), findsNothing);
   });
 
   for (final size in [const Size(320, 740), const Size(390, 844)]) {

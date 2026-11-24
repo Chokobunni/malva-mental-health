@@ -58,13 +58,13 @@ void main() {
         home: Scaffold(
             body: SingleChildScrollView(
                 child: SharedRecordDetail.screening(screening: screening)))));
-    expect(find.text('Detail Record'), findsOneWidget);
+    expect(find.text('Rincian Hasil'), findsOneWidget);
     expect(find.text('09/10/2026'), findsOneWidget);
     expect(find.text('09:26'), findsOneWidget);
     expect(find.text('KRISIS'), findsOneWidget);
     expect(find.text('INDIKATOR KESELAMATAN: YA'), findsOneWidget);
-    expect(find.text('PHQ-9 · Dukungan rule internal (CF)'), findsOneWidget);
-    expect(find.text('GAD-7 · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.text('PHQ-9 · Dukungan aturan internal (CF)'), findsOneWidget);
+    expect(find.text('GAD-7 · Dukungan aturan internal (CF)'), findsOneWidget);
     expect(find.textContaining('0.95', findRichText: true), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
@@ -86,6 +86,39 @@ void main() {
                 child: SharedRecordDetail.screening(screening: screening)))));
     expect(find.textContaining('0.68', findRichText: true), findsOneWidget);
     expect(find.textContaining('0.00', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('saved PHQ-9 and GAD-7 show and highlight their own score bands',
+      (tester) async {
+    await openRecord(tester, {'phq9_score': 16, 'gad7_score': 16});
+
+    final disclosure = find.text('Apa arti skormu?');
+    expect(disclosure, findsOneWidget);
+    await tester.ensureVisible(disclosure);
+    await tester.tap(disclosure);
+    await tester.pumpAndSettle();
+
+    expect(find.text('PHQ-9 (Depresi) — 16/27'), findsOneWidget);
+    expect(find.text('GAD-7 (Kecemasan) — 16/21'), findsOneWidget);
+    expect(find.text('Cukup Berat'), findsWidgets);
+    expect(
+      find.ancestor(
+        of: find.text('15–19'),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Semantics && widget.properties.selected == true,
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.ancestor(
+        of: find.text('15–21'),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Semantics && widget.properties.selected == true,
+        ),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -111,8 +144,8 @@ void main() {
                               ...values
                             }))))));
     await show({'phq9_cf': 0.95, 'gad7_cf': 0.684});
-    expect(find.text('PHQ-9 · Dukungan rule internal (CF)'), findsOneWidget);
-    expect(find.text('GAD-7 · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.text('PHQ-9 · Dukungan aturan internal (CF)'), findsOneWidget);
+    expect(find.text('GAD-7 · Dukungan aturan internal (CF)'), findsOneWidget);
     expect(find.textContaining('0.95', findRichText: true), findsOneWidget);
     expect(find.textContaining('0.68', findRichText: true), findsOneWidget);
     await show({'cf': 0.95});
@@ -295,7 +328,7 @@ void main() {
                                     isMine: false,
                                     kind: kind,
                                     metadata: metadata))))))));
-        expect(find.text('Detail Record'), findsOneWidget);
+        expect(find.text('Rincian Hasil'), findsOneWidget);
         expect(find.text('09/11/2026'), findsWidgets);
         expect(find.text('06:43'), findsOneWidget);
         expect(find.textContaining('occurred at'), findsNothing);

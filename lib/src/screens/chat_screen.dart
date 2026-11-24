@@ -849,7 +849,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           meta['session_id'] != _access.sessionId) {
         if (mounted)
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Sesi permintaan assessment sudah berakhir.')));
+              content: Text('Sesi permintaan asesmen sudah berakhir.')));
         return;
       }
       final module = meta['module_id']?.toString();
@@ -913,7 +913,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 ),
                 (
                   Icons.fact_check_rounded,
-                  'Assessment Record',
+                  'Riwayat Asesmen',
                   'assessment',
                   MalvaColors.orchid
                 ),
@@ -925,17 +925,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 ),
                 (
                   Icons.assignment_turned_in_rounded,
-                  'Therapy Record',
+                  'Riwayat Terapi',
                   'worksheet',
                   MalvaColors.plum
                 ),
                 (
                   Icons.flag_rounded,
-                  'Goals & Habits',
+                  'Target & Kebiasaan',
                   'goals',
                   MalvaColors.amber
                 ),
-                (Icons.edit_note_rounded, 'Diary', 'diary', MalvaColors.plum),
+                (Icons.edit_note_rounded, 'Jurnal', 'diary', MalvaColors.plum),
               ])
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
@@ -1017,10 +1017,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 moodScore: entry.mood.score,
               ),
           ],
-          localLogs: [
-            for (final log in store.medicationLogs)
-              (at: log.takenAt, status: log.status),
-          ],
         );
         if (metrics == null) {
           text = 'Ringkasan 7 hari belum tersedia '
@@ -1074,11 +1070,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           fallback: store,
         );
         if (goals.isEmpty) {
-          _toast('Belum ada goals untuk dibagikan.');
+          _toast('Belum ada target untuk dibagikan.');
           return;
         }
         metadata = {'goals': goals};
-        text = 'Goals & habits: '
+        text = 'Target & Kebiasaan: '
             '${goals.take(5).map((goal) => goal['title']).join(', ')}.';
       case 'diary':
         final diaries = await _collectDiaries(
@@ -1086,11 +1082,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           api: api,
         );
         if (diaries.isEmpty) {
-          _toast('Belum ada diary untuk dibagikan.');
+          _toast('Belum ada jurnal untuk dibagikan.');
           return;
         }
         if (!mounted || !_ownerMatches) return;
-        final diary = await _pickCandidate(diaries, title: 'Pilih diary');
+        final diary = await _pickCandidate(diaries, title: 'Pilih jurnal');
         if (diary == null || !mounted || !_canShare) return;
         final currentToken = ref.read(currentSessionProvider)?.accessToken;
         if (currentToken == null || currentToken.isEmpty) return;
@@ -1104,8 +1100,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             kind: 'diary', text: diary.text, metadata: diary.metadata);
         if (mounted && _ownerMatches) {
           _toast(sent
-              ? 'Diary terkirim ke chat.'
-              : 'Akses diary diberikan, tetapi pesan belum terkirim.');
+              ? 'Jurnal terkirim ke chat.'
+              : 'Akses jurnal diberikan, tetapi pesan belum terkirim.');
         }
         return;
       default:
@@ -1126,25 +1122,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           .toList(growable: false);
     } on Object catch (error) {
       if (mounted && _ownerMatches) {
-        _toast('Gagal memuat therapy record: ${friendlyErrorMessage(error)}');
+        _toast('Gagal memuat riwayat Terapi: ${friendlyErrorMessage(error)}');
       }
       return;
     }
     if (!mounted || !_ownerMatches) return;
     if (records.isEmpty) {
-      _toast('Belum ada therapy record untuk dibagikan.');
+      _toast('Belum ada riwayat Terapi untuk dibagikan.');
       return;
     }
     final chosen = await _pickCandidate([
       for (final record in records)
         _ShareCandidate(
-          title: record.title.trim().isEmpty ? 'Therapy Record' : record.title,
+          title: record.title.trim().isEmpty ? 'Riwayat Terapi' : record.title,
           subtitle: _dateLabel(record.createdDateTime),
           text: record.summary,
           icon: Icons.assignment_turned_in_rounded,
           metadata: {'submission_id': record.id},
         ),
-    ], title: 'Pilih therapy record');
+    ], title: 'Pilih riwayat Terapi');
     if (!mounted ||
         chosen == null ||
         !_canShare ||
@@ -1154,7 +1150,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       api: api,
       submissionId: chosen.metadata['submission_id'] as String,
       kind: 'worksheet',
-      label: 'Therapy Record',
+      label: 'Riwayat Terapi',
     );
   }
 
@@ -1265,7 +1261,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             if (!mounted || !_messages.any((entry) => entry.id == message.id)) {
               return const Padding(
                   padding: EdgeInsets.all(24),
-                  child: Text('Detail diary sudah tidak tersedia.'));
+                  child: Text('Detail jurnal sudah tidak tersedia.'));
             }
             return SafeArea(
                 top: false,
@@ -1312,7 +1308,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
     if (!mounted || !_ownerMatches) return;
     if (candidates.isEmpty) {
-      _toast('Belum ada assessment record untuk dibagikan.');
+      _toast('Belum ada riwayat Asesmen untuk dibagikan.');
       return;
     }
     var chosen = candidates.first;
@@ -1357,7 +1353,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       );
       for (final screening in screenings) {
         if (screening.phq9.score < 0 || screening.gad7.score < 0) continue;
-        final text = 'Hasil screening: PHQ-9 '
+        final text = 'Hasil skrining: PHQ-9 '
             '${screening.phq9.score}/${screening.phq9.maxScore} '
             '(${screening.phq9.level}), GAD-7 '
             '${screening.gad7.score}/${screening.gad7.maxScore} '
@@ -1438,7 +1434,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             : phqLevel.index > gadLevel.index
                 ? phqLevel
                 : gadLevel;
-        final text = 'Hasil screening: PHQ-9 ${bundle.phq9.score} '
+        final text = 'Hasil skrining: PHQ-9 ${bundle.phq9.score} '
             '(${phqLevel.label}), GAD-7 ${bundle.gad7.score} '
             '(${gadLevel.label}).';
         out.add(_ShareCandidate(
@@ -1495,7 +1491,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   /// Bottom sheet pemilihan assessment record (dipanggil bila kandidat > 1).
   Future<_ShareCandidate?> _pickCandidate(List<_ShareCandidate> candidates,
-      {String title = 'Pilih assessment record'}) {
+      {String title = 'Pilih riwayat Asesmen'}) {
     if (!_ownerMatches) return Future.value(null);
     return showModalBottomSheet<_ShareCandidate>(
       context: context,
@@ -1668,9 +1664,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     return [
       for (final entry in entries)
         _ShareCandidate(
-          title: entry.title.trim().isEmpty ? 'Diary' : entry.title.trim(),
+          title: entry.title.trim().isEmpty ? 'Jurnal' : entry.title.trim(),
           subtitle: _dateLabel(entry.occurredAt),
-          text: 'Diary dibagikan',
+          text: 'Jurnal dibagikan',
           icon: Icons.edit_note_rounded,
           metadata: {'diary_id': entry.id},
         ),
@@ -1822,7 +1818,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                           _liveExpired
                               ? 'Sesi berakhir. Riwayat chat tetap tersedia.'
                               : _isPatient && _access.hasActivePackage
-                                  ? 'Di Luar Jam Sesi: Kamu tetap dapat memperbarui data diary, goals, dan worksheet. Chat interaktif aktif saat sesi konseling berlangsung.'
+                                  ? 'Di Luar Jam Sesi: Kamu tetap dapat memperbarui data jurnal, target, dan lembar kerja. Chat interaktif aktif saat sesi konseling berlangsung.'
                                   : _access.reason.isEmpty
                                       ? 'Chat teks aktif saat sesi berjalan.'
                                       : _access.reason,
@@ -2033,8 +2029,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               disabledHint: _liveExpired
                   ? 'Sesi berakhir. Riwayat chat tetap tersedia.'
                   : _isPatient && _canShare
-                      ? 'Di luar sesi: kamu bisa mengirim data (diary, goals, '
-                          'assessment, dll). Chat aktif saat sesi berjalan.'
+                      ? 'Di luar sesi: kamu bisa mengirim data (jurnal, target, '
+                          'asesmen, dll). Chat aktif saat sesi berjalan.'
                       : _accessLoaded
                           ? (_access.reason.isEmpty ? null : _access.reason)
                           : null,
@@ -2538,16 +2534,16 @@ class _SharedCardBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (icon, label) = switch (message.kind) {
-      'diary' => (Icons.edit_note_rounded, 'Diary'),
-      'goals' => (Icons.flag_rounded, 'Goals & Habits'),
-      'habits' => (Icons.flag_rounded, 'Goals & Habits'),
+      'diary' => (Icons.edit_note_rounded, 'Jurnal'),
+      'goals' => (Icons.flag_rounded, 'Target & Kebiasaan'),
+      'habits' => (Icons.flag_rounded, 'Target & Kebiasaan'),
       'summary' => (Icons.auto_awesome_rounded, 'Ringkasan'),
-      'assessment' => (Icons.fact_check_rounded, 'Assessment'),
-      'screening' => (Icons.fact_check_rounded, 'Screening'),
-      'worksheet' => (Icons.assignment_turned_in_rounded, 'Therapy Record'),
+      'assessment' => (Icons.fact_check_rounded, 'Asesmen'),
+      'screening' => (Icons.fact_check_rounded, 'Skrining'),
+      'worksheet' => (Icons.assignment_turned_in_rounded, 'Riwayat Terapi'),
       'prescription' => (Icons.medication_rounded, 'Obat & Resep'),
       'medication' => (Icons.medication_rounded, 'Obat & Resep'),
-      'progress' => (Icons.show_chart_rounded, 'Progress'),
+      'progress' => (Icons.show_chart_rounded, 'Progres'),
       _ => (Icons.insert_drive_file_rounded, 'Lampiran'),
     };
     return Container(

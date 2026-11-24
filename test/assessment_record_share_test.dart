@@ -166,7 +166,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(f.pdfService.lines.join('\n'), contains('84%'));
     expect(f.pdfService.lines.join('\n'),
-        contains('Perlu screening lanjutan karena ada jawaban 0–1'));
+        contains('Perlu skrining lanjutan karena ada jawaban 0–1'));
   });
   testWidgets(
       'worksheet share uses saved ID once and creates no duplicate chat message',

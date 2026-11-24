@@ -512,9 +512,9 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
           appBar: AppBar(
               backgroundColor: MalvaColors.seed,
               title: Text(switch (_section) {
-                'goals' => 'Goals / Habits',
-                'assessment' => 'Assessment',
-                'health' => 'Health Record',
+                'goals' => 'Target / Kebiasaan',
+                'assessment' => 'Asesmen',
+                'health' => 'Rekam Medis',
                 'files' => 'Berkas',
                 'summary' => 'Rangkuman sesi',
                 _ => 'Alat sesi',
@@ -572,19 +572,19 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
         for (final item in const [
           (
             'goals',
-            'Goals / Habits',
+            'Target / Kebiasaan',
             'Lihat progres dan buat tujuan pasien',
             Icons.task_alt
           ),
           (
             'assessment',
-            'Assessment',
+            'Asesmen',
             'Kirim permintaan skrining, DASS-21, atau WHO-5',
             Icons.assignment_outlined
           ),
           (
             'health',
-            'Health Record',
+            'Rekam Medis',
             'Perbarui diagnosis dan kelola obat',
             Icons.medical_information_outlined
           ),
@@ -597,7 +597,7 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
           (
             'summary',
             'Rangkuman sesi',
-            'Bagikan goals dan insight untuk pasien',
+            'Bagikan target dan insight untuk pasien',
             Icons.summarize_outlined
           ),
         ])
@@ -615,7 +615,10 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
   List<Widget> _goalsPanel(bool summary) {
     if (_goals == null) return [];
     return [
-      Text(summary ? 'Pilih goals untuk rangkuman' : 'Goals dan progres pasien',
+      Text(
+          summary
+              ? 'Pilih target untuk rangkuman'
+              : 'Target dan progres pasien',
           style: Theme.of(context).textTheme.titleMedium),
       if (_goals!.isEmpty)
         const Padding(
@@ -679,11 +682,11 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
         FilledButton(
             onPressed: _busy || _selectedGoals.isEmpty
                 ? null
-                : () => _sendCard('goals', 'Goals untuk pasien', {
+                : () => _sendCard('goals', 'Target untuk pasien', {
                       'session_id': widget.sessionId,
                       'goal_ids': _selectedGoals.toList()..sort()
                     }),
-            child: const Text('Bagikan goals')),
+            child: const Text('Bagikan target')),
       ],
     ];
   }

@@ -114,7 +114,7 @@ void main() {
     expect(find.text('Ami'), findsOneWidget);
     expect(find.text('Dhiva'), findsOneWidget);
     expect(find.text('SOS'), findsWidgets);
-    expect(find.text('Screening'), findsWidgets);
+    expect(find.text('Skrining'), findsWidgets);
   });
 
   testWidgets('tombol "Tandai sudah ditangani" hanya untuk insiden SOS',
@@ -145,7 +145,7 @@ void main() {
 
     expect(find.textContaining('Belum ditangani'), findsNothing);
     expect(find.textContaining('belum ditangani'), findsNothing);
-    expect(find.text('Riwayat screening'), findsOneWidget);
+    expect(find.text('Riwayat skrining'), findsOneWidget);
     expect(find.text('Perlu tindak lanjut'), findsOneWidget);
     expect(find.text('2 catatan • 1 SOS perlu tindak lanjut'), findsOneWidget);
     expect(backend.resolveCalls, 0,
@@ -169,7 +169,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(backend.resolveCalls, 1);
     expect(backend.logCalls, 2);
-    expect(find.text('Riwayat screening'), findsOneWidget);
+    expect(find.text('Riwayat skrining'), findsOneWidget);
     expect(find.text('Sudah ditangani'), findsOneWidget);
     expect(find.text('Perlu tindak lanjut'), findsNothing);
     expect(find.widgetWithText(OutlinedButton, 'Tandai sudah ditangani'),

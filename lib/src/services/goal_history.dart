@@ -1,22 +1,44 @@
 import '../time/wib.dart';
 import 'malva_api_client.dart';
 
-typedef GoalHistoryEntry = ({BackendGoal goal, BackendHabitLog log});
+typedef GoalHistoryEntry = ({BackendGoal goal, BackendHabitLog? log});
 
 Map<String, List<GoalHistoryEntry>> groupGoalHistory(
     List<BackendGoal> goals, List<BackendHabitLog> logs,
-    {String? goalId}) {
+    {required DateTime start, required DateTime end, required DateTime today}) {
+  final from = wibDateKey(start);
+  final to = wibDateKey(end);
+  final todayKey = wibDateKey(today);
   final byId = {for (final goal in goals) goal.id: goal};
-  final grouped = <String, List<GoalHistoryEntry>>{};
-  final sorted = [...logs]..sort((a, b) => b.loggedOn.compareTo(a.loggedOn));
-  for (final log in sorted) {
+  final grouped = <String, Map<String, GoalHistoryEntry>>{};
+  for (final log in logs) {
     final goal = byId[log.goalId];
     if (goal == null ||
-        (goalId != null && goal.id != goalId) ||
+        log.loggedOn.compareTo(from) < 0 ||
+        log.loggedOn.compareTo(to) > 0 ||
         parseWibStored(log.loggedOn) == null) continue;
-    (grouped[log.loggedOn] ??= []).add((goal: goal, log: log));
+    (grouped[log.loggedOn] ??= {})[goal.id] = (goal: goal, log: log);
   }
-  return grouped;
+  for (final goal in goals) {
+    final details = goal.details;
+    if (!goal.isActive ||
+        details == null ||
+        (details.recurrence == 'weekly' && details.weeklyTarget != null)) {
+      continue;
+    }
+    final anchor = parseWibStored(details.startDate);
+    if (anchor == null) continue;
+    var day = parseWibStored(from)!;
+    if (anchor.isAfter(day)) day = anchor;
+    for (;; day = day.add(const Duration(days: 1))) {
+      final key = wibDateKey(day);
+      if (key.compareTo(to) > 0 || key.compareTo(todayKey) >= 0) break;
+      if (!details.isDueOn(day)) continue;
+      (grouped[key] ??= {}).putIfAbsent(goal.id, () => (goal: goal, log: null));
+    }
+  }
+  final dates = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
+  return {for (final date in dates) date: grouped[date]!.values.toList()};
 }
 
 Future<List<BackendHabitLog>> loadGoalHistoryLogs(
@@ -36,16 +58,18 @@ Future<List<BackendHabitLog>> loadGoalHistoryLogs(
 
 int completedGoalSteps(GoalHistoryEntry entry) =>
     entry.goal.details?.steps
-        .where((step) => entry.log.completedStepIds.contains(step.id))
+        .where((step) => entry.log?.completedStepIds.contains(step.id) == true)
         .length ??
     0;
 
 String goalHistoryResult(GoalHistoryEntry entry) {
+  final log = entry.log;
+  if (log == null) return 'Tidak dilakukan';
   final details = entry.goal.details;
   return switch (details?.method) {
-    'numeric' => '${entry.log.value}/${details!.target} ${details.unit}'.trim(),
+    'numeric' => '${log.value}/${details!.target} ${details.unit}'.trim(),
     'checklist' =>
       '${completedGoalSteps(entry)}/${details!.steps.length} langkah',
-    _ => entry.log.done ? 'Selesai' : 'Belum selesai',
+    _ => log.done ? 'Selesai' : 'Tidak dilakukan',
   };
 }

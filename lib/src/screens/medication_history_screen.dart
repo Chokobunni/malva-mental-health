@@ -4,6 +4,7 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../time/wib.dart';
+import '../services/medication_adherence.dart';
 
 class MedicationHistoryScreen extends ConsumerStatefulWidget {
   const MedicationHistoryScreen({super.key, this.session, this.apiClient});
@@ -210,15 +211,14 @@ class _MedicationHistoryScreenState
   }
 
   Widget _log(BackendMedicationLog log) {
-    final color = switch (log.status) {
+    final status = normalizedMedicationStatus(log.status);
+    final color = switch (status) {
       'taken' => const Color(0xff29c8b7),
-      'partial' => const Color(0xffae69b7),
       'skipped' => const Color(0xffd8a236),
       _ => const Color(0xffdf676d)
     };
-    final icon = switch (log.status) {
+    final icon = switch (status) {
       'taken' => Icons.check_rounded,
-      'partial' => Icons.hourglass_bottom_rounded,
       'skipped' => Icons.skip_next_rounded,
       _ => Icons.close_rounded
     };
@@ -256,7 +256,7 @@ class _MedicationHistoryScreenState
                         color: Color(0xff27333c))),
                 const SizedBox(height: 5),
                 Text(
-                    '${log.status.isEmpty ? 'STATUS TIDAK TERCATAT' : log.status.toUpperCase()} · $time',
+                    '${status.isEmpty ? 'STATUS TIDAK TERCATAT' : status.toUpperCase()} · $time',
                     style:
                         const TextStyle(color: Color(0xff818991), fontSize: 15))
               ])),

@@ -128,7 +128,7 @@ class _InitialSymptomsScreenState extends ConsumerState<InitialSymptomsScreen> {
               const Icon(Icons.local_florist_rounded,
                   color: Colors.white, size: 54),
               const SizedBox(height: 16),
-              Text('Symptoms Assessment',
+              Text('Asesmen Gejala',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       color: Colors.white, fontWeight: FontWeight.w900)),
@@ -210,7 +210,7 @@ class _InitialSymptomsScreenState extends ConsumerState<InitialSymptomsScreen> {
         Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Text(
           decision.needsFurtherScreening
-              ? 'Lanjutkan screening'
+              ? 'Lanjutkan skrining'
               : 'Kondisi Mental Sangat Baik',
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
       const SizedBox(height: 12),
@@ -236,7 +236,7 @@ class _InitialSymptomsScreenState extends ConsumerState<InitialSymptomsScreen> {
       ),
       const SizedBox(height: 8),
       const Text(
-          'Hasil WHO-5 tersimpan untuk 2 minggu terakhir dan bukan diagnosis. Kamu tetap dapat berkonsultasi atau mengisi screening lagi bila membutuhkan dukungan.'),
+          'Hasil WHO-5 tersimpan untuk 2 minggu terakhir dan bukan diagnosis. Kamu tetap dapat berkonsultasi atau mengisi skrining lagi bila membutuhkan dukungan.'),
       const SizedBox(height: 18),
       FilledButton(
           onPressed: decision.needsFurtherScreening

@@ -88,7 +88,7 @@ Widget _wrap(ProviderContainer container, Widget child) =>
 
 Finder _therapySwitch() => find.descendant(
       of: find.ancestor(
-        of: find.text('Therapy Record (Psikologis)'),
+        of: find.text('Riwayat Terapi (Psikologis)'),
         matching: find.byType(Row),
       ),
       matching: find.byType(Switch),
@@ -270,9 +270,10 @@ void main() {
           body: MessagesListScreen(session: _professional, apiClient: api),
         )));
     await tester.pumpAndSettle();
-    expect(find.text('Messages'), findsOneWidget);
+    expect(find.text('Percakapan'), findsOneWidget);
     expect(find.byType(AppBar), findsNothing);
-    expect(find.text('Recent'), findsOneWidget);
+    expect(find.text('Lihat pesan dan riwayat chat dengan pasien.'),
+        findsOneWidget);
   });
 
   testWidgets('fullscreen messages retains app bar and back navigation',
@@ -292,7 +293,7 @@ void main() {
     })));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(AppBar, 'Messages'), findsOneWidget);
+    expect(find.widgetWithText(AppBar, 'Percakapan'), findsOneWidget);
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     expect(find.text('Open'), findsOneWidget);

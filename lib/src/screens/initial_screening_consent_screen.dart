@@ -38,7 +38,7 @@ class InitialScreeningConsentScreen extends ConsumerWidget {
                     color: Colors.white, size: 54),
                 const SizedBox(height: 20),
                 Text(
-                  'Symptoms Assessment',
+                  'Asesmen Gejala',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         color: Colors.white,
@@ -47,7 +47,7 @@ class InitialScreeningConsentScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'WHO-5 untuk screening awal',
+                  'WHO-5 untuk skrining awal',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: Colors.white.withValues(alpha: 0.9),
@@ -68,7 +68,7 @@ class InitialScreeningConsentScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'Mulai dengan 5 pertanyaan WHO-5 tentang kesejahteraan selama 2 minggu terakhir. Bila perlu, lanjutkan PHQ-9 dan GAD-7. Ini adalah screening, bukan diagnosis. Hasil tersimpan dan dapat dibagikan kepada profesional sesuai persetujuanmu.',
+                          'Mulai dengan 5 pertanyaan WHO-5 tentang kesejahteraan selama 2 minggu terakhir. Bila perlu, lanjutkan PHQ-9 dan GAD-7. Ini adalah skrining, bukan diagnosis. Hasil tersimpan dan dapat dibagikan kepada profesional sesuai persetujuanmu.',
                           textAlign: TextAlign.center,
                           style: Theme.of(context)
                               .textTheme

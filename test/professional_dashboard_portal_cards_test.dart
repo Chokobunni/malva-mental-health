@@ -200,7 +200,7 @@ void main() {
     expect(find.text('Pasien terhubung'), findsNothing);
     expect(find.text('Riwayat asesmen pasien'), findsNothing);
     expect(find.text('Data pasien dibagikan'), findsNothing);
-    expect(find.text('Crisis Incident Log'), findsNothing);
+    expect(find.text('Riwayat Insiden Krisis'), findsNothing);
     expect(find.text('Ketersediaan & harga'), findsOneWidget);
     expect(find.text('Earnings'), findsOneWidget);
     await tester.tap(find.text('Pasien'));

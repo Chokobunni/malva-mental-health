@@ -308,12 +308,12 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                                 ]),
                                 _PriceRow(
                                     icon: Icons.chat_bubble_outline_rounded,
-                                    label: 'Chat session',
+                                    label: 'Sesi Chat',
                                     price: _chatPrice()),
                                 const Divider(height: 10),
                                 _PriceRow(
                                     icon: Icons.videocam_outlined,
-                                    label: 'Video session',
+                                    label: 'Sesi Video',
                                     price: _videoPrice()),
                                 const Divider(height: 10),
                                 _PriceRow(
@@ -734,7 +734,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                                 Icons.event_available_rounded
                               ),
                               (
-                                'Kirim diary, goals, assessment & worksheet (selama paket aktif)',
+                                'Kirim jurnal, target, asesmen & lembar kerja (selama paket aktif)',
                                 Icons.send_rounded
                               ),
                               (
@@ -1073,7 +1073,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
       'seksualitas':
           'Seksualitas — isu terkait identitas seksual, orientasi, disfungsi seksual, dan kesehatan reproduksi mental.',
       'cbt':
-          'CBT (Cognitive Behavioral Therapy) — terapi berbasis bukti yang mengubah pola pikir dan perilaku negatif menjadi lebih adaptif.',
+          'CBT (Cognitive Behavioral Terapi) — terapi berbasis bukti yang mengubah pola pikir dan perilaku negatif menjadi lebih adaptif.',
       'manajemen_stres':
           'Manajemen Stres — teknik pengelolaan stres kerja, akademik, dan kehidupan sehari-hari melalui relaksasi dan restrukturisasi kognitif.',
       'konseling_remaja':
@@ -1091,7 +1091,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
       'pengembangan_diri':
           'Pengembangan Diri — eksplorasi potensi, penetapan tujuan hidup, peningkatan self-awareness dan self-efficacy.',
       'kecemasan_sosial':
-          'Kecemasan Sosial — ketakutan berlebihan dalam situasi sosial, ditangani dengan exposure therapy dan social skills training.',
+          'Kecemasan Sosial — ketakutan berlebihan dalam situasi sosial, ditangani dengan exposure terapi dan social skills training.',
       'parenting':
           'Parenting — konseling pengasuhan anak, manajemen stres orang tua, dan strategi disiplin positif.',
       'grief':

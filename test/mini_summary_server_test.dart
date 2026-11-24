@@ -9,9 +9,73 @@ import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/providers/auth_providers.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
+import 'package:malva_mental_health/src/services/weekly_summary_service.dart';
 import 'package:malva_mental_health/src/widgets/mini_summary.dart';
 
 void main() {
+  for (final failingRoute in ['/v1/medications', '/v1/medication-logs']) {
+    test('adherence is unavailable when $failingRoute fails', () async {
+      final api = MalvaApiClient(
+          baseUrl: 'http://backend.test',
+          httpClient: MockClient((request) async {
+            if (request.url.path == failingRoute) {
+              return http.Response('{"error":"Unavailable"}', 503);
+            }
+            final body = switch (request.url.path) {
+              '/v1/mood-checkins' => {'moods': []},
+              '/v1/medications' => {'medications': []},
+              '/v1/medication-logs' => {
+                  'medication_logs': [
+                    {'taken_at': '2026-11-16T08:00:00+07:00', 'status': 'taken'}
+                  ]
+                },
+              _ => throw StateError('Unexpected ${request.url.path}'),
+            };
+            return http.Response(jsonEncode(body), 200);
+          }));
+      final metrics = await loadWeeklySummary(
+          api: api, accessToken: 'token', asOf: wibFromParts(2026, 11, 22, 9));
+      expect(metrics?.moodKnown, true);
+      expect(metrics?.logsKnown, false);
+    });
+  }
+  test('server summary counts daily doses missed after the last dose',
+      () async {
+    final api = MalvaApiClient(
+        baseUrl: 'http://backend.test',
+        httpClient: MockClient((request) async {
+          final body = switch (request.url.path) {
+            '/v1/mood-checkins' => {'mood_checkins': []},
+            '/v1/medications' => {
+                'medications': [
+                  {
+                    'id': 'lamictal',
+                    'name': 'Lamictal',
+                    'created_at': '2026-11-16T06:00:00+07:00',
+                    'reminder_time': '08:00',
+                  },
+                ],
+              },
+            '/v1/medication-logs' => {
+                'medication_logs': [
+                  {
+                    'medication_id': 'lamictal',
+                    'medication_name': 'Lamictal',
+                    'taken_at': '2026-11-16T08:10:00+07:00',
+                    'status': 'partial',
+                  },
+                ]
+              },
+            _ => throw StateError('Unexpected ${request.url.path}'),
+          };
+          return http.Response(jsonEncode(body), 200);
+        }));
+    final metrics = await loadWeeklySummary(
+        api: api, accessToken: 'token', asOf: wibFromParts(2026, 11, 22, 9));
+    expect(metrics?.takenLogs, 1);
+    expect(metrics?.totalLogs, 7);
+    expect(metrics?.adherencePercent, 14);
+  });
   testWidgets(
       'seven day summary loads goals while mood is pending without diary section',
       (tester) async {

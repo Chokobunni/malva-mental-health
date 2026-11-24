@@ -98,7 +98,7 @@ class _WebTherapyHistoryViewState extends ConsumerState<WebTherapyHistoryView> {
           );
     try {
       await ref.read(exportServiceProvider).sharePdf(
-            title: 'Worksheet ${item.title} — Malva',
+            title: 'Lembar Kerja ${item.title} — Malva',
             filename: webWorksheetFileName(
               module ??
                   TherapyModule(
@@ -126,8 +126,9 @@ class _WebTherapyHistoryViewState extends ConsumerState<WebTherapyHistoryView> {
   Future<void> _delete(BackendTherapySubmission item) async {
     final confirmed = await showWebConfirmDialog(
       context,
-      title: 'Hapus worksheet',
-      message: 'Worksheet "${item.title}" akan dihapus dari riwayat dan tidak '
+      title: 'Hapus lembar kerja',
+      message:
+          'Lembar Kerja "${item.title}" akan dihapus dari riwayat dan tidak '
           'bisa dikembalikan. Profesional yang pernah menerimanya tidak lagi '
           'bisa membuka salinan baru.',
       confirmLabel: 'Hapus',
@@ -140,7 +141,7 @@ class _WebTherapyHistoryViewState extends ConsumerState<WebTherapyHistoryView> {
             submissionId: item.id,
           );
       if (!mounted) return;
-      _showMessage('Worksheet dihapus.');
+      _showMessage('Lembar Kerja dihapus.');
       await _load();
     } catch (error) {
       if (!mounted) return;
@@ -170,7 +171,7 @@ class _WebTherapyHistoryViewState extends ConsumerState<WebTherapyHistoryView> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         WebPageHeader(
-          title: 'Riwayat worksheet',
+          title: 'Riwayat lembar kerja',
           subtitle: 'Latihan yang sudah Anda simpan. Hasil asesmen ada di menu '
               'Asesmen.',
           trailing: Wrap(
@@ -228,7 +229,7 @@ class _WebTherapyHistoryViewState extends ConsumerState<WebTherapyHistoryView> {
               ),
             ),
             Text(
-              '${entries.length} worksheet',
+              '${entries.length} lembar kerja',
               style: const TextStyle(fontSize: 12, color: Color(0xFF6B6377)),
             ),
           ],
@@ -243,13 +244,13 @@ class _WebTherapyHistoryViewState extends ConsumerState<WebTherapyHistoryView> {
   }
 
   Widget _buildBody(List<BackendTherapySubmission> entries) {
-    if (_loading) return const WebAdminLoading(label: 'Memuat worksheet...');
+    if (_loading) return const WebAdminLoading(label: 'Memuat lembar kerja...');
     if (_error != null) {
       return WebAdminError(error: _error!, onRetry: () => unawaited(_load()));
     }
     return WebAdminTable(
       minWidth: 1040,
-      emptyMessage: 'Belum ada worksheet tersimpan.',
+      emptyMessage: 'Belum ada lembar kerja tersimpan.',
       columns: const <WebAdminColumn>[
         WebAdminColumn('TANGGAL (WIB)', 160),
         WebAdminColumn('MODUL', 220),
@@ -400,7 +401,7 @@ class _WebTherapyDetailDialog extends StatelessWidget {
                       ],
                       if (entries.isEmpty)
                         const Text(
-                          'Worksheet ini belum berisi jawaban.',
+                          'Lembar Kerja ini belum berisi jawaban.',
                           style: TextStyle(
                             fontSize: 12.5,
                             color: Color(0xFF8B8194),

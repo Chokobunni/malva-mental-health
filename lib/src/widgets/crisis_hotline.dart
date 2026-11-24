@@ -49,7 +49,7 @@ class CrisisHotlineBanner extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Crisis Detected',
+                      'Krisis Terdeteksi',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -57,7 +57,7 @@ class CrisisHotlineBanner extends ConsumerWidget {
                       ),
                     ),
                     Text(
-                      'Hasil screening menunjukkan krisis aktif',
+                      'Hasil skrining menunjukkan krisis aktif',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.85),
                         fontSize: 12,

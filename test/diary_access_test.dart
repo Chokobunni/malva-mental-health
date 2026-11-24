@@ -99,7 +99,7 @@ void main() {
                 theme: buildMalvaTheme(),
                 home: DiaryHistoryScreen(apiClient: api, session: _patient)))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tulis Cerita Diari Baru'));
+    await tester.tap(find.text('Tulis Cerita Jurnal Baru'));
     await tester.pumpAndSettle();
     await captureRecord(tester, boundary, 'diary-access-private-320.png');
     await tester.tap(find.text('Bagikan'));
@@ -253,9 +253,9 @@ void main() {
     await captureRecord(tester, boundary, 'diary-access-history-390.png');
     await tester.tap(title);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Aksi diary'));
+    await tester.tap(find.byTooltip('Aksi jurnal'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Edit Diary'));
+    await tester.tap(find.text('Edit Jurnal'));
     await tester.pumpAndSettle();
     expect(find.text(_professional['display_name']!), findsOneWidget);
     await captureRecord(tester, boundary, 'diary-access-editor-390.png');

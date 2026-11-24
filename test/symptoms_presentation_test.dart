@@ -140,14 +140,14 @@ void main() {
     await tester.ensureVisible(safety);
     await tester.pumpAndSettle();
     expect(safety.hitTestable(), findsOneWidget);
-    expect(find.textContaining('Crisis Support:'), findsOneWidget);
+    expect(find.textContaining('Bantuan Krisis:'), findsOneWidget);
     await tester.ensureVisible(find.text('Apa arti skormu?'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Apa arti skormu?'));
     await tester.pumpAndSettle();
     expect(find.textContaining('CF menunjukkan'), findsNothing);
-    expect(find.textContaining('PHQ-9 (Depresi) — Apa arti skormu?'),
-        findsOneWidget);
+    expect(
+        find.text('PHQ-9 (Depresi) — ${bundle.phq9.score}/27'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

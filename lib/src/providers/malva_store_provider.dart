@@ -9,6 +9,7 @@ import '../platform/platform_providers.dart';
 import '../services/assessment_database_service.dart';
 import '../services/malva_api_client.dart';
 import '../services/server_clock.dart';
+import '../services/medication_adherence.dart';
 import 'auth_providers.dart';
 import 'data/assessment_provider.dart';
 import '../time/wib.dart';
@@ -73,36 +74,44 @@ class MalvaStoreState {
   ScreeningBundle? get latestScreeningBundle =>
       screeningBundles.isEmpty ? null : screeningBundles.last;
 
-  /// Persentase obat yang sudah diminum HARI INI (bukan jumlah dosis).
-  ///
-  /// Aturan klinis (jangan diubah tanpa alasan): hanya log berstatus `taken`
-  /// yang menaikkan kepatuhan. Status `partial`/`skipped`/`missed` TIDAK
-  /// dihitung — meski `partial` tetap memotong stok di server, ia bukan dosis
-  /// penuh sehingga tidak boleh membuat angka kepatuhan terlihat 100%.
-  ///
-  /// Satu obat yang dicatat dua kali tetap dihitung satu, supaya angka tidak
-  /// melebihi porsi obat yang benar-benar sudah diminum saat pasien punya
-  /// banyak obat. Log untuk obat yang tidak ada di daftar [medications]
-  /// (mis. obat sudah dihapus) juga tidak dihitung.
-  ///
-  /// Perbandingan hari WAJIB memakai [isSameLocalDay] + [ServerClock.now]:
-  /// `takenAt` dari server berbentuk UTC, sehingga perbandingan `.day` mentah
-  /// membuat dosis 03:20 WIB terbaca sebagai hari sebelumnya (adherence 0%).
+  /// Kepatuhan hari ini berdasarkan dosis terjadwal yang sudah jatuh tempo.
+  /// Obat fleksibel tetap dihitung satu kali per ID ketika dicatat.
   int get adherencePercent {
-    if (medications.isEmpty) return 0;
     final now = ServerClock.now();
-    final takenMedicationIds = <String>{};
+    final today = medicationDay(now);
+    final scheduled = medications
+        .where((medication) =>
+            medication.schedule != null ||
+            (medication.createdAt != null &&
+                medication.reminders.any((r) => r.repeatDaily)))
+        .toList();
+    final byId = {
+      for (final medication in medications) medication.id: medication
+    };
+    final scheduledIds = scheduled.map((medication) => medication.id).toSet();
+    final scheduledLogs = <MedicationLog>[];
+    final flexibleTaken = <String>{};
     for (final log in medicationLogs) {
-      if (log.status != 'taken') continue;
-      if (!isSameLocalDay(log.takenAt, now)) continue;
       final identity = _medicationIdentityForAdherence(log);
-      if (identity == null) continue; // obat tidak dikenal → jangan dihitung
-      takenMedicationIds.add(identity);
+      if (identity == null) continue;
+      if (scheduledIds.contains(identity)) {
+        final med = byId[identity]!;
+        scheduledLogs.add(MedicationLog(
+            medicationId: med.id,
+            medicationName: med.name,
+            takenAt: log.takenAt,
+            status: log.status));
+      } else if (normalizedMedicationStatus(log.status) == 'taken' &&
+          isSameLocalDay(log.takenAt, now)) {
+        flexibleTaken.add(identity);
+      }
     }
-    if (takenMedicationIds.isEmpty) return 0;
-    return ((takenMedicationIds.length / medications.length) * 100)
-        .clamp(0, 100)
-        .round();
+    final adherence = MedicationAdherence.calculate(
+        medications: scheduled, logs: scheduledLogs, start: today, end: now);
+    final total = adherence.rows.length + medications.length - scheduled.length;
+    return total == 0
+        ? 0
+        : ((adherence.taken + flexibleTaken.length) * 100 / total).round();
   }
 
   /// Identitas obat pada daftar [medications] yang cocok dengan [log].
@@ -148,7 +157,7 @@ class MalvaStoreState {
     }
     if (latestScreeningBundle?.crisisFlag == true ||
         (assessments.isNotEmpty && assessments.last.crisisFlag)) {
-      alerts.add('Crisis flag aktif dari asesmen terbaru.');
+      alerts.add('Krisis flag aktif dari asesmen terbaru.');
     }
     return alerts;
   }
@@ -345,7 +354,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
     try {
       final meds = await api.listMedications(
         accessToken: token,
-        limit: 50,
+        limit: 100,
       );
       if (!_isCurrentAccountGeneration(generation) ||
           requestGeneration != _medicationRequestGeneration) return;
@@ -1465,7 +1474,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
           );
           uploaded = true;
         } else {
-          uploadError = 'Server tidak mengembalikan ID screening.';
+          uploadError = 'Server tidak mengembalikan ID skrining.';
         }
       } on MalvaApiException catch (error) {
         uploadError = error.message;
@@ -1478,7 +1487,7 @@ class MalvaStoreNotifier extends StateNotifier<MalvaStoreState> {
 
     if (!_isCurrentAccountGeneration(generation)) {
       throw const AuthFailure(
-          'Akun telah berubah. Buka ulang screening untuk akun aktif.');
+          'Akun telah berubah. Buka ulang skrining untuk akun aktif.');
     }
     saveScreeningBundle(bundle);
     return ScreeningSubmitResult(

@@ -90,7 +90,7 @@ void main() {
               home: MoodMedicationCheckinScreen(
                   session: session, apiClient: api))));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Medication'));
+      await tester.tap(find.text('Obat'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.byType(ErrorWidget), findsNothing);
@@ -102,7 +102,8 @@ void main() {
       final card = find.ancestor(
           of: find.text('Obat resep tanpa pengingat'),
           matching: find.byType(Card));
-      final take = find.descendant(of: card, matching: find.text('Take Now'));
+      final take =
+          find.descendant(of: card, matching: find.text('Minum Sekarang'));
       await tester.ensureVisible(take);
       await tester.pumpAndSettle();
       await tester.tap(take);

@@ -7,7 +7,9 @@ import '../models.dart';
 import '../models/diary_content.dart';
 import '../services/malva_api_client.dart';
 import '../assessment_engine.dart';
+import '../ai/assessment_scoring.dart';
 import '../time/wib.dart';
+import 'score_meaning.dart';
 
 /// Read the snapshot that was actually shared, including older message formats.
 class SharedRecordDetail extends StatelessWidget {
@@ -33,7 +35,7 @@ class SharedRecordDetail extends StatelessWidget {
     return SharedRecordDetail(
       key: key,
       showClinicalAudit: true,
-      statusLabel: 'Hasil Screening',
+      statusLabel: 'Hasil Skrining',
       timestampAvailable: screening.createdAt != null,
       message: ChatMessage(
         id: screening.id,
@@ -64,7 +66,7 @@ class SharedRecordDetail extends StatelessWidget {
     return SharedRecordDetail(
         key: key,
         showClinicalAudit: true,
-        statusLabel: 'Hasil Screening',
+        statusLabel: 'Hasil Skrining',
         message: ChatMessage(
             id: bundle.id,
             senderId: '',
@@ -100,7 +102,7 @@ class SharedRecordDetail extends StatelessWidget {
     'reminder_time': 'Jadwal',
     'relation_to_meal': 'Aturan makan',
     'source': 'Sumber',
-    'goals': 'Goals & Habits',
+    'goals': 'Target & Kebiasaan',
     'target_per_week': 'Target per minggu',
     'done_this_week': 'Selesai minggu ini',
     'is_active': 'Aktif',
@@ -109,22 +111,22 @@ class SharedRecordDetail extends StatelessWidget {
     'mood_count': 'Jumlah check-in',
     'avg_sleep_hours': 'Rata-rata tidur (jam)',
     'medication_adherence': 'Ketaatan obat (%)',
-    'phq9_score': 'PHQ-9 Total Score',
-    'gad7_score': 'GAD-7 Total Score',
+    'phq9_score': 'Skor Total PHQ-9',
+    'gad7_score': 'Skor Total GAD-7',
     'overall_level': 'Tingkat gejala',
     'crisis_flag': 'Indikator keselamatan',
     'module_id': 'Instrumen',
     'answers': 'Jawaban tersimpan',
     'phq9': 'PHQ-9',
     'gad7': 'GAD-7',
-    'score': 'Total Score',
+    'score': 'Skor Total',
     'max_score': 'Skor maksimum',
     'level': 'Tingkat gejala',
     'phq9_max_score': 'Skor maksimum PHQ-9',
     'gad7_max_score': 'Skor maksimum GAD-7',
     'phq9_level': 'Tingkat PHQ-9',
     'gad7_level': 'Tingkat GAD-7',
-    'diary': 'Diary',
+    'diary': 'Jurnal',
     'medication': 'Obat',
     'category': 'Kategori',
     'last_logged_on': 'Terakhir dicatat',
@@ -311,7 +313,7 @@ class SharedRecordDetail extends StatelessWidget {
   List<Widget> _goals(Map meta) {
     final goals = _maps(meta['goals']);
     return [
-      _heading('RINCIAN GOALS & HABITS', Icons.checklist_rounded,
+      _heading('RINCIAN TARGET & KEBIASAAN', Icons.checklist_rounded,
           color: const Color(0xFF4188DE)),
       for (var i = 0; i < goals.length; i++)
         _goal(goals[i],
@@ -323,7 +325,7 @@ class SharedRecordDetail extends StatelessWidget {
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
-              child: Text(_value(goal, 'title', 'Goal'),
+              child: Text(_value(goal, 'title', 'Target'),
                   style: const TextStyle(
                       fontSize: 17, fontWeight: FontWeight.w800, color: _ink))),
           if (goal['is_active'] is bool) ...[
@@ -525,7 +527,7 @@ class SharedRecordDetail extends StatelessWidget {
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
-              child: Text('$instrument Total Score',
+              child: Text('Skor Total $instrument',
                   style: const TextStyle(
                       fontWeight: FontWeight.w800,
                       color: _muted,
@@ -564,7 +566,7 @@ class SharedRecordDetail extends StatelessWidget {
         Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('$label · Dukungan rule internal (CF)',
+          Text('$label · Dukungan aturan internal (CF)',
               style: const TextStyle(
                   fontSize: 12, fontWeight: FontWeight.w800, color: _muted)),
           const SizedBox(height: 6),
@@ -715,6 +717,29 @@ class SharedRecordDetail extends StatelessWidget {
             padding: const EdgeInsets.only(top: 12),
             child: Text(
                 'CF gabungan historis: ${_validCF(meta['cf'] ?? meta['certainty_factor'])?.toStringAsFixed(2) ?? 'belum tersedia'}. Nilai per instrumen tidak tercatat.')),
+      if (phqLevel != null || gadLevel != null)
+        ScoreMeaningExpansion(
+          children: [
+            if (phqLevel != null)
+              ScoreRangeTable(
+                title: 'PHQ-9 (Depresi)',
+                score: (phq['score'] as num).toInt(),
+                maxScore: 27,
+                color: _purple,
+                ranges: phq9Ranges,
+              ),
+            if (phqLevel != null && gadLevel != null)
+              const SizedBox(height: 10),
+            if (gadLevel != null)
+              ScoreRangeTable(
+                title: 'GAD-7 (Kecemasan)',
+                score: (gad['score'] as num).toInt(),
+                maxScore: 21,
+                color: _purple,
+                ranges: gad7Ranges,
+              ),
+          ],
+        ),
     ];
   }
 
@@ -754,7 +779,7 @@ class SharedRecordDetail extends StatelessWidget {
               final left = Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Detail Record',
+                    const Text('Rincian Hasil',
                         style: TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 19,
@@ -764,7 +789,7 @@ class SharedRecordDetail extends StatelessWidget {
                         statusLabel ??
                             (message.kind == 'assessment' ||
                                     message.kind == 'screening'
-                                ? 'Assessment Dibagikan'
+                                ? 'Asesmen Dibagikan'
                                 : 'Dibagikan'),
                         style: const TextStyle(fontSize: 12, color: _muted)),
                   ]);

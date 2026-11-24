@@ -139,7 +139,7 @@ class _TestsMarketplaceScreenState
                 color: MalvaColors.seed,
                 title: 'PHQ-9 & GAD-7',
                 subtitle:
-                    'Screening depresi & kecemasan (16 pertanyaan). Hasil tersimpan & bisa direview profesional.',
+                    'Skrining depresi & kecemasan (16 pertanyaan). Hasil tersimpan & bisa direview profesional.',
                 onTap: () => Navigator.pushNamed(context, '/assessment'),
               ),
               const SizedBox(height: 10),

@@ -127,7 +127,7 @@ void main() {
                           }))))));
         await tester.pumpAndSettle();
         if (surface == 'patient') {
-          await tester.tap(find.widgetWithText(Tab, 'Diary'));
+          await tester.tap(find.widgetWithText(Tab, 'Jurnal'));
           await tester.pumpAndSettle();
         }
         expect(find.text('Ceritaku hari ini.'), findsOneWidget);

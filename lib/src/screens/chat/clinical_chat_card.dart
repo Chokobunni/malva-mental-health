@@ -32,7 +32,7 @@ class ClinicalChatCard extends StatelessWidget {
       'screening' => 'PHQ-9 & GAD-7',
       'dass21' => 'DASS-21',
       'who5' => 'WHO-5',
-      _ => 'Assessment',
+      _ => 'Asesmen',
     };
     final insight = meta['insight']?.toString() ?? '';
     final filename = meta['filename']?.toString() ?? 'Lampiran';
@@ -40,7 +40,7 @@ class ClinicalChatCard extends StatelessWidget {
       final action = attachment
           ? 'Buka lampiran'
           : isPatient
-              ? 'Isi assessment'
+              ? 'Isi asesmen'
               : 'Lihat detail';
       final size = meta['size'];
       return Container(
@@ -76,7 +76,7 @@ class ClinicalChatCard extends StatelessWidget {
                 if (assessment) ...[
                   const SizedBox(height: 4),
                   const Text(
-                      'Isi sendiri untuk mencatat kondisi terkini. Hasil tersimpan di Assessment Record.',
+                      'Isi sendiri untuk mencatat kondisi terkini. Hasil tersimpan di Riwayat Asesmen.',
                       style: TextStyle(color: MalvaColors.ink, fontSize: 12)),
                 ],
                 if (attachment && size is num && size.isFinite && size > 0) ...[
@@ -123,7 +123,7 @@ class ClinicalChatCard extends StatelessWidget {
                   Icon(Icons.flag_outlined, color: MalvaColors.seed),
                   SizedBox(width: 8),
                   Expanded(
-                      child: Text('Goals & Habits',
+                      child: Text('Target & Kebiasaan',
                           style: TextStyle(
                               fontWeight: FontWeight.w800,
                               color: MalvaColors.ink)))
@@ -133,7 +133,7 @@ class ClinicalChatCard extends StatelessWidget {
                     insight.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   if (goals.isEmpty && goalIds.isNotEmpty)
-                    Text('${goalIds.length} homework goals tersimpan'),
+                    Text('${goalIds.length} homework target tersimpan'),
                   for (final goal in goals)
                     Padding(
                         padding: const EdgeInsets.only(bottom: 6),
@@ -148,7 +148,7 @@ class ClinicalChatCard extends StatelessWidget {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                    Text(goal['title']?.toString() ?? 'Goal'),
+                                    Text(goal['title']?.toString() ?? 'Target'),
                                     Text(
                                         '${goal['target_per_week'] ?? 3} kali per minggu',
                                         style: Theme.of(context)

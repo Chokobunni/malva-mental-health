@@ -39,7 +39,7 @@ void main() {
                     displayName: 'P',
                     accessToken: 'test')))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tulis Cerita Diari Baru'));
+    await tester.tap(find.text('Tulis Cerita Jurnal Baru'));
     await tester.pumpAndSettle();
     expect(find.byType(BottomSheet), findsNothing);
     expect(find.byTooltip('Tambah media'), findsOneWidget);
@@ -58,11 +58,11 @@ void main() {
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
     expect(find.text('Cerita saya'), findsOneWidget);
-    expect(find.textContaining('Diary belum tersimpan'), findsWidgets);
+    expect(find.textContaining('Jurnal belum tersimpan'), findsWidgets);
     fail = false;
     await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
-    expect(find.text('Ruang Cerita & Diari'), findsOneWidget);
+    expect(find.text('Ruang Cerita & Jurnal Harian'), findsOneWidget);
     final content = DiaryContent.parse(saved!['note'] as String);
     expect(content.text, 'Cerita saya');
     expect(content.size, 24);

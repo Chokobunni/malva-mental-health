@@ -30,7 +30,7 @@ void main() {
     );
     await tester.pump(const Duration(seconds: 1));
 
-    expect(find.textContaining('Hasil screening menunjukkan risiko'),
+    expect(find.textContaining('Hasil skrining menunjukkan risiko'),
         findsOneWidget);
     expect(tester.takeException(), isNull);
   });

@@ -412,7 +412,7 @@ class ForwardChainingEngine {
       isCrisis = true;
       final crisisLevel = workingMemory['crisis_level'];
       final crisisSummary = crisisLevel?.value as String? ??
-          'Ada indikator keselamatan diri. Tampilkan crisis flow dan hubungi profesional.';
+          'Ada indikator keselamatan diri. Tampilkan krisis flow dan hubungi profesional.';
       summary = '$summary $crisisSummary';
       if (crisisFlag.certaintyFactor > finalCF) {
         finalCF = crisisFlag.certaintyFactor;

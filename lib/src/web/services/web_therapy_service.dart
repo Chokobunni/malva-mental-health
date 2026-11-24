@@ -22,7 +22,7 @@ class WebTherapyGroup {
 /// Urutan kategori yang diinginkan di hub. Kategori lain tetap tampil setelah
 /// daftar ini (urut alfabetis) agar modul baru tidak pernah "hilang".
 const List<String> _webCategoryOrder = <String>[
-  'Assessment',
+  'Asesmen',
   'CBT',
   'DBT',
   'Relaksasi',
@@ -147,7 +147,7 @@ class WebWorksheetAnswers {
       return null;
     }
     if (!hasAnyAnswer(module)) {
-      return 'Isi minimal satu kolom worksheet dulu.';
+      return 'Isi minimal satu kolom lembar kerja dulu.';
     }
     return null;
   }
@@ -267,7 +267,7 @@ String webWorksheetSummaryText({
     }
   }
   buffer.writeln(
-    'Catatan: worksheet ini adalah latihan mandiri, bukan diagnosis. '
+    'Catatan: lembar kerja ini adalah latihan mandiri, bukan diagnosis. '
     'Diskusikan dengan profesional bila diperlukan.',
   );
   return buffer.toString();

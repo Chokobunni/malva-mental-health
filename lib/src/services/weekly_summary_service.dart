@@ -1,5 +1,6 @@
 import '../models.dart';
 import 'mood_insights.dart';
+import 'medication_adherence.dart';
 import 'malva_api_client.dart';
 import '../time/wib.dart';
 
@@ -16,9 +17,6 @@ import '../time/wib.dart';
 
 /// Satu titik mood lokal (dari store perangkat) untuk fallback.
 typedef LocalMoodPoint = ({DateTime at, double sleepHours, int moodScore});
-
-/// Satu log obat lokal (dari store perangkat) untuk fallback.
-typedef LocalMedicationLog = ({DateTime at, String status});
 
 /// Metrik ringkasan 7 hari terakhir.
 ///
@@ -72,7 +70,7 @@ class WeeklySummaryMetrics {
 
 /// Ambil metrik 7 hari: server lebih dulu, fallback ke data lokal per metrik.
 ///
-/// [localMoods]/[localLogs] diisi pemanggil dari store perangkat (boleh kosong).
+/// [localMoods] provides a fallback when server mood history is unavailable.
 /// [asOf] anchors historical cards to their original WIB calendar date.
 /// Mengembalikan null hanya bila TIDAK ADA satu pun sumber data.
 Future<WeeklySummaryMetrics?> loadWeeklySummary({
@@ -81,7 +79,6 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
   String? patientId,
   DateTime? asOf,
   List<LocalMoodPoint> localMoods = const [],
-  List<LocalMedicationLog> localLogs = const [],
 }) async {
   final now = toWib(asOf ?? wibNow());
   final end =
@@ -131,50 +128,60 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
     }
   }
 
-  // ---------- Kepatuhan obat ----------
-  var logsKnown = false;
-  var logsFromApi = false;
-  var takenLogs = 0;
-  var totalLogs = 0;
-  var adherencePercent = 0;
-
-  try {
-    final logs = await api.listMedicationLogs(
-      accessToken: accessToken,
-      limit: 0,
-      patientId: patientId,
-    );
-    final recent = logs
-        .where((l) => l.takenAt != null && inPeriod(l.takenAt!))
-        .toList(growable: false);
-    logsKnown = true;
-    logsFromApi = true;
-    totalLogs = recent.length;
-    // 'partial' (sebagian diminum) ikut dihitung sebagai dosis yang diminum.
-    takenLogs = recent
-        .where((l) => l.status == 'taken' || l.status == 'partial')
-        .length;
-    adherencePercent =
-        totalLogs == 0 ? 0 : ((takenLogs / totalLogs) * 100).round();
-  } on Object {
-    final recent =
-        localLogs.where((l) => inPeriod(l.at)).toList(growable: false);
-    if (recent.isNotEmpty) {
-      logsKnown = true;
-      totalLogs = recent.length;
-      takenLogs = recent
-          .where((l) => l.status == 'taken' || l.status == 'partial')
-          .length;
-      adherencePercent =
-          totalLogs == 0 ? 0 : ((takenLogs / totalLogs) * 100).round();
-    }
-  }
+  // Schedule and complete log history are both required for adherence.
+  List<BackendMedicationLog>? logs;
+  List<BackendMedication>? medications;
+  await Future.wait([
+    () async {
+      try {
+        final records = await api.listMedicationLogs(
+          accessToken: accessToken,
+          patientId: patientId,
+          limit: 0,
+        );
+        if (records.every((log) => (log.takenAt ?? log.createdAt) != null)) {
+          logs = records;
+        }
+      } on Object {
+        // Leave adherence unknown when the dose history is unavailable.
+      }
+    }(),
+    () async {
+      try {
+        medications = await api.listMedications(
+          accessToken: accessToken,
+          patientId: patientId,
+          limit: 100,
+        );
+      } on Object {
+        // Leave adherence unknown when the schedule cannot be loaded.
+      }
+    }(),
+  ]);
+  final schedules = medications;
+  final history = logs;
+  final adherence = schedules == null || history == null
+      ? null
+      : MedicationAdherence.calculate(
+          medications: schedules.map((med) => med.toMedication()).toList(),
+          logs: [
+            for (final log in history)
+              MedicationLog(
+                  medicationId: log.medicationId,
+                  medicationName: log.medicationName,
+                  takenAt: (log.takenAt ?? log.createdAt)!,
+                  status: log.status),
+          ],
+          start: cutoff,
+          end: now,
+        );
+  final logsKnown = adherence != null;
 
   if (!moodKnown && !logsKnown) return null;
 
-  final source = moodFromApi && logsFromApi
+  final source = moodFromApi && logsKnown
       ? 'api'
-      : (moodFromApi || logsFromApi ? 'mixed' : 'local');
+      : (moodFromApi || logsKnown ? 'mixed' : 'local');
 
   return WeeklySummaryMetrics(
     entries: entries,
@@ -184,9 +191,9 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
     avgSleepHours: avgSleepHours,
     moodScores: moodScores,
     logsKnown: logsKnown,
-    takenLogs: takenLogs,
-    totalLogs: totalLogs,
-    adherencePercent: adherencePercent,
+    takenLogs: adherence?.taken ?? 0,
+    totalLogs: adherence?.rows.length ?? 0,
+    adherencePercent: adherence?.percent ?? 0,
   );
 }
 

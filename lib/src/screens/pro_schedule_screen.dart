@@ -8,10 +8,13 @@ import '../providers/providers.dart';
 import '../services/care_session_refresh.dart';
 import '../widgets/session_attendance_actions.dart';
 import '../services/malva_api_client.dart';
+import '../services/server_clock.dart';
 import '../theme.dart';
+import '../time/wib.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/care_reference_widgets.dart';
 import '../widgets/malva_components.dart';
+import '../widgets/professional_schedule_calendar.dart';
 import '../widgets/meet_join_button.dart';
 import '../widgets/professional_availability_summary.dart';
 import 'chat_screen.dart';
@@ -20,7 +23,7 @@ import 'pro_patient_detail_screen.dart';
 // ============================================================
 // PRO SCHEDULE — tab "Jadwal" dashboard profesional:
 //   - Sesi hari ini & mendatang: join chat, tandai hadir/tidak,
-//     batal (kredit kembali), reschedule, meeting URL, ringkasan.
+//     batal (kredit kembali), penjadwalan ulang, dan tautan video.
 // Pengaturan ketersediaan/harga dibuka dari Home profesional.
 // Semua dari server — tanpa data demo.
 // ============================================================
@@ -46,6 +49,8 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
   bool _isLoading = true;
   bool _loadInProgress = false;
   bool _historyExpanded = false;
+  DateTime? _calendarMonth;
+  DateTime? _selectedDate;
   String? _error;
 
   MalvaApiClient get _api => widget.apiClient ?? ref.read(apiClientProvider);
@@ -154,6 +159,25 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
         .map((s) => sessionsById[s.id]!)
         .where((s) => !completionIds.contains(s.id))
         .toList();
+    final now = wibNow();
+    final month = _calendarMonth ?? wibFromParts(now.year, now.month, 1);
+    final byDate = <String, List<BackendCareSession>>{};
+    for (final session in [...today, ...upcoming]) {
+      final at = session.scheduledDateTime;
+      if (at != null) {
+        (byDate[wibDateKey(at)] ??= []).add(session);
+      }
+    }
+    final selectedKey =
+        _selectedDate == null ? null : wibDateKey(_selectedDate!);
+    final selected = byDate[selectedKey];
+    final filtered = selected == null
+        ? upcoming
+        : upcoming.where((s) => selected.contains(s)).toList();
+    final selectionLabel = selected == null
+        ? 'Semua tanggal'
+        : professionalScheduleDateLabel(_selectedDate!);
+    void clearSelection() => setState(() => _selectedDate = null);
     return Theme(
         data: Theme.of(context).copyWith(
             cardTheme: Theme.of(context).cardTheme.copyWith(elevation: .35)),
@@ -173,9 +197,40 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
                   _ProSessionCard(
                       key: ValueKey('complete-${s.id}'),
                       session: s,
-                      onChanged: _load),
+                      onChanged: _load,
+                      accessToken: _token,
+                      apiClient: _api),
                   const SizedBox(height: 10),
                 ],
+              ],
+              if (!_isLoading && _error == null) ...[
+                ProfessionalScheduleCalendar(
+                  month: month,
+                  today: now,
+                  sessionsByDate: byDate,
+                  selectedDate: selected == null ? null : _selectedDate,
+                  onMonthChanged: (offset) => setState(() {
+                    _calendarMonth =
+                        wibFromParts(month.year, month.month + offset, 1);
+                    _selectedDate = null;
+                  }),
+                  onClear: clearSelection,
+                  onDateTapped: (date) {
+                    final key = wibDateKey(date);
+                    if (key == selectedKey) {
+                      clearSelection();
+                    } else if (byDate.containsKey(key)) {
+                      setState(() => _selectedDate = date);
+                    } else {
+                      ScaffoldMessenger.of(context)
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(const SnackBar(
+                          content: Text('Tidak ada sesi pada tanggal ini.'),
+                        ));
+                    }
+                  },
+                ),
+                const SizedBox(height: 14),
               ],
               if (_isLoading)
                 const Center(child: CircularProgressIndicator())
@@ -212,29 +267,55 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
                     _ProSessionCard(
                         key: ValueKey('today-${s.id}'),
                         session: s,
-                        onChanged: _load),
+                        onChanged: _load,
+                        accessToken: _token,
+                        apiClient: _api),
                     const SizedBox(height: 10),
                   ],
                 ],
                 const SizedBox(height: 14),
-                if (upcoming.isEmpty)
-                  const CareIllustratedCard(
+                Row(children: [
+                  const Flexible(
+                    child: Text('Mendatang',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w800)),
+                  ),
+                  const SizedBox(width: 8),
+                  StatusPill(
+                      label: '${filtered.length} sesi',
+                      color: MalvaColors.seed),
+                  const Spacer(),
+                  Flexible(
+                    child: Text(selectionLabel,
+                        textAlign: TextAlign.end,
+                        style: const TextStyle(color: MalvaColors.seed)),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                if (filtered.isEmpty)
+                  CareIllustratedCard(
                     horizontal: true,
                     imageHeight: 85,
                     asset: 'pro-upcoming',
-                    title: 'Mendatang',
-                    subtitle: 'Belum ada sesi mendatang',
-                  )
-                else ...[
-                  const SectionLabel('Mendatang'),
-                  for (final s in upcoming) ...[
-                    _ProSessionCard(
-                        key: ValueKey('upcoming-${s.id}'),
-                        session: s,
-                        onChanged: _load),
-                    const SizedBox(height: 10),
-                  ],
+                    title: selected == null
+                        ? 'Belum ada sesi mendatang'
+                        : 'Tidak ada sesi mendatang pada tanggal ini.',
+                  ),
+                for (final s in filtered) ...[
+                  _ProSessionCard(
+                      key: ValueKey('upcoming-${s.id}'),
+                      session: s,
+                      onChanged: _load,
+                      accessToken: _token,
+                      apiClient: _api),
+                  const SizedBox(height: 10),
                 ],
+                if (selected != null)
+                  OutlinedButton.icon(
+                    onPressed: clearSelection,
+                    icon: const Icon(Icons.layers_outlined),
+                    label: Text('Tampilkan semua sesi (${upcoming.length})'),
+                  ),
                 const SizedBox(height: 14),
                 SoftCard(
                     radius: 14,
@@ -264,7 +345,9 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
                     _ProSessionCard(
                         key: ValueKey('past-${s.id}'),
                         session: s,
-                        onChanged: _load),
+                        onChanged: _load,
+                        accessToken: _token,
+                        apiClient: _api),
                     const SizedBox(height: 10),
                   ],
               ],
@@ -276,9 +359,15 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
 
 class _ProSessionCard extends ConsumerWidget {
   const _ProSessionCard(
-      {super.key, required this.session, required this.onChanged});
+      {super.key,
+      required this.session,
+      required this.onChanged,
+      this.apiClient,
+      this.accessToken});
 
   final BackendCareSession session;
+  final MalvaApiClient? apiClient;
+  final String? accessToken;
   final Future<void> Function() onChanged;
 
   @override
@@ -286,7 +375,7 @@ class _ProSessionCard extends ConsumerWidget {
     final at = session.scheduledDateTime;
     final dateLabel = at == null
         ? '-'
-        : '${at.day}/${at.month}/${at.year} ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')} WIB';
+        : '${wibWeekdayDate(at)} • ${formatWibBubbleTime(at)} WIB';
     final statusColor = switch (session.status) {
       'scheduled' => MalvaColors.seed,
       'completed' => MalvaColors.mint,
@@ -411,7 +500,8 @@ class _ProSessionCard extends ConsumerWidget {
                       SizedBox(
                           width: double.infinity,
                           child: OutlinedButton(
-                            onPressed: () => _openPatientDetail(context, ref),
+                            onPressed: () => _openPatientDetail(
+                                context, ref, session, apiClient),
                             style: OutlinedButton.styleFrom(
                                 side:
                                     const BorderSide(color: Color(0xFFE5E7EB)),
@@ -458,52 +548,12 @@ class _ProSessionCard extends ConsumerWidget {
           // Lapis 3 — aksi sekunder (batal/pindah/detail) hanya relevan
           // untuk sesi yang masih scheduled.
           if (session.isScheduled && !session.isAfterJoinWindow) ...[
-            CollapsibleCard(
+            ProfessionalSessionActions(
               key: ValueKey('aksi-lain-${session.id}'),
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-              header: const Text(
-                'AKSI LAIN',
-                style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
-                    color: Colors.black54),
-              ),
-              color: const Color(0xFFF7F8FA),
-              child: LayoutBuilder(builder: (context, constraints) {
-                Widget action(
-                        IconData icon, String title, VoidCallback onPressed) =>
-                    SizedBox(
-                        width: (constraints.maxWidth - 8) / 2,
-                        child: OutlinedButton.icon(
-                            onPressed: onPressed,
-                            style: OutlinedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                side:
-                                    const BorderSide(color: Color(0xFFE5E7EB)),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(11)),
-                                minimumSize: const Size(0, 34),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 8),
-                                textStyle: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge
-                                    ?.copyWith(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700)),
-                            icon: Icon(icon, size: 15),
-                            label: Text(title, textAlign: TextAlign.center)));
-                return Wrap(spacing: 8, runSpacing: 8, children: [
-                  action(Icons.person_outline_rounded, 'Detail pasien',
-                      () => _openPatientDetail(context, ref)),
-                  action(Icons.cancel_outlined, 'Batal',
-                      () => _cancel(context, ref)),
-                  action(Icons.edit_calendar_rounded, 'Reschedule',
-                      () => _reschedule(context, ref)),
-                  action(Icons.link_rounded, 'Link & ringkasan',
-                      () => _editDetail(context, ref)),
-                ]);
-              }),
+              session: session,
+              accessToken: accessToken,
+              apiClient: apiClient,
+              onChanged: onChanged,
             ),
           ],
           if (session.isScheduled && !session.isBeforeJoinWindow)
@@ -531,24 +581,75 @@ class _ProSessionCard extends ConsumerWidget {
       ),
     );
   }
+}
 
-  void _openPatientDetail(BuildContext context, WidgetRef ref) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ProPatientDetailScreen(
-          patientId: session.patientId,
-          patientName:
-              session.patientName.isEmpty ? 'Pasien' : session.patientName,
-          session: ref.read(currentSessionProvider),
-          apiClient: ref.read(apiClientProvider),
-        ),
+class ProfessionalSessionActions extends ConsumerWidget {
+  const ProfessionalSessionActions(
+      {super.key,
+      required this.session,
+      required this.onChanged,
+      this.apiClient,
+      this.accessToken,
+      this.futureCancellationOnly = false});
+  final BackendCareSession session;
+  final Future<void> Function() onChanged;
+  final MalvaApiClient? apiClient;
+  final String? accessToken;
+  final bool futureCancellationOnly;
+
+  bool get _canCancel =>
+      !futureCancellationOnly ||
+      (session.scheduledDateTime?.isAfter(ServerClock.now()) ?? false);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return CollapsibleCard(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      header: const Text(
+        'Aksi lain',
+        style: TextStyle(
+            fontWeight: FontWeight.w800, fontSize: 12, color: Colors.black54),
       ),
+      color: const Color(0xFFF7F8FA),
+      child: LayoutBuilder(builder: (context, constraints) {
+        Widget action(
+                IconData icon, String title, VoidCallback? onPressed) =>
+            SizedBox(
+                width: (constraints.maxWidth - 8) / 2,
+                child: OutlinedButton.icon(
+                    onPressed: onPressed,
+                    style: OutlinedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        side: const BorderSide(color: Color(0xFFE5E7EB)),
+                        shape:
+                            RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(11)),
+                        minimumSize: const Size(0, 34),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 8),
+                        textStyle: Theme.of(context)
+                            .textTheme
+                            .labelLarge
+                            ?.copyWith(
+                                fontSize: 12, fontWeight: FontWeight.w700)),
+                    icon: Icon(icon, size: 15),
+                    label: Text(title, textAlign: TextAlign.center)));
+        return Wrap(spacing: 8, runSpacing: 8, children: [
+          action(Icons.person_outline_rounded, 'Detail pasien',
+              () => _openPatientDetail(context, ref, session, apiClient)),
+          action(Icons.cancel_outlined, 'Batal',
+              _canCancel ? () => _cancel(context, ref) : null),
+          action(Icons.edit_calendar_rounded, 'Jadwalkan ulang',
+              () => _reschedule(context, ref)),
+          if (session.isVideo)
+            action(Icons.link_rounded, 'Link', () => _editLink(context, ref)),
+        ]);
+      }),
     );
   }
 
   Future<void> _cancel(BuildContext context, WidgetRef ref) async {
-    final reasonController = TextEditingController();
+    var reason = '';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -560,7 +661,7 @@ class _ProSessionCard extends ConsumerWidget {
                 'Kredit sesi pasien otomatis kembali dan bisa dijadwalkan ulang.'),
             const SizedBox(height: 10),
             TextField(
-              controller: reasonController,
+              onChanged: (value) => reason = value,
               maxLines: 2,
               decoration: const InputDecoration(labelText: 'Alasan (opsional)'),
             ),
@@ -581,17 +682,16 @@ class _ProSessionCard extends ConsumerWidget {
         ],
       ),
     );
-    reasonController.dispose();
-    if (confirmed != true || !context.mounted) return;
-    final api = ref.read(apiClientProvider);
-    final token = ref.read(currentSessionProvider)?.accessToken;
+    if (confirmed != true || !context.mounted || !_canCancel) return;
+    final MalvaApiClient api = apiClient ?? ref.read(apiClientProvider);
+    final token = accessToken ?? ref.read(currentSessionProvider)?.accessToken;
     if (token == null || token.isEmpty) return;
     try {
       await api.updateCareSession(
         accessToken: token,
         sessionId: session.id,
         status: 'cancelled_by_professional',
-        cancelReason: reasonController.text.trim(),
+        cancelReason: reason.trim(),
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -615,7 +715,7 @@ class _ProSessionCard extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Reschedule sesi'),
+        title: const Text('Jadwalkan ulang sesi'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -632,7 +732,7 @@ class _ProSessionCard extends ConsumerWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Pilih slot dalam jam praktikmu. Reschedule profesional boleh melewati kedaluwarsa paket.',
+              'Pilih slot dalam jam praktikmu. Jadwal baru boleh melewati kedaluwarsa paket.',
               style: TextStyle(
                   fontSize: 12,
                   color: Theme.of(ctx).colorScheme.onSurfaceVariant),
@@ -654,8 +754,8 @@ class _ProSessionCard extends ConsumerWidget {
     );
     final scheduledAt = '${date.trim()}T${time.trim()}';
     if (confirmed != true || !context.mounted) return;
-    final api = ref.read(apiClientProvider);
-    final token = ref.read(currentSessionProvider)?.accessToken;
+    final MalvaApiClient api = apiClient ?? ref.read(apiClientProvider);
+    final token = accessToken ?? ref.read(currentSessionProvider)?.accessToken;
     if (token == null || token.isEmpty) return;
     try {
       final result = await api.rescheduleCareSession(
@@ -671,7 +771,7 @@ class _ProSessionCard extends ConsumerWidget {
       final messenger = ScaffoldMessenger.of(context);
       if (result.warnings.isEmpty) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('Sesi berhasil di-reschedule.')),
+          const SnackBar(content: Text('Sesi berhasil dijadwalkan ulang.')),
         );
       } else {
         messenger.showSnackBar(
@@ -693,49 +793,29 @@ class _ProSessionCard extends ConsumerWidget {
     }
   }
 
-  Future<void> _editDetail(BuildContext context, WidgetRef ref) async {
-    final meetingController = TextEditingController(text: session.meetingUrl);
-    final summaryController =
-        TextEditingController(text: session.summaryForPatient);
-    final noteController = TextEditingController(text: session.privateNote);
+  Future<void> _editLink(BuildContext context, WidgetRef ref) async {
+    var meeting = session.meetingUrl;
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Link & ringkasan sesi'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: meetingController,
-                decoration: const InputDecoration(
-                    labelText: 'Meeting URL (video)',
-                    hintText: 'https://meet.google.com/...'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: summaryController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                    labelText: 'Ringkasan untuk pasien',
-                    hintText:
-                        'Dibagikan ke pasien setelah sesi — ganti follow-up.'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: noteController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                    labelText: 'Catatan privat (hanya kamu)'),
-              ),
-            ],
-          ),
+        title: const Text('Link sesi video'),
+        content: TextFormField(
+          initialValue: meeting,
+          onChanged: (value) => meeting = value,
+          decoration: const InputDecoration(
+              labelText: 'Link Google Meet',
+              hintText: 'https://meet.google.com/...'),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Batal'),
           ),
+          if (session.meetingUrl.trim().isEmpty)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Buat link Meet'),
+            ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: compactFilledButtonStyle,
@@ -744,27 +824,23 @@ class _ProSessionCard extends ConsumerWidget {
         ],
       ),
     );
-    final meeting = meetingController.text.trim();
-    final summary = summaryController.text.trim();
-    final note = noteController.text.trim();
-    meetingController.dispose();
-    summaryController.dispose();
-    noteController.dispose();
-    if (saved != true || !context.mounted) return;
-    final api = ref.read(apiClientProvider);
-    final token = ref.read(currentSessionProvider)?.accessToken;
+    if (saved == null || !context.mounted) return;
+    final MalvaApiClient api = apiClient ?? ref.read(apiClientProvider);
+    final token = accessToken ?? ref.read(currentSessionProvider)?.accessToken;
     if (token == null || token.isEmpty) return;
     try {
-      await api.updateCareSession(
-        accessToken: token,
-        sessionId: session.id,
-        meetingUrl: meeting,
-        summaryForPatient: summary,
-        privateNote: note,
-      );
+      if (saved) {
+        await api.updateCareSession(
+          accessToken: token,
+          sessionId: session.id,
+          meetingUrl: meeting.trim(),
+        );
+      } else {
+        await api.ensureMeetLink(accessToken: token, sessionId: session.id);
+      }
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Detail sesi tersimpan.')),
+        const SnackBar(content: Text('Link sesi tersimpan.')),
       );
       await onChanged();
     } on Object catch (e) {
@@ -1617,4 +1693,20 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
       if (mounted) setState(() => _savingPricing = false);
     }
   }
+}
+
+void _openPatientDetail(BuildContext context, WidgetRef ref,
+    BackendCareSession session, MalvaApiClient? apiClient) {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => ProPatientDetailScreen(
+        patientId: session.patientId,
+        patientName:
+            session.patientName.isEmpty ? 'Pasien' : session.patientName,
+        session: ref.read(currentSessionProvider),
+        apiClient: apiClient ?? ref.read(apiClientProvider),
+      ),
+    ),
+  );
 }

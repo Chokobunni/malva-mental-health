@@ -116,6 +116,67 @@ class ScoreRangeRow {
   String get rangeLabel => '$min–$max';
 }
 
+const phq9Ranges = [
+  ScoreRangeRow(
+    min: 0,
+    max: 4,
+    label: 'Minimal',
+    advice: 'Gejala depresi sangat ringan atau tidak ada.',
+  ),
+  ScoreRangeRow(
+    min: 5,
+    max: 9,
+    label: 'Ringan',
+    advice: 'Gejala depresi ringan. Pantau perubahan suasana hati.',
+  ),
+  ScoreRangeRow(
+    min: 10,
+    max: 14,
+    label: 'Sedang',
+    advice: 'Gejala depresi sedang. Pertimbangkan konsultasi profesional.',
+  ),
+  ScoreRangeRow(
+    min: 15,
+    max: 19,
+    label: 'Cukup Berat',
+    advice: 'Gejala depresi cukup berat. Hubungi profesional kesehatan mental.',
+  ),
+  ScoreRangeRow(
+    min: 20,
+    max: 27,
+    label: 'Berat',
+    advice:
+        'Gejala depresi berat. Segera hubungi profesional kesehatan mental.',
+  ),
+];
+
+const gad7Ranges = [
+  ScoreRangeRow(
+    min: 0,
+    max: 4,
+    label: 'Minimal',
+    advice: 'Gejala kecemasan sangat ringan atau tidak ada.',
+  ),
+  ScoreRangeRow(
+    min: 5,
+    max: 9,
+    label: 'Ringan',
+    advice: 'Gejala kecemasan ringan. Pantau perubahan gejala.',
+  ),
+  ScoreRangeRow(
+    min: 10,
+    max: 14,
+    label: 'Sedang',
+    advice: 'Gejala kecemasan sedang. Pertimbangkan konsultasi profesional.',
+  ),
+  ScoreRangeRow(
+    min: 15,
+    max: 21,
+    label: 'Berat',
+    advice: 'Gejala kecemasan berat. Hubungi profesional kesehatan mental.',
+  ),
+];
+
 /// Ambang baku DASS-21 subskala depresi (0-42).
 const List<ScoreRangeRow> dassDepressionRanges = [
   ScoreRangeRow(
@@ -206,7 +267,7 @@ const List<ScoreRangeRow> who5Ranges = [
       min: 0,
       max: 7,
       label: 'Sangat rendah',
-      advice: 'Kemungkinan depresi — disarankan screening lanjutan.'),
+      advice: 'Kemungkinan depresi — disarankan skrining lanjutan.'),
   ScoreRangeRow(
       min: 8,
       max: 12,
@@ -389,12 +450,12 @@ String who5Summary(Map<String, dynamic> answers) {
   final score = scoreWho5(answers);
   var suffix = 'Kesejahteraan baik';
   if (score.possibleDepression) {
-    suffix = 'Perlu screening lanjutan (kemungkinan depresi)';
+    suffix = 'Perlu skrining lanjutan (kemungkinan depresi)';
   } else if (score.lowWellbeing) {
     suffix = 'Kesejahteraan rendah, pertimbangkan konsultasi';
   }
   if (!score.lowWellbeing && hasStandardizedWho5LowItem(answers)) {
-    suffix += '. Perlu screening lanjutan karena ada jawaban 0–1';
+    suffix += '. Perlu skrining lanjutan karena ada jawaban 0–1';
   }
   return 'WHO-5 ${score.raw}/25 (${score.percent}%) — $suffix';
 }

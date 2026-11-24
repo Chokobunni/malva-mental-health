@@ -3,6 +3,7 @@ import '../../models/diary_content.dart';
 
 import '../../platform/platform_providers.dart';
 import '../../services/export_service.dart';
+import '../../services/medication_adherence.dart';
 import '../../time/wib.dart';
 import '../malva_store_provider.dart';
 
@@ -25,7 +26,7 @@ final moodReportProvider = Provider<List<String>>((ref) => [
 final medicationReportProvider = Provider<List<String>>((ref) => [
       'RIWAYAT KONSUMSI OBAT',
       for (final e in ref.watch(malvaStoreProvider).medicationLogs)
-        '${formatWibDateTime(e.takenAt)} | ${e.medicationName} | ${e.status}',
+        '${formatWibDateTime(e.takenAt)} | ${e.medicationName} | ${normalizedMedicationStatus(e.status)}',
     ]);
 
 final diaryReportProvider = Provider<List<String>>((ref) => [

@@ -84,9 +84,9 @@ void main() {
           irritability: 2,
           note: ''),
     ], now: wibFromParts(2026, 11, 8))))));
-    expect(find.text('✅ Longest Streak'), findsOneWidget);
-    expect(find.text('🔥 Current Streak'), findsOneWidget);
-    expect(find.text('🗓️ Total Days'), findsOneWidget);
+    expect(find.text('✅ Runtutan Terpanjang'), findsOneWidget);
+    expect(find.text('🔥 Runtutan Saat Ini'), findsOneWidget);
+    expect(find.text('🗓️ Total Hari'), findsOneWidget);
     expect(find.text('November 2026'), findsOneWidget);
     await tester.tap(find.byTooltip('Bulan sebelumnya'));
     await tester.pump();
@@ -96,8 +96,8 @@ void main() {
             w is Semantics &&
             w.properties.label == '31 Oktober 2026, 1 check-in'),
         findsOneWidget);
-    expect(find.text('Symptoms Balance Map'), findsOneWidget);
-    expect(find.text('Lifetime'), findsOneWidget);
+    expect(find.text('Peta Keseimbangan Gejala'), findsOneWidget);
+    expect(find.text('Semua Waktu'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

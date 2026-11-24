@@ -156,22 +156,22 @@ void main() {
       'selected patient screening includes both sources and opens actual CF details',
       (tester) async {
     final owner = await _pump(tester, _Fixture());
-    await _openTab(tester, 'Screening');
+    await _openTab(tester, 'Skrining');
     expect(find.text('Ami WHO-5'), findsOneWidget);
     expect(find.text('Ami DASS-21'), findsOneWidget);
     expect(find.text('Dina WHO-5'), findsNothing);
     expect(find.text('Ami Latihan ABCDE'), findsNothing);
-    expect(find.text('Screening PHQ-9 + GAD-7'), findsOneWidget);
-    await tester.tap(find.text('Screening PHQ-9 + GAD-7'));
+    expect(find.text('Skrining PHQ-9 + GAD-7'), findsOneWidget);
+    await tester.tap(find.text('Skrining PHQ-9 + GAD-7'));
     await tester.pumpAndSettle();
-    expect(find.text('PHQ-9 Total Score'), findsOneWidget);
-    expect(find.text('GAD-7 Total Score'), findsOneWidget);
-    expect(find.text('PHQ-9 · Dukungan rule internal (CF)'), findsOneWidget);
-    expect(find.text('GAD-7 · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.text('Skor Total PHQ-9'), findsOneWidget);
+    expect(find.text('Skor Total GAD-7'), findsOneWidget);
+    expect(find.text('PHQ-9 · Dukungan aturan internal (CF)'), findsOneWidget);
+    expect(find.text('GAD-7 · Dukungan aturan internal (CF)'), findsOneWidget);
     expect(find.text('Bagikan ke Profesional'), findsNothing);
     owner.read(authStateProvider.notifier).clearSession();
     await tester.pumpAndSettle();
-    expect(find.text('PHQ-9 Total Score'), findsNothing);
+    expect(find.text('Skor Total PHQ-9'), findsNothing);
   });
 
   for (final deniedSource in ['/v1/screenings', '/v1/therapy-submissions']) {
@@ -180,14 +180,14 @@ void main() {
         (tester) async {
       final fixture = _Fixture()..status[deniedSource] = 403;
       await _pump(tester, fixture);
-      await _openTab(tester, 'Screening');
+      await _openTab(tester, 'Skrining');
       if (deniedSource == '/v1/screenings') {
         expect(find.text('Ami WHO-5'), findsOneWidget);
         await tester.tap(find.text('Ami WHO-5'));
         await tester.pumpAndSettle();
         expect(find.byType(AssessmentResultCard), findsOneWidget);
       } else {
-        expect(find.text('Screening PHQ-9 + GAD-7'), findsOneWidget);
+        expect(find.text('Skrining PHQ-9 + GAD-7'), findsOneWidget);
         expect(find.text('Ami WHO-5'), findsNothing);
       }
       expect(find.textContaining('Gagal membuka'), findsNothing);
@@ -199,7 +199,7 @@ void main() {
     final fixture = _Fixture()
       ..delayedFirstPatient = Completer<http.Response>();
     await _pump(tester, fixture);
-    final tab = find.widgetWithText(Tab, 'Screening');
+    final tab = find.widgetWithText(Tab, 'Skrining');
     expect(tab, findsOneWidget);
     await tester.ensureVisible(tab);
     await tester.tap(tab);

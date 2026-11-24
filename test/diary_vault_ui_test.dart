@@ -91,7 +91,7 @@ void main() {
                     displayName: 'P',
                     accessToken: 'test')))));
     await tester.pump();
-    await tester.tap(find.text('Tulis Cerita Diari Baru'));
+    await tester.tap(find.text('Tulis Cerita Jurnal Baru'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.enterText(
@@ -210,7 +210,7 @@ void main() {
             theme: buildMalvaTheme(),
             home: DiaryHistoryScreen(apiClient: api, session: a))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tulis Cerita Diari Baru'));
+    await tester.tap(find.text('Tulis Cerita Jurnal Baru'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Pertanyaan Refleksi'));
     await tester.pumpAndSettle();
@@ -275,14 +275,14 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cerita privat'));
       await tester.pumpAndSettle();
-      expect(find.text('Halaman Cerita Diari'), findsOneWidget);
-      await tester.tap(find.byTooltip('Aksi diary'));
+      expect(find.text('Halaman Cerita Jurnal'), findsOneWidget);
+      await tester.tap(find.byTooltip('Aksi jurnal'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Hapus Diary'));
+      await tester.tap(find.text('Hapus Jurnal'));
       await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(find.text(cancel ? 'Batal' : 'Hapus'));
       await tester.pumpAndSettle();
-      expect(find.text('Halaman Cerita Diari'), findsOneWidget);
+      expect(find.text('Halaman Cerita Jurnal'), findsOneWidget);
       expect(container.read(malvaStoreProvider).diaryEntries.single.id, 'd');
     });
   }
@@ -310,13 +310,13 @@ void main() {
                     displayName: 'P',
                     accessToken: 'test')))));
     await tester.pumpAndSettle();
-    expect(find.text('Ruang Cerita & Diari'), findsOneWidget);
-    expect(find.text('Jawab di Diari'), findsNothing);
+    expect(find.text('Ruang Cerita & Jurnal Harian'), findsOneWidget);
+    expect(find.text('Jawab di Jurnal'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('prompt-card-1')));
     await tester.pumpAndSettle();
-    expect(find.text('Jawab di Diari'), findsOneWidget);
-    await tester.ensureVisible(find.text('Jawab di Diari'));
-    await tester.tap(find.text('Jawab di Diari'));
+    expect(find.text('Jawab di Jurnal'), findsOneWidget);
+    await tester.ensureVisible(find.text('Jawab di Jurnal'));
+    await tester.tap(find.text('Jawab di Jurnal'));
     await tester.pumpAndSettle();
     await tester.enterText(
         find.widgetWithText(TextField, 'Tulis ceritamu di sini...'),

@@ -88,9 +88,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await captureRecord(tester, boundary, 'diary-flip-${width.toInt()}.png');
-      await tester.ensureVisible(find.text('Jawab di Diari'));
+      await tester.ensureVisible(find.text('Jawab di Jurnal'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Jawab di Diari'));
+      await tester.tap(find.text('Jawab di Jurnal'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await captureRecord(
@@ -106,7 +106,7 @@ void main() {
       expect(tester.takeException(), isNull);
       await captureRecord(
           tester, boundary, 'diary-badges-${width.toInt()}.png');
-      await tester.tap(find.text('Kembali ke Diari'));
+      await tester.tap(find.text('Kembali ke Jurnal'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
           find.text('Menyelesaikan Revisi Bab Desain Halaman Diari'), 300,

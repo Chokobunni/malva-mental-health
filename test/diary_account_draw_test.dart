@@ -23,7 +23,7 @@ void main() {
         container: container,
         child: const MaterialApp(home: DiaryHistoryScreen())));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tulis Cerita Diari Baru'));
+    await tester.tap(find.text('Tulis Cerita Jurnal Baru'));
     await tester.pumpAndSettle();
     await tester.enterText(
         find.widgetWithText(TextField, 'Tulis ceritamu di sini...'),

@@ -90,7 +90,7 @@ void main() {
         child: const MaterialApp(home: TherapyDetailScreen(module: _module))));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'jawaban saya');
-    await tester.tap(find.text('Download Worksheet'));
+    await tester.tap(find.text('Unduh Lembar Kerja'));
     await tester.pump();
     container.read(authStateProvider.notifier).setSession(const AuthSession(
         role: UserRole.patient,
@@ -164,7 +164,7 @@ void main() {
       expect(exporter.calls.single['mimeType'], 'application/pdf');
       expect(exporter.calls.single['magic'], '%PDF-');
       expect(exporter.calls.single['subject'],
-          'Worksheet ${abcdeModule.title} — Malva');
+          'Lembar Kerja ${abcdeModule.title} — Malva');
     });
   }
   group('AC2 — ekspor di web BERFUNGSI (tombol memanggil FileExporter)', () {
@@ -177,7 +177,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tombol ekspor HARUS ada (bukan catatan) di web.
-      final moodExport = find.text('Export Mood History');
+      final moodExport = find.text('Ekspor Riwayat Mood');
       expect(moodExport, findsOneWidget);
 
       await tester.ensureVisible(moodExport);
@@ -211,14 +211,14 @@ void main() {
       await tester.enterText(find.byType(TextField).first, 'jawaban saya');
       await tester.pump();
 
-      final download = find.text('Download Worksheet');
+      final download = find.text('Unduh Lembar Kerja');
       await tester.ensureVisible(download);
       await tester.tap(download);
       await tester.pumpAndSettle();
 
       expect(exporter.calls, isNotEmpty);
-      expect(
-          exporter.calls.last['subject'], 'Worksheet Test Worksheet — Malva');
+      expect(exporter.calls.last['subject'],
+          'Lembar Kerja Test Worksheet — Malva');
       expect(exporter.calls.last['mimeType'], 'application/pdf');
       expect(exporter.calls.last['filename'], endsWith('.pdf'));
       expect(exporter.calls.last['magic'], '%PDF-');

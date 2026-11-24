@@ -56,9 +56,9 @@ void main() {
     expect(find.text('Belum tersedia'), findsWidgets);
     await tester.tap(find.text('7/21'));
     await tester.pumpAndSettle();
-    expect(find.text('Detail Record'), findsOneWidget);
-    expect(find.text('PHQ-9 Total Score'), findsOneWidget);
-    expect(find.text('GAD-7 Total Score'), findsOneWidget);
+    expect(find.text('Rincian Hasil'), findsOneWidget);
+    expect(find.text('Skor Total PHQ-9'), findsOneWidget);
+    expect(find.text('Skor Total GAD-7'), findsOneWidget);
     expect(find.text('7'), findsOneWidget);
     expect(find.text('Ringan'), findsWidgets);
     expect(find.text('Belum tersedia'), findsWidgets);

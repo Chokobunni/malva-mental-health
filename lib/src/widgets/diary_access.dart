@@ -197,7 +197,9 @@ class _DiaryAccessSheetState extends State<DiaryAccessSheet> {
                           Row(children: [
                             Expanded(
                                 child: Text(
-                                    _picking ? 'Bagikan diary' : 'Kelola akses',
+                                    _picking
+                                        ? 'Bagikan jurnal'
+                                        : 'Kelola akses',
                                     style: const TextStyle(
                                         fontSize: 20,
                                         fontWeight: FontWeight.w800))),

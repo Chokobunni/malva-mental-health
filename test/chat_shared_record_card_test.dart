@@ -132,7 +132,7 @@ void main() {
             'bundle' => {'bundle': instruments},
             _ => instruments,
           });
-      expect(find.text('Hasil Screening Klinis'), findsOneWidget);
+      expect(find.text('Hasil Skrining Klinis'), findsOneWidget);
       expect(find.text('PHQ-9 (Depresi)'), findsOneWidget);
       expect(find.text('8 / 27'), findsOneWidget);
       expect(find.text('6 / 21'), findsOneWidget);
@@ -187,7 +187,7 @@ void main() {
                 'answers': _answers(module)
               },
               respond: (_) async => _json({'error': 'Tidak tersedia'}, status));
-          expect(find.text('Assessment belum tersedia'), findsOneWidget);
+          expect(find.text('Asesmen belum tersedia'), findsOneWidget);
           expect(find.textContaining('CF'), findsNothing);
         });
       }
@@ -264,7 +264,7 @@ void main() {
         });
       });
       expect(requests, 1);
-      expect(find.text('Hasil Screening Klinis'), findsOneWidget);
+      expect(find.text('Hasil Skrining Klinis'), findsOneWidget);
       expect(
           find.textContaining('Dukungan aturan triage (CF)'), findsOneWidget);
       if (module == 'who5') {
@@ -288,7 +288,7 @@ void main() {
               'answers': _answers(module)
             },
             respond: (_) async => _json({'error': 'Tidak tersedia'}, status));
-        expect(find.text('Assessment belum tersedia'), findsOneWidget);
+        expect(find.text('Asesmen belum tersedia'), findsOneWidget);
         expect(find.textContaining('0.55', findRichText: true), findsNothing);
         expect(find.text('10 / 25'), findsNothing);
         expect(find.textContaining('28 / 42'), findsNothing);
@@ -322,7 +322,7 @@ void main() {
           respond: (_) async => _json(
               status == 200 ? {'screenings': []} : {'error': 'Tidak tersedia'},
               status));
-      expect(find.text('Assessment belum tersedia'), findsOneWidget);
+      expect(find.text('Asesmen belum tersedia'), findsOneWidget);
       expect(find.textContaining('CF'), findsNothing);
     });
   }
@@ -387,7 +387,7 @@ void main() {
         }
       ]
     });
-    expect(find.text('Progress Goals & Habits'), findsOneWidget);
+    expect(find.text('Progres Target & Kebiasaan'), findsOneWidget);
     expect(find.text('4/3'), findsOneWidget);
     expect(find.text('—/7'), findsOneWidget);
     expect(find.text('0/2'), findsNothing);
@@ -412,7 +412,7 @@ void main() {
       'note': note,
       'occurred_at': '2026-11-08T19:39:00+07:00'
     });
-    expect(find.text('Diary'), findsOneWidget);
+    expect(find.text('Jurnal'), findsOneWidget);
     expect(find.textContaining('Baris pertama.'), findsOneWidget);
     final preview = tester.widget<Text>(find.textContaining('Baris pertama.'));
     expect(preview.maxLines, 3);
@@ -546,8 +546,9 @@ void main() {
           'avg_sleep_hours': 14,
           'medication_adherence': 99
         },
-        respond: (request) async =>
-            _json(request.url.path == '/v1/mood-checkins'
+        respond: (request) async => _json(request.url.path == '/v1/medications'
+            ? {'medications': []}
+            : request.url.path == '/v1/mood-checkins'
                 ? {
                     'moods': [
                       {

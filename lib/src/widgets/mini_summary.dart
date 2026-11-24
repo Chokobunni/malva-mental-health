@@ -118,11 +118,6 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
                     moodScore: entry.mood.score
                   )
             ],
-            localLogs: [
-              for (final log in store.medicationLogs)
-                if (widget.patientId == null)
-                  (at: log.takenAt, status: log.status)
-            ],
           );
         } on Object {/* Unknown stays visible. */}
         if (isCurrent()) setState(() => _metrics = metrics);
@@ -203,7 +198,7 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
           _SummaryTile(
             icon: Icons.show_chart_rounded,
             color: MalvaColors.seed,
-            title: 'Mood Trend',
+            title: 'Tren Mood',
             value: moodKnown
                 ? '$moodTrend ($moodCount check-in)'
                 : 'Data check-in belum dimuat',
@@ -229,13 +224,13 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
             color: MalvaColors.mint,
             title: 'Ketaatan Obat',
             value: logsKnown
-                ? '$adherence% ($taken dari $totalLogs log)'
+                ? '$adherence% ($taken dari $totalLogs dosis)'
                 : 'Data log obat belum dimuat',
           ),
           const SizedBox(height: 8),
-          const SectionLabel('Current Goals'),
+          const SectionLabel('Target Saat Ini'),
           if (_goals == null)
-            const Text('Data goals belum dimuat.')
+            const Text('Data target belum dimuat.')
           else if (activeGoals.isEmpty)
             const Text('Belum ada goal aktif.')
           else

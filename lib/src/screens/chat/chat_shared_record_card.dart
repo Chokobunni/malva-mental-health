@@ -67,8 +67,8 @@ class ChatDiaryDetail extends ConsumerWidget {
     return ref.watch(chatDiaryEntryProvider(id)).when(
         skipLoadingOnRefresh: false,
         data: (entry) => _detail(context, ref, _diaryData(message, entry)),
-        error: (_, __) => _unavailable(context, 'Akses diary tidak tersedia.'),
-        loading: () => _unavailable(context, 'Memuat diary…'));
+        error: (_, __) => _unavailable(context, 'Akses jurnal tidak tersedia.'),
+        loading: () => _unavailable(context, 'Memuat jurnal…'));
   }
 
   Widget _unavailable(BuildContext context, String text) => Padding(
@@ -76,7 +76,7 @@ class ChatDiaryDetail extends ConsumerWidget {
       child: Row(children: [
         Expanded(child: Text(text)),
         IconButton(
-            tooltip: 'Tutup detail diary',
+            tooltip: 'Tutup detail jurnal',
             onPressed: () => Navigator.pop(context),
             icon: const Icon(Icons.close, color: MalvaColors.plum)),
       ]));
@@ -98,13 +98,13 @@ class ChatDiaryDetail extends ConsumerWidget {
                     color: Color(0xffac792a), size: 20)),
             const SizedBox(width: 10),
             const Expanded(
-                child: Text('Detail Diary',
+                child: Text('Detail Jurnal',
                     style: TextStyle(
                         color: MalvaColors.plum,
                         fontSize: 20,
                         fontWeight: FontWeight.w800))),
             IconButton(
-                tooltip: 'Tutup detail diary',
+                tooltip: 'Tutup detail jurnal',
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.close, color: MalvaColors.plum)),
           ])),
@@ -393,14 +393,14 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
       Color(0xff12a7b5)
     ];
     return [
-      _heading('Progress Goals & Habits', Icons.flag_outlined,
+      _heading('Progres Target & Kebiasaan', Icons.flag_outlined,
           subtitle: 'Pembaruan Target Mingguan'),
       for (final (index, goal) in goals.indexed) ...[
         if (index > 0) const Divider(height: 19, color: Color(0xffe8def0)),
         _goalProgress(goal, colors[index % colors.length]),
       ],
       if (goals.isEmpty)
-        const Text('Goals belum tersedia',
+        const Text('Target belum tersedia',
             style: TextStyle(color: _muted, fontSize: 12)),
     ];
   }
@@ -437,7 +437,7 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(
-            child: Text(_text(goal, 'title', 'Goal'),
+            child: Text(_text(goal, 'title', 'Target'),
                 style: const TextStyle(
                     color: _ink, fontWeight: FontWeight.w800, fontSize: 13))),
         if (!numeric && target != null && target > 0) ...[
@@ -543,7 +543,7 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
           Text(
               triage
                   ? '$instrument · Dukungan aturan triage (CF)'
-                  : 'Dukungan rule internal (CF)',
+                  : 'Dukungan aturan internal (CF)',
               style: const TextStyle(color: _muted, fontSize: 9)),
           Text.rich(TextSpan(children: [
             TextSpan(
@@ -601,7 +601,7 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
 
   List<Widget> _assessment() {
     final header = _heading(
-        'Hasil Screening Klinis', Icons.assignment_turned_in_outlined,
+        'Hasil Skrining Klinis', Icons.assignment_turned_in_outlined,
         subtitle: 'Evaluasi Mandiri Terbaru', color: _mint);
     final submissionId = _meta['submission_id']?.toString() ?? '';
     final screeningId = _meta['screening_id']?.toString() ?? '';
@@ -609,7 +609,7 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
         (screeningId.isNotEmpty && _screening == null)) {
       return [
         header,
-        Text(_loading ? 'Memuat assessment…' : 'Assessment belum tersedia',
+        Text(_loading ? 'Memuat asesmen…' : 'Asesmen belum tersedia',
             style: const TextStyle(color: _muted, fontSize: 12))
       ];
     }
@@ -626,7 +626,7 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
         return [
           header,
           _white(_instrument(
-              'WHO-5 (Well-Being Index)',
+              'WHO-5 (Indeks Kesejahteraan)',
               '${score?.raw ?? '—'} / 25',
               score?.level ?? 'Belum tersedia',
               'WHO-5',
@@ -810,8 +810,8 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
     return ref.watch(chatDiaryEntryProvider(id)).when(
         skipLoadingOnRefresh: false,
         data: (entry) => _diaryPreview(_diaryData(widget.message, entry)),
-        error: (_, __) => const [Text('Akses diary tidak tersedia.')],
-        loading: () => const [Text('Memuat diary…')]);
+        error: (_, __) => const [Text('Akses jurnal tidak tersedia.')],
+        loading: () => const [Text('Memuat jurnal…')]);
   }
 
   List<Widget> _diaryPreview(Map data) {
@@ -830,7 +830,7 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
     ];
     final sent = widget.message.timestamp;
     return [
-      _heading('Diary', Icons.menu_book_outlined,
+      _heading('Jurnal', Icons.menu_book_outlined,
           color: const Color(0xFFC69F49),
           trailing:
               const Icon(Icons.chevron_right_rounded, color: MalvaColors.plum)),
@@ -889,7 +889,7 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                  const Text('Therapy Record',
+                  const Text('Riwayat Terapi',
                       style: TextStyle(color: _ink, fontSize: 12)),
                   const SizedBox(height: 3),
                   Text(_text(_meta, 'title', widget.message.text),

@@ -127,7 +127,7 @@ void main() {
                   'insight': 'Catatan asli.',
                 }),
                 isPatient: false))));
-    expect(find.text('2 goals tersimpan. Detail goal belum tersedia.'),
+    expect(find.text('2 target tersimpan. Rincian target belum tersedia.'),
         findsOneWidget);
     expect(find.text('Catatan asli.'), findsOneWidget);
     expect(find.text('Lihat detail'), findsNothing);

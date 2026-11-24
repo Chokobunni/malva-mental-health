@@ -101,7 +101,7 @@ Widget _wrap(MalvaApiClient api) {
 }
 
 Finder _therapyToggle() =>
-    find.widgetWithText(SwitchListTile, 'Therapy Record (Psikologis)');
+    find.widgetWithText(SwitchListTile, 'Riwayat Terapi (Psikologis)');
 
 bool _switchValue(WidgetTester tester, Finder toggle) =>
     tester.widget<SwitchListTile>(toggle).value;
@@ -122,8 +122,7 @@ void main() {
     expect(_switchValue(tester, _therapyToggle()), isFalse,
         reason: 'default opt-in: izin mati sampai pasien menyalakannya');
     // Kategori lain tetap ada (tidak ada yang hilang).
-    expect(
-        find.widgetWithText(SwitchListTile, 'Health Record'), findsOneWidget);
+    expect(find.widgetWithText(SwitchListTile, 'Rekam Medis'), findsOneWidget);
     expect(find.widgetWithText(SwitchListTile, 'Timeline'), findsOneWidget);
   });
 

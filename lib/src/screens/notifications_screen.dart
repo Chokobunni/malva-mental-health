@@ -178,7 +178,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                   imageHeight: 135,
                   title: 'Belum ada notifikasi',
                   subtitle:
-                      'Update screening, chat, dan reminder akan muncul di sini.',
+                      'Update skrining, chat, dan reminder akan muncul di sini.',
                 ),
               )
             else if (_items.isEmpty)
@@ -186,7 +186,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                 icon: Icons.notifications_none_rounded,
                 title: 'Belum ada notifikasi',
                 subtitle:
-                    'Update screening, chat, dan reminder akan muncul di sini.',
+                    'Update skrining, chat, dan reminder akan muncul di sini.',
               )
             else
               for (final item in _items) ...[

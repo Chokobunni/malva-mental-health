@@ -226,7 +226,7 @@ class _SmallWinsCardState extends State<SmallWinsCard> {
   static const _wins = [
     'Minum 1 gelas air',
     'Jalan kaki 5 menit',
-    'Tulis 1 baris di Diary',
+    'Tulis 1 baris di Jurnal',
   ];
 
   final Set<int> _done = {};
@@ -241,7 +241,7 @@ class _SmallWinsCardState extends State<SmallWinsCard> {
             children: [
               const Expanded(
                 child: Text(
-                  'Small Wins Today',
+                  'Small Wins Hari Ini',
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
                 ),
               ),

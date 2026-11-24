@@ -275,7 +275,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     (true, upcomingVideos, _showAllUpcomingVideos),
                   ]) ...[
                     _HomeSectionLabel(
-                      video ? 'Video call mendatang' : 'Chat mendatang',
+                      video ? 'Panggilan video mendatang' : 'Chat mendatang',
                       icon: video
                           ? Icons.videocam_rounded
                           : Icons.chat_bubble_rounded,
@@ -302,14 +302,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         _upcomingCard(session, auth),
                     if (_upcomingLoadFailed)
                       Text(video
-                          ? 'Video call mendatang belum dapat dimuat.'
+                          ? 'Panggilan video mendatang belum dapat dimuat.'
                           : 'Chat mendatang belum dapat dimuat.')
                     else if (sessions.isEmpty &&
                         (!video || ongoingVideos.isEmpty))
                       _HomeSessionEmpty(
                         asset: video ? 'home-video' : 'home-chat',
                         text: video
-                            ? 'Tidak ada video call mendatang.'
+                            ? 'Tidak ada panggilan video mendatang.'
                             : 'Tidak ada chat mendatang.',
                       )
                     else
@@ -322,7 +322,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     TextButton(
                         onPressed: _loadUpcomingSession,
                         child: const Text('Coba lagi')),
-                  const _HomeSectionLabel('Self-care', center: true),
+                  const _HomeSectionLabel('Pengelolaan Diri', center: true),
                   _MoodMedicationBanner(
                       onTap: () => _push(MoodMedicationCheckinScreen(
                           session: widget.session,
@@ -334,13 +334,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     items: [
                       _GridItem(
                         icon: Icons.flag_rounded,
-                        label: 'Goals & Habits',
+                        label: 'Target & Kebiasaan',
                         color: const Color(0xff5985c6),
                         onTap: () => _push(const GoalsScreen()),
                       ),
                       _GridItem(
                         icon: Icons.menu_book_rounded,
-                        label: 'Diary History',
+                        label: 'Riwayat Jurnal',
                         color: const Color(0xffd49949),
                         onTap: () => _push(DiaryHistoryScreen(
                           session: widget.session,
@@ -349,13 +349,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       ),
                       _GridItem(
                         icon: Icons.psychology_rounded,
-                        label: 'Psychological Therapy',
+                        label: 'Terapi Psikologis',
                         color: const Color(0xff46a68e),
                         onTap: () => _push(const TherapyCatalogScreen()),
                       ),
                       _GridItem(
                         icon: Icons.note_add_rounded,
-                        label: 'Health Record',
+                        label: 'Rekam Medis',
                         color: const Color(0xff469dcd),
                         onTap: () => _push(RecordScreen(
                           session: widget.session,
@@ -367,7 +367,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   const SizedBox(height: 22),
 
                   // === 4. PROFESSIONAL CARE ===
-                  const _HomeSectionLabel('Professional Care', center: true),
+                  const _HomeSectionLabel('Layanan Profesional', center: true),
                   _FindProfessionalsButton(
                     onTap: () => _openDoctorDiscovery(context),
                   ),
@@ -377,13 +377,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     items: [
                       _GridItem(
                         icon: Icons.fact_check_rounded,
-                        label: 'Assessment',
+                        label: 'Asesmen',
                         color: const Color(0xffcf7c68),
                         onTap: widget.onOpenAssessment,
                       ),
                       _GridItem(
                         icon: Icons.show_chart_rounded,
-                        label: 'History Log',
+                        label: 'Riwayat Aktivitas',
                         color: const Color(0xff46a68e),
                         onTap: () => _push(HistoryLogScreen(
                           session: widget.session,
@@ -671,7 +671,7 @@ class _UpcomingSessionCard extends StatelessWidget {
                         const SizedBox(width: 4),
                         Flexible(
                             child: Text(
-                          '${isVideo ? 'Video' : 'Chat'} Session, ${session.durationMinutes} menit',
+                          'Sesi ${isVideo ? 'Video' : 'Chat'}, ${session.durationMinutes} menit',
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
@@ -739,7 +739,7 @@ class _UpcomingSessionCard extends StatelessWidget {
                       side: const BorderSide(color: Color(0xffeeebf0)),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(13))),
-                  child: const Text('Cancel',
+                  child: const Text('Batalkan',
                       style: TextStyle(
                           fontFamily: 'Roboto', fontWeight: FontWeight.w700)),
                 ),
@@ -807,12 +807,12 @@ class _MoodMedicationBanner extends StatelessWidget {
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                  Text('Mood Medication Check-in',
+                  Text('Check-in Mood & Obat',
                       style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
                           fontSize: 14)),
-                  Text('Mood Tracker & Medication Tracker',
+                  Text('Pelacak Mood & Obat',
                       style: TextStyle(color: Color(0xfff0dff5), fontSize: 11))
                 ])),
             const CircleAvatar(

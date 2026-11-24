@@ -43,14 +43,14 @@ class _DiaryReaderScreenState extends State<DiaryReaderScreen> {
             appBar: AppBar(
                 backgroundColor: diaryPaper,
                 foregroundColor: diaryPlum,
-                title: const Text('Halaman Cerita Diari',
+                title: const Text('Halaman Cerita Jurnal',
                     style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
                         color: diaryPlum)),
                 actions: [
                   PopupMenuButton<String>(
-                      tooltip: 'Aksi diary',
+                      tooltip: 'Aksi jurnal',
                       enabled: !_busy,
                       onSelected: (v) async {
                         if (v == 'edit') widget.onEdit(_entry);
@@ -62,9 +62,9 @@ class _DiaryReaderScreenState extends State<DiaryReaderScreen> {
                       },
                       itemBuilder: (_) => const [
                             PopupMenuItem(
-                                value: 'edit', child: Text('Edit Diary')),
+                                value: 'edit', child: Text('Edit Jurnal')),
                             PopupMenuItem(
-                                value: 'delete', child: Text('Hapus Diary'))
+                                value: 'delete', child: Text('Hapus Jurnal'))
                           ])
                 ]),
             body: SafeArea(
@@ -121,7 +121,7 @@ class _DiaryReaderScreenState extends State<DiaryReaderScreen> {
                                     _entries[_index] = next;
                                   } else {
                                     _error =
-                                        'Perubahan Positive Vault belum tersimpan. Coba lagi.';
+                                        'Perubahan Ruang Positif belum tersimpan. Coba lagi.';
                                   }
                                 });
                               },
@@ -129,8 +129,8 @@ class _DiaryReaderScreenState extends State<DiaryReaderScreen> {
                             ? Icons.bookmark
                             : Icons.bookmark_border),
                         label: Text(content.inVault
-                            ? 'Tersimpan di Positive Vault'
-                            : 'Simpan ke Positive Vault')),
+                            ? 'Tersimpan di Ruang Positif'
+                            : 'Simpan ke Ruang Positif')),
                     if (_busy) const LinearProgressIndicator(),
                     if (_error != null)
                       Text(_error!,

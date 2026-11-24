@@ -10,7 +10,8 @@ import '../services/malva_api_client.dart';
 import '../services/medication_reminder_service.dart';
 import '../theme.dart';
 import '../time/wib.dart';
-import '../widgets/home_personalization.dart';
+import '../services/medication_adherence.dart';
+import '../services/server_clock.dart';
 import '../widgets/malva_components.dart';
 import 'medication_history_screen.dart';
 import 'portal/prescription_wizard_screen.dart';
@@ -45,6 +46,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
   /// Status izin notifikasi: null = belum selesai diperiksa.
   bool? _notificationsEnabled;
   bool _historyAccountInvalid = false;
+  bool _showStreak = false;
 
   /// Sedang memeriksa/meminta izin (tombol dinonaktifkan sementara).
   bool _isCheckingPermission = false;
@@ -144,6 +146,33 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
     });
     final storeState = ref.watch(malvaStoreProvider);
     final store = ref.read(malvaStoreProvider.notifier);
+    final now = ServerClock.now();
+    final today = medicationDay(now);
+    final weekStart = today.subtract(const Duration(days: 6));
+    final lastTaken = <String, DateTime>{};
+    var historyStart = weekStart;
+    for (final log in storeState.medicationLogs) {
+      if (log.takenAt.isAfter(now)) continue;
+      if (log.takenAt.isBefore(historyStart))
+        historyStart = medicationDay(log.takenAt);
+      final last = lastTaken[log.medicationId];
+      if (normalizedMedicationStatus(log.status) == 'taken' &&
+          (last == null || log.takenAt.isAfter(last))) {
+        lastTaken[log.medicationId] = log.takenAt;
+      }
+    }
+    final weekly = MedicationAdherence.calculate(
+        medications: storeState.medications,
+        logs: storeState.medicationLogs,
+        start: weekStart,
+        end: now);
+    final longTerm = historyStart == weekStart
+        ? weekly
+        : MedicationAdherence.calculate(
+            medications: storeState.medications,
+            logs: storeState.medicationLogs,
+            start: historyStart,
+            end: now);
     final content = RefreshIndicator(
       onRefresh: () async {
         final startedOwner = _owner(_session);
@@ -154,30 +183,22 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
           await Future<void>.delayed(const Duration(milliseconds: 500));
           return;
         }
-        try {
-          final backendMeds = await api.listMedications(
-            accessToken: accessToken,
-          );
-          if (!mounted ||
-              _owner(_session) != startedOwner ||
-              _owner(ref.read(authStateProvider).session) != startedAuthOwner)
-            return;
-          final meds = backendMeds.map((b) => b.toMedication()).toList();
-          // replaceMedications() ikut mengurangkan dosis yang masih pending,
-          // sehingga stok yang belum terpotong di server tidak menaikkan
-          // angka di layar.
-          store.replaceMedications(meds);
-        } on Object catch (_) {
-          await Future<void>.delayed(const Duration(milliseconds: 500));
+        if (_owner(_session) != startedOwner ||
+            _owner(ref.read(authStateProvider).session) != startedAuthOwner) {
+          return;
         }
+        await Future.wait([
+          store.loadMedications(api, accessToken),
+          store.loadMedicationLogs(api, accessToken),
+        ]);
       },
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
           if (!widget.embedded)
             const GradientHeader(
-              title: 'Medication',
-              subtitle: 'Reminder, stok, dan adherence',
+              title: 'Obat',
+              subtitle: 'Pengingat, stok, dan kepatuhan',
               leading:
                   Icon(Icons.medication_rounded, color: Colors.white, size: 34),
             ),
@@ -188,79 +209,45 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
               children: [
                 SoftCard(
                   color: MalvaColors.plum,
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Kepatuhan Hari Ini',
-                              style: TextStyle(
-                                  color: Colors.white70,
-                                  fontWeight: FontWeight.w800),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              '${storeState.adherencePercent}% hari ini',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .headlineSmall
-                                  ?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                            ),
-                            const SizedBox(height: 6),
-                            const Text('Tap Take Now setelah obat diminum.',
-                                style: TextStyle(color: Colors.white70)),
-                          ],
-                        ),
-                      ),
-                      CircleAvatar(
-                        radius: 34,
-                        backgroundColor: Colors.white,
-                        child: Text(
-                          '${storeState.adherencePercent}%',
+                      Text('Kepatuhan hari ini ${storeState.adherencePercent}%',
                           style: const TextStyle(
-                              color: MalvaColors.plum,
-                              fontWeight: FontWeight.w900),
-                        ),
-                      ),
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 6),
+                      const Text('Ketuk Minum Sekarang setelah obat diminum.',
+                          style: TextStyle(color: Colors.white70)),
                     ],
                   ),
                 ),
                 const SizedBox(height: 14),
-                SoftCard(
-                  child: Row(
-                    children: [
-                      StreakRing(percent: storeState.adherencePercent),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              storeState.adherencePercent >= 100
-                                  ? 'Perfect! Adherence 100%'
-                                  : 'Adherence streak',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w900, fontSize: 16),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${storeState.medications.length} obat dipantau • ${storeState.medicationLogs.length} log tercatat',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                _MedicationConsistencyCard(
+                  summary: weekly,
+                  longTerm: longTerm,
+                  medicationCount: storeState.medications.length,
+                  logCount: storeState.medicationLogs
+                      .where((log) =>
+                          !log.takenAt.isBefore(weekStart) &&
+                          !log.takenAt.isAfter(now))
+                      .length,
+                  lastTaken: lastTaken,
+                  showStreak: _showStreak,
+                  onChanged: (value) => setState(() => _showStreak = value),
                 ),
                 const SizedBox(height: 14),
                 _buildReminderStatusCard(context),
                 const SizedBox(height: 22),
+                if (storeState.medications.isNotEmpty) ...[
+                  FilledButton.icon(
+                    onPressed: () => _openMedicationForm(context),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Tambah Obat'),
+                  ),
+                  const SizedBox(height: 14),
+                ],
                 const SectionLabel('Jadwal hari ini'),
                 if (storeState.medications.isEmpty)
                   SoftCard(
@@ -315,12 +302,6 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                if (storeState.medications.isNotEmpty)
-                  FilledButton.icon(
-                    onPressed: () => _openMedicationForm(context),
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Tambah Obat'),
-                  ),
                 const SizedBox(height: 22),
                 OutlinedButton.icon(
                     key: const Key('open-medication-history'),
@@ -904,6 +885,200 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
   }
 }
 
+class _MedicationConsistencyCard extends StatelessWidget {
+  const _MedicationConsistencyCard({
+    required this.summary,
+    required this.longTerm,
+    required this.medicationCount,
+    required this.logCount,
+    required this.lastTaken,
+    required this.showStreak,
+    required this.onChanged,
+  });
+
+  final MedicationAdherence summary;
+  final MedicationAdherence longTerm;
+  final int medicationCount;
+  final int logCount;
+  final Map<String, DateTime> lastTaken;
+  final bool showStreak;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    const teal = Color(0xff14877e);
+    final streak = longTerm.streak;
+    final progress =
+        showStreak ? (streak > 0 ? 1.0 : 0.0) : summary.percent / 100;
+    final title = showStreak ? 'Runtutan kepatuhan' : 'Kepatuhan 7 Hari';
+    final latestMiss = (showStreak ? longTerm : summary).misses.lastOrNull;
+    final last = latestMiss == null ? null : lastTaken[latestMiss.medicationId];
+    final firstMiss = latestMiss == null
+        ? null
+        : longTerm.misses.firstWhere(
+            (miss) =>
+                miss.medicationId == latestMiss.medicationId &&
+                (last == null || miss.takenAt.isAfter(last)),
+            orElse: () => latestMiss);
+    final elapsed = last == null
+        ? null
+        : medicationDay(longTerm.end).difference(medicationDay(last)).inDays;
+    final lapse = latestMiss == null || (showStreak && streak > 0)
+        ? null
+        : showStreak
+            ? '${latestMiss.medicationName} terlewat sejak ${_shortDate(firstMiss!.takenAt)}'
+            : last != null && latestMiss.takenAt.isAfter(last)
+                ? '${latestMiss.medicationName} tidak tercatat diminum sejak ${_shortDate(last)} ($elapsed hari)'
+                : '${latestMiss.medicationName} terlewat pada ${_shortDate(latestMiss.takenAt)}';
+    return SoftCard(
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                    color: const Color(0xffedf9f7),
+                    borderRadius: BorderRadius.circular(20)),
+                child: const Text('Ringkasan Konsistensi',
+                    style: TextStyle(color: teal, fontWeight: FontWeight.w800)),
+              ),
+              SegmentedButton<bool>(
+                showSelectedIcon: false,
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  padding: WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                ),
+                segments: const [
+                  ButtonSegment(value: false, label: Text('7 Hari')),
+                  ButtonSegment(value: true, label: Text('Runtutan')),
+                ],
+                selected: {showStreak},
+                onSelectionChanged: (value) => onChanged(value.single),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 75,
+                height: 75,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Positioned.fill(
+                        child: CircularProgressIndicator(
+                      value: progress,
+                      color: showStreak ? teal : const Color(0xffea950c),
+                      backgroundColor: const Color(0xffe6e8eb),
+                      strokeWidth: 7,
+                      strokeCap: StrokeCap.round,
+                      semanticsLabel: title,
+                    )),
+                    Padding(
+                      padding: const EdgeInsets.all(9),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                                showStreak
+                                    ? '$streak hari'
+                                    : '${summary.percent}%',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w900, fontSize: 17)),
+                            Text(showStreak ? 'berturut' : '7 hari',
+                                style: Theme.of(context).textTheme.bodySmall),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 5,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(title,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w900, fontSize: 16)),
+                        Tooltip(
+                          message: showStreak
+                              ? 'Jumlah hari terjadwal berturut-turut dengan seluruh dosis tercatat diminum.'
+                              : 'Dosis yang diminum dibandingkan dengan seluruh dosis yang sudah jatuh tempo dan catatan dalam tujuh hari WIB.',
+                          child:
+                              const Icon(Icons.info_outline_rounded, size: 15),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text('$medicationCount obat dipantau • $logCount catatan',
+                        style: Theme.of(context).textTheme.bodySmall),
+                    if (lapse != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 6),
+                        decoration: BoxDecoration(
+                            color: showStreak
+                                ? const Color(0xffffeff1)
+                                : const Color(0xfffff7e4),
+                            borderRadius: BorderRadius.circular(12)),
+                        child: Text(lapse,
+                            style: TextStyle(
+                                color: showStreak
+                                    ? const Color(0xff991f40)
+                                    : const Color(0xff834413))),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _shortDate(DateTime value) {
+    final at = toWib(value);
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des'
+    ];
+    return '${at.day} ${months[at.month - 1]}';
+  }
+}
+
 class _MedicationCard extends StatelessWidget {
   const _MedicationCard({
     required this.medication,
@@ -1023,7 +1198,7 @@ class _MedicationCard extends StatelessWidget {
                             ? 'Coba simpan'
                             : cooldown
                                 ? 'Tunggu 24 jam'
-                                : 'Take Now'),
+                                : 'Minum Sekarang'),
               ),
             ],
           ),
@@ -1097,7 +1272,7 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              widget.initial == null ? 'Tambah Medication' : 'Edit Medication',
+              widget.initial == null ? 'Tambah Obat' : 'Edit Obat',
               style: Theme.of(context)
                   .textTheme
                   .titleLarge
@@ -1154,7 +1329,7 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
                     controller: _stock,
                     keyboardType: TextInputType.number,
                     decoration:
-                        const InputDecoration(labelText: 'Current stock'),
+                        const InputDecoration(labelText: 'Saat Ini stock'),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -1197,7 +1372,7 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
     widget.onSave(
       Medication(
         id: id,
-        name: _name.text.trim().isEmpty ? 'Medication' : _name.text.trim(),
+        name: _name.text.trim().isEmpty ? 'Obat' : _name.text.trim(),
         dosage: _dosage.text.trim().isEmpty ? '0 mg' : _dosage.text.trim(),
         form: _form.text.trim().isEmpty ? 'Tablet' : _form.text.trim(),
         reminders: widget.initial?.schedule?.reminders(_relation) ??

@@ -125,7 +125,7 @@ class _WebTherapyHubScreenState extends ConsumerState<WebTherapyHubScreen> {
             SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Worksheet tersimpan',
+                'Lembar Kerja tersimpan',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
             ),
@@ -197,7 +197,7 @@ class _WebTherapyHubScreenState extends ConsumerState<WebTherapyHubScreen> {
     final owner = ref.read(currentSessionProvider);
     try {
       await ref.read(exportServiceProvider).sharePdf(
-            title: 'Worksheet ${module.title} — Malva',
+            title: 'Lembar Kerja ${module.title} — Malva',
             filename: webWorksheetFileName(module, now),
             lines: webWorksheetSummaryText(
               module: module,
@@ -228,8 +228,8 @@ class _WebTherapyHubScreenState extends ConsumerState<WebTherapyHubScreen> {
       final selected = await showWebShareProfessionalDialog(
         context,
         links: links,
-        title: 'Bagikan worksheet',
-        description: 'Pilih profesional yang boleh melihat worksheet ini.',
+        title: 'Bagikan lembar kerja',
+        description: 'Pilih profesional yang boleh melihat lembar kerja ini.',
       );
       if (selected == null || !mounted) return;
       await api.shareTherapySubmission(
@@ -241,7 +241,7 @@ class _WebTherapyHubScreenState extends ConsumerState<WebTherapyHubScreen> {
       );
       if (!mounted) return;
       _showMessage(
-          'Worksheet dibagikan ke ${selected.professionalDisplayName}.');
+          'Lembar Kerja dibagikan ke ${selected.professionalDisplayName}.');
     } catch (error) {
       if (!mounted) return;
       _showMessage(webShareErrorMessage(error));
@@ -289,7 +289,7 @@ class _WebTherapyHubScreenState extends ConsumerState<WebTherapyHubScreen> {
             key: const Key('web-therapy-open-history'),
             onPressed: () => setState(() => _view = _WebTherapyView.history),
             icon: const Icon(Icons.history_rounded, size: 17),
-            label: const Text('Riwayat worksheet'),
+            label: const Text('Riwayat lembar kerja'),
           ),
         ),
         for (final WebTherapyGroup group in groups) ...<Widget>[

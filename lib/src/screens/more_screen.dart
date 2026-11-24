@@ -8,6 +8,7 @@ import '../models.dart';
 import '../models/diary_content.dart';
 import '../services/goal_history.dart';
 import '../time/wib.dart';
+import '../services/medication_adherence.dart';
 import '../ai/assessment_scoring.dart';
 import '../services/health_pdf_report.dart';
 import '../services/mood_insights.dart';
@@ -102,7 +103,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   const Divider(height: 12),
                   _ExportTile(
                       icon: Icons.settings_rounded,
-                      title: 'Settings',
+                      title: 'Pengaturan',
                       subtitle: 'Akun, notifikasi, dan keamanan',
                       color: MalvaColors.seed,
                       onTap: () => open(SettingsScreen(
@@ -110,7 +111,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   const Divider(height: 12),
                   _ExportTile(
                       icon: Icons.security_rounded,
-                      title: 'Consent Management',
+                      title: 'Manajemen Persetujuan',
                       subtitle: 'Kelola berbagi data dengan profesional',
                       color: MalvaColors.orchid,
                       onTap: () => open(const ConsentManagementScreen())),
@@ -133,7 +134,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   ),
                 ],
                 const SizedBox(height: 20),
-                const SectionLabel('Export Data'),
+                const SectionLabel('Ekspor Data'),
                 _ExportSection(),
                 const SizedBox(height: 20),
                 SoftCard(
@@ -145,7 +146,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                           style: TextStyle(fontWeight: FontWeight.w900)),
                       const SizedBox(height: 8),
                       Text(
-                        'Skor assessment di app ini hanya untuk screening dan triase. Diagnosis dan perubahan terapi tetap harus dibuat profesional.',
+                        'Skor asesmen di aplikasi ini hanya untuk skrining dan triase. Diagnosis dan perubahan terapi tetap harus dibuat professional',
                         style: Theme.of(context)
                             .textTheme
                             .bodyMedium
@@ -288,6 +289,7 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
           all || category == 'mood_history' ? store.moodEntries : null;
       List<MedicationLog>? medications =
           all || category == 'medication_log' ? store.medicationLogs : null;
+      var medicationSchedules = store.medications;
       List<DiaryEntry>? diaries =
           all || category == 'diary' ? store.diaryEntries : null;
       List<ScreeningPdfRow>? screenings;
@@ -304,7 +306,8 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
               loadGoalHistoryLogs(api, token, period.start, period.end);
           loads.add(Future.wait([goalLoad, logLoad]).then((data) {
             goalHistory = groupGoalHistory(
-                data[0] as List<BackendGoal>, data[1] as List<BackendHabitLog>);
+                data[0] as List<BackendGoal>, data[1] as List<BackendHabitLog>,
+                start: period.start, end: period.end, today: wibNow());
           }));
         } else {
           goalHistory = {};
@@ -319,6 +322,10 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
         }));
       }
       if (remote && medications != null) {
+        loads.add(
+            api.listMedications(accessToken: token, limit: 100).then((rows) {
+          medicationSchedules = rows.map((med) => med.toMedication()).toList();
+        }));
         loads.add(
             api.listMedicationLogs(accessToken: token, limit: 0).then((rows) {
           medications = rows
@@ -339,7 +346,8 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
               .map((e) => DiaryEntry(
                   id: e.id,
                   createdAt: e.occurredAt ??
-                      (throw const FormatException('Waktu diary tidak valid.')),
+                      (throw const FormatException(
+                          'Waktu jurnal tidak valid.')),
                   mood: MoodValue.okay,
                   title: e.title,
                   note: e.note,
@@ -380,8 +388,17 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
       await Future.wait(loads);
       if (!isCurrent()) return;
       moods = moods?.where((entry) => inPeriod(entry.date)).toList();
-      medications =
-          medications?.where((entry) => inPeriod(entry.takenAt)).toList();
+      if (medications != null) {
+        final now = wibNow();
+        final periodEnd =
+            endExclusive.subtract(const Duration(microseconds: 1));
+        medications = MedicationAdherence.calculate(
+          medications: medicationSchedules,
+          logs: medications!,
+          start: period.start,
+          end: now.isBefore(periodEnd) ? now : periodEnd,
+        ).rows;
+      }
       diaries = diaries?.where((entry) => inPeriod(entry.createdAt)).toList();
       screenings = screenings
           ?.where((entry) => entry.date != null && inPeriod(entry.date!))
@@ -408,10 +425,10 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
       if (!isCurrent()) return;
       final title = switch (category) {
         'mood_history' => 'Laporan Riwayat Mood: MALVA',
-        'screenings' => 'Hasil Screening Psikologis: MALVA',
+        'screenings' => 'Hasil Skrining Psikologis: MALVA',
         'medication_log' => 'Riwayat Konsumsi Obat: MALVA',
         'diary' => 'Catatan Harian: MALVA',
-        'goals_habits' => 'Laporan Goals & Habits: MALVA',
+        'goals_habits' => 'Laporan Target & Kebiasaan: MALVA',
         _ => 'Ringkasan Data Pasien: MALVA',
       };
       await ref.read(exportServiceProvider).shareHealthReport(
@@ -467,7 +484,7 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
             ),
             _ExportTile(
               icon: Icons.mood_rounded,
-              title: 'Export Mood History',
+              title: 'Ekspor Riwayat Mood',
               subtitle: 'PDF riwayat mood',
               color: MalvaColors.seed,
               onTap: () => _export('mood_history'),
@@ -475,7 +492,7 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
             const SizedBox(height: 8),
             _ExportTile(
               icon: Icons.fact_check_rounded,
-              title: 'Export Screening Results',
+              title: 'Ekspor Hasil Skrining',
               subtitle: 'PDF WHO-5, GAD-7, PHQ-9, dan DASS-21',
               color: MalvaColors.amber,
               onTap: () => _export('screenings'),
@@ -483,7 +500,7 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
             const SizedBox(height: 8),
             _ExportTile(
               icon: Icons.medication_rounded,
-              title: 'Export Medication Log',
+              title: 'Ekspor Log Obat',
               subtitle: 'PDF riwayat konsumsi obat',
               color: MalvaColors.mint,
               onTap: () => _export('medication_log'),
@@ -491,15 +508,15 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
             const SizedBox(height: 8),
             _ExportTile(
               icon: Icons.note_rounded,
-              title: 'Export Diary Entries',
-              subtitle: 'PDF catatan harian',
+              title: 'Ekspor Entri Jurnal',
+              subtitle: 'PDF Jurnal',
               color: MalvaColors.orchid,
               onTap: () => _export('diary'),
             ),
             const SizedBox(height: 8),
             _ExportTile(
               icon: Icons.task_alt_rounded,
-              title: 'Export Goals & Habits',
+              title: 'Ekspor Target & Kebiasaan',
               subtitle: 'PDF riwayat progres target dan kebiasaan',
               color: MalvaColors.seed,
               onTap: () => _export('goals_habits'),
@@ -507,7 +524,7 @@ class _ExportSectionState extends ConsumerState<_ExportSection> {
             const Divider(height: 24),
             _ExportTile(
               icon: Icons.file_download_rounded,
-              title: 'Export All Data (PDF)',
+              title: 'Ekspor Semua Data (PDF)',
               subtitle: 'Ringkasan data yang tersedia untuk konsultasi',
               color: MalvaColors.plum,
               onTap: () => _export('full_export'),

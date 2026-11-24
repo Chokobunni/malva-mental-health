@@ -42,12 +42,12 @@ void main() {
     ));
     await tester.pumpAndSettle();
     final actions = {
-      'Export Mood History': 'mood_history',
-      'Export Screening Results': 'screenings',
-      'Export Medication Log': 'medication_log',
-      'Export Diary Entries': 'diary',
-      'Export Goals & Habits': 'goals_habits',
-      'Export All Data (PDF)': 'full_export',
+      'Ekspor Riwayat Mood': 'mood_history',
+      'Ekspor Hasil Skrining': 'screenings',
+      'Ekspor Log Obat': 'medication_log',
+      'Ekspor Entri Jurnal': 'diary',
+      'Ekspor Target & Kebiasaan': 'goals_habits',
+      'Ekspor Semua Data (PDF)': 'full_export',
     };
     for (final action in actions.entries) {
       await tester.ensureVisible(find.text(action.key));
@@ -59,7 +59,7 @@ void main() {
     expect(port.names.length, 6);
     expect(find.text('Pengaturan Privasi'), findsNothing);
     expect(find.byType(SwitchListTile), findsNothing);
-    expect(find.text('Consent Management'), findsOneWidget);
+    expect(find.text('Manajemen Persetujuan'), findsOneWidget);
   });
 
   testWidgets('PDF save failure is visible and permits retry', (tester) async {
@@ -69,13 +69,13 @@ void main() {
       child: MaterialApp(home: MoreScreen(onLogout: () {})),
     ));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Export Mood History'));
+    await tester.ensureVisible(find.text('Ekspor Riwayat Mood'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Export Mood History'));
+    await tester.tap(find.text('Ekspor Riwayat Mood'));
     await tester.pumpAndSettle();
     expect(find.textContaining('PDF belum dapat dibuat'), findsOneWidget);
     port.reject = false;
-    await tester.tap(find.text('Export Mood History'));
+    await tester.tap(find.text('Ekspor Riwayat Mood'));
     await tester.pumpAndSettle();
     expect(port.names, ['malva_mood_history.pdf']);
   });

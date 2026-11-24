@@ -22,9 +22,9 @@ class LocalNotificationGoalReminderScheduler implements GoalReminderScheduler {
 
   /// Kanal notifikasi pengingat goals (nama harus sama di semua tempat).
   static const String channelId = 'goal_reminders';
-  static const String channelName = 'Pengingat Goals';
+  static const String channelName = 'Pengingat Target';
   static const String channelDescription =
-      'Pengingat harian untuk mencatat progres goals di Malva';
+      'Pengingat harian untuk mencatat progres target di Malva';
 
   @override
   Future<void> initialize() async {
@@ -141,7 +141,7 @@ class LocalNotificationGoalReminderScheduler implements GoalReminderScheduler {
     try {
       await _plugin.cancel(id: id);
     } on Object catch (error) {
-      if (kDebugMode) debugPrint('Gagal membatalkan pengingat goals: $error');
+      if (kDebugMode) debugPrint('Gagal membatalkan pengingat target: $error');
     }
   }
 

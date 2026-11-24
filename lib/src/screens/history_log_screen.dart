@@ -29,7 +29,7 @@ class HistoryLogScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('History Log'),
+        title: const Text('Riwayat Aktivitas'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),
@@ -49,7 +49,7 @@ class HistoryLogScreen extends ConsumerWidget {
                 padding: const EdgeInsets.all(18),
                 children: [
                   const Text(
-                    'Recent',
+                    'Terbaru',
                     style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
                   ),
                   const SizedBox(height: 12),
@@ -80,11 +80,11 @@ class _HistoryEntryCard extends StatelessWidget {
     final todayKey = wibDateKey(now);
     final local = toWib(entry.date);
     final dayKey = wibDateKey(local);
-    if (todayKey == dayKey) return 'Today';
+    if (todayKey == dayKey) return 'Hari ini';
 
     final yesterdayKey =
         wibDateKey(wibFromParts(now.year, now.month, now.day - 1));
-    if (dayKey == yesterdayKey) return 'Yesterday';
+    if (dayKey == yesterdayKey) return 'Kemarin';
 
     const months = [
       'Jan',
@@ -104,15 +104,15 @@ class _HistoryEntryCard extends StatelessWidget {
   }
 
   String _level(int score) {
-    if (score >= 7) return 'High';
-    if (score >= 4) return 'Med';
-    return 'Low';
+    if (score >= 7) return 'Tinggi';
+    if (score >= 4) return 'Sedang';
+    return 'Rendah';
   }
 
   String _severity(int score) {
-    if (score >= 7) return 'Severe';
-    if (score >= 4) return 'Moderate';
-    return 'Mild';
+    if (score >= 7) return 'Berat';
+    if (score >= 4) return 'Sedang';
+    return 'Ringan';
   }
 
   @override
@@ -152,12 +152,12 @@ class _HistoryEntryCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 6,
             children: [
-              _LevelPill(label: 'Anxiety', value: _severity(entry.anxiety)),
+              _LevelPill(label: 'Kecemasan', value: _severity(entry.anxiety)),
               _LevelPill(
-                  label: 'Irritability', value: _severity(entry.irritability)),
-              _LevelPill(label: 'Energy', value: _level(entry.energy)),
+                  label: 'Iritabilitas', value: _severity(entry.irritability)),
+              _LevelPill(label: 'Energi', value: _level(entry.energy)),
               _LevelPill(
-                  label: 'Sleep',
+                  label: 'Tidur',
                   value: '${entry.sleepHours.toStringAsFixed(0)} h'),
             ],
           ),
@@ -174,8 +174,8 @@ class _LevelPill extends StatelessWidget {
   final String value;
 
   Color get _color {
-    if (value == 'High' || value == 'Severe') return MalvaColors.danger;
-    if (value == 'Med' || value == 'Moderate') return MalvaColors.amber;
+    if (value == 'Tinggi' || value == 'Berat') return MalvaColors.danger;
+    if (value == 'Sedang') return MalvaColors.amber;
     return MalvaColors.mint;
   }
 

@@ -12,6 +12,7 @@ import 'package:malva_mental_health/src/screens/professional_dashboard_screen.da
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
+import 'package:malva_mental_health/src/web/screens/professional/web_professional_schedule_screen.dart';
 
 const _professional = AuthSession(
   role: UserRole.professional,
@@ -96,6 +97,7 @@ class _Client extends http.BaseClient {
 
 Future<_Client> _mount(WidgetTester tester,
     {bool dashboard = false,
+    bool web = false,
     bool includeSchedules = false,
     _Client? clientOverride,
     AuthSession session = _professional}) async {
@@ -132,7 +134,11 @@ Future<_Client> _mount(WidgetTester tester,
       home: dashboard
           ? ProfessionalDashboardScreen(
               session: session, apiClient: api, onLogout: () {})
-          : Scaffold(body: ProScheduleScreen(session: session, apiClient: api)),
+          : Scaffold(
+              body: web
+                  ? const SingleChildScrollView(
+                      child: WebProfessionalScheduleScreen())
+                  : ProScheduleScreen(session: session, apiClient: api)),
     ),
   ));
   await tester.pumpAndSettle();
@@ -141,6 +147,85 @@ Future<_Client> _mount(WidgetTester tester,
 
 void main() {
   setUpAll(initializeWib);
+
+  testWidgets('web Jadwal keeps Hari ini results independent of calendar date',
+      (tester) async {
+    final client = await _mount(tester, web: true);
+    final now = wibNow();
+    final scheduled = parseWibStored(
+        client.session(upcoming: true)['scheduled_at'] as String)!;
+    if (scheduled.month != now.month) {
+      await tester.tap(find.byTooltip('Bulan berikutnya'));
+      await tester.pumpAndSettle();
+    }
+    final day = find.byKey(ValueKey('jadwal-${wibDateKey(scheduled)}'));
+    await tester.ensureVisible(day);
+    await tester.pumpAndSettle();
+    await tester.tap(day);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Daftar Pasien'), findsOneWidget);
+    final showToday = find.byKey(const Key('web-pro-schedule-today'));
+    await tester.ensureVisible(showToday);
+    await tester.pumpAndSettle();
+    await tester.tap(showToday);
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const Key('pro-session-session-synthetic')), findsOneWidget);
+    expect(find.byKey(const Key('pro-session-session-upcoming')), findsNothing);
+    expect(find.textContaining('Daftar Pasien'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+      'Jadwal calendar filters upcoming sessions and restores all dates',
+      (tester) async {
+    final client = await _mount(tester);
+    final now = wibNow();
+    final scheduled = parseWibStored(
+        client.session(upcoming: true)['scheduled_at'] as String)!;
+    Finder day(DateTime at) => find.byKey(ValueKey('jadwal-${wibDateKey(at)}'));
+    expect(day(now), findsOneWidget);
+    final empty = wibFromParts(now.year, now.month, now.day > 1 ? 1 : 2);
+    if (wibDateKey(empty) != wibDateKey(scheduled)) {
+      await tester.tap(day(empty));
+      await tester.pump();
+      expect(find.text('Tidak ada sesi pada tanggal ini.'), findsOneWidget);
+    }
+    if (scheduled.month != now.month) {
+      await tester.tap(find.byTooltip('Bulan berikutnya'));
+      await tester.pumpAndSettle();
+    }
+    await tester.ensureVisible(day(scheduled));
+    await tester.pumpAndSettle();
+    await tester.tap(day(scheduled));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Tampilkan semua'), 100);
+    await tester.ensureVisible(find.text('Tampilkan semua'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Daftar Pasien'), findsOneWidget);
+    expect(find.text('1 pasien'), findsOneWidget);
+    await tester.tap(find.text('Tampilkan semua'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Daftar Pasien'), findsNothing);
+    await tester.scrollUntilVisible(day(scheduled), -150);
+    await tester.ensureVisible(day(scheduled));
+    await tester.pumpAndSettle();
+    await tester.tap(day(scheduled));
+    await tester.pumpAndSettle();
+    await tester.tap(day(scheduled));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Daftar Pasien'), findsNothing);
+    await tester.tap(day(scheduled));
+    await tester.pumpAndSettle();
+    final resetUnderCards = find.text('Tampilkan semua sesi (1)');
+    await tester.scrollUntilVisible(resetUnderCards, 140);
+    await tester.ensureVisible(resetUnderCards);
+    await tester.pumpAndSettle();
+    await tester.tap(resetUnderCards);
+    await tester.pumpAndSettle();
+    expect(find.text('Semua tanggal'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets(
       'availability summary marks disabled shared slots in each category',
@@ -293,9 +378,13 @@ void main() {
   testWidgets('schedule detail keeps the authenticated professional session',
       (tester) async {
     final client = await _mount(tester);
-    await tester.tap(find.text('AKSI LAIN').first);
+    await tester.scrollUntilVisible(find.text('Aksi lain'), 120);
+    await tester.ensureVisible(find.text('Aksi lain').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Aksi lain').first);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Detail pasien').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Detail pasien').first);
     await tester.pumpAndSettle();
     expect(find.text('Login dulu.'), findsNothing);
@@ -312,10 +401,16 @@ void main() {
   testWidgets(
       'Hadir sends attended with the professional token and keeps session live',
       (tester) async {
+    tester.view.physicalSize = const Size(800, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final client = await _mount(tester);
     await tester.scrollUntilVisible(
         find.widgetWithText(OutlinedButton, 'Hadir'), 200,
         scrollable: find.byType(Scrollable).first);
+    await tester
+        .ensureVisible(find.widgetWithText(OutlinedButton, 'Hadir').first);
     await tester.tap(find.widgetWithText(OutlinedButton, 'Hadir').first);
     await tester.pumpAndSettle();
     final request =

@@ -385,9 +385,9 @@ void main() {
       'groups clinical data and keeps CF without raw traces or technical prose',
       (tester) async {
     await _pump(tester, _Responses());
-    final health = find.text('Health Record & Obat');
+    final health = find.text('Rekam Medis & Obat');
     final daily = find.text('Pemantauan harian');
-    final screening = find.text('Screening');
+    final screening = find.text('Skrining');
     expect(find.text('Catatan sesi'), findsNothing);
     expect(health, findsOneWidget);
     expect(screening, findsOneWidget);
@@ -400,11 +400,11 @@ void main() {
     expect(find.text('Hasil DASS-21 / WHO-5 & tren'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('screening-screening-1')));
     await tester.pumpAndSettle();
-    expect(find.text('Detail Record'), findsOneWidget);
-    expect(find.text('PHQ-9 Total Score'), findsOneWidget);
-    expect(find.text('GAD-7 Total Score'), findsOneWidget);
-    expect(find.text('PHQ-9 · Dukungan rule internal (CF)'), findsOneWidget);
-    expect(find.text('GAD-7 · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.text('Rincian Hasil'), findsOneWidget);
+    expect(find.text('Skor Total PHQ-9'), findsOneWidget);
+    expect(find.text('Skor Total GAD-7'), findsOneWidget);
+    expect(find.text('PHQ-9 · Dukungan aturan internal (CF)'), findsOneWidget);
+    expect(find.text('GAD-7 · Dukungan aturan internal (CF)'), findsOneWidget);
     expect(find.textContaining('0.68', findRichText: true), findsNWidgets(2));
     expect(find.text('PHQ9_MILD: 0.72 × 0.95 = 0.684'), findsNothing);
     expect(find.textContaining('bukan probabilitas diagnosis'), findsNothing);
@@ -425,12 +425,12 @@ void main() {
       ..statusByPath['/v1/health-record'] = 500;
     await _pump(tester, responses);
     expect(find.text('WHO-5 dibagikan'), findsOneWidget);
-    expect(find.text('Screening PHQ-9 / GAD-7 belum dapat dimuat.'),
+    expect(find.text('Skrining PHQ-9 / GAD-7 belum dapat dimuat.'),
         findsOneWidget);
     expect(find.text('Mood belum dapat dimuat.'), findsOneWidget);
-    expect(find.text('Health Record belum dapat dimuat.'), findsOneWidget);
+    expect(find.text('Rekam Medis belum dapat dimuat.'), findsOneWidget);
     expect(find.textContaining('Sebagian data gagal dimuat'), findsNothing);
-    expect(find.text('Belum ada screening'), findsNothing);
+    expect(find.text('Belum ada skrining'), findsNothing);
     expect(find.text('Belum ada data / tidak dibagikan'), findsNothing);
     responses.statusByPath.clear();
     await tester.tap(find.byTooltip('Muat ulang'));
@@ -444,11 +444,11 @@ void main() {
       (tester) async {
     final responses = _Responses()..statusByPath['/v1/screenings'] = 403;
     await _pump(tester, responses);
-    expect(find.text('Screening PHQ-9 / GAD-7 tidak dibagikan pasien.'),
+    expect(find.text('Skrining PHQ-9 / GAD-7 tidak dibagikan pasien.'),
         findsOneWidget);
     expect(find.text('WHO-5 dibagikan'), findsOneWidget);
     expect(find.text('Diagnosis tersimpan'), findsOneWidget);
-    expect(find.text('Belum ada screening'), findsNothing);
+    expect(find.text('Belum ada skrining'), findsNothing);
   });
 
   testWidgets('missing instrument never appears as a normal zero score',

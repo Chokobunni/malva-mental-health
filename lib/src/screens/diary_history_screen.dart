@@ -93,7 +93,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
           return const Scaffold(
               body: Center(
                   child: Text(
-                      'Sesi akun telah berubah. Buka kembali diary dari akun aktif.')));
+                      'Sesi akun telah berubah. Buka kembali jurnal dari akun aktif.')));
         return builder();
       });
   void _badges() {
@@ -141,13 +141,13 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                               const SizedBox(height: 12),
                               if (entries.isEmpty)
                                 const Text(
-                                    'Tulis diari terlebih dahulu untuk mencatat pengalamanmu.')
+                                    'Tulis jurnal terlebih dahulu untuk mencatat pengalamanmu.')
                               else ...[
                                 DropdownButtonFormField<String>(
                                     initialValue: selectedId,
                                     isExpanded: true,
                                     decoration: const InputDecoration(
-                                        labelText: 'Pilih diari'),
+                                        labelText: 'Pilih jurnal'),
                                     items: entries
                                         .map((e) => DropdownMenuItem(
                                             value: e.id,
@@ -171,7 +171,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                             })),
                                 const SizedBox(height: 8),
                                 const Text(
-                                    'Pilih sesuai pengalamanmu dalam diari ini. Progres mengikuti isi diari yang tersimpan.',
+                                    'Pilih sesuai pengalamanmu dalam jurnal ini. Progres mengikuti isi jurnal yang tersimpan.',
                                     style: TextStyle(
                                         fontSize: 12, color: diaryPlum)),
                               ],
@@ -220,7 +220,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                               .firstOrNull;
                                           if (current == null) {
                                             update(() => error =
-                                                'Diari ini sudah tidak tersedia.');
+                                                'Jurnal ini sudah tidak tersedia.');
                                             return;
                                           }
                                           final note =
@@ -232,7 +232,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                                   .encode();
                                           if (utf8.encode(note).length > 6000) {
                                             update(() => error =
-                                                'Diari beserta pilihan apresiasi melebihi batas 6000 byte. Kurangi pilihan atau isi diari.');
+                                                'Jurnal beserta pilihan apresiasi melebihi batas 6000 byte. Kurangi pilihan atau isi jurnal.');
                                             return;
                                           }
                                           update(() {
@@ -393,7 +393,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                     return const Scaffold(
                         body: Center(
                             child: Text(
-                                'Sesi akun telah berubah. Buka kembali diary dari akun aktif.')));
+                                'Sesi akun telah berubah. Buka kembali jurnal dari akun aktif.')));
                   }
                   return DiaryEditorScreen(
                       initialEntry: entry,
@@ -414,7 +414,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                   appBar: AppBar(),
                                   body: const Center(
                                       child: Text(
-                                          'Sesi akun telah berubah. Buka kembali diary dari akun aktif.')));
+                                          'Sesi akun telah berubah. Buka kembali jurnal dari akun aktif.')));
                             }
                             return child;
                           }),
@@ -502,7 +502,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                 sharedWithProfessionals: false,
                 occurredAt: entry.createdAt);
         if (response.id.isEmpty) {
-          throw const MalvaApiException('Respons diary tidak valid.');
+          throw const MalvaApiException('Respons jurnal tidak valid.');
         }
         saved = _entry(response);
       }
@@ -517,13 +517,13 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
       }
       ref.read(malvaStoreProvider.notifier).upsertDiary(saved);
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Diary tersimpan.')));
+          .showSnackBar(const SnackBar(content: Text('Jurnal tersimpan.')));
       return saved;
     } on Object catch (e) {
       if (!mounted || _accountChanged || _identity(_session) != identity)
         return null;
       setState(
-          () => _error = 'Diary belum tersimpan: ${friendlyErrorMessage(e)}');
+          () => _error = 'Jurnal belum tersimpan: ${friendlyErrorMessage(e)}');
       return null;
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -537,8 +537,9 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
         context: context,
         builder: (dialog) => _protect(
             () => AlertDialog(
-                    title: const Text('Hapus Diary?'),
-                    content: Text('Hapus “${entry.title}” dari riwayat diary?'),
+                    title: const Text('Hapus Jurnal?'),
+                    content:
+                        Text('Hapus “${entry.title}” dari riwayat jurnal?'),
                     actions: [
                       TextButton(
                           onPressed: () => Navigator.pop(dialog, false),
@@ -571,7 +572,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
       if (!mounted || _accountChanged || _identity(_session) != identity)
         return false;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Diary belum dihapus: ${friendlyErrorMessage(e)}')));
+          content: Text('Jurnal belum dihapus: ${friendlyErrorMessage(e)}')));
       return false;
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -595,7 +596,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
       return const Scaffold(
           body: Center(
               child: Text(
-                  'Sesi akun telah berubah. Buka kembali diary dari akun aktif.')));
+                  'Sesi akun telah berubah. Buka kembali jurnal dari akun aktif.')));
     ref.watch(malvaStoreProvider);
     final query = _search.text.trim().toLowerCase();
     final all = _all;
@@ -642,7 +643,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                             padding: EdgeInsets.symmetric(
                                                 vertical: 14),
                                             child: Text(
-                                                'Tulis Cerita Diari Baru',
+                                                'Tulis Cerita Jurnal Baru',
                                                 style: TextStyle(
                                                     fontSize: 13,
                                                     fontWeight:
@@ -662,7 +663,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                             ScaffoldMessenger.of(context)
                                                 .showSnackBar(const SnackBar(
                                                     content: Text(
-                                                        'Simpan cerita ke Positive Vault terlebih dahulu.')));
+                                                        'Simpan cerita ke Ruang Positif terlebih dahulu.')));
                                             return;
                                           }
                                           _read(
@@ -717,7 +718,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                         onChanged: (_) => setState(() {}),
                                         decoration: InputDecoration(
                                             hintText:
-                                                'Cari judul atau isi diary',
+                                                'Cari judul atau isi jurnal',
                                             prefixIcon:
                                                 const Icon(Icons.search),
                                             suffixIcon: query.isEmpty
@@ -736,8 +737,8 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                       Expanded(
                                           child: Text(
                                               _vaultOnly
-                                                  ? 'Kenangan di Positive Vault'
-                                                  : 'Daftar Cerita Diari',
+                                                  ? 'Kenangan di Ruang Positif'
+                                                  : 'Daftar Cerita Jurnal',
                                               style: const TextStyle(
                                                   fontSize: 15,
                                                   fontWeight:
@@ -758,7 +759,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                     ]),
                                     const SizedBox(height: 4),
                                     const Text(
-                                        'Ketuk salah satu kartu untuk membaca halaman isi diari',
+                                        'Ketuk salah satu kartu untuk membaca halaman isi jurnal.',
                                         style: TextStyle(
                                             fontSize: 10,
                                             color: Color(0xff6b7280))),
@@ -803,7 +804,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                               icon: const Icon(Icons.refresh,
                                                   size: 16),
                                               label: const Text(
-                                                  'Muat ulang diary',
+                                                  'Muat ulang jurnal',
                                                   style: TextStyle(
                                                       fontSize: 11)))),
                                     if (!_loading && entries.isEmpty)
@@ -815,7 +816,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                             height: 82,
                                             excludeFromSemantics: true),
                                         SizedBox(height: 12),
-                                        Text('Belum ada catatan diary',
+                                        Text('Belum ada catatan jurnal',
                                             textAlign: TextAlign.center,
                                             style: TextStyle(
                                                 fontWeight: FontWeight.w700)),
@@ -913,7 +914,7 @@ class _DiaryHistoryScreenState extends ConsumerState<DiaryHistoryScreen> {
                                               color: diaryPurple, size: 11),
                                           SizedBox(width: 4),
                                           Flexible(
-                                              child: Text('Positive Vault',
+                                              child: Text('Ruang Positif',
                                                   style: TextStyle(
                                                       color: diaryPurple,
                                                       fontSize: 10,

@@ -309,6 +309,7 @@ class Medication {
     required this.source,
     this.lastTakenAt,
     this.schedule,
+    this.createdAt,
   });
 
   final String id;
@@ -320,6 +321,7 @@ class Medication {
   final int alertBelow;
   final String source;
   final DateTime? lastTakenAt;
+  final DateTime? createdAt;
   final MedicationSchedule? schedule;
   int get unitsPerDose => schedule?.unitsPerDose ?? 1;
 
@@ -339,7 +341,7 @@ class Medication {
     final sameDay = isSameLocalDay(taken, wibNow());
     final h = wib.hour.toString().padLeft(2, '0');
     final m = wib.minute.toString().padLeft(2, '0');
-    return sameDay ? 'Taken $h:$m' : 'Taken ${wib.day}/${wib.month} $h:$m';
+    return sameDay ? 'Diminum $h:$m' : 'Diminum ${wib.day}/${wib.month} $h:$m';
   }
 
   Medication copyWith({
@@ -364,6 +366,7 @@ class Medication {
       alertBelow: alertBelow ?? this.alertBelow,
       source: source ?? this.source,
       lastTakenAt: lastTakenAt ?? this.lastTakenAt,
+      createdAt: createdAt,
       schedule: schedule ?? this.schedule,
     );
   }

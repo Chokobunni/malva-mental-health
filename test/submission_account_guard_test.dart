@@ -104,7 +104,7 @@ void main() {
       expect(
           tester
               .widget<FilledButton>(
-                  find.widgetWithText(FilledButton, 'Simpan ke Therapy Record'))
+                  find.widgetWithText(FilledButton, 'Simpan ke Riwayat Terapi'))
               .onPressed,
           isNotNull);
       expect(tester.takeException(), isNull);

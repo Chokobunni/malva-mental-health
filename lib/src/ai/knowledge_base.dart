@@ -220,7 +220,7 @@ class KnowledgeBase {
               value: 'crisis',
               cf: 0.95,
               explanation:
-                  'Ada indikator keselamatan diri. Tampilkan crisis flow dan hubungi profesional.',
+                  'Ada indikator keselamatan diri. Tampilkan krisis flow dan hubungi profesional.',
             ),
           ],
           ruleCF: 1.0, // Maximum reliability - this is a critical safety rule

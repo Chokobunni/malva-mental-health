@@ -189,7 +189,7 @@ class _ConsentManagementScreenState
         padding: EdgeInsets.zero,
         children: [
           const GradientHeader(
-            title: 'Consent Management',
+            title: 'Manajemen Persetujuan',
             subtitle: 'Kelola berbagi data dengan profesional',
             leading:
                 Icon(Icons.security_rounded, color: Colors.white, size: 34),
@@ -254,7 +254,7 @@ class _ConsentManagementScreenState
                 const SizedBox(height: 16),
                 _ConsentSwitch(
                   icon: Icons.fact_check_rounded,
-                  title: 'Screening Results',
+                  title: 'Skrining Results',
                   subtitle: 'Hasil PHQ-9 dan GAD-7',
                   value: _shareScreenings,
                   onChanged: _isLoading || !_hasLoadedConsent
@@ -266,8 +266,8 @@ class _ConsentManagementScreenState
                 const SizedBox(height: 12),
                 _ConsentSwitch(
                   icon: Icons.mood_rounded,
-                  title: 'Mood & Diary',
-                  subtitle: 'Data mood check-in dan diary entries',
+                  title: 'Mood & Jurnal',
+                  subtitle: 'Data mood check-in dan jurnal entries',
                   value: _shareMoodDiary,
                   onChanged: _isLoading || !_hasLoadedConsent
                       ? null
@@ -302,7 +302,7 @@ class _ConsentManagementScreenState
                 const SizedBox(height: 12),
                 _ConsentSwitch(
                   icon: Icons.folder_shared_rounded,
-                  title: 'Health Record',
+                  title: 'Rekam Medis',
                   subtitle: 'Diagnosis & catatan klinis',
                   value: _shareHealthRecord,
                   onChanged: _isLoading || !_hasLoadedConsent
@@ -314,8 +314,8 @@ class _ConsentManagementScreenState
                 const SizedBox(height: 12),
                 _ConsentSwitch(
                   icon: Icons.flag_rounded,
-                  title: 'Goals & Habits',
-                  subtitle: 'Target harian & streak',
+                  title: 'Target & Kebiasaan',
+                  subtitle: 'Target harian & runtutan',
                   value: _shareGoals,
                   onChanged: _isLoading || !_hasLoadedConsent
                       ? null
@@ -326,8 +326,8 @@ class _ConsentManagementScreenState
                 const SizedBox(height: 12),
                 _ConsentSwitch(
                   icon: Icons.psychology_rounded,
-                  title: 'Therapy Record (Psikologis)',
-                  subtitle: 'Worksheet dan catatan latihan terapi',
+                  title: 'Riwayat Terapi (Psikologis)',
+                  subtitle: 'Lembar Kerja dan catatan latihan terapi',
                   value: _shareTherapyRecords,
                   onChanged: _isLoading || !_hasLoadedConsent
                       ? null
@@ -349,7 +349,7 @@ class _ConsentManagementScreenState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Tentang Consent Management',
+                        'Tentang Manajemen Persetujuan',
                         style: TextStyle(fontWeight: FontWeight.w900),
                       ),
                       SizedBox(height: 8),

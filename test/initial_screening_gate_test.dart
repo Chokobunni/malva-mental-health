@@ -16,7 +16,7 @@ void main() {
     };
     expect(who5Summary(answers), contains('WHO-5 21/25 (84%)'));
     expect(who5Summary(answers),
-        contains('Perlu screening lanjutan karena ada jawaban 0–1'));
+        contains('Perlu skrining lanjutan karena ada jawaban 0–1'));
     expect(scoreWho5(answers).level, 'Baik');
     answers.remove('scale_version');
     expect(who5Summary(answers), isNot(contains('jawaban 0–1')));

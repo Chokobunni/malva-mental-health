@@ -94,7 +94,7 @@ class _EmergencyDashboardScreenState
                         SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'Hasil screening menunjukkan risiko. Halaman ini membantu kamu tetap aman.',
+                            'Hasil skrining menunjukkan risiko. Halaman ini membantu kamu tetap aman.',
                             style: TextStyle(fontWeight: FontWeight.w700),
                           ),
                         ),

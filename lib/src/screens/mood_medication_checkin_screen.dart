@@ -40,7 +40,7 @@ class _MoodMedicationCheckinScreenState
       body: Column(
         children: [
           const GradientHeader(
-            title: 'Mood Medication Check-in',
+            title: 'Check-in Mood & Obat',
             subtitle: 'Pantau mood harian & kepatuhan obat',
             leading: Icon(Icons.monitor_heart_rounded,
                 color: Colors.white, size: 34),
@@ -50,7 +50,7 @@ class _MoodMedicationCheckinScreenState
             child: SegmentedButton<int>(
               segments: const [
                 ButtonSegment(value: 0, label: Text('Mood')),
-                ButtonSegment(value: 1, label: Text('Medication')),
+                ButtonSegment(value: 1, label: Text('Obat')),
               ],
               selected: {_tab},
               onSelectionChanged: (s) => setState(() => _tab = s.first),

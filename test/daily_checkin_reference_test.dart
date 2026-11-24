@@ -65,7 +65,7 @@ void main() {
   }
 
   void expectCompleted() {
-    expect(find.textContaining('Check-in hari ini selesai. Streak'),
+    expect(find.textContaining('Check-in harian selesai. Runtutan'),
         findsOneWidget);
     for (final mood in MoodValue.values) {
       expect(find.text(mood.label), findsNothing);
@@ -313,7 +313,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(restored.read(malvaStoreProvider).moodEntries, isEmpty);
     expectCompleted();
-    expect(find.textContaining('Streak 1 hari!'), findsOneWidget);
+    expect(find.textContaining('Runtutan 1 hari!'), findsOneWidget);
     restored.read(authStateProvider.notifier).setSession(const AuthSession(
         role: UserRole.patient,
         identifier: 'other',

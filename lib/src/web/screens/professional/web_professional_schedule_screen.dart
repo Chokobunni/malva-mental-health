@@ -8,7 +8,9 @@ import '../../../providers/providers.dart';
 import '../../../services/malva_api_client.dart';
 import '../../../services/meeting_launcher.dart';
 import '../../../theme.dart';
+import '../../../time/wib.dart';
 import '../../../widgets/friendly_error.dart';
+import '../../../widgets/professional_schedule_calendar.dart';
 import '../../services/web_care_service.dart';
 import '../../web_format.dart';
 import '../../web_theme.dart';
@@ -27,7 +29,9 @@ class WebProfessionalScheduleScreen extends ConsumerStatefulWidget {
 class _WebProfessionalScheduleScreenState
     extends ConsumerState<WebProfessionalScheduleScreen> {
   String _scope = 'upcoming';
-  List<BackendCareSession> _sessions = const <BackendCareSession>[];
+  Map<String, List<BackendCareSession>> _sessions = const {};
+  DateTime? _calendarMonth;
+  DateTime? _selectedDate;
   bool _loading = true;
   Object? _error;
 
@@ -40,22 +44,25 @@ class _WebProfessionalScheduleScreenState
   }
 
   Future<void> _load() async {
+    final scope = _scope;
+    final token = _token;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final sessions = await ref.read(apiClientProvider).listCareSessions(
-            accessToken: _token,
-            scope: _scope,
-          );
-      if (!mounted) return;
+      final api = ref.read(apiClientProvider);
+      final scopes = {'today', 'upcoming', scope};
+      final sessions = await Future.wait(scopes.map((scope) async => MapEntry(
+          scope,
+          await api.listCareSessions(accessToken: token, scope: scope))));
+      if (!mounted || scope != _scope || token != _token) return;
       setState(() {
-        _sessions = sessions;
+        _sessions = Map.fromEntries(sessions);
         _loading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || scope != _scope || token != _token) return;
       setState(() {
         _error = error;
         _loading = false;
@@ -103,6 +110,32 @@ class _WebProfessionalScheduleScreenState
 
   @override
   Widget build(BuildContext context) {
+    final now = wibNow();
+    final month = _calendarMonth ?? wibFromParts(now.year, now.month, 1);
+    final byDate = <String, List<BackendCareSession>>{};
+    final ids = <String>{};
+    for (final scope in ['today', 'upcoming']) {
+      for (final session in _sessions[scope] ?? const <BackendCareSession>[]) {
+        final at = session.scheduledDateTime;
+        if (at != null &&
+            session.isScheduled &&
+            !session.isAfterJoinWindow &&
+            ids.add(session.id)) {
+          (byDate[wibDateKey(at)] ??= []).add(session);
+        }
+      }
+    }
+    final selectedDate = _selectedDate;
+    final selectedKey = selectedDate == null ? null : wibDateKey(selectedDate);
+    final filtered = selectedKey != null && byDate.containsKey(selectedKey);
+    final rows = _sessions[_scope] ?? const <BackendCareSession>[];
+    final visibleRows = _scope == 'upcoming' && filtered
+        ? rows.where((session) {
+            final at = session.scheduledDateTime;
+            return at != null && wibDateKey(at) == selectedKey;
+          }).toList()
+        : rows;
+    void clearSelection() => setState(() => _selectedDate = null);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -117,37 +150,80 @@ class _WebProfessionalScheduleScreenState
           ),
         ),
         const SizedBox(height: WebSpacing.section),
+        if (!_loading && _error == null) ...[
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 540),
+            child: ProfessionalScheduleCalendar(
+              month: month,
+              today: now,
+              sessionsByDate: byDate,
+              selectedDate: filtered ? selectedDate : null,
+              onClear: clearSelection,
+              onMonthChanged: (offset) => setState(() {
+                _calendarMonth =
+                    wibFromParts(month.year, month.month + offset, 1);
+                _selectedDate = null;
+              }),
+              onDateTapped: (date) {
+                final key = wibDateKey(date);
+                if (key == selectedKey) {
+                  clearSelection();
+                } else if (byDate.containsKey(key)) {
+                  setState(() => _selectedDate = date);
+                } else {
+                  ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+                  _showMessage('Tidak ada sesi pada tanggal ini.');
+                }
+              },
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: <Widget>[
             for (final (String scope, String label) in const <(String, String)>[
               ('today', 'Hari ini'),
-              ('upcoming', 'Akan datang'),
+              ('upcoming', 'Mendatang'),
               ('all', 'Semua'),
             ])
               ChoiceChip(
                 key: Key('web-pro-schedule-$scope'),
                 label: Text(label),
                 selected: _scope == scope,
-                onSelected: (bool selected) {
-                  if (!selected) return;
-                  setState(() => _scope = scope);
-                  unawaited(_load());
-                },
+                onSelected: _loading
+                    ? null
+                    : (bool selected) {
+                        if (!selected) return;
+                        setState(() => _scope = scope);
+                        unawaited(_load());
+                      },
               ),
           ],
         ),
         const SizedBox(height: 14),
+        if (_scope == 'upcoming' && !_loading && _error == null) ...[
+          Text('${visibleRows.length} sesi • '
+              '${filtered ? professionalScheduleDateLabel(selectedDate!) : 'Semua tanggal'}'),
+          const SizedBox(height: 8),
+        ],
         WebAdminCard(
           padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
-          child: _buildBody(),
+          child: _buildBody(visibleRows),
         ),
+        if (_scope == 'upcoming' && filtered) ...[
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+              onPressed: clearSelection,
+              icon: const Icon(Icons.layers_outlined),
+              label: Text('Tampilkan semua sesi (${rows.length})')),
+        ],
       ],
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(List<BackendCareSession> sessions) {
     if (_loading) return const WebAdminLoading(label: 'Memuat sesi...');
     if (_error != null) {
       return WebAdminError(error: _error!, onRetry: () => unawaited(_load()));
@@ -163,23 +239,28 @@ class _WebProfessionalScheduleScreenState
         WebAdminColumn('STATUS', 160),
         WebAdminColumn('AKSI', 240, align: Alignment.centerRight),
       ],
-      rowKeyBuilder: (int index) => Key('pro-session-${_sessions[index].id}'),
-      rows: _sessions.map((BackendCareSession session) {
+      rowKeyBuilder: (int index) => Key('pro-session-${sessions[index].id}'),
+      rows: sessions.map((BackendCareSession session) {
         final isVideo = session.isVideo;
+        final at = session.scheduledDateTime;
         return <Widget>[
           Text(
             formatWibDateTimeOrDash(session.scheduledDateTime),
             style: const TextStyle(fontSize: 12),
           ),
-          Text(
-            session.patientName.isEmpty
-                ? session.patientId
-                : session.patientName,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                session.patientName.isEmpty ? 'Pasien' : session.patientName,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    fontSize: 12.5, fontWeight: FontWeight.w700),
+              ),
+              if (at != null)
+                Text(wibWeekdayName(at), style: const TextStyle(fontSize: 11)),
+            ],
           ),
           Text(
             webSessionTypeLabel(session.sessionType),

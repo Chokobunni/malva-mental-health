@@ -23,10 +23,16 @@ import 'settings_screens.dart';
 // ============================================================
 
 class MessagesListScreen extends ConsumerStatefulWidget {
-  const MessagesListScreen({super.key, this.session, this.apiClient});
+  const MessagesListScreen({
+    super.key,
+    this.session,
+    this.apiClient,
+    this.showProfessionalHeader = true,
+  });
 
   final AuthSession? session;
   final MalvaApiClient? apiClient;
+  final bool showProfessionalHeader;
 
   @override
   ConsumerState<MessagesListScreen> createState() => _MessagesListScreenState();
@@ -218,10 +224,21 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
     final embeddedProfessional = isPro && Scaffold.maybeOf(context) != null;
     final recent = _links.where((link) => link.status == 'active');
     final history = _links.where((link) => link.status != 'active');
+    const proTitle = 'Percakapan';
+    const proSubtitle = 'Lihat pesan dan riwayat chat dengan pasien.';
     return Scaffold(
       backgroundColor: carePageColor,
       appBar: isPro && !embeddedProfessional
-          ? AppBar(title: const Text('Messages'))
+          ? AppBar(
+              toolbarHeight: 72,
+              title: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(proTitle),
+                  Text(proSubtitle, style: TextStyle(fontSize: 12)),
+                ],
+              ),
+            )
           : null,
       body: RefreshIndicator(
         onRefresh: _load,
@@ -247,17 +264,14 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (embeddedProfessional) ...[
-                        Text('Messages',
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w900,
-                                )),
-                        const SizedBox(height: 16),
+                      if (!isPro) const SectionLabel('Terbaru'),
+                      if (embeddedProfessional &&
+                          widget.showProfessionalHeader) ...[
+                        Text(proTitle,
+                            style: Theme.of(context).textTheme.headlineSmall),
+                        const Text(proSubtitle),
+                        const SizedBox(height: 12),
                       ],
-                      const SectionLabel('Recent'),
                       if (_isLoading)
                         const Center(child: CircularProgressIndicator())
                       else if (_error != null)
@@ -315,7 +329,7 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
                         )
                       else
                         for (final (heading, group) in [
-                          ('', recent),
+                          (isPro ? 'Terbaru' : '', recent),
                           ('Riwayat', history)
                         ]) ...[
                           if (heading.isNotEmpty && group.isNotEmpty) ...[

@@ -90,7 +90,7 @@ void main() {
         child: MaterialApp(
             home: MedicationScreen(apiClient: api, session: session))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Take Now'));
+    await tester.tap(find.text('Minum Sekarang'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sudah diminum'));
     await tester.pumpAndSettle();
@@ -161,7 +161,7 @@ void main() {
         child: MaterialApp(
             home: MedicationScreen(apiClient: api, session: session))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Take Now'));
+    await tester.tap(find.text('Minum Sekarang'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sudah diminum'));
     await tester.pumpAndSettle();
@@ -226,7 +226,7 @@ void main() {
         child: MaterialApp(
             home: MedicationScreen(apiClient: api, session: session))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Take Now'));
+    await tester.tap(find.text('Minum Sekarang'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sudah diminum'));
     await tester.pumpAndSettle();
@@ -326,7 +326,7 @@ void main() {
         child: MaterialApp(
             home: MedicationScreen(apiClient: api, session: session))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Take Now'));
+    await tester.tap(find.text('Minum Sekarang'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sudah diminum'));
     await tester.pump();
@@ -426,12 +426,12 @@ void main() {
                     displayName: 'A',
                     accessToken: 'a')))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Medication'));
+    await tester.tap(find.text('Obat'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.scrollUntilVisible(find.text('Take Now').first, 250);
+    await tester.scrollUntilVisible(find.text('Minum Sekarang').first, 250);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Take Now').first);
+    await tester.tap(find.text('Minum Sekarang').first);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Sudah diminum'));
@@ -447,7 +447,8 @@ void main() {
         isNull);
     expect(
         tester
-            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Take Now'))
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Minum Sekarang'))
             .onPressed,
         isNotNull);
     expect(tester.takeException(), isNull);

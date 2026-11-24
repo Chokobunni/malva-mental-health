@@ -114,8 +114,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Seksi 'Therapy Record' tepat satu (SectionLabel), di BAWAH modul pertama.
-    expect(find.text('Therapy Record'), findsOneWidget);
-    final sectionTop = tester.getTopLeft(find.text('Therapy Record')).dy;
+    expect(find.text('Riwayat Terapi'), findsOneWidget);
+    final sectionTop = tester.getTopLeft(find.text('Riwayat Terapi')).dy;
     final firstModuleTop =
         tester.getTopLeft(find.text(allTherapyModules.first.title).first).dy;
     expect(firstModuleTop, lessThan(sectionTop));

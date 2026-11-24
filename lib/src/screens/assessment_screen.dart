@@ -130,7 +130,7 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
                         const Icon(Icons.local_florist_rounded,
                             color: Colors.white, size: 54),
                         const SizedBox(height: 16),
-                        Text('Symptoms Assessment',
+                        Text('Asesmen Gejala',
                             style: Theme.of(context)
                                 .textTheme
                                 .headlineSmall
@@ -144,8 +144,8 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
               else
                 GradientHeader(
                   title: widget.isInitialScreening
-                      ? 'Screening Awal'
-                      : 'Self Assessments',
+                      ? 'Skrining Awal'
+                      : 'Self Asesmen',
                   subtitle: 'PHQ-9 + GAD-7 • 16 pertanyaan dalam satu halaman',
                   leading: IconButton(
                     onPressed:
@@ -220,7 +220,7 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
                           ),
                           const SizedBox(height: 6),
                           const Text(
-                            'Periksa kembali jawabanmu sebelum mengirim kedua screening.',
+                            'Periksa kembali jawabanmu sebelum mengirim kedua skrining.',
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 16),
@@ -311,8 +311,8 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
                 gad7Answers: _gad7Answers.map((answer) => answer ?? 0).toList(),
                 isInitial: widget.isInitialScreening,
                 source: widget.isInitialScreening
-                    ? 'Initial patient screening'
-                    : 'Self assessment',
+                    ? 'Initial patient skrining'
+                    : 'Self asesmen',
                 session: widget.session,
               );
     } on MalvaApiException catch (error) {
@@ -342,7 +342,7 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Screening berhasil dikirim. ID: ${bundle.id}',
+            'Skrining berhasil dikirim. ID: ${bundle.id}',
           ),
           backgroundColor: MalvaColors.mint,
         ),
@@ -373,7 +373,7 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
       context: context,
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.cloud_off_rounded, color: MalvaColors.danger),
-        title: const Text('Screening belum terkirim'),
+        title: const Text('Skrining belum terkirim'),
         content: Text(
           '${detail.isEmpty ? '' : '$detail\n\n'}'
           'Hasilmu tersimpan di perangkat ini, tetapi BELUM diterima server, '
@@ -401,7 +401,7 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
       context: context,
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.cloud_off_rounded, color: MalvaColors.danger),
-        title: const Text('Gagal mengirim screening'),
+        title: const Text('Gagal mengirim skrining'),
         content: Text(message),
         actions: [
           TextButton(
@@ -667,14 +667,14 @@ class AssessmentResultScreen extends StatelessWidget {
                               color: Colors.white,
                               fontSize: 24,
                               fontWeight: FontWeight.w900)),
-                      Text('Hasil screening sudah tersimpan',
+                      Text('Hasil skrining sudah tersimpan',
                           style: TextStyle(color: Colors.white)),
                     ]),
                   ))
             else
               const GradientHeader(
                 title: 'Terima Kasih',
-                subtitle: 'Hasil screening sudah tersimpan',
+                subtitle: 'Hasil skrining sudah tersimpan',
                 leading: Icon(Icons.local_florist_rounded,
                     color: Colors.white, size: 34),
               ),
@@ -684,83 +684,6 @@ class AssessmentResultScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SharedRecordDetail.bundle(bundle: bundle),
-                  const SizedBox(height: 12),
-                  SoftCard(
-                    color: Colors.white,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ExpansionTile(
-                          tilePadding: EdgeInsets.zero,
-                          title: const Text('Apa arti skormu?'),
-                          children: [
-                            _ScoreExplanationCard(
-                              title: 'PHQ-9 (Depresi)',
-                              score: bundle.phq9.score,
-                              maxScore: bundle.phq9.maxScore,
-                              level: bundle.phq9.level,
-                              ranges: const [
-                                (
-                                  '0–4',
-                                  'Minimal',
-                                  'Gejala depresi sangat ringan atau tidak ada.'
-                                ),
-                                (
-                                  '5–9',
-                                  'Ringan',
-                                  'Gejala depresi ringan. Pantau kondisi dan jaga self-care.'
-                                ),
-                                (
-                                  '10–14',
-                                  'Sedang',
-                                  'Gejala depresi sedang. Disarankan konsultasi profesional.'
-                                ),
-                                (
-                                  '15–19',
-                                  'Berat',
-                                  'Gejala depresi berat. Segera hubungi profesional kesehatan mental.'
-                                ),
-                                (
-                                  '20–27',
-                                  'Sangat Berat',
-                                  'Gejala depresi sangat berat. Cari bantuan segera.'
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            _ScoreExplanationCard(
-                              title: 'GAD-7 (Kecemasan)',
-                              score: bundle.gad7.score,
-                              maxScore: bundle.gad7.maxScore,
-                              level: bundle.gad7.level,
-                              ranges: const [
-                                (
-                                  '0–4',
-                                  'Minimal',
-                                  'Kecemasan sangat ringan atau tidak ada.'
-                                ),
-                                (
-                                  '5–9',
-                                  'Ringan',
-                                  'Kecemasan ringan. Teknik relaksasi bisa membantu.'
-                                ),
-                                (
-                                  '10–14',
-                                  'Sedang',
-                                  'Kecemasan sedang. Disarankan konsultasi profesional.'
-                                ),
-                                (
-                                  '15–21',
-                                  'Berat',
-                                  'Kecemasan berat. Segera hubungi profesional kesehatan mental.'
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
                   if (bundle.crisisFlag) ...[
                     const SizedBox(height: 12),
                     _CrisisSupportCard(
@@ -781,7 +704,7 @@ class AssessmentResultScreen extends StatelessWidget {
                   const SizedBox(height: 18),
                   const Padding(
                       padding: EdgeInsets.fromLTRB(4, 8, 4, 12),
-                      child: Text('Assessment lanjutan',
+                      child: Text('Asesmen lanjutan',
                           style: TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w900,
@@ -799,7 +722,7 @@ class AssessmentResultScreen extends StatelessWidget {
                     icon: Icons.psychology_alt_rounded,
                     title: 'Konsultasi psikiater',
                     body:
-                        'Psikiater dapat diakses menggunakan BPJS sesuai alur faskes dan rujukan yang berlaku. Bawa hasil screening ini saat konsultasi.',
+                        'Psikiater dapat diakses menggunakan BPJS sesuai alur faskes dan rujukan yang berlaku. Bawa hasil skrining ini saat konsultasi.',
                     color: MalvaColors.seed,
                   ),
                   const SizedBox(height: 10),
@@ -854,7 +777,7 @@ class _CrisisSupportCard extends StatelessWidget {
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Crisis Support: Jika kamu merasa tidak aman, ketuk di sini untuk bantuan.',
+                  'Bantuan Krisis: Jika kamu merasa tidak aman, ketuk di sini untuk bantuan.',
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
                 ),
               ),
@@ -973,124 +896,3 @@ class _TipCard extends StatelessWidget {
 /// Kartu penjelasan skor screening (PHQ-9 / GAD-7). Menampilkan tabel rentang
 /// skor dengan baris yang sesuai skor pasien di-highlight, sehingga pasien
 /// langsung paham posisi mereka dalam spektrum keparahan.
-class _ScoreExplanationCard extends StatelessWidget {
-  const _ScoreExplanationCard({
-    required this.title,
-    required this.score,
-    required this.maxScore,
-    required this.level,
-    required this.ranges,
-  });
-
-  final String title;
-  final int score;
-  final int maxScore;
-  final RiskLevel level;
-  final List<(String range, String label, String description)> ranges;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: MalvaColors.seed.withValues(alpha: 0.25),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.info_outline_rounded, size: 16, color: level.color),
-              const SizedBox(width: 6),
-              Expanded(
-                  child: Text(
-                '$title — Apa arti skormu?',
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 12.5,
-                  color: level.color,
-                ),
-              )),
-            ],
-          ),
-          const SizedBox(height: 8),
-          for (final (range, label, desc) in ranges) ...[
-            Container(
-              margin: const EdgeInsets.only(bottom: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                color: _isInRange(score, range)
-                    ? level.color.withValues(alpha: 0.12)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
-                border: _isInRange(score, range)
-                    ? Border.all(color: level.color.withValues(alpha: 0.4))
-                    : null,
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 48,
-                    child: Text(
-                      range,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 11,
-                        color: _isInRange(score, range)
-                            ? level.color
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 52,
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11,
-                        color: _isInRange(score, range)
-                            ? level.color
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      desc,
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 4),
-          Text(
-            'Total Score: $score/$maxScore (${level.label})',
-            style: TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: 12,
-              color: level.color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Cek apakah skor masuk dalam rentang string seperti "0–4" atau "5–9".
-  static bool _isInRange(int score, String range) {
-    final parts = range.split('–');
-    if (parts.length != 2) return false;
-    final low = int.tryParse(parts[0].trim());
-    final high = int.tryParse(parts[1].trim());
-    if (low == null || high == null) return false;
-    return score >= low && score <= high;
-  }
-}

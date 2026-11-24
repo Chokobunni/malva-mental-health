@@ -166,8 +166,8 @@ void main() {
 
     // Disclaimer amber berada DI ATAS judul 'Assessment Record'.
     final disclaimerTop =
-        tester.getTopLeft(find.textContaining('alat bantu screening')).dy;
-    final sectionTop = tester.getTopLeft(find.text('Assessment Record')).dy;
+        tester.getTopLeft(find.textContaining('alat bantu skrining')).dy;
+    final sectionTop = tester.getTopLeft(find.text('Riwayat Asesmen')).dy;
     expect(disclaimerTop, lessThan(sectionTop),
         reason: 'disclaimer harus di atas judul Assessment Record');
 
@@ -178,7 +178,7 @@ void main() {
     expect((buttonTop - sectionTop).abs(), lessThan(24),
         reason: '"Lihat semua" harus sebaris dengan judul Assessment Record');
     expect(buttonLeft,
-        greaterThan(tester.getTopLeft(find.text('Assessment Record')).dx));
+        greaterThan(tester.getTopLeft(find.text('Riwayat Asesmen')).dx));
 
     // Tap membuka halaman Assessment Record lengkap.
     await tester.tap(find.text('Lihat semua'));
@@ -284,14 +284,14 @@ void main() {
     await tester.pumpAndSettle();
 
     // Tile yang dihapus dari sidebar.
-    expect(find.text('Health Record'), findsNothing);
-    expect(find.text('Therapy Record'), findsNothing);
+    expect(find.text('Rekam Medis'), findsNothing);
+    expect(find.text('Riwayat Terapi'), findsNothing);
 
     // Tile lain masih ada.
     expect(find.text('Kontak Darurat'), findsOneWidget);
-    expect(find.text('Settings'), findsOneWidget);
-    expect(find.text('Consent Management'), findsOneWidget);
-    expect(find.text('Export Data'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'Pengaturan'), findsOneWidget);
+    expect(find.text('Manajemen Persetujuan'), findsOneWidget);
+    expect(find.text('Ekspor Data'), findsOneWidget);
   });
 
   testWidgets('T5: tile Health Record di Home (Self Care) TIDAK ikut terhapus',
@@ -316,8 +316,8 @@ void main() {
     await tester.pump();
 
     // Grid Self Care tetap punya Health Record + Psychological Therapy.
-    expect(find.text('Health Record'), findsOneWidget);
-    expect(find.text('Psychological Therapy'), findsOneWidget);
+    expect(find.text('Rekam Medis'), findsOneWidget);
+    expect(find.text('Terapi Psikologis'), findsOneWidget);
   });
 }
 

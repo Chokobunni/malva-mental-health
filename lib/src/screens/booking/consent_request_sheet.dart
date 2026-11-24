@@ -109,7 +109,7 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
-                    'Allow Progress Monitoring?',
+                    'Allow Progres Monitoring?',
                     style:
                         TextStyle(fontWeight: FontWeight.w900, fontSize: 16.5),
                   ),
@@ -134,7 +134,7 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
             _ConsentToggle(
               icon: Icons.fact_check_rounded,
               color: MalvaColors.seed,
-              title: 'Assessment',
+              title: 'Asesmen',
               subtitle: 'Hasil PHQ-9 & GAD-7',
               value: _screenings,
               onChanged: (v) => setState(() => _screenings = v),
@@ -142,7 +142,7 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
             _ConsentToggle(
               icon: Icons.edit_note_rounded,
               color: MalvaColors.orchid,
-              title: 'Mood & Diary',
+              title: 'Mood & Jurnal',
               subtitle: 'Tren mood & catatan harian',
               value: _moodDiary,
               onChanged: (v) => setState(() => _moodDiary = v),
@@ -150,7 +150,7 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
             _ConsentToggle(
               icon: Icons.medication_rounded,
               color: MalvaColors.mint,
-              title: 'Medication',
+              title: 'Obat',
               subtitle: 'Obat & kepatuhan minum obat',
               value: _medications,
               onChanged: (v) => setState(() => _medications = v),
@@ -158,15 +158,15 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
             _ConsentToggle(
               icon: Icons.flag_rounded,
               color: MalvaColors.amber,
-              title: 'Goals & Habits',
-              subtitle: 'Target harian & streak',
+              title: 'Target & Kebiasaan',
+              subtitle: 'Target harian & runtutan',
               value: _goals,
               onChanged: (v) => setState(() => _goals = v),
             ),
             _ConsentToggle(
               icon: Icons.folder_shared_rounded,
               color: MalvaColors.seed,
-              title: 'Health Record',
+              title: 'Rekam Medis',
               subtitle: 'Diagnosis & catatan klinis',
               value: _healthRecord,
               onChanged: (v) => setState(() => _healthRecord = v),
@@ -174,8 +174,8 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
             _ConsentToggle(
               icon: Icons.psychology_alt_rounded,
               color: MalvaColors.plum,
-              title: 'Therapy History',
-              subtitle: 'Worksheet CBT/DBT & catatan terapi',
+              title: 'Riwayat Terapi',
+              subtitle: 'Lembar Kerja CBT/DBT & catatan terapi',
               value: _therapyHistory,
               onChanged: (v) => setState(() => _therapyHistory = v),
             ),

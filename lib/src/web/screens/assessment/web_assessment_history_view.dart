@@ -252,7 +252,7 @@ class _WebHistoryDetailDialog extends StatelessWidget {
                 label: 'Sumber',
                 value: entry.isScreening
                     ? 'POST /v1/screenings'
-                    : 'Therapy submission',
+                    : 'Terapi submission',
               ),
               _DetailRow(
                 label: 'Dibagikan',

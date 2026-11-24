@@ -88,7 +88,7 @@ String friendlyServerMessage(String raw) {
       return 'Pasien belum membagikan data tujuan terapi.';
     }
     if (lower.contains('health record')) {
-      return 'Pasien belum membagikan Health Record.';
+      return 'Pasien belum membagikan Rekam Medis.';
     }
     if (lower.contains('mood') || lower.contains('diary')) {
       return 'Pasien belum membagikan data mood/diary.';

@@ -111,12 +111,14 @@ void main() {
                           session: professional, apiClient: api)))));
       await tester.pumpAndSettle();
       if (!isPatient) {
-        await tester.ensureVisible(find.text('AKSI LAIN').first);
-        await tester.tap(find.text('AKSI LAIN').first);
+        await tester.scrollUntilVisible(find.text('Aksi lain'), 120);
+        await tester.tap(find.text('Aksi lain').first);
         await tester.pumpAndSettle();
       }
-      await tester.ensureVisible(find.text('Reschedule').first);
-      await tester.tap(find.text('Reschedule').first);
+      final reschedule =
+          find.text(isPatient ? 'Reschedule' : 'Jadwalkan ulang').first;
+      await tester.ensureVisible(reschedule);
+      await tester.tap(reschedule);
       await tester.pumpAndSettle();
       if (isPatient) {
         await tester.tap(find.widgetWithText(ChoiceChip, '10:30'));

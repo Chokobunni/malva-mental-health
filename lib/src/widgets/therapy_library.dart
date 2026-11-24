@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../ai/assessment_interpretation.dart';
 import '../ai/assessment_scoring.dart';
+import 'score_meaning.dart';
 import '../models.dart' show AuthSession;
 import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
@@ -236,12 +237,12 @@ const List<String> _dassScaleShort = [
 
 const dass21Module = TherapyModule(
   id: 'dass21',
-  title: 'DASS-21 (Depression Anxiety Stress Scales)',
+  title: 'DASS-21 (Skala Depresi, Kecemasan, dan Stres)',
   description:
-      'DASS-21 menilai gejala depresi, kecemasan, dan stres selama 1 minggu terakhir melalui 21 pernyataan. Hasil ini adalah screening, bukan diagnosis.',
+      'DASS-21 menilai gejala depresi, kecemasan, dan stres selama 1 minggu terakhir melalui 21 pernyataan. Hasil ini adalah skrining, bukan diagnosis.',
   icon: Icons.assignment_rounded,
   color: MalvaColors.seed,
-  category: 'Assessment',
+  category: 'Asesmen',
   worksheetFields: dass21WorksheetFields,
   steps: [],
 );
@@ -471,12 +472,12 @@ const List<String> _who5ScaleShort = [
 
 const who5Module = TherapyModule(
   id: 'who5',
-  title: 'WHO-5 (Well-Being Index)',
+  title: 'WHO-5 (Indeks Kesejahteraan)',
   description:
-      'WHO-5 menilai kesejahteraan psikologis selama 2 minggu terakhir melalui 5 pernyataan. Hasil ini adalah screening, bukan diagnosis.',
+      'WHO-5 menilai kesejahteraan psikologis selama 2 minggu terakhir melalui 5 pernyataan. Hasil ini adalah skrining, bukan diagnosis.',
   icon: Icons.favorite_rounded,
   color: MalvaColors.mint,
-  category: 'Assessment',
+  category: 'Asesmen',
   worksheetFields: who5WorksheetFields,
   steps: [],
 );
@@ -549,9 +550,9 @@ const abcdeModule = TherapyModule(
   title: 'Restrukturisasi Kognitif (ABCDE)',
   description:
       'Teknik inti CBT untuk mengidentifikasi dan mengubah pola pikir negatif. '
-      'ABCDE = Activating event (kejadian pemicu), Belief (pikiran/interpretasi), '
-      'Consequence (perasaan & perilaku), Dispute (mempertanyakan pikiran), '
-      'Effective new belief (pikiran baru yang seimbang).',
+      'ABCDE = Kejadian Pemicu (Activating Event), Keyakinan/Pikiran Otomatis (Belief), '
+      'Konsekuensi/Dampak (Consequence), Bantahan/Evaluasi Pikiran (Dispute), '
+      'Keyakinan Baru yang Efektif (Effective New Belief).',
   icon: Icons.psychology_alt_rounded,
   color: MalvaColors.orchid,
   category: 'CBT',
@@ -572,44 +573,44 @@ const abcdeWorksheetFields = <TherapyWorksheetField>[
   TherapyWorksheetField(
     id: 'activating',
     badge: 'A',
-    label: 'Activating event (kejadian pemicu)',
+    label: 'Kejadian Pemicu (Activating Event)',
     hint: 'Tulis fakta kejadiannya, bukan tafsirannya…',
   ),
   TherapyWorksheetField(
     id: 'belief',
     badge: 'B',
-    label: 'Belief (pikiran otomatis)',
+    label: 'Keyakinan / Pikiran Otomatis (Belief)',
     hint: 'Pikiran yang muncul saat kejadian itu…',
   ),
   TherapyWorksheetField(
     id: 'consequence_physical',
     badge: 'C1',
-    label: 'Consequence: reaksi fisik',
+    label: 'Konsekuensi: Reaksi Fisik',
     hint: 'Jantung berdebar, tegang, dll…',
   ),
   TherapyWorksheetField(
     id: 'consequence_emotional',
     badge: 'C2',
-    label: 'Consequence: emosi & perilaku',
+    label: 'Konsekuensi: Emosi & Perilaku',
     hint: 'Malu, cemas, menghindar, dll…',
   ),
   TherapyWorksheetField(
     id: 'dispute',
     badge: 'D',
-    label: 'Dispute (bantah pikiran)',
+    label: 'Bantahan Pikiran (Dispute)',
     hint: 'Bukti yang mendukung/menentang pikiran itu…',
   ),
   TherapyWorksheetField(
     id: 'effective',
     badge: 'E',
-    label: 'Effective new belief (pikiran baru)',
+    label: 'Keyakinan Baru yang Efektif (Effective New Belief)',
     hint: 'Versi pikiran yang lebih seimbang & realistis…',
   ),
 ];
 
 const thinkingTrapsModule = TherapyModule(
   id: 'thinking_traps',
-  title: 'Identifikasi Distorsi Kognitif (Thinking Traps)',
+  title: 'Identifikasi Distorsi Kognitif (Jebakan Pikiran)',
   description:
       'Distorsi kognitif adalah "jebakan pikiran" — cara berpikir otomatis '
       'yang menyimpang dari fakta, seperti kata-kata harus (should), '
@@ -693,11 +694,11 @@ const thinkingTrapsWorksheetFields = <TherapyWorksheetField>[
 
 const behavioralActivationModule = TherapyModule(
   id: 'behavioral_activation',
-  title: 'Behavioral Activation / Goals',
+  title: 'Aktivasi Perilaku / Target',
   description:
       'Teknik CBT untuk mengatasi malaise: jangan menunggu "punya semangat dulu '
       'baru bergerak", tetapi bergerak dulu (aktivitas kecil bernilai) agar '
-      'semangat mengikuti. Dikombinasikan dengan penetapan goals kecil yang '
+      'semangat mengikuti. Dikombinasikan dengan penetapan target kecil yang '
       'terukur untuk membangun momentum.',
   icon: Icons.directions_run_rounded,
   color: MalvaColors.seed,
@@ -710,7 +711,7 @@ const behavioralActivationModule = TherapyModule(
     'Lakukan tanpa menunggu mood membaik — mulai sekecil apa pun.',
     'Catat hasil dan bagaimana perasaanmu setelahnya.',
     'Naikkan tingkat kesulitan bertahap setiap beberapa hari.',
-    'Rayakan streak kecil untuk memperkuat kebiasaan.',
+    'Rayakan capaian beruntun kecil untuk memperkuat kebiasaan.',
   ],
 );
 
@@ -770,7 +771,6 @@ const groundingModule = TherapyModule(
     '3 — Raba 3 benda dan perhatikan teksturnya.',
     '2 — Cium 2 AROMA di sekitarmu (atau aroma favoritmu).',
     '1 — Sadari 1 hal yang bisa kamu RASA (napas, rasa minuman).',
-    'Ulangi bila perlu. Tersedia panduan audio di menu Safety.',
   ],
 );
 
@@ -1005,7 +1005,7 @@ const psychoeducationModule = TherapyModule(
     'Hubungkan dengan pengalamanmu: kapan siklus itu terjadi padamu?',
     'Bawa pertanyaan ke sesi konsultasi berikutnya.',
     'Bagikan pemahaman baru ke orang terdekat sebagai sistem dukungan.',
-    'Gunakan hasil screening sebagai titik awal diskusi dengan profesional.',
+    'Gunakan hasil skrining sebagai titik awal diskusi dengan profesional.',
   ],
 );
 
@@ -1284,13 +1284,13 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
         return;
       }
     } else if (!_hasAnyAnswer) {
-      setState(() => _error = 'Isi minimal satu kolom worksheet dulu.');
+      setState(() => _error = 'Isi minimal satu kolom lembar kerja dulu.');
       return;
     }
     final session = ref.read(currentSessionProvider);
     final token = session?.accessToken;
     if (token == null || token.isEmpty) {
-      setState(() => _error = 'Login dulu untuk menyimpan worksheet.');
+      setState(() => _error = 'Login dulu untuk menyimpan lembar kerja.');
       return;
     }
     final revision = ++_submissionRevision;
@@ -1334,7 +1334,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
               _isSaving = false;
               _saved = jsonEncode(_answers()) == payload;
             });
-            _toast('Worksheet tersimpan di Therapy Record. '
+            _toast('Lembar Kerja tersimpan di Riwayat Terapi. '
                 'Belum dibagikan ke profesional.');
           }
           return;
@@ -1351,8 +1351,8 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
         _saved = jsonEncode(_answers()) == payload;
       });
       _toast(share
-          ? 'Worksheet tersimpan & dibagikan ke profesional.'
-          : 'Worksheet tersimpan di Therapy Record.');
+          ? 'Lembar Kerja tersimpan & dibagikan ke profesional.'
+          : 'Lembar Kerja tersimpan di Riwayat Terapi.');
     } on Object catch (e) {
       if (!_isCurrentSubmissionAccount(session!, revision)) return;
       setState(() {
@@ -1392,7 +1392,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
             (link.professionalDisplayName.trim().isNotEmpty))
         .toList(growable: false);
     if (active.isEmpty) {
-      _toast('Berbagi worksheet butuh paket sesi aktif dengan profesional.');
+      _toast('Berbagi lembar kerja butuh paket sesi aktif dengan profesional.');
       return null;
     }
     // Hanya yang paketnya aktif (server menolak sisanya).
@@ -1408,7 +1408,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
     }
     if (!_isCurrentSubmissionAccount(owner, revision)) return null;
     if (eligible.isEmpty) {
-      _toast('Berbagi worksheet butuh paket sesi aktif dengan profesional.');
+      _toast('Berbagi lembar kerja butuh paket sesi aktif dengan profesional.');
       return null;
     }
     return showModalBottomSheet<String>(
@@ -1469,12 +1469,12 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
         return;
       }
     } else if (!_hasAnyAnswer) {
-      setState(() => _error = 'Isi minimal satu kolom worksheet dulu.');
+      setState(() => _error = 'Isi minimal satu kolom lembar kerja dulu.');
       return;
     }
     final answers = _answers();
     final buffer = StringBuffer()
-      ..writeln('MALVA — Worksheet Terapi')
+      ..writeln('MALVA — Lembar Kerja Terapi')
       ..writeln(module.title)
       ..writeln('Kategori: ${module.category ?? 'Terapi'}')
       ..writeln('Tanggal: ${wibIso(wibNow())}');
@@ -1496,7 +1496,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
     final owner = ref.read(currentSessionProvider);
     try {
       await ref.read(exportServiceProvider).sharePdf(
-            title: 'Worksheet ${module.title} — Malva',
+            title: 'Lembar Kerja ${module.title} — Malva',
             filename: 'malva-worksheet-'
                 '${module.id.isEmpty ? 'terapi' : module.id}-'
                 '${wibNow().millisecondsSinceEpoch}.pdf',
@@ -1611,7 +1611,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
             const SizedBox(height: 14),
             Row(
               children: [
-                const Expanded(child: SectionLabel('Worksheet')),
+                const Expanded(child: SectionLabel('Lembar Kerja')),
                 const Spacer(),
                 if (module.isAssessment)
                   StatusPill(
@@ -1647,8 +1647,8 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                     module.isAssessment
                         ? 'Pilih jawaban yang paling sesuai untuk setiap '
                             'pernyataan. Semua wajib dijawab agar skor valid.'
-                        : 'Isi worksheet ini sesuai kondisimu. Hasilnya bisa '
-                            'disimpan ke Therapy Record, diunduh, atau dikirim '
+                        : 'Isi lembar kerja ini sesuai kondisimu. Hasilnya bisa '
+                            'disimpan ke Riwayat Terapi, diunduh, atau dikirim '
                             'langsung ke profesional (butuh paket sesi aktif).',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant),
@@ -1724,8 +1724,8 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                 SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Worksheet tersimpan di Therapy Record (menu More → '
-                    'Therapy Record).',
+                    'Lembar Kerja tersimpan di Riwayat Terapi (menu More → '
+                    'Riwayat Terapi).',
                     style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
                   ),
                 ),
@@ -1745,7 +1745,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.save_rounded),
-              label: const Text('Simpan ke Therapy Record'),
+              label: const Text('Simpan ke Riwayat Terapi'),
             ),
             const SizedBox(height: 8),
             FilledButton.tonalIcon(
@@ -1764,7 +1764,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                   minimumSize: const Size.fromHeight(48),
                 ),
                 icon: const Icon(Icons.download_rounded),
-                label: const Text('Download Worksheet'),
+                label: const Text('Unduh Lembar Kerja'),
               )
             else
               Container(
@@ -1780,7 +1780,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Unduh worksheet tersedia di aplikasi Android Malva.',
+                        'Unduh lembar kerja tersedia di aplikasi Android Malva.',
                         style: Theme.of(context)
                             .textTheme
                             .bodySmall
@@ -1922,7 +1922,7 @@ class AssessmentResultCard extends StatelessWidget {
       return const SoftCard(
         color: Colors.white,
         child: Text(
-          'Skor belum tersedia. Jawaban assessment tidak lengkap atau tidak '
+          'Skor belum tersedia. Jawaban asesmen tidak lengkap atau tidak '
           'valid; skor dan interpretasi tidak ditampilkan.',
         ),
       );
@@ -1964,29 +1964,29 @@ class AssessmentResultCard extends StatelessWidget {
           const SizedBox(height: 12),
           AssessmentTriageSummary(interpretation: interpretation),
           const SizedBox(height: 8),
-          _ScoreMeaningExpansion(
+          ScoreMeaningExpansion(
             children: [
-              _ScoreRangeTable(
+              ScoreRangeTable(
                 title: 'Depresi',
                 score: s.depression,
                 maxScore: 42,
-                level: s.depressionLevel,
+                color: severityColor(s.depressionLevel),
                 ranges: dassDepressionRanges,
               ),
               const SizedBox(height: 10),
-              _ScoreRangeTable(
+              ScoreRangeTable(
                 title: 'Kecemasan',
                 score: s.anxiety,
                 maxScore: 42,
-                level: s.anxietyLevel,
+                color: severityColor(s.anxietyLevel),
                 ranges: dassAnxietyRanges,
               ),
               const SizedBox(height: 10),
-              _ScoreRangeTable(
+              ScoreRangeTable(
                 title: 'Stres',
                 score: s.stress,
                 maxScore: 42,
-                level: s.stressLevel,
+                color: severityColor(s.stressLevel),
                 ranges: dassStressRanges,
               ),
             ],
@@ -2033,7 +2033,7 @@ class AssessmentResultCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             s.possibleDepression
-                ? 'Skor ≤ 7 menunjukkan kesejahteraan sangat rendah — disarankan screening lanjutan dan konsultasi profesional.'
+                ? 'Skor ≤ 7 menunjukkan kesejahteraan sangat rendah — disarankan skrining lanjutan dan konsultasi profesional.'
                 : s.lowWellbeing
                     ? 'Skor ≤ 12 (<50%) menunjukkan kesejahteraan rendah — pertimbangkan konsultasi.'
                     : 'Kesejahteraan dalam rentang ${s.level.toLowerCase()}. Ulangi rutin untuk memantau tren.',
@@ -2042,13 +2042,13 @@ class AssessmentResultCard extends StatelessWidget {
           const SizedBox(height: 12),
           AssessmentTriageSummary(interpretation: interpretation),
           const SizedBox(height: 8),
-          _ScoreMeaningExpansion(
+          ScoreMeaningExpansion(
             children: [
-              _ScoreRangeTable(
+              ScoreRangeTable(
                 title: 'Kesejahteraan (WHO-5)',
                 score: s.raw,
                 maxScore: 25,
-                level: s.level,
+                color: severityColor(s.level),
                 ranges: who5Ranges,
               ),
             ],
@@ -2115,132 +2115,6 @@ class AssessmentTriageSummary extends StatelessWidget {
             const SizedBox(height: 4),
             Text('• $reason', style: const TextStyle(fontSize: 11.5)),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Pembungkus lipat untuk tabel "Apa arti skormu?" agar layar tidak panjang.
-class _ScoreMeaningExpansion extends StatelessWidget {
-  const _ScoreMeaningExpansion({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
-    return Theme(
-      // Hilangkan garis pemisah bawaan ExpansionTile agar menyatu dengan kartu.
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        childrenPadding: const EdgeInsets.only(top: 4, bottom: 4),
-        shape: const Border(),
-        collapsedShape: const Border(),
-        iconColor: MalvaColors.seed,
-        collapsedIconColor: onSurfaceVariant,
-        title: Row(
-          children: [
-            Icon(Icons.info_outline_rounded, size: 16, color: onSurfaceVariant),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                'Apa arti skormu?',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w900,
-                  color: onSurfaceVariant,
-                ),
-              ),
-            ),
-          ],
-        ),
-        children: children,
-      ),
-    );
-  }
-}
-
-/// Tabel rentang skor (rentang → label → saran) dengan baris skor di-highlight.
-class _ScoreRangeTable extends StatelessWidget {
-  const _ScoreRangeTable({
-    required this.title,
-    required this.score,
-    required this.maxScore,
-    required this.level,
-    required this.ranges,
-  });
-
-  final String title;
-  final int score;
-  final int maxScore;
-  final String level;
-  final List<ScoreRangeRow> ranges;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = severityColor(level);
-    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: MalvaColors.seed.withValues(alpha: 0.22)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('$title — $score/$maxScore',
-              style: TextStyle(
-                  fontWeight: FontWeight.w900, fontSize: 12, color: color)),
-          const SizedBox(height: 6),
-          for (final row in ranges)
-            Container(
-              margin: const EdgeInsets.only(bottom: 3),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              decoration: BoxDecoration(
-                color: row.contains(score)
-                    ? color.withValues(alpha: 0.12)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
-                border: row.contains(score)
-                    ? Border.all(color: color.withValues(alpha: 0.4))
-                    : null,
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 44,
-                    child: Text(
-                      row.rangeLabel,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 11,
-                        color: row.contains(score) ? color : onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 68,
-                    child: Text(
-                      row.label,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11,
-                        color: row.contains(score) ? color : onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child:
-                        Text(row.advice, style: const TextStyle(fontSize: 11)),
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );
@@ -2925,7 +2799,7 @@ class _TherapySubmissionsScreenState
     if (token == null || token.isEmpty) {
       setState(() {
         _isLoading = false;
-        _error = 'Login dulu untuk melihat worksheet.';
+        _error = 'Login dulu untuk melihat lembar kerja.';
       });
       return;
     }
@@ -2985,7 +2859,7 @@ class _TherapySubmissionsScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text(
-                'Berbagi worksheet butuh paket sesi aktif dengan profesional.')),
+                'Berbagi lembar kerja butuh paket sesi aktif dengan profesional.')),
       );
       return;
     }
@@ -3001,7 +2875,7 @@ class _TherapySubmissionsScreenState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Bagikan worksheet ke',
+              const Text('Bagikan lembar kerja ke',
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
               const SizedBox(height: 4),
               Text('Hanya profesional dengan paket sesi aktif.',
@@ -3032,7 +2906,7 @@ class _TherapySubmissionsScreenState
       if (!mounted || !_isOwner) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Worksheet dibagikan ke profesional.'),
+          content: Text('Lembar Kerja dibagikan ke profesional.'),
           backgroundColor: MalvaColors.mint,
         ),
       );
@@ -3053,7 +2927,7 @@ class _TherapySubmissionsScreenState
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Hapus worksheet?'),
+        title: const Text('Hapus lembar kerja?'),
         content: Text('"${submission.title}" akan dihapus permanen.'),
         actions: [
           TextButton(
@@ -3089,7 +2963,7 @@ class _TherapySubmissionsScreenState
     final items = _therapyItems;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Therapy Record'),
+        title: const Text('Riwayat Terapi'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
         actions: [
@@ -3112,12 +2986,12 @@ class _TherapySubmissionsScreenState
               : items.isEmpty
                   ? const EmptyState(
                       icon: Icons.self_improvement_rounded,
-                      title: 'Belum ada therapy record',
+                      title: 'Belum ada riwayat Terapi',
                       subtitle:
-                          'Buka menu Psychological Therapy, pilih modul terapi, '
-                          'isi worksheet, lalu simpan. Hasilnya muncul di sini. '
-                          'Assessment record (DASS-21/WHO-5) ada di halaman '
-                          'Assessment.',
+                          'Buka menu Terapi Psikologis, pilih modul terapi, '
+                          'isi lembar kerja, lalu simpan. Hasilnya muncul di sini. '
+                          'Riwayat Asesmen (DASS-21/WHO-5) ada di halaman '
+                          'Asesmen.',
                     )
                   : RefreshIndicator(
                       onRefresh: _load,
@@ -3241,7 +3115,7 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _error = 'Login dulu untuk melihat therapy record.';
+        _error = 'Login dulu untuk melihat riwayat Terapi.';
       });
       return;
     }
@@ -3302,7 +3176,7 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
             ),
             const SizedBox(width: 12),
             Text(
-              'Memuat therapy record…',
+              'Memuat riwayat Terapi…',
               style: TextStyle(fontSize: 12.5, color: onSurfaceVariant),
             ),
           ],
@@ -3318,7 +3192,7 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Therapy record belum bisa dimuat. $_error',
+                'Riwayat Terapi belum bisa dimuat. $_error',
                 style: const TextStyle(
                     fontSize: 12.5, fontWeight: FontWeight.w700),
               ),
@@ -3337,7 +3211,7 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
             SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Belum ada therapy record. Isi worksheet pada modul terapi lalu '
+                'Belum ada riwayat Terapi. Isi lembar kerja pada modul terapi lalu '
                 'simpan — hasilnya muncul di sini.',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
               ),
@@ -3425,7 +3299,7 @@ class TherapyCatalogScreen extends StatelessWidget {
         allTherapyModules.map((m) => m.category ?? 'Lainnya').toSet().toList();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Psychological Therapy'),
+        title: const Text('Terapi Psikologis'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),
@@ -3440,8 +3314,8 @@ class TherapyCatalogScreen extends StatelessWidget {
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Text(
-                    'Isi worksheet pada tiap modul, lalu simpan ke '
-                    'Therapy Record — bisa diunduh & dikirim ke profesional '
+                    'Isi lembar kerja pada tiap modul, lalu simpan ke '
+                    'Riwayat Terapi — bisa diunduh & dikirim ke profesional '
                     '(butuh paket sesi aktif).',
                     style:
                         TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
@@ -3486,7 +3360,7 @@ class TherapyCatalogScreen extends StatelessWidget {
           // (aman — tidak dipasang di dalam Row tanpa Expanded).
           const SizedBox(height: 20),
           SectionLabel(
-            'Therapy Record',
+            'Riwayat Terapi',
             action: TextButton(
               onPressed: () => Navigator.push(
                 context,

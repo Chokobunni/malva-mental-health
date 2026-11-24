@@ -29,7 +29,7 @@ void main() {
         child:
             MaterialApp(home: MoodScreen(session: patient, apiClient: api))));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add Mood Entry'));
+    await tester.tap(find.text('Tambah Catatan Mood'));
     await tester.pumpAndSettle();
     expect(find.byType(BottomSheet), findsNothing);
     expect(find.text('Bagaimana perasaan\nAnda?'), findsOneWidget);

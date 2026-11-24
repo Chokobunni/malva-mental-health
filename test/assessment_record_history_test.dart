@@ -260,7 +260,7 @@ void main() {
     final cards = tester
         .widgetList<AssessmentHistoryCard>(find.byType(AssessmentHistoryCard))
         .toList();
-    expect(cards.first.entry.title, 'Screening PHQ-9 + GAD-7');
+    expect(cards.first.entry.title, 'Skrining PHQ-9 + GAD-7');
     expect(cards[1].entry.title, 'Retake 1');
     await tester.tap(find.widgetWithText(FilterChip, 'WHO-5'));
     await tester.pumpAndSettle();
@@ -386,20 +386,20 @@ void main() {
 
     expect(find.text('PHQ-9 16/27 (Cukup berat) • GAD-7 7/21 (Ringan)'),
         findsOneWidget);
-    await tester.tap(find.text('Screening PHQ-9 + GAD-7'));
+    await tester.tap(find.text('Skrining PHQ-9 + GAD-7'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Detail Record'), findsOneWidget);
-    expect(find.text('PHQ-9 Total Score'), findsOneWidget);
-    expect(find.text('GAD-7 Total Score'), findsOneWidget);
+    expect(find.text('Rincian Hasil'), findsOneWidget);
+    expect(find.text('Skor Total PHQ-9'), findsOneWidget);
+    expect(find.text('Skor Total GAD-7'), findsOneWidget);
     expect(find.text('16'), findsOneWidget);
     expect(find.text('7'), findsOneWidget);
     expect(find.text('Cukup Berat'), findsOneWidget);
     expect(find.text('Ringan'), findsOneWidget);
     expect(find.text('KRISIS'), findsOneWidget);
     expect(find.text('INDIKATOR KESELAMATAN: YA'), findsOneWidget);
-    expect(find.text('PHQ-9 · Dukungan rule internal (CF)'), findsOneWidget);
-    expect(find.text('GAD-7 · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.text('PHQ-9 · Dukungan aturan internal (CF)'), findsOneWidget);
+    expect(find.text('GAD-7 · Dukungan aturan internal (CF)'), findsOneWidget);
     expect(find.textContaining('0.95', findRichText: true), findsOneWidget);
     expect(find.textContaining('0.68', findRichText: true), findsOneWidget);
     expect(find.text('moderately_severe'), findsNothing);
@@ -420,12 +420,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Screening'), findsOneWidget);
+    expect(find.text('Skrining'), findsOneWidget);
     expect(find.text('Screening Utama'), findsNothing);
     expect(find.text('Assessment Lanjutan'), findsNothing);
-    final who = find.text('WHO-5 (Well-Being Index)');
+    final who = find.text('WHO-5 (Indeks Kesejahteraan)');
     final phqGad = find.text('PHQ-9 + GAD-7');
-    final dass = find.text('DASS-21 (Depression Anxiety Stress Scales)');
+    final dass = find.text('DASS-21 (Skala Depresi, Kecemasan, dan Stres)');
     expect(tester.getTopLeft(who).dy, lessThan(tester.getTopLeft(phqGad).dy));
     expect(tester.getTopLeft(phqGad).dy, lessThan(tester.getTopLeft(dass).dy));
 
@@ -474,16 +474,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Assessment Record'), findsOneWidget);
+    expect(find.text('Riwayat Asesmen'), findsOneWidget);
     expect(find.text('WHO-5 (Well-Being Index)'), findsOneWidget);
-    expect(find.text('Screening PHQ-9 + GAD-7'), findsOneWidget);
+    expect(find.text('Skrining PHQ-9 + GAD-7'), findsOneWidget);
 
     // Worksheet terapi tidak masuk assessment record.
     expect(find.text('Restrukturisasi Kognitif (ABCDE)'), findsNothing);
 
     // Urut tanggal DESC: screening (22/10) di atas worksheet WHO-5 (20/10).
     final screeningTop =
-        tester.getTopLeft(find.text('Screening PHQ-9 + GAD-7')).dy;
+        tester.getTopLeft(find.text('Skrining PHQ-9 + GAD-7')).dy;
     final who5Top = tester.getTopLeft(find.text('WHO-5 (Well-Being Index)')).dy;
     expect(screeningTop, lessThan(who5Top));
   });
@@ -524,8 +524,8 @@ void main() {
 
     // Disclaimer berada DI ATAS judul 'Assessment Record'.
     final disclaimerTop =
-        tester.getTopLeft(find.textContaining('alat bantu screening')).dy;
-    final sectionTop = tester.getTopLeft(find.text('Assessment Record')).dy;
+        tester.getTopLeft(find.textContaining('alat bantu skrining')).dy;
+    final sectionTop = tester.getTopLeft(find.text('Riwayat Asesmen')).dy;
     expect(disclaimerTop, lessThan(sectionTop));
 
     // Tap "Lihat semua" membuka halaman Assessment Record lengkap.
@@ -598,11 +598,11 @@ void main() {
         if (index == 0) {
           expect(
               find.descendant(
-                  of: sheet, matching: find.text('PHQ-9 Total Score')),
+                  of: sheet, matching: find.text('Skor Total PHQ-9')),
               findsOneWidget);
           expect(
               find.descendant(
-                  of: sheet, matching: find.text('GAD-7 Total Score')),
+                  of: sheet, matching: find.text('Skor Total GAD-7')),
               findsOneWidget);
           expect(find.descendant(of: sheet, matching: find.text('12')),
               findsOneWidget);
@@ -651,8 +651,7 @@ void main() {
 
     expect(find.text('Hasil WHO-5'), findsOneWidget);
     expect(
-        find.text(
-            'Skor assessment adalah alat bantu screening, bukan diagnosis.'),
+        find.text('Skor asesmen adalah alat bantu skrining, bukan diagnosis.'),
         findsOneWidget);
   });
 
@@ -669,11 +668,11 @@ void main() {
     expect(find.text('PHQ-9 12/27 (Sedang) • GAD-7 9/21 (Ringan)'),
         findsOneWidget);
 
-    await tester.tap(find.text('Screening PHQ-9 + GAD-7'));
+    await tester.tap(find.text('Skrining PHQ-9 + GAD-7'));
     await tester.pumpAndSettle();
 
-    expect(find.text('PHQ-9 Total Score'), findsOneWidget);
-    expect(find.text('GAD-7 Total Score'), findsOneWidget);
+    expect(find.text('Skor Total PHQ-9'), findsOneWidget);
+    expect(find.text('Skor Total GAD-7'), findsOneWidget);
     expect(find.text('12'), findsOneWidget);
     expect(find.text('9'), findsOneWidget);
     expect(find.textContaining('Screening ini menandai risiko krisis'),

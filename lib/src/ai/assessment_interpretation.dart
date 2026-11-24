@@ -194,7 +194,7 @@ AssessmentInterpretation interpretDassWho5({
       level: TriageLevel.tinggi,
       certainty: 0.74,
       reason: 'Kesejahteraan (WHO-5) hanya $who5Percent% (≤ 28%) — tanda '
-          'kemungkinan depresi, disarankan screening lanjutan.',
+          'kemungkinan depresi, disarankan skrining lanjutan.',
     ));
   }
   if (who5Percent != null && who5Percent <= 50 && facts.depressionRank >= 2) {
@@ -228,7 +228,7 @@ AssessmentInterpretation interpretDassWho5({
       level: TriageLevel.sedang,
       certainty: 0.55,
       reason: facts.who5LowItem
-          ? 'WHO-5 memiliki jawaban 0–1; screening lanjutan dianjurkan '
+          ? 'WHO-5 memiliki jawaban 0–1; skrining lanjutan dianjurkan '
               'meskipun skor total $who5Percent%.'
           : 'Kesejahteraan (WHO-5) $who5Percent% — di bawah ambang '
               'kesejahteraan baik (50%).',
