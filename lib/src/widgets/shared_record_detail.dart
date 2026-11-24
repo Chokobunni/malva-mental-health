@@ -725,7 +725,7 @@ class SharedRecordDetail extends StatelessWidget {
                 title: 'PHQ-9 (Depresi)',
                 score: (phq['score'] as num).toInt(),
                 maxScore: 27,
-                color: phqLevel.color,
+                color: _purple,
                 ranges: phq9Ranges,
               ),
             if (phqLevel != null && gadLevel != null)
@@ -735,7 +735,7 @@ class SharedRecordDetail extends StatelessWidget {
                 title: 'GAD-7 (Kecemasan)',
                 score: (gad['score'] as num).toInt(),
                 maxScore: 21,
-                color: gadLevel.color,
+                color: _purple,
                 ranges: gad7Ranges,
               ),
           ],

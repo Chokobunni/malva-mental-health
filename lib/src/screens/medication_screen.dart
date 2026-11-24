@@ -952,7 +952,12 @@ class _MedicationConsistencyCard extends StatelessWidget {
               ),
               SegmentedButton<bool>(
                 showSelectedIcon: false,
-                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  padding: WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                ),
                 segments: const [
                   ButtonSegment(value: false, label: Text('7 Hari')),
                   ButtonSegment(value: true, label: Text('Runtutan')),
