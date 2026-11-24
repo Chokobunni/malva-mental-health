@@ -1420,30 +1420,30 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
             const Center(child: CircularProgressIndicator())
           else ...[
             _Toggle(
-                label: 'Assessment (PHQ-9/GAD-7)',
+                label: 'Asesmen (PHQ-9/GAD-7)',
                 value: _screenings,
                 onChanged: (v) => setState(() => _screenings = v)),
             _Toggle(
-                label: 'Mood & Diary',
+                label: 'Mood & Jurnal',
                 value: _moodDiary,
                 onChanged: (v) => setState(() => _moodDiary = v)),
             _Toggle(
-                label: 'Obat (Medication)',
+                label: 'Obat (Obat)',
                 value: _medications,
                 onChanged: (v) => setState(() => _medications = v)),
             _Toggle(
-                label: 'Goals & Habits',
+                label: 'Target & Kebiasaan',
                 value: _goals,
                 onChanged: (v) => setState(() => _goals = v)),
             _Toggle(
-                label: 'Health Record',
+                label: 'Rekam Medis',
                 value: _healthRecord,
                 onChanged: (v) => setState(() => _healthRecord = v)),
             _Toggle(
-                label: 'Therapy Record (Psikologis)',
+                label: 'Riwayat Terapi (Psikologis)',
                 description:
-                    'Profesional dapat melihat worksheet terapi CBT/DBT yang kamu isi '
-                    '(ABCDE, Thinking Traps, TIPP, dll).',
+                    'Profesional dapat melihat lembar kerja terapi CBT/DBT yang kamu isi '
+                    '(ABCDE, Jebakan Pikiran, TIPP, dll).',
                 value: _therapyRecords,
                 onChanged: (v) => setState(() => _therapyRecords = v)),
             _Toggle(

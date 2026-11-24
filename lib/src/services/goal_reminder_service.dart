@@ -157,7 +157,7 @@ class GoalReminderService {
       }
     }).catchError((Object _) {
       // OS permission/network-independent storage failures must not block boot.
-      if (kDebugMode) debugPrint('Gagal menyinkronkan pengingat goals');
+      if (kDebugMode) debugPrint('Gagal menyinkronkan pengingat target');
     });
     return _work;
   }
@@ -205,7 +205,7 @@ class GoalReminderService {
   /// Payload notifikasi (bukan JSON, bukan id obat — lihat router).
   static const String payload = LocalNotificationRouter.goalReminderPayload;
 
-  static const String title = 'Waktunya cek goals hari ini';
+  static const String title = 'Waktunya cek target hari ini';
   static const String body =
       'Catat progres goals-mu sebentar saja — konsistensi kecil berarti besar.';
 
@@ -222,7 +222,7 @@ class GoalReminderService {
       await _scheduler.initialize();
     } on Object {
       // Izin/kanal gagal tidak boleh menggagalkan boot aplikasi.
-      if (kDebugMode) debugPrint('Gagal menyiapkan pengingat goals');
+      if (kDebugMode) debugPrint('Gagal menyiapkan pengingat target');
     }
   }
 
@@ -253,7 +253,7 @@ class GoalReminderService {
       );
     } on Object catch (error) {
       // Gagal menjadwalkan (izin/alarm) tidak boleh menggagalkan boot.
-      if (kDebugMode) debugPrint('Gagal menjadwalkan pengingat goals: $error');
+      if (kDebugMode) debugPrint('Gagal menjadwalkan pengingat target: $error');
     }
   }
 
@@ -266,7 +266,7 @@ class GoalReminderService {
       await _cancelConfigured();
       await _scheduler.cancel(notificationId);
     }).catchError((Object _) {
-      if (kDebugMode) debugPrint('Gagal membatalkan pengingat goals');
+      if (kDebugMode) debugPrint('Gagal membatalkan pengingat target');
     });
     return _work;
   }
@@ -338,7 +338,7 @@ class GoalReminderService {
       await _store.write(hourStorageKey, '${settings.hour}');
       await _store.write(minuteStorageKey, '${settings.minute}');
     } on Object catch (error) {
-      if (kDebugMode) debugPrint('Gagal menyimpan preferensi goals: $error');
+      if (kDebugMode) debugPrint('Gagal menyimpan preferensi target: $error');
     }
   }
 

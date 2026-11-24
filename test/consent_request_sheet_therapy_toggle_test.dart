@@ -94,7 +94,7 @@ Widget _wrap(MalvaApiClient api) {
 /// Switch yang berada di baris toggle "Therapy History".
 Finder _therapySwitch() {
   final row = find
-      .ancestor(of: find.text('Therapy History'), matching: find.byType(Row))
+      .ancestor(of: find.text('Riwayat Terapi'), matching: find.byType(Row))
       .first;
   return find.descendant(of: row, matching: find.byType(Switch));
 }
@@ -115,7 +115,7 @@ void main() {
     await tester.tap(find.text('Buka'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Therapy History'), findsOneWidget,
+    expect(find.text('Riwayat Terapi'), findsOneWidget,
         reason: 'toggle Therapy History harus ada di sheet consent');
     expect(tester.widget<Switch>(_therapySwitch()).value, isFalse,
         reason: 'default opt-in: izin mati sampai pasien menyalakannya');

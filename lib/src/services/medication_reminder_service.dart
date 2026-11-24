@@ -343,7 +343,7 @@ class MedicationReminderService {
   /// Next occurrences are calculated from the persisted anchor, never the device zone.
   /// shortcut: arbitrary intervals queue 60 occurrences; replenish on app resume/refresh.
   static List<tz.TZDateTime> routineOccurrences(MedicationSchedule routine,
-      {DateTime? now, int limit = 60}) {
+      {DateTime? now, DateTime? until, int limit = 60}) {
     if (routine.times.isEmpty || routine.weekdays.isEmpty || limit < 1)
       return [];
     final base = toWib(now ?? wibNow());
@@ -365,6 +365,7 @@ class MedicationReminderService {
           final parts = time.split(':');
           final candidate = wibFromParts(month.year, month.month, day,
               int.parse(parts[0]), int.parse(parts[1]));
+          if (until != null && !candidate.isBefore(until)) return result;
           if (!candidate.isBefore(start) &&
               candidate.isAfter(base) &&
               routine.weekdays.contains(candidate.weekday))
@@ -385,6 +386,7 @@ class MedicationReminderService {
       for (var i = 0;
           i < limit * 7 + 7 && result.length < limit;
           i++, candidate = candidate.add(interval)) {
+        if (until != null && !candidate.isBefore(until)) break;
         if (routine.weekdays.contains(candidate.weekday)) result.add(candidate);
       }
       return result;
@@ -403,6 +405,7 @@ class MedicationReminderService {
         attempts < limit * 7 + 7 && result.length < limit;
         attempts++,
         date = wibFromParts(date.year, date.month, date.day + step)) {
+      if (until != null && !date.isBefore(until)) break;
       if (!routine.weekdays.contains(date.weekday)) continue;
       if (routine.intervalDays > 1 &&
           date.difference(startDate).inDays % routine.intervalDays != 0)
@@ -410,6 +413,7 @@ class MedicationReminderService {
       for (final reminder in times) {
         final candidate = wibFromParts(date.year, date.month, date.day,
             reminder.time.hour, reminder.time.minute);
+        if (until != null && !candidate.isBefore(until)) return result;
         if (candidate.isAfter(base) && !candidate.isBefore(start)) {
           result.add(candidate);
           if (result.length == limit) break;

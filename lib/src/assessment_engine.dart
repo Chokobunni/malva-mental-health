@@ -12,9 +12,9 @@ extension AssessmentTypeText on AssessmentType {
 
   String get subtitle => switch (this) {
         AssessmentType.phq9 =>
-          'Screening gejala depresi dalam 2 minggu terakhir',
+          'Skrining gejala depresi dalam 2 minggu terakhir',
         AssessmentType.gad7 =>
-          'Screening gejala kecemasan dalam 2 minggu terakhir',
+          'Skrining gejala kecemasan dalam 2 minggu terakhir',
       };
 }
 
@@ -324,7 +324,7 @@ class AssessmentEngine {
       throw ArgumentError('Expected $expected answers for ${type.title}.');
     }
     if (answers.any((value) => value < 0 || value > 3)) {
-      throw ArgumentError('Assessment answers must be between 0 and 3.');
+      throw ArgumentError('Jawaban asesmen harus antara 0 dan 3.');
     }
 
     // Get question IDs for the AI engine

@@ -31,7 +31,7 @@ class SettingsScreen extends ConsumerWidget {
     final active = session ?? ref.watch(currentSessionProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: const Text('Pengaturan'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),
@@ -591,7 +591,7 @@ class _AvatarPickerState extends ConsumerState<_AvatarPicker> {
                     child: OutlinedButton(
                       style: outlineStyle,
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
+                      child: const Text('Batalkan'),
                     ),
                   ),
                   const SizedBox(width: 10),

@@ -1,5 +1,12 @@
 # AGENTS.md — Panduan Perilaku Agent untuk Repo Malva
 
+## Adherensi, Riwayat, dan Jadwal (2026-11-25)
+
+- Mini Summary, Obat, dan ekspor memakai jadwal WIB serta log yang tersimpan. Catatan lama `partial` dihitung dan ditampilkan sebagai `taken`. Perhitungan melewatkan dosis yang belum jatuh tempo dan mengutamakan catatan diminum jika ada beberapa status untuk dosis yang sama.
+- Riwayat Target & Kebiasaan dan PDF menampilkan jadwal tetap yang sudah lewat tanpa log sebagai Tidak dilakukan. Baris turunan tidak disimpan dan tidak memberi izin koreksi checklist di luar jadwal.
+- Jadwal profesional Android dan web menyaring Mendatang berdasarkan tanggal WIB. Home profesional Android dan Percakapan memakai alur sesi yang sudah ada. Ringkasan sesi tersedia di riwayat.
+- Rincian Hasil menampilkan tabel arti skor baku untuk PHQ-9 dan GAD-7 tanpa mengubah skor, CF, atau indikator keselamatan.
+
 **Tujuan:** panduan kerja wajib bagi setiap agent (manusia maupun AI) yang mengubah kode di repo Malva, agar perubahan konsisten, aman, dan tidak merusak alur yang sudah berjalan.
 
 **Dokumen ini adalah adaptasi `Project Rules` untuk Malva.** Dokumen sumber (`Project Rules.docx`, 14 bagian / 43 aturan) ditulis untuk konteks lain (mikroservis POS Go + GORM + Gin + Redis). Adaptasi ini menerjemahkan *semangat* tiap aturan ke realitas Malva tanpa menyalin mekanisme yang tidak ada.

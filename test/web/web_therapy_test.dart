@@ -77,7 +77,7 @@ void main() {
       }
       // Kategori dari therapy_library dipakai apa adanya (uppercase di judul).
       // Judul seksi (uppercase) + badge kategori di tiap kartu.
-      expect(find.text('ASSESSMENT'), findsOneWidget);
+      expect(find.text('ASESMEN'), findsOneWidget);
       expect(find.text('RELAKSASI'), findsOneWidget);
       expect(find.text('PSIKOEDUKASI'), findsOneWidget);
       expect(find.text('CBT'), findsWidgets);
@@ -131,7 +131,7 @@ void main() {
       await _tapKey(tester, 'web-therapy-save');
 
       expect(
-        find.text('Isi minimal satu kolom worksheet dulu.'),
+        find.text('Isi minimal satu kolom lembar kerja dulu.'),
         findsOneWidget,
       );
       expect(saved, isEmpty);
@@ -266,7 +266,7 @@ void main() {
       final answers = WebWorksheetAnswers();
       expect(
         answers.validationError(abcdeModule),
-        'Isi minimal satu kolom worksheet dulu.',
+        'Isi minimal satu kolom lembar kerja dulu.',
       );
       answers.texts['activating'] = 'sesuatu';
       expect(answers.validationError(abcdeModule), isNull);

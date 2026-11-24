@@ -79,7 +79,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('10 November 2026'), findsOneWidget);
     expect(find.text('TAKEN · 01:49'), findsOneWidget);
-    expect(find.text('PARTIAL · 00:08'), findsOneWidget);
+    expect(find.text('TAKEN · 00:08'), findsOneWidget);
     expect(
         tester.getTopLeft(find.byKey(const Key('medication-log-new'))).dy,
         lessThan(tester

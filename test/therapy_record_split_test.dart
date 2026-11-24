@@ -134,7 +134,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Judul layar + worksheet terapi tampil.
-    expect(find.text('Therapy Record'), findsOneWidget);
+    expect(find.text('Riwayat Terapi'), findsOneWidget);
     expect(find.text('Restrukturisasi Kognitif (ABCDE)'), findsOneWidget);
 
     // Hasil assessment TIDAK muncul di halaman ini.
@@ -162,7 +162,7 @@ void main() {
     await tester.pumpWidget(_buildApp(api));
     await tester.pumpAndSettle();
 
-    expect(find.text('Belum ada therapy record'), findsOneWidget);
+    expect(find.text('Belum ada riwayat Terapi'), findsOneWidget);
     // Judul worksheet asesmen tidak pernah tampil sebagai kartu.
     expect(find.text('WHO-5 (Well-Being Index)'), findsNothing);
   });
@@ -185,7 +185,7 @@ void main() {
 
     // Data pasien tidak boleh hilang hanya karena definisi modul berubah.
     expect(find.text('Worksheet Modul Hantu'), findsOneWidget);
-    expect(find.text('Belum ada therapy record'), findsNothing);
+    expect(find.text('Belum ada riwayat Terapi'), findsNothing);
   });
 }
 

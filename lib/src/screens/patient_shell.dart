@@ -249,7 +249,7 @@ class _PatientShellState extends ConsumerState<PatientShell>
                   NavigationDestination(
                     icon: Icon(Icons.home_outlined),
                     selectedIcon: Icon(Icons.home_rounded),
-                    label: 'Home',
+                    label: 'Beranda',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.event_note_outlined),
@@ -259,7 +259,7 @@ class _PatientShellState extends ConsumerState<PatientShell>
                   NavigationDestination(
                     icon: Icon(Icons.chat_bubble_outline_rounded),
                     selectedIcon: Icon(Icons.chat_bubble_rounded),
-                    label: 'Messages',
+                    label: 'Percakapan',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.sentiment_satisfied_alt_outlined),

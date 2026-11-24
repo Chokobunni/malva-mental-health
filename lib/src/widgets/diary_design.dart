@@ -116,7 +116,8 @@ class DiaryHeader extends StatelessWidget {
             onTap: onBack,
             borderRadius: BorderRadius.circular(16),
             child: Tooltip(
-                message: onBack == null ? 'Ruang Cerita & Diari' : 'Kembali',
+                message:
+                    onBack == null ? 'Ruang Cerita & Jurnal Harian' : 'Kembali',
                 child: Container(
                     width: 44,
                     height: 44,
@@ -129,7 +130,7 @@ class DiaryHeader extends StatelessWidget {
         Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Ruang Cerita & Diari',
+          const Text('Ruang Cerita & Jurnal Harian',
               style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
@@ -266,7 +267,7 @@ class DiaryVaultCard extends StatelessWidget {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                  Text('POSITIVE VAULT',
+                                  Text('Ruang Positif',
                                       style: TextStyle(
                                           color: Color(0xffe9d5ff),
                                           fontSize: 10,
@@ -331,7 +332,7 @@ class DiaryVaultCard extends StatelessWidget {
                                         borderRadius:
                                             BorderRadius.circular(13))),
                                 child: Text(
-                                    vaultOnly ? 'Semua Diari' : 'Lihat Semua',
+                                    vaultOnly ? 'Semua Jurnal' : 'Lihat Semua',
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(
                                         fontSize: 11,
@@ -594,7 +595,7 @@ class _DailyPromptCardsState extends State<DailyPromptCards> {
               alignment: Alignment.centerRight,
               child: FilledButton(
                   onPressed: () => widget.onAnswer(_cards[_selected!]),
-                  child: const Text('Jawab di Diari')))
+                  child: const Text('Jawab di Jurnal')))
         ]
       ]));
 }
@@ -643,7 +644,7 @@ class DiaryCalendar extends StatelessWidget {
         const Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('PALET WARNA DIARI',
+          Text('Palet Warna Jurnal',
               style: TextStyle(
                   fontSize: 10,
                   color: diaryPlum,
@@ -777,7 +778,7 @@ class DiaryCalendar extends StatelessWidget {
           ]),
       const SizedBox(height: 10),
       const Text(
-          'Tanggal berwarna = diari tercatat • Titik ungu = tersimpan di Vault',
+          'Tanggal berwarna = jurnal tercatat • Titik ungu = tersimpan di Vault',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 9, color: Color(0xff9ca3af), height: 1.5))
     ]));

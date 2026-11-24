@@ -442,8 +442,8 @@ void main() {
         );
 
     expect(adherence([log('taken', today)]), 100, reason: 'taken hari ini');
-    expect(adherence([log('partial', today)]), 0,
-        reason: 'partial tidak dihitung');
+    expect(adherence([log('partial', today)]), 100,
+        reason: 'partial dihitung sebagai taken');
     expect(adherence([log('skipped', today)]), 0,
         reason: 'skipped tidak dihitung');
     expect(adherence([log('missed', today)]), 0,

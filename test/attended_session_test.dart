@@ -120,10 +120,14 @@ void main() {
     expect(find.text('Check-in dibuka 10 menit sebelum sesi.'), findsOneWidget);
     expect(find.text('Kehadiran saya'), findsNothing);
     expect(find.text('Join / Chat'), findsNothing);
-    await tester.tap(find.text('AKSI LAIN'));
+    final actions = find.text('Aksi lain');
+    await tester.scrollUntilVisible(actions, 140);
+    await tester.ensureVisible(actions);
+    await tester.pumpAndSettle();
+    await tester.tap(actions);
     await tester.pumpAndSettle();
     expect(find.text('Detail pasien'), findsOneWidget);
-    expect(find.text('Reschedule'), findsOneWidget);
+    expect(find.text('Jadwalkan ulang'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     container.dispose();
   });

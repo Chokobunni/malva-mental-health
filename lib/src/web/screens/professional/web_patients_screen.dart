@@ -243,13 +243,13 @@ class _PatientSummaryDialogState extends ConsumerState<_PatientSummaryDialog> {
               WebAdminError(error: _error!, onRetry: () => unawaited(_load()))
             else ...<Widget>[
               Text(
-                'Total screening: ${_screenings.length}',
+                'Total skrining: ${_screenings.length}',
                 style: const TextStyle(fontSize: 12.5),
               ),
               const SizedBox(height: 6),
               Text(
                 latest == null
-                    ? 'Belum ada screening.'
+                    ? 'Belum ada skrining.'
                     : 'Terakhir: ${formatWibDateTimeOrDash(latest.createdAt)} WIB · '
                         'level ${webRiskLevelLabel(latest.overallLevel)}',
                 style: const TextStyle(
@@ -266,7 +266,7 @@ class _PatientSummaryDialogState extends ConsumerState<_PatientSummaryDialog> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Text(
-                    'Ada indikator krisis pada riwayat screening pasien ini. '
+                    'Ada indikator krisis pada riwayat skrining pasien ini. '
                     'Tinjau sebagai prioritas.',
                     style: TextStyle(
                       fontSize: 12,
@@ -278,7 +278,7 @@ class _PatientSummaryDialogState extends ConsumerState<_PatientSummaryDialog> {
                 )
               else
                 const Text(
-                  'Tidak ada indikator krisis pada screening terakhir.',
+                  'Tidak ada indikator krisis pada skrining terakhir.',
                   style: TextStyle(fontSize: 12, color: Color(0xFF1F7A66)),
                 ),
               const SizedBox(height: 10),

@@ -780,7 +780,7 @@ void main() {
         expect(find.text('Kamis, 12 November 2026'), findsOneWidget);
       } else {
         expect(find.byType(Checkbox), findsNothing);
-        expect(find.text('Sesi akun telah berubah. Buka kembali Goals.'),
+        expect(find.text('Sesi akun telah berubah. Buka kembali Target.'),
             findsOneWidget);
       }
     });

@@ -35,11 +35,11 @@ void main() {
         findsOneWidget);
     expect(find.textContaining('PHQ-9'), findsWidgets);
     expect(find.textContaining('GAD-7'), findsWidgets);
-    expect(find.text('Detail Record'), findsOneWidget);
-    expect(find.text('Hasil Screening'), findsOneWidget);
-    expect(find.text('Assessment Dibagikan'), findsNothing);
-    expect(find.text('PHQ-9 · Dukungan rule internal (CF)'), findsOneWidget);
-    expect(find.text('GAD-7 · Dukungan rule internal (CF)'), findsOneWidget);
+    expect(find.text('Rincian Hasil'), findsOneWidget);
+    expect(find.text('Hasil Skrining'), findsOneWidget);
+    expect(find.text('Asesmen Dibagikan'), findsNothing);
+    expect(find.text('PHQ-9 · Dukungan aturan internal (CF)'), findsOneWidget);
+    expect(find.text('GAD-7 · Dukungan aturan internal (CF)'), findsOneWidget);
     expect(find.text('Rekomendasi profesional'), findsOneWidget);
     expect(find.textContaining('BPJS'), findsWidgets);
     expect(find.textContaining('Puskesmas'), findsOneWidget);

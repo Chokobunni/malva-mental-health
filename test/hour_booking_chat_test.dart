@@ -100,11 +100,11 @@ void main() {
       await tester.pumpAndSettle();
       for (final label in [
         'Ringkasan (Mini Summary)',
-        'Assessment Record',
+        'Riwayat Asesmen',
         'Obat & Resep',
-        'Therapy Record',
-        'Goals & Habits',
-        'Diary'
+        'Riwayat Terapi',
+        'Target & Kebiasaan',
+        'Jurnal'
       ]) {
         expect(find.text(label), findsOneWidget);
       }

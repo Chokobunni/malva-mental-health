@@ -127,7 +127,7 @@ AssessmentHistoryEntry assessmentEntryFromSubmission(
   return AssessmentHistoryEntry(
     kind: AssessmentHistoryEntry.kindWorksheet,
     title: submission.title.isEmpty
-        ? (module?.title ?? 'Assessment record')
+        ? (module?.title ?? 'Riwayat Asesmen')
         : submission.title,
     subtitle: submission.summary,
     date: submission.createdDateTime,
@@ -146,7 +146,7 @@ AssessmentHistoryEntry assessmentEntryFromScreening(
 ) {
   return AssessmentHistoryEntry(
     kind: AssessmentHistoryEntry.kindScreening,
-    title: 'Screening PHQ-9 + GAD-7',
+    title: 'Skrining PHQ-9 + GAD-7',
     subtitle: screeningScoreSummary(session),
     date: session.createdAt,
     screening: session,
@@ -345,7 +345,7 @@ class _AssessmentDetailBody extends StatelessWidget {
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         SharedRecordDetail.screening(screening: screening),
         const SizedBox(height: 14),
-        Text('Skor assessment adalah alat bantu screening, bukan diagnosis.',
+        Text('Skor asesmen adalah alat bantu skrining, bukan diagnosis.',
             style: TextStyle(fontSize: 11.5, color: onSurfaceVariant)),
         const SizedBox(height: 12),
         AssessmentRecordShareActions(entry: entry),
@@ -405,7 +405,7 @@ class _AssessmentDetailBody extends StatelessWidget {
         if (entry.isAssessmentResult) ...[
           const SizedBox(height: 14),
           Text(
-            'Skor assessment adalah alat bantu screening, bukan diagnosis.',
+            'Skor asesmen adalah alat bantu skrining, bukan diagnosis.',
             style: TextStyle(fontSize: 11.5, color: onSurfaceVariant),
           ),
           const SizedBox(height: 12),
@@ -435,7 +435,7 @@ class _WorksheetAnswerList extends StatelessWidget {
     final items = therapyAnswerEntries(moduleId: moduleId, answers: answers);
     if (items.isEmpty && summary.isEmpty) {
       return Text(
-        'Jawaban worksheet ini tidak tersimpan.',
+        'Jawaban lembar kerja ini tidak tersimpan.',
         style: Theme.of(context).textTheme.bodySmall,
       );
     }
@@ -504,7 +504,7 @@ class _AssessmentHistoryScreenState
     if (token == null || token.isEmpty) {
       setState(() {
         _isLoading = false;
-        _error = 'Login dulu untuk melihat assessment record.';
+        _error = 'Login dulu untuk melihat riwayat Asesmen.';
       });
       return;
     }
@@ -549,7 +549,7 @@ class _AssessmentHistoryScreenState
           padding: EdgeInsets.zero,
           children: [
             GradientHeader(
-              title: 'Assessment Record',
+              title: 'Riwayat Asesmen',
               subtitle: 'Riwayat skrining & asesmen yang tersimpan',
               leading: IconButton(
                 onPressed: () => Navigator.maybePop(context),
@@ -589,10 +589,10 @@ class _AssessmentHistoryScreenState
                   else if (_entries.isEmpty)
                     const EmptyState(
                       icon: Icons.fact_check_rounded,
-                      title: 'Belum ada assessment record',
+                      title: 'Belum ada riwayat Asesmen',
                       subtitle:
-                          'Isi DASS-21 atau WHO-5 dari menu Assessment, atau '
-                          'selesaikan screening PHQ-9 + GAD-7. Hasilnya '
+                          'Isi DASS-21 atau WHO-5 dari menu Asesmen, atau '
+                          'selesaikan skrining PHQ-9 + GAD-7. Hasilnya '
                           'tersimpan di sini.',
                     )
                   else if (visible.isEmpty)
@@ -752,7 +752,7 @@ class _AssessmentRecordShareActionsState
             'Stres: ${score.stress}/42 — ${score.stressLevel}'
           ]);
         }
-        lines.add('Hasil screening adalah alat bantu, bukan diagnosis.');
+        lines.add('Hasil skrining adalah alat bantu, bukan diagnosis.');
         await ref.read(exportServiceProvider).sharePdf(
             title: entry.title,
             lines: lines,
@@ -807,7 +807,7 @@ class _AssessmentRecordShareActionsState
       }
       if (entry.isScreening) {
         final screening = entry.screening!;
-        final text = 'Hasil screening: ${screeningScoreSummary(screening)}.';
+        final text = 'Hasil skrining: ${screeningScoreSummary(screening)}.';
         await api.sendChatMessage(
             accessToken: token,
             recipientId: selected.professionalUserId,
@@ -829,7 +829,7 @@ class _AssessmentRecordShareActionsState
             submissionId: entry.sourceId,
             professionalId: selected.professionalUserId);
       }
-      _toast('Assessment record dibagikan ke profesional.');
+      _toast('Riwayat Asesmen dibagikan ke profesional.');
     } on Object catch (error) {
       _toast('Gagal membagikan hasil: ${friendlyErrorMessage(error)}');
     } finally {
@@ -886,7 +886,7 @@ class _AssessmentHistoryPreviewState
       if (!mounted || ref.read(currentSessionProvider) != session) return;
       setState(() {
         _isLoading = false;
-        _error = 'Login dulu untuk melihat assessment record.';
+        _error = 'Login dulu untuk melihat riwayat Asesmen.';
       });
       return;
     }
@@ -934,7 +934,7 @@ class _AssessmentHistoryPreviewState
             ),
             const SizedBox(width: 12),
             Text(
-              'Memuat assessment record…',
+              'Memuat riwayat Asesmen…',
               style: TextStyle(fontSize: 12.5, color: onSurfaceVariant),
             ),
           ],
@@ -950,7 +950,7 @@ class _AssessmentHistoryPreviewState
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Assessment record belum bisa dimuat. $_error',
+                'Riwayat Asesmen belum bisa dimuat. $_error',
                 style: const TextStyle(
                     fontSize: 12.5, fontWeight: FontWeight.w700),
               ),
@@ -969,7 +969,7 @@ class _AssessmentHistoryPreviewState
             SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Belum ada assessment record. Isi DASS-21 atau WHO-5 di bawah — '
+                'Belum ada riwayat Asesmen. Isi DASS-21 atau WHO-5 di bawah — '
                 'hasilnya akan tersimpan di sini.',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
               ),

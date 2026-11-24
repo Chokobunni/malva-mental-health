@@ -35,6 +35,7 @@ class _UnusedPort implements FileExporter {
 class _Capture extends ExportService {
   _Capture() : super(_UnusedPort());
   final diaries = <DiaryEntry>[];
+  final medications = <MedicationLog>[];
   var calls = 0;
   @override
   Future<void> shareHealthReport(
@@ -53,6 +54,7 @@ class _Capture extends ExportService {
     if (canShare != null && !canShare()) return;
     calls++;
     diaries.addAll(diaryEntries ?? []);
+    medications.addAll(medicationLogs ?? []);
   }
 }
 
@@ -64,6 +66,60 @@ const _owner = AuthSession(
     accessToken: 'test');
 
 void main() {
+  testWidgets(
+      'medication export includes elapsed unlogged doses and normalizes partial',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final capture = _Capture();
+    final today = wibNow();
+    final start = wibFromParts(today.year, today.month, today.day - 3, 8);
+    final yesterday = start.add(const Duration(days: 2));
+    final api = MalvaApiClient(httpClient: MockClient((r) async {
+      final body = switch (r.url.path) {
+        '/v1/medications' => {
+            'medications': [
+              {
+                'id': 'lamictal',
+                'name': 'Lamictal',
+                'created_at': wibIso(start),
+                'reminder_time': '08:00',
+              },
+            ],
+          },
+        '/v1/medication-logs' => {
+            'medication_logs': [
+              {
+                'medication_id': 'lamictal',
+                'medication_name': 'Lamictal',
+                'taken_at': wibIso(start.add(const Duration(minutes: 1))),
+                'status': 'partial',
+              },
+            ],
+          },
+        _ => throw StateError('Unexpected ${r.url.path}'),
+      };
+      return http.Response(jsonEncode(body), 200);
+    }));
+    await tester.pumpWidget(ProviderScope(overrides: [
+      authStateProvider
+          .overrideWith((ref) => AuthNotifier()..setSession(_owner)),
+      apiClientProvider.overrideWithValue(api),
+      exportServiceProvider.overrideWithValue(capture),
+    ], child: MaterialApp(home: MoreScreen(onLogout: () {}))));
+    await tester.pumpAndSettle();
+    final export = find.text('Ekspor Log Obat');
+    await tester.ensureVisible(export);
+    await tester.tap(export);
+    await tester.pumpAndSettle();
+    expect(capture.calls, 1);
+    expect(capture.medications.first.status, 'taken');
+    expect(
+        capture.medications,
+        contains(isA<MedicationLog>()
+            .having((row) => row.status, 'status', 'missed')
+            .having((row) => row.takenAt, 'scheduled time', yesterday)));
+  });
   testWidgets(
       'cold diary export includes server entries within the 30-day WIB window',
       (tester) async {
@@ -102,8 +158,8 @@ void main() {
       exportServiceProvider.overrideWithValue(capture),
     ], child: MaterialApp(home: MoreScreen(onLogout: () {}))));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Export Diary Entries'));
-    await tester.tap(find.text('Export Diary Entries'));
+    await tester.ensureVisible(find.text('Ekspor Entri Jurnal'));
+    await tester.tap(find.text('Ekspor Entri Jurnal'));
     await tester.pumpAndSettle();
     expect(capture.calls, 1);
     expect(capture.diaries.single.id, 'server-only');
@@ -127,8 +183,8 @@ void main() {
         container: container,
         child: MaterialApp(home: MoreScreen(onLogout: () {}))));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Export Diary Entries'));
-    await tester.tap(find.text('Export Diary Entries'));
+    await tester.ensureVisible(find.text('Ekspor Entri Jurnal'));
+    await tester.tap(find.text('Ekspor Entri Jurnal'));
     await tester.pump();
     container.read(authStateProvider.notifier).clearSession();
     await tester.pump();
@@ -152,7 +208,7 @@ void main() {
           'q5': 5
         }));
     expect(row.scores.single.total, '21/25 (84%)');
-    expect(row.scores.single.interpretation, contains('screening lanjutan'));
+    expect(row.scores.single.interpretation, contains('skrining lanjutan'));
     expect(row.scores.single.rank, greaterThan(0));
   });
 }

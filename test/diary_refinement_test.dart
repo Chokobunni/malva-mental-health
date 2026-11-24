@@ -197,7 +197,9 @@ void main() {
     final tiles = find.byType(DiaryImage);
     expect(tester.getTopLeft(tiles.first).dy, tester.getTopLeft(tiles.last).dy);
     expect(find.textContaining('Baca Diari'), findsNothing);
-    expect(find.text('Positive Vault'), findsOneWidget);
+    final storyCard = find.widgetWithText(InkWell, 'Cerita berwarna');
+    expect(find.descendant(of: storyCard, matching: find.text('Ruang Positif')),
+        findsOneWidget);
     expect(find.text('#Lega'), findsOneWidget);
     expect(find.text('Cerita berwarna').hitTestable(), findsOneWidget);
     await tester.tap(find.text('Cerita berwarna'));

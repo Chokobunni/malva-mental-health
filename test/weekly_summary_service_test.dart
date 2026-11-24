@@ -25,6 +25,9 @@ void main() {
           httpClient: MockClient((request) async {
             if (!fromApi) return http.Response('{}', 403);
             expect(request.url.queryParameters['patient_id'], 'patient');
+            if (request.url.path == '/v1/medications') {
+              return http.Response('{"medications":[]}', 200);
+            }
             return http.Response(
                 jsonEncode(request.url.path == '/v1/mood-checkins'
                     ? {
@@ -55,19 +58,16 @@ void main() {
           accessToken: 'token',
           patientId: 'patient',
           // This instant is January 11 in WIB; device/input offset must not choose January 10.
-          asOf: DateTime.parse('2025-01-10T18:30:00-05:00'),
+          asOf: DateTime.parse('2025-01-11T11:59:00-05:00'),
           localMoods: [
             for (var i = 0; i < times.length; i++)
               (at: times[i], sleepHours: i == 1 ? 6.0 : 8.0, moodScore: 4)
-          ],
-          localLogs: [
-            for (var i = 0; i < times.length; i++)
-              (at: times[i], status: i == 2 ? 'missed' : 'taken')
           ]);
       expect(result!.moodCount, 2);
       expect(result.avgSleepHours, 7);
-      expect(result.totalLogs, 2);
-      expect(result.adherencePercent, 50);
+      expect(result.logsKnown, fromApi);
+      expect(result.totalLogs, fromApi ? 2 : 0);
+      expect(result.adherencePercent, fromApi ? 50 : 0);
       expect(result.source, fromApi ? 'api' : 'local');
     });
   }
@@ -80,52 +80,54 @@ void main() {
     final api = MalvaApiClient(
         baseUrl: 'http://backend.test',
         httpClient: MockClient((request) async => http.Response(
-            jsonEncode(request.url.path == '/v1/mood-checkins'
-                ? {
-                    'moods': [
-                      {
-                        'id': 'boundary',
-                        'mood': 'good',
-                        'occurred_at': wibIso(start),
-                        'sleep_hours': 8
-                      },
-                      {
-                        'id': 'before',
-                        'mood': 'sad',
-                        'occurred_at':
-                            wibIso(start.subtract(const Duration(minutes: 1))),
-                        'sleep_hours': 2
-                      },
-                      {
-                        'id': 'future',
-                        'mood': 'great',
-                        'occurred_at':
-                            wibIso(start.add(const Duration(days: 7))),
-                        'sleep_hours': 12
-                      },
-                    ]
-                  }
-                : {
-                    'medication_logs': [
-                      {
-                        'id': 'boundary',
-                        'status': 'taken',
-                        'taken_at': wibIso(start)
-                      },
-                      {
-                        'id': 'before',
-                        'status': 'missed',
-                        'taken_at':
-                            wibIso(start.subtract(const Duration(minutes: 1)))
-                      },
-                      {
-                        'id': 'future',
-                        'status': 'missed',
-                        'taken_at': wibIso(start.add(const Duration(days: 7)))
-                      },
-                      {'id': 'unknown', 'status': 'missed'},
-                    ]
-                  }),
+            jsonEncode(request.url.path == '/v1/medications'
+                ? {'medications': []}
+                : request.url.path == '/v1/mood-checkins'
+                    ? {
+                        'moods': [
+                          {
+                            'id': 'boundary',
+                            'mood': 'good',
+                            'occurred_at': wibIso(start),
+                            'sleep_hours': 8
+                          },
+                          {
+                            'id': 'before',
+                            'mood': 'sad',
+                            'occurred_at': wibIso(
+                                start.subtract(const Duration(minutes: 1))),
+                            'sleep_hours': 2
+                          },
+                          {
+                            'id': 'future',
+                            'mood': 'great',
+                            'occurred_at':
+                                wibIso(start.add(const Duration(days: 7))),
+                            'sleep_hours': 12
+                          },
+                        ]
+                      }
+                    : {
+                        'medication_logs': [
+                          {
+                            'id': 'boundary',
+                            'status': 'taken',
+                            'taken_at': wibIso(start)
+                          },
+                          {
+                            'id': 'before',
+                            'status': 'missed',
+                            'taken_at': wibIso(
+                                start.subtract(const Duration(minutes: 1)))
+                          },
+                          {
+                            'id': 'future',
+                            'status': 'missed',
+                            'taken_at':
+                                wibIso(start.add(const Duration(days: 7)))
+                          },
+                        ]
+                      }),
             200)));
     final result = await loadWeeklySummary(api: api, accessToken: 'token');
     expect(result!.moodCount, 1);
@@ -160,33 +162,35 @@ void main() {
     final api = MalvaApiClient(
         baseUrl: 'http://backend.test',
         httpClient: MockClient((request) async => http.Response(
-            jsonEncode(request.url.path == '/v1/mood-checkins'
-                ? {
-                    'moods': [
-                      {
-                        'id': 'historical',
-                        'mood': 'awful',
-                        'occurred_at':
-                            wibIso(now.subtract(const Duration(days: 90))),
-                        'sleep_hours': 1
-                      },
-                      {
-                        'id': 'new',
-                        'mood': 'great',
-                        'occurred_at':
-                            wibIso(now.subtract(const Duration(hours: 1))),
-                        'sleep_hours': 8
-                      },
-                      {
-                        'id': 'old',
-                        'mood': 'sad',
-                        'occurred_at':
-                            wibIso(now.subtract(const Duration(days: 2))),
-                        'sleep_hours': 6
-                      },
-                    ]
-                  }
-                : {'logs': []}),
+            jsonEncode(request.url.path == '/v1/medications'
+                ? {'medications': []}
+                : request.url.path == '/v1/mood-checkins'
+                    ? {
+                        'moods': [
+                          {
+                            'id': 'historical',
+                            'mood': 'awful',
+                            'occurred_at':
+                                wibIso(now.subtract(const Duration(days: 90))),
+                            'sleep_hours': 1
+                          },
+                          {
+                            'id': 'new',
+                            'mood': 'great',
+                            'occurred_at':
+                                wibIso(now.subtract(const Duration(hours: 1))),
+                            'sleep_hours': 8
+                          },
+                          {
+                            'id': 'old',
+                            'mood': 'sad',
+                            'occurred_at':
+                                wibIso(now.subtract(const Duration(days: 2))),
+                            'sleep_hours': 6
+                          },
+                        ]
+                      }
+                    : {'logs': []}),
             200,
             headers: {'content-type': 'application/json'})));
     final result = await loadWeeklySummary(api: api, accessToken: 'token');

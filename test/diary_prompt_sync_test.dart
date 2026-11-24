@@ -98,7 +98,7 @@ void main() {
         await _tap(
             tester,
             find.text(
-                answerButton ? 'Jawab di Diari' : 'Tulis Cerita Diari Baru'));
+                answerButton ? 'Jawab di Jurnal' : 'Tulis Cerita Jurnal Baru'));
         expect(find.byType(DiaryEditorScreen), findsOneWidget);
         expect(find.text(question), findsOneWidget);
         if (slot == 0 && answerButton) {
@@ -119,7 +119,7 @@ void main() {
         await _tap(
             tester,
             answerButton
-                ? find.text('Jawab di Diari')
+                ? find.text('Jawab di Jurnal')
                 : find.byTooltip('Tutup kartu pertanyaan'));
         final note =
             find.widgetWithText(TextField, 'Tulis ceritamu di sini...');
@@ -145,7 +145,7 @@ void main() {
     await tester.pumpAndSettle();
     await _tap(tester, find.byKey(const ValueKey('prompt-card-1')));
     final previous = _question(tester);
-    await _tap(tester, find.text('Jawab di Diari'));
+    await _tap(tester, find.text('Jawab di Jurnal'));
     if (find.byType(DailyPromptCards).evaluate().isEmpty) {
       await _tap(tester, find.text('Pertanyaan Refleksi'));
     }
@@ -177,7 +177,7 @@ void main() {
     await tester.pumpAndSettle();
     await _tap(tester, find.byKey(const ValueKey('prompt-card-0')));
     final first = _question(tester);
-    await _tap(tester, find.text('Jawab di Diari'));
+    await _tap(tester, find.text('Jawab di Jurnal'));
     await _tap(tester, find.byKey(const ValueKey('prompt-card-2')));
     final selected = _question(tester);
     expect(selected, isNot(first));

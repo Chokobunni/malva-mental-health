@@ -640,7 +640,7 @@ class _GoalEditorState extends State<GoalEditor> {
                                                       'Disiplin'),
                                                   _rule(
                                                       'Otomatis tandai gagal jika terlewat',
-                                                      'Menjaga konsistensi beruntun (streak) saat tengah malam',
+                                                      'Menjaga konsistensi beruntun (runtutan) saat tengah malam',
                                                       _autoFail,
                                                       (v) => setState(
                                                           () => _autoFail = v),

@@ -238,7 +238,7 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
                       ? '4 sesi video per paket.'
                       : '4 sesi video per paket, masing-masing berdurasi ${widget.durationLabel}.'),
               const _PackageRule(Icons.send_outlined,
-                  'Selama paket aktif, kirim diary, goals, assessment, dan worksheet. Termasuk monitoring data.'),
+                  'Selama paket aktif, kirim jurnal, target, asesmen, dan lembar kerja. Termasuk monitoring data.'),
               const _PackageRule(Icons.chat_bubble_outline_rounded,
                   'Profesional membahas kiriman saat sesi berlangsung, tanpa kewajiban membalas di luar sesi.'),
               const _PackageRule(Icons.info_outline_rounded,

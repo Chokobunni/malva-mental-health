@@ -209,26 +209,26 @@ void main() {
     );
 
     // Frame pertama: sumber tambahan (asesmen/terapi) masih dimuat.
-    expect(find.text('Memuat assessment & therapy record…'), findsOneWidget);
+    expect(find.text('Memuat asesmen & riwayat Terapi…'), findsOneWidget);
 
     await tester.pumpAndSettle();
 
     // Semua jenis entri muncul di satu daftar.
-    expect(find.text('Health Record'), findsOneWidget);
+    expect(find.text('Rekam Medis'), findsOneWidget);
     expect(find.text('Hasil Lab PDF'), findsOneWidget);
     expect(find.text('WHO-5 (Well-Being Index)'), findsOneWidget);
     expect(find.text('Restrukturisasi Kognitif (ABCDE)'), findsOneWidget);
-    expect(find.text('Screening PHQ-9 + GAD-7'), findsOneWidget);
+    expect(find.text('Skrining PHQ-9 + GAD-7'), findsOneWidget);
 
     // Filter "Assessment": hanya entri asesmen tersisa.
     // Bagian Record bisa lebih panjang dari layar uji (800x600) — scroll chip
     // ke dalam viewport dulu (pump diperlukan agar render tree mengikuti).
-    await tester.ensureVisible(find.text('Assessment'));
+    await tester.ensureVisible(find.text('Asesmen'));
     await tester.pump();
-    await tester.tap(find.text('Assessment'));
+    await tester.tap(find.text('Asesmen'));
     await tester.pumpAndSettle();
     expect(find.text('WHO-5 (Well-Being Index)'), findsOneWidget);
-    expect(find.text('Screening PHQ-9 + GAD-7'), findsOneWidget);
+    expect(find.text('Skrining PHQ-9 + GAD-7'), findsOneWidget);
     expect(find.text('Hasil Lab PDF'), findsNothing);
     expect(find.text('Restrukturisasi Kognitif (ABCDE)'), findsNothing);
 
@@ -239,7 +239,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Hasil Lab PDF'), findsOneWidget);
     expect(find.text('WHO-5 (Well-Being Index)'), findsNothing);
-    expect(find.text('Screening PHQ-9 + GAD-7'), findsNothing);
+    expect(find.text('Skrining PHQ-9 + GAD-7'), findsNothing);
     expect(find.text('PDF'), findsOneWidget);
     expect(find.text('IMAGE'), findsOneWidget);
     expect(find.text('DOC'), findsOneWidget);
@@ -256,7 +256,7 @@ void main() {
     expect(find.text('Hasil Lab PDF'), findsOneWidget);
     expect(find.text('WHO-5 (Well-Being Index)'), findsOneWidget);
     expect(find.text('Restrukturisasi Kognitif (ABCDE)'), findsOneWidget);
-    expect(find.text('Screening PHQ-9 + GAD-7'), findsOneWidget);
+    expect(find.text('Skrining PHQ-9 + GAD-7'), findsOneWidget);
 
     // Pencarian judul lintas jenis: hanya entri yang cocok tersisa.
     await tester.ensureVisible(find.byType(TextField));
@@ -266,13 +266,13 @@ void main() {
     expect(find.text('WHO-5 (Well-Being Index)'), findsOneWidget);
     expect(find.text('Hasil Lab PDF'), findsNothing);
     expect(find.text('Restrukturisasi Kognitif (ABCDE)'), findsNothing);
-    expect(find.text('Screening PHQ-9 + GAD-7'), findsNothing);
+    expect(find.text('Skrining PHQ-9 + GAD-7'), findsNothing);
 
     // Kosongkan pencarian: daftar lengkap kembali.
     await tester.enterText(find.byType(TextField), '');
     await tester.pumpAndSettle();
     expect(find.text('Hasil Lab PDF'), findsOneWidget);
-    expect(find.text('Screening PHQ-9 + GAD-7'), findsOneWidget);
+    expect(find.text('Skrining PHQ-9 + GAD-7'), findsOneWidget);
   });
 }
 

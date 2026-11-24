@@ -33,7 +33,7 @@ const _availableSpecialties = [
   ('kekerasan_domestik', 'Kekerasan Domestik'),
   ('pranikah', 'Konseling Pranikah'),
   ('seksualitas', 'Seksualitas'),
-  ('cbt', 'CBT (Cognitive Behavioral Therapy)'),
+  ('cbt', 'CBT (Terapi Kognitif Perilaku)'),
   ('manajemen_stres', 'Manajemen Stres'),
   ('konseling_remaja', 'Konseling Remaja'),
   ('bullying', 'Bullying'),

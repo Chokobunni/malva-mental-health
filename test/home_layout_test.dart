@@ -29,40 +29,40 @@ void main() {
     await pumpHome(tester);
 
     // Header + sambutan (via mood check-in).
-    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Beranda'), findsOneWidget);
 
     // Figma Group 242: tile Cari Profesional.
     expect(find.text('Cari Profesional'), findsOneWidget);
 
     // Figma section labels.
-    expect(find.text('Self-care'), findsOneWidget);
-    expect(find.text('Professional Care'), findsOneWidget);
+    expect(find.text('Pengelolaan Diri'), findsOneWidget);
+    expect(find.text('Layanan Profesional'), findsOneWidget);
 
     // Figma grid Self-care: Goals & Habits / Diary History /
     // Psychological Therapy / Health Record.
-    expect(find.text('Goals & Habits'), findsOneWidget);
-    expect(find.textContaining('Diary'), findsOneWidget);
-    expect(find.text('Health Record'), findsOneWidget);
-    expect(find.text('Psychological Therapy'), findsOneWidget);
+    expect(find.text('Target & Kebiasaan'), findsOneWidget);
+    expect(find.textContaining('Jurnal'), findsOneWidget);
+    expect(find.text('Rekam Medis'), findsOneWidget);
+    expect(find.text('Terapi Psikologis'), findsOneWidget);
 
     // Figma grid Professional Care: Assessment / History Log.
-    expect(find.text('Assessment'), findsOneWidget);
-    expect(find.text('History Log'), findsOneWidget);
+    expect(find.text('Asesmen'), findsOneWidget);
+    expect(find.text('Riwayat Aktivitas'), findsOneWidget);
 
     // Tombol Cari Profesional.
     expect(find.text('Cari Profesional'), findsOneWidget);
 
     // The reference places the tracker above the four Self-care tiles.
-    expect(tester.getTopLeft(find.text('Mood Medication Check-in')).dy,
-        lessThan(tester.getTopLeft(find.text('Goals & Habits')).dy));
+    expect(tester.getTopLeft(find.text('Check-in Mood & Obat')).dy,
+        lessThan(tester.getTopLeft(find.text('Target & Kebiasaan')).dy));
     // Banner Mood Medication Check-in.
-    expect(find.text('Mood Medication Check-in'), findsOneWidget);
-    expect(tester.getTopLeft(find.text('Mood Medication Check-in')).dy,
-        lessThan(tester.getTopLeft(find.text('Professional Care')).dy));
+    expect(find.text('Check-in Mood & Obat'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('Check-in Mood & Obat')).dy,
+        lessThan(tester.getTopLeft(find.text('Layanan Profesional')).dy));
 
     // Tanpa booking aktif: kartu sesi tidak tampil.
     expect(find.text('Join'), findsNothing);
-    expect(find.text('Cancel'), findsNothing);
+    expect(find.text('Batalkan'), findsNothing);
 
     expect(tester.takeException(), isNull);
   });

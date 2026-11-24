@@ -174,7 +174,7 @@ void main() {
     expect(find.text('Video call mendatang'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Operasional'), 300,
         scrollable: find.byType(Scrollable).first);
-    expect(find.text('Crisis Incident Log'), findsNothing);
+    expect(find.text('Riwayat Insiden Krisis'), findsNothing);
 
     // 3. Penanda per-pasien + kedua pasien muncul di tab Pasien.
     await tester.tap(find.text('Pasien'));

@@ -350,7 +350,7 @@ class _GuidePanel extends StatelessWidget {
           FilledButton(
             key: const Key('web-therapy-save'),
             onPressed: saving ? null : onSubmit,
-            child: Text(saving ? 'Menyimpan...' : 'Simpan worksheet'),
+            child: Text(saving ? 'Menyimpan...' : 'Simpan lembar kerja'),
           ),
           const SizedBox(height: 8),
           OutlinedButton(

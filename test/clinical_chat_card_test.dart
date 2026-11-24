@@ -50,7 +50,7 @@ void main() {
     ))));
     expect(find.text('Latihan napas'), findsOneWidget);
     expect(find.text('Praktikkan perlahan.'), findsOneWidget);
-    expect(find.text('Detail Record'), findsOneWidget);
+    expect(find.text('Rincian Hasil'), findsOneWidget);
     expect(find.text('Rangkuman Sesi'), findsOneWidget);
     expect(find.text('Catatan & Target Konseling'), findsOneWidget);
     expect(find.text('Target: 4x / minggu'), findsOneWidget);
@@ -76,12 +76,12 @@ void main() {
         home: Scaffold(
             body: ClinicalChatCard(
                 message: message, isPatient: false, onAction: () {}))));
-    expect(find.text('Isi assessment'), findsNothing);
+    expect(find.text('Isi asesmen'), findsNothing);
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: ClinicalChatCard(
                 message: message, isPatient: true, onAction: () {}))));
     expect(find.text('WHO-5'), findsOneWidget);
-    expect(find.text('Isi assessment'), findsOneWidget);
+    expect(find.text('Isi asesmen'), findsOneWidget);
   });
 }

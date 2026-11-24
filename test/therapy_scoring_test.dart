@@ -202,7 +202,7 @@ void main() {
       expect(
           who5Summary(_who5([5, 5, 5, 5, 5])), contains('Kesejahteraan baik'));
       expect(
-          who5Summary(_who5([0, 0, 0, 0, 0])), contains('screening lanjutan'));
+          who5Summary(_who5([0, 0, 0, 0, 0])), contains('skrining lanjutan'));
     });
   });
 

@@ -62,6 +62,7 @@ void main() {
                       range: DateTimeRange(
                           start: wibFromParts(2026, 11, 18),
                           end: wibFromParts(2026, 11, 24)),
+                      today: wibFromParts(2026, 11, 24),
                       rangeLabel: '7 hari terakhir',
                       onRangeChanged: (_) {},
                       method: selection,
@@ -109,5 +110,46 @@ void main() {
     for (final goal in goals) {
       expect(find.text(goal.title), findsOneWidget);
     }
+  });
+
+  testWidgets('a missed target is counted on its scheduled day',
+      (tester) async {
+    tester.view.physicalSize = const Size(430, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final start = wibFromParts(2026, 11, 24);
+    final today = wibFromParts(2026, 11, 25, 23);
+    final goal = BackendGoal.fromJson({
+      'id': 'sleep',
+      'title': 'Tidur jam 22.00',
+      'details': {'start_date': '2026-11-24', 'time': '22:00'},
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: GoalHistoryPanel(
+      goals: [goal],
+      logs: const [],
+      range: DateTimeRange(start: start, end: today),
+      today: today,
+      rangeLabel: 'Tanggal pilihan',
+      onRangeChanged: (_) {},
+      method: '',
+      onMethodChanged: (_) {},
+      onArchive: () {},
+      loading: false,
+      error: null,
+      onRetry: () {},
+    ))));
+    expect(find.byType(ExpansionTile), findsOneWidget);
+    expect(find.text('0/1 selesai'), findsOneWidget);
+    await tester.tap(find.byType(ExpansionTile));
+    await tester.pumpAndSettle();
+    expect(find.text('Tidur jam 22.00'), findsOneWidget);
+    expect(find.text('Tidak dilakukan'), findsOneWidget);
+    await tester.tap(find.text('Tidur jam 22.00'));
+    await tester.pumpAndSettle();
+    expect(find.text('Detail aktivitas'), findsOneWidget);
+    expect(find.text('Selasa, 24 November 2026'), findsOneWidget);
+    expect(find.text('Tidak dilakukan'), findsWidgets);
   });
 }

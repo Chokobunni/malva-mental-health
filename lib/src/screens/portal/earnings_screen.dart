@@ -165,7 +165,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              const SectionLabel('Recent Transactions'),
+              const SectionLabel('Terbaru Transactions'),
               if (_transactions.isEmpty)
                 const EmptyState(
                   icon: Icons.receipt_long_outlined,

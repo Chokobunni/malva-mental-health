@@ -160,7 +160,7 @@ class _WebAssessmentScreenState extends ConsumerState<WebAssessmentScreen> {
       if (outcome.instrument == WebAssessmentInstrument.screening) {
         final bundle = outcome.screeningBundle;
         if (bundle == null) {
-          throw const MalvaApiException('Hasil screening tidak lengkap.');
+          throw const MalvaApiException('Hasil skrining tidak lengkap.');
         }
         await api.submitScreening(
           accessToken: _token,

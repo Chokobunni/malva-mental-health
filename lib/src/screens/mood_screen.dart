@@ -152,7 +152,7 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
                         FilledButton.icon(
                             onPressed: _saving ? null : _openEntry,
                             icon: const Icon(Icons.add_rounded),
-                            label: const Text('Add Mood Entry')),
+                            label: const Text('Tambah Catatan Mood')),
                         const SizedBox(height: 18),
                         MoodInsights(
                             entries: _entries,
@@ -184,8 +184,8 @@ class _MoodScreenState extends ConsumerState<MoodScreen> {
     await _refreshData();
     if (mounted &&
         _owner(ref.read(authStateProvider).session) == _owner(startedAuth)) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Mood entry tersimpan.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Catatan Mood tersimpan.')));
     }
   }
 }

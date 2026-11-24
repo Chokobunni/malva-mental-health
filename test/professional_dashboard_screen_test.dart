@@ -8,7 +8,7 @@ import 'package:malva_mental_health/src/theme.dart';
 
 void main() {
   testWidgets(
-      'professional dashboard renders Dashboard/Jadwal/Pasien/Lainnya/Messages',
+      'professional dashboard renders Dashboard/Jadwal/Pasien/Lainnya/Pesan',
       (tester) async {
     final container = ProviderContainer();
     final store = container.read(malvaStoreProvider.notifier);
@@ -37,7 +37,7 @@ void main() {
     expect(find.text('Jadwal'), findsOneWidget);
     expect(find.text('Pasien'), findsOneWidget);
     expect(find.text('Lainnya'), findsOneWidget);
-    expect(find.text('Messages'), findsOneWidget);
+    expect(find.text('Pesan'), findsOneWidget);
     expect(
         tester
             .widget<NavigationBar>(find.byType(NavigationBar))
@@ -45,13 +45,13 @@ void main() {
             .cast<NavigationDestination>()
             .map((item) => item.label)
             .toList(),
-        ['Dashboard', 'Jadwal', 'Pasien', 'Messages', 'Lainnya']);
+        ['Dashboard', 'Jadwal', 'Pasien', 'Pesan', 'Lainnya']);
     expect(find.text('Tugas'), findsNothing);
 
     expect(find.text('Video call mendatang'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Operasional'), 200,
         scrollable: find.byType(Scrollable).first);
-    expect(find.text('Crisis Incident Log'), findsNothing);
+    expect(find.text('Riwayat Insiden Krisis'), findsNothing);
     expect(find.text('Prioritas pasien'), findsNothing);
 
     // Tab Jadwal: tombol Quick Video Call (dipindah dari Dashboard) + sesi.
@@ -69,15 +69,17 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Belum ada pasien terhubung'), findsOneWidget);
 
-    await tester.tap(find.text('Messages'));
+    await tester.tap(find.text('Pesan'));
     await tester.pumpAndSettle();
-    expect(find.text('Recent'), findsOneWidget);
+    expect(find.text('Percakapan'), findsOneWidget);
+    expect(find.text('Lihat pesan dan riwayat chat dengan pasien.'),
+        findsOneWidget);
 
     // Profile is first; obsolete audit and duplicate crisis entry are absent.
     await tester.tap(find.text('Lainnya'));
     await tester.pumpAndSettle();
     expect(find.text('Audit & export ringkasan'), findsNothing);
-    expect(find.text('Crisis Incident Log'), findsNothing);
+    expect(find.text('Riwayat Insiden Krisis'), findsNothing);
     expect(find.text('Akun Profesional'), findsOneWidget);
     expect(find.text('Portal Profesional'), findsOneWidget);
     expect(find.text('Relasi pasien–profesional'), findsNothing);

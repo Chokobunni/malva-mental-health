@@ -186,7 +186,7 @@ void main() {
     await capture('anxiety');
     await tester.tap(find.text('Selesai Check-in'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Check-in hari ini selesai. Streak 1 hari!'),
+    expect(find.textContaining('Check-in harian selesai. Runtutan 1 hari!'),
         findsOneWidget);
     for (final mood in MoodValue.values) {
       expect(find.text(mood.label), findsNothing);

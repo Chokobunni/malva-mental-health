@@ -220,9 +220,9 @@ void main() {
     expect(creates, 0,
         reason: 'answering without explicit submission is not a test record');
     for (var i = 0; i < 2; i++) {
-      await tester.tap(find.text('Simpan ke Therapy Record'));
+      await tester.tap(find.text('Simpan ke Riwayat Terapi'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Worksheet tersimpan di Therapy Record'),
+      expect(find.textContaining('Lembar Kerja tersimpan di Riwayat Terapi'),
           findsWidgets);
     }
     await tester.tap(find.text('Simpan & Kirim ke Profesional'));
@@ -231,7 +231,7 @@ void main() {
         reason: 'save/share must reuse the completed submission');
     await tester.tap(find.widgetWithText(ChoiceChip, '3').first);
     await tester.pump();
-    await tester.tap(find.text('Simpan ke Therapy Record'));
+    await tester.tap(find.text('Simpan ke Riwayat Terapi'));
     await tester.pumpAndSettle();
     expect(creates, 2, reason: 'changed answers represent a new submission');
     expect(tester.takeException(), isNull);

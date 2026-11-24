@@ -34,7 +34,8 @@ class _DiaryFormSheetState extends State<DiaryFormSheet> {
             child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-              Text(widget.initialEntry == null ? 'Tambah Diary' : 'Edit Diary',
+              Text(
+                  widget.initialEntry == null ? 'Tambah Jurnal' : 'Edit Jurnal',
                   style: Theme.of(context)
                       .textTheme
                       .titleLarge
@@ -54,7 +55,7 @@ class _DiaryFormSheetState extends State<DiaryFormSheet> {
                   maxLines: 10,
                   maxLength: 10000,
                   decoration:
-                      const InputDecoration(labelText: 'Catatan diary')),
+                      const InputDecoration(labelText: 'Catatan jurnal')),
               if (_error != null)
                 Text(_error!,
                     style:
@@ -69,12 +70,12 @@ class _DiaryFormSheetState extends State<DiaryFormSheet> {
                 TextButton.icon(
                     onPressed: widget.onDelete,
                     icon: const Icon(Icons.delete_outline),
-                    label: const Text('Hapus Diary')),
+                    label: const Text('Hapus Jurnal')),
             ])),
       );
   void _save() {
     if (_note.text.trim().isEmpty) {
-      setState(() => _error = 'Isi catatan diary terlebih dahulu.');
+      setState(() => _error = 'Isi catatan jurnal terlebih dahulu.');
       return;
     }
     final previous = widget.initialEntry;

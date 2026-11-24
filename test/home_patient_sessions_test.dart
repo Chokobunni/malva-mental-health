@@ -162,7 +162,7 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(tester.getCenter(join).dy,
-        lessThan(tester.getCenter(find.text('Cancel')).dy));
+        lessThan(tester.getCenter(find.text('Batalkan')).dy));
     await tester.tap(join);
     await tester.pumpAndSettle();
     expect(actions, ['attended', url]);
@@ -217,7 +217,7 @@ void main() {
       (tester) async {
     await _pumpHome(tester, _api());
     expect(find.text('Sesi berjalan'), findsOneWidget);
-    expect(find.text('Video call mendatang'), findsOneWidget);
+    expect(find.text('Panggilan video mendatang'), findsOneWidget);
     expect(find.text('dr. Sedang Berjalan'), findsOneWidget);
     expect(find.text('dr. Video Berikutnya'), findsOneWidget);
     final avatars =

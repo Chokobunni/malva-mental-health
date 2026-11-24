@@ -12,6 +12,7 @@ class GoalHistoryPanel extends StatelessWidget {
     required this.goals,
     required this.logs,
     required this.range,
+    required this.today,
     required this.rangeLabel,
     required this.onRangeChanged,
     required this.method,
@@ -25,6 +26,7 @@ class GoalHistoryPanel extends StatelessWidget {
   final List<BackendGoal> goals;
   final List<BackendHabitLog> logs;
   final DateTimeRange range;
+  final DateTime today;
   final String rangeLabel;
   final ValueChanged<int> onRangeChanged;
   final String method;
@@ -43,7 +45,8 @@ class GoalHistoryPanel extends StatelessWidget {
     };
     final filteredGoals = goals.where((goal) =>
         method.isEmpty || (goal.details?.method ?? 'yes_no') == method);
-    final grouped = groupGoalHistory(filteredGoals.toList(), logs);
+    final grouped = groupGoalHistory(filteredGoals.toList(), logs,
+        start: range.start, end: range.end, today: today);
     final start = wibDateKey(range.start), end = wibDateKey(range.end);
     final sameMonth = range.start.year == range.end.year &&
         range.start.month == range.end.month;
@@ -116,7 +119,7 @@ class GoalHistoryPanel extends StatelessWidget {
                             fontWeight: FontWeight.w800, fontSize: 14))),
                 const SizedBox(width: 8),
                 Text(
-                    '${day.value.where((entry) => entry.log.done).length}/${day.value.length} selesai',
+                    '${day.value.where((entry) => entry.log?.done == true).length}/${day.value.length} selesai',
                     style: const TextStyle(
                         color: goalMuted,
                         fontWeight: FontWeight.w700,
@@ -142,7 +145,7 @@ class GoalHistoryPanel extends StatelessWidget {
                                 fontWeight: FontWeight.w600)),
                         trailing: entry.goal.details?.method != 'numeric' &&
                                 entry.goal.details?.method != 'checklist' &&
-                                entry.log.done
+                                entry.log?.done == true
                             ? const GoalPill('Selesai',
                                 icon: Icons.check,
                                 color: Color(0xFF14865B),
@@ -155,7 +158,7 @@ class GoalHistoryPanel extends StatelessWidget {
                                     overflow: TextOverflow.ellipsis,
                                     textAlign: TextAlign.end,
                                     style: const TextStyle(color: goalMuted))),
-                        onTap: () => _showDetails(context, entry),
+                        onTap: () => _showDetails(context, day.key, entry),
                       ),
                     ]),
                   ),
@@ -182,13 +185,14 @@ class GoalHistoryPanel extends StatelessWidget {
     ]);
   }
 
-  void _showDetails(BuildContext context, GoalHistoryEntry entry) {
+  void _showDetails(BuildContext context, String day, GoalHistoryEntry entry) {
+    final log = entry.log;
     final details = entry.goal.details;
     final method = details?.method;
     final numeric = method == 'numeric';
     final checklist = method == 'checklist';
     final total = numeric ? details!.target : details?.steps.length ?? 0;
-    final progress = numeric ? entry.log.value : completedGoalSteps(entry);
+    final progress = numeric ? log?.value ?? 0 : completedGoalSteps(entry);
     showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
@@ -203,7 +207,7 @@ class GoalHistoryPanel extends StatelessWidget {
                         style: const TextStyle(
                             fontSize: 18, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 4),
-                    Text(_historyDayLabel(entry.log.loggedOn),
+                    Text(_historyDayLabel(day),
                         style: const TextStyle(color: goalMuted)),
                     const SizedBox(height: 14),
                     GoalSurface(
@@ -211,7 +215,7 @@ class GoalHistoryPanel extends StatelessWidget {
                       child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if (numeric || checklist) ...[
+                            if (log != null && (numeric || checklist)) ...[
                               Text(
                                   'Progres tercatat: ${goalHistoryResult(entry)}',
                                   style: const TextStyle(
@@ -225,11 +229,13 @@ class GoalHistoryPanel extends StatelessWidget {
                                   color: goalPurple),
                               const SizedBox(height: 8),
                             ],
-                            Text(entry.log.done
-                                ? 'Selesai'
-                                : numeric
-                                    ? 'Belum tercapai'
-                                    : 'Belum selesai'),
+                            Text(log == null || (!numeric && !checklist)
+                                ? goalHistoryResult(entry)
+                                : log.done
+                                    ? 'Selesai'
+                                    : numeric
+                                        ? 'Belum tercapai'
+                                        : 'Belum selesai'),
                           ]),
                     ),
                     if (details != null && details.steps.isNotEmpty) ...[
@@ -244,8 +250,9 @@ class GoalHistoryPanel extends StatelessWidget {
                                 children: [
                                   Icon(
                                       checklist
-                                          ? entry.log.completedStepIds
-                                                  .contains(step.id)
+                                          ? log?.completedStepIds
+                                                      .contains(step.id) ==
+                                                  true
                                               ? Icons.check_box_outlined
                                               : Icons.check_box_outline_blank
                                           : Icons.circle,

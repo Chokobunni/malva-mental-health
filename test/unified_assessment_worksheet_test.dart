@@ -167,7 +167,7 @@ void main() {
       expect(find.text('0 = Tidak pernah'), findsWidgets);
       expect(find.byType(AssessmentResultCard), findsNothing);
 
-      await tester.tap(find.text('Simpan ke Therapy Record'));
+      await tester.tap(find.text('Simpan ke Riwayat Terapi'));
       await tester.pumpAndSettle();
       expect(find.textContaining('pertanyaan belum dijawab'), findsOneWidget);
       expect(find.byType(AssessmentResultCard), findsNothing);

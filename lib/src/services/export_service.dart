@@ -10,6 +10,7 @@ import '../models/diary_content.dart';
 import '../platform/contracts/ports.dart';
 import '../time/wib.dart';
 import 'goal_history.dart';
+import 'medication_adherence.dart';
 import 'health_pdf_report.dart';
 
 // ============================================================
@@ -152,7 +153,7 @@ class ExportService {
 
   String exportMoodCsv(List<MoodEntry> entries) {
     final buffer = StringBuffer();
-    buffer.writeln('Date,Mood,Sleep Hours,Energy,Anxiety,Irritability,Note');
+    buffer.writeln('Date,Mood,Tidur Hours,Energi,Kecemasan,Iritabilitas,Note');
     for (final e in entries) {
       buffer.writeln(
         '${wibIso(e.date)},'
@@ -170,7 +171,7 @@ class ExportService {
   String exportScreeningCsv(List<ScreeningBundle> bundles) {
     final buffer = StringBuffer();
     buffer.writeln(
-        'ID,Date,PHQ9 Score,PHQ9 Level,GAD7 Score,GAD7 Level,Crisis Flag,Source');
+        'ID,Date,PHQ9 Skor,PHQ9 Level,GAD7 Skor,GAD7 Level,Krisis Flag,Source');
     for (final b in bundles) {
       buffer.writeln(
         '"${b.id}",'
@@ -188,13 +189,13 @@ class ExportService {
 
   String exportMedicationLogCsv(List<MedicationLog> logs) {
     final buffer = StringBuffer();
-    buffer.writeln('Medication ID,Medication Name,Taken At,Status');
+    buffer.writeln('Obat ID,Obat Name,Taken At,Status');
     for (final log in logs) {
       buffer.writeln(
         '"${log.medicationId}",'
         '"${log.medicationName}",'
         '${wibIso(log.takenAt)},'
-        '${log.status}',
+        '${normalizedMedicationStatus(log.status)}',
       );
     }
     return buffer.toString();
@@ -262,7 +263,7 @@ class ExportService {
                 'medicationId': l.medicationId,
                 'medicationName': l.medicationName,
                 'takenAt': wibIso(l.takenAt),
-                'status': l.status,
+                'status': normalizedMedicationStatus(l.status),
               })
           .toList(),
       'diaryEntries': diaryEntries

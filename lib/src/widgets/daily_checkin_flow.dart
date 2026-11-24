@@ -150,7 +150,7 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
                   Stack(alignment: Alignment.center, children: [
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 92),
-                      child: Text('Home',
+                      child: Text('Beranda',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                               fontSize: 19, fontWeight: FontWeight.w500)),
@@ -190,7 +190,7 @@ class _DailyCheckInFlowState extends ConsumerState<DailyCheckInFlow> {
                     const SizedBox(height: 12),
                     Text(
                         done
-                            ? 'Check-in hari ini selesai. Streak $streak hari!'
+                            ? 'Check-in harian selesai. Runtutan $streak hari!'
                             : 'Bagaimana kabarmu hari ini?',
                         textAlign: TextAlign.center,
                         style: const TextStyle(

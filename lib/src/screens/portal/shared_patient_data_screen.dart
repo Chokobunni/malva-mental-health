@@ -56,11 +56,11 @@ class _SharedPatientDataScreenState
 
   static const List<_TabSpec> _tabs = [
     _TabSpec('Mood', Icons.mood_rounded),
-    _TabSpec('Diary', Icons.menu_book_rounded),
+    _TabSpec('Jurnal', Icons.menu_book_rounded),
     _TabSpec('Obat', Icons.medication_rounded),
-    _TabSpec('Health Record', Icons.medical_information_rounded),
-    _TabSpec('Goals', Icons.flag_rounded),
-    _TabSpec('Screening', Icons.fact_check_rounded),
+    _TabSpec('Rekam Medis', Icons.medical_information_rounded),
+    _TabSpec('Target', Icons.flag_rounded),
+    _TabSpec('Skrining', Icons.fact_check_rounded),
     _TabSpec('Terapi', Icons.psychology_rounded),
   ];
 
@@ -530,7 +530,7 @@ class _DiaryTabState
   IconData get emptyIcon => Icons.menu_book_outlined;
 
   @override
-  String get emptyMessage => 'Belum ada diary yang dibagikan.';
+  String get emptyMessage => 'Belum ada jurnal yang dibagikan.';
 
   @override
   bool isEmpty(List<BackendDiaryEntry> data) => data.isEmpty;
@@ -557,7 +557,7 @@ class _DiaryTabState
                   children: [
                     Expanded(
                       child: Text(
-                        entry.title.isEmpty ? 'Catatan diary' : entry.title,
+                        entry.title.isEmpty ? 'Catatan jurnal' : entry.title,
                         style: const TextStyle(fontWeight: FontWeight.w900),
                       ),
                     ),
@@ -685,13 +685,13 @@ class _HealthRecordTab extends _PatientDataTabState<BackendHealthRecord> {
 class _HealthRecordTabState
     extends _PatientDataTabStateBase<BackendHealthRecord, _HealthRecordTab> {
   @override
-  String get categoryLabel => 'Health Record';
+  String get categoryLabel => 'Rekam Medis';
 
   @override
   IconData get emptyIcon => Icons.medical_information_outlined;
 
   @override
-  String get emptyMessage => 'Health record belum diisi.';
+  String get emptyMessage => 'Rekam Medis belum diisi.';
 
   @override
   bool isEmpty(BackendHealthRecord data) =>
@@ -870,7 +870,7 @@ class _ScreeningTabState extends _PatientDataTabStateBase<
   IconData get emptyIcon => Icons.fact_check_outlined;
 
   @override
-  String get emptyMessage => 'Belum ada hasil screening yang dibagikan.';
+  String get emptyMessage => 'Belum ada hasil skrining yang dibagikan.';
 
   @override
   bool isEmpty(List<AssessmentHistoryEntry> data) => data.isEmpty;
@@ -919,7 +919,7 @@ class _TherapyTabState extends _PatientDataTabStateBase<
   IconData get emptyIcon => Icons.psychology_outlined;
 
   @override
-  String get emptyMessage => 'Belum ada worksheet terapi yang dibagikan.';
+  String get emptyMessage => 'Belum ada lembar kerja terapi yang dibagikan.';
 
   @override
   bool isEmpty(List<BackendTherapySubmission> data) => data.isEmpty;
@@ -950,7 +950,7 @@ class _TherapyTabState extends _PatientDataTabStateBase<
                     Expanded(
                       child: Text(
                         submission.title.isEmpty
-                            ? 'Worksheet terapi'
+                            ? 'Lembar Kerja terapi'
                             : submission.title,
                         style: const TextStyle(fontWeight: FontWeight.w900),
                       ),

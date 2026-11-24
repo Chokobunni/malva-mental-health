@@ -247,7 +247,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
     if (!_current)
       return const Scaffold(
           body: Center(
-              child: Text('Sesi akun telah berubah. Buka kembali Goals.')));
+              child: Text('Sesi akun telah berubah. Buka kembali Target.')));
     final local = ref.watch(malvaStoreProvider).goals;
     final all = _server ? _serverGoals : local.map(_fromLocal).toList();
     if (widget.showArchive) return _archiveScreen(all);
@@ -302,7 +302,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
-                                          Text('Goals & Habits',
+                                          Text('Target & Kebiasaan',
                                               style: TextStyle(
                                                   fontFamily: 'PlusJakartaSans',
                                                   color: Colors.white,
@@ -311,7 +311,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                                   fontWeight: FontWeight.w700,
                                                   letterSpacing: -.6)),
                                           SizedBox(height: 2),
-                                          Text('Daily focus dan history',
+                                          Text('Target harian dan riwayat',
                                               style: TextStyle(
                                                   fontFamily: 'PlusJakartaSans',
                                                   color: Colors.white70,
@@ -354,6 +354,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                             goals: all,
                                             logs: _historyLogs,
                                             range: _loadedHistoryRange,
+                                            today: parseWibStored(_today)!,
                                             rangeLabel: _customHistoryRange !=
                                                     null
                                                 ? 'Tanggal pilihan'
@@ -449,7 +450,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                                                             const SizedBox(
                                                                 height: 3),
                                                             Text(
-                                                                '$completed dari ${due.length} target ${_selectedDate == _today ? 'hari ini' : 'pada tanggal ini'} telah selesai',
+                                                                '$completed dari ${due.length} target selesai ${_selectedDate == _today ? 'hari ini' : 'pada tanggal ini'}',
                                                                 style: const TextStyle(
                                                                     fontFamily:
                                                                         'PlusJakartaSans',
@@ -1087,8 +1088,10 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                       done
                           ? 'Ya, selesai ${_selectedDate == _today ? 'hari ini' : 'pada tanggal ini'}'
                           : goal.failedToday
-                              ? 'Belum tercapai'
-                              : 'Sudah dilakukan?',
+                              ? 'Tidak dilakukan'
+                              : _selectedDate == _today
+                                  ? 'Sudah dilakukan hari ini?'
+                                  : 'Sudah dilakukan pada tanggal ini?',
                       style: const TextStyle(
                           fontFamily: 'PlusJakartaSans',
                           fontSize: 11,
@@ -1362,7 +1365,7 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen>
                 return const Scaffold(
                     body: Center(
                         child: Text(
-                            'Sesi akun telah berubah. Buka kembali Goals.')));
+                            'Sesi akun telah berubah. Buka kembali Target.')));
               return GoalEditor(
                   goal: goal,
                   onSave: (result) async {

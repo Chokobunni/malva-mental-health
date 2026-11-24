@@ -37,7 +37,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView).first, const Offset(0, 4000));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tulis Cerita Diari Baru'));
+    await tester.tap(find.text('Tulis Cerita Jurnal Baru'));
     await tester.pumpAndSettle();
     await tester.enterText(
         find.widgetWithText(TextField, 'Tulis ceritamu di sini...'),
@@ -102,7 +102,7 @@ void main() {
         'server-existing');
     await tester.drag(find.byType(ListView).first, const Offset(0, 4000));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tulis Cerita Diari Baru'));
+    await tester.tap(find.text('Tulis Cerita Jurnal Baru'));
     await tester.pumpAndSettle();
     await tester.enterText(
         find.widgetWithText(TextField, 'Judul'), 'Cerita baru');

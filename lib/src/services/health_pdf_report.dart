@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../models.dart';
 import '../time/wib.dart';
 import 'goal_history.dart';
+import 'medication_adherence.dart';
 import 'mood_insights.dart';
 
 class ScreeningPdfScore {
@@ -126,7 +127,7 @@ Future<Uint8List> buildHealthReportPdf({
     addCategory('Riwayat Mood', _moodSection(moods, emoji, periodEnd ?? at));
   }
   if (screenings != null) {
-    addCategory('Hasil Screening Psikologis', _screeningSection(screenings));
+    addCategory('Hasil Skrining Psikologis', _screeningSection(screenings));
   }
   if (medicationLogs != null) {
     addCategory('Riwayat Konsumsi Obat', _medicationSection(medicationLogs));
@@ -135,7 +136,7 @@ Future<Uint8List> buildHealthReportPdf({
     addCategory('Catatan Harian', _diarySection(diaries, diaryThumbnails));
   }
   if (goalHistory != null) {
-    addCategory('Goals & Habits', _goalSection(goalHistory));
+    addCategory('Target & Kebiasaan', _goalSection(goalHistory));
   }
   return document.save();
 }
@@ -202,7 +203,7 @@ Iterable<pw.Widget> _medicationSection(List<MedicationLog> logs) sync* {
   yield pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 10),
       child: _text(
-          'Catatan harian kepatuhan konsumsi obat. Hijau: taken, kuning: partial, jingga: skipped, merah: missed.'));
+          'Dosis terjadwal tanpa catatan ditandai MISSED. Hijau: taken, jingga: skipped, merah: missed.'));
   final sorted = [...logs]..sort((a, b) => b.takenAt.compareTo(a.takenAt));
   if (sorted.isEmpty) {
     yield _text('Belum ada log obat.');
@@ -220,10 +221,9 @@ Iterable<pw.Widget> _medicationSection(List<MedicationLog> logs) sync* {
         _text(_time(log.takenAt)),
         _text(log.medicationName, bold: true, color: _teal),
         _badge(
-            log.status.toUpperCase(),
-            switch (log.status) {
+            normalizedMedicationStatus(log.status).toUpperCase(),
+            switch (normalizedMedicationStatus(log.status)) {
               'taken' => 0,
-              'partial' => 2,
               'skipped' => 3,
               _ => 4
             }),
@@ -240,14 +240,14 @@ Iterable<pw.Widget> _screeningSection(List<ScreeningPdfRow> rows) sync* {
   yield pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 10),
       child: _text(
-          'Hasil lengkap yang tersedia di Assessment Record. Skor screening adalah alat bantu, bukan diagnosis.'));
+          'Hasil lengkap yang tersedia di Riwayat Asesmen. Skor skrining adalah alat bantu, bukan diagnosis.'));
   if (rows.isEmpty) {
-    yield _text('Belum ada hasil screening lengkap.');
+    yield _text('Belum ada hasil skrining lengkap.');
     return;
   }
   yield _table([
     'WAKTU (WIB)',
-    'JENIS SCREENING',
+    'JENIS SKRINING',
     'HASIL & INTERPRETASI'
   ], [
     for (final row in rows)
@@ -256,7 +256,7 @@ Iterable<pw.Widget> _screeningSection(List<ScreeningPdfRow> rows) sync* {
         _text(row.title),
         pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           for (final score in row.scores) ...[
-            _text('${score.instrument} - Total Score: ${score.total}',
+            _text('${score.instrument} - Skor Total: ${score.total}',
                 bold: true),
             pw.SizedBox(height: 4),
             _badge(score.interpretation, score.rank),
@@ -314,13 +314,13 @@ Iterable<pw.Widget> _moodSection(List<MoodEntry> entries,
     5: const pw.FlexColumnWidth(1.15)
   });
   yield pw.NewPage();
-  yield _heading('Mood Trend (Weekly)');
+  yield _heading('Tren Mood (Mingguan)');
   yield _text(
       '7 hari terakhir. Mood: skala 1-5; tidur: 0-12 jam. Rata-rata per tanggal; tanggal tanpa check-in dibiarkan kosong.');
   yield pw.SizedBox(height: 12);
   yield _combo(entries, emoji, at);
   yield pw.SizedBox(height: 18);
-  yield _heading('Symptoms Balance Map (Weekly)');
+  yield _heading('Peta Keseimbangan Gejala (Mingguan)');
   yield _radar(entries, at);
   yield _text(
       'Rata-rata 7 hari. Mood dinormalisasi dari 1-5; energi, kecemasan, iritabilitas dari 0-10; tidur dari 0-12 jam. Kecemasan/iritabilitas lebih tinggi berarti gejala lebih kuat.');
@@ -331,13 +331,13 @@ Iterable<pw.Widget> _diarySection(
   final sorted = [...entries]
     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   if (sorted.isEmpty) {
-    yield _text('Belum ada catatan diary.');
+    yield _text('Belum ada catatan jurnal.');
     return;
   }
   yield _table([
     'WAKTU (WIB)',
     'JUDUL',
-    'ISI DIARY'
+    'ISI JURNAL'
   ], [
     for (final entry in sorted) ..._diaryRows(entry, thumbnails),
   ], {
@@ -427,7 +427,7 @@ Iterable<pw.Widget> _goalSection(
         pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
       _text('${days.length} hari tercatat', bold: true),
       _text(
-          '${records.where((entry) => entry.log.done).length} dari ${records.length} catatan selesai',
+          '${records.where((entry) => entry.log?.done == true).length} dari ${records.length} target selesai',
           bold: true),
     ]),
   );
@@ -463,6 +463,7 @@ Iterable<pw.Widget> _goalSection(
 
 Iterable<List<pw.Widget>> _goalRows(
     DateTime date, GoalHistoryEntry entry) sync* {
+  final log = entry.log;
   final details = entry.goal.details;
   final checklist = details?.method == 'checklist';
   final numeric = details?.method == 'numeric';
@@ -488,7 +489,7 @@ Iterable<List<pw.Widget>> _goalRows(
           _text(checklist ? 'Daftar langkah' : 'Rincian aktivitas', bold: true),
           for (final step in steps.skip(offset).take(stepsPerRow))
             _text(checklist
-                ? '${entry.log.completedStepIds.contains(step.id) ? "[x]" : "[ ]"} ${step.label}'
+                ? '${log?.completedStepIds.contains(step.id) == true ? "[x]" : "[ ]"} ${step.label}'
                 : '- ${step.label}'),
         ],
       ]),
@@ -497,12 +498,8 @@ Iterable<List<pw.Widget>> _goalRows(
           : checklist
               ? 'Sub-Tugas'
               : 'Ya / Tidak'),
-      _text(
-          !numeric && !checklist && !entry.log.done
-              ? 'Tidak dilakukan'
-              : goalHistoryResult(entry),
-          bold: entry.log.done,
-          color: entry.log.done ? _teal : null),
+      _text(goalHistoryResult(entry),
+          bold: log?.done == true, color: log?.done == true ? _teal : null),
     ];
   }
 }
@@ -690,14 +687,15 @@ pw.Widget _radar(List<MoodEntry> entries, DateTime at) {
                     canvas.strokePath();
                   })),
           pw.Positioned(left: 230, top: 0, child: _text('Mood', bold: true)),
-          pw.Positioned(right: 80, top: 85, child: _text('Energy', bold: true)),
+          pw.Positioned(right: 80, top: 85, child: _text('Energi', bold: true)),
           pw.Positioned(
-              right: 130, bottom: 7, child: _text('Sleep', bold: true)),
+              right: 130, bottom: 7, child: _text('Tidur', bold: true)),
           pw.Positioned(
-              left: 110, bottom: 7, child: _text('Irritability', bold: true)),
-          pw.Positioned(left: 65, top: 85, child: _text('Anxiety', bold: true)),
+              left: 110, bottom: 7, child: _text('Iritabilitas', bold: true)),
+          pw.Positioned(
+              left: 65, top: 85, child: _text('Kecemasan', bold: true)),
         ])),
     _text(
-        'Mood ${(values[0] / 2).toStringAsFixed(1)}/5 | Energy ${values[1].toStringAsFixed(1)}/10 | Sleep ${values[2].toStringAsFixed(1)} jam | Irritability ${values[3].toStringAsFixed(1)}/10 | Anxiety ${values[4].toStringAsFixed(1)}/10'),
+        'Mood ${(values[0] / 2).toStringAsFixed(1)}/5 | Energi ${values[1].toStringAsFixed(1)}/10 | Tidur ${values[2].toStringAsFixed(1)} jam | Iritabilitas ${values[3].toStringAsFixed(1)}/10 | Kecemasan ${values[4].toStringAsFixed(1)}/10'),
   ]);
 }

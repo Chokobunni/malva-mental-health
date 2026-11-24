@@ -184,7 +184,7 @@ class DiaryImage extends StatelessWidget {
                 cacheWidth: preview ? 720 : null,
                 fit: BoxFit.contain,
                 semanticLabel:
-                    media.kind == 'drawing' ? 'Gambar diary' : 'Foto diary',
+                    media.kind == 'drawing' ? 'Gambar jurnal' : 'Foto jurnal',
                 errorBuilder: (_, __, ___) => !showLabel
                     ? const Center(
                         child: Icon(Icons.broken_image_outlined,
@@ -193,7 +193,7 @@ class DiaryImage extends StatelessWidget {
                         height: 100,
                         child: Center(
                             child: Text(
-                                'Gambar belum dapat dimuat. Buka kembali diary untuk mencoba lagi.')))));
+                                'Gambar belum dapat dimuat. Buka kembali jurnal untuk mencoba lagi.')))));
     return Stack(fit: StackFit.passthrough, children: [
       Container(
           constraints: BoxConstraints(maxHeight: preview ? 180 : 360),

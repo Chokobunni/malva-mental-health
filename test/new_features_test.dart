@@ -84,7 +84,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Crisis Incident Log'), findsOneWidget);
+    expect(find.text('Riwayat Insiden Krisis'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -139,7 +139,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Mini Summary (7 hari)'), findsOneWidget);
-    expect(find.text('Mood Trend'), findsOneWidget);
+    expect(find.text('Tren Mood'), findsOneWidget);
     expect(find.text('Rata-rata Jam Tidur'), findsOneWidget);
     expect(find.text('Ketaatan Obat'), findsOneWidget);
     expect(tester.takeException(), isNull);

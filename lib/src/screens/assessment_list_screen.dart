@@ -31,7 +31,7 @@ class AssessmentListScreen extends ConsumerWidget {
         padding: EdgeInsets.zero,
         children: [
           GradientHeader(
-            title: 'Assessment',
+            title: 'Asesmen',
             subtitle: 'Pilih asesmen sesuai kebutuhanmu',
             leading: IconButton(
               onPressed: () => Navigator.maybePop(context),
@@ -59,7 +59,7 @@ class AssessmentListScreen extends ConsumerWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Screening terakhir',
+                              const Text('Skrining terakhir',
                                   style: TextStyle(
                                       fontWeight: FontWeight.w900,
                                       fontSize: 14)),
@@ -82,7 +82,7 @@ class AssessmentListScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 18),
                 ],
-                const SectionLabel('Screening', center: true),
+                const SectionLabel('Skrining', center: true),
                 _AssessmentTile(
                   icon: who5Module.icon ?? Icons.favorite_rounded,
                   color: who5Module.color ?? MalvaColors.mint,
@@ -103,7 +103,7 @@ class AssessmentListScreen extends ConsumerWidget {
                   color: MalvaColors.seed,
                   title: 'PHQ-9 + GAD-7',
                   subtitle:
-                      'Screening depresi & kecemasan (16 pertanyaan, 2 minggu terakhir).',
+                      'Skrining depresi & kecemasan (16 pertanyaan, 2 minggu terakhir).',
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -143,7 +143,7 @@ class AssessmentListScreen extends ConsumerWidget {
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Skor assessment adalah alat bantu screening, bukan '
+                          'Skor asesmen adalah alat bantu skrining, bukan '
                           'diagnosis. Diagnosis hanya dapat diberikan oleh '
                           'profesional terverifikasi setelah sesi konsultasi.',
                           style: TextStyle(
@@ -158,7 +158,7 @@ class AssessmentListScreen extends ConsumerWidget {
                 // dibaca dari satu tempat ini. Satu-satunya tombol
                 // "Lihat semua" ada di sini.
                 SectionLabel(
-                  'Assessment Record',
+                  'Riwayat Asesmen',
                   action: TextButton(
                     onPressed: () => Navigator.push(
                       context,

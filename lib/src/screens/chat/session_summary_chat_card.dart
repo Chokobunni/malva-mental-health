@@ -115,7 +115,7 @@ class SessionSummaryChatCard extends StatelessWidget {
                       child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                        Text('Detail Record',
+                        Text('Rincian Hasil',
                             style: TextStyle(
                                 color: _ink,
                                 fontSize: 18,
@@ -168,7 +168,7 @@ class SessionSummaryChatCard extends StatelessWidget {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('Goals & Habits',
+                    const Text('Target & Kebiasaan',
                         style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
@@ -177,8 +177,8 @@ class SessionSummaryChatCard extends StatelessWidget {
                     if (goals.isEmpty)
                       Text(
                           goalCount > 0
-                              ? '$goalCount goals tersimpan. Detail goal belum tersedia.'
-                              : 'Belum ada goals dalam rangkuman ini.',
+                              ? '$goalCount target tersimpan. Rincian target belum tersedia.'
+                              : 'Belum ada target dalam rangkuman ini.',
                           style: const TextStyle(fontSize: 11, color: _muted))
                     else
                       LayoutBuilder(builder: (context, constraints) {

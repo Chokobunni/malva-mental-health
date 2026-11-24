@@ -181,14 +181,14 @@ void main() {
     for (final label in [
       'Tidak ada sesi berjalan saat ini.',
       'Tidak ada chat mendatang.',
-      'Tidak ada video call mendatang.'
+      'Tidak ada panggilan video mendatang.'
     ]) {
       await tester.scrollUntilVisible(find.text(label), 120,
           scrollable: find.byType(Scrollable).first);
       expect(find.text(label), findsOneWidget);
     }
     expect(tester.getTopLeft(find.text('Chat mendatang')).dy,
-        lessThan(tester.getTopLeft(find.text('Video call mendatang')).dy));
+        lessThan(tester.getTopLeft(find.text('Panggilan video mendatang')).dy));
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -308,7 +308,7 @@ void main() {
     await _mount(tester, professional: true);
     await tester.scrollUntilVisible(find.text('Pasien video 1'), 250,
         scrollable: find.byType(Scrollable).first);
-    expect(find.text('Video Session, 30 menit'), findsOneWidget);
+    expect(find.text('Sesi video, 30 menit'), findsOneWidget);
     expect(find.text('Kamis, 1 Januari 2099 • 15:30'), findsOneWidget);
     final videoCard = find
         .ancestor(
@@ -334,7 +334,7 @@ void main() {
       (tester) async {
     await _mount(tester, professional: true);
     final messages = find.descendant(
-        of: find.byType(NavigationBar), matching: find.text('Messages'));
+        of: find.byType(NavigationBar), matching: find.text('Pesan'));
     expect(messages, findsOneWidget);
     await tester.tap(messages);
     await tester.pumpAndSettle();
@@ -359,7 +359,7 @@ void main() {
     expect(find.text('Kamis, 1 Januari 2099 • 15:30'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is NavigationDestination && widget.label == 'Messages'));
+        widget is NavigationDestination && widget.label == 'Pesan'));
     await tester.pumpAndSettle();
     expect(find.text('Pasien video 6'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -374,6 +374,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Lihat jadwal dan riwayat sesi Anda.'), findsOneWidget);
     expect(find.text('Quick Video Call'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Sesi hari ini'), 120);
     expect(find.text('Sesi hari ini'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });

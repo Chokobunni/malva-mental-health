@@ -796,7 +796,7 @@ class MalvaApiClient {
     final screenings = payload['screenings'];
     if (screenings is! List) {
       throw const MalvaApiException(
-          'Respons histori screening dari server tidak valid.');
+          'Respons histori skrining dari server tidak valid.');
     }
     return screenings
         .whereType<Map<String, dynamic>>()
@@ -871,7 +871,7 @@ class MalvaApiClient {
     final screening = payload['screening'];
     if (screening is! Map<String, dynamic>) {
       throw const MalvaApiException(
-          'Respons screening dari server tidak valid.');
+          'Respons skrining dari server tidak valid.');
     }
     return BackendScreeningResult(
       id: screening['id']?.toString() ?? '',
@@ -895,7 +895,7 @@ class MalvaApiClient {
     for (final s in sessions) {
       if (s.id == screeningId) return s;
     }
-    throw const MalvaApiException('Screening tidak ditemukan.');
+    throw const MalvaApiException('Skrining tidak ditemukan.');
   }
 
   Future<BackendScreeningReview> reviewScreening({
@@ -914,7 +914,7 @@ class MalvaApiClient {
       },
     );
     return BackendScreeningReview.fromJson(
-      _expectMap(payload['review'], 'Respons review screening tidak valid.'),
+      _expectMap(payload['review'], 'Respons review skrining tidak valid.'),
     );
   }
 
@@ -1119,7 +1119,7 @@ class MalvaApiClient {
       },
     );
     return BackendDiaryEntry.fromJson(
-      _expectMap(payload['diary'], 'Respons diary tidak valid.'),
+      _expectMap(payload['diary'], 'Respons jurnal tidak valid.'),
     );
   }
 
@@ -1143,9 +1143,9 @@ class MalvaApiClient {
     final access = payload['diary_access'] == null
         ? const <String, dynamic>{}
         : _expectMap(
-            payload['diary_access'], 'Respons akses diary tidak valid.');
+            payload['diary_access'], 'Respons akses jurnal tidak valid.');
     return _expectNullableCollection(
-            payload, 'diaries', 'Respons diary tidak valid.')
+            payload, 'diaries', 'Respons jurnal tidak valid.')
         .whereType<Map<String, dynamic>>()
         .map((entry) => BackendDiaryEntry.fromJson(entry,
             accessRecipients: _diaryAccessRecipients(access[entry['id']])))
@@ -1162,7 +1162,7 @@ class MalvaApiClient {
       accessToken: accessToken,
     );
     return BackendDiaryEntry.fromJson(
-      _expectMap(payload['diary'], 'Respons diary tidak valid.'),
+      _expectMap(payload['diary'], 'Respons jurnal tidak valid.'),
     );
   }
 
@@ -1200,7 +1200,7 @@ class MalvaApiClient {
 
   BackendDiaryAccess _diaryAccess(Map<String, dynamic> payload) {
     if (payload['recipients'] is! List || payload['eligible'] is! List) {
-      throw const MalvaApiException('Respons akses diary tidak valid.');
+      throw const MalvaApiException('Respons akses jurnal tidak valid.');
     }
     return BackendDiaryAccess(
       recipients: _diaryAccessRecipients(payload['recipients']),
@@ -1211,17 +1211,17 @@ class MalvaApiClient {
   List<DiaryAccessRecipient> _diaryAccessRecipients(Object? data) {
     if (data == null) return const [];
     if (data is! List) {
-      throw const MalvaApiException('Respons akses diary tidak valid.');
+      throw const MalvaApiException('Respons akses jurnal tidak valid.');
     }
     return List.unmodifiable(data.map((value) {
-      final row = _expectMap(value, 'Respons akses diary tidak valid.');
+      final row = _expectMap(value, 'Respons akses jurnal tidak valid.');
       final id = row['professional_id'];
       final name = row['display_name'];
       if (id is! String ||
           id.isEmpty ||
           name is! String ||
           name.trim().isEmpty) {
-        throw const MalvaApiException('Respons akses diary tidak valid.');
+        throw const MalvaApiException('Respons akses jurnal tidak valid.');
       }
       return DiaryAccessRecipient(professionalId: id, displayName: name);
     }));
@@ -1246,7 +1246,7 @@ class MalvaApiClient {
       },
     );
     return BackendDiaryEntry.fromJson(
-      _expectMap(payload['diary'], 'Respons diary tidak valid.'),
+      _expectMap(payload['diary'], 'Respons jurnal tidak valid.'),
     );
   }
 
@@ -1278,7 +1278,7 @@ class MalvaApiClient {
       },
     );
     return BackendDiaryEntry.fromJson(
-      _expectMap(payload['diary'], 'Respons feedback diary tidak valid.'),
+      _expectMap(payload['diary'], 'Respons feedback jurnal tidak valid.'),
     );
   }
 
@@ -1306,7 +1306,7 @@ class MalvaApiClient {
       accessToken: accessToken,
     );
     return _expectNullableCollection(
-            payload, 'goals', 'Respons goals tidak valid.')
+            payload, 'goals', 'Respons target tidak valid.')
         .whereType<Map<String, dynamic>>()
         .map(BackendGoal.fromJson)
         .toList(growable: false);
@@ -1461,7 +1461,8 @@ class MalvaApiClient {
       accessToken: accessToken,
     );
     final seen = <String>{};
-    return _expectList(payload['submissions'], 'Respons worksheet tidak valid.')
+    return _expectList(
+            payload['submissions'], 'Respons lembar kerja tidak valid.')
         .whereType<Map<String, dynamic>>()
         .map(BackendTherapySubmission.fromJson)
         .where((item) =>
@@ -1490,7 +1491,7 @@ class MalvaApiClient {
       },
     );
     return BackendTherapySubmission.fromJson(
-      _expectMap(payload['submission'], 'Respons worksheet tidak valid.'),
+      _expectMap(payload['submission'], 'Respons lembar kerja tidak valid.'),
     );
   }
 
@@ -1504,7 +1505,7 @@ class MalvaApiClient {
       accessToken: accessToken,
     );
     return BackendTherapySubmission.fromJson(
-      _expectMap(payload['submission'], 'Respons worksheet tidak valid.'),
+      _expectMap(payload['submission'], 'Respons lembar kerja tidak valid.'),
     );
   }
 
@@ -1520,7 +1521,7 @@ class MalvaApiClient {
       body: {'professional_id': professionalId},
     );
     return BackendTherapySubmission.fromJson(
-      _expectMap(payload['submission'], 'Respons worksheet tidak valid.'),
+      _expectMap(payload['submission'], 'Respons lembar kerja tidak valid.'),
     );
   }
 
@@ -1805,8 +1806,7 @@ class MalvaApiClient {
       accessToken: accessToken,
     );
     return BackendHealthRecord.fromJson(
-      _expectMap(
-          payload['health_record'], 'Respons health record tidak valid.'),
+      _expectMap(payload['health_record'], 'Respons rekam Medis tidak valid.'),
     );
   }
 
@@ -1826,8 +1826,7 @@ class MalvaApiClient {
       },
     );
     return BackendHealthRecord.fromJson(
-      _expectMap(
-          payload['health_record'], 'Respons health record tidak valid.'),
+      _expectMap(payload['health_record'], 'Respons rekam Medis tidak valid.'),
     );
   }
 
@@ -2907,7 +2906,7 @@ class MalvaApiClient {
   }) async {
     final uri = DiaryMedia(url: url).resolve(baseUri);
     if (uri == null || accessToken.isEmpty) {
-      throw const MalvaApiException('Gambar diary tidak dapat diakses.');
+      throw const MalvaApiException('Gambar jurnal tidak dapat diakses.');
     }
     final response = await _privateChatRequest(accessToken, (token) async {
       final request = http.Request('GET', uri)
@@ -2916,7 +2915,7 @@ class MalvaApiClient {
       return http.Response.fromStream(await _httpClient.send(request));
     });
     if (response.bodyBytes.length > 5 * 1024 * 1024) {
-      throw const MalvaApiException('Gambar diary melebihi 5 MB.');
+      throw const MalvaApiException('Gambar jurnal melebihi 5 MB.');
     }
     return response.bodyBytes;
   }
@@ -2946,7 +2945,7 @@ class MalvaApiClient {
           );
       response = await http.Response.fromStream(streamed);
     } on Object {
-      throw const MalvaApiException('Gagal mengunggah gambar diary.');
+      throw const MalvaApiException('Gagal mengunggah gambar jurnal.');
     }
     Map<String, dynamic> body;
     try {
@@ -2957,12 +2956,12 @@ class MalvaApiClient {
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw MalvaApiException(
-          body['error']?.toString() ?? 'Gagal mengunggah gambar diary.');
+          body['error']?.toString() ?? 'Gagal mengunggah gambar jurnal.');
     }
     final path = body['url'];
     if (path is! String || !path.startsWith('/v1/diary-media/')) {
       throw const MalvaApiException(
-          'Server tidak mengembalikan URL gambar diary.');
+          'Server tidak mengembalikan URL gambar jurnal.');
     }
     return '${baseUri.origin}$path';
   }
@@ -3927,10 +3926,12 @@ class BackendMedication {
     this.source = '',
     this.relationToMeal = '',
     this.schedule,
+    this.createdAt,
   });
 
   factory BackendMedication.fromJson(Map<String, dynamic> json) {
     return BackendMedication(
+      createdAt: parseWibStored(json['created_at']?.toString()),
       schedule: json['schedule'] is Map && (json['schedule'] as Map).isNotEmpty
           ? MedicationSchedule.fromJson(
               Map<String, dynamic>.from(json['schedule'] as Map))
@@ -3957,6 +3958,7 @@ class BackendMedication {
   final String source;
   final String relationToMeal;
   final MedicationSchedule? schedule;
+  final DateTime? createdAt;
   Medication toMedication() => Medication(
       id: id,
       name: name,
@@ -3973,6 +3975,7 @@ class BackendMedication {
       currentStock: currentStock,
       alertBelow: alertBelow,
       source: source,
+      createdAt: createdAt,
       schedule: schedule);
 
   bool get needsRefill =>

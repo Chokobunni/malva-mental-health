@@ -46,7 +46,7 @@ class _DiaryBadgesScreenState extends State<DiaryBadgesScreen> {
                                       onPressed: () => Navigator.pop(context),
                                       icon: const Icon(Icons.chevron_left,
                                           size: 18),
-                                      label: const Text('Kembali ke Diari',
+                                      label: const Text('Kembali ke Jurnal',
                                           style: TextStyle(fontSize: 11))),
                                   const Text('Lencana Apresiasi Diri',
                                       textAlign: TextAlign.right,
@@ -99,7 +99,7 @@ class _DiaryBadgesScreenState extends State<DiaryBadgesScreen> {
                                       const Text('Catat pengalaman pribadi')),
                               const SizedBox(height: 8),
                               const Text(
-                                  'Pilih diari dan pengalaman yang ingin kamu apresiasi.',
+                                  'Pilih jurnal dan pengalaman yang ingin kamu apresiasi.',
                                   style: TextStyle(
                                       fontSize: 11, color: diaryPlum)),
                               const SizedBox(height: 16),

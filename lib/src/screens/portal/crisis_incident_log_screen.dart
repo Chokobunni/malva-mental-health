@@ -89,7 +89,7 @@ class _CrisisIncidentLogScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Crisis Incident Log'),
+        title: const Text('Riwayat Insiden Krisis'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),
@@ -123,7 +123,7 @@ class _CrisisIncidentLogScreenState
                 icon: Icons.shield_outlined,
                 title: 'Belum ada incident tercatat',
                 subtitle:
-                    'Insiden krisis (SOS / screening) dari pasien terhubung akan tampil di sini.',
+                    'Insiden krisis (SOS / skrining) dari pasien terhubung akan tampil di sini.',
               )
             else ...[
               if (_total > 0)
@@ -144,7 +144,7 @@ class _CrisisIncidentLogScreenState
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
-                  'Screening adalah catatan kondisi saat pengisian. '
+                  'Skrining adalah catatan kondisi saat pengisian. '
                   'Penanganan SOS dapat dikonfirmasi tanpa menulis catatan.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
@@ -262,7 +262,7 @@ class _CrisisLogCard extends StatelessWidget {
                 ),
               ),
               StatusPill(
-                label: isSos ? 'SOS' : 'Screening',
+                label: isSos ? 'SOS' : 'Skrining',
                 color: pillColor,
                 icon: isSos
                     ? Icons.warning_amber_rounded
@@ -273,7 +273,7 @@ class _CrisisLogCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             item.title.isEmpty
-                ? (isSos ? 'SOS darurat' : 'Screening krisis')
+                ? (isSos ? 'SOS darurat' : 'Skrining krisis')
                 : item.title,
             style: const TextStyle(fontWeight: FontWeight.w800),
           ),
@@ -290,7 +290,7 @@ class _CrisisLogCard extends StatelessWidget {
             children: [
               StatusPill(
                 label: !isSos
-                    ? 'Riwayat screening'
+                    ? 'Riwayat skrining'
                     : item.isResolved
                         ? 'Sudah ditangani'
                         : 'Perlu tindak lanjut',

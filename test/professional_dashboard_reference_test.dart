@@ -194,7 +194,22 @@ void main() {
     await tester.tap(find.byTooltip('Tampilkan semua sesi video'));
     await tester.pumpAndSettle();
     expect(find.text('Pasien Kedua'), findsOneWidget);
-    await tester.tap(find.text('Cancel').first);
+    await tester.scrollUntilVisible(find.text('Aksi lain').first, 100);
+    await tester.ensureVisible(find.text('Aksi lain').first);
+    await tester.tap(find.text('Aksi lain').first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Link').first);
+    await tester.tap(find.text('Link').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Link sesi video'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('Ringkasan untuk pasien'), findsNothing);
+    await tester.tap(find.descendant(
+        of: find.byType(AlertDialog), matching: find.text('Batal')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Batal').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Batal').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Batalkan'));
     await tester.pumpAndSettle();
@@ -217,6 +232,26 @@ void main() {
     await tester.drag(find.byType(ListView).first, const Offset(0, 2000));
     await tester.pumpAndSettle();
     await _capture(tester, 'professional-reference.png');
+    if (Platform.environment['MALVA_QA_CAPTURE_DIR'] != null) {
+      await tester.ensureVisible(find.text('Aksi lain').first);
+      await tester.tap(find.text('Aksi lain').first);
+      await tester.pumpAndSettle();
+      await _capture(tester, 'professional-home-actions.png');
+      await tester.tap(find.text('Jadwal').last);
+      await tester.pumpAndSettle();
+      await _capture(tester, 'professional-jadwal-all.png');
+      final date = wibNow().add(const Duration(hours: 40, minutes: 45));
+      if (date.month != wibNow().month) {
+        await tester.tap(find.byTooltip('Bulan berikutnya'));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.byKey(ValueKey('jadwal-${wibDateKey(date)}')));
+      await tester.pumpAndSettle();
+      await _capture(tester, 'professional-jadwal-selected.png');
+      await tester.tap(find.text('Pesan'));
+      await tester.pumpAndSettle();
+      await _capture(tester, 'professional-percakapan.png');
+    }
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

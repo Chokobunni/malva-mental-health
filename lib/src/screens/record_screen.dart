@@ -282,8 +282,8 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
           padding: EdgeInsets.zero,
           children: [
             GradientHeader(
-              title: 'Health Record',
-              subtitle: 'Data klinis terkunci dan audit-ready',
+              title: 'Rekam Medis',
+              subtitle: 'Data klinis terkunci dan siap diaudit',
               leading: IconButton(
                 onPressed: () => Navigator.maybePop(context),
                 icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
@@ -322,7 +322,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                     ),
                   ],
                   const SizedBox(height: 22),
-                  const SectionLabel('Medication'),
+                  const SectionLabel('Obat'),
                   if (_isLoading)
                     const SizedBox.shrink()
                   else if (_medications.isEmpty)
@@ -338,7 +338,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                           ),
                           SizedBox(height: 6),
                           Text(
-                            'Tambahkan obat dari menu Medication agar '
+                            'Tambahkan obat dari menu Obat agar '
                             'muncul di sini.',
                             textAlign: TextAlign.center,
                           ),
@@ -352,16 +352,16 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                     ],
                   const SizedBox(height: 22),
                   SectionLabel(
-                    'Record',
+                    'Arsip',
                     action: OutlinedButton.icon(
                       onPressed: () => _showAddRecordDialog(context),
                       icon: const Icon(Icons.upload_file_rounded),
-                      label: const Text('Add File'),
+                      label: const Text('Tambah Berkas'),
                     ),
                   ),
                   TextField(
                     decoration: const InputDecoration(
-                      labelText: 'Search',
+                      labelText: 'Cari',
                       hintText: 'Cari dokumen, asesmen, atau terapi...',
                       prefixIcon: Icon(Icons.search_rounded),
                     ),
@@ -379,7 +379,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                         ),
                         const SizedBox(width: 10),
                         Text(
-                          'Memuat assessment & therapy record…',
+                          'Memuat asesmen & riwayat Terapi…',
                           style: TextStyle(
                             fontSize: 12.5,
                             color:
@@ -448,9 +448,9 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                     Text(
                       [
                         if (_therapyError != null)
-                          'Therapy record belum termuat: $_therapyError',
+                          'Riwayat Terapi belum termuat: $_therapyError',
                         if (_screeningError != null)
-                          'Assessment record belum termuat: $_screeningError',
+                          'Riwayat Asesmen belum termuat: $_screeningError',
                       ].join(' • '),
                       style: const TextStyle(
                           fontSize: 11.5, color: MalvaColors.danger),
@@ -475,8 +475,8 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'Upload dokumen, isi assessment, atau simpan '
-                            'worksheet therapy — semuanya tampil di sini.',
+                            'Upload dokumen, isi asesmen, atau simpan '
+                            'lembar kerja terapi — semuanya tampil di sini.',
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -616,8 +616,8 @@ class _RecordEntry {
 
   static const String kindAll = 'Semua';
   static const String kindDocument = 'Dokumen';
-  static const String kindAssessment = 'Assessment';
-  static const String kindTherapy = 'Therapy';
+  static const String kindAssessment = 'Asesmen';
+  static const String kindTherapy = 'Terapi';
 
   final String kind;
   final String title;
@@ -771,7 +771,7 @@ class _DiagnosisCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Only your doctor can edit — pasien read-only.',
+                  'Hanya dokter yang dapat mengedit — pasien hanya baca.',
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
@@ -870,15 +870,15 @@ class _MedicationCard extends StatelessWidget {
                     : '${med.reminderTime} • ${med.form}'),
                 Text(
                   med.source.isEmpty
-                      ? 'Source: Profesional'
-                      : 'Source: ${medicationSourceLabel(med.source)}',
+                      ? 'Sumber: Profesional'
+                      : 'Sumber: ${medicationSourceLabel(med.source)}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
           ),
           StatusPill(
-            label: '${med.currentStock} left',
+            label: 'Tersisa ${med.currentStock}',
             color: med.needsRefill ? MalvaColors.danger : MalvaColors.seed,
           ),
         ],

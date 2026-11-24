@@ -438,7 +438,7 @@ void main() {
     await tester.pumpWidget(_screenApp(container, api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Take Now'));
+    await tester.tap(find.text('Minum Sekarang'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sudah diminum'));
     await tester.pumpAndSettle();

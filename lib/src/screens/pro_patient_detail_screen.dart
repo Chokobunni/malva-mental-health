@@ -70,11 +70,11 @@ class _ProPatientDetailScreenState
         oldestFirst: _oldestAssessmentFirst);
     return [
       if (entries.isEmpty &&
-          !_isUnavailable('Screening PHQ-9 / GAD-7') &&
-          !_isUnavailable('Assessment & worksheet'))
+          !_isUnavailable('Skrining PHQ-9 / GAD-7') &&
+          !_isUnavailable('Asesmen & lembar kerja'))
         const EmptyState(
             icon: Icons.fact_check_outlined,
-            title: 'Belum ada screening',
+            title: 'Belum ada skrining',
             subtitle: 'Tidak ada hasil untuk filter ini.'),
       for (final entry in entries.take(_visibleAssessments)) ...[
         if (entry.screening != null)
@@ -102,7 +102,7 @@ class _ProPatientDetailScreenState
   Widget _clinicalScreening(BackendScreeningSession sc) => CollapsibleCard(
         key: ValueKey('screening-${sc.id}'),
         color: Colors.white,
-        semanticLabel: 'Detail screening ${_screeningDate(sc.createdAt)}',
+        semanticLabel: 'Detail skrining ${_screeningDate(sc.createdAt)}',
         header: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -327,15 +327,15 @@ class _ProPatientDetailScreenState
         safely(
             () => _api.listScreenings(
                 accessToken: token, patientId: widget.patientId, limit: 10),
-            'Screening PHQ-9 / GAD-7'),
+            'Skrining PHQ-9 / GAD-7'),
         safely(
             () => _api.listTherapySubmissions(
                 accessToken: token, patientId: widget.patientId),
-            'Assessment & worksheet'),
+            'Asesmen & lembar kerja'),
         safely(
             () =>
                 _api.listGoals(accessToken: token, patientId: widget.patientId),
-            'Goals'),
+            'Target'),
         safely(
             () => _api.listMoodCheckins(
                 accessToken: token, patientId: widget.patientId, limit: 0),
@@ -350,7 +350,7 @@ class _ProPatientDetailScreenState
                 accessToken: token,
                 patientId: widget.patientId,
               ),
-          'Health Record');
+          'Rekam Medis');
       if (!mounted) return;
       // Muat kredensial sendiri untuk menentukan apakah Psikiater (hanya
       // Psikiater yang boleh meresepkan). Kegagalan memuat tidak menjatuhkan
@@ -564,14 +564,14 @@ class _ProPatientDetailScreenState
                       ),
                     ),
                   const SizedBox(height: 14),
-                  const SectionLabel('Health Record & Obat'),
+                  const SectionLabel('Rekam Medis & Obat'),
                   SoftCard(
                     color: Colors.white,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (_isUnavailable('Health Record'))
-                          _sectionStatus('Health Record')
+                        if (_isUnavailable('Rekam Medis'))
+                          _sectionStatus('Rekam Medis')
                         else
                           Text(
                             _healthRecord?.diagnosisSummary.isNotEmpty == true
@@ -636,24 +636,24 @@ class _ProPatientDetailScreenState
                   const SizedBox(height: 22),
                   const SectionLabel('Pemantauan harian',
                       icon: Icons.monitor_heart_rounded),
-                  if (_isUnavailable('Goals'))
-                    _sectionStatus('Goals')
+                  if (_isUnavailable('Target'))
+                    _sectionStatus('Target')
                   else if (_goals.isEmpty)
                     const EmptyState(
                       icon: Icons.flag_outlined,
-                      title: 'Belum ada goals / tidak dibagikan',
-                      subtitle: 'Goals pasien muncul bila dibagikan.',
+                      title: 'Belum ada target / tidak dibagikan',
+                      subtitle: 'Target pasien muncul bila dibagikan.',
                     )
                   else
                     CollapsibleCard(
                       key: const ValueKey('goals-section'),
                       color: Colors.white,
-                      semanticLabel: 'Goals & habits',
+                      semanticLabel: 'Target & Kebiasaan',
                       header: Row(
                         children: [
                           const Expanded(
                             child: Text(
-                              'Goals & habits',
+                              'Target & Kebiasaan',
                               style: TextStyle(fontWeight: FontWeight.w900),
                             ),
                           ),
@@ -729,7 +729,7 @@ class _ProPatientDetailScreenState
                     ),
                   const SizedBox(height: 10),
                   const SizedBox(height: 22),
-                  const SectionLabel('Screening', center: true),
+                  const SectionLabel('Skrining', center: true),
                   AssessmentHistoryFilters(
                     selected: _assessmentInstruments,
                     oldestFirst: _oldestAssessmentFirst,
@@ -739,19 +739,19 @@ class _ProPatientDetailScreenState
                       _visibleAssessments = 5;
                     }),
                   ),
-                  if (_isUnavailable('Assessment & worksheet'))
-                    _sectionStatus('Assessment & worksheet'),
-                  if (_isUnavailable('Screening PHQ-9 / GAD-7'))
-                    _sectionStatus('Screening PHQ-9 / GAD-7'),
+                  if (_isUnavailable('Asesmen & lembar kerja'))
+                    _sectionStatus('Asesmen & lembar kerja'),
+                  if (_isUnavailable('Skrining PHQ-9 / GAD-7'))
+                    _sectionStatus('Skrining PHQ-9 / GAD-7'),
                   ..._clinicalAssessmentRecords(),
-                  const SectionLabel('Worksheet terapi dibagikan'),
-                  if (_isUnavailable('Assessment & worksheet'))
-                    _sectionStatus('Assessment & worksheet')
+                  const SectionLabel('Lembar Kerja terapi dibagikan'),
+                  if (_isUnavailable('Asesmen & lembar kerja'))
+                    _sectionStatus('Asesmen & lembar kerja')
                   else if (!_worksheets.any(
                       (w) => w.moduleId != 'who5' && w.moduleId != 'dass21'))
                     const EmptyState(
                       icon: Icons.assignment_outlined,
-                      title: 'Belum ada worksheet terapi dibagikan',
+                      title: 'Belum ada lembar kerja terapi dibagikan',
                       subtitle:
                           'Latihan terapi yang dibagikan pasien muncul di sini.',
                     )

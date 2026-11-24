@@ -154,7 +154,7 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
           context: context,
           builder: (dialog) {
             final confirmation = AlertDialog(
-                title: const Text('Simpan diary terlebih dahulu?'),
+                title: const Text('Simpan jurnal terlebih dahulu?'),
                 content:
                     const Text('Setelah disimpan, kamu bisa memilih penerima.'),
                 actions: [
@@ -201,13 +201,13 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
         }
       } else {
         setState(() => _error =
-            'Diary belum tersimpan. Ceritamu tetap di sini, silakan coba lagi.');
+            'Jurnal belum tersimpan. Ceritamu tetap di sini, silakan coba lagi.');
       }
       return result;
     } on Object catch (e) {
       if (mounted)
-        setState(
-            () => _error = 'Diary belum tersimpan: ${friendlyErrorMessage(e)}');
+        setState(() =>
+            _error = 'Jurnal belum tersimpan: ${friendlyErrorMessage(e)}');
       return null;
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -229,11 +229,11 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
       {DiaryMedia? replace, List<int> colors = const []}) async {
     final token = widget.accessToken;
     if (token == null || token.isEmpty) {
-      setState(() => _error = 'Masuk ke akun untuk menyimpan gambar diary.');
+      setState(() => _error = 'Masuk ke akun untuk menyimpan gambar jurnal.');
       return;
     }
     if (replace == null && _media.length >= 6) {
-      setState(() => _error = 'Maksimal 6 gambar dalam satu diary.');
+      setState(() => _error = 'Maksimal 6 gambar dalam satu jurnal.');
       return;
     }
     setState(() {
@@ -635,8 +635,8 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                         fit: BoxFit.scaleDown,
                         child: Text(
                             _persistedEntry == null
-                                ? 'Tambah Diary'
-                                : 'Edit Diary',
+                                ? 'Tambah Jurnal'
+                                : 'Edit Jurnal',
                             style: const TextStyle(
                                 fontFamily: 'Inter',
                                 fontSize: 16,
@@ -824,7 +824,7 @@ class _DiaryEditorScreenState extends ConsumerState<DiaryEditorScreen> {
                                           _inVault
                                               ? Icons.bookmark
                                               : Icons.bookmark_border,
-                                          'Positive Vault',
+                                          'Ruang Positif',
                                           () => setState(
                                               () => _inVault = !_inVault),
                                           selected: _inVault))

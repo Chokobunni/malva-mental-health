@@ -47,7 +47,7 @@ abstract final class MalvaNotificationChannels {
   static String name(String channel) => switch (channel) {
         updates => 'Pembaruan Malva',
         medication => 'Pengingat Obat',
-        crisis => 'Crisis Alerts',
+        crisis => 'Krisis Alerts',
         _ => 'Follow-ups',
       };
 }
@@ -201,9 +201,9 @@ class PushNotificationService {
     await androidPlugin.createNotificationChannel(
       const AndroidNotificationChannel(
         MalvaNotificationChannels.crisis,
-        'Crisis Alerts',
+        'Krisis Alerts',
         description:
-            'Urgent crisis notifications requiring immediate attention',
+            'Urgent krisis notifications requiring immediate attention',
         importance: Importance.max,
         enableVibration: true,
         playSound: true,

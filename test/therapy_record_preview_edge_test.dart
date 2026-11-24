@@ -113,8 +113,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Seksi Therapy Record tetap ada + empty state.
-    expect(find.text('Therapy Record'), findsOneWidget);
-    expect(find.textContaining('Belum ada therapy record'), findsOneWidget);
+    expect(find.text('Riwayat Terapi'), findsOneWidget);
+    expect(find.textContaining('Belum ada riwayat Terapi'), findsOneWidget);
     // Katalog tidak blank: modul pertama tetap tampil.
     expect(find.text(allTherapyModules.first.title), findsWidgets);
   });
@@ -129,12 +129,12 @@ void main() {
     await tester.pumpAndSettle();
 
     // Kartu error tampil + tombol Coba, tanpa crash.
-    expect(find.textContaining('Therapy record belum bisa dimuat'),
+    expect(find.textContaining('Riwayat Terapi belum bisa dimuat'),
         findsOneWidget);
     expect(find.text('Coba'), findsOneWidget);
     // Katalog tetap ter-render (tidak blank).
     expect(find.text(allTherapyModules.first.title), findsWidgets);
-    expect(find.text('Therapy Record'), findsOneWidget);
+    expect(find.text('Riwayat Terapi'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -154,7 +154,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Login dulu untuk melihat therapy record'),
+    expect(find.textContaining('Login dulu untuk melihat riwayat Terapi'),
         findsOneWidget);
     expect(tester.takeException(), isNull);
   });

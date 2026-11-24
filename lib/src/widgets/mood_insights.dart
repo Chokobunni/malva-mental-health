@@ -78,9 +78,9 @@ class _MoodInsightsState extends State<MoodInsights> {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Row(children: [
         for (final metric in [
-          ('✅ Longest Streak', stats.longestStreak),
-          ('🔥 Current Streak', stats.currentStreak),
-          ('🗓️ Total Days', stats.totalDays)
+          ('✅ Runtutan Terpanjang', stats.longestStreak),
+          ('🔥 Runtutan Saat Ini', stats.currentStreak),
+          ('🗓️ Total Hari', stats.totalDays)
         ])
           Expanded(
               child: Padding(
@@ -128,7 +128,7 @@ class _MoodInsightsState extends State<MoodInsights> {
       const SizedBox(height: 18),
       SymptomsBalanceChart(entries: widget.entries, now: widget.now),
       const SizedBox(height: 18),
-      const SectionLabel('Recent Mood Entries'),
+      const SectionLabel('Catatan Mood Terbaru'),
       if (recent.isEmpty)
         const SoftCard(
             child: Text('Belum ada check-in. Tambahkan mood pertamamu.')),
@@ -216,7 +216,7 @@ class MoodTrendChart extends StatelessWidget {
     return SoftCard(
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const Text('Mood Trend',
+      const Text('Tren Mood',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
       const Text('7 hari terakhir • rata-rata harian • WIB',
           style: TextStyle(fontSize: 12)),
@@ -243,16 +243,16 @@ class MoodTrendChart extends StatelessWidget {
             'Belum ada data minggu ini. Hari tanpa check-in dibiarkan kosong.'),
       const SizedBox(height: 12),
       Wrap(spacing: 8, runSpacing: 8, children: [
-        _symptomTag('Anxiety', balance?[4], MalvaColors.amber),
-        _symptomTag('Energy', balance?[1], MalvaColors.mint),
-        _symptomTag('Irritability', balance?[3], MalvaColors.pink),
+        _symptomTag('Kecemasan', balance?[4], MalvaColors.amber),
+        _symptomTag('Energi', balance?[1], MalvaColors.mint),
+        _symptomTag('Iritabilitas', balance?[3], MalvaColors.pink),
       ]),
     ]));
   }
 
   Widget _symptomTag(String label, double? value, Color color) => StatusPill(
       label:
-          '$label: ${value == null ? '—' : value < 4 ? 'Low' : value < 7 ? 'Med' : 'High'}',
+          '$label: ${value == null ? '—' : value < 4 ? 'Rendah' : value < 7 ? 'Sedang' : 'Tinggi'}',
       color: color);
 }
 
@@ -333,14 +333,18 @@ class _SymptomsBalanceChartState extends State<SymptomsBalanceChart> {
     return SoftCard(
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const Text('Symptoms Balance Map',
+      const Text('Peta Keseimbangan Gejala',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
       const SizedBox(height: 10),
       Wrap(spacing: 6, runSpacing: 4, children: [
         for (final range in MoodRange.values)
           ChoiceChip(
-              label: Text(
-                  '${range.name[0].toUpperCase()}${range.name.substring(1)}'),
+              label: Text(switch (range) {
+                MoodRange.weekly => 'Mingguan',
+                MoodRange.monthly => 'Bulanan',
+                MoodRange.yearly => 'Tahunan',
+                MoodRange.lifetime => 'Semua Waktu',
+              }),
               selected: range == _range,
               onSelected: (_) => setState(() => _range = range))
       ]),
@@ -354,12 +358,12 @@ class _SymptomsBalanceChartState extends State<SymptomsBalanceChart> {
             height: 260,
             child: Semantics(
                 label:
-                    'Mood ${(values[0] / 2).toStringAsFixed(1)}/5, Energy ${values[1].toStringAsFixed(1)}/10, Sleep ${values[2].toStringAsFixed(1)} jam, Irritability ${values[3].toStringAsFixed(1)}/10, Anxiety ${values[4].toStringAsFixed(1)}/10',
+                    'Mood ${(values[0] / 2).toStringAsFixed(1)}/5, Energi ${values[1].toStringAsFixed(1)}/10, Tidur ${values[2].toStringAsFixed(1)} jam, Iritabilitas ${values[3].toStringAsFixed(1)}/10, Kecemasan ${values[4].toStringAsFixed(1)}/10',
                 child: CustomPaint(
                     painter: _BalancePainter(values),
                     child: const SizedBox.expand()))),
         const Text(
-            'Rata-rata check-in. Mood: 1–5 • Sleep: 0–12 jam • sumbu lain: 0–10. Angka kecemasan/iritabilitas lebih tinggi berarti gejala lebih kuat.',
+            'Rata-rata check-in. Mood: 1–5 • Tidur: 0–12 jam • sumbu lain: 0–10. Angka kecemasan/iritabilitas lebih tinggi berarti gejala lebih kuat.',
             style: TextStyle(fontSize: 11)),
       ],
     ]));
@@ -393,7 +397,7 @@ class _BalancePainter extends CustomPainter {
     for (var ring = 1; ring <= 5; ring++) {
       canvas.drawPath(polygon(ring / 5), grid);
     }
-    const names = ['Mood', 'Energy', 'Sleep', 'Irritability', 'Anxiety'];
+    const names = ['Mood', 'Energi', 'Tidur', 'Iritabilitas', 'Kecemasan'];
     for (var i = 0; i < 5; i++) {
       canvas.drawLine(center, point(i, 1), grid);
       final label = point(i, 1.28);
@@ -467,9 +471,9 @@ class _RecentMood extends StatelessWidget {
         ]),
         const SizedBox(height: 12),
         for (final value in [
-          ('Energy', entry.energy, MalvaColors.mint),
-          ('Anxiety', entry.anxiety, MalvaColors.amber),
-          ('Irritability', entry.irritability, MalvaColors.pink)
+          ('Energi', entry.energy, MalvaColors.mint),
+          ('Kecemasan', entry.anxiety, MalvaColors.amber),
+          ('Iritabilitas', entry.irritability, MalvaColors.pink)
         ])
           Padding(
               padding: const EdgeInsets.only(bottom: 6),
