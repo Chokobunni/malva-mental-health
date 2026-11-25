@@ -16,6 +16,8 @@ import '../services/mood_insights.dart';
 import '../services/server_clock.dart';
 import '../time/wib.dart';
 import '../widgets/mood_insights.dart';
+import '../widgets/clinical_allergy_section.dart';
+import '../widgets/clinical_profile_cards.dart';
 import '../theme.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
@@ -52,55 +54,186 @@ class ProPatientDetailScreen extends ConsumerStatefulWidget {
       _ProPatientDetailScreenState();
 }
 
-class _ProPatientDetailScreenState
-    extends ConsumerState<ProPatientDetailScreen> {
-  Set<String> _assessmentInstruments = {'who5', 'gad7', 'phq9', 'dass21'};
-  bool _oldestAssessmentFirst = false;
-  int _visibleAssessments = 5;
+class _ProPatientDetailScreenState extends ConsumerState<ProPatientDetailScreen>
+    with WidgetsBindingObserver {
+  String _archiveQuery = '';
+  String _archiveFilter = 'Semua';
+  int _visibleAssessments = 4;
+  List<BackendHealthRecordAllergy> _allergies = const [];
+  int? _adherence;
 
   List<Widget> _clinicalAssessmentRecords() {
-    final entries = filterAssessmentHistory([
+    final entries = [
       for (final screening in _screenings)
         assessmentEntryFromScreening(screening),
       for (final worksheet in _worksheets)
-        if (isCompleteAssessmentAnswers(worksheet.moduleId, worksheet.answers))
-          assessmentEntryFromSubmission(worksheet),
-    ],
-        instruments: _assessmentInstruments,
-        oldestFirst: _oldestAssessmentFirst);
+        assessmentEntryFromSubmission(worksheet),
+    ]..sort((a, b) => (b.date?.millisecondsSinceEpoch ?? 0)
+        .compareTo(a.date?.millisecondsSinceEpoch ?? 0));
+    final query = _archiveQuery.trim().toLowerCase();
+    final filtered = entries
+        .where((entry) =>
+            (_archiveFilter == 'Semua' ||
+                entry.isAssessmentResult == (_archiveFilter == 'Asesmen')) &&
+            '${entry.title} ${entry.subtitle}'.toLowerCase().contains(query))
+        .toList();
     return [
+      const SectionLabel('Arsip Klinis & Skrining'),
+      const Text('Hasil asesmen psikometri & lembar kerja terapi pasien'),
+      const SizedBox(height: 12),
+      TextField(
+        decoration: const InputDecoration(
+          hintText: 'Cari hasil asesmen atau terapi…',
+          prefixIcon: Icon(Icons.search),
+        ),
+        onChanged: (query) => setState(() {
+          _archiveQuery = query;
+          _visibleAssessments = 4;
+        }),
+      ),
+      const SizedBox(height: 6),
+      Wrap(
+        spacing: 8,
+        children: [
+          for (final option in const ['Semua', 'Asesmen', 'Terapi'])
+            ChoiceChip(
+              label: Text(option),
+              selected: _archiveFilter == option,
+              showCheckmark: false,
+              onSelected: (_) => setState(() {
+                _archiveFilter = option;
+                _visibleAssessments = 4;
+              }),
+            ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      if (_isUnavailable('Asesmen & lembar kerja'))
+        _sectionStatus('Asesmen & lembar kerja'),
+      if (_isUnavailable('Skrining PHQ-9 / GAD-7'))
+        _sectionStatus('Skrining PHQ-9 / GAD-7'),
+      if (filtered.isEmpty && entries.isNotEmpty)
+        const SoftCard(child: Text('Tidak ada hasil yang cocok.')),
       if (entries.isEmpty &&
           !_isUnavailable('Skrining PHQ-9 / GAD-7') &&
           !_isUnavailable('Asesmen & lembar kerja'))
-        const EmptyState(
-            icon: Icons.fact_check_outlined,
-            title: 'Belum ada skrining',
-            subtitle: 'Tidak ada hasil untuk filter ini.'),
-      for (final entry in entries.take(_visibleAssessments)) ...[
-        if (entry.screening != null)
-          _clinicalScreening(entry.screening!)
-        else
-          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(formatAssessmentDate(entry.date),
-                style: const TextStyle(fontSize: 12)),
-            TherapySubmissionView(
-                key: ValueKey('worksheet-' + entry.sourceId),
-                moduleId: entry.moduleId,
-                title: entry.title,
-                answers: entry.answers,
-                summary: entry.subtitle),
-          ]),
+        const SoftCard(child: Text('Belum ada arsip klinis.')),
+      for (final entry in filtered.take(_visibleAssessments)) ...[
+        _archiveCard(entry),
         const SizedBox(height: 8),
       ],
-      if (entries.length > _visibleAssessments)
-        TextButton(
-            onPressed: () => setState(() => _visibleAssessments += 5),
-            child: const Text('Tampilkan lebih banyak')),
+      if (filtered.length > _visibleAssessments)
+        OutlinedButton(
+          onPressed: () => setState(() => _visibleAssessments += 5),
+          child: Text(
+              'Tunjukkan Lebih (${filtered.length - _visibleAssessments} lagi)'),
+        ),
     ];
+  }
+
+  Widget _archiveCard(AssessmentHistoryEntry entry) {
+    final screening = entry.screening;
+    final crisis = screening?.crisisFlag == true;
+    final color = crisis ? MalvaColors.danger : entry.color;
+    return SoftCard(
+      color: Colors.white,
+      outline: crisis ? BorderSide(color: color.withValues(alpha: 0.25)) : null,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClinicalIconTile(icon: entry.icon, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(entry.title,
+                    style: const TextStyle(fontWeight: FontWeight.w900)),
+                const SizedBox(height: 6),
+                if (screening != null)
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 5,
+                    children: [
+                      if (crisis)
+                        const StatusPill(
+                            label: 'CRISIS',
+                            color: MalvaColors.danger,
+                            icon: Icons.warning_amber_rounded),
+                      for (final score in entry.subtitle.split(' • '))
+                        StatusPill(label: score, color: color),
+                    ],
+                  )
+                else if (entry.subtitle.isNotEmpty)
+                  Text(entry.subtitle,
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 6),
+                Text(
+                  '${entry.isAssessmentResult ? 'Asesmen' : 'Terapi'} • ${formatAssessmentDate(entry.date)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                Wrap(
+                  spacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (screening != null || entry.isShared)
+                      const StatusPill(
+                          label: 'Dibagikan',
+                          color: MalvaColors.mint,
+                          icon: Icons.send_outlined),
+                    TextButton(
+                      onPressed: () => _showArchiveResult(entry),
+                      child: const Text('Lihat hasil'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showArchiveResult(AssessmentHistoryEntry entry) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => Consumer(builder: (context, ref, _) {
+        ref.watch(authStateProvider);
+        if (_accountChanged)
+          return const Padding(
+            padding: EdgeInsets.all(18),
+            child: Text('Sesi akun telah berubah.'),
+          );
+        return FractionallySizedBox(
+          heightFactor: 0.85,
+          child: ListView(
+            padding: const EdgeInsets.all(18),
+            children: [
+              Text(entry.title, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 10),
+              if (entry.screening case final screening?)
+                _clinicalScreening(screening)
+              else
+                TherapySubmissionView(
+                  moduleId: entry.moduleId,
+                  title: entry.title,
+                  answers: entry.answers,
+                  summary: entry.subtitle,
+                ),
+            ],
+          ),
+        );
+      }),
+    );
   }
 
   Widget _clinicalScreening(BackendScreeningSession sc) => CollapsibleCard(
         key: ValueKey('screening-${sc.id}'),
+        initiallyExpanded: true,
         color: Colors.white,
         semanticLabel: 'Detail skrining ${_screeningDate(sc.createdAt)}',
         header: Column(
@@ -172,6 +305,11 @@ class _ProPatientDetailScreenState
   bool _diagnosisOpening = false;
   bool _accountChanged = false;
   Timer? _diagnosisBoundary;
+  Timer? _consentPoll;
+  int _loadRevision = 0;
+  int _clinicalRevision = 0;
+  bool _refreshingClinical = false;
+  final _clinicalAccess = ValueNotifier(true);
   String? _restricted;
   bool _isLoading = true;
   String? _error;
@@ -204,6 +342,13 @@ class _ProPatientDetailScreenState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _consentPoll = Timer.periodic(const Duration(seconds: 30), (_) {
+      final state = WidgetsBinding.instance.lifecycleState;
+      if (state == null || state == AppLifecycleState.resumed) {
+        unawaited(_refreshClinical());
+      }
+    });
     ref.listenManual(authStateProvider, (previous, next) {
       final owner = widget.session ?? previous?.session;
       if (owner == null) return;
@@ -213,6 +358,8 @@ class _ProPatientDetailScreenState
               (owner.backendUserId ?? owner.identifier)) {
         setState(() => _accountChanged = true);
         _diagnosisBoundary?.cancel();
+        _consentPoll?.cancel();
+        _clinicalAccess.value = false;
       }
     });
     _load();
@@ -252,32 +399,162 @@ class _ProPatientDetailScreenState
             !now.isBefore(window.start) && now.isBefore(window.end));
   }
 
-  void _watchDiagnosisBoundary() {
+  Iterable<({DateTime? start, DateTime end})> get _readWindows sync* {
+    final professional = widget.session ?? ref.read(currentSessionProvider);
+    final id = professional?.backendUserId ?? professional?.identifier;
+    if (id == null) return;
+    for (final package in _packages) {
+      final end = package.expiresDateTime;
+      if (end != null &&
+          package.isActive &&
+          package.patientId == widget.patientId &&
+          package.professionalId == id) {
+        yield (start: null, end: end);
+      }
+    }
+    for (final session in _sessions) {
+      // A package session cannot extend access beyond its package.
+      if (session.packageId?.isNotEmpty == true ||
+          session.status != 'scheduled' ||
+          session.patientId != widget.patientId ||
+          session.professionalId != id) continue;
+      final start = session.scheduledDateTime;
+      if (start != null) {
+        yield (
+          start: start,
+          end: start.add(Duration(minutes: session.durationMinutes))
+        );
+      }
+    }
+  }
+
+  void _watchDiagnosisBoundary({DateTime? after}) {
     _diagnosisBoundary?.cancel();
     final now = ServerClock.now();
+    final cutoff = after != null && after.isAfter(now) ? after : now;
     final future = [
-      for (final window in _diagnosisWindows) ...[window.start, window.end]
-    ].where((time) => time.isAfter(now)).toList()
+      for (final window in _readWindows) ...[
+        if (window.start != null) window.start!,
+        window.end
+      ],
+      for (final window in _diagnosisWindows) ...[window.start, window.end],
+    ].where((time) => time.isAfter(cutoff)).toList()
       ..sort();
     if (future.isEmpty) return;
-    _diagnosisBoundary = Timer(future.first.difference(now), () {
-      if (!mounted) return;
-      setState(() {});
-      if (_healthRecord == null) {
-        unawaited(_load());
+    final boundary = future.first;
+    _diagnosisBoundary = Timer(boundary.difference(now), () {
+      if (!mounted || _accountChanged) return;
+      if (!_readWindows.any((window) =>
+          window.end.isAfter(boundary) &&
+          (window.start == null || !boundary.isBefore(window.start!)))) {
+        _clearClinical();
       } else {
-        _watchDiagnosisBoundary();
+        setState(() {});
       }
+      unawaited(_refreshClinical(force: true));
+      _watchDiagnosisBoundary(after: boundary);
     });
+  }
+
+  void _clearClinical() {
+    ++_clinicalRevision;
+    _refreshingClinical = false;
+    setState(() {
+      _healthRecord = null;
+      _allergies = const [];
+    });
+    _clinicalAccess.value = false;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || _accountChanged || _isLoading)
+      return;
+    final now = ServerClock.now();
+    if (!_readWindows.any((window) =>
+        window.end.isAfter(now) &&
+        (window.start == null || !now.isBefore(window.start!)))) {
+      _clearClinical();
+    }
+    _watchDiagnosisBoundary();
+    unawaited(_refreshClinical(force: true));
+  }
+
+  Future<void> _refreshClinical({bool force = false}) async {
+    final token = _token;
+    if (token == null || _isLoading || (_refreshingClinical && !force)) return;
+    final revision = ++_clinicalRevision;
+    final patientId = widget.patientId;
+    _refreshingClinical = true;
+    final failed = <String>{};
+    final unshared = <String>{};
+    Future<T?> fetch<T>(String label, Future<T> Function() request) async {
+      try {
+        return await request();
+      } on MalvaApiException catch (error) {
+        if (error.statusCode == 401 || error.statusCode == 403) {
+          unshared.add(label);
+        } else {
+          failed.add(label);
+        }
+      } on Object {
+        failed.add(label);
+      }
+      return null;
+    }
+
+    const diagnosis = 'Rekam Medis';
+    const allergies = 'Alergi & Reaksi Obat';
+    final results = await Future.wait([
+      fetch(diagnosis,
+          () => _api.getHealthRecord(accessToken: token, patientId: patientId)),
+      fetch(
+          allergies,
+          () => _api.listHealthRecordAllergies(
+              accessToken: token, patientId: patientId)),
+    ]);
+    if (!mounted ||
+        _accountChanged ||
+        widget.patientId != patientId ||
+        revision != _clinicalRevision) return;
+    _refreshingClinical = false;
+    setState(() {
+      _healthRecord = results[0] as BackendHealthRecord?;
+      _allergies =
+          (results[1] as List<BackendHealthRecordAllergy>?) ?? const [];
+      _failedSections = [
+        ..._failedSections
+            .where((label) => label != diagnosis && label != allergies),
+        ...failed,
+      ];
+      _unsharedSections = [
+        ..._unsharedSections
+            .where((label) => label != diagnosis && label != allergies),
+        ...unshared,
+      ];
+    });
+    _clinicalAccess.value = _healthRecord != null;
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _diagnosisBoundary?.cancel();
+    _consentPoll?.cancel();
+    _clinicalAccess.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
+    final revision = ++_loadRevision;
+    final patientId = widget.patientId;
+    ++_clinicalRevision;
+    _refreshingClinical = false;
+    bool current() =>
+        mounted &&
+        !_accountChanged &&
+        revision == _loadRevision &&
+        widget.patientId == patientId;
     final token = _token;
     if (token == null) {
       if (mounted) {
@@ -305,7 +582,7 @@ class _ProPatientDetailScreenState
             unshared.add(sectionLabel);
             // 403 = pasien tidak membagikan data ini; sudah dijelaskan lewat
             // _restricted, bukan kegagalan muat.
-            if (mounted) {
+            if (current()) {
               setState(() => _restricted = (_restricted == null)
                   ? e.message
                   : '$_restricted • ${e.message}');
@@ -326,7 +603,7 @@ class _ProPatientDetailScreenState
             accessToken: token, scope: 'all', patientId: widget.patientId),
         safely(
             () => _api.listScreenings(
-                accessToken: token, patientId: widget.patientId, limit: 10),
+                accessToken: token, patientId: widget.patientId, limit: 0),
             'Skrining PHQ-9 / GAD-7'),
         safely(
             () => _api.listTherapySubmissions(
@@ -342,8 +619,18 @@ class _ProPatientDetailScreenState
             'Mood'),
         safely(
             () => _api.listMedications(
-                accessToken: token, patientId: widget.patientId, limit: 30),
+                accessToken: token, patientId: widget.patientId, limit: 100),
             'Obat'),
+        safely(
+          () => _api.listHealthRecordAllergies(
+              accessToken: token, patientId: widget.patientId),
+          'Alergi & Reaksi Obat',
+        ),
+        safely(
+          () => _api.listMedicationLogs(
+              accessToken: token, patientId: widget.patientId, limit: 0),
+          'Kepatuhan Obat',
+        ),
       ]);
       final record = await safely(
           () => _api.getHealthRecord(
@@ -351,7 +638,7 @@ class _ProPatientDetailScreenState
                 patientId: widget.patientId,
               ),
           'Rekam Medis');
-      if (!mounted) return;
+      if (!current()) return;
       // Muat kredensial sendiri untuk menentukan apakah Psikiater (hanya
       // Psikiater yang boleh meresepkan). Kegagalan memuat tidak menjatuhkan
       // layar — perlakukan sebagai bukan psikiater (aman).
@@ -361,7 +648,7 @@ class _ProPatientDetailScreenState
       } on Object {
         cred = null;
       }
-      if (!mounted) return;
+      if (!current()) return;
       setState(() {
         _packages = results[0] as List<BackendCarePackage>;
         _sessions = results[1] as List<BackendCareSession>;
@@ -380,6 +667,12 @@ class _ProPatientDetailScreenState
         _moods = (results[5] as List<BackendMoodCheckin>?) ?? const [];
         _medications = (results[6] as List<BackendMedication>?) ?? const [];
         _healthRecord = record;
+        _allergies =
+            (results[7] as List<BackendHealthRecordAllergy>?) ?? const [];
+        final logs = results[8] as List<BackendMedicationLog>?;
+        _adherence = logs == null || _medications.isEmpty
+            ? null
+            : clinicalMedicationAdherence(_medications, logs);
         _verified = cred?.verificationStatus.toUpperCase() == 'VERIFIED';
         _isPsychiatrist =
             cred != null && isPsychiatristSpecialization(cred.specialization);
@@ -387,9 +680,10 @@ class _ProPatientDetailScreenState
         _unsharedSections = List.unmodifiable(unshared);
         _isLoading = false;
       });
+      _clinicalAccess.value = record != null;
       _watchDiagnosisBoundary();
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!current()) return;
       setState(() {
         _error = friendlyErrorMessage(e);
         _isLoading = false;
@@ -434,7 +728,29 @@ class _ProPatientDetailScreenState
             cardTheme: Theme.of(context).cardTheme.copyWith(elevation: .35)),
         child: Scaffold(
           appBar: AppBar(
-            title: Text(widget.patientName),
+            centerTitle: false,
+            titleTextStyle: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.patientName,
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                const Text('PROFIL KLINIS',
+                    style:
+                        TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+              ],
+            ),
+            flexibleSpace: const DecoratedBox(
+              decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                colors: [MalvaColors.seed, MalvaColors.orchid],
+              )),
+            ),
             backgroundColor: MalvaColors.seed,
             foregroundColor: Colors.white,
             actions: [
@@ -471,8 +787,12 @@ class _ProPatientDetailScreenState
                   // ============================================================
                   // GRUP 1 — Ringkasan klinis
                   // ============================================================
-                  const SectionLabel('Ringkasan klinis',
-                      icon: Icons.assessment_rounded),
+                  SectionLabel(
+                    'Paket & Sesi Konsultasi',
+                    action: StatusPill(
+                        label: '${_packages.length} paket',
+                        color: MalvaColors.seed),
+                  ),
                   if (_packages.isEmpty && _sessions.isEmpty)
                     const EmptyState(
                       icon: Icons.card_membership_outlined,
@@ -483,21 +803,11 @@ class _ProPatientDetailScreenState
                     CollapsibleCard(
                       key: const ValueKey('packages-section'),
                       color: Colors.white,
-                      semanticLabel: 'Paket & sesi',
-                      header: Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Paket & sesi',
-                              style: TextStyle(fontWeight: FontWeight.w900),
-                            ),
-                          ),
-                          if (_packages.isNotEmpty)
-                            StatusPill(
-                              label: '${_packages.length} paket',
-                              color: MalvaColors.seed,
-                            ),
-                        ],
+                      semanticLabel: 'Jadwal sesi',
+                      initiallyExpanded: true,
+                      header: const Text(
+                        'Paket & sesi',
+                        style: TextStyle(fontWeight: FontWeight.w900),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -513,6 +823,11 @@ class _ProPatientDetailScreenState
                                   children: [
                                     Row(
                                       children: [
+                                        const ClinicalIconTile(
+                                          icon: Icons.calendar_today_outlined,
+                                          color: MalvaColors.seed,
+                                        ),
+                                        const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
                                             'Paket ${p.totalSessions} sesi / ${p.validityDays} hari',
@@ -539,7 +854,8 @@ class _ProPatientDetailScreenState
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      '${p.remainingSessions}/${p.totalSessions} sesi tersisa',
+                                      '${p.remainingSessions}/${p.totalSessions} sesi tersisa'
+                                      '${p.totalSessions > 0 ? ' • ${(p.usedSessions * 100 / p.totalSessions).round()}% terpakai' : ''}',
                                       style:
                                           Theme.of(context).textTheme.bodySmall,
                                     ),
@@ -564,72 +880,67 @@ class _ProPatientDetailScreenState
                       ),
                     ),
                   const SizedBox(height: 14),
-                  const SectionLabel('Rekam Medis & Obat'),
-                  SoftCard(
-                    color: Colors.white,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (_isUnavailable('Rekam Medis'))
-                          _sectionStatus('Rekam Medis')
-                        else
-                          Text(
-                            _healthRecord?.diagnosisSummary.isNotEmpty == true
-                                ? _healthRecord!.diagnosisSummary
-                                : 'Belum ada diagnosis / tidak dibagikan.',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        const SizedBox(height: 8),
-                        if (_isUnavailable('Obat')) _sectionStatus('Obat'),
-                        if (_medications.isNotEmpty) ...[
-                          const Text('Obat pasien:',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w800, fontSize: 12.5)),
-                          const SizedBox(height: 4),
-                          for (final m in _medications.take(5))
-                            Text(
-                                '• ${m.name} ${m.dosage} (stok ${m.currentStock})',
-                                style: const TextStyle(fontSize: 12.5)),
-                          const SizedBox(height: 8),
-                        ],
-                        Row(
-                          children: [
-                            Expanded(
-                              child: FilledButton.icon(
-                                onPressed:
-                                    !_canEditDiagnosis || _diagnosisOpening
-                                        ? null
-                                        : () => _openHealthRecordEdit(context),
-                                style: compactFilledButtonStyle,
-                                icon: const Icon(Icons.edit_note_rounded,
-                                    size: 16),
-                                label: const Text('Isi diagnosis'),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              // Resep hanya untuk Psikiater (Sp.KJ). Psikolog
-                              // melihat keterangan, bukan tombol yang pasti 403.
-                              child: _isPsychiatrist
-                                  ? OutlinedButton.icon(
-                                      onPressed: () =>
-                                          _openPrescribeMedication(context),
-                                      icon: const Icon(Icons.medication_rounded,
-                                          size: 16),
-                                      label: const Text('Resepkan obat'),
-                                    )
-                                  : const Text(
-                                      'Hanya Psikiater (Sp.KJ) yang dapat '
-                                      'meresepkan obat.',
-                                      style: TextStyle(fontSize: 11.5),
-                                    ),
-                            ),
-                          ],
-                        ),
-                      ],
+                  SectionLabel(
+                    'Diagnosis Klinis (ICD-10)',
+                    action: TextButton.icon(
+                      onPressed: !_canEditDiagnosis || _diagnosisOpening
+                          ? null
+                          : () => _openHealthRecordEdit(context),
+                      icon: const Icon(Icons.edit_note_rounded),
+                      label: const Text('Isi diagnosis'),
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  if (_isUnavailable('Rekam Medis'))
+                    _sectionStatus('Rekam Medis')
+                  else if (_healthRecord?.diagnosisSummary.trim().isNotEmpty ==
+                      true)
+                    ClinicalDiagnosisCard(
+                      record: _healthRecord!,
+                      onEdit: !_canEditDiagnosis || _diagnosisOpening
+                          ? null
+                          : () => _openHealthRecordEdit(context),
+                    )
+                  else
+                    const SoftCard(child: Text('Belum ada diagnosis.')),
+                  const SizedBox(height: 22),
+                  ClinicalAllergySection(
+                    records: _allergies,
+                    prescribing: true,
+                    status: _isUnavailable('Alergi & Reaksi Obat')
+                        ? _sectionStatus('Alergi & Reaksi Obat')
+                        : null,
+                  ),
+                  const SizedBox(height: 22),
+                  SectionLabel(
+                    'Obat Aktif (${_medications.length})',
+                    action: _isPsychiatrist
+                        ? TextButton.icon(
+                            onPressed: () => _openPrescribeMedication(context),
+                            icon: const Icon(Icons.add),
+                            label: const Text('Resepkan obat'),
+                          )
+                        : null,
+                  ),
+                  if (_isUnavailable('Obat'))
+                    _sectionStatus('Obat')
+                  else if (_medications.isEmpty)
+                    const SoftCard(child: Text('Belum ada obat aktif.'))
+                  else ...[
+                    if (_adherence != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: StatusPill(
+                          label: 'Kepatuhan $_adherence% (7 hr)',
+                          color: MalvaColors.seed,
+                        ),
+                      ),
+                    for (final medication in _medications) ...[
+                      ClinicalMedicationCard(med: medication),
+                      const SizedBox(height: 8),
+                    ],
+                  ],
+                  const SizedBox(height: 22),
+                  ..._clinicalAssessmentRecords(),
                   // ============================================================
                   // GRUP 2 — Pemantauan harian (semua read-only → dilipat)
                   // ============================================================
@@ -729,46 +1040,7 @@ class _ProPatientDetailScreenState
                     ),
                   const SizedBox(height: 10),
                   const SizedBox(height: 22),
-                  const SectionLabel('Skrining', center: true),
-                  AssessmentHistoryFilters(
-                    selected: _assessmentInstruments,
-                    oldestFirst: _oldestAssessmentFirst,
-                    onChanged: (selected, oldest) => setState(() {
-                      _assessmentInstruments = selected;
-                      _oldestAssessmentFirst = oldest;
-                      _visibleAssessments = 5;
-                    }),
-                  ),
-                  if (_isUnavailable('Asesmen & lembar kerja'))
-                    _sectionStatus('Asesmen & lembar kerja'),
-                  if (_isUnavailable('Skrining PHQ-9 / GAD-7'))
-                    _sectionStatus('Skrining PHQ-9 / GAD-7'),
-                  ..._clinicalAssessmentRecords(),
-                  const SectionLabel('Lembar Kerja terapi dibagikan'),
-                  if (_isUnavailable('Asesmen & lembar kerja'))
-                    _sectionStatus('Asesmen & lembar kerja')
-                  else if (!_worksheets.any(
-                      (w) => w.moduleId != 'who5' && w.moduleId != 'dass21'))
-                    const EmptyState(
-                      icon: Icons.assignment_outlined,
-                      title: 'Belum ada lembar kerja terapi dibagikan',
-                      subtitle:
-                          'Latihan terapi yang dibagikan pasien muncul di sini.',
-                    )
-                  else
-                    for (final w in _worksheets.where((w) =>
-                        w.moduleId != 'who5' && w.moduleId != 'dass21')) ...[
-                      TherapySubmissionView(
-                        key: ValueKey('worksheet-${w.id}'),
-                        moduleId: w.moduleId,
-                        title: w.title,
-                        answers: w.answers,
-                        summary: w.summary,
-                        sharedAt: w.sharedAt,
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  // ============================================================
+
                   // GRUP 4 — Akses data
                   // ============================================================
                   const SizedBox(height: 22),
@@ -837,111 +1109,150 @@ class _ProPatientDetailScreenState
       String? error;
       final updated = await showDialog<BackendHealthRecord>(
         context: context,
-        builder: (_) => Consumer(builder: (dialog, dialogRef, _) {
-          dialogRef.watch(authStateProvider);
-          if (_accountChanged || !mounted || widget.patientId != patientId) {
-            return AlertDialog(
-              content: const Text('Sesi akun telah berubah.'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialog),
-                  child: const Text('Tutup'),
-                ),
-              ],
-            );
-          }
-          return StatefulBuilder(builder: (ctx, update) {
-            final summary = diagnosisSummaryFor(selected);
-            return PopScope(
-              canPop: !saving,
-              child: AlertDialog(
-                title: const Text('Diagnosis pasien'),
-                scrollable: true,
-                content: SizedBox(
-                  width: 440,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (legacy) ...[
-                        const Text('Diagnosis sebelumnya',
-                            style: TextStyle(fontWeight: FontWeight.w700)),
-                        Text(original),
-                        const SizedBox(height: 12),
-                      ],
-                      DiagnosisSearchField(
-                        service: service,
-                        selected: selected,
-                        enabled: !saving,
-                        onChanged: (value) => update(() {
-                          selected = value;
-                          error = null;
-                        }),
-                      ),
-                      if (error != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(error!,
-                              style: TextStyle(
-                                  color: Theme.of(ctx).colorScheme.error)),
+        builder: (_) => ValueListenableBuilder<bool>(
+            valueListenable: _clinicalAccess,
+            builder: (_, active, __) =>
+                Consumer(builder: (dialog, dialogRef, _) {
+                  dialogRef.watch(authStateProvider);
+                  if (!active ||
+                      _accountChanged ||
+                      !mounted ||
+                      widget.patientId != patientId) {
+                    return AlertDialog(
+                      content: const Text('Akses diagnosis sudah berakhir.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialog),
+                          child: const Text('Tutup'),
                         ),
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: saving ? null : () => Navigator.pop(ctx),
-                    child: const Text('Batal'),
-                  ),
-                  FilledButton(
-                    style: compactFilledButtonStyle,
-                    onPressed: saving ||
-                            summary == original ||
-                            (legacy && selected.isEmpty)
-                        ? null
-                        : () async {
-                            final token = _token;
-                            if (token == null || !_canEditDiagnosis) {
-                              update(() => error =
-                                  'Izin mengubah diagnosis sudah berakhir.');
-                              return;
-                            }
-                            if (utf8.encode(summary).length > 2000) {
-                              update(() => error =
-                                  'Diagnosis melebihi batas 2.000 byte.');
-                              return;
-                            }
-                            update(() {
-                              saving = true;
-                              error = null;
-                            });
-                            try {
-                              final record =
-                                  await _api.updateHealthRecordDiagnosis(
-                                accessToken: token,
-                                patientId: patientId,
-                                diagnosisSummary: summary,
-                              );
-                              if (ctx.mounted && !_accountChanged) {
-                                Navigator.pop(ctx, record);
-                              }
-                            } on Object catch (e) {
-                              if (!ctx.mounted || _accountChanged) return;
-                              update(() {
-                                saving = false;
-                                error = friendlyErrorMessage(e);
-                              });
-                            }
-                          },
-                    child: Text(saving ? 'Menyimpan...' : 'Simpan'),
-                  ),
-                ],
-              ),
-            );
-          });
-        }),
+                      ],
+                    );
+                  }
+                  return StatefulBuilder(builder: (ctx, update) {
+                    final summary = diagnosisSummaryFor(selected);
+                    return PopScope(
+                      canPop: !saving,
+                      child: AlertDialog(
+                        backgroundColor: Colors.white,
+                        actionsPadding:
+                            const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(24)),
+                        title: Row(
+                          children: [
+                            const Expanded(child: Text('Diagnosis Pasien')),
+                            IconButton(
+                              tooltip: 'Tutup',
+                              onPressed:
+                                  saving ? null : () => Navigator.pop(ctx),
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
+                        ),
+                        scrollable: true,
+                        content: SizedBox(
+                          width: 440,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Text(
+                                  'Pilih diagnosis utama & sekunder berdasarkan kode ICD-10'),
+                              const SizedBox(height: 14),
+                              if (legacy) ...[
+                                const Text('Diagnosis sebelumnya',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.w700)),
+                                Text(original),
+                                const SizedBox(height: 12),
+                              ],
+                              DiagnosisSearchField(
+                                service: service,
+                                showSelectionCards: true,
+                                selected: selected,
+                                enabled: !saving,
+                                onChanged: (value) => update(() {
+                                  selected = value;
+                                  error = null;
+                                }),
+                              ),
+                              if (error != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(error!,
+                                      style: TextStyle(
+                                          color:
+                                              Theme.of(ctx).colorScheme.error)),
+                                ),
+                            ],
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: saving ? null : () => Navigator.pop(ctx),
+                            child: const Text('Batal'),
+                          ),
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(0, 42),
+                              textStyle: const TextStyle(
+                                  fontFamily: 'Roboto',
+                                  fontWeight: FontWeight.w700),
+                            ),
+                            onPressed: saving ||
+                                    summary == original ||
+                                    (legacy && selected.isEmpty)
+                                ? null
+                                : () async {
+                                    final token = _token;
+                                    if (token == null || !_canEditDiagnosis) {
+                                      update(() => error =
+                                          'Izin mengubah diagnosis sudah berakhir.');
+                                      return;
+                                    }
+                                    if (utf8.encode(summary).length > 2000) {
+                                      update(() => error =
+                                          'Diagnosis melebihi batas 2.000 byte.');
+                                      return;
+                                    }
+                                    update(() {
+                                      saving = true;
+                                      error = null;
+                                    });
+                                    try {
+                                      final record = await _api
+                                          .updateHealthRecordDiagnosis(
+                                        accessToken: token,
+                                        patientId: patientId,
+                                        diagnosisSummary: summary,
+                                      );
+                                      if (ctx.mounted && !_accountChanged) {
+                                        Navigator.pop(ctx, record);
+                                      }
+                                    } on Object catch (e) {
+                                      if (!ctx.mounted || _accountChanged)
+                                        return;
+                                      update(() {
+                                        saving = false;
+                                        error = friendlyErrorMessage(e);
+                                      });
+                                    }
+                                  },
+                            child: Text(
+                                saving ? 'Menyimpan...' : 'Simpan Diagnosis'),
+                          ),
+                        ],
+                      ),
+                    );
+                  });
+                })),
       );
-      if (!context.mounted || _accountChanged || updated == null) return;
+      if (!context.mounted ||
+          _accountChanged ||
+          !_clinicalAccess.value ||
+          updated == null) return;
+      ++_clinicalRevision;
+      _refreshingClinical = false;
       setState(() => _healthRecord = updated);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

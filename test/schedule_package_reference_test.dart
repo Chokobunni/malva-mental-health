@@ -17,9 +17,13 @@ void main() {
     tester.view.physicalSize = const Size(390, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    Map<String, dynamic>? scheduled;
     final api = MalvaApiClient(
         baseUrl: 'https://synthetic.test',
         httpClient: MockClient((request) async {
+          if (request.method == 'POST') {
+            scheduled = jsonDecode(request.body) as Map<String, dynamic>;
+          }
           final body = switch (request.url.path) {
             '/v1/doctors/pro' => {
                 'credential': {'specialization': 'Sp.KJ'},
@@ -74,6 +78,17 @@ void main() {
     expect(find.text('Pilih Jadwal Sesi 3'), findsOneWidget);
     expect(find.text('1. Pilih Tanggal'), findsOneWidget);
     expect(find.text('2. Pilih Jam (WIB)'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Video'), findsNothing);
+    expect(find.widgetWithText(ChoiceChip, 'Chat'), findsNothing);
+    await tester.tap(find.text('10:00'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Pilih Jadwal'));
+    await tester.pumpAndSettle();
+    final submit = find.widgetWithText(FilledButton, 'Jadwalkan 1 sesi');
+    await tester.ensureVisible(submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(scheduled?['session_type'], 'video');
     expect(tester.takeException(), isNull);
   });
 }

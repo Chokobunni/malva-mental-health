@@ -62,14 +62,19 @@ class PrescriptionStatus extends StatelessWidget {
             color: issued ? const Color(0xffe3f6f0) : const Color(0xfffff3cf),
             borderRadius: BorderRadius.circular(30)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(issued ? Icons.check_circle : Icons.schedule,
+          Icon(issued ? Icons.check_circle_outline : Icons.schedule,
               size: 16,
-              color: issued ? prescriptionGreen : const Color(0xff9c762f)),
+              color:
+                  issued ? const Color(0xff126e58) : const Color(0xff795917)),
           const SizedBox(width: 5),
-          Text(issued ? 'Issued' : 'Draft',
-              style: TextStyle(
-                  color: issued ? prescriptionGreen : const Color(0xff9c762f),
-                  fontWeight: FontWeight.w800))
+          Flexible(
+              child: Text(issued ? 'Diterbitkan' : 'Draft',
+                  style: TextStyle(
+                      color: issued
+                          ? const Color(0xff126e58)
+                          : const Color(0xff795917),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800)))
         ]));
   }
 }

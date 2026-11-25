@@ -345,7 +345,8 @@ Repo ini memakai tiga alat bantu. **Semuanya aktif default**, dan semuanya berad
 
 ## Kontrak sesi dan alat klinis chat (2026-11-06)
 
-- Hadir/Tidak hadir dicatat sendiri oleh setiap peran. Pasien absent menjadi no_show dan kuota terpakai; profesional absent membatalkan sesi dan mengembalikan kredit pasien tepat sekali. Penyelesaian profesional hanya setelah durasi jadwal berakhir. Status terminal tidak boleh dihidupkan kembali oleh retry/sweeper.
+- Hadir/Tidak hadir dicatat sendiri oleh setiap peran selama jendela check-in. Saat durasi berakhir, keduanya hadir menjadi completed, dan hasil lain menjadi no_show. Kuota sesi kembali hanya jika pasien hadir dan profesional tidak hadir. Penyelesaian manual memerlukan dua konfirmasi hadir. Status terminal tidak dibuka kembali saat retry atau sweep.
+- Profil Klinis menyimpan catatan alergi dan efek samping pasien. Pembacaan profesional memerlukan relasi aktif dan izin Profil Klinis yang masih berlaku. Pilih Semua di Atur Data mencakup enam kategori yang terlihat dan mempertahankan preferensi Timeline tersimpan.
 - Akses chat/Meet hanya sesi scheduled, akhir eksklusif, memakai jam server. Chat permission menyertakan session_id/session_ends_at; klien menutup composer pada akhir, memeriksa ulang saat resume/reconnect, dan mempertahankan riwayat. Private note tidak masuk respons pasien.
 - Kartu profesional assessment_request/session_summary/goals harus diverifikasi pada REST dan WebSocket dengan sesi aktif, kredensial VERIFIED, tautan dan consent. Goal harus benar-benar milik pasien; snapshot judul berasal dari server. Obat tetap khusus psikiater.
 - Lampiran klinis hanya lewat /v1/chat-attachments; JPEG/PNG/WebP/PDF maksimal 10 MiB, isi divalidasi, tersimpan di sibling UploadDir + '-chat-private' di luar mount publik. Unduhan wajib memeriksa peserta pesan; jangan memakai /v1/upload untuk resep.

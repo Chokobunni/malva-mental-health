@@ -38,7 +38,6 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
   bool _loading = true;
   bool _psychiatrist = false;
   String? _error;
-  String _filter = 'all';
   int _request = 0;
   AuthSession? get _session =>
       _account.session(ref.read(authStateProvider).session);
@@ -119,13 +118,7 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
 
   Future<void> _edit(BackendEPrescription rx) async {
     if (rx.items.isEmpty) return;
-    await Navigator.push<bool>(
-        context,
-        MaterialPageRoute(
-            builder: (_) => EPrescriptionFormScreen(
-                session: _session,
-                apiClient: widget.apiClient,
-                prescription: rx)));
+    await _openPrescriptionEditor(context, _session, widget.apiClient, rx);
     if (mounted && _session != null) await _load();
   }
 
@@ -151,23 +144,16 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
     final valid = _account.current(active);
     final query = _search.text.trim().toLowerCase();
     final shown = _prescriptions
-        .where((rx) =>
-            (_filter == 'all' || rx.status == _filter) &&
-            (query.isEmpty ||
-                [_patient(rx), rx.qrToken, ...rx.items.map((i) => i.name)]
-                    .any((s) => s.toLowerCase().contains(query))))
+        .where((rx) => (query.isEmpty ||
+            [_patient(rx), rx.qrToken, ...rx.items.map((i) => i.name)]
+                .any((s) => s.toLowerCase().contains(query))))
         .toList();
     return Scaffold(
-        backgroundColor: const Color(0xfffcfbfd),
-        appBar: AppBar(
-            title: const Text('E-Prescription',
-                style: TextStyle(
-                    fontFamily: 'Roboto', fontWeight: FontWeight.w800)),
-            backgroundColor: prescriptionPurple,
-            foregroundColor: Colors.white,
-            shape: const RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.vertical(bottom: Radius.circular(24)))),
+        backgroundColor: _prescriptionBackground,
+        appBar: _prescriptionAppBar(
+          title: 'E-Prescription',
+          subtitle: 'Manajemen Resep Digital',
+        ),
         floatingActionButton: valid && !_loading && _psychiatrist
             ? FloatingActionButton.extended(
                 heroTag: 'erx_add_fab',
@@ -198,38 +184,23 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
                     padding: const EdgeInsets.fromLTRB(18, 20, 18, 100),
                     children: [
                       TextField(
-                          controller: _search,
-                          onChanged: (_) => setState(() {}),
-                          decoration: InputDecoration(
-                              labelText: 'Cari obat, pasien, atau QR',
-                              prefixIcon: const Icon(Icons.search),
-                              filled: true,
-                              fillColor: const Color(0xfff7f7fa),
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xffe4e5e9))))),
-                      const SizedBox(height: 14),
-                      Wrap(spacing: 8, runSpacing: 8, children: [
-                        for (final filter in [
-                          ('all', 'Semua'),
-                          ('issued', 'Issued'),
-                          ('draft', 'Draft')
-                        ])
-                          ChoiceChip(
-                              label: Text(
-                                  '${filter.$2}  ${_prescriptions.where((r) => filter.$1 == 'all' || r.status == filter.$1).length}'),
-                              selected: _filter == filter.$1,
-                              selectedColor: prescriptionPurple,
-                              labelStyle: TextStyle(
-                                  color: _filter == filter.$1
-                                      ? Colors.white
-                                      : const Color(0xff566170),
-                                  fontWeight: FontWeight.w700),
-                              showCheckmark: false,
-                              onSelected: (_) =>
-                                  setState(() => _filter = filter.$1))
-                      ]),
+                        controller: _search,
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          hintText: 'Cari nama pasien, obat, atau kode QR…',
+                          prefixIcon: const Icon(Icons.search,
+                              color: _prescriptionAccent),
+                          filled: true,
+                          fillColor: Colors.white,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: const BorderSide(
+                                color: Color(0xffa778ae), width: 1.5),
+                          ),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                        ),
+                      ),
                       const SizedBox(height: 18),
                       if (_loading)
                         const Center(child: CircularProgressIndicator())
@@ -254,7 +225,7 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
                                 : 'Resep tidak ditemukan',
                             subtitle: query.isEmpty
                                 ? 'Resep yang diterbitkan akan tercatat di sini.'
-                                : 'Coba kata pencarian atau filter lain.')
+                                : 'Coba kata pencarian lain.')
                       else
                         for (final rx in shown) ...[
                           _PrescriptionCard(
@@ -268,6 +239,108 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
                     ])));
   }
 }
+
+const _prescriptionBackground = Color(0xfff6f7f9);
+const _prescriptionAccent = Color(0xff783087);
+const _prescriptionTint = Color(0xfffaf2fc);
+const _prescriptionMuted = Color(0xff677482);
+const _prescriptionGradient =
+    LinearGradient(colors: [_prescriptionAccent, Color(0xff692477)]);
+
+AppBar _prescriptionAppBar({
+  required String title,
+  required String subtitle,
+  bool detail = false,
+}) {
+  const radius = BorderRadius.vertical(bottom: Radius.circular(26));
+  return AppBar(
+    centerTitle: true,
+    toolbarHeight: 72,
+    backgroundColor: _prescriptionAccent,
+    foregroundColor: Colors.white,
+    elevation: 3,
+    shape: const RoundedRectangleBorder(borderRadius: radius),
+    flexibleSpace: const DecoratedBox(
+      decoration:
+          BoxDecoration(gradient: _prescriptionGradient, borderRadius: radius),
+    ),
+    title: Column(
+      children: [
+        if (detail)
+          Text(subtitle,
+              style: const TextStyle(
+                  fontSize: 11, letterSpacing: .7, color: Color(0xffedd9f0))),
+        Text(title,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        if (!detail)
+          Text(subtitle,
+              style: const TextStyle(fontSize: 13, color: Color(0xffedd9f0))),
+      ],
+    ),
+  );
+}
+
+class _PrescriptionCode extends StatelessWidget {
+  const _PrescriptionCode({required this.token, this.detail = false});
+  final String token;
+  final bool detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final copy = IconButton(
+      tooltip: 'Salin kode QR',
+      onPressed: () => Clipboard.setData(ClipboardData(text: token)),
+      icon:
+          const Icon(Icons.copy_outlined, color: _prescriptionMuted, size: 18),
+    );
+    const codeStyle = TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: Color(0xff384453));
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      decoration: BoxDecoration(
+        color: _prescriptionBackground,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xffe8ebef)),
+      ),
+      child: detail
+          ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: SelectableText(token, style: codeStyle)),
+              Align(alignment: Alignment.centerRight, child: copy),
+            ])
+          : Row(children: [
+              const Text('QR',
+                  style: TextStyle(
+                      color: _prescriptionMuted, fontWeight: FontWeight.w700)),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Text(token,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: codeStyle)),
+              copy,
+            ]),
+    );
+  }
+}
+
+Future<bool?> _openPrescriptionEditor(BuildContext context,
+        AuthSession? session, MalvaApiClient? api, BackendEPrescription rx,
+        {int itemIndex = 0}) =>
+    Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+          builder: (_) => EPrescriptionFormScreen(
+                session: session,
+                apiClient: api,
+                prescription: rx,
+                itemIndex: itemIndex,
+              )),
+    );
 
 class _PrescriptionCard extends StatelessWidget {
   const _PrescriptionCard(
@@ -287,7 +360,8 @@ class _PrescriptionCard extends StatelessWidget {
           Container(
               padding: const EdgeInsets.all(12),
               decoration: const BoxDecoration(
-                  color: Color(0xffe0f3ef), shape: BoxShape.circle),
+                  color: Color(0xffe3f8f3),
+                  borderRadius: BorderRadius.all(Radius.circular(14))),
               child: const Icon(Icons.medication_rounded,
                   color: prescriptionGreen, size: 25)),
           const SizedBox(width: 12),
@@ -295,41 +369,21 @@ class _PrescriptionCard extends StatelessWidget {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                Text('${rx.items.length} item obat',
+                Text(patientName,
                     style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 19)),
-                const SizedBox(height: 8),
-                Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                    decoration: BoxDecoration(
-                        color: const Color(0xfff8effb),
-                        borderRadius: BorderRadius.circular(8)),
-                    child: Text(patientName,
-                        style: const TextStyle(
-                            color: prescriptionPurple,
-                            fontWeight: FontWeight.w700))),
+                        fontWeight: FontWeight.w800, fontSize: 17)),
+                const SizedBox(height: 4),
+                Text('${rx.items.length} item obat',
+                    style: const TextStyle(color: _prescriptionMuted)),
               ])),
           const SizedBox(width: 5),
           PrescriptionStatus(status: rx.status)
         ]),
         const SizedBox(height: 10),
-        if (rx.status == 'issued' && rx.qrToken.isNotEmpty)
-          Row(children: [
-            Expanded(
-                child: Text('QR: ${rx.qrToken}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontFamily: 'monospace', fontSize: 12))),
-            IconButton(
-                tooltip: 'Salin kode QR',
-                visualDensity: VisualDensity.compact,
-                onPressed: () =>
-                    Clipboard.setData(ClipboardData(text: rx.qrToken)),
-                icon: const Icon(Icons.copy_outlined, size: 17))
-          ]),
-        const Divider(height: 22),
+        if (rx.status == 'issued' && rx.qrToken.isNotEmpty) ...[
+          _PrescriptionCode(token: rx.qrToken),
+          const SizedBox(height: 10),
+        ],
         PrescriptionPanel(
             color: const Color(0xfff8f9fb),
             padding: const EdgeInsets.all(10),
@@ -347,7 +401,7 @@ class _PrescriptionCard extends StatelessWidget {
                             color: prescriptionPurple,
                             fontWeight: FontWeight.w700)))
             ])),
-        const SizedBox(height: 12),
+        const Divider(height: 20),
         if (rx.createdAt != null)
           Row(children: [
             const Icon(Icons.calendar_today_outlined,
@@ -357,37 +411,48 @@ class _PrescriptionCard extends StatelessWidget {
                 style: const TextStyle(fontSize: 12, color: Color(0xff7c8794)))
           ]),
         const SizedBox(height: 6),
-        Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-          TextButton.icon(
-              key: Key('rx-detail-${rx.id}'),
-              onPressed: onDetail,
-              icon: const Icon(Icons.qr_code, size: 18),
-              label: const Text('QR & Detail')),
-          IconButton(
-              key: Key('rx-edit-${rx.id}'),
-              tooltip: 'Edit resep',
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined, size: 20)),
-          IconButton(
-              key: Key('rx-delete-${rx.id}'),
-              tooltip: 'Hapus resep',
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline, size: 20))
-        ]),
+        Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              TextButton.icon(
+                  key: Key('rx-detail-${rx.id}'),
+                  style: TextButton.styleFrom(
+                    backgroundColor: _prescriptionTint,
+                    foregroundColor: _prescriptionAccent,
+                  ),
+                  onPressed: onDetail,
+                  icon: const Icon(Icons.qr_code, size: 18),
+                  label: const Text('QR & Detail')),
+              IconButton(
+                  key: Key('rx-edit-${rx.id}'),
+                  tooltip: 'Edit resep',
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined, size: 20)),
+              IconButton(
+                  key: Key('rx-delete-${rx.id}'),
+                  tooltip: 'Hapus resep',
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline, size: 20))
+            ]),
       ]));
 }
 
 class _MedicationPreview extends StatelessWidget {
-  const _MedicationPreview({required this.item, required this.index});
+  const _MedicationPreview(
+      {required this.item, required this.index, this.detail = false});
   final BackendEPrescriptionItem item;
   final int index;
+  final bool detail;
   @override
   Widget build(BuildContext context) => Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: const Color(0xffedeef2)),
-          borderRadius: BorderRadius.circular(14)),
+      padding: EdgeInsets.all(detail ? 0 : 10),
+      decoration: detail
+          ? null
+          : BoxDecoration(
+              color: _prescriptionBackground,
+              border: Border.all(color: const Color(0xffedeef2)),
+              borderRadius: BorderRadius.circular(14)),
       child: Row(children: [
         Container(
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
@@ -416,11 +481,18 @@ class _MedicationPreview extends StatelessWidget {
         ])),
         const SizedBox(width: 6),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text('${item.currentStock} ${item.form}',
-              style: const TextStyle(
-                  color: prescriptionGreen,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800)),
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xffe7f9f6),
+              borderRadius: BorderRadius.circular(7),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+            child: Text('${item.currentStock} ${item.form}',
+                style: const TextStyle(
+                    color: Color(0xff126e66),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800)),
+          ),
           if (item.remainingStock != null)
             Text('Sisa ${item.remainingStock}',
                 style: const TextStyle(color: Color(0xff7b8491), fontSize: 11))
@@ -541,26 +613,49 @@ class _EPrescriptionDetailScreenState
         _session?.role == UserRole.professional &&
         _session?.backendUserId == rx.professionalId;
     return Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-            toolbarHeight: 86,
-            title:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('DETAIL E-PRESCRIPTION',
-                  style: TextStyle(
-                      fontFamily: 'Roboto', fontSize: 12, letterSpacing: .5)),
-              const SizedBox(height: 6),
-              Text(valid ? widget.patientName : 'Detail Resep',
-                  style: const TextStyle(
-                      fontFamily: 'Roboto',
-                      fontWeight: FontWeight.w800,
-                      fontSize: 20))
-            ]),
-            backgroundColor: prescriptionPurple,
-            foregroundColor: Colors.white,
-            shape: const RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.vertical(bottom: Radius.circular(26)))),
+        backgroundColor: _prescriptionBackground,
+        appBar: _prescriptionAppBar(
+          title: valid ? widget.patientName : 'Detail Resep',
+          subtitle: 'DETAIL E-PRESCRIPTION',
+          detail: true,
+        ),
+        bottomNavigationBar: canEdit
+            ? SafeArea(
+                top: false,
+                child: Material(
+                  color: Colors.white,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 12),
+                    child: Row(children: [
+                      OutlinedButton.icon(
+                        onPressed: _busy ? null : _delete,
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: const Text('Hapus'),
+                        style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red.shade700),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                          child: FilledButton.icon(
+                        onPressed: _busy || rx.items.isEmpty
+                            ? null
+                            : () async {
+                                await _openPrescriptionEditor(
+                                    context, _session, widget.apiClient, rx);
+                                if (mounted && _session != null) await _load();
+                              },
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        label: const Text('Edit Resep'),
+                        style: FilledButton.styleFrom(
+                            backgroundColor: _prescriptionAccent,
+                            minimumSize: const Size(0, 45)),
+                      )),
+                    ]),
+                  ),
+                ),
+              )
+            : null,
         body: !valid
             ? const Center(
                 child: Text('Sesi akun berubah. Buka kembali halaman resep.'))
@@ -582,81 +677,99 @@ class _EPrescriptionDetailScreenState
                             padding: const EdgeInsets.all(20),
                             children: [
                                 PrescriptionPanel(
-                                    color: const Color(0xfff8f9fb),
                                     child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.stretch,
                                         children: [
-                                          Row(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                if (rx.status == 'issued' &&
-                                                    rx.qrToken.isNotEmpty) ...[
-                                                  PrescriptionQr(
-                                                      value: widget
-                                                          .apiClient!.baseUri
-                                                          .replace(
-                                                              path:
-                                                                  '/v1/e-prescriptions/verify',
-                                                              queryParameters: {
-                                                            'token': rx.qrToken
-                                                          }).toString(),
-                                                      size: 100),
-                                                  const SizedBox(width: 12)
-                                                ],
-                                                Expanded(
-                                                    child: Column(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .start,
-                                                        children: [
-                                                      PrescriptionStatus(
-                                                          status: rx.status),
-                                                      if (rx.createdAt != null)
-                                                        Padding(
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .symmetric(
-                                                                    vertical:
-                                                                        8),
-                                                            child: Text(
-                                                                formatWibDateTime(rx
-                                                                    .createdAt!),
-                                                                style: const TextStyle(
+                                      Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            if (rx.status == 'issued' &&
+                                                rx.qrToken.isNotEmpty) ...[
+                                              PrescriptionQr(
+                                                  value: widget
+                                                      .apiClient!.baseUri
+                                                      .replace(
+                                                          path:
+                                                              '/v1/e-prescriptions/verify',
+                                                          queryParameters: {
+                                                        'token': rx.qrToken
+                                                      }).toString(),
+                                                  size: 100),
+                                              const SizedBox(width: 12)
+                                            ],
+                                            Expanded(
+                                                child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                  PrescriptionStatus(
+                                                      status: rx.status),
+                                                  if (rx.createdAt != null)
+                                                    Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                                vertical: 8),
+                                                        child: Text(
+                                                            formatWibDateTime(
+                                                                rx.createdAt!),
+                                                            style:
+                                                                const TextStyle(
                                                                     fontSize:
                                                                         12,
                                                                     color: Colors
                                                                         .grey))),
-                                                      if (rx.status == 'issued')
-                                                        SelectableText(
-                                                            rx.qrToken,
-                                                            style: const TextStyle(
-                                                                fontFamily:
-                                                                    'monospace',
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w700))
-                                                      else
-                                                        const Padding(
-                                                            padding:
-                                                                EdgeInsets.only(
-                                                                    top: 10),
-                                                            child: Text(
-                                                                'Draft belum memiliki QR yang berlaku.'))
-                                                    ]))
-                                              ]),
-                                          if (rx.status == 'issued')
-                                            Padding(
-                                                padding: const EdgeInsets.only(
-                                                    top: 12),
-                                                child: Text(
-                                                    'Ditandatangani secara digital • STR/SIP: ${rx.signatureData['str_number'] ?? rx.signatureData['sip_number'] ?? 'Belum tersedia'}',
-                                                    style: const TextStyle(
-                                                        fontSize: 12,
-                                                        color:
-                                                            Color(0xff677482))))
-                                        ])),
+                                                  if (rx.status == 'issued' &&
+                                                      rx.qrToken.isNotEmpty)
+                                                    _PrescriptionCode(
+                                                        token: rx.qrToken,
+                                                        detail: true)
+                                                  else
+                                                    const Padding(
+                                                        padding:
+                                                            EdgeInsets.only(
+                                                                top: 10),
+                                                        child: Text(
+                                                            'Draft belum memiliki QR yang berlaku.'))
+                                                ]))
+                                          ]),
+                                      if (rx.status == 'issued') ...[
+                                        const Divider(height: 26),
+                                        Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              const Icon(
+                                                  Icons.verified_user_outlined,
+                                                  color: _prescriptionAccent,
+                                                  size: 20),
+                                              const SizedBox(width: 9),
+                                              Expanded(
+                                                  child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                    const Text(
+                                                        'Ditandatangani secara digital',
+                                                        style: TextStyle(
+                                                            fontWeight:
+                                                                FontWeight
+                                                                    .w700)),
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                        "STR/SIP: ${rx.signatureData['str_number'] ?? rx.signatureData['sip_number'] ?? 'Belum tersedia'}",
+                                                        style: const TextStyle(
+                                                            fontSize: 12,
+                                                            color:
+                                                                _prescriptionMuted)),
+                                                  ])),
+                                            ]),
+                                      ],
+                                    ])),
                                 const SizedBox(height: 18),
                                 if (rx.diagnosis.isNotEmpty ||
                                     rx.notes.isNotEmpty ||
@@ -698,115 +811,135 @@ class _EPrescriptionDetailScreenState
                                               Text(rx.instructions)
                                             ]
                                           ])),
-                                const Padding(
-                                    padding:
-                                        EdgeInsets.only(top: 24, bottom: 14),
-                                    child: Text('RINCIAN OBAT DIRESEPKAN',
-                                        style: TextStyle(
-                                            color: Color(0xff7c8794),
-                                            fontWeight: FontWeight.w700))),
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                      top: 18, bottom: 12),
+                                  child: Row(children: [
+                                    const Expanded(
+                                        child: Text('RINCIAN OBAT DIRESEPKAN',
+                                            style: TextStyle(
+                                                color: _prescriptionMuted,
+                                                fontWeight: FontWeight.w700))),
+                                    Text('${rx.items.length} Item',
+                                        style: const TextStyle(
+                                            color: _prescriptionAccent,
+                                            fontWeight: FontWeight.w700)),
+                                  ]),
+                                ),
                                 for (var i = 0; i < rx.items.length; i++) ...[
-                                  _MedicationPreview(
-                                      item: rx.items[i], index: i + 1),
-                                  if (rx.items[i].schedule != null)
-                                    Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                            10, 8, 10, 4),
-                                        child: Text(rx.items[i].schedule!.label,
-                                            style: const TextStyle(
-                                                fontSize: 12,
-                                                color: prescriptionPurple))),
-                                  if (rx.items[i].schedule?.instructions
-                                          .isNotEmpty ==
-                                      true)
-                                    Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                            10, 4, 10, 8),
-                                        child: Text(
-                                            'Catatan: ${rx.items[i].schedule!.instructions}')),
-                                  if (canEdit)
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: TextButton.icon(
+                                  PrescriptionPanel(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _MedicationPreview(
+                                            item: rx.items[i],
+                                            index: i + 1,
+                                            detail: true),
+                                        if (rx.items[i].schedule
+                                            case final schedule?) ...[
+                                          const Divider(height: 18),
+                                          DecoratedBox(
+                                            decoration: BoxDecoration(
+                                              color: _prescriptionTint,
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                            ),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 9,
+                                                      vertical: 7),
+                                              child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(Icons.schedule,
+                                                        size: 16,
+                                                        color:
+                                                            _prescriptionAccent),
+                                                    const SizedBox(width: 6),
+                                                    Flexible(
+                                                        child: Text(
+                                                            schedule.label,
+                                                            style: const TextStyle(
+                                                                fontSize: 12,
+                                                                color:
+                                                                    _prescriptionAccent))),
+                                                  ]),
+                                            ),
+                                          ),
+                                          if (schedule.instructions.isNotEmpty)
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.only(top: 8),
+                                              child: Text(
+                                                  'Catatan: ${schedule.instructions}'),
+                                            ),
+                                        ],
+                                        if (canEdit && rx.items.length > 1)
+                                          Align(
+                                            alignment: Alignment.centerRight,
+                                            child: TextButton.icon(
+                                              onPressed: _busy
+                                                  ? null
+                                                  : () async {
+                                                      await _openPrescriptionEditor(
+                                                          context,
+                                                          _session,
+                                                          widget.apiClient,
+                                                          rx,
+                                                          itemIndex: i);
+                                                      if (mounted &&
+                                                          _session != null)
+                                                        await _load();
+                                                    },
+                                              icon: const Icon(
+                                                  Icons.edit_outlined),
+                                              label: const Text('Edit Obat'),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12)
+                                ],
+                                if (canEdit)
+                                  Wrap(
+                                    spacing: 6,
+                                    alignment: WrapAlignment.end,
+                                    children: [
+                                      TextButton(
                                         onPressed: _busy
                                             ? null
                                             : () async {
-                                                await Navigator.push<bool>(
+                                                await Navigator.push(
                                                   context,
                                                   MaterialPageRoute(
-                                                    builder: (_) =>
-                                                        EPrescriptionFormScreen(
-                                                      session: _session,
-                                                      apiClient:
-                                                          widget.apiClient,
-                                                      prescription: rx,
-                                                      itemIndex: i,
-                                                    ),
-                                                  ),
+                                                      builder: (_) =>
+                                                          EPrescriptionEditorScreen(
+                                                            session: _session,
+                                                            apiClient: widget
+                                                                .apiClient,
+                                                            prescription: rx,
+                                                            patientName: widget
+                                                                .patientName,
+                                                          )),
                                                 );
                                                 if (mounted && _session != null)
                                                   await _load();
                                               },
-                                        icon: const Icon(Icons.edit_outlined),
-                                        label: const Text('Edit Obat'),
+                                        child: const Text('Kelola Isi Resep'),
                                       ),
-                                    ),
-                                  const SizedBox(height: 12)
-                                ],
-                                if (canEdit) ...[
-                                  const Divider(height: 28),
-                                  Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      alignment: WrapAlignment.end,
-                                      children: [
-                                        OutlinedButton.icon(
-                                            onPressed: _busy ? null : _delete,
-                                            icon: const Icon(
-                                                Icons.delete_outline),
-                                            label: const Text('Hapus'),
-                                            style: OutlinedButton.styleFrom(
-                                                foregroundColor:
-                                                    Colors.red.shade700)),
-                                        OutlinedButton.icon(
-                                            onPressed: _busy ? null : _status,
-                                            icon: const Icon(Icons.sync),
-                                            label: Text(rx.status == 'issued'
-                                                ? 'Jadikan Draft'
-                                                : 'Terbitkan Resep')),
-                                        FilledButton.icon(
-                                            onPressed: _busy
-                                                ? null
-                                                : () async {
-                                                    await Navigator.push(
-                                                        context,
-                                                        MaterialPageRoute(
-                                                            builder: (_) => EPrescriptionEditorScreen(
-                                                                session:
-                                                                    _session,
-                                                                apiClient: widget
-                                                                    .apiClient,
-                                                                prescription:
-                                                                    rx,
-                                                                patientName: widget
-                                                                    .patientName)));
-                                                    if (mounted &&
-                                                        _session != null)
-                                                      await _load();
-                                                  },
-                                            icon:
-                                                const Icon(Icons.edit_outlined),
-                                            label: const Text('Edit Resep'),
-                                            style: FilledButton.styleFrom(
-                                                backgroundColor:
-                                                    prescriptionPurple,
-                                                textStyle: const TextStyle(
-                                                    fontFamily: 'Roboto',
-                                                    fontWeight:
-                                                        FontWeight.w700),
-                                                minimumSize: const Size(0, 50)))
-                                      ])
-                                ],
+                                      TextButton(
+                                        onPressed: _busy ? null : _status,
+                                        child: Text(rx.status == 'issued'
+                                            ? 'Jadikan Draft'
+                                            : 'Terbitkan Resep'),
+                                      ),
+                                    ],
+                                  ),
                               ]));
   }
 }

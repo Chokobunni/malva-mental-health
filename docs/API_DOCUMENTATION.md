@@ -48,11 +48,13 @@ true). Bintang disimpan independen dari pilihan terbantu. Hanya pasien yang
 memiliki hak ulasan yang belum dipakai dengan profesional tersebut dapat mengirim.
 `GET /v1/review-entitlements` (pasien terautentikasi) mengembalikan `entitlements`
 berisi `professional_id`, `professional_name`, `completed_at` WIB dan tepat satu
-dari `session_id` / `care_package_id`. Satu sesi satu kali `completed` memberi satu
+dari `session_id` / `care_package_id`. Sesi tunggal juga memuat `session_type`
+dan `scheduled_at` WIB. Satu sesi satu kali `completed` memberi satu
 hak. Setiap pembelian paket memberi satu hak setelah seluruh kuota pembeliannya
 terpakai oleh `completed`/`no_show`, tanpa sesi scheduled/pending pada rentang
 pembelian itu, dan setidaknya satu completed;
-pembatalan profesional tidak menghabiskan kuota. Paket seluruhnya no-show tidak
+pembatalan profesional dan no-show yang hanya dihadiri pasien tidak menghabiskan
+kuota. Paket seluruhnya no-show tidak
 memberi hak. Pemeriksaan berasal dari sesi aktual, tanpa menunggu sweeper paket.
 Penggabungan saldo paket tetap berlaku: pembelian 4+4 tampil sebagai saldo 8, tetapi
 tetap memiliki dua hak terpisah memakai ID baris pembelian asal yang dipertahankan.
@@ -77,6 +79,12 @@ terlambat atas jadwal lama dapat tetap ditekan oleh cutoff legacy secara konserv
 POST menerima salah satu ID tersebut (opsional); klien lama tanpa ID memakai hak
 tertua yang tersedia. Otorisasi, pemeriksaan dan penyimpanan atomik di server;
 konflik, belum selesai, ID asing atau sudah diulas menghasilkan 409. Salah role 403.
+`POST /v1/review-entitlements/prompt` menerima tepat satu ID sesi atau paket
+dan `claim_id` UUID yang tetap sama saat percobaan jaringan diulang.
+Respons `{"show":true}` menandai satu klaim Beranda per akun untuk unit yang masih
+layak diulas. Percobaan ulang dengan UUID pemenang tetap mendapat hasil sama.
+Klaim lain atau unit yang tidak layak mengembalikan `{"show":false}`.
+Klaim tidak mengubah hak mengirim ulasan secara manual.
 Pengiriman paralel tetap menghasilkan satu ulasan per unit. Nama penulis pada
 daftar ulasan tetap tersamar.
 
@@ -1487,6 +1495,7 @@ tarik izin berbagi bila `professional_id` dikirim kosong.
 - Medication create/update/delete by professional requires verified psychiatrist, linked patient, consent and active session. Health-record diagnosis and goals use corresponding consent scopes. Existing patient self-management remains supported.
 
 - `PUT /v1/health-record` requires a verified professional, an active patient link, and Health Record consent. A valid active multi-session package grants write access before and between sessions. A scheduled standalone session grants access from its start through its exclusive end. `diagnosis_summary` remains a string with a 2,000-byte limit. The app sends selected ICD-10 codes and titles as one ordered entry per line, with the primary diagnosis first.
+- `GET /v1/health-record/allergies` lists the patient's entries in `items`. A professional supplies `patient_id` and needs the same active link and consent as the Health Record read endpoint. `POST` accepts `reaction_type`, `substance`, `symptoms`, `severity`, and optional `occurred_when` from the authenticated patient, and returns `item`. An optional `client_id` UUID makes retries idempotent for the same patient and payload. The server assigns the source and timestamp.
 - Payment GET status trusts configured authenticated HTTPS provider transport, binds response order to requested reference and enforces amount/fraud validation. Webhook signature remains required.
 - Provider body codes are accepted only as 200 for capture/settlement, 201/pending, 202/deny and 407/expire. Unrecognized non-200 combinations stay pending; missing or mismatched orders cannot change state. Terminal reconciliation is idempotent and never activates an unpaid booking.
 

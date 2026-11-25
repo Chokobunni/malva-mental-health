@@ -23,6 +23,7 @@ import 'chat_screen.dart';
 import 'notifications_screen.dart';
 import 'settings_screens.dart';
 import 'schedule_package_sessions_screen.dart';
+import 'booking/booking_owner.dart';
 import 'booking/doctor_profile_screen.dart';
 
 // ============================================================
@@ -181,11 +182,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
   bool _matchesSessionFilter(BackendCareSession session, String filter) =>
       switch (filter) {
         'selesai' => session.status == 'completed',
-        'dibatalkan' => const {
-            'cancelled_by_patient',
-            'cancelled_by_professional',
-            'expired_unpaid'
-          }.contains(session.status),
+        'dibatalkan' => isCareSessionCancelled(session),
         'tidak_hadir' => session.status == 'no_show',
         _ => true,
       };
@@ -329,6 +326,38 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
     final filtered = upcoming
         ? base
         : base.where((s) => _matchesSessionFilter(s, _filterPast)).toList();
+    final now = ServerClock.now();
+    bool isRunning(BackendCareSession session) =>
+        session.isScheduled && session.scheduledDateTime?.isAfter(now) == false;
+    final groups = upcoming
+        ? [
+            (
+              'Sesi berjalan',
+              Icons.circle,
+              const Color(0xff0d9e79),
+              filtered.where(isRunning)
+            ),
+            (
+              'Video call mendatang',
+              Icons.videocam_rounded,
+              MalvaColors.seed,
+              filtered.where((s) => s.isScheduled && !isRunning(s) && s.isVideo)
+            ),
+            (
+              'Sesi chat mendatang',
+              Icons.chat_bubble_rounded,
+              MalvaColors.seed,
+              filtered
+                  .where((s) => s.isScheduled && !isRunning(s) && !s.isVideo)
+            ),
+            (
+              'Menunggu pembayaran',
+              Icons.payment_rounded,
+              MalvaColors.seed,
+              filtered.where((s) => s.status == 'pending_payment')
+            ),
+          ]
+        : [('Riwayat konsultasi', Icons.history, MalvaColors.seed, filtered)];
     return [
       if (!upcoming) ...[
         Center(
@@ -352,10 +381,8 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
         ),
         const SizedBox(height: 14),
       ],
-      _careSectionLabel(
-          upcoming ? 'Konsultasi mendatang' : 'Riwayat konsultasi',
-          filtered.length,
-          'sesi'),
+      if (!upcoming)
+        _careSectionLabel('Riwayat konsultasi', filtered.length, 'sesi'),
       if (filtered.isEmpty)
         CareIllustratedCard(
           asset: upcoming ? 'care-schedule' : 'care-history',
@@ -364,51 +391,96 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
           subtitle: upcoming ? 'Jadwalkan sesi dari paketmu.' : null,
         )
       else
-        for (final session in filtered) ...[
-          CareSessionCard(
-            key: ValueKey(session.id),
-            session: session,
-            role: UserRole.patient,
-            subtitle: _professionals[session.professionalId] == null
-                ? null
-                : professionalRoleLabel(_professionals[session.professionalId]!
-                    .credential
-                    .specialization),
-            onChanged: _load,
-            onOpenChat: () => _openChat(session),
-            accessToken: (widget.session ?? ref.read(currentSessionProvider))
-                ?.accessToken,
-            apiClient: widget.apiClient,
-            onProfile: () => Navigator.push<void>(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DoctorProfileScreen(
-                    doctorUserId: session.professionalId,
-                    doctorName: session.professionalName,
-                    session: widget.session,
-                    apiClient: widget.apiClient,
-                  ),
-                )),
-            onCancel:
-                _mayChange(session) ? () => _cancelSession(session) : null,
-            onReschedule:
-                _mayChange(session) ? () => _reschedule(session) : null,
-          ),
-          if (session.canJoinNow)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: SessionAttendanceActions(
+        for (final (label, icon, color, sessions) in groups)
+          if (sessions.isNotEmpty) ...[
+            if (upcoming) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12, top: 4),
+                child: Row(children: [
+                  Container(
+                      width: 4,
+                      height: 17,
+                      decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(5))),
+                  const SizedBox(width: 8),
+                  Icon(icon, color: color, size: 16),
+                  const SizedBox(width: 7),
+                  Expanded(
+                      child: Text(label,
+                          style: const TextStyle(
+                              color: MalvaColors.seed,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800))),
+                  if (label == 'Sesi berjalan')
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xffe5f8ef),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text('Sedang Berlangsung',
+                          style: TextStyle(
+                              color: color,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 10)),
+                    ),
+                ]),
+              ),
+            ],
+            for (final session in sessions) ...[
+              CareSessionCard(
+                key: ValueKey(session.id),
                 session: session,
                 role: UserRole.patient,
+                detailLabel: upcoming
+                    ? 'Lihat Detail Sesi'
+                    : 'Lihat Detail & Catatan Sesi',
+                subtitle: _professionals[session.professionalId] == null
+                    ? null
+                    : professionalRoleLabel(
+                        _professionals[session.professionalId]!
+                            .credential
+                            .specialization),
                 onChanged: _load,
+                onOpenChat: () => _openChat(session),
                 accessToken:
                     (widget.session ?? ref.read(currentSessionProvider))
                         ?.accessToken,
                 apiClient: widget.apiClient,
+                onProfile: () => Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DoctorProfileScreen(
+                        doctorUserId: session.professionalId,
+                        doctorName: session.professionalName,
+                        session: widget.session,
+                        apiClient: widget.apiClient,
+                      ),
+                    )),
+                onCancel:
+                    _mayChange(session) ? () => _cancelSession(session) : null,
+                onReschedule:
+                    _mayChange(session) ? () => _reschedule(session) : null,
               ),
-            ),
-          const SizedBox(height: 12),
-        ],
+              if (session.canJoinNow)
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: SessionAttendanceActions(
+                    session: session,
+                    role: UserRole.patient,
+                    onChanged: _load,
+                    accessToken:
+                        (widget.session ?? ref.read(currentSessionProvider))
+                            ?.accessToken,
+                    apiClient: widget.apiClient,
+                  ),
+                ),
+              const SizedBox(height: 12),
+            ],
+          ],
     ];
   }
 
@@ -1169,6 +1241,7 @@ class ManageDataSheet extends ConsumerStatefulWidget {
 
 class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
   // Default MATI (opt-in eksplisit); nilai riil dimuat dari server.
+  late final BookingOwner _owner;
   bool _screenings = false;
   bool _moodDiary = false;
   bool _medications = false;
@@ -1178,18 +1251,20 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
   // Kategori Therapy Record (worksheet CBT/DBT) — OPT-IN, default MATI.
   bool _therapyRecords = false;
   bool _isLoading = true;
+  bool _loaded = false;
   bool _isSaving = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _owner = BookingOwner(ref, null);
     _load();
   }
 
   Future<void> _load() async {
     final apiClient = ref.read(apiClientProvider);
-    final token = ref.read(currentSessionProvider)?.accessToken;
+    final token = _owner.session?.accessToken;
     if (token == null || token.isEmpty) {
       if (mounted) {
         setState(() {
@@ -1205,7 +1280,7 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
         accessToken: token,
         professionalId: widget.professionalId,
       );
-      if (!mounted) return;
+      if (!mounted || _owner.session == null) return;
       setState(() {
         _screenings = consent.shareScreenings;
         _moodDiary = consent.shareMoodDiary;
@@ -1215,9 +1290,10 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
         _goals = consent.shareGoals;
         _therapyRecords = consent.shareTherapyRecords;
         _isLoading = false;
+        _loaded = true;
       });
     } on Object catch (e) {
-      if (!mounted) return;
+      if (!mounted || _owner.session == null) return;
       setState(() {
         _isLoading = false;
         _error = friendlyErrorMessage(e);
@@ -1227,82 +1303,172 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Manage Data — ${widget.professionalName}',
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-              'Sharing: pilih kategori yang boleh dibaca profesional selama paket aktif.'),
-          const SizedBox(height: 12),
-          if (_isLoading)
-            const Center(child: CircularProgressIndicator())
-          else ...[
-            _Toggle(
-                label: 'Asesmen (PHQ-9/GAD-7)',
-                value: _screenings,
-                onChanged: (v) => setState(() => _screenings = v)),
-            _Toggle(
-                label: 'Mood & Jurnal',
-                value: _moodDiary,
-                onChanged: (v) => setState(() => _moodDiary = v)),
-            _Toggle(
-                label: 'Obat (Obat)',
-                value: _medications,
-                onChanged: (v) => setState(() => _medications = v)),
-            _Toggle(
-                label: 'Target & Kebiasaan',
-                value: _goals,
-                onChanged: (v) => setState(() => _goals = v)),
-            _Toggle(
-                label: 'Rekam Medis',
-                value: _healthRecord,
-                onChanged: (v) => setState(() => _healthRecord = v)),
-            _Toggle(
-                label: 'Riwayat Terapi (Psikologis)',
-                description:
-                    'Profesional dapat melihat lembar kerja terapi CBT/DBT yang kamu isi '
-                    '(ABCDE, Jebakan Pikiran, TIPP, dll).',
-                value: _therapyRecords,
-                onChanged: (v) => setState(() => _therapyRecords = v)),
-            _Toggle(
-                label: 'Timeline',
-                value: _timeline,
-                onChanged: (v) => setState(() => _timeline = v)),
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!,
-                  style: const TextStyle(
-                      color: MalvaColors.danger, fontWeight: FontWeight.w700)),
-            ],
+    ref.watch(currentSessionProvider);
+    final count = [
+      _screenings,
+      _moodDiary,
+      _medications,
+      _goals,
+      _healthRecord,
+      _therapyRecords,
+    ].where((enabled) => enabled).length;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+                child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xffdfe1e8),
+                borderRadius: BorderRadius.circular(8),
+              ),
+            )),
+            const SizedBox(height: 14),
+            Row(children: [
+              const _ConsentIcon('privacy', size: 28),
+              const SizedBox(width: 7),
+              const Expanded(
+                  child: Text('Privasi & Akses Data',
+                      style: TextStyle(color: MalvaColors.seed))),
+              IconButton(
+                tooltip: 'Tutup',
+                onPressed: _isSaving ? null : () => Navigator.maybePop(context),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ]),
+            Text('Atur Data Konseling',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 4),
+            Text(widget.professionalName,
+                style: const TextStyle(
+                    color: MalvaColors.seed, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _isSaving ? null : _save,
-              child: Text(_isSaving ? 'Menyimpan...' : 'Simpan'),
-            ),
+            const Text(
+                'Pilih kategori data yang diizinkan untuk diakses oleh profesional selama masa paket aktif Anda.'),
+            const SizedBox(height: 14),
+            if (_owner.session == null && _error == null)
+              const Text('Sesi akun tidak tersedia.')
+            else if (_isLoading)
+              const Center(child: CircularProgressIndicator())
+            else if (_error != null && !_loaded)
+              TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _isLoading = true;
+                      _error = null;
+                    });
+                    _load();
+                  },
+                  child: Text('$_error Coba lagi'))
+            else ...[
+              Material(
+                color: Colors.white,
+                shape: RoundedRectangleBorder(
+                  side: const BorderSide(color: Color(0xffece2f3)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: _Toggle(
+                  asset: 'all',
+                  label: 'Pilih Semua Data',
+                  description: '$count dari 6 kategori aktif',
+                  value: count == 6,
+                  onChanged: _isSaving
+                      ? null
+                      : (enabled) => setState(() {
+                            _screenings = _moodDiary = _medications = _goals =
+                                _healthRecord = _therapyRecords = enabled;
+                          }),
+                ),
+              ),
+              const SizedBox(height: 8),
+              _Toggle(
+                  asset: 'assessment',
+                  label: 'Asesmen',
+                  description:
+                      'Hasil kuesioner skrining kesehatan mental berkala (WHO-5, PHQ-9 + GAD-7, dan DASS-21).',
+                  value: _screenings,
+                  onChanged: _isSaving
+                      ? null
+                      : (v) => setState(() => _screenings = v)),
+              const Divider(height: 1),
+              _Toggle(
+                  asset: 'mood',
+                  label: 'Mood & Jurnal Harian',
+                  description: 'Catatan perasaan harian dan refleksi pribadi.',
+                  value: _moodDiary,
+                  onChanged:
+                      _isSaving ? null : (v) => setState(() => _moodDiary = v)),
+              const Divider(height: 1),
+              _Toggle(
+                  asset: 'medication',
+                  label: 'Catatan Obat & Resep',
+                  description: 'Daftar konsumsi obat dan jadwal pengingat.',
+                  value: _medications,
+                  onChanged: _isSaving
+                      ? null
+                      : (v) => setState(() => _medications = v)),
+              const Divider(height: 1),
+              _Toggle(
+                  asset: 'goals',
+                  label: 'Target & Kebiasaan',
+                  description: 'Progres kebiasaan positif dan tujuan terapi.',
+                  value: _goals,
+                  onChanged:
+                      _isSaving ? null : (v) => setState(() => _goals = v)),
+              const Divider(height: 1),
+              _Toggle(
+                  asset: 'clinical',
+                  label: 'Profil Klinis',
+                  description:
+                      'Riwayat diagnosis dan catatan klinis sebelumnya.',
+                  value: _healthRecord,
+                  onChanged: _isSaving
+                      ? null
+                      : (v) => setState(() => _healthRecord = v)),
+              const Divider(height: 1),
+              _Toggle(
+                  asset: 'therapy',
+                  label: 'Riwayat Terapi (Psikologis)',
+                  description:
+                      'Profesional dapat melihat lembar kerja terapi CBT/DBT yang kamu isi (ABCDE, Jebakan Pikiran, TIPP, dll).',
+                  value: _therapyRecords,
+                  onChanged: _isSaving
+                      ? null
+                      : (v) => setState(() => _therapyRecords = v)),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(_error!,
+                    style: const TextStyle(color: MalvaColors.danger)),
+              ],
+              const SizedBox(height: 14),
+              FilledButton(
+                onPressed: _isSaving ? null : _save,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18)),
+                ),
+                child: Text(_isSaving ? 'Menyimpan...' : 'Simpan'),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
 
   Future<void> _save() async {
+    if (!_loaded || _isSaving) return;
     final apiClient = ref.read(apiClientProvider);
-    final token = ref.read(currentSessionProvider)?.accessToken;
+    final token = _owner.session?.accessToken;
     if (token == null || token.isEmpty) return;
     setState(() {
       _isSaving = true;
@@ -1320,7 +1486,7 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
         shareGoals: _goals,
         shareTherapyRecords: _therapyRecords,
       );
-      if (!mounted) return;
+      if (!mounted || _owner.session == null) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Pengaturan sharing tersimpan.')),
@@ -1335,31 +1501,48 @@ class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
   }
 }
 
+class _ConsentIcon extends StatelessWidget {
+  const _ConsentIcon(this.asset, {this.size = 44});
+
+  final String asset;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Image.asset(
+        'assets/care/consent-$asset.png',
+        width: size,
+        height: size,
+        cacheWidth: 144,
+        fit: BoxFit.contain,
+        excludeFromSemantics: true,
+      );
+}
+
 class _Toggle extends StatelessWidget {
-  const _Toggle(
-      {required this.label,
-      required this.value,
-      required this.onChanged,
-      this.description});
+  const _Toggle({
+    required this.asset,
+    required this.label,
+    required this.description,
+    required this.value,
+    required this.onChanged,
+  });
 
-  final String label;
+  final String asset, label, description;
   final bool value;
-  final ValueChanged<bool> onChanged;
-
-  /// Penjelasan singkat di bawah label (dipakai kategori yang butuh konteks).
-  final String? description;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
     return SwitchListTile(
       value: value,
       onChanged: onChanged,
-      title: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
-      subtitle: description == null
-          ? null
-          : Text(description!, style: Theme.of(context).textTheme.bodySmall),
+      secondary: _ConsentIcon(asset),
+      title: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+      subtitle: Text(description,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4)),
       activeThumbColor: MalvaColors.seed,
-      contentPadding: EdgeInsets.zero,
+      activeTrackColor: const Color(0xffd8afea),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
     );
   }
 }

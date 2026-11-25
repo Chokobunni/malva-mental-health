@@ -165,8 +165,7 @@ void main() {
     expect(find.text('dr. Berjalan'), findsOneWidget);
     expect(find.text('dr. Lewat'), findsOneWidget);
 
-    expect(find.text('Ringkasan: Ringkasan tersimpan s_in'), findsOneWidget);
-    expect(find.text('Ringkasan: Ringkasan tersimpan s_out'), findsOneWidget);
+    expect(find.text('Lihat Detail & Catatan Sesi'), findsNWidgets(2));
     expect(find.text('Join'), findsNothing,
         reason: 'completed menutup akses tanpa menunggu akhir jendela');
     expect(find.text('Kirim'), findsNothing);
@@ -196,9 +195,9 @@ void main() {
 
     expect(find.text('dr. Berjalan'), findsOneWidget);
     expect(find.text('Kehadiran saya: Hadir'), findsOneWidget);
-    expect(find.text('Gabung'), findsOneWidget,
+    expect(find.text('Gabung Sesi'), findsOneWidget,
         reason: 'konfirmasi hadir mempertahankan status scheduled');
-    expect(find.widgetWithText(OutlinedButton, 'Chat'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Chat'), findsNothing);
     expect(find.widgetWithText(OutlinedButton, 'Hadir'), findsNothing);
     expect(find.widgetWithText(OutlinedButton, 'Tidak hadir'), findsNothing);
     await tester.pumpWidget(const SizedBox());
@@ -254,8 +253,15 @@ void main() {
     expect(card, findsOneWidget);
 
     expect(find.text('Pasien sesi'), findsOneWidget);
-    expect(find.text('Ringkasan: Ringkasan tersimpan s_past_live'),
-        findsOneWidget);
+    final detail = find.text('Lihat Detail & Catatan Sesi');
+    await Scrollable.ensureVisible(tester.element(detail), alignment: .4);
+    await tester.pumpAndSettle();
+    await tester.tap(detail);
+    await tester.pumpAndSettle();
+    expect(find.text('Detail Sesi'), findsOneWidget);
+    await tester.scrollUntilVisible(
+        find.text('Catatan sesi sudah tersimpan'), 180);
+    expect(find.text('Catatan sesi sudah tersimpan'), findsOneWidget);
     expect(find.text('Join / Chat'), findsNothing,
         reason: 'completed terminal walau waktu terjadwal belum habis');
     // Hadir/Tidak hadir TIDAK ditawarkan ulang untuk sesi completed.

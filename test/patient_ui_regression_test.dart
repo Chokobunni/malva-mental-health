@@ -284,7 +284,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Tile yang dihapus dari sidebar.
-    expect(find.text('Rekam Medis'), findsNothing);
+    expect(find.text('Profil Klinis'), findsNothing);
     expect(find.text('Riwayat Terapi'), findsNothing);
 
     // Tile lain masih ada.
@@ -316,7 +316,7 @@ void main() {
     await tester.pump();
 
     // Grid Self Care tetap punya Health Record + Psychological Therapy.
-    expect(find.text('Rekam Medis'), findsOneWidget);
+    expect(find.text('Profil Klinis'), findsOneWidget);
     expect(find.text('Terapi Psikologis'), findsOneWidget);
   });
 }

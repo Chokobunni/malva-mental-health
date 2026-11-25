@@ -159,7 +159,8 @@ void main() {
     await tester.pumpWidget(_wrap(api));
     await tester.pumpAndSettle();
     await _openTab(tester, 'Jadwal');
-    expect(find.textContaining('Video'), findsOneWidget);
+    expect(find.text('Video'), findsOneWidget);
+    expect(find.text('Video call mendatang'), findsOneWidget);
     expect(find.textContaining('Paket'), findsWidgets);
     expect(find.text('Check-in dibuka 10 menit sebelum sesi.'), findsOneWidget);
     await tester.ensureVisible(find.text('AKSI LAIN'));
@@ -185,7 +186,11 @@ void main() {
     await _openTab(tester, 'Riwayat');
     await _tapFilter(tester, 'Dibatalkan 1');
     expect(find.textContaining('Chat'), findsOneWidget);
-    expect(find.text('Ringkasan: Lanjutkan latihan napas.'), findsOneWidget);
+    final detail = find.text('Lihat Detail & Catatan Sesi');
+    expect(detail, findsOneWidget);
+    await tester.ensureVisible(detail);
+    await tester.tap(detail);
+    await tester.pumpAndSettle();
     expect(find.text('Alasan: Jadwal berbenturan.'), findsOneWidget);
     expect(find.text('Kehadiran saya'), findsNothing);
     expect(find.text('Join'), findsNothing);
@@ -280,7 +285,7 @@ void main() {
     await tester.pumpWidget(_wrap(api));
     await _openTab(tester, 'Jadwal');
     expect(find.text('dr. Aktif'), findsOneWidget);
-    expect(find.text('1 sesi'), findsOneWidget);
+    expect(find.text('Sesi chat mendatang'), findsOneWidget);
     expect(find.text('dr. Batal'), findsNothing);
     expect(find.widgetWithText(ChoiceChip, 'Dibatalkan 0'), findsNothing);
   });

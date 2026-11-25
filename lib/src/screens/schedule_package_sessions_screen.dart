@@ -89,8 +89,7 @@ class _SchedulePackageSessionsScreenState
         accessToken: token,
         professionalId: _package.professionalId,
         sessionNumber: number,
-        initialType: _selected[number]?.split('|').last ?? 'video',
-        allowTypeSelection: true,
+        dateAndTimeOnly: true,
         expiresAt: _package.expiresDateTime,
         excludedSlots: _selected.entries
             .where((entry) => entry.key != number)
@@ -277,8 +276,17 @@ class _SchedulePackageSessionsScreenState
                       outline: const BorderSide(color: Color(0xfff0e7f5)),
                       child: Column(children: [
                         Row(children: [
-                          const Icon(Icons.event_available_outlined,
-                              size: 36, color: MalvaColors.seed),
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Padding(
+                              padding: EdgeInsets.all(8),
+                              child: Icon(Icons.event_available_outlined,
+                                  size: 24, color: MalvaColors.seed),
+                            ),
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -293,10 +301,20 @@ class _SchedulePackageSessionsScreenState
                             ),
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                              '${total > 0 ? (_remaining / total * 100).round() : 0}%',
-                              style: title.copyWith(
-                                  color: MalvaColors.seed, fontSize: 17)),
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 5),
+                              child: Text(
+                                  '${total > 0 ? (_remaining / total * 100).round() : 0}%',
+                                  style: title.copyWith(
+                                      color: MalvaColors.seed, fontSize: 17)),
+                            ),
+                          ),
                         ]),
                         const SizedBox(height: 14),
                         LinearProgressIndicator(
@@ -310,18 +328,46 @@ class _SchedulePackageSessionsScreenState
                         ),
                       ])),
                   const Divider(height: 24),
-                  Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    runSpacing: 5,
-                    spacing: 12,
-                    children: [
-                      Text(
-                          'DETAIL PAKET\n${total ~/ 4} paket · $total sesi\n${_package.validityDays ~/ 7} minggu masa aktif'),
-                      if (expiry != null)
-                        Text(
-                            'BERLAKU HINGGA\n${_longDate(expiry)}\n${_expired ? 'Paket berakhir' : '${expiry.difference(ServerClock.now()).inDays.clamp(0, 99999)} hari lagi'}'),
-                    ],
-                  ),
+                  LayoutBuilder(builder: (context, constraints) {
+                    final validityDays = _package.validityDays;
+                    final validity = validityDays % 7 == 0
+                        ? '${validityDays ~/ 7} minggu aktif'
+                        : '$validityDays hari aktif';
+                    final details = [
+                      _PackageFact(
+                        icon: Icons.inventory_2_outlined,
+                        label: 'DETAIL PAKET',
+                        value: total > 0 && total % 4 == 0
+                            ? '${total ~/ 4} paket · $total sesi'
+                            : '$total sesi',
+                        caption: validity,
+                      ),
+                      _PackageFact(
+                        icon: Icons.schedule,
+                        label: 'BERLAKU HINGGA',
+                        value: expiry == null
+                            ? 'Belum tersedia'
+                            : _longDate(expiry),
+                        caption: _expired
+                            ? 'Paket berakhir'
+                            : '${expiry!.difference(ServerClock.now()).inDays} hari lagi',
+                        accent: true,
+                      ),
+                    ];
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        for (final fact in details)
+                          SizedBox(
+                            width: constraints.maxWidth >= 275
+                                ? (constraints.maxWidth - 10) / 2
+                                : constraints.maxWidth,
+                            child: fact,
+                          ),
+                      ],
+                    );
+                  }),
                   const SizedBox(height: 12),
                   const SoftCard(
                     color: Color(0xfff7f9fb),
@@ -474,4 +520,60 @@ class _SchedulePackageSessionsScreenState
     'Jumat',
     'Sabtu',
   ];
+}
+
+class _PackageFact extends StatelessWidget {
+  const _PackageFact({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.caption,
+    this.accent = false,
+  });
+
+  final IconData icon;
+  final String label, value, caption;
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) => SoftCard(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        radius: 16,
+        color: const Color(0xfff7f9fb),
+        outline: const BorderSide(color: Color(0xffe7e9ee)),
+        child: Column(children: [
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(icon, color: MalvaColors.seed, size: 15),
+            const SizedBox(width: 5),
+            Flexible(
+                child: Text(label,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xff626f80)))),
+          ]),
+          const SizedBox(height: 8),
+          Text(value,
+              textAlign: TextAlign.center,
+              style:
+                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: accent ? const Color(0xfff3eaf8) : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+              child: Text(caption,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 11,
+                      color:
+                          accent ? MalvaColors.plum : const Color(0xff465567))),
+            ),
+          ),
+        ]),
+      );
 }

@@ -53,7 +53,7 @@ class _ConsentBackend {
             'share_screenings': true,
             'share_mood_diary': false,
             'share_medications': false,
-            'share_timeline': false,
+            'share_timeline': true,
             'share_health_record': false,
             'share_goals': false,
             'share_therapy_records': shareTherapyRecords,
@@ -122,8 +122,9 @@ void main() {
     expect(_switchValue(tester, _therapyToggle()), isFalse,
         reason: 'default opt-in: izin mati sampai pasien menyalakannya');
     // Kategori lain tetap ada (tidak ada yang hilang).
-    expect(find.widgetWithText(SwitchListTile, 'Rekam Medis'), findsOneWidget);
-    expect(find.widgetWithText(SwitchListTile, 'Timeline'), findsOneWidget);
+    expect(
+        find.widgetWithText(SwitchListTile, 'Profil Klinis'), findsOneWidget);
+    expect(find.widgetWithText(SwitchListTile, 'Timeline'), findsNothing);
   });
 
   testWidgets(
@@ -140,14 +141,17 @@ void main() {
         reason: 'nilai awal harus dari server, bukan default lokal');
 
     // Pasien mematikan izin lalu menyimpan.
+    await tester.ensureVisible(_therapyToggle());
     await tester.tap(_therapyToggle());
     await tester.pumpAndSettle();
     expect(_switchValue(tester, _therapyToggle()), isFalse);
 
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Simpan'));
     await tester.tap(find.widgetWithText(FilledButton, 'Simpan'));
     await tester.pumpAndSettle();
 
     expect(backend.putCalls, 1);
+    expect(backend.lastPutBody?['share_timeline'], isTrue);
     expect(backend.lastPutBody?['share_therapy_records'], isFalse,
         reason: 'perubahan toggle harus ikut terkirim di payload');
     expect(backend.lastPutBody?['share_screenings'], isTrue,
@@ -163,12 +167,44 @@ void main() {
     await tester.pumpWidget(_wrap(api));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(_therapyToggle());
     await tester.tap(_therapyToggle());
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Simpan'));
     await tester.tap(find.widgetWithText(FilledButton, 'Simpan'));
     await tester.pumpAndSettle();
 
     expect(backend.lastPutBody?['share_therapy_records'], isTrue);
+  });
+  testWidgets(
+      'Pilih Semua changes six visible categories and preserves Timeline',
+      (tester) async {
+    final backend = _ConsentBackend();
+    await tester.pumpWidget(_wrap(MalvaApiClient(
+        baseUrl: 'http://backend.test', httpClient: backend.client())));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 dari 6 kategori aktif'), findsOneWidget);
+    await tester.tap(find.text('Pilih Semua Data'));
+    await tester.pumpAndSettle();
+    expect(find.text('6 dari 6 kategori aktif'), findsOneWidget);
+    await tester.tap(find.text('Pilih Semua Data'));
+    await tester.pumpAndSettle();
+    expect(find.text('0 dari 6 kategori aktif'), findsOneWidget);
+    final save = find.widgetWithText(FilledButton, 'Simpan');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+
+    expect(backend.lastPutBody?['share_timeline'], isTrue);
+    expect(
+        backend.lastPutBody?.entries
+            .where((entry) =>
+                entry.key != 'share_timeline' &&
+                entry.key.startsWith('share_') &&
+                entry.value == false)
+            .length,
+        6);
   });
 }
 

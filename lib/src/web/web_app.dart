@@ -8,6 +8,7 @@ import '../platform/platform_providers.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
+import '../widgets/doctor_review_actions.dart';
 import 'screens/admin/web_admin_doctors_screen.dart';
 import 'screens/admin/web_admin_overview_screen.dart';
 import 'screens/admin/web_admin_payments_screen.dart';
@@ -217,9 +218,12 @@ class _MalvaWebAppState extends ConsumerState<MalvaWebApp> {
 
     switch (path) {
       case WebRoutes.home:
-        return WebHomeScreen(
-          displayName: session.displayName,
-          onNavigate: navigate,
+        return ReviewCompletionPrompt(
+          apiClient: ref.read(apiClientProvider),
+          child: WebHomeScreen(
+            displayName: session.displayName,
+            onNavigate: navigate,
+          ),
         );
       case WebRoutes.professional:
         if (session.role == UserRole.professional) {

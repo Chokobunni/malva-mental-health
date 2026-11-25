@@ -440,13 +440,6 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		if status == "absent" && isProf {
-			if _, err := s.recordAutoCredit(r, updated); err != nil {
-				writeError(w, http.StatusInternalServerError, errors.New("kehadiran tersimpan; kredit belum tercatat, coba lagi"))
-				return
-			}
-			s.cancelMeetEventBestEffort(r.Context(), s.calendar, cs.ProfessionalID, cs.GoogleEventID)
-		}
 		writeJSON(w, http.StatusOK, map[string]any{"session": careSessionForRole(updated, claims.Role)})
 		return
 	case isProf && (status == "completed" || status == "no_show"):
@@ -455,7 +448,7 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		if status == "no_show" {
+		if status == "no_show" && updated.PatientAttendance != "attended" {
 			s.notifyPatient(r, cs.PatientID, "session_no_show",
 				"Sesi tercatat tidak hadir",
 				"Kamu tercatat tidak hadir; 1 sesi paket hangus sesuai aturan.",

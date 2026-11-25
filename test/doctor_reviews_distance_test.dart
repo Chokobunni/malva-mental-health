@@ -280,14 +280,15 @@ void main() {
         .setSession(sessionWithToken('fresh-token'));
     await tester.pumpAndSettle();
     expect(find.text('Review after refresh'), findsOneWidget);
-    await tester.tap(find.text('Kirim ulasan'));
+    await tester.ensureVisible(find.text('Kirim Ulasan'));
+    await tester.tap(find.text('Kirim Ulasan'));
     await tester.pumpAndSettle();
     expect(authorization, ['Bearer fresh-token', 'Bearer rotated-token']);
     expect(find.text('Sesi akun telah berubah.'), findsNothing);
     expect(find.text('Mengirim…'), findsOneWidget);
     finishReview.complete();
     await tester.pumpAndSettle();
-    expect(find.text('Ulasan sesi'), findsNothing);
+    expect(find.text('Ulasan Sesi'), findsNothing);
     expect(submitted, 1);
     expect(tester.takeException(), isNull);
   });
@@ -448,7 +449,8 @@ void main() {
     await tester.enterText(
         find.byKey(const Key('doctor-review-text')), 'Penjelasan jelas');
     await tester.tap(find.text('Sesi ini membantu saya'));
-    await tester.tap(find.text('Kirim ulasan'));
+    await tester.ensureVisible(find.text('Kirim Ulasan'));
+    await tester.tap(find.text('Kirim Ulasan'));
     await tester.pumpAndSettle();
     final posted =
         client.requests.where((r) => r.method == 'POST').single as http.Request;

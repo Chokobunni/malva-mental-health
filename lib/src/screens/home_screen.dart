@@ -370,7 +370,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       ),
                       _GridItem(
                         icon: Icons.note_add_rounded,
-                        label: 'Rekam Medis',
+                        label: 'Profil Klinis',
                         color: const Color(0xff469dcd),
                         onTap: () => _push(RecordScreen(
                           session: widget.session,

@@ -321,6 +321,12 @@ func TestProfessionalAbsenceDisconnectsOneTimeCare(t *testing.T) {
 	if _, err := s.MarkCareSessionAttendance(ctx, cs.ID, "professional", prof, "absent"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := db.ExecContext(ctx, `UPDATE care_sessions SET scheduled_at=$2 WHERE id=$1`, cs.ID, clock.Now().Add(-2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.finalizeEndedCareSessions(ctx, " AND id=$2", cs.ID); err != nil {
+		t.Fatal(err)
+	}
 	linked, err := s.ProfessionalLinkedToPatient(ctx, prof, patient)
 	if err != nil || linked {
 		t.Fatalf("absent professional remains linked=%v err=%v", linked, err)

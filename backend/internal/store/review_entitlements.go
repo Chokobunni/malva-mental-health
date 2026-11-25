@@ -13,11 +13,13 @@ import (
 var ErrReviewNotEligible = errors.New("sesi atau paket belum selesai, sudah diulas, atau bukan milik akun ini")
 
 type ReviewEntitlement struct {
-	SessionID        string    `json:"session_id,omitempty"`
-	CarePackageID    string    `json:"care_package_id,omitempty"`
-	ProfessionalID   string    `json:"professional_id"`
-	ProfessionalName string    `json:"professional_name"`
-	CompletedAt      time.Time `json:"completed_at"`
+	SessionID        string     `json:"session_id,omitempty"`
+	CarePackageID    string     `json:"care_package_id,omitempty"`
+	ProfessionalID   string     `json:"professional_id"`
+	ProfessionalName string     `json:"professional_name"`
+	SessionType      string     `json:"session_type,omitempty"`
+	ScheduledAt      *time.Time `json:"scheduled_at,omitempty"`
+	CompletedAt      time.Time  `json:"completed_at"`
 }
 
 // Scheduled ends stay stable after terminal detail edits; updated_at does not.
@@ -36,7 +38,7 @@ const reviewEntitlementsSQL = `WITH package_roots AS (
    AND NOT EXISTS (SELECT 1 FROM care_sessions cs WHERE cs.package_id=cp.id
      AND (cs.patient_id<>cp.patient_id OR cs.professional_id<>cp.professional_id))
    AND (SELECT COUNT(*) FROM care_sessions cs WHERE cs.package_id=cp.id
-     AND cs.status IN ('completed','no_show','scheduled','pending_payment'))<=cp.total_sessions
+     AND (cs.status='pending_payment' OR ` + careSessionUsesQuotaSQL + `))<=cp.total_sessions
 ), purchases AS (
  SELECT cp.id,cp.id AS root_id,cp.patient_id,cp.professional_id,cp.original_quota AS quota,
    0 AS renewal,NULL::timestamptz AS merged_at,cp.created_at
@@ -51,14 +53,14 @@ const reviewEntitlementsSQL = `WITH package_roots AS (
  FROM purchases
 ), counted_meetings AS (
  SELECT cs.*, ROW_NUMBER() OVER (PARTITION BY package_id ORDER BY scheduled_at,id) AS meeting_number
- FROM care_sessions cs WHERE cs.patient_id=$1 AND cs.status IN ('completed','no_show','scheduled','pending_payment')
+ FROM care_sessions cs WHERE cs.patient_id=$1 AND (cs.status='pending_payment' OR ` + careSessionUsesQuotaSQL + `)
 ), units AS (
  SELECT cs.id AS session_id, NULL::uuid AS care_package_id, cs.patient_id, cs.professional_id,
-   cs.scheduled_at + cs.duration_minutes * interval '1 minute' AS completed_at
+   cs.scheduled_at + cs.duration_minutes * interval '1 minute' AS completed_at, cs.session_type, cs.scheduled_at
  FROM care_sessions cs WHERE cs.patient_id=$1 AND cs.package_id IS NULL AND cs.status='completed'
  UNION ALL
  SELECT NULL::uuid,p.id,p.patient_id,p.professional_id,
-   MAX(cs.scheduled_at + cs.duration_minutes * interval '1 minute')
+   MAX(cs.scheduled_at + cs.duration_minutes * interval '1 minute'), '', NULL::timestamptz
  FROM purchase_ranges p JOIN counted_meetings cs ON cs.package_id=p.root_id
    AND cs.meeting_number>p.quota_end-p.quota AND cs.meeting_number<=p.quota_end
  WHERE NOT EXISTS (SELECT 1 FROM counted_meetings preceding
@@ -69,7 +71,7 @@ const reviewEntitlementsSQL = `WITH package_roots AS (
    AND COUNT(*) FILTER (WHERE cs.status='completed')>0
 )
 SELECT COALESCE(units.session_id::text,''), COALESCE(units.care_package_id::text,''),
- units.professional_id, COALESCE(u.display_name,'Profesional'), units.completed_at
+ units.professional_id, COALESCE(u.display_name,'Profesional'), units.completed_at, units.session_type, units.scheduled_at
 FROM units LEFT JOIN users u ON u.id=units.professional_id
 WHERE ($2='' OR units.professional_id::text=$2)
  AND NOT EXISTS (SELECT 1 FROM doctor_reviews r WHERE r.session_id=units.session_id OR r.care_package_id=units.care_package_id)
@@ -91,8 +93,13 @@ func listReviewEntitlements(ctx context.Context, db reviewQuerier, patientID, pr
 	out := make([]ReviewEntitlement, 0)
 	for rows.Next() {
 		var e ReviewEntitlement
-		if err := rows.Scan(&e.SessionID, &e.CarePackageID, &e.ProfessionalID, &e.ProfessionalName, &e.CompletedAt); err != nil {
+		if err := rows.Scan(&e.SessionID, &e.CarePackageID, &e.ProfessionalID, &e.ProfessionalName, &e.CompletedAt, &e.SessionType, &e.ScheduledAt); err != nil {
 			return nil, err
+		}
+		e.CompletedAt = e.CompletedAt.In(clock.Location())
+		if e.ScheduledAt != nil {
+			scheduled := e.ScheduledAt.In(clock.Location())
+			e.ScheduledAt = &scheduled
 		}
 		out = append(out, e)
 	}
@@ -101,6 +108,23 @@ func listReviewEntitlements(ctx context.Context, db reviewQuerier, patientID, pr
 
 func (s *Store) ListReviewEntitlements(ctx context.Context, patientID, professionalID string) ([]ReviewEntitlement, error) {
 	return listReviewEntitlements(ctx, s.db, patientID, professionalID)
+}
+
+// ClaimReviewPrompt lets a single Home instance show an eligible prompt.
+// It doesn't consume the entitlement for manual review submission.
+func (s *Store) ClaimReviewPrompt(ctx context.Context, patientID, unitID, unitType, claimID string) (bool, error) {
+	result, err := s.db.ExecContext(ctx, `
+		INSERT INTO review_prompt_claims(patient_id,unit_id,unit_type,claim_id)
+		SELECT $1::uuid,$3::uuid,$4,$5 FROM (`+reviewEntitlementsSQL+`) AS eligible(session_id,package_id)
+		WHERE CASE $4 WHEN 'session' THEN eligible.session_id WHEN 'package' THEN eligible.package_id END = ($3::uuid)::text
+		ON CONFLICT(patient_id,unit_id,unit_type) DO UPDATE SET claim_id=EXCLUDED.claim_id
+		  WHERE review_prompt_claims.claim_id=EXCLUDED.claim_id
+	`, patientID, "", unitID, unitType, claimID)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	return affected == 1, err
 }
 
 func (s *Store) CreateDoctorReviewForEntitlement(ctx context.Context, professionalID, patientID string, stars int, reviewText string, helpful bool, sessionID, packageID string) (DoctorReview, error) {

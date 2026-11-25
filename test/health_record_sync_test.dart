@@ -170,6 +170,41 @@ MalvaApiClient _api() {
 }
 
 void main() {
+  testWidgets('arsip pasien menampilkan empat terbaru dan menambah lima',
+      (tester) async {
+    tester.view.physicalSize = const Size(430, 5000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    for (var i = 1; i <= 10; i++) {
+      container.read(malvaStoreProvider.notifier).addRecord(HealthRecord(
+            id: 'doc-$i',
+            date: DateTime(2026, 10, i),
+            title: 'Berkas $i',
+            type: 'PDF',
+            lockedByProfessional: false,
+          ));
+    }
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(theme: buildMalvaTheme(), home: const RecordScreen()),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Berkas 7'), findsOneWidget);
+    expect(find.text('Berkas 6'), findsNothing);
+    await tester.tap(find.text('Tunjukkan Lebih (6 lagi)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Berkas 2'), findsOneWidget);
+    expect(find.text('Berkas 1'), findsNothing);
+    await tester.tap(find.text('Tunjukkan Lebih (1 lagi)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Berkas 1'), findsOneWidget);
+    expect(find.textContaining('Tunjukkan Lebih'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
       'Record menggabungkan dokumen + asesmen + terapi + screening, filter chip, dan pencarian bekerja',
       (tester) async {
@@ -214,7 +249,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Semua jenis entri muncul di satu daftar.
-    expect(find.text('Rekam Medis'), findsOneWidget);
+    expect(find.text('Profil Klinis'), findsOneWidget);
     expect(find.text('Hasil Lab PDF'), findsOneWidget);
     expect(find.text('WHO-5 (Well-Being Index)'), findsOneWidget);
     expect(find.text('Restrukturisasi Kognitif (ABCDE)'), findsOneWidget);

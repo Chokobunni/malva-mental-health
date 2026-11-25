@@ -180,7 +180,7 @@ void main() {
   });
 
   testWidgets(
-      'Rx list filters actual patient and status, editor preserves consumed stock and full routine, draft and delete update list',
+      'Rx list searches real data without a status filter, editor preserves consumed stock and full routine, draft and delete update list',
       (tester) async {
     tester.view.physicalSize = const Size(430, 1100);
     tester.view.devicePixelRatio = 1;
@@ -242,10 +242,11 @@ void main() {
             home: EPrescriptionScreen(session: pro, apiClient: api))));
     await tester.pumpAndSettle();
     expect(find.text('Ami'), findsWidgets);
+    expect(find.byType(ChoiceChip), findsNothing);
     expect(find.text('30 Tablet'), findsWidgets);
     expect(find.text('Sisa 27'), findsWidgets);
     await tester.enterText(
-        find.widgetWithText(TextField, 'Cari obat, pasien, atau QR'),
+        find.widgetWithText(TextField, 'Cari nama pasien, obat, atau kode QR…'),
         'Sertraline');
     await tester.pumpAndSettle();
     expect(find.text('QR & Detail'), findsNWidgets(2));
@@ -283,6 +284,12 @@ void main() {
     await tester.tap(detail);
     await tester.pumpAndSettle();
     expect(find.text('F41.1'), findsOneWidget);
+    await tester.tap(find.text('Edit Resep'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit Obat'), findsOneWidget);
+    expect(find.byKey(const Key('rx-name')), findsOneWidget);
+    await tester.tap(find.byTooltip('Kembali'));
+    await tester.pumpAndSettle();
     final draft = find.text('Jadikan Draft');
     await tester.scrollUntilVisible(draft, 400,
         scrollable: find.byType(Scrollable).first);

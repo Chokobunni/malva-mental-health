@@ -22,7 +22,10 @@ const _pro = AuthSession(
     accessToken: 'pro-token');
 
 BackendCareSession _session(
-        {bool ended = false, bool completed = false, bool future = false}) =>
+        {bool ended = false,
+        bool completed = false,
+        bool future = false,
+        bool bothAttended = false}) =>
     BackendCareSession(
         id: 'session',
         patientId: 'patient',
@@ -34,6 +37,8 @@ BackendCareSession _session(
             : ServerClock.now().subtract(
                 ended ? const Duration(hours: 8) : const Duration(minutes: 5))),
         durationMinutes: 30,
+        patientAttendance: bothAttended ? 'attended' : '',
+        professionalAttendance: bothAttended ? 'attended' : '',
         status: completed ? 'completed' : 'scheduled');
 
 void main() {
@@ -75,6 +80,8 @@ void main() {
                             'duration_minutes': 30,
                             'status': 'scheduled',
                             'attended_marked_at': session.scheduledAt,
+                            'patient_attendance': 'attended',
+                            'professional_attendance': 'attended',
                           }
                         ]
                       : []
@@ -100,8 +107,7 @@ void main() {
     expect(find.text('Selesaikan sesi'), findsOneWidget);
     expect(find.text('Selesaikan sesi').hitTestable(), findsOneWidget,
         reason: 'actionable ended session must precede truncated history');
-    expect(find.text('Kehadiran saya'), findsOneWidget,
-        reason: 'legacy marker must not invent professional self attendance');
+    expect(find.text('Kehadiran saya: Hadir'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     container.dispose();
   });
@@ -164,8 +170,16 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Patient'), findsOneWidget);
     expect(find.text('Selesai'), findsOneWidget);
-    expect(find.text('Ringkasan: Ringkasan akhir'), findsOneWidget);
     expect(find.text('Join / Chat'), findsNothing);
+    final detail = find.text('Lihat Detail & Catatan Sesi');
+    await Scrollable.ensureVisible(tester.element(detail), alignment: .4);
+    await tester.pumpAndSettle();
+    await tester.tap(detail);
+    await tester.pumpAndSettle();
+    expect(find.text('Detail Sesi'), findsOneWidget);
+    await tester.scrollUntilVisible(
+        find.text('Catatan sesi sudah tersimpan'), 180);
+    expect(find.text('Catatan sesi sudah tersimpan'), findsOneWidget);
     expect(find.text('Kehadiran saya'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     container.dispose();
@@ -201,6 +215,12 @@ void main() {
           find.widgetWithText(OutlinedButton, 'Tidak hadir'), findsOneWidget);
       expect(find.text('Selesaikan sesi'), findsNothing);
       await mount(_session(ended: true));
+      await tester.pumpAndSettle();
+      expect(find.text('Selesaikan sesi'), findsNothing,
+          reason: 'an ended session needs both attendance confirmations');
+      expect(find.widgetWithText(OutlinedButton, 'Hadir'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Tidak hadir'), findsNothing);
+      await mount(_session(ended: true, bothAttended: true));
       await tester.pumpAndSettle();
       expect(find.text('Selesaikan sesi'),
           role == UserRole.professional ? findsOneWidget : findsNothing);

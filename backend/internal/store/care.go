@@ -20,7 +20,8 @@ import (
 // Aturan bisnis:
 //   * 1 paket = 4 sesi dengan satu profesional, berlaku 6 minggu
 //     (42 hari) sejak pembayaran. Sisa sesi setelah 42 hari hangus.
-//   * Sesi yang dijadwalkan/completed/no_show mengurangi sisa.
+//   * Jadwal, sesi selesai, dan no-show mengurangi sisa kecuali pasien
+//     hadir dan profesional tidak.
 //   * Pasien tidak hadir -> sesi hangus tetap dihitung berkurang.
 //   * Profesional membatalkan -> kredit sesi dikembalikan ke paket
 //     (refundable) atau sesi di-reschedule.
@@ -97,7 +98,7 @@ const carePackageColumns = `cp.id, cp.patient_id, cp.professional_id, cp.booking
 	cp.total_sessions, cp.validity_days, cp.price, cp.status,
 	cp.starts_at, cp.expires_at, cp.created_at,
 	` + `(SELECT COUNT(*) FROM care_sessions
-		WHERE package_id = cp.id AND status IN ('scheduled','completed','no_show')),` +
+		WHERE package_id = cp.id AND ` + careSessionUsesQuotaSQL + `),` +
 	`COALESCE(pat.display_name, ''), COALESCE(pro.display_name, ''),
 	COALESCE((SELECT pc.photo_intro_url FROM professional_credentials pc WHERE pc.user_id = cp.professional_id), '')`
 
@@ -595,7 +596,7 @@ func (s *Store) CreateCareSession(ctx context.Context, cs CareSession) (CareSess
 		var pkg CarePackage
 		err := tx.QueryRowContext(ctx, `SELECT status, expires_at, total_sessions,
 			(SELECT COUNT(*) FROM care_sessions WHERE package_id = care_packages.id
-			  AND status IN ('scheduled','completed','no_show'))
+			  AND `+careSessionUsesQuotaSQL+`)
 			FROM care_packages WHERE id = $1 FOR UPDATE`, *cs.PackageID).
 			Scan(&pkg.Status, &pkg.ExpiresAt, &pkg.TotalSessions, &pkg.UsedSessions)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -802,11 +803,11 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 		return CareSession{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var current, patientAttendance, professionalID string
+	var current, patientAttendance, professionalAttendance, professionalID string
 	var start time.Time
 	var duration int
-	if err := tx.QueryRowContext(ctx, `SELECT status, scheduled_at, duration_minutes, patient_attendance, professional_id
-		FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&current, &start, &duration, &patientAttendance, &professionalID); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT status, scheduled_at, duration_minutes, patient_attendance, professional_attendance, professional_id
+		FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&current, &start, &duration, &patientAttendance, &professionalAttendance, &professionalID); err != nil {
 		return CareSession{}, err
 	}
 	if current == status && current != "scheduled" {
@@ -828,16 +829,17 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 				return CareSession{}, errors.New("hanya profesional sesi yang bisa menyelesaikan sesi setelah check-in dibuka")
 			}
 		}
+		bothAttended := patientAttendance == "attended" && professionalAttendance == "attended"
 		switch {
 		case status == "finalize":
 			status = "no_show"
-			if patientAttendance == "attended" {
+			if bothAttended {
 				status = "completed"
 			}
-		case status == "completed" && patientAttendance != "attended":
-			return CareSession{}, errors.New("pasien belum mengonfirmasi kehadiran")
-		case status == "no_show" && patientAttendance == "attended":
-			return CareSession{}, errors.New("pasien sudah mengonfirmasi kehadiran")
+		case status == "completed" && !bothAttended:
+			return CareSession{}, errors.New("pasien dan profesional harus mengonfirmasi kehadiran")
+		case status == "no_show" && bothAttended:
+			return CareSession{}, errors.New("pasien dan profesional sudah mengonfirmasi kehadiran")
 		}
 	}
 
@@ -877,7 +879,10 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 		// "attended" sebelum sesi diselesaikan.
 		setAttended = ", attended_marked_at = COALESCE(attended_marked_at, now())"
 	case "no_show":
-		setAttended = ", patient_attendance='absent', patient_attendance_marked_at=COALESCE(patient_attendance_marked_at,now())"
+		setAttended = `, patient_attendance=COALESCE(NULLIF(patient_attendance,''),'absent'),
+			professional_attendance=COALESCE(NULLIF(professional_attendance,''),'absent'),
+			patient_attendance_marked_at=COALESCE(patient_attendance_marked_at,now()),
+			professional_attendance_marked_at=COALESCE(professional_attendance_marked_at,now())`
 	}
 	setCancelledBy := ""
 	args := []any{status, strings.TrimSpace(cancelReason), sessionID}
@@ -912,8 +917,15 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 			return CareSession{}, err
 		}
 	}
-	if status == "cancelled_by_patient" || status == "cancelled_by_professional" {
+	if status == "cancelled_by_patient" || status == "cancelled_by_professional" || (status == "no_show" && professionalAttendance != "attended") {
 		if err := deactivateCancelledOneTimeLink(ctx, tx, sessionID); err != nil {
+			return CareSession{}, err
+		}
+	}
+	if status == "no_show" && patientAttendance == "attended" && professionalAttendance != "attended" {
+		if _, err := tx.ExecContext(ctx, `UPDATE care_packages SET status='active',updated_at=now()
+			WHERE id=(SELECT package_id FROM care_sessions WHERE id=$1)
+			  AND status='completed' AND expires_at>now()`, sessionID); err != nil {
 			return CareSession{}, err
 		}
 	}
@@ -979,7 +991,7 @@ func (s *Store) MarkCareSessionAttendance(ctx context.Context, sessionID, role, 
 		return CareSession{}, ErrCareSessionTerminal
 	}
 	now := clock.Now()
-	if (role == "patient" || attendance == "absent") && !now.Before(start.Add(time.Duration(duration)*time.Minute)) {
+	if !now.Before(start.Add(time.Duration(duration) * time.Minute)) {
 		return CareSession{}, ErrCareSessionTerminal
 	}
 	if now.Before(start.Add(-10 * time.Minute)) {
@@ -988,34 +1000,13 @@ func (s *Store) MarkCareSessionAttendance(ctx context.Context, sessionID, role, 
 	if previous != "" {
 		return CareSession{}, errors.New("kehadiran sudah dikonfirmasi")
 	}
-	next := "scheduled"
-	cancelledBy := ""
-	if attendance == "absent" {
-		if role == "patient" {
-			next = "no_show"
-		} else {
-			next = "cancelled_by_professional"
-			cancelledBy = actorID
-		}
-	}
 	legacy := ""
 	if role == "professional" && attendance == "attended" {
 		legacy = ", attended_marked_at=COALESCE(attended_marked_at,now())"
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE care_sessions SET `+role+`_attendance=$2, `+role+`_attendance_marked_at=now(),status=$3,cancelled_by=COALESCE(NULLIF($4,'')::uuid,cancelled_by),updated_at=now()`+legacy+` WHERE id=$1`, sessionID, attendance, next, cancelledBy)
+	_, err = tx.ExecContext(ctx, `UPDATE care_sessions SET `+role+`_attendance=$2, `+role+`_attendance_marked_at=now(),updated_at=now()`+legacy+` WHERE id=$1`, sessionID, attendance)
 	if err != nil {
 		return CareSession{}, err
-	}
-	if attendance == "absent" && role == "professional" {
-		if err := deactivateCancelledOneTimeLink(ctx, tx, sessionID); err != nil {
-			return CareSession{}, err
-		}
-		// A completed package can contain a legacy scheduled final session.
-		// Returning that session's quota makes the unexpired package usable again.
-		if _, err := tx.ExecContext(ctx, `UPDATE care_packages SET status='active',updated_at=now()
-			WHERE id=(SELECT package_id FROM care_sessions WHERE id=$1) AND status='completed' AND expires_at>now()`, sessionID); err != nil {
-			return CareSession{}, err
-		}
 	}
 	if err := tx.Commit(); err != nil {
 		return CareSession{}, err
@@ -1708,11 +1699,14 @@ func (s *Store) SweepCareState(ctx context.Context) (expiredPackages int64, expi
 		SET status = 'completed', updated_at = now()
 		WHERE cp.status = 'active'
 		  AND (SELECT COUNT(*) FROM care_sessions cs
-		        WHERE cs.package_id = cp.id AND cs.status IN ('scheduled','completed','no_show')) >= cp.total_sessions
+		        WHERE cs.package_id = cp.id AND `+careSessionUsesQuotaSQL+`) >= cp.total_sessions
 		  AND NOT EXISTS (SELECT 1 FROM care_sessions cs2
 		        WHERE cs2.package_id = cp.id AND cs2.status = 'scheduled')`)
 	return
 }
+
+const careSessionUsesQuotaSQL = `(status IN ('scheduled','completed','no_show')
+	AND NOT (status='no_show' AND patient_attendance='attended' AND professional_attendance='absent'))`
 
 // ============================================================
 // LEDGER REFUND/KREDIT (care_refunds) + IDEMPOTENSI WEBHOOK

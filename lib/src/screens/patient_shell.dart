@@ -282,6 +282,7 @@ class _PatientShellState extends ConsumerState<PatientShell>
               ))),
     );
     return ReviewCompletionPrompt(
+        enabled: _index == 0,
         apiClient: widget.apiClient ?? ref.read(apiClientProvider),
         child: scaffold);
   }
