@@ -217,12 +217,14 @@ void main() {
     expect(find.textContaining('Daftar Pasien'), findsNothing);
     await tester.tap(day(scheduled));
     await tester.pumpAndSettle();
-    final resetUnderCards = find.text('Tampilkan semua sesi (1)');
+    final resetUnderCards = find.text('Tampilkan semua sesi');
     await tester.scrollUntilVisible(resetUnderCards, 140);
     await tester.ensureVisible(resetUnderCards);
     await tester.pumpAndSettle();
     await tester.tap(resetUnderCards);
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Semua tanggal'), -140,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Semua tanggal'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
@@ -268,7 +270,8 @@ void main() {
     expect(find.text('Continuous Package'), findsOneWidget);
     expect(find.text('Belum diatur'), findsNWidgets(3));
     client.requests.clear();
-    await tester.tap(find.text('Jadwal'));
+    await tester.tap(find.byWidgetPredicate(
+        (w) => w is NavigationDestination && w.label == 'Jadwal'));
     await tester.pumpAndSettle();
     expect(find.text('Ketersediaan & harga'), findsNothing);
     expect(
@@ -383,9 +386,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Aksi lain').first);
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Detail pasien').first);
+    await tester.ensureVisible(find.text('Profil').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Detail pasien').first);
+    await tester.tap(find.text('Profil').first);
     await tester.pumpAndSettle();
     expect(find.text('Login dulu.'), findsNothing);
     expect(find.text('Ringkasan klinis'), findsOneWidget);
@@ -411,6 +414,7 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester
         .ensureVisible(find.widgetWithText(OutlinedButton, 'Hadir').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(OutlinedButton, 'Hadir').first);
     await tester.pumpAndSettle();
     final request =
@@ -421,7 +425,7 @@ void main() {
     expect(
         find.text('Kehadiran dicatat. Sesi tetap berjalan sampai waktu habis.'),
         findsOneWidget);
-    expect(find.text('Join / Chat'), findsWidgets);
+    expect(find.widgetWithText(OutlinedButton, 'Chat'), findsWidgets);
     await tester.pumpWidget(const SizedBox());
   });
 }

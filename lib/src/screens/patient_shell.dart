@@ -14,6 +14,7 @@ import 'messages_list_screen.dart';
 import 'more_screen.dart';
 import 'my_care_screen.dart';
 import '../widgets/sos_fab.dart';
+import '../widgets/care_navigation_icon.dart';
 import '../widgets/doctor_review_actions.dart';
 
 // ============================================================
@@ -44,6 +45,7 @@ class PatientShell extends ConsumerStatefulWidget {
 class _PatientShellState extends ConsumerState<PatientShell>
     with WidgetsBindingObserver {
   int _index = 0;
+  int _scheduleRevision = 0;
   String _professionalUserId = '';
   String _professionalName = 'Profesional';
 
@@ -179,6 +181,12 @@ class _PatientShellState extends ConsumerState<PatientShell>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(patientScheduleRequestProvider, (_, revision) {
+      setState(() {
+        _index = 1;
+        _scheduleRevision = revision;
+      });
+    });
     final pages = [
       // 0. HOME
       HomeScreen(
@@ -205,6 +213,7 @@ class _PatientShellState extends ConsumerState<PatientShell>
       ),
       // 1. MY CARE (jadwal profesional)
       MyCareScreen(
+        key: ValueKey(_scheduleRevision),
         session: widget.session,
         apiClient: widget.apiClient,
       ),
@@ -238,7 +247,8 @@ class _PatientShellState extends ConsumerState<PatientShell>
                               : const Color(0xff9ca3af)))),
               child: NavigationBar(
                 backgroundColor: Colors.white,
-                indicatorColor: const Color(0xfff8f1fc),
+                indicatorColor:
+                    _index < 2 ? Colors.transparent : const Color(0xfff8f1fc),
                 indicatorShape: const CircleBorder(),
                 height: 64,
                 labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
@@ -247,14 +257,16 @@ class _PatientShellState extends ConsumerState<PatientShell>
                     setState(() => _index = value),
                 destinations: const [
                   NavigationDestination(
-                    icon: Icon(Icons.home_outlined),
-                    selectedIcon: Icon(Icons.home_rounded),
+                    icon: CareNavigationIcon(asset: 'home'),
+                    selectedIcon:
+                        CareNavigationIcon(asset: 'home', selected: true),
                     label: 'Beranda',
                   ),
                   NavigationDestination(
-                    icon: Icon(Icons.event_note_outlined),
-                    selectedIcon: Icon(Icons.event_note_rounded),
-                    label: 'MyCare',
+                    icon: CareNavigationIcon(asset: 'care'),
+                    selectedIcon:
+                        CareNavigationIcon(asset: 'care', selected: true),
+                    label: 'Jadwal',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.chat_bubble_outline_rounded),

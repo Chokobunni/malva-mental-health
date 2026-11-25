@@ -280,6 +280,7 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                   switch (_step) {
                     0 when _editing => 'Edit Obat',
                     1 when _editing => 'Edit Rutinitas',
+                    2 when _editing && !widget.personal => 'Edit Pengingat',
                     2 when _editing => 'Edit Pengingat Obat',
                     3 when _editing => 'Edit Pengingat Stok',
                     0 => widget.personal ? 'Tambah Obat' : 'Detail Obat',
@@ -423,6 +424,21 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                                                                 when widget
                                                                     .personal =>
                                                               'Simpan obat',
+                                                            0
+                                                                when _editing &&
+                                                                    !widget
+                                                                        .personal =>
+                                                              'Lanjut Edit Rutinitas',
+                                                            1
+                                                                when _editing &&
+                                                                    !widget
+                                                                        .personal =>
+                                                              'Lanjut Edit Pengingat',
+                                                            2
+                                                                when _editing &&
+                                                                    !widget
+                                                                        .personal =>
+                                                              'Lanjut Edit Pengingat Stok',
                                                             0 =>
                                                               'Lanjut Atur Jadwal Resep',
                                                             1 =>

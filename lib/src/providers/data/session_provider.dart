@@ -46,3 +46,5 @@ final sessionIsExpiredProvider = Provider<bool>((ref) {
   // The notifier handles actual expiry via timer
   return false;
 });
+
+final patientScheduleRequestProvider = StateProvider<int>((ref) => 0);

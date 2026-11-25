@@ -21,19 +21,28 @@ Map<String, List<GoalHistoryEntry>> groupGoalHistory(
   }
   for (final goal in goals) {
     final details = goal.details;
+    // Seven occurrences require every day, even when stored as a flexible
+    // weekly goal. Smaller weekly targets have no fixed missed day to infer.
+    final legacyDaily = details == null && goal.targetPerWeek == 7;
     if (!goal.isActive ||
-        details == null ||
-        (details.recurrence == 'weekly' && details.weeklyTarget != null)) {
+        (details == null && !legacyDaily) ||
+        (details?.recurrence == 'weekly' &&
+            details?.weeklyTarget != null &&
+            details!.weeklyTarget != 7)) {
       continue;
     }
-    final anchor = parseWibStored(details.startDate);
+    final anchor = details == null
+        ? (goal.createdAt == null
+            ? null
+            : parseWibStored(wibDateKey(goal.createdAt!)))
+        : parseWibStored(details.startDate);
     if (anchor == null) continue;
     var day = parseWibStored(from)!;
     if (anchor.isAfter(day)) day = anchor;
     for (;; day = day.add(const Duration(days: 1))) {
       final key = wibDateKey(day);
       if (key.compareTo(to) > 0 || key.compareTo(todayKey) >= 0) break;
-      if (!details.isDueOn(day)) continue;
+      if (details != null && !details.isDueOn(day)) continue;
       (grouped[key] ??= {}).putIfAbsent(goal.id, () => (goal: goal, log: null));
     }
   }

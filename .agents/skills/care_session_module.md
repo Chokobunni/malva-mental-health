@@ -77,6 +77,9 @@ Status paket: `pending_payment` → `active` (saat booking dibayar) → `complet
 
 ## Presentasi profesional (2026-11-09)
 
+- Beranda dan tab Jadwal kedua peran memakai kartu konsultasi dan rute Detail Sesi yang sama. Jadwal profesional menaruh List Sesi dan Riwayat Sesi di tab atas, dengan hitungan sesi selesai. Detail waktu dan tombol ruang mengikuti status sesi dan jam server.
+- Catatan klinis tersimpan melalui kontrak sesi yang ada. Ringkasan yang dipublikasikan memakai `summary_for_patient`. Draf dan catatan pribadi memakai `private_note` dan hanya dapat dibaca profesional.
+
 - Home profesional memuat Sesi berjalan, Video call mendatang dan Sesi chat mendatang; Operasional berisi Ketersediaan & harga serta Earnings, Klinis berisi E-Prescription sesuai kewenangan psikiater. Data pasien dibagikan berada pada tab Pasien. Lainnya memuat identitas akun, Portal Profesional (termasuk STR/SIP), dan Keluar.
 - Crisis Incident Log dihapus dari navigasi, konten dan pemuatan dashboard profesional. Endpoint/riwayat insiden global serta alur SOS pasien dipertahankan.
 - Jadwal menampilkan Quick Video Call, sesi hari ini, mendatang, ketersediaan/harga dan riwayat. Aksi lain membuka Detail pasien/Batal/Reschedule/Link & ringkasan; aturan check-in, penyelesaian dan jendela akses tetap berlaku. Ringkasan praktik hanya menampilkan slot aktif, dikelompokkan per hari, dengan hari libur dan harga server.

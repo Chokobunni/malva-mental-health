@@ -10,6 +10,42 @@ import 'package:malva_mental_health/src/time/wib.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+      'daily goal export includes missed days and saved progress through November 25',
+      () async {
+    final now = wibFromParts(2026, 11, 25, 23);
+    final history = groupGoalHistory([
+      BackendGoal.fromJson({
+        'id': 'sleep',
+        'title': 'Tidur jam 22.00',
+        'target_per_week': 7,
+        'created_at': '2026-11-15T09:00:00+07:00',
+      }),
+    ], [
+      for (final day in [15, 22, 24, 25])
+        BackendHabitLog(
+            id: 'l$day', goalId: 'sleep', loggedOn: '2026-11-$day', done: true),
+    ], start: wibFromParts(2026, 11, 15), end: now, today: now);
+    expect(history.length, 11);
+    expect(history.keys.first, '2026-11-25');
+    expect(history.keys.last, '2026-11-15');
+    expect(
+        history.values
+            .expand((entries) => entries)
+            .where((entry) => goalHistoryResult(entry) == 'Tidak dilakukan')
+            .length,
+        7);
+    final bytes = await buildHealthReportPdf(
+        title: 'Riwayat Target & Kebiasaan',
+        now: now,
+        periodStart: wibFromParts(2026, 11, 15),
+        periodEnd: now,
+        goalHistory: history);
+    expect(latin1.decode(bytes).startsWith('%PDF-'), isTrue);
+    final dir = Platform.environment['MALVA_HEALTH_PDF_QA'];
+    if (dir != null)
+      await File('$dir/goals-november-25.pdf').writeAsBytes(bytes);
+  });
   test('selected empty categories each occupy one page without blank pages',
       () async {
     final bytes = await buildHealthReportPdf(

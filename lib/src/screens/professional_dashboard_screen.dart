@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../widgets/care_navigation_icon.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
@@ -9,15 +10,15 @@ import '../providers/providers.dart';
 import '../services/care_session_time.dart';
 import '../services/care_session_refresh.dart';
 import '../services/server_clock.dart';
-import '../widgets/session_attendance_actions.dart';
+
 import '../services/dashboard_sync_service.dart';
 import '../services/malva_api_client.dart';
-import '../services/meeting_launcher.dart';
+
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/care_reference_widgets.dart';
 import '../widgets/account_avatar.dart';
-import '../widgets/meet_join_button.dart';
+import '../widgets/care_session_card.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/professional_avatar.dart';
 import '../widgets/professional_availability_summary.dart';
@@ -453,14 +454,16 @@ class _ProfessionalDashboardScreenState
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             child: NavigationBar(
               labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
+              indicatorColor: _tabIndex == 0 ? Colors.transparent : null,
               indicatorShape: const CircleBorder(),
               selectedIndex: _tabIndex,
               onDestinationSelected: (value) =>
                   setState(() => _tabIndex = value),
               destinations: const [
                 NavigationDestination(
-                    icon: Icon(Icons.grid_view_outlined),
-                    selectedIcon: Icon(Icons.grid_view_rounded),
+                    icon: CareNavigationIcon(asset: 'home'),
+                    selectedIcon:
+                        CareNavigationIcon(asset: 'home', selected: true),
                     label: 'Dashboard'),
                 NavigationDestination(
                     icon: Icon(Icons.calendar_month_outlined),
@@ -1526,8 +1529,6 @@ class _UpcomingSessionsSection extends ConsumerStatefulWidget {
 
 class _UpcomingSessionsSectionState
     extends ConsumerState<_UpcomingSessionsSection> {
-  final _cancelling = <String>{};
-
   @override
   Widget build(BuildContext context) {
     if (widget.isLoading) {
@@ -1546,269 +1547,32 @@ class _UpcomingSessionsSectionState
       );
     }
     return Column(children: [
-      for (final s in widget.sessions) ...[
-        _DashboardCard(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Stack(children: [
-              CircleAvatar(
-                  radius: 25,
-                  backgroundColor: const Color(0xFFF3E6F8),
-                  child: Text(_initials(s.patientName),
-                      style: const TextStyle(
-                          color: _dashboardPurple,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700))),
-              const Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Tooltip(
-                      message: 'Status online belum diketahui',
-                      child: DecoratedBox(
-                          decoration: BoxDecoration(
-                              color: Color(0xFFB7BEC5),
-                              shape: BoxShape.circle,
-                              border: Border.fromBorderSide(
-                                  BorderSide(color: Colors.white, width: 2))),
-                          child: SizedBox.square(dimension: 13)))),
-            ]),
-            const SizedBox(width: 14),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Text(s.patientName.isEmpty ? 'Pasien' : s.patientName,
-                      style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF252E38))),
-                  const SizedBox(height: 3),
-                  Row(children: [
-                    Icon(
-                        s.isVideo
-                            ? Icons.videocam_rounded
-                            : Icons.forum_rounded,
-                        size: 16,
-                        color: _dashboardPurple),
-                    const SizedBox(width: 5),
-                    Expanded(
-                        child: Text(
-                            s.isVideo
-                                ? 'Sesi video, ${s.durationMinutes} menit'
-                                : 'Chat • ${s.durationMinutes} menit',
-                            style: const TextStyle(
-                                fontSize: 13, color: Color(0xFF7D8993)))),
-                  ]),
-                ])),
-          ]),
-          const SizedBox(height: 14),
-          Text(_whenLabel(s),
-              style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.2,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF303A45))),
-          const SizedBox(height: 12),
-          if (s.isVideo && s.canJoinNow)
-            MeetJoinButton(
+      for (final s in widget.sessions)
+        Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: CareSessionCard(
                 session: s,
+                allowPreSessionChat: true,
+                role: UserRole.professional,
                 accessToken: widget.accessToken,
-                expanded: true,
-                onSessionChanged: (_) => unawaited(widget.onChanged()))
-          else
-            Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
-                decoration: BoxDecoration(
-                    color: const Color(0xFFF6EFFA),
-                    borderRadius: BorderRadius.circular(13),
-                    border: Border.all(color: const Color(0xFFF0E7F5))),
-                child:
-                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  const Icon(Icons.schedule_rounded,
-                      size: 16, color: _dashboardPurple),
-                  const SizedBox(width: 7),
-                  Flexible(
-                      child: Text(_countdown(s),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              fontSize: 13,
-                              height: 1.2,
-                              color: _dashboardPurple,
-                              fontWeight: FontWeight.w500))),
-                ])),
-          const SizedBox(height: 14),
-          Row(children: [
-            Expanded(
-                child: FilledButton.icon(
-                    onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => ChatScreen(
-                                otherUserId: s.patientId,
-                                otherUserName: s.patientName))),
-                    style: FilledButton.styleFrom(
-                        backgroundColor: _dashboardPurple,
-                        minimumSize: const Size.fromHeight(40),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        textStyle: const TextStyle(
-                            fontSize: 14,
-                            fontFamily: 'Roboto',
-                            fontWeight: FontWeight.w500),
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(13))),
-                    icon: const Icon(Icons.chat_bubble_rounded, size: 15),
-                    label: const Text('Chat'))),
-            if (!s.isVideo) ...[
-              const SizedBox(width: 12),
-              Expanded(
-                  child: OutlinedButton(
-                      onPressed: _canCancel(s) && !_cancelling.contains(s.id)
-                          ? () => _cancel(s)
-                          : null,
-                      style: OutlinedButton.styleFrom(
-                          foregroundColor: _dashboardPurple,
-                          minimumSize: const Size.fromHeight(40),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          side: const BorderSide(color: Color(0xFFE5E7EB)),
-                          textStyle: const TextStyle(
-                              fontSize: 14,
-                              fontFamily: 'Roboto',
-                              fontWeight: FontWeight.w500),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(13))),
-                      child: Text(_cancelling.contains(s.id)
-                          ? 'Membatalkan...'
-                          : 'Batal'))),
-            ],
-          ]),
-          if (s.isVideo) ...[
-            const SizedBox(height: 8),
-            ProfessionalSessionActions(
-              key: ValueKey('home-actions-${s.id}'),
-              session: s,
-              accessToken: widget.accessToken,
-              apiClient: widget.apiClient,
-              onChanged: widget.onChanged,
-              futureCancellationOnly: true,
-            ),
-          ],
-        ])),
-        if (s != widget.sessions.last) const SizedBox(height: 12),
-      ],
+                apiClient: widget.apiClient,
+                onChanged: widget.onChanged,
+                onOpenChat: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => ChatScreen(
+                            otherUserId: s.patientId,
+                            otherUserName: s.patientName))),
+                otherActions: ProfessionalSessionActions(
+                    session: s,
+                    onChanged: widget.onChanged,
+                    accessToken: widget.accessToken,
+                    apiClient: widget.apiClient,
+                    futureCancellationOnly: true)))
     ]);
-  }
-
-  bool _canCancel(BackendCareSession s) =>
-      s.isScheduled &&
-      s.scheduledDateTime != null &&
-      ServerClock.now().isBefore(s.scheduledDateTime!);
-
-  Future<void> _cancel(BackendCareSession s) async {
-    if (!_canCancel(s) || _cancelling.contains(s.id)) return;
-    final token = widget.accessToken;
-    final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-                title: const Text('Batalkan sesi?'),
-                content: const Text(
-                    'Kredit sesi pasien otomatis kembali dan bisa dijadwalkan ulang.'),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('Kembali')),
-                  FilledButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      style: compactFilledButtonStyle,
-                      child: const Text('Batalkan')),
-                ]));
-    if (!mounted ||
-        confirmed != true ||
-        widget.accessToken != token ||
-        token.isEmpty ||
-        !_canCancel(s)) return;
-    setState(() => _cancelling.add(s.id));
-    try {
-      final MalvaApiClient api =
-          widget.apiClient ?? ref.read(apiClientProvider);
-      await api.updateCareSession(
-          accessToken: token,
-          sessionId: s.id,
-          status: 'cancelled_by_professional');
-      if (!mounted || widget.accessToken != token) return;
-      await widget.onChanged();
-    } on Object catch (error) {
-      if (!mounted || widget.accessToken != token) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(error))));
-    } finally {
-      if (mounted) setState(() => _cancelling.remove(s.id));
-    }
-  }
-
-  String _initials(String name) => name
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((s) => s.isNotEmpty)
-      .take(2)
-      .map((s) => s[0])
-      .join()
-      .toUpperCase();
-
-  String _countdown(BackendCareSession s) {
-    final at = s.scheduledDateTime;
-    if (at == null) return 'Jadwal belum tersedia';
-    final diff = at.difference(ServerClock.now());
-    if (diff <= Duration.zero) return 'Sesi berlangsung';
-    final minutes = (diff.inSeconds / 60).ceil();
-    final hours = minutes ~/ 60;
-    return 'Mulai dalam ${hours > 0 ? '$hours jam ' : ''}${minutes % 60} mnt';
-  }
-
-  String _whenLabel(BackendCareSession s) {
-    final at = s.scheduledDateTime;
-    if (at == null) return 'Jadwal belum tersedia';
-    if (!s.isVideo) return '${formatWibDateTime(at)} WIB';
-    const days = [
-      'Senin',
-      'Selasa',
-      'Rabu',
-      'Kamis',
-      'Jumat',
-      'Sabtu',
-      'Minggu'
-    ];
-    const months = [
-      'Januari',
-      'Februari',
-      'Maret',
-      'April',
-      'Mei',
-      'Juni',
-      'Juli',
-      'Agustus',
-      'September',
-      'Oktober',
-      'November',
-      'Desember'
-    ];
-    return '${days[at.weekday - 1]}, ${at.day} ${months[at.month - 1]} ${at.year} • ${formatWibBubbleTime(at)}';
   }
 }
 
-/// Tombol Outlined ringkas untuk dipakai di dalam `Row` (theme global memakai
-/// minimumSize tak-hingga sehingga tanpa style ini tombol melahap seluruh lebar).
-final ButtonStyle _compactOutlinedButtonStyle = OutlinedButton.styleFrom(
-  minimumSize: Size.zero,
-  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-);
-
-/// Kartu "satu pintu" generik untuk dashboard profesional: satu tombol besar
-/// yang membuka layar lain. Meniru pola visual kartu Crisis Incident Log
-/// (ikon berwarna + judul + subjudul + chevron).
 class _PortalDoorCard extends StatelessWidget {
   const _PortalDoorCard({
     required this.icon,
@@ -1925,114 +1689,11 @@ class _OngoingSessionCard extends StatelessWidget {
   final Future<void> Function() onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    final isVideo = session.sessionType == 'video';
-    final patientName =
-        session.patientName.isEmpty ? 'Pasien' : session.patientName;
-    final timeRange = _timeRangeLabel(session);
-    final badgeColor = isVideo ? MalvaColors.seed : MalvaColors.mint;
-    return _DashboardCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              InitialAvatar(
-                name: patientName,
-                radius: 18,
-                color: MalvaColors.seed,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(patientName,
-                        style: const TextStyle(fontWeight: FontWeight.w900)),
-                    Text(
-                      timeRange,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-              ),
-              StatusPill(
-                label: isVideo ? 'Video' : 'Chat',
-                color: badgeColor,
-                icon: isVideo
-                    ? Icons.videocam_rounded
-                    : Icons.chat_bubble_rounded,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const StatusPill(
-                label: 'Berlangsung',
-                color: MalvaColors.mint,
-                icon: Icons.sensors_rounded,
-              ),
-              const Spacer(),
-              if (isVideo) ...[
-                if (session.meetingUrl.trim().isNotEmpty)
-                  FilledButton.icon(
-                    onPressed: () => _joinVideo(context),
-                    icon: const Icon(Icons.videocam_rounded, size: 18),
-                    label: const Text('Gabung'),
-                    style: compactFilledButtonStyle,
-                  ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: () => _openChat(context, patientName),
-                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
-                  label: const Text('Chat'),
-                  style: _compactOutlinedButtonStyle,
-                ),
-              ] else
-                FilledButton.icon(
-                  onPressed: () => _openChat(context, patientName),
-                  icon: const Icon(Icons.chat_bubble_rounded, size: 18),
-                  label: const Text('Buka chat'),
-                  style: compactFilledButtonStyle,
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          SessionAttendanceActions(
-              session: session,
-              role: UserRole.professional,
-              onChanged: onChanged),
-        ],
-      ),
-    );
-  }
-
-  /// Label rentang waktu `HH:mm–HH:mm WIB` dari jadwal + durasi sesi.
-  String _timeRangeLabel(BackendCareSession s) {
-    final start = parseWibStored(s.scheduledAt);
-    if (start == null) return '';
-    final end = start.add(Duration(minutes: s.durationMinutes));
-    return '${formatWibBubbleTime(start)}–${formatWibBubbleTime(end)} WIB';
-  }
-
-  Future<void> _joinVideo(BuildContext context) async {
-    if (!session.canJoinNow) return;
-    final result = await openMeetLink(session.meetingUrl);
-    if (result == MeetLaunchResult.failed) {
-      await copyMeetLink(session.meetingUrl);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Tautan Meet disalin. Tempel di aplikasi Meet untuk '
-              'bergabung.'),
-        ),
-      );
-    }
-  }
+  Widget build(BuildContext context) => CareSessionCard(
+      session: session,
+      role: UserRole.professional,
+      onChanged: onChanged,
+      onOpenChat: () => _openChat(context, session.patientName));
 
   void _openChat(BuildContext context, String patientName) {
     if (!session.canJoinNow) return;

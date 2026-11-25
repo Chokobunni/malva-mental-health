@@ -65,6 +65,27 @@ void main() {
     expect(find.text('Email pasien'), findsOneWidget);
   });
 
+  testWidgets('system back from the patient form returns to the role gate',
+      (tester) async {
+    await pumpToPatientLogin(tester);
+    await tester.enterText(find.byType(TextField).first, 'pasien@example.test');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Are you'), findsOneWidget);
+  });
+
+  testWidgets('system back from professional registration returns to role gate',
+      (tester) async {
+    await pumpToProfessionalLogin(tester);
+    await tester.tap(find.text('Daftar'));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Are you'), findsOneWidget);
+  });
+
   testWidgets('toggle Masuk/Daftar di halaman profesional', (tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1.0;

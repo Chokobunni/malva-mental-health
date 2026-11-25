@@ -12,6 +12,8 @@ import 'package:malva_mental_health/src/malva_app.dart';
 import 'package:malva_mental_health/src/providers/auth_providers.dart';
 import 'package:malva_mental_health/src/screens/booking/payment_screen.dart';
 import 'package:malva_mental_health/src/screens/booking/payment_success_screen.dart';
+import 'package:malva_mental_health/src/screens/patient_shell.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
 
@@ -153,6 +155,9 @@ class _GatewayBackend {
             'reference': 'TXN-1',
             'status': statusSequence[index],
             'redirect_url': _redirectUrl,
+            'paid_at': '2026-11-25T08:13:17+07:00',
+            'gross_amount': 200000,
+            'service_fee_amount': 2000,
           },
           'session_id': statusSequence[index] == 'paid' ? 'sess_1' : '',
         });
@@ -196,6 +201,48 @@ Widget _screen(MalvaApiClient api) => PaymentScreen(
     );
 
 void main() {
+  setUpAll(initializeWib);
+
+  testWidgets(
+      'receipt uses confirmed server values and returns to schedule tab',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = _api(_GatewayBackend(statusSequence: const ['paid']));
+    await tester.pumpWidget(_wrap(
+        api,
+        PatientShell(
+          session: _patientSession,
+          apiClient: api,
+          onLogout: () {},
+        )));
+    await tester.pumpAndSettle();
+    final context = tester.element(find.byType(PatientShell));
+    unawaited(Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => PaymentScreen(
+        reference: 'TXN-1',
+        booking: _booking(),
+        doctorName: 'dr. Uji',
+        session: _patientSession,
+        apiClient: api,
+      ),
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View Receipt'));
+    await tester.pumpAndSettle();
+    expect(find.text('E-Receipt'), findsOneWidget);
+    expect(find.text('Rp202.000'), findsOneWidget);
+    expect(find.text('2026-11-25 08:13 WIB'), findsNWidgets(2));
+    await tester.tap(find.text('Tutup'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Lihat Sesi Saya'));
+    await tester.pumpAndSettle();
+    expect(find.text('Konsultasi Saya'), findsOneWidget);
+    expect(find.byType(PaymentSuccessScreen), findsNothing);
+    expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        1);
+  });
   testWidgets('cold payment return restores the exact package context',
       (tester) async {
     final backend =

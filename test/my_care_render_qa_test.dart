@@ -122,6 +122,17 @@ void main() {
               'credential': {
                 'specialization': r.url.path.endsWith('0') ? 'M.Psi' : 'Sp.KJ'
               },
+              'schedules': [
+                for (final day in [3, 5, 6])
+                  {
+                    'day_of_week': day,
+                    'start_time': '09:00',
+                    'end_time': day == 6 ? '12:00' : '16:00',
+                    'is_active': true,
+                    'slot_duration_minutes': 60,
+                    'service_category': 'shared'
+                  },
+              ],
               'reviews': [],
               'rating': {
                 'review_count': r.url.path.endsWith('1') ? 1 : 0,
@@ -217,6 +228,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Jadwalkan Sesi').first);
     await tester.pumpAndSettle();
+    await capture('schedule-package-summary');
     final firstSession = find.widgetWithText(TextButton, 'Pilih jadwal').first;
     await tester.ensureVisible(firstSession);
     await tester.tap(firstSession);
@@ -237,7 +249,17 @@ void main() {
     await tester.tap(find.text('Pilih Jadwal'));
     await tester.pumpAndSettle();
     expect(find.text('2 sesi dipilih'), findsOneWidget);
+    await tester.drag(find.byType(ListView).last, const Offset(0, 1800));
+    await tester.pumpAndSettle();
     await capture('schedule-package-sessions');
+    await tester.scrollUntilVisible(find.text('Jam Praktik'), 300,
+        scrollable: find
+            .descendant(
+                of: find.byType(ListView).last,
+                matching: find.byType(Scrollable))
+            .first);
+    await tester.pumpAndSettle();
+    await capture('schedule-package-practice');
     await tester.pumpWidget(const SizedBox());
     debugDisableShadows = true;
   });

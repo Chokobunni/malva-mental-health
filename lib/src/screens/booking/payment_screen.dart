@@ -251,7 +251,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
         appBar: AppBar(title: const Text('Payment')),
         body: const Center(
             child: Text(
-                'Akun telah berubah. Buka kembali pembayaran dari MyCare.')),
+                'Akun telah berubah. Buka kembali pembayaran dari Konsultasi Saya.')),
       );
     }
     return Scaffold(
@@ -438,7 +438,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
             ),
           const SizedBox(height: 8),
           const Text(
-            'Setelah pembayaran berhasil, lihat paket atau sesi kamu di MyCare. Pengaturan berbagi data dapat diubah melalui Kelola Data.',
+            'Setelah pembayaran berhasil, lihat paket atau sesi kamu di Konsultasi Saya. Pengaturan berbagi data dapat diubah melalui Atur Data.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: Colors.black54),
           ),
@@ -549,7 +549,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
   ) async {
     if (!mounted || !_ownerMatches) return;
     if (payment.status.toLowerCase() == 'paid') {
-      _goToSuccess(payment.reference);
+      await _goToSuccess(payment);
       return;
     }
     if (payment.redirectUrl.isNotEmpty ||
@@ -558,11 +558,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
       _startWaitingForGateway(payment);
       return;
     }
-    await apiClient.markPaymentPaid(
+    final paid = await apiClient.markPaymentPaid(
       accessToken: accessToken,
       reference: payment.reference,
     );
-    _goToSuccess(payment.reference);
+    await _goToSuccess(paid);
   }
 
   /// Masuk keadaan menunggu pembayaran gateway: pantau status lebih dulu, lalu
@@ -615,7 +615,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
     }
     if (_packageBooking == null)
       throw const MalvaApiException(
-          'Pembayaran diterima. Konteks booking belum tersedia; cek status lagi atau buka MyCare.');
+          'Pembayaran diterima. Konteks booking belum tersedia; cek status lagi atau buka Konsultasi Saya.');
     if (_packageBooking!.serviceType == 'package_session') {
       final packages = await _api.listCarePackages(accessToken: accessToken);
       if (!mounted || !_ownerMatches) return;
@@ -627,7 +627,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
       }
       if (_restoredPackage == null)
         throw const MalvaApiException(
-            'Pembayaran diterima. Paket belum tersedia; cek status lagi atau buka MyCare.');
+            'Pembayaran diterima. Paket belum tersedia; cek status lagi atau buka Konsultasi Saya.');
     }
   }
 
@@ -692,8 +692,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
         await _restoreReturnContext(status.payment, accessToken);
         if (!mounted || !_ownerMatches || _navigated) return;
         _pollTimer?.cancel();
-        setState(() => _waiting = false);
-        _goToSuccess(_pendingReference);
+        await _goToSuccess(status.payment, sessionId: status.sessionId);
         return;
       }
       if (state == 'cancelled' || state == 'expired' || state == 'deny') {
@@ -702,7 +701,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
           _waiting = false;
           _isPaying = false;
           _error = 'Pembayaran tidak selesai ($state). '
-              '${widget.reference == null ? 'Kamu bisa mencoba lagi dengan menekan "Bayar Sekarang".' : 'Kembali ke MyCare untuk melanjutkan pembelian.'}';
+              '${widget.reference == null ? 'Kamu bisa mencoba lagi dengan menekan "Bayar Sekarang".' : 'Kembali ke Konsultasi Saya untuk melanjutkan pembelian.'}';
         });
         return;
       }
@@ -729,24 +728,39 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
     }
   }
 
-  /// Pindah ke layar sukses (layar itu yang mengarahkan ke MyCare).
-  void _goToSuccess(String reference) {
+  /// Pindah ke layar sukses (layar itu yang mengarahkan ke Konsultasi Saya).
+  Future<void> _goToSuccess(BackendPayment payment, {String? sessionId}) async {
     if (!mounted || !_ownerMatches || _navigated) return;
     _navigated = true;
-    unawaited(_closePaymentPage());
+    _pollTimer?.cancel();
+    final booking = _packageBooking ?? widget.booking;
+    final package = widget.package ?? _restoredPackage;
+    final session = _session;
+    final doctorUserId = _doctorUserId;
+    var name = widget.doctorName;
+    if (name == 'Profesional' && package?.professionalName.isNotEmpty == true) {
+      name = package!.professionalName;
+    }
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(
-        builder: (_) => PaymentSuccessScreen(
-          reference: reference,
-          package: widget.package ?? _restoredPackage,
-          doctorUserId: _doctorUserId,
-          doctorName: widget.doctorName,
-          session: _session,
+      PageRouteBuilder<void>(
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        pageBuilder: (_, animation, secondaryAnimation) => PaymentSuccessScreen(
+          reference: payment.reference,
+          package: package,
+          doctorUserId: doctorUserId,
+          doctorName: name,
+          session: session,
           apiClient: widget.apiClient,
+          payment: payment,
+          booking: booking,
+          sessionScheduled: sessionId == null || sessionId.isNotEmpty,
         ),
       ),
     );
+    // Prepare the Flutter destination before dismissing the native checkout.
+    await _closePaymentPage();
   }
 
   Future<void> _closePaymentPage() async {

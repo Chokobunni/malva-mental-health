@@ -187,8 +187,8 @@ void main() {
           scrollable: find.byType(Scrollable).first);
       expect(find.text(label), findsOneWidget);
     }
-    expect(tester.getTopLeft(find.text('Chat mendatang')).dy,
-        lessThan(tester.getTopLeft(find.text('Panggilan video mendatang')).dy));
+    expect(tester.getTopLeft(find.text('Panggilan video mendatang')).dy,
+        lessThan(tester.getTopLeft(find.text('Chat mendatang')).dy));
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -308,8 +308,9 @@ void main() {
     await _mount(tester, professional: true);
     await tester.scrollUntilVisible(find.text('Pasien video 1'), 250,
         scrollable: find.byType(Scrollable).first);
-    expect(find.text('Sesi video, 30 menit'), findsOneWidget);
-    expect(find.text('Kamis, 1 Januari 2099 • 15:30'), findsOneWidget);
+    expect(find.text('Video'), findsOneWidget);
+    expect(find.text('30 mnt'), findsNWidgets(2));
+    expect(find.text('Kamis, 01/01/2099 • 15:30 WIB'), findsNWidgets(2));
     final videoCard = find
         .ancestor(
             of: find.text('Pasien video 1'), matching: find.byType(Container))
@@ -321,8 +322,9 @@ void main() {
     expect(find.byType(MeetJoinButton), findsNothing,
         reason: 'a saved Meet URL must not bypass the session opening window');
     expect(find.text('Gabung video call'), findsNothing);
-    final chat = tester.widget<FilledButton>(find.descendant(
-        of: videoCard, matching: find.widgetWithText(FilledButton, 'Chat')));
+    final chat = tester.widget<OutlinedButton>(find.descendant(
+        of: videoCard,
+        matching: find.widgetWithText(OutlinedButton, 'Buka Riwayat Chat')));
     expect(chat.onPressed, isNotNull,
         reason:
             'chat history stays accessible before the video opening window');
@@ -356,7 +358,7 @@ void main() {
     await _mount(tester, professional: true, textScale: 1.3);
     await tester.scrollUntilVisible(find.text('Pasien video 1'), 250,
         scrollable: find.byType(Scrollable).first);
-    expect(find.text('Kamis, 1 Januari 2099 • 15:30'), findsOneWidget);
+    expect(find.text('Kamis, 01/01/2099 • 15:30 WIB'), findsNWidgets(2));
     expect(tester.takeException(), isNull);
     await tester.tap(find.byWidgetPredicate((widget) =>
         widget is NavigationDestination && widget.label == 'Pesan'));
@@ -370,7 +372,8 @@ void main() {
       'professional schedule retains its header and omits Quick Video Call',
       (tester) async {
     await _mount(tester, professional: true);
-    await tester.tap(find.text('Jadwal'));
+    await tester.tap(find.byWidgetPredicate(
+        (w) => w is NavigationDestination && w.label == 'Jadwal'));
     await tester.pumpAndSettle();
     expect(find.text('Lihat jadwal dan riwayat sesi Anda.'), findsOneWidget);
     expect(find.text('Quick Video Call'), findsNothing);

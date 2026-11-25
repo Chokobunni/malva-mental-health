@@ -198,7 +198,7 @@ void main() {
     expect(find.text('Kehadiran saya: Hadir'), findsOneWidget);
     expect(find.text('Gabung'), findsOneWidget,
         reason: 'konfirmasi hadir mempertahankan status scheduled');
-    expect(find.text('Chat'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Chat'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Hadir'), findsNothing);
     expect(find.widgetWithText(OutlinedButton, 'Tidak hadir'), findsNothing);
     await tester.pumpWidget(const SizedBox());
