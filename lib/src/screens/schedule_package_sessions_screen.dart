@@ -89,16 +89,18 @@ class _SchedulePackageSessionsScreenState
         accessToken: token,
         professionalId: _package.professionalId,
         sessionNumber: number,
+        initialType: _selected[number]?.split('|').last ?? 'video',
+        allowTypeSelection: true,
         expiresAt: _package.expiresDateTime,
         excludedSlots: _selected.entries
             .where((entry) => entry.key != number)
-            .map((entry) => entry.value)
+            .map((entry) => entry.value.split('|').first)
             .toSet(),
       ),
     );
     if (!mounted || chosen == null || _token == null) return;
     setState(() {
-      _selected[number] = chosen.split('|').first;
+      _selected[number] = chosen;
       _error = null;
     });
   }
@@ -114,12 +116,13 @@ class _SchedulePackageSessionsScreenState
     try {
       for (final entry in requested) {
         if (!mounted || _token == null) return;
+        final slot = entry.value.split('|');
         try {
           await widget.api.scheduleSession(
             accessToken: _token!,
             packageId: _package.id,
-            scheduledAt: entry.value,
-            sessionType: 'video',
+            scheduledAt: slot.first,
+            sessionType: slot.last,
           );
         } on Object {
           // If the response was lost after the write, reconcile the same slot
@@ -128,9 +131,10 @@ class _SchedulePackageSessionsScreenState
           if (token == null) return;
           final sessions =
               await widget.api.listCareSessions(accessToken: token);
-          final start = parseWibStored(entry.value);
+          final start = parseWibStored(slot.first);
           if (!sessions.any((session) =>
               session.packageId == _package.id &&
+              session.sessionType == slot.last &&
               session.status == 'scheduled' &&
               parseWibStored(session.scheduledAt) == start)) {
             rethrow;
@@ -177,7 +181,9 @@ class _SchedulePackageSessionsScreenState
       '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
 
   String _slotText(String value) {
-    final start = parseWibStored(value)!;
+    final slot = value.split('|');
+    final start = parseWibStored(slot.first)!;
+    final method = slot.last == 'chat' ? 'Chat' : 'Video';
     final startClock = _clock(start);
     final duration = _practiceHours
         .where((schedule) =>
@@ -187,10 +193,10 @@ class _SchedulePackageSessionsScreenState
         .firstOrNull
         ?.slotDurationMinutes;
     if (duration == null) {
-      return '${wibWeekdayName(start)}, ${_longDate(start)} · $startClock';
+      return '${wibWeekdayName(start)}, ${_longDate(start)} · $startClock · $method';
     }
     final end = start.add(Duration(minutes: duration.clamp(60, 180)));
-    return '${wibWeekdayName(start)}, ${_longDate(start)} · ${_clock(start)}–${_clock(end)}';
+    return '${wibWeekdayName(start)}, ${_longDate(start)} · ${_clock(start)}–${_clock(end)} · $method';
   }
 
   @override

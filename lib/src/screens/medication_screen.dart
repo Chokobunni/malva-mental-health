@@ -42,7 +42,8 @@ class MedicationScreen extends ConsumerStatefulWidget {
   ConsumerState<MedicationScreen> createState() => _MedicationScreenState();
 }
 
-class _MedicationScreenState extends ConsumerState<MedicationScreen> {
+class _MedicationScreenState extends ConsumerState<MedicationScreen>
+    with WidgetsBindingObserver {
   /// Status izin notifikasi: null = belum selesai diperiksa.
   bool? _notificationsEnabled;
   bool _historyAccountInvalid = false;
@@ -76,6 +77,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _cooldownTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) setState(() {});
     });
@@ -85,6 +87,34 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
       if (!mounted) return;
       unawaited(_refreshPermissionStatus());
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || _session == null) return;
+    unawaited(_refreshPermissionStatus());
+    unawaited(_refreshMedications());
+  }
+
+  Future<void> _refreshMedications() async {
+    final session = _session;
+    final token = session?.accessToken;
+    final api = _apiClient;
+    if (api == null || token == null || token.isEmpty) return;
+    final store = ref.read(malvaStoreProvider.notifier);
+    await Future.wait([
+      store.loadMedications(api, token),
+      store.loadMedicationLogs(api, token)
+    ]);
+  }
+
+  void _openHistory() {
+    if (_historyAccountInvalid || _session == null) return;
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => MedicationHistoryScreen(
+                session: _session, apiClient: _apiClient)));
   }
 
   /// Periksa izin notifikasi dan minta bila belum aktif, lalu simpan statusnya.
@@ -173,6 +203,13 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
             logs: storeState.medicationLogs,
             start: historyStart,
             end: now);
+    final takenToday = storeState.medications
+        .where((med) => storeState.medicationLogs.any((log) =>
+            log.medicationId == med.id &&
+            medicationDay(log.takenAt) == today &&
+            !log.takenAt.isAfter(now) &&
+            normalizedMedicationStatus(log.status) == 'taken'))
+        .length;
     final content = RefreshIndicator(
       onRefresh: () async {
         final startedOwner = _owner(_session);
@@ -207,19 +244,54 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SoftCard(
-                  color: MalvaColors.plum,
+                Container(
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                          colors: [Color(0xff53236c), Color(0xff783298)]),
+                      borderRadius: BorderRadius.circular(22)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Kepatuhan hari ini ${storeState.adherencePercent}%',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900)),
+                      const Text('TARGET HARIAN',
+                          style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              letterSpacing: .4)),
+                      const SizedBox(height: 12),
+                      Row(children: [
+                        const Expanded(
+                            child: Text('Kepatuhan hari ini',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900))),
+                        Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: .12),
+                                borderRadius: BorderRadius.circular(18)),
+                            child: Column(children: [
+                              Text('${storeState.adherencePercent}%',
+                                  style: const TextStyle(
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white)),
+                              Text(
+                                  '$takenToday/${storeState.medications.length} obat',
+                                  style: const TextStyle(color: Colors.white70))
+                            ])),
+                      ]),
                       const SizedBox(height: 6),
                       const Text('Ketuk Minum Sekarang setelah obat diminum.',
                           style: TextStyle(color: Colors.white70)),
+                      const SizedBox(height: 18),
+                      LinearProgressIndicator(
+                          value: storeState.adherencePercent / 100,
+                          color: const Color(0xffd19de5),
+                          backgroundColor: const Color(0xff48205e),
+                          borderRadius: BorderRadius.circular(8),
+                          minHeight: 8),
                     ],
                   ),
                 ),
@@ -236,16 +308,28 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
                   lastTaken: lastTaken,
                   showStreak: _showStreak,
                   onChanged: (value) => setState(() => _showStreak = value),
+                  onHistory: _historyAccountInvalid || _session == null
+                      ? null
+                      : _openHistory,
                 ),
                 const SizedBox(height: 14),
                 _buildReminderStatusCard(context),
                 const SizedBox(height: 22),
                 if (storeState.medications.isNotEmpty) ...[
-                  FilledButton.icon(
-                    onPressed: () => _openMedicationForm(context),
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Tambah Obat'),
-                  ),
+                  DecoratedBox(
+                      decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                              colors: [Color(0xff76229f), Color(0xff9729e7)]),
+                          borderRadius: BorderRadius.circular(16)),
+                      child: FilledButton.icon(
+                        onPressed: () => _openMedicationForm(context),
+                        style: FilledButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            minimumSize: const Size.fromHeight(50)),
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text('Tambah Obat'),
+                      )),
                   const SizedBox(height: 14),
                 ],
                 const SectionLabel('Jadwal hari ini'),
@@ -302,18 +386,6 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                const SizedBox(height: 22),
-                OutlinedButton.icon(
-                    key: const Key('open-medication-history'),
-                    onPressed: _historyAccountInvalid || _session == null
-                        ? null
-                        : () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => MedicationHistoryScreen(
-                                    session: _session, apiClient: _apiClient))),
-                    icon: const Icon(Icons.history_rounded),
-                    label: const Text('Riwayat minum obat')),
               ],
             ),
           ),
@@ -380,6 +452,13 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
             ? MalvaColors.mint
             : MalvaColors.amber;
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+    final compact = MediaQuery.sizeOf(context).width < 360 ||
+        MediaQuery.textScalerOf(context).scale(12) > 15;
+    final description = enabled == null
+        ? 'Memeriksa izin notifikasi…'
+        : active
+            ? 'Izin notifikasi aktif — pengingat berbunyi sesuai jam minum obat.'
+            : 'Izin notifikasi belum aktif — pengingat tidak akan berbunyi. Aktifkan agar tidak ada dosis yang terlewat.';
     return SoftCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -400,33 +479,53 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
                       style:
                           TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      enabled == null
-                          ? 'Memeriksa izin notifikasi…'
-                          : active
-                              ? 'Izin notifikasi aktif — pengingat berbunyi '
-                                  'sesuai jam minum obat.'
-                              : 'Izin notifikasi belum aktif — pengingat tidak '
-                                  'akan berbunyi. Aktifkan agar tidak ada dosis '
-                                  'yang terlewat.',
-                      style: TextStyle(fontSize: 12, color: onSurfaceVariant),
-                    ),
+                    if (!compact) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        enabled == null
+                            ? 'Memeriksa izin notifikasi…'
+                            : active
+                                ? 'Izin notifikasi aktif — pengingat berbunyi '
+                                    'sesuai jam minum obat.'
+                                : 'Izin notifikasi belum aktif — pengingat tidak '
+                                    'akan berbunyi. Aktifkan agar tidak ada dosis '
+                                    'yang terlewat.',
+                        style: TextStyle(fontSize: 12, color: onSurfaceVariant),
+                      )
+                    ],
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              StatusPill(
+              if (!compact) ...[
+                const SizedBox(width: 8),
+                StatusPill(
+                  label: enabled == null
+                      ? 'Memeriksa'
+                      : active
+                          ? 'Aktif'
+                          : 'Tidak aktif',
+                  color: color,
+                )
+              ],
+            ],
+          ),
+          if (compact) ...[
+            const SizedBox(height: 10),
+            StatusPill(
                 label: enabled == null
                     ? 'Memeriksa'
                     : active
                         ? 'Aktif'
                         : 'Tidak aktif',
-                color: color,
-              ),
-            ],
-          ),
+                color: color),
+            const SizedBox(height: 8),
+            Text(description,
+                style: TextStyle(fontSize: 12, color: onSurfaceVariant)),
+          ],
           const SizedBox(height: 12),
+          const Text('Pastikan volume perangkat aktif',
+              style: TextStyle(color: Color(0xff8c97a3), fontSize: 12)),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -880,6 +979,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _cooldownTimer?.cancel();
     super.dispose();
   }
@@ -894,6 +994,7 @@ class _MedicationConsistencyCard extends StatelessWidget {
     required this.lastTaken,
     required this.showStreak,
     required this.onChanged,
+    this.onHistory,
   });
 
   final MedicationAdherence summary;
@@ -903,6 +1004,7 @@ class _MedicationConsistencyCard extends StatelessWidget {
   final Map<String, DateTime> lastTaken;
   final bool showStreak;
   final ValueChanged<bool> onChanged;
+  final VoidCallback? onHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -948,11 +1050,18 @@ class _MedicationConsistencyCard extends StatelessWidget {
                     color: const Color(0xffedf9f7),
                     borderRadius: BorderRadius.circular(20)),
                 child: const Text('Ringkasan Konsistensi',
-                    style: TextStyle(color: teal, fontWeight: FontWeight.w800)),
+                    style: TextStyle(
+                        color: teal,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12)),
               ),
               SegmentedButton<bool>(
                 showSelectedIcon: false,
                 style: const ButtonStyle(
+                  textStyle: WidgetStatePropertyAll(TextStyle(
+                      fontFamily: 'Roboto',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
                   visualDensity: VisualDensity.compact,
                   padding: WidgetStatePropertyAll(
                     EdgeInsets.symmetric(horizontal: 8),
@@ -968,92 +1077,154 @@ class _MedicationConsistencyCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 75,
-                height: 75,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Positioned.fill(
-                        child: CircularProgressIndicator(
-                      value: progress,
-                      color: showStreak ? teal : const Color(0xffea950c),
-                      backgroundColor: const Color(0xffe6e8eb),
-                      strokeWidth: 7,
-                      strokeCap: StrokeCap.round,
-                      semanticsLabel: title,
-                    )),
-                    Padding(
-                      padding: const EdgeInsets.all(9),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
+          if (showStreak)
+            Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                    color: const Color(0xfffffaf1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xfff5e8ce))),
+                child: Row(children: [
+                  Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                              colors: [Color(0xffffab00), Color(0xfff57e0b)]),
+                          borderRadius: BorderRadius.circular(20)),
+                      child: const Icon(Icons.local_fire_department_outlined,
+                          color: Colors.white, size: 30)),
+                  const SizedBox(width: 14),
+                  Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                                showStreak
-                                    ? '$streak hari'
-                                    : '${summary.percent}%',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w900, fontSize: 17)),
-                            Text(showStreak ? 'berturut' : '7 hari',
-                                style: Theme.of(context).textTheme.bodySmall),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
+                        Text('$streak Hari Berturut-turut',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 17)),
+                        const SizedBox(height: 5),
+                        Text('Rekor terlama: ${longTerm.longestStreak} hari',
+                            style: const TextStyle(color: Color(0xff77518d))),
+                        if (lapse != null)
+                          Text(lapse,
+                              style: const TextStyle(
+                                  color: Color(0xff991f40), fontSize: 12))
+                      ])),
+                ]))
+          else
+            Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                    color: const Color(0xfff8f9fc),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xfff0f1f4))),
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Wrap(
-                      spacing: 5,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(title,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w900, fontSize: 16)),
-                        Tooltip(
-                          message: showStreak
-                              ? 'Jumlah hari terjadwal berturut-turut dengan seluruh dosis tercatat diminum.'
-                              : 'Dosis yang diminum dibandingkan dengan seluruh dosis yang sudah jatuh tempo dan catatan dalam tujuh hari WIB.',
-                          child:
-                              const Icon(Icons.info_outline_rounded, size: 15),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text('$medicationCount obat dipantau • $logCount catatan',
-                        style: Theme.of(context).textTheme.bodySmall),
-                    if (lapse != null) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 9, vertical: 6),
-                        decoration: BoxDecoration(
-                            color: showStreak
-                                ? const Color(0xffffeff1)
-                                : const Color(0xfffff7e4),
-                            borderRadius: BorderRadius.circular(12)),
-                        child: Text(lapse,
-                            style: TextStyle(
-                                color: showStreak
-                                    ? const Color(0xff991f40)
-                                    : const Color(0xff834413))),
+                    SizedBox(
+                      width: 75,
+                      height: 75,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Positioned.fill(
+                              child: CircularProgressIndicator(
+                            value: progress,
+                            color: showStreak ? teal : const Color(0xffea950c),
+                            backgroundColor: const Color(0xffe6e8eb),
+                            strokeWidth: 7,
+                            strokeCap: StrokeCap.round,
+                            semanticsLabel: title,
+                          )),
+                          Padding(
+                            padding: const EdgeInsets.all(9),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                      showStreak
+                                          ? '$streak hari'
+                                          : '${summary.percent}%',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 17)),
+                                  Text(showStreak ? 'berturut' : '7 hari',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 5,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(title,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 16)),
+                              Tooltip(
+                                message: showStreak
+                                    ? 'Jumlah hari terjadwal berturut-turut dengan seluruh dosis tercatat diminum.'
+                                    : 'Dosis yang diminum dibandingkan dengan seluruh dosis yang sudah jatuh tempo dan catatan dalam tujuh hari WIB.',
+                                child: const Icon(Icons.info_outline_rounded,
+                                    size: 15),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Wrap(spacing: 8, runSpacing: 6, children: [
+                            Text('$medicationCount obat dipantau',
+                                style: Theme.of(context).textTheme.bodySmall),
+                            Text('$logCount catatan',
+                                style: Theme.of(context).textTheme.bodySmall),
+                          ]),
+                          if (lapse != null) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 9, vertical: 6),
+                              decoration: BoxDecoration(
+                                  color: showStreak
+                                      ? const Color(0xffffeff1)
+                                      : const Color(0xfffff7e4),
+                                  borderRadius: BorderRadius.circular(12)),
+                              child: Text(lapse,
+                                  style: TextStyle(
+                                      color: showStreak
+                                          ? const Color(0xff991f40)
+                                          : const Color(0xff834413))),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ],
-                ),
-              ),
-            ],
-          ),
+                )),
+          const Divider(height: 28, color: Color(0xfff0f1f4)),
+          Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              children: [
+                const Text('Catatan konsumsi & kepatuhan',
+                    style: TextStyle(color: Color(0xff8c97a3), fontSize: 12)),
+                TextButton.icon(
+                    key: const Key('open-medication-history'),
+                    onPressed: onHistory,
+                    icon: const Icon(Icons.history, size: 18),
+                    label: const Text('Lihat riwayat obat')),
+              ]),
         ],
       ),
     );
@@ -1128,12 +1299,15 @@ class _MedicationCard extends StatelessWidget {
                     Text(medication.name,
                         style: const TextStyle(
                             fontWeight: FontWeight.w900, fontSize: 16)),
-                    Text([
-                      medication.dosage,
-                      medication.form,
-                      if (firstReminder?.relationToMeal.isNotEmpty ?? false)
-                        firstReminder!.relationToMeal,
-                    ].join(' - ')),
+                    Text(
+                        [
+                          medication.dosage,
+                          medication.form,
+                          if (firstReminder?.relationToMeal.isNotEmpty ?? false)
+                            firstReminder!.relationToMeal,
+                        ].join(' • '),
+                        style: const TextStyle(
+                            color: Color(0xff788590), fontSize: 13)),
                   ],
                 ),
               ),
@@ -1166,7 +1340,7 @@ class _MedicationCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const Divider(height: 28, color: Color(0xfff0f1f4)),
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,

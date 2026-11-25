@@ -322,12 +322,11 @@ void main() {
     expect(find.byType(MeetJoinButton), findsNothing,
         reason: 'a saved Meet URL must not bypass the session opening window');
     expect(find.text('Gabung video call'), findsNothing);
-    final chat = tester.widget<OutlinedButton>(find.descendant(
-        of: videoCard,
-        matching: find.widgetWithText(OutlinedButton, 'Buka Riwayat Chat')));
-    expect(chat.onPressed, isNotNull,
-        reason:
-            'chat history stays accessible before the video opening window');
+    expect(
+        find.descendant(
+            of: videoCard,
+            matching: find.widgetWithText(OutlinedButton, 'Buka Riwayat Chat')),
+        findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

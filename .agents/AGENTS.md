@@ -3,6 +3,8 @@
 ## Adherensi, Riwayat, dan Jadwal (2026-11-25)
 
 - Mini Summary, Obat, dan ekspor memakai jadwal WIB serta log yang tersimpan. Catatan lama `partial` dihitung dan ditampilkan sebagai `taken`. Perhitungan melewatkan dosis yang belum jatuh tempo dan mengutamakan catatan diminum jika ada beberapa status untuk dosis yang sama.
+- Riwayat Minum Obat memakai rekonsiliasi jadwal dan log yang sama dengan PDF. Dosis yang terlewat diturunkan dari jadwal dan disajikan tanpa menulis log baru.
+- Paket Chat yang lunas dan aktif membuka percakapan lebih awal. Akses Meet serta mutasi klinis mengikuti jendela sesi. Profesional dapat menyelesaikan sesi sejak check-in dibuka setelah pasien mencatat kehadiran.
 - Riwayat Target & Kebiasaan dan PDF menampilkan jadwal tetap yang sudah lewat tanpa log sebagai Tidak dilakukan. Baris turunan tidak disimpan dan tidak memberi izin koreksi checklist di luar jadwal.
 - Target mingguan 7 kali menghasilkan satu kejadian per hari untuk jadwal mingguan fleksibel serta data lama tanpa detail, mulai dari tanggal mulai atau tanggal pembuatan WIB.
 - Jadwal profesional Android dan web menyaring Mendatang berdasarkan tanggal WIB. Home profesional Android dan Percakapan memakai alur sesi yang sudah ada. Ringkasan sesi tersedia di riwayat.

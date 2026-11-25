@@ -228,7 +228,7 @@ void main() {
     await tester.pumpWidget(_screenApp(container, api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Riwayat minum obat'));
+    await tester.tap(find.byKey(const Key('open-medication-history')));
     await tester.pumpAndSettle();
     expect(find.text('30 Oktober 2026'), findsOneWidget);
     expect(find.textContaining('03:20'), findsOneWidget,

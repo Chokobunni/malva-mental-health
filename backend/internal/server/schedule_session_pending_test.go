@@ -193,8 +193,7 @@ func TestScheduleSessionVideoPendingOnReauth(t *testing.T) {
 	}
 }
 
-// Patient requests always schedule video, including legacy chat input.
-func TestPatientScheduleSessionChatInputBecomesVideo(t *testing.T) {
+func TestPatientScheduleSessionKeepsExplicitChat(t *testing.T) {
 	db, st := openOnboardingTestStore(t)
 	fake := &fakeMeetCalendar{createEventID: "evt-y", createMeetURL: "https://meet.google.com/y"}
 	f := newScheduleFixture(t, db, st, fake)
@@ -204,8 +203,12 @@ func TestPatientScheduleSessionChatInputBecomesVideo(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, mau %d (body: %s)", rec.Code, http.StatusCreated, rec.Body.String())
 	}
-	if payload["meet_pending"] != true {
-		t.Errorf("meet_pending = %v, mau true untuk sesi video yang menunggu link", payload["meet_pending"])
+	if payload["meet_pending"] == true {
+		t.Errorf("chat tidak boleh menunggu link: %v", payload)
+	}
+	session := payload["session"].(map[string]any)
+	if session["session_type"] != "chat" {
+		t.Errorf("tipe sesi tersimpan = %v, mau chat", session["session_type"])
 	}
 	if fake.createCalls != 0 {
 		t.Errorf("sesi chat tidak boleh memanggil kalender, dapat %d", fake.createCalls)

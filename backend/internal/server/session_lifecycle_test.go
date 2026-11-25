@@ -52,12 +52,6 @@ func TestSessionLifecycleContract(t *testing.T) {
 			t.Fatal("private note leaked to patient")
 		}
 	})
-	t.Run("completion before scheduled end is rejected", func(t *testing.T) {
-		w := patch("professional", professional.ID, `{"status":"completed"}`)
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("early completion: %d %s", w.Code, w.Body.String())
-		}
-	})
 	t.Run("summary patch preserves omitted fields", func(t *testing.T) {
 		w := patch("professional", professional.ID, `{"summary_for_patient":"summary"}`)
 		if w.Code != 200 {
@@ -81,9 +75,11 @@ func TestSessionLifecycleContract(t *testing.T) {
 		}
 	})
 	t.Run("completed session is terminal for chat", func(t *testing.T) {
-		_, err := db.ExecContext(context.Background(), `UPDATE care_sessions SET status='completed',scheduled_at=$2 WHERE id=$1`, id, clock.Now().Add(-5*time.Minute))
-		if err != nil {
-			t.Fatal(err)
+		for range 2 {
+			w := patch("professional", professional.ID, `{"status":"completed"}`)
+			if w.Code != http.StatusOK {
+				t.Fatalf("completion during live session: %d %s", w.Code, w.Body.String())
+			}
 		}
 		access, err := st.ChatAccessFor(context.Background(), patient.ID, professional.ID, "patient")
 		if err != nil {
@@ -97,6 +93,48 @@ func TestSessionLifecycleContract(t *testing.T) {
 			t.Fatalf("terminal completed overwritten: %d %s", w.Code, w.Body.String())
 		}
 	})
+}
+
+func TestPaidPackageChatBeforeCheckIn(t *testing.T) {
+	db, st := openOnboardingTestStore(t)
+	ctx := context.Background()
+	patient := createIdentityTestUser(t, db, st, "patient", nil)
+	professional := createIdentityTestUser(t, db, st, "professional", nil)
+	var packageID string
+	if err := db.QueryRowContext(ctx, `INSERT INTO care_packages(patient_id,professional_id,status,expires_at)
+		VALUES($1,$2,'pending_payment',$3) RETURNING id`, patient.ID, professional.ID, clock.Now().AddDate(0, 0, 7)).Scan(&packageID); err != nil {
+		t.Fatal(err)
+	}
+	id := insertManualLinkSession(t, db, patient.ID, professional.ID, "chat", "scheduled", "")
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(ctx, `DELETE FROM care_sessions WHERE id=$1`, id)
+		_, _ = db.ExecContext(ctx, `DELETE FROM care_packages WHERE id=$1`, packageID)
+	})
+	if _, err := db.ExecContext(ctx, `UPDATE care_sessions SET package_id=$2,scheduled_at=$3 WHERE id=$1`, id, packageID, clock.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	check := func(want bool) {
+		t.Helper()
+		for _, role := range []string{"patient", "professional"} {
+			access, err := st.ChatAccessFor(ctx, patient.ID, professional.ID, role)
+			if err != nil || access.CanSendText != want || access.InSession || access.SessionID != "" || access.SessionEndsAt != nil {
+				t.Fatalf("%s: access=%+v err=%v, want early text=%v without live session", role, access, err, want)
+			}
+		}
+	}
+	check(false)
+	if _, err := db.ExecContext(ctx, `UPDATE care_packages SET status='active', starts_at=$2 WHERE id=$1`, packageID, clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	check(true)
+	if _, err := db.ExecContext(ctx, `UPDATE care_sessions SET session_type='video' WHERE id=$1`, id); err != nil {
+		t.Fatal(err)
+	}
+	check(false)
+	if _, err := db.ExecContext(ctx, `UPDATE care_sessions SET session_type='chat', status='completed' WHERE id=$1`, id); err != nil {
+		t.Fatal(err)
+	}
+	check(false)
 }
 
 func TestManualCompletionAfterEndAndReplay(t *testing.T) {

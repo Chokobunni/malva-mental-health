@@ -293,28 +293,47 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
                         }),
                     const SizedBox(height: 14)
                   ],
-                  Row(children: [
-                    Expanded(
-                        child: Text(
-                            _historyExpanded ? 'Riwayat Sesi' : 'Daftar Sesi',
+                  Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 12,
+                      runSpacing: 10,
+                      children: [
+                        Text(_historyExpanded ? 'Riwayat Sesi' : 'Daftar Sesi',
                             style: const TextStyle(
-                                fontWeight: FontWeight.w800, fontSize: 18))),
-                    OutlinedButton.icon(
-                        onPressed: () async {
-                          final date = await showDatePicker(
-                              context: context,
-                              initialDate: _selectedDate ?? now,
-                              firstDate: wibFromParts(2020, 1, 1),
-                              lastDate: wibFromParts(now.year + 10, 12, 31));
-                          if (date != null && mounted)
-                            setState(() => _selectedDate =
-                                wibFromParts(date.year, date.month, date.day));
-                        },
-                        icon: const Icon(Icons.tune, size: 17),
-                        label: Text(_selectedDate == null
-                            ? 'Semua tanggal'
-                            : professionalScheduleDateLabel(_selectedDate!)))
-                  ]),
+                                fontWeight: FontWeight.w800, fontSize: 20)),
+                        FilledButton(
+                            onPressed: () async {
+                              final date = await showDatePicker(
+                                  context: context,
+                                  initialDate: _selectedDate ?? now,
+                                  firstDate: wibFromParts(2020, 1, 1),
+                                  lastDate:
+                                      wibFromParts(now.year + 10, 12, 31));
+                              if (date != null && mounted)
+                                setState(() => _selectedDate = wibFromParts(
+                                    date.year, date.month, date.day));
+                            },
+                            style: FilledButton.styleFrom(
+                                backgroundColor: MalvaColors.seed,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 13, vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(15))),
+                            child:
+                                Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.calendar_today_outlined,
+                                  size: 18),
+                              const SizedBox(width: 8),
+                              Text(_selectedDate == null
+                                  ? 'Semua tanggal'
+                                  : professionalScheduleDateLabel(
+                                      _selectedDate!)),
+                              const SizedBox(width: 7),
+                              const Icon(Icons.keyboard_arrow_down, size: 20)
+                            ]))
+                      ]),
                   if (_selectedDate != null)
                     Align(
                         alignment: Alignment.centerRight,
@@ -322,7 +341,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
                             onPressed: () =>
                                 setState(() => _selectedDate = null),
                             child: const Text('Tampilkan semua sesi'))),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   if (_historyExpanded) ...[
                     if (history.isEmpty)
                       const EmptyState(
@@ -509,12 +528,6 @@ class ProfessionalSessionActions extends ConsumerWidget {
                     }
                   })
                 ],
-                if (session.isVideo && session.meetingUrl.trim().isNotEmpty)
-                  Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                          onPressed: () => _editLink(context, ref),
-                          child: const Text('Ubah link video'))),
               ]);
             })
           ]));

@@ -276,7 +276,7 @@ func (s *Server) scheduleSession(w http.ResponseWriter, r *http.Request, claims 
 	googleEventID := ""
 	meetPending := false
 	sessionType := strings.ToLower(strings.TrimSpace(req.SessionType))
-	if isPatient {
+	if isPatient && sessionType == "" {
 		sessionType = "video"
 	}
 	if meetingURL != "" && !isGoogleMeetURL(meetingURL) {

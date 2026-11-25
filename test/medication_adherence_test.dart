@@ -24,6 +24,21 @@ void main() {
       takenAt: wibFromParts(2026, 11, 16, 8, 5),
       status: 'partial');
 
+  test('longest streak retains completed run after a missed day', () {
+    final summary = MedicationAdherence.calculate(medications: [
+      med
+    ], logs: [
+      for (final day in [16, 17, 18, 20])
+        MedicationLog(
+            medicationId: med.id,
+            medicationName: med.name,
+            takenAt: wibFromParts(2026, 11, day, 8),
+            status: 'taken'),
+    ], start: start, end: wibFromParts(2026, 11, 20, 9));
+    expect(summary.streak, 1);
+    expect(summary.longestStreak, 3);
+  });
+
   test('later consumption replaces an earlier missed dose for the same slot',
       () {
     final due = wibFromParts(2026, 11, 16, 8);

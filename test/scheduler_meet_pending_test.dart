@@ -146,9 +146,10 @@ void main() {
       await tester.tap(openButton);
       await tester.pumpAndSettle();
 
-      // Video satu jam dipilih otomatis; catatan muncul saat Meet belum siap.
-      expect(find.text('Video • 1 jam per sesi'), findsOneWidget);
-      expect(find.widgetWithText(ChoiceChip, 'Chat'), findsNothing);
+      final video = find.widgetWithText(ChoiceChip, 'Video');
+      final chat = find.widgetWithText(ChoiceChip, 'Chat');
+      expect(tester.widget<ChoiceChip>(video).selected, isTrue);
+      expect(tester.widget<ChoiceChip>(chat).selected, isFalse);
 
       expect(
         find.textContaining('Video tetap bisa dijadwalkan'),

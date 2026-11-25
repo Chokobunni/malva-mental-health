@@ -37,7 +37,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(copied, s.meetingUrl);
     expect(find.text('Link sesi video'), findsNothing);
-    expect(find.text('Ubah link video'), findsOneWidget);
+    expect(find.text('Ubah link video'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets('chat actions offer full width reschedule and omit video Link',

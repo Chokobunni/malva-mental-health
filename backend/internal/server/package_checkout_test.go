@@ -12,6 +12,15 @@ import (
 )
 
 func TestPackageCheckoutKeepsUnusableCreditAndReplaysSafely(t *testing.T) {
+	for _, method := range []string{"video", "chat"} {
+		t.Run(method, func(t *testing.T) {
+			checkPackageCheckout(t, method)
+		})
+	}
+}
+
+func checkPackageCheckout(t *testing.T, method string) {
+	t.Helper()
 	ctx := context.Background()
 	db, st := openOnboardingTestStore(t)
 	f := newActivationFixture(t, db, st, nil)
@@ -36,7 +45,7 @@ func TestPackageCheckoutKeepsUnusableCreditAndReplaysSafely(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := store.Booking{PatientID: f.patient.ID, ProfessionalID: f.prof.ID,
-		ServiceType: "package_session", SessionType: "video", DurationMinutes: 60,
+		ServiceType: "package_session", SessionType: method, DurationMinutes: 60,
 		BookingDate: first.Format("2006-01-02"), SlotTime: first.Format("15:04"), Price: pkg.Price}
 	booking, err := st.CreatePackageBooking(ctx, pkg.ID, input, slots...)
 	if err != nil {
@@ -81,5 +90,13 @@ func TestPackageCheckoutKeepsUnusableCreditAndReplaysSafely(t *testing.T) {
 	saved, err := st.ListPackageCheckoutSlots(ctx, booking.ID)
 	if err != nil || len(saved) != 2 || !saved[0].Resolved || saved[0].Missed || !saved[1].Missed {
 		t.Fatalf("checkout outcomes = %+v, %v", saved, err)
+	}
+	var numSessions int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM care_sessions WHERE package_id=$1 AND session_type=$2`, pkg.ID, method).Scan(&numSessions); err != nil || numSessions != 2 {
+		t.Fatalf("checkout did not preserve method for both slots: %d, %v", numSessions, err)
+	}
+	access, err := st.ChatAccessFor(ctx, f.patient.ID, f.prof.ID, "patient")
+	if err != nil || access.InSession || access.CanSendText != (method == "chat") {
+		t.Fatalf("%s checkout outside its session window: %+v, %v", method, access, err)
 	}
 }

@@ -1552,7 +1552,6 @@ class _UpcomingSessionsSectionState
             padding: const EdgeInsets.only(bottom: 12),
             child: CareSessionCard(
                 session: s,
-                allowPreSessionChat: true,
                 role: UserRole.professional,
                 accessToken: widget.accessToken,
                 apiClient: widget.apiClient,
