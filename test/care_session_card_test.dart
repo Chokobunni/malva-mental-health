@@ -50,7 +50,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('Ringkasan Catatan Sesi'), findsOneWidget);
-    expect(find.text('ID Sesi: real-session-42'), findsOneWidget);
+    expect(find.text('ID Sesi Konsultasi'), findsOneWidget);
+    expect(find.text('real-session-42'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Ringkasan tersimpan'), 180,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Ringkasan tersimpan'), findsOneWidget);

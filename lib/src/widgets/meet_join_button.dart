@@ -36,6 +36,7 @@ class MeetJoinButton extends ConsumerStatefulWidget {
     this.canCreateLink = true,
     this.onConfirmAttendance,
     this.joinLabel,
+    this.joinStyle,
   });
 
   final BackendCareSession session;
@@ -52,6 +53,7 @@ class MeetJoinButton extends ConsumerStatefulWidget {
   /// (pasien) tanpa aksi yang pasti gagal.
   final bool canCreateLink;
   final String? joinLabel;
+  final ButtonStyle? joinStyle;
 
   final Future<BackendCareSession?> Function()? onConfirmAttendance;
 
@@ -368,10 +370,11 @@ class _MeetJoinButtonState extends ConsumerState<MeetJoinButton> {
           (widget.onConfirmAttendance == null
               ? 'Gabung video call'
               : 'Join Meeting')),
-      style: FilledButton.styleFrom(
-        backgroundColor: MalvaColors.mint,
-        foregroundColor: Colors.white,
-      ),
+      style: widget.joinStyle ??
+          FilledButton.styleFrom(
+            backgroundColor: MalvaColors.mint,
+            foregroundColor: Colors.white,
+          ),
     );
   }
 }

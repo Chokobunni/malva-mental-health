@@ -392,7 +392,13 @@ class _DetailButton extends StatelessWidget {
                             style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w700))),
-                    const Icon(Icons.chevron_right, color: Colors.white)
+                    Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: .16),
+                            borderRadius: BorderRadius.circular(8)),
+                        child: const Icon(Icons.chevron_right,
+                            color: Colors.white, size: 19))
                   ])))));
 }
 
@@ -417,6 +423,25 @@ class _CareSessionDetailScreenState
   BackendCarePackage? _package;
   static const _purple = Color(0xff792b91);
   static const _ink = Color(0xff18212e);
+  static const _gradient =
+      LinearGradient(colors: [Color(0xff75248e), Color(0xff9d38b5)]);
+  static final _primaryStyle = FilledButton.styleFrom(
+          minimumSize: const Size(0, 48),
+          backgroundColor: _purple,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: const Color(0xffe3e5e9),
+          disabledForegroundColor: const Color(0xff626a77),
+          textStyle: const TextStyle(
+              fontFamily: 'Roboto', fontSize: 14, fontWeight: FontWeight.w700),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)))
+      .copyWith(backgroundBuilder: (context, states, child) {
+    if (states.contains(WidgetState.disabled)) return child!;
+    return Ink(
+        decoration: BoxDecoration(
+            gradient: _gradient, borderRadius: BorderRadius.circular(15)),
+        child: child);
+  });
 
   bool get _owns => !_providerOwned || _owner.session?.role == widget.card.role;
   String get _token => _providerOwned
@@ -643,111 +668,125 @@ class _CareSessionDetailScreenState
 
   Widget _identity(String name, String initials, {bool white = false}) =>
       Container(
-          padding: const EdgeInsets.all(18),
-          margin: const EdgeInsets.only(bottom: 16),
+          padding: white ? EdgeInsets.zero : const EdgeInsets.all(18),
+          margin: EdgeInsets.only(bottom: white ? 6 : 16),
           decoration: BoxDecoration(
               color: white ? Colors.white : null,
-              gradient: white
-                  ? null
-                  : const LinearGradient(
-                      colors: [Color(0xff75248e), Color(0xff9d38b5)]),
+              gradient: white ? null : _gradient,
               borderRadius: BorderRadius.circular(24)),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Container(
-                  width: 48,
-                  height: 48,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                      color: white ? _purple : Colors.white,
-                      borderRadius: BorderRadius.circular(15)),
-                  child: Text(initials,
-                      style: TextStyle(
-                          color: white ? Colors.white : _purple,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18))),
-              const SizedBox(width: 12),
-              Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(name,
-                        style: TextStyle(
-                            color: white ? _ink : Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 4),
-                    Text(
-                        widget.card.subtitle ??
-                            (_professional
-                                ? 'Konsultasi • Kesehatan Mental'
-                                : 'Profesional'),
-                        style: TextStyle(
-                            color:
-                                white ? const Color(0xff626a77) : Colors.white,
-                            fontSize: 13)),
-                  ]))
-            ]),
-            const SizedBox(height: 12),
-            Align(
-                alignment: Alignment.centerRight,
-                child: _chip(_packageLabel, light: true)),
-          ]));
-
-  Widget _information(String status) {
-    final at = _session.scheduledDateTime;
-    final range = at == null
-        ? 'Jadwal belum tersedia'
-        : '${formatWibBubbleTime(at)}–${formatWibBubbleTime(at.add(Duration(minutes: _session.durationMinutes)))} WIB';
-    return _block(Column(children: [
-      _row(
-          _session.isVideo
-              ? Icons.videocam_outlined
-              : Icons.chat_bubble_outline,
-          Wrap(
-              spacing: 10,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _text(_session.isVideo ? 'Video Call' : 'Chat Konsultasi'),
-                _chip(status,
-                    color: _live
-                        ? _purple
-                        : _session.isScheduled
-                            ? const Color(0xff8b5800)
-                            : _purple)
-              ])),
-      const Divider(height: 1, color: Color(0xfff0eef3)),
-      _row(Icons.calendar_today_outlined,
-          _text(at == null ? 'Tanggal belum tersedia' : wibWeekdayDate(at))),
-      const Divider(height: 1, color: Color(0xfff0eef3)),
-      _row(Icons.schedule, _text(range)),
-      const Divider(height: 1, color: Color(0xfff0eef3)),
-      _row(
-          Icons.tag,
-          Row(children: [
+          child: Row(children: [
+            Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                    color: white ? _purple : Colors.white,
+                    borderRadius: BorderRadius.circular(15)),
+                child: Text(initials,
+                    style: TextStyle(
+                        color: white ? Colors.white : _purple,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18))),
+            const SizedBox(width: 12),
             Expanded(
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                  const Text('ID Sesi Konsultasi',
-                      style: TextStyle(color: Color(0xff626a77), fontSize: 12)),
-                  const SizedBox(height: 5),
-                  _text('ID Sesi: ${_session.id}', size: 13)
+                  Text(name,
+                      style: TextStyle(
+                          color: white ? _ink : Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  Text(
+                      _completed
+                          ? _method
+                          : widget.card.subtitle ??
+                              (_professional
+                                  ? 'Konsultasi • Kesehatan Mental'
+                                  : 'Profesional'),
+                      style: TextStyle(
+                          color: white ? const Color(0xff626a77) : Colors.white,
+                          fontSize: 13)),
+                  if (_completed && !_professional) ...[
+                    const SizedBox(height: 6),
+                    Text('$_scheduledDate\n$_scheduledRange',
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 12, height: 1.4)),
+                  ]
                 ])),
-            TextButton.icon(
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: _session.id));
-                  if (mounted)
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('ID sesi disalin.')));
-                },
-                icon: const Icon(Icons.copy_outlined, size: 17),
-                label: const Text('Salin'))
-          ])),
+            const SizedBox(width: 8),
+            ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 108),
+                child: _chip(_packageLabel, light: true)),
+          ]));
+
+  String get _method => _session.isVideo ? 'Video Call' : 'Chat Konsultasi';
+  IconData get _methodIcon =>
+      _session.isVideo ? Icons.videocam_outlined : Icons.chat_bubble_outline;
+  String get _scheduledDate {
+    final at = _session.scheduledDateTime;
+    return at == null ? 'Tanggal belum tersedia' : wibWeekdayDate(at);
+  }
+
+  String get _scheduledRange {
+    final at = _session.scheduledDateTime;
+    return at == null
+        ? 'Jadwal belum tersedia'
+        : '${formatWibBubbleTime(at)}–${formatWibBubbleTime(at.add(Duration(minutes: _session.durationMinutes)))} WIB';
+  }
+
+  Widget _information(String status, {Widget? completedIdentity}) {
+    if (_completed && !_professional) return _block(_sessionIdRow());
+    return _block(Column(children: [
+      if (completedIdentity != null) completedIdentity,
+      if (completedIdentity == null) ...[
+        _row(
+            _methodIcon,
+            Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _text(_method),
+                  _chip(status,
+                      color: _live
+                          ? _purple
+                          : _session.isScheduled
+                              ? const Color(0xff8b5800)
+                              : _purple)
+                ])),
+        const Divider(height: 1, color: Color(0xfff0eef3)),
+      ],
+      _row(Icons.calendar_today_outlined, _text(_scheduledDate)),
+      const Divider(height: 1, color: Color(0xfff0eef3)),
+      _row(Icons.schedule, _text(_scheduledRange)),
+      const Divider(height: 1, color: Color(0xfff0eef3)),
+      _sessionIdRow(),
     ]));
   }
+
+  Widget _sessionIdRow() => _row(
+      Icons.tag,
+      Row(children: [
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('ID Sesi Konsultasi',
+              style: TextStyle(color: Color(0xff626a77), fontSize: 12)),
+          const SizedBox(height: 5),
+          _text(_session.id, size: 13)
+        ])),
+        TextButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: _session.id));
+              if (mounted)
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('ID sesi disalin.')));
+            },
+            icon: const Icon(Icons.copy_outlined, size: 17),
+            label: const Text('Salin'))
+      ]));
 
   Widget _timer() {
     final at = _session.scheduledDateTime;
@@ -856,14 +895,7 @@ class _CareSessionDetailScreenState
                   onPressed: action,
                   icon: Icon(icon, size: 19),
                   label: Text(label, textAlign: TextAlign.center),
-                  style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                      backgroundColor: _purple,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: const Color(0xffe3e5e9),
-                      disabledForegroundColor: const Color(0xff626a77),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15)))));
+                  style: _primaryStyle));
 
   @override
   Widget build(BuildContext context) {
@@ -931,14 +963,18 @@ class _CareSessionDetailScreenState
         Center(child: _text('Sesi Selesai', size: 25)),
         const SizedBox(height: 20),
       ],
-      _identity(name, initials, white: _completed && professional),
-      _information(_completed
-          ? 'Selesai'
-          : _live
-              ? 'Sedang Berlangsung'
-              : _session.isScheduled
-                  ? 'Menunggu Jadwal'
-                  : status),
+      if (!_completed || !professional) _identity(name, initials),
+      _information(
+          _completed
+              ? 'Selesai'
+              : _live
+                  ? 'Sedang Berlangsung'
+                  : _session.isScheduled
+                      ? 'Menunggu Jadwal'
+                      : status,
+          completedIdentity: _completed && professional
+              ? _identity(name, initials, white: true)
+              : null),
       if (_session.isScheduled && !_session.isAfterJoinWindow) _timer(),
       if (_completed && !professional) ..._publishedSummary(),
       if (_session.status == 'completed' && !_canShowSummary)
@@ -1039,6 +1075,7 @@ class _CareSessionDetailScreenState
             expanded: true,
             canCreateLink: professional,
             joinLabel: 'Masuk Video Call',
+            joinStyle: _primaryStyle,
             onConfirmAttendance: widget.card.onConfirmAttendance,
             onSessionChanged: (s) async {
               if (mounted && _owns) setState(() => _session = s);
@@ -1070,7 +1107,21 @@ class _CareSessionDetailScreenState
             centerTitle: false,
             toolbarHeight: 83,
             foregroundColor: Colors.white,
-            backgroundColor: _purple,
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            leading: Navigator.canPop(context)
+                ? Padding(
+                    padding: const EdgeInsets.only(left: 10),
+                    child: Center(
+                        child: IconButton(
+                            tooltip: MaterialLocalizations.of(context)
+                                .backButtonTooltip,
+                            style: IconButton.styleFrom(
+                                backgroundColor: Colors.white24,
+                                foregroundColor: Colors.white),
+                            onPressed: () => Navigator.maybePop(context),
+                            icon: const Icon(Icons.arrow_back))))
+                : null,
             shape: const RoundedRectangleBorder(
                 borderRadius:
                     BorderRadius.vertical(bottom: Radius.circular(27))),
@@ -1081,7 +1132,8 @@ class _CareSessionDetailScreenState
                         end: Alignment.bottomCenter,
                         colors: [Color(0xff75248e), Color(0xffb572cb)]),
                     borderRadius:
-                        BorderRadius.vertical(bottom: Radius.circular(27)))),
+                        BorderRadius.vertical(bottom: Radius.circular(27))),
+                child: SizedBox.expand()),
             title:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(title,
@@ -1113,7 +1165,6 @@ class _CareSessionDetailScreenState
                 decoration: const BoxDecoration(
                     color: Colors.white,
                     border: Border(top: BorderSide(color: Color(0xfff0eaf4)))),
-                child: Column(
-                    mainAxisSize: MainAxisSize.min, children: actions))));
+                child: Column(mainAxisSize: MainAxisSize.min, children: actions))));
   }
 }
