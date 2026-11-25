@@ -7,13 +7,15 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/care_session_refresh.dart';
 import '../services/server_clock.dart';
-import '../widgets/session_attendance_actions.dart';
 import '../widgets/doctor_review_actions.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
 import '../time/wib.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/care_reference_widgets.dart';
+import '../widgets/care_session_card.dart';
+import '../widgets/session_attendance_actions.dart';
+import '../professional_role.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/professional_avatar.dart';
 import 'care_package_screen.dart';
@@ -211,7 +213,7 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
                 CarePageHeader(
-                  title: 'My Care',
+                  title: 'Konsultasi Saya',
                   subtitle:
                       'Lihat profesional terhubung, jadwal, dan riwayat sesi.',
                   session: widget.session ?? ref.watch(currentSessionProvider),
@@ -363,16 +365,48 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
         )
       else
         for (final session in filtered) ...[
-          _SessionCard(
+          CareSessionCard(
+            key: ValueKey(session.id),
             session: session,
+            role: UserRole.patient,
+            subtitle: _professionals[session.professionalId] == null
+                ? null
+                : professionalRoleLabel(_professionals[session.professionalId]!
+                    .credential
+                    .specialization),
             onChanged: _load,
             onOpenChat: () => _openChat(session),
             accessToken: (widget.session ?? ref.read(currentSessionProvider))
                 ?.accessToken,
             apiClient: widget.apiClient,
-            onCancel: () => _cancelSession(session),
-            onReschedule: () => _openScheduler(existing: session),
+            onProfile: () => Navigator.push<void>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DoctorProfileScreen(
+                    doctorUserId: session.professionalId,
+                    doctorName: session.professionalName,
+                    session: widget.session,
+                    apiClient: widget.apiClient,
+                  ),
+                )),
+            onCancel:
+                _mayChange(session) ? () => _cancelSession(session) : null,
+            onReschedule:
+                _mayChange(session) ? () => _reschedule(session) : null,
           ),
+          if (session.canJoinNow)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: SessionAttendanceActions(
+                session: session,
+                role: UserRole.patient,
+                onChanged: _load,
+                accessToken:
+                    (widget.session ?? ref.read(currentSessionProvider))
+                        ?.accessToken,
+                apiClient: widget.apiClient,
+              ),
+            ),
           const SizedBox(height: 12),
         ],
     ];
@@ -597,74 +631,29 @@ class _MyCareScreenState extends ConsumerState<MyCareScreen>
     if (mounted) await _load();
   }
 
-  Future<void> _openScheduler({
-    BackendCarePackage? package,
-    BackendCareSession? existing,
-  }) async {
+  bool _mayChange(BackendCareSession session) {
+    final start = session.scheduledDateTime;
+    return session.isScheduled &&
+        start != null &&
+        start.difference(ServerClock.now()) >= const Duration(hours: 24);
+  }
+
+  Future<void> _reschedule(BackendCareSession existing) async {
     final token =
         (widget.session ?? ref.read(currentSessionProvider))?.accessToken;
-    final professionalId = package?.professionalId ?? existing?.professionalId;
-    if (token == null || token.isEmpty || professionalId == null) return;
+    if (token == null || token.isEmpty) return;
     final api = widget.apiClient ?? ref.read(apiClientProvider);
     if (api == null) return;
-    final expires = package?.expiresDateTime ??
-        (existing?.packageId == null
-            ? null
-            : _packageForProfessional(professionalId)?.expiresDateTime);
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: carePageColor,
-      builder: (_) => CareSessionSchedulerSheet(
-        apiClient: api,
-        accessToken: token,
-        professionalId: professionalId,
-        expiresAt: expires,
-        initialType: existing?.sessionType ?? 'video',
-        serviceCategory: package != null || existing?.packageId != null
-            ? 'package'
-            : existing?.sessionType == 'chat'
-                ? 'quick_chat'
-                : 'quick_video',
-      ),
+    final changed = await reschedulePatientCareSession(
+      context,
+      api: api,
+      token: token,
+      session: existing,
+      expiresAt: existing.packageId == null
+          ? null
+          : _packageForProfessional(existing.professionalId)?.expiresDateTime,
     );
-    if (!mounted ||
-        selected == null ||
-        token !=
-            (widget.session ?? ref.read(currentSessionProvider))?.accessToken)
-      return;
-    try {
-      final at = selected.split('|').first;
-      final String message;
-      if (existing != null) {
-        final updated = await api.rescheduleCareSession(
-          accessToken: token,
-          sessionId: existing.id,
-          scheduledAt: at,
-        );
-        message = updated.warnings.isEmpty
-            ? 'Sesi berhasil dijadwalkan ulang.'
-            : updated.warnings.join(' ');
-      } else {
-        final scheduled = await api.scheduleSession(
-          accessToken: token,
-          packageId: package!.id,
-          scheduledAt: at,
-          sessionType: 'video',
-        );
-        message = scheduled.meetPending
-            ? 'Sesi berhasil dijadwalkan. Link video dibuat profesional sebelum sesi dimulai.'
-            : 'Sesi berhasil dijadwalkan.';
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
-      await _load();
-    } on Object catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(error))));
-    }
+    if (mounted && changed) await _load();
   }
 
   Future<void> _cancelSession(BackendCareSession session) async {
@@ -906,234 +895,63 @@ String _rupiah(int value) => 'Rp ${value.toString().replaceAllMapped(
       (m) => '${m[1]}.',
     )}';
 
-class _SessionCard extends StatelessWidget {
-  const _SessionCard({
-    required this.session,
-    required this.onChanged,
-    required this.onOpenChat,
-    this.accessToken,
-    this.apiClient,
-    required this.onCancel,
-    required this.onReschedule,
-  });
-
-  final BackendCareSession session;
-  final Future<void> Function() onChanged;
-  final VoidCallback onOpenChat, onCancel, onReschedule;
-  final String? accessToken;
-  final MalvaApiClient? apiClient;
-
-  @override
-  Widget build(BuildContext context) {
-    final at = session.scheduledDateTime;
-    const weekdays = [
-      'Senin',
-      'Selasa',
-      'Rabu',
-      'Kamis',
-      'Jumat',
-      'Sabtu',
-      'Minggu'
-    ];
-    final dateLabel = at == null
-        ? '-'
-        : '${weekdays[at.weekday - 1]}, ${at.day}/${at.month}/${at.year} · ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
-    final kind =
-        '${session.isVideo ? 'Video' : 'Chat'} · ${session.durationMinutes} mnt · ${session.packageId == null ? 'Sekali sesi' : 'Paket'}';
-    final (status, color) = switch (session.status) {
-      'scheduled' => (
-          session.isAfterJoinWindow ? 'Waktu sesi berakhir' : 'Terjadwal',
-          MalvaColors.seed
-        ),
-      'completed' => ('Selesai', const Color(0xff129471)),
-      'no_show' => ('Tidak hadir', MalvaColors.danger),
-      'cancelled_by_professional' || 'cancelled_by_patient' => (
-          'Dibatalkan',
-          Colors.black54
-        ),
-      'expired_unpaid' => ('Pembayaran kedaluwarsa', Colors.black54),
-      'pending_payment' => ('Menunggu pembayaran', MalvaColors.amber),
-      _ => (session.status, Colors.black54),
-    };
-    final live = session.canJoinNow;
-    final upcoming = session.isScheduled && !session.isAfterJoinWindow;
-    final before = at?.difference(ServerClock.now());
-    final minutes = before?.inMinutes ?? 0;
-    final remaining = minutes ~/ 60 > 0
-        ? '${minutes ~/ 60} jam ${minutes % 60} mnt'
-        : '${minutes.clamp(1, 59)} mnt';
-    final mayChange = before != null && before >= const Duration(hours: 24);
-    return SoftCard(
-      color: Colors.white,
-      outline: careCardBorder,
-      radius: 16,
-      padding: const EdgeInsets.all(13),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _ProAvatar(
-                professionalId: session.professionalId,
-                displayName: session.professionalName,
-                photoUrl: session.photoIntroUrl),
-            const SizedBox(width: 10),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Expanded(
-                        child: Text(
-                            session.professionalName.isEmpty
-                                ? 'Profesional'
-                                : session.professionalName,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w900, fontSize: 14))),
-                    const SizedBox(width: 5),
-                    ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 108),
-                        child: _careBadge(status, color)),
-                  ]),
-                  const SizedBox(height: 4),
-                  if (upcoming)
-                    Text(kind)
-                  else ...[
-                    _detailLine(Icons.calendar_today_outlined, dateLabel),
-                    const SizedBox(height: 4),
-                    _detailLine(
-                        session.isVideo
-                            ? Icons.videocam_rounded
-                            : Icons.chat_bubble_rounded,
-                        kind),
-                  ],
-                ])),
-          ]),
-          if (upcoming) ...[
-            const SizedBox(height: 12),
-            _sessionStrip(Icons.calendar_today_outlined, dateLabel,
-                const Color(0xfff6f2f8), MalvaColors.ink),
-            if (before != null && before > Duration.zero) ...[
-              const SizedBox(height: 6),
-              _sessionStrip(Icons.schedule_rounded, 'Mulai dalam $remaining',
-                  const Color(0xfff3e8fa), MalvaColors.seed),
-            ],
-            if (session.isBeforeJoinWindow) ...[
-              const SizedBox(height: 6),
-              const Text('Check-in dibuka 10 menit sebelum sesi.'),
-            ],
-            const SizedBox(height: 12),
-            if (live) ...[
-              SessionAttendanceActions(
-                  session: session,
-                  role: UserRole.patient,
-                  accessToken: accessToken,
-                  apiClient: apiClient,
-                  onChanged: onChanged),
-              const SizedBox(height: 6),
-              const Divider(color: Color(0xFFECE4EF)),
-              const SizedBox(height: 4),
-            ],
-            LayoutBuilder(builder: (context, constraints) {
-              final primary = FilledButton.icon(
-                onPressed: onOpenChat,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(0, 38),
-                  padding: const EdgeInsets.symmetric(horizontal: 7),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(11)),
-                  textStyle: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w800),
-                ),
-                icon: const Icon(Icons.chat_bubble_rounded, size: 14),
-                label: const Text('Chat'),
-              );
-              final secondaryStyle = OutlinedButton.styleFrom(
-                minimumSize: const Size(0, 38),
-                padding: const EdgeInsets.symmetric(horizontal: 7),
-                side: careCardBorder,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(11)),
-                textStyle:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-              );
-              final actions = [
-                primary,
-                if (live && !session.isVideo)
-                  FilledButton(
-                    onPressed: onOpenChat,
-                    style: compactFilledButtonStyle,
-                    child: const Text('Gabung'),
-                  )
-                else ...[
-                  OutlinedButton(
-                      style: secondaryStyle,
-                      onPressed: mayChange ? onReschedule : null,
-                      child: const Text('Reschedule')),
-                  OutlinedButton(
-                    style: secondaryStyle.copyWith(
-                        foregroundColor: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.disabled)
-                          ? null
-                          : const Color(0xffa62c60),
-                    )),
-                    onPressed: mayChange ? onCancel : null,
-                    child: const Text('Batal'),
-                  ),
-                ],
-              ];
-              if ((live && !session.isVideo) ||
-                  constraints.maxWidth < 260 ||
-                  MediaQuery.textScalerOf(context).scale(12) > 16) {
-                return Wrap(spacing: 7, runSpacing: 4, children: actions);
-              }
-              return Row(children: [
-                for (var i = 0; i < actions.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 7),
-                  Expanded(child: actions[i]),
-                ],
-              ]);
-            }),
-          ],
-          if (session.summaryForPatient.isNotEmpty)
-            Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text('Ringkasan: ${session.summaryForPatient}')),
-          if (session.packageId != null &&
-              (session.cancelledByProfessional || session.status == 'no_show'))
-            Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(session.cancelledByProfessional
-                    ? 'Kuota sesi dikembalikan.'
-                    : 'Kuota sesi terpakai.')),
-          if (session.cancelReason.isNotEmpty)
-            Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text('Alasan: ${session.cancelReason}')),
-        ],
+Future<bool> reschedulePatientCareSession(
+  BuildContext context, {
+  required MalvaApiClient api,
+  required String token,
+  required BackendCareSession session,
+  DateTime? expiresAt,
+}) async {
+  final container = ProviderScope.containerOf(context, listen: false);
+  var stillCurrent = true;
+  final subscription = container.listen<String?>(
+    currentSessionProvider.select((value) => value?.accessToken),
+    (_, next) {
+      if (next != token) stillCurrent = false;
+    },
+  );
+  try {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      builder: (_) => CareSessionSchedulerSheet(
+        apiClient: api,
+        accessToken: token,
+        professionalId: session.professionalId,
+        expiresAt: expiresAt,
+        initialType: session.sessionType,
+        serviceCategory: session.packageId != null
+            ? 'package'
+            : session.isVideo
+                ? 'quick_video'
+                : 'quick_chat',
       ),
     );
-  }
-
-  Widget _detailLine(IconData icon, String text) => Row(children: [
-        Icon(icon, color: MalvaColors.seed, size: 16),
-        const SizedBox(width: 8),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 12))),
-      ]);
-
-  Widget _sessionStrip(IconData icon, String text, Color color, Color ink) =>
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-            color: color, borderRadius: BorderRadius.circular(10)),
-        child: Row(children: [
-          Icon(icon, color: MalvaColors.seed, size: 18),
-          const SizedBox(width: 10),
-          Expanded(
-              child: Text(text,
-                  style: TextStyle(
-                      color: ink, fontSize: 13, fontWeight: FontWeight.w800))),
-        ]),
+    if (!context.mounted || !stillCurrent || selected == null) return false;
+    final updated = await api.rescheduleCareSession(
+      accessToken: token,
+      sessionId: session.id,
+      scheduledAt: selected.split('|').first,
+    );
+    if (!context.mounted || !stillCurrent) return false;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+      updated.warnings.isEmpty
+          ? 'Sesi berhasil dijadwalkan ulang.'
+          : updated.warnings.join(' '),
+    )));
+    return true;
+  } on Object catch (error) {
+    if (context.mounted && stillCurrent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyErrorMessage(error))),
       );
+    }
+    return false;
+  } finally {
+    subscription.close();
+  }
 }
 
 class _ProfessionalLinkCard extends StatelessWidget {
@@ -1161,7 +979,7 @@ class _ProfessionalLinkCard extends StatelessWidget {
     final remaining = active ? package.remainingSessions : 0;
     final expires = package.expiresDateTime;
     final (label, color) = active
-        ? ('Paket aktif', const Color(0xff129471))
+        ? ('Paket aktif', const Color(0xff117a64))
         : (
             switch (package.status) {
               'expired' || 'active' => 'Expired',
@@ -1169,153 +987,168 @@ class _ProfessionalLinkCard extends StatelessWidget {
               'cancelled' => 'Dibatalkan',
               _ => 'Tidak aktif',
             },
-            Colors.black54
+            Colors.black54,
           );
     final reviews = doctor?.reviews;
+    final specialization = doctor?.credential.specialization;
+    final name = link.professionalDisplayName.trim();
+    final progress = package.totalSessions <= 0
+        ? 0.0
+        : (remaining / package.totalSessions).clamp(0.0, 1.0);
+
+    Widget action(IconData icon, String text, VoidCallback callback,
+        {bool emphasized = false}) {
+      return OutlinedButton.icon(
+        onPressed: callback,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: emphasized ? const Color(0xfff3e8fa) : Colors.white,
+          side: careCardBorder,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+        ),
+        icon: Icon(icon, size: 16),
+        label: Text(text, textAlign: TextAlign.center),
+      );
+    }
+
     return SoftCard(
       color: Colors.white,
       outline: careCardBorder,
-      radius: 17,
-      padding: const EdgeInsets.all(13),
+      radius: 22,
+      padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           _ProAvatar(
-              professionalId: link.professionalUserId,
-              displayName: link.professionalDisplayName,
-              photoUrl: link.professionalPhotoUrl),
-          const SizedBox(width: 10),
+            professionalId: link.professionalUserId,
+            displayName: name,
+            photoUrl: link.professionalPhotoUrl,
+          ),
+          const SizedBox(width: 12),
           Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(name.isEmpty ? 'Profesional' : name,
+                  style: const TextStyle(
+                      color: MalvaColors.plum,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900)),
+              if (specialization != null && specialization.isNotEmpty)
+                Text(professionalRoleLabel(specialization),
+                    style: const TextStyle(
+                        color: Color(0xff596776), fontSize: 12)),
+              const SizedBox(height: 7),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xfff8f2fa),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.star_rounded,
+                      color: MalvaColors.amber, size: 15),
+                  const SizedBox(width: 4),
+                  Flexible(
+                      child: Text(
+                    reviews == null
+                        ? 'Ulasan belum dapat dimuat'
+                        : reviews.reviewCount > 0
+                            ? '${reviews.averageStars.toStringAsFixed(1)} (${reviews.reviewCount} ulasan)'
+                            : 'Belum ada ulasan',
+                    style:
+                        const TextStyle(fontSize: 11, color: Color(0xff535964)),
+                  )),
+                ]),
+              ),
+            ]),
+          ),
+          const SizedBox(width: 6),
+          _careBadge('• $label', color),
+        ]),
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          child: InkWell(
+            onTap: onPackage,
+            borderRadius: BorderRadius.circular(15),
+            child: SoftCard(
+              outline: careCardBorder,
+              radius: 15,
+              padding: const EdgeInsets.all(12),
+              color: const Color(0xfff8f2fa),
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                Row(children: [
-                  Expanded(
-                      child: TextButton(
-                    onPressed: onProfile,
-                    style: TextButton.styleFrom(
-                      alignment: Alignment.centerLeft,
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 40),
+                    Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        spacing: 12,
+                        runSpacing: 4,
+                        children: [
+                          Text(
+                              '$remaining/${package.totalSessions} sesi tersisa',
+                              style: const TextStyle(
+                                  color: MalvaColors.plum,
+                                  fontWeight: FontWeight.w800)),
+                          if (expires != null)
+                            Text(
+                                '${active ? 'Hingga' : 'Berakhir'} ${expires.day}/${expires.month}/${expires.year}',
+                                style: const TextStyle(
+                                    color: Color(0xff596776), fontSize: 12)),
+                        ]),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: progress,
+                      borderRadius: BorderRadius.circular(10),
+                      minHeight: 8,
+                      color: MalvaColors.orchid,
+                      backgroundColor: const Color(0xffead8f1),
                     ),
-                    child: Text(
-                        link.professionalDisplayName.isEmpty
-                            ? 'Profesional'
-                            : link.professionalDisplayName,
-                        style: const TextStyle(
-                            color: MalvaColors.plum,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w900)),
-                  )),
-                  const SizedBox(width: 5),
-                  _careBadge(label, color),
-                ]),
-                InkWell(
-                  onTap: onPackage,
-                  borderRadius: BorderRadius.circular(7),
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 1, bottom: 8),
-                    child: Column(children: [
-                      Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                                child: Text(
-                                    '$remaining/${package.totalSessions} sesi tersisa',
-                                    style: const TextStyle(
-                                        color: MalvaColors.seed,
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 11))),
-                            if (expires != null) ...[
-                              const SizedBox(width: 6),
-                              Flexible(
-                                  child: Align(
-                                      alignment: Alignment.centerRight,
-                                      child: Text(
-                                        '${active ? 'Hingga' : 'Berakhir'} ${expires.day}/${expires.month}/${expires.year}',
-                                        textAlign: TextAlign.right,
-                                        style: TextStyle(
-                                            color: active
-                                                ? const Color(0xff535964)
-                                                : MalvaColors.danger,
-                                            fontSize: 11),
-                                      ))),
-                            ],
-                          ]),
-                      const SizedBox(height: 6),
-                      LinearProgressIndicator(
-                        value: package.totalSessions <= 0
-                            ? 0
-                            : (remaining / package.totalSessions)
-                                .clamp(0.0, 1.0),
-                        borderRadius: BorderRadius.circular(8),
-                        minHeight: 7,
-                        color: MalvaColors.orchid,
-                        backgroundColor: const Color(0xfff2e4f8),
-                      ),
-                    ]),
-                  ),
-                ),
-              ])),
-        ]),
+                  ]),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         Row(children: [
-          const Icon(Icons.star_rounded, color: MalvaColors.amber, size: 18),
-          const SizedBox(width: 5),
-          Expanded(
-              child: Text(
-                  reviews == null
-                      ? 'Ulasan belum dapat dimuat'
-                      : reviews.reviewCount > 0
-                          ? '${reviews.averageStars.toStringAsFixed(1)} / 5 (${reviews.reviewCount} ulasan)'
-                          : 'Belum ada ulasan',
-                  style:
-                      const TextStyle(fontSize: 12, color: Color(0xff535964)))),
+          if (active) ...[
+            Expanded(
+                child: action(Icons.chat_bubble_outline, 'Chat', onChat,
+                    emphasized: true)),
+            const SizedBox(width: 6),
+          ],
+          Expanded(child: action(Icons.person_outline, 'Profil', onProfile)),
+          if (active) ...[
+            const SizedBox(width: 6),
+            Expanded(child: action(Icons.tune_rounded, 'Atur Data', onManage)),
+          ],
         ]),
         if (active) ...[
           const SizedBox(height: 7),
-          Row(children: [
-            Expanded(
-                child: FilledButton.icon(
-                    onPressed: onChat,
-                    style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 34),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(9)),
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        textStyle: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w800)),
-                    icon: const Icon(Icons.chat_bubble_rounded, size: 15),
-                    label: const Text('Chat'))),
-            const SizedBox(width: 8),
-            Expanded(
-                child: OutlinedButton.icon(
-                    onPressed: onManage,
-                    style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(0, 34),
-                        side: careCardBorder,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(9)),
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        textStyle: const TextStyle(fontSize: 12)),
-                    icon: const Icon(Icons.share_rounded, size: 15),
-                    label: const Text('Bagikan data'))),
-          ]),
-          const SizedBox(height: 3),
-          FilledButton.tonalIcon(
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: onSchedule == null
+                  ? null
+                  : const LinearGradient(
+                      colors: [MalvaColors.plum, MalvaColors.orchid],
+                    ),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: FilledButton.icon(
               onPressed: onSchedule,
               style: FilledButton.styleFrom(
-                  minimumSize: const Size(0, 33),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(9)),
-                  foregroundColor: MalvaColors.plum,
-                  textStyle: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w800)),
-              icon: const Icon(Icons.calendar_today_outlined, size: 16),
-              label: const Text('Jadwalkan Sesi')),
+                backgroundColor: Colors.transparent,
+                minimumSize: const Size(0, 46),
+              ),
+              icon: const Icon(Icons.edit_calendar_rounded, size: 19),
+              label: const Text('Jadwalkan Sesi'),
+            ),
+          ),
         ],
       ]),
     );
   }
 }
+
 // ============================================================
 // MANAGE DATA — sharing toggles sesuai kolom consent server
 // ============================================================

@@ -118,14 +118,14 @@ class _EPrescriptionScreenState extends ConsumerState<EPrescriptionScreen> {
   }
 
   Future<void> _edit(BackendEPrescription rx) async {
+    if (rx.items.isEmpty) return;
     await Navigator.push<bool>(
         context,
         MaterialPageRoute(
-            builder: (_) => EPrescriptionEditorScreen(
+            builder: (_) => EPrescriptionFormScreen(
                 session: _session,
                 apiClient: widget.apiClient,
-                prescription: rx,
-                patientName: _patient(rx))));
+                prescription: rx)));
     if (mounted && _session != null) await _load();
   }
 

@@ -175,7 +175,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Keluar'));
     expect(logout, isTrue);
-    await tester.tap(find.text('Dashboard'));
+    await tester.tap(find.byWidgetPredicate(
+        (w) => w is NavigationDestination && w.label == 'Dashboard'));
     await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView).first, const Offset(0, -450));
     await tester.pumpAndSettle();
@@ -196,10 +197,12 @@ void main() {
     expect(find.text('Pasien Kedua'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Aksi lain').first, 100);
     await tester.ensureVisible(find.text('Aksi lain').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Aksi lain').first);
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Link').first);
-    await tester.tap(find.text('Link').first);
+    await tester.ensureVisible(find.text('Ubah link video').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ubah link video').first);
     await tester.pumpAndSettle();
     expect(find.text('Link sesi video'), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
@@ -225,6 +228,8 @@ void main() {
     await _mount(tester, _Fixture(), size: const Size(390, 1625));
     await tester.scrollUntilVisible(find.text('Ketersediaan & harga'), 100,
         scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(find.text('Ketersediaan & harga'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Ketersediaan & harga'));
     await tester.pumpAndSettle();
     expect(find.text('09:00–16:00'), findsNWidgets(6));
@@ -234,10 +239,12 @@ void main() {
     await _capture(tester, 'professional-reference.png');
     if (Platform.environment['MALVA_QA_CAPTURE_DIR'] != null) {
       await tester.ensureVisible(find.text('Aksi lain').first);
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Aksi lain').first);
       await tester.pumpAndSettle();
       await _capture(tester, 'professional-home-actions.png');
-      await tester.tap(find.text('Jadwal').last);
+      await tester.tap(find.byWidgetPredicate(
+          (w) => w is NavigationDestination && w.label == 'Jadwal'));
       await tester.pumpAndSettle();
       await _capture(tester, 'professional-jadwal-all.png');
       final date = wibNow().add(const Duration(hours: 40, minutes: 45));
@@ -248,7 +255,8 @@ void main() {
       await tester.tap(find.byKey(ValueKey('jadwal-${wibDateKey(date)}')));
       await tester.pumpAndSettle();
       await _capture(tester, 'professional-jadwal-selected.png');
-      await tester.tap(find.text('Pesan'));
+      await tester.tap(find.byWidgetPredicate(
+          (w) => w is NavigationDestination && w.label == 'Pesan'));
       await tester.pumpAndSettle();
       await _capture(tester, 'professional-percakapan.png');
     }

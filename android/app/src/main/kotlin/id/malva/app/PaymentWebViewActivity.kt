@@ -3,6 +3,8 @@ package id.malva.app
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.os.Message
@@ -17,6 +19,7 @@ import java.lang.ref.WeakReference
 /** Sandbox checkout owns its browser so verified payment can return to Malva. */
 class PaymentWebViewActivity : Activity() {
     private lateinit var checkout: WebView
+    private var returningToMalva = false
 
     companion object {
         private var current = WeakReference<PaymentWebViewActivity>(null)
@@ -32,11 +35,20 @@ class PaymentWebViewActivity : Activity() {
         }
         current = WeakReference(this)
         checkout = WebView(this)
+        checkout.setBackgroundColor(Color.WHITE)
         checkout.settings.javaScriptEnabled = true
         checkout.settings.domStorageEnabled = true
         checkout.settings.setSupportMultipleWindows(true)
         checkout.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = navigate(request.url)
+
+            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                val uri = Uri.parse(url)
+                if (isPaymentReturn(uri)) {
+                    view.stopLoading()
+                    navigate(uri)
+                }
+            }
         }
         // Sandbox bank simulators open a popup; keep it in the owned checkout.
         checkout.webChromeClient = object : WebChromeClient() {
@@ -60,8 +72,13 @@ class PaymentWebViewActivity : Activity() {
         checkout.loadUrl(url)
     }
 
+    private fun isPaymentReturn(uri: Uri): Boolean =
+        uri.scheme == "malva" && uri.host == "payment" && uri.path == "/return"
+
     private fun navigate(uri: Uri): Boolean {
-        if (uri.scheme == "malva" && uri.host == "payment" && uri.path == "/return") {
+        if (isPaymentReturn(uri)) {
+            if (returningToMalva) return true
+            returningToMalva = true
             startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW).setData(uri)
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
             finish()

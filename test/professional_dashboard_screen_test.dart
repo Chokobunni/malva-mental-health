@@ -55,13 +55,15 @@ void main() {
     expect(find.text('Prioritas pasien'), findsNothing);
 
     // Tab Jadwal: tombol Quick Video Call (dipindah dari Dashboard) + sesi.
-    await tester.tap(find.text('Jadwal'));
+    await tester.tap(find.byWidgetPredicate(
+        (w) => w is NavigationDestination && w.label == 'Jadwal'));
     await tester.pumpAndSettle();
     expect(find.text('Quick Video Call'), findsNothing);
     expect(find.text('Lihat jadwal dan riwayat sesi Anda.'), findsOneWidget);
 
     // Tab Pasien: tanpa backend = empty state, tanpa pasien demo.
-    await tester.tap(find.text('Pasien'));
+    await tester.tap(find.descendant(
+        of: find.byType(NavigationBar), matching: find.text('Pasien')));
     await tester.pumpAndSettle();
     expect(find.text('Pasien terhubung'), findsOneWidget);
     await tester.scrollUntilVisible(
@@ -69,14 +71,16 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Belum ada pasien terhubung'), findsOneWidget);
 
-    await tester.tap(find.text('Pesan'));
+    await tester.tap(find.byWidgetPredicate(
+        (w) => w is NavigationDestination && w.label == 'Pesan'));
     await tester.pumpAndSettle();
-    expect(find.text('Percakapan'), findsOneWidget);
+    expect(find.text('Percakapan'), findsNWidgets(2));
     expect(find.text('Lihat pesan dan riwayat chat dengan pasien.'),
         findsOneWidget);
 
     // Profile is first; obsolete audit and duplicate crisis entry are absent.
-    await tester.tap(find.text('Lainnya'));
+    await tester.tap(find.byWidgetPredicate(
+        (w) => w is NavigationDestination && w.label == 'Lainnya'));
     await tester.pumpAndSettle();
     expect(find.text('Audit & export ringkasan'), findsNothing);
     expect(find.text('Riwayat Insiden Krisis'), findsNothing);

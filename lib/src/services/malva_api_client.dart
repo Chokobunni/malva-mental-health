@@ -6031,6 +6031,7 @@ class BackendPayment {
     this.snapToken = '',
     this.gateway = '',
     this.paidAt,
+    this.totalAmount,
   });
 
   factory BackendPayment.fromJson(Map<String, dynamic> json) {
@@ -6043,6 +6044,10 @@ class BackendPayment {
       snapToken: json['snap_token']?.toString() ?? '',
       gateway: json['gateway']?.toString() ?? '',
       paidAt: parseWibStored(json['paid_at']?.toString()),
+      totalAmount: json['gross_amount'] is num
+          ? (json['gross_amount'] as num).toInt() +
+              ((json['service_fee_amount'] as num?)?.toInt() ?? 0)
+          : null,
     );
   }
 
@@ -6062,6 +6067,7 @@ class BackendPayment {
 
   /// Waktu pembayaran lunas (WIB) bila sudah dibayar.
   final DateTime? paidAt;
+  final int? totalAmount;
 }
 
 /// Konfigurasi mode pembayaran dari `GET /v1/config/payment`.

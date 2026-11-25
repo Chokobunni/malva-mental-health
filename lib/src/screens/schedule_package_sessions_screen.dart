@@ -36,6 +36,7 @@ class _SchedulePackageSessionsScreenState
   final _selected = <int, String>{};
   final _scheduled = <int>{};
   List<BackendProfessionalSchedule> _practiceHours = const [];
+  String _specialty = '';
   bool _saving = false;
   bool _changed = false;
   late final BookingOwner _owner;
@@ -65,8 +66,11 @@ class _SchedulePackageSessionsScreenState
         final schedules = professionalServiceSchedules(
             profile.schedules, 'package',
             usePrimarySchedule: profile.usePrimarySchedule);
-        setState(
-            () => _practiceHours = schedules.where((s) => s.isActive).toList());
+        setState(() {
+          _practiceHours = schedules.where((s) => s.isActive).toList()
+            ..sort((a, b) => a.dayOfWeek.compareTo(b.dayOfWeek));
+          _specialty = profile.credential.specialization;
+        });
       }
     } on Object {
       // Availability inside the picker is loaded from the slots API.
@@ -79,11 +83,12 @@ class _SchedulePackageSessionsScreenState
     final chosen = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: carePageColor,
+      backgroundColor: Colors.white,
       builder: (_) => CareSessionSchedulerSheet(
         apiClient: widget.api,
         accessToken: token,
         professionalId: _package.professionalId,
+        sessionNumber: number,
         expiresAt: _package.expiresDateTime,
         excludedSlots: _selected.entries
             .where((entry) => entry.key != number)
@@ -197,7 +202,7 @@ class _SchedulePackageSessionsScreenState
     final expiry = _package.expiresDateTime;
     const title = TextStyle(
       fontSize: 20,
-      color: MalvaColors.plum,
+      color: Color(0xff182330),
       fontWeight: FontWeight.w900,
     );
     return PopScope(
@@ -214,7 +219,7 @@ class _SchedulePackageSessionsScreenState
           padding: const EdgeInsets.all(16),
           children: [
             SoftCard(
-              radius: 18,
+              radius: 26,
               color: Colors.white,
               outline: careCardBorder,
               child: Column(
@@ -225,40 +230,79 @@ class _SchedulePackageSessionsScreenState
                       displayName: name,
                       photoUrl: _package.photoIntroUrl,
                       radius: 25,
+                      borderRadius: BorderRadius.circular(18),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                        child: Text(name.isEmpty ? 'Profesional' : name,
-                            style: title)),
-                    const SizedBox(width: 6),
-                    StatusPill(
-                      label: available ? 'Paket aktif' : 'Paket berakhir',
-                      color: available ? MalvaColors.mint : MalvaColors.plum,
-                    ),
-                  ]),
-                  const Divider(height: 24),
-                  Row(children: [
-                    const Icon(Icons.event_available_outlined,
-                        size: 36, color: MalvaColors.seed),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('$_remaining/$total sesi tersisa',
-                              style: title.copyWith(color: MalvaColors.seed)),
-                          const SizedBox(height: 9),
-                          LinearProgressIndicator(
-                            value: total > 0
-                                ? (_remaining / total).clamp(0.0, 1.0)
-                                : 0,
-                            borderRadius: BorderRadius.circular(8),
-                            minHeight: 8,
-                          ),
+                        child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name.isEmpty ? 'Profesional' : name, style: title),
+                        if (_specialty.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(_specialty,
+                              style: const TextStyle(
+                                  color: Color(0xff7d8891), fontSize: 13)),
                         ],
-                      ),
+                      ],
+                    )),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                          color: available
+                              ? const Color(0xffe9faf3)
+                              : const Color(0xfff7effa),
+                          borderRadius: BorderRadius.circular(20)),
+                      child: Text(available ? 'Paket aktif' : 'Paket berakhir',
+                          style: TextStyle(
+                              color: available
+                                  ? const Color(0xff257d65)
+                                  : MalvaColors.plum,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12)),
                     ),
                   ]),
+                  const SizedBox(height: 20),
+                  SoftCard(
+                      color: const Color(0xfffaf5fd),
+                      radius: 18,
+                      outline: const BorderSide(color: Color(0xfff0e7f5)),
+                      child: Column(children: [
+                        Row(children: [
+                          const Icon(Icons.event_available_outlined,
+                              size: 36, color: MalvaColors.seed),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Kuota Konsultasi',
+                                    style: TextStyle(color: MalvaColors.seed)),
+                                Text('$_remaining dari $total sesi tersisa',
+                                    style: title.copyWith(
+                                        color: MalvaColors.plum, fontSize: 16)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                              '${total > 0 ? (_remaining / total * 100).round() : 0}%',
+                              style: title.copyWith(
+                                  color: MalvaColors.seed, fontSize: 17)),
+                        ]),
+                        const SizedBox(height: 14),
+                        LinearProgressIndicator(
+                          value: total > 0
+                              ? (_remaining / total).clamp(0.0, 1.0)
+                              : 0,
+                          borderRadius: BorderRadius.circular(8),
+                          minHeight: 8,
+                          backgroundColor: const Color(0xffe7d2ef),
+                          color: MalvaColors.seed,
+                        ),
+                      ])),
                   const Divider(height: 24),
                   Wrap(
                     alignment: WrapAlignment.spaceBetween,
@@ -266,50 +310,60 @@ class _SchedulePackageSessionsScreenState
                     spacing: 12,
                     children: [
                       Text(
-                          '${total ~/ 4} paket · $total sesi\n${_package.validityDays ~/ 7} minggu masa aktif'),
+                          'DETAIL PAKET\n${total ~/ 4} paket · $total sesi\n${_package.validityDays ~/ 7} minggu masa aktif'),
                       if (expiry != null)
-                        Text('Berlaku hingga\n${_longDate(expiry)}'),
+                        Text(
+                            'BERLAKU HINGGA\n${_longDate(expiry)}\n${_expired ? 'Paket berakhir' : '${expiry.difference(ServerClock.now()).inDays.clamp(0, 99999)} hari lagi'}'),
                     ],
                   ),
                   const SizedBox(height: 12),
                   const SoftCard(
-                    color: Color(0xfff3e8fa),
-                    padding: EdgeInsets.all(10),
-                    child: Text(
-                        'Setiap pembelian paket menambah 4 sesi dan 6 minggu masa aktif. Sisa sesi mengikuti tanggal berakhir terbaru.'),
+                    color: Color(0xfff7f9fb),
+                    padding: EdgeInsets.all(14),
+                    child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info, color: MalvaColors.seed, size: 18),
+                          SizedBox(width: 10),
+                          Expanded(
+                              child: Text(
+                                  'Setiap pembelian paket menambah 4 sesi dan 6 minggu masa aktif. Sisa sesi mengikuti tanggal berakhir terbaru.',
+                                  style: TextStyle(
+                                      color: Color(0xff66717e), height: 1.5))),
+                        ]),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 18),
             const Row(children: [
-              Expanded(child: Text('Pilih jadwal', style: title)),
+              Expanded(child: Text('Pilih Jadwal', style: title)),
               StatusPill(label: 'WIB', color: MalvaColors.seed),
             ]),
-            Text('Pilih hingga $_remaining sesi sesuai jam praktik.'),
+            Text('Pilih hingga $_remaining sesi sesuai jam praktik dokter',
+                style: const TextStyle(color: Color(0xff7d8891))),
             const SizedBox(height: 12),
-            SoftCard(
-              padding: EdgeInsets.zero,
-              color: Colors.white,
-              radius: 18,
-              outline: careCardBorder,
-              child: Column(children: [
-                for (var number = _package.usedSessions + 1;
-                    number <= total;
-                    number++) ...[
-                  if (number > _package.usedSessions + 1)
-                    const Divider(height: 1, indent: 16, endIndent: 16),
-                  ListTile(
-                    leading: CircleAvatar(
-                      radius: 14,
-                      backgroundColor: const Color(0xfff3e8fa),
+            for (var number = _package.usedSessions + 1;
+                number <= total;
+                number++) ...[
+              SoftCard(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  color: Colors.white,
+                  radius: 20,
+                  child: ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                          color: const Color(0xfff8f0fc),
+                          borderRadius: BorderRadius.circular(16)),
                       child: Icon(
                           _scheduled.contains(number) ||
                                   _selected.containsKey(number)
                               ? Icons.check_rounded
                               : Icons.event_outlined,
                           color: MalvaColors.seed,
-                          size: 17),
+                          size: 22),
                     ),
                     title: Text('Sesi $number',
                         style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -319,6 +373,9 @@ class _SchedulePackageSessionsScreenState
                             ? 'Belum dijadwalkan'
                             : _slotText(_selected[number]!)),
                     trailing: TextButton(
+                      style: TextButton.styleFrom(
+                          backgroundColor: const Color(0xfff8f0fc),
+                          foregroundColor: MalvaColors.seed),
                       onPressed:
                           !available || _saving || _scheduled.contains(number)
                               ? null
@@ -327,16 +384,42 @@ class _SchedulePackageSessionsScreenState
                           ? 'Ubah'
                           : 'Pilih jadwal'),
                     ),
-                  ),
-                ],
-              ]),
-            ),
+                  )),
+              const SizedBox(height: 12),
+            ],
             if (_practiceHours.isNotEmpty) ...[
               const SizedBox(height: 16),
-              const Text('Jam praktik', style: title),
-              for (final schedule in _practiceHours)
-                Text(
-                    '${_dayNames[schedule.dayOfWeek % 7]} ${schedule.startTime}–${schedule.endTime}'),
+              const Row(children: [
+                Expanded(child: Text('Jam Praktik', style: title)),
+                Text('Jadwal rutin mingguan',
+                    style: TextStyle(color: Color(0xffa0a8b1), fontSize: 11))
+              ]),
+              const SizedBox(height: 12),
+              SoftCard(
+                  color: Colors.white,
+                  radius: 20,
+                  child: Column(children: [
+                    for (final schedule in _practiceHours)
+                      Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Row(children: [
+                            const Icon(Icons.circle,
+                                size: 8, color: MalvaColors.seed),
+                            const SizedBox(width: 10),
+                            Expanded(
+                                child: Text(_dayNames[schedule.dayOfWeek % 7],
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700))),
+                            Container(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 6, horizontal: 12),
+                                decoration: BoxDecoration(
+                                    color: const Color(0xfff1f4f8),
+                                    borderRadius: BorderRadius.circular(10)),
+                                child: Text(
+                                    '${schedule.startTime} – ${schedule.endTime}')),
+                          ])),
+                  ])),
             ],
             if (_error != null) ...[
               const SizedBox(height: 12),
@@ -344,26 +427,34 @@ class _SchedulePackageSessionsScreenState
             ],
           ],
         ),
-        bottomNavigationBar: SafeArea(
-          minimum: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('${_selected.length} sesi dipilih',
-                  style: const TextStyle(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
-              FilledButton.icon(
-                onPressed:
-                    _saving || !available || _selected.isEmpty ? null : _save,
-                icon: const Icon(Icons.event_available_outlined),
-                label: Text(_saving
-                    ? 'Menjadwalkan…'
-                    : 'Jadwalkan ${_selected.length} sesi'),
+        bottomNavigationBar: Material(
+            color: Colors.white,
+            child: SafeArea(
+              minimum: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(children: [
+                    const Expanded(
+                        child: Text('Total jadwal dipilih',
+                            style: TextStyle(color: Color(0xff7d8891)))),
+                    Text('${_selected.length} sesi dipilih',
+                        style: const TextStyle(fontWeight: FontWeight.w800))
+                  ]),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: _saving || !available || _selected.isEmpty
+                        ? null
+                        : _save,
+                    icon: const Icon(Icons.event_available_outlined),
+                    label: Text(_saving
+                        ? 'Menjadwalkan…'
+                        : 'Jadwalkan ${_selected.length} sesi'),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            )),
       ),
     );
   }

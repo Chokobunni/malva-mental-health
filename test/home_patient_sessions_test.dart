@@ -162,7 +162,7 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(tester.getCenter(join).dy,
-        lessThan(tester.getCenter(find.text('Batalkan')).dy));
+        lessThan(tester.getCenter(find.text('Lihat Detail Sesi')).dy));
     await tester.tap(join);
     await tester.pumpAndSettle();
     expect(actions, ['attended', url]);
@@ -188,7 +188,7 @@ void main() {
     });
     await _pumpHome(tester, _api(baseUrl: 'http://127.0.0.1:${server.port}'),
         providerOnly: true);
-    final chat = find.widgetWithText(FilledButton, 'Chat');
+    final chat = find.widgetWithText(OutlinedButton, 'Buka Riwayat Chat');
     await tester.scrollUntilVisible(chat.last, 250,
         scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();

@@ -304,7 +304,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('4.5 / 5'), findsOneWidget);
+    expect(find.textContaining('4.5 ('), findsOneWidget);
     expect(
         client.requests
             .where((request) => request.url.path == '/v1/doctors/doctor'),
@@ -379,9 +379,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ChoiceChip, 'Terhubung'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('4.5 / 5'), findsOneWidget);
-    expect(find.widgetWithText(TextButton, 'Dokter Uji'), findsOneWidget);
-    await tester.tap(find.widgetWithText(TextButton, 'Dokter Uji'));
+    expect(find.textContaining('4.5 ('), findsOneWidget);
+    final profile = find.widgetWithText(OutlinedButton, 'Profil');
+    await tester.ensureVisible(profile);
+    await tester.tap(profile);
     await tester.pumpAndSettle();
     expect(find.byType(DoctorProfileScreen), findsOneWidget);
     expect(

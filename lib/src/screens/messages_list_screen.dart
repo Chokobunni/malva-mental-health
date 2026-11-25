@@ -248,7 +248,7 @@ class _MessagesListScreenState extends ConsumerState<MessagesListScreen>
           children: [
             if (!isPro)
               CarePageHeader(
-                title: 'Messages',
+                title: 'Percakapan',
                 subtitle: 'Lihat percakapan aktif dan riwayat chat.',
                 session: _session,
                 onNotifications: () => Navigator.push(

@@ -7,6 +7,7 @@ import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../services/care_session_refresh.dart';
+import '../services/server_clock.dart';
 import '../widgets/doctor_review_actions.dart';
 import '../services/medication_reminder_service.dart';
 import '../theme.dart';
@@ -15,12 +16,14 @@ import 'notifications_screen.dart';
 import '../widgets/crisis_hotline.dart';
 import '../widgets/daily_checkin_flow.dart';
 import '../widgets/malva_components.dart';
-import '../widgets/meet_join_button.dart';
+import '../widgets/care_session_card.dart';
 import '../widgets/friendly_error.dart';
-import '../widgets/professional_avatar.dart';
+
 import '../widgets/sync_status.dart';
 import '../widgets/therapy_library.dart';
 import 'booking/doctor_discovery_screen.dart';
+import 'booking/doctor_profile_screen.dart';
+import 'my_care_screen.dart';
 import 'chat_screen.dart';
 import 'diary_history_screen.dart';
 import 'goals_screen.dart';
@@ -257,22 +260,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       icon: Icons.play_circle_rounded),
                   if (_ongoingLoadFailed)
                     const Text('Sesi berjalan belum dapat dimuat.')
-                  else if (ongoingChats.isEmpty)
+                  else if (liveSessions.isEmpty)
                     const _HomeSessionEmpty(
                         asset: 'home-ongoing',
                         text: 'Tidak ada sesi berjalan saat ini.')
                   else
-                    for (final s in ongoingChats)
+                    for (final s in [...ongoingVideos, ...ongoingChats])
                       Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: _OngoingSessionCard(
                             session: s,
                             onChat: () => _joinSession(context, s),
+                            onChanged: _loadUpcomingSession,
+                            accessToken: auth?.accessToken ?? '',
+                            onConfirmAttendance: () async {
+                              final token = auth?.accessToken;
+                              if (token == null ||
+                                  token.isEmpty ||
+                                  _session?.accessToken != token) return null;
+                              final updated = await _api.updateCareSession(
+                                  accessToken: token,
+                                  sessionId: s.id,
+                                  status: 'attended');
+                              return mounted && _session?.accessToken == token
+                                  ? updated
+                                  : null;
+                            },
                           )),
                   const SizedBox(height: 23),
                   for (final (video, sessions, expanded) in [
-                    (false, upcomingChats, _showAllUpcomingChats),
                     (true, upcomingVideos, _showAllUpcomingVideos),
+                    (false, upcomingChats, _showAllUpcomingChats),
                   ]) ...[
                     _HomeSectionLabel(
                       video ? 'Panggilan video mendatang' : 'Chat mendatang',
@@ -297,9 +315,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                             )
                           : null,
                     ),
-                    if (video)
-                      for (final session in ongoingVideos)
-                        _upcomingCard(session, auth),
                     if (_upcomingLoadFailed)
                       Text(video
                           ? 'Panggilan video mendatang belum dapat dimuat.'
@@ -420,6 +435,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           accessToken: auth?.accessToken ?? '',
           onJoin: () => _joinSession(context, session),
           onCancel: () => _cancelSession(context, session),
+          onProfile: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => DoctorProfileScreen(
+                      doctorUserId: session.professionalId,
+                      doctorName: session.professionalName,
+                      session: auth,
+                      apiClient: _api))),
+          onReschedule: session.scheduledDateTime != null &&
+                  session.scheduledDateTime!.difference(ServerClock.now()) >=
+                      const Duration(hours: 24)
+              ? () async {
+                  final token = auth?.accessToken ?? '';
+                  if (token.isEmpty) return;
+                  final changed = await reschedulePatientCareSession(context,
+                      api: _api, token: token, session: session);
+                  if (changed && mounted) await _loadUpcomingSession();
+                }
+              : null,
           onChanged: _loadUpcomingSession,
           onConfirmAttendance: () async {
             final token = auth?.accessToken;
@@ -520,50 +554,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
 /// Kartu sesi mendatang: nama profesional riil, tipe & durasi riil,
 /// tanggal, tombol Join / Cancel.
-Widget _homeAvatar(String name, String? photo) {
-  if (photo?.trim().isNotEmpty == true)
-    return ProfessionalAvatar(displayName: name, radius: 27, photoUrl: photo);
-  final words = name
-      .replaceAll(RegExp(r'^(dr\.?|dokter)\s+', caseSensitive: false), '')
-      .trim()
-      .split(RegExp(r'\s+'));
-  final initials = words
-      .where((v) => v.isNotEmpty)
-      .take(2)
-      .map((v) => v.characters.first)
-      .join()
-      .toUpperCase();
-  return CircleAvatar(
-      radius: 27,
-      backgroundColor: const Color(0xfff2e7fc),
-      child: Text(initials,
-          style: const TextStyle(
-              fontSize: 23,
-              color: Color(0xffb05cd1),
-              fontWeight: FontWeight.w700)));
-}
-
 class _HomeCard extends StatelessWidget {
   const _HomeCard(
-      {required this.child,
-      this.padding = const EdgeInsets.all(20),
-      this.color,
-      this.accent,
-      this.bordered = false});
+      {required this.child, this.padding = const EdgeInsets.all(20)});
   final Widget child;
   final EdgeInsets padding;
-  final Color? color, accent;
-  final bool bordered;
+
   @override
   Widget build(BuildContext context) => Container(
       padding: padding,
       decoration: BoxDecoration(
-          color: color ?? Colors.white,
+          color: Colors.white,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: careSoftShadow,
-          border: accent == null
-              ? null
-              : Border(left: BorderSide(color: accent!, width: 3))),
+          boxShadow: careSoftShadow),
       child: child);
 }
 
@@ -594,162 +597,30 @@ class _UpcomingSessionCard extends StatelessWidget {
     required this.accessToken,
     required this.onChanged,
     required this.onConfirmAttendance,
+    this.onProfile,
+    this.onReschedule,
   });
 
   final BackendCareSession session;
   final VoidCallback onJoin;
   final VoidCallback onCancel;
+  final VoidCallback? onProfile, onReschedule;
   final String accessToken;
   final Future<void> Function() onChanged;
   final Future<BackendCareSession?> Function() onConfirmAttendance;
 
-  static const _days = [
-    'Senin',
-    'Selasa',
-    'Rabu',
-    'Kamis',
-    'Jumat',
-    'Sabtu',
-    'Minggu'
-  ];
-  static const _months = [
-    'Januari',
-    'Februari',
-    'Maret',
-    'April',
-    'Mei',
-    'Juni',
-    'Juli',
-    'Agustus',
-    'September',
-    'Oktober',
-    'November',
-    'Desember'
-  ];
-
   @override
-  Widget build(BuildContext context) {
-    final isVideo = session.isVideo;
-    final date = session.scheduledDateTime;
-    final dateLabel = date != null
-        ? '${_days[date.weekday - 1]}, ${date.day.toString().padLeft(2, '0')} '
-            '${_months[date.month - 1]} ${date.year} • '
-            '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}'
-        : '-';
-    final name = session.professionalName.isEmpty
-        ? 'Profesional'
-        : session.professionalName;
-    return _HomeCard(
-      color: Colors.white,
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              _homeAvatar(name, session.photoIntroUrl),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w700, fontSize: 16),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Icon(
-                          isVideo
-                              ? Icons.videocam_rounded
-                              : Icons.chat_bubble_rounded,
-                          size: 14,
-                          color: MalvaColors.seed,
-                        ),
-                        const SizedBox(width: 4),
-                        Flexible(
-                            child: Text(
-                          'Sesi ${isVideo ? 'Video' : 'Chat'}, ${session.durationMinutes} menit',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: Colors.black54),
-                        )),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            dateLabel,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-          ),
-          const SizedBox(height: 16),
-          if (isVideo && session.canJoinNow) ...[
-            Theme(
-                data: Theme.of(context).copyWith(
-                    outlinedButtonTheme: OutlinedButtonThemeData(
-                        style: OutlinedButton.styleFrom(
-                            disabledForegroundColor: const Color(0xff9755ad),
-                            disabledBackgroundColor: const Color(0xfff8f1fc),
-                            minimumSize: const Size.fromHeight(44),
-                            side: const BorderSide(color: Color(0xffeee4f4)),
-                            textStyle: const TextStyle(
-                                fontFamily: 'Roboto',
-                                fontWeight: FontWeight.w600),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12))))),
-                child: MeetJoinButton(
-                    session: session,
-                    accessToken: accessToken,
-                    expanded: true,
-                    canCreateLink: false,
-                    onConfirmAttendance: onConfirmAttendance,
-                    onSessionChanged: (_) => onChanged())),
-            const SizedBox(height: 18),
-          ],
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: onJoin,
-                  style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xff9755ad),
-                      minimumSize: const Size.fromHeight(47),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(13))),
-                  icon: const Icon(Icons.chat_bubble_rounded, size: 18),
-                  label: const Text('Chat',
-                      style: TextStyle(
-                          fontFamily: 'Roboto', fontWeight: FontWeight.w700)),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: onCancel,
-                  style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xff9755ad),
-                      minimumSize: const Size.fromHeight(47),
-                      side: const BorderSide(color: Color(0xffeeebf0)),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(13))),
-                  child: const Text('Batalkan',
-                      style: TextStyle(
-                          fontFamily: 'Roboto', fontWeight: FontWeight.w700)),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => CareSessionCard(
+      session: session,
+      role: UserRole.patient,
+      allowPreSessionChat: true,
+      onOpenChat: onJoin,
+      onChanged: onChanged,
+      accessToken: accessToken,
+      onCancel: onCancel,
+      onProfile: onProfile,
+      onReschedule: onReschedule,
+      onConfirmAttendance: onConfirmAttendance);
 }
 
 /// Tombol "Find Professionals" di bawah label Professional Care.
@@ -953,70 +824,24 @@ class _OngoingSessionCard extends StatelessWidget {
   const _OngoingSessionCard({
     required this.session,
     required this.onChat,
+    required this.onChanged,
+    required this.accessToken,
+    required this.onConfirmAttendance,
   });
 
   final BackendCareSession session;
+  final String accessToken;
+  final Future<BackendCareSession?> Function() onConfirmAttendance;
   final VoidCallback onChat;
+  final Future<void> Function() onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    final at = session.scheduledDateTime;
-    final dateLabel = at == null
-        ? '-'
-        : '${at.day}/${at.month}/${at.year} '
-            '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
-    return _HomeCard(
-      bordered: true,
-      accent: MalvaColors.mint,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              ProfessionalAvatar(
-                displayName: session.professionalName.isEmpty
-                    ? 'Profesional'
-                    : session.professionalName,
-                radius: 22,
-                photoUrl: session.photoIntroUrl.isNotEmpty
-                    ? session.photoIntroUrl
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      session.professionalName.isEmpty
-                          ? 'Sesi ${session.isVideo ? 'Video' : 'Chat'}'
-                          : session.professionalName,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    Text(
-                      '${session.isVideo ? 'Video' : 'Chat'} • $dateLabel',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              const StatusPill(label: 'Berjalan', color: MalvaColors.mint),
-            ],
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: onChat,
-              style: compactFilledButtonStyle,
-              icon: const Icon(Icons.chat_bubble_rounded, size: 16),
-              label: const Text('Chat',
-                  style: TextStyle(
-                      fontFamily: 'Roboto', fontWeight: FontWeight.w700)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => CareSessionCard(
+      session: session,
+      role: UserRole.patient,
+      allowPreSessionChat: true,
+      onOpenChat: onChat,
+      accessToken: accessToken,
+      onConfirmAttendance: onConfirmAttendance,
+      onChanged: onChanged);
 }

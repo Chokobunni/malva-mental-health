@@ -162,6 +162,9 @@ void main() {
     expect(find.textContaining('Video'), findsOneWidget);
     expect(find.textContaining('Paket'), findsWidgets);
     expect(find.text('Check-in dibuka 10 menit sebelum sesi.'), findsOneWidget);
+    await tester.ensureVisible(find.text('AKSI LAIN'));
+    await tester.tap(find.text('AKSI LAIN'));
+    await tester.pumpAndSettle();
     expect(find.text('Reschedule'), findsOneWidget);
     expect(find.text('Batal'), findsOneWidget);
     expect(find.text('Kehadiran saya'), findsNothing);

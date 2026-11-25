@@ -46,9 +46,10 @@ void main() {
     expect(find.textContaining('TXN-TEST-001'), findsWidgets);
     expect(find.text('Lihat Sesi Saya'), findsOneWidget);
 
+    await tester.scrollUntilVisible(find.text('View Receipt'), 120);
     await tester.tap(find.text('View Receipt'));
     await tester.pumpAndSettle();
-    expect(find.text('Receipt'), findsOneWidget);
+    expect(find.text('E-Receipt'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

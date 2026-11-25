@@ -176,14 +176,15 @@ void main() {
     expect(find.text('Sesi berjalan'), findsOneWidget);
     expect(_requestedPaths, isNot(contains('/v1/crisis-incident-log')));
     // Sesi berjalan (video) menampilkan aksi "Gabung".
-    expect(find.text('Gabung'), findsOneWidget);
+    expect(find.text('Gabung video call'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('invalid instrument total never labels patient screening normal',
       (tester) async {
     await _pumpDashboard(tester, invalidScore: true);
-    await tester.tap(find.text('Pasien'));
+    await tester.tap(find.descendant(
+        of: find.byType(NavigationBar), matching: find.text('Pasien')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Ami'), 200,
         scrollable: find.byType(Scrollable).first);
@@ -203,10 +204,12 @@ void main() {
     expect(find.text('Riwayat Insiden Krisis'), findsNothing);
     expect(find.text('Ketersediaan & harga'), findsOneWidget);
     expect(find.text('Earnings'), findsOneWidget);
-    await tester.tap(find.text('Pasien'));
+    await tester.tap(find.descendant(
+        of: find.byType(NavigationBar), matching: find.text('Pasien')));
     await tester.pumpAndSettle();
     expect(find.text('Data pasien dibagikan'), findsOneWidget);
-    await tester.tap(find.text('Lainnya'));
+    await tester.tap(find.byWidgetPredicate(
+        (w) => w is NavigationDestination && w.label == 'Lainnya'));
     await tester.pumpAndSettle();
     expect(find.text('Operasional'), findsNothing);
     expect(find.text('Earnings'), findsNothing);

@@ -925,6 +925,7 @@ class CareSessionSchedulerSheet extends StatefulWidget {
     this.initialType = 'video',
     this.serviceCategory = 'package',
     this.excludedSlots = const {},
+    this.sessionNumber,
   });
 
   final MalvaApiClient apiClient;
@@ -934,6 +935,7 @@ class CareSessionSchedulerSheet extends StatefulWidget {
   final String initialType;
   final String serviceCategory;
   final Set<String> excludedSlots;
+  final int? sessionNumber;
 
   @override
   State<CareSessionSchedulerSheet> createState() =>
@@ -1035,168 +1037,218 @@ class CareSessionSchedulerSheetState extends State<CareSessionSchedulerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: ConstrainedBox(
-        constraints:
-            BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .88),
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-              22, 12, 22, MediaQuery.viewInsetsOf(context).bottom + 24),
-          child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                    child: Container(
-                        width: 44,
-                        height: 5,
-                        decoration: BoxDecoration(
-                            color: const Color(0xFFD9D9DF),
-                            borderRadius: BorderRadius.circular(30)))),
-                const SizedBox(height: 14),
-                Row(children: [
-                  const Expanded(
-                      child: Text('Jadwalkan sesi',
+    return Material(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+        clipBehavior: Clip.antiAlias,
+        child: SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * .88),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                  22, 12, 22, MediaQuery.viewInsetsOf(context).bottom + 24),
+              child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                        child: Container(
+                            width: 44,
+                            height: 5,
+                            decoration: BoxDecoration(
+                                color: const Color(0xFFD9D9DF),
+                                borderRadius: BorderRadius.circular(30)))),
+                    const SizedBox(height: 14),
+                    Row(children: [
+                      Expanded(
+                          child: Text(
+                              widget.sessionNumber == null
+                                  ? 'Jadwalkan sesi'
+                                  : 'Pilih Jadwal Sesi ${widget.sessionNumber}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700, fontSize: 20))),
+                      IconButton.filledTonal(
+                          onPressed: () => Navigator.pop(context),
+                          tooltip: 'Tutup',
+                          style: IconButton.styleFrom(
+                              backgroundColor: const Color(0xFFF0EDF4),
+                              minimumSize: const Size(32, 32),
+                              padding: EdgeInsets.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                          icon: const Icon(Icons.close_rounded, size: 20)),
+                    ]),
+                    const SizedBox(height: 4),
+                    Text(
+                        _days.isEmpty
+                            ? 'Hanya hari praktik profesional & sebelum paket kedaluwarsa.'
+                            : 'Tersedia pada hari ${_days.map((day) => _shortDay(day.date).split('\n').first).toSet().join(', ')}',
+                        style: const TextStyle(
+                            color: Color(0xFF7E818D),
+                            fontSize: 11,
+                            height: 1.5)),
+                    const SizedBox(height: 10),
+                    const Row(children: [
+                      Icon(Icons.videocam_rounded,
+                          color: MalvaColors.seed, size: 16),
+                      SizedBox(width: 8),
+                      Flexible(
+                          child: Text('Video • 1 jam per sesi',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: MalvaColors.seed,
+                                  fontSize: 11))),
+                    ]),
+                    if (_type == 'video' && _meetReady == false) ...[
+                      const SizedBox(height: 10),
+                      const Text(
+                          'Video tetap bisa dijadwalkan; link Meet dibuat setelah profesional mengaktifkan Google Calendar.',
                           style: TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 18))),
-                  IconButton.filledTonal(
-                      onPressed: () => Navigator.pop(context),
-                      tooltip: 'Tutup',
-                      style: IconButton.styleFrom(
-                          backgroundColor: const Color(0xFFF0EDF4),
-                          minimumSize: const Size(32, 32),
-                          padding: EdgeInsets.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                      icon: const Icon(Icons.close_rounded, size: 20)),
-                ]),
-                const SizedBox(height: 4),
-                const Text(
-                    'Hanya hari praktik profesional & sebelum paket kedaluwarsa.',
-                    style: TextStyle(
-                        color: Color(0xFF7E818D), fontSize: 11, height: 1.5)),
-                const SizedBox(height: 10),
-                const Row(children: [
-                  Icon(Icons.videocam_rounded,
-                      color: MalvaColors.seed, size: 16),
-                  SizedBox(width: 8),
-                  Flexible(
-                      child: Text('Video • 1 jam per sesi',
+                              fontSize: 11, color: Color(0xFF7E818D))),
+                    ],
+                    const SizedBox(height: 20),
+                    Row(children: [
+                      const Expanded(
+                        child: Text('1. Pilih Tanggal',
+                            style: TextStyle(fontWeight: FontWeight.w800)),
+                      ),
+                      if (widget.expiresAt != null)
+                        TextButton.icon(
+                          onPressed: _loadingDays ? null : _pickCalendar,
+                          icon: const Icon(Icons.calendar_today_outlined,
+                              size: 16),
+                          label: const Text('Kalender'),
+                        ),
+                    ]),
+                    const SizedBox(height: 10),
+                    if (_loadingDays)
+                      const Center(child: CircularProgressIndicator())
+                    else if (_days.isEmpty)
+                      const Text(
+                          'Belum ada slot dalam daftar. Cek tanggal lain di kalender.')
+                    else
+                      SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(children: [
+                            for (final d in _days)
+                              Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: ChoiceChip(
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    visualDensity: VisualDensity.compact,
+                                    label: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(_shortDay(d.date)
+                                              .split('\n')
+                                              .first),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                              _shortDay(d.date)
+                                                  .split('\n')
+                                                  .last,
+                                              style: const TextStyle(
+                                                  color: Color(0xff182330),
+                                                  fontWeight: FontWeight.w800)),
+                                        ]),
+                                    showCheckmark: false,
+                                    selected: _date == d.date,
+                                    selectedColor: const Color(0xfff6edf9),
+                                    backgroundColor: Colors.white,
+                                    checkmarkColor: Colors.white,
+                                    labelStyle: TextStyle(
+                                        color: _date == d.date
+                                            ? MalvaColors.seed
+                                            : const Color(0xFF535964),
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 18, vertical: 18),
+                                    side: const BorderSide(
+                                        color: Color(0xFFF0E7F7)),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(18)),
+                                    onSelected: (_) => setState(() {
+                                      _date = d.date;
+                                      _slot = null;
+                                    }),
+                                  )),
+                          ])),
+                    const SizedBox(height: 20),
+                    if (_date != null) ...[
+                      const Text('2. Pilih Jam (WIB)',
                           style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: MalvaColors.seed,
-                              fontSize: 11))),
-                ]),
-                if (_type == 'video' && _meetReady == false) ...[
-                  const SizedBox(height: 10),
-                  const Text(
-                      'Video tetap bisa dijadwalkan; link Meet dibuat setelah profesional mengaktifkan Google Calendar.',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF7E818D))),
-                ],
-                const SizedBox(height: 20),
-                Row(children: [
-                  const Expanded(
-                    child: Text('Pilih tanggal',
-                        style: TextStyle(fontWeight: FontWeight.w800)),
-                  ),
-                  if (widget.expiresAt != null)
-                    TextButton.icon(
-                      onPressed: _loadingDays ? null : _pickCalendar,
-                      icon: const Icon(Icons.calendar_today_outlined, size: 16),
-                      label: const Text('Kalender'),
-                    ),
-                ]),
-                const SizedBox(height: 10),
-                if (_loadingDays)
-                  const Center(child: CircularProgressIndicator())
-                else if (_days.isEmpty)
-                  const Text(
-                      'Belum ada slot dalam daftar. Cek tanggal lain di kalender.')
-                else
-                  SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(children: [
-                        for (final d in _days)
-                          Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: ChoiceChip(
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                visualDensity: VisualDensity.compact,
-                                label: Text(_shortDay(d.date)),
-                                selected: _date == d.date,
-                                selectedColor: MalvaColors.seed,
-                                backgroundColor: Colors.white,
-                                checkmarkColor: Colors.white,
-                                labelStyle: TextStyle(
-                                    color: _date == d.date
-                                        ? Colors.white
-                                        : const Color(0xFF535964),
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 10),
-                                side:
-                                    const BorderSide(color: Color(0xFFF0E7F7)),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(18)),
-                                onSelected: (_) => setState(() {
-                                  _date = d.date;
-                                  _slot = null;
-                                }),
-                              )),
-                      ])),
-                const SizedBox(height: 20),
-                if (_date != null) ...[
-                  const Text('PILIH JAM KONSULTASI',
-                      style: TextStyle(
-                          color: Color(0xFF999DA8),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: .4)),
-                  const SizedBox(height: 10),
-                  Text(_shortDay(_date!)),
-                  _FirstSessionSlots(
-                      key: ValueKey(_date),
-                      apiClient: widget.apiClient,
-                      accessToken: widget.accessToken,
-                      professionalId: widget.professionalId,
-                      date: _date!,
-                      serviceCategory: widget.serviceCategory,
-                      expiresAt: widget.expiresAt,
-                      excludedSlots: widget.excludedSlots,
-                      selected: _slot,
-                      onSelect: (time) => setState(() => _slot = time)),
-                ],
-                if (_error != null) ...[
-                  const SizedBox(height: 10),
-                  Text(_error!,
-                      style: const TextStyle(
-                          color: MalvaColors.danger,
-                          fontWeight: FontWeight.w700)),
-                ],
-                const SizedBox(height: 20),
-                FilledButton(
-                    onPressed: (_date == null || _slot == null)
-                        ? null
-                        : () =>
-                            Navigator.pop(context, '${_date}T$_slot|$_type'),
-                    style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(44),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18))),
-                    child: const Text('Pilih Jadwal',
-                        style: TextStyle(fontSize: 12))),
-              ]),
-        ),
-      ),
-    );
+                              color: Color(0xFF535964),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: .4)),
+                      const SizedBox(height: 10),
+                      _FirstSessionSlots(
+                          key: ValueKey(_date),
+                          apiClient: widget.apiClient,
+                          accessToken: widget.accessToken,
+                          professionalId: widget.professionalId,
+                          date: _date!,
+                          serviceCategory: widget.serviceCategory,
+                          expiresAt: widget.expiresAt,
+                          excludedSlots: widget.excludedSlots,
+                          selected: _slot,
+                          onSelect: (time) => setState(() => _slot = time)),
+                    ],
+                    if (_error != null) ...[
+                      const SizedBox(height: 10),
+                      Text(_error!,
+                          style: const TextStyle(
+                              color: MalvaColors.danger,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                    const SizedBox(height: 20),
+                    FilledButton(
+                        onPressed: (_date == null || _slot == null)
+                            ? null
+                            : () => Navigator.pop(
+                                context, '${_date}T$_slot|$_type'),
+                        style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(44),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18))),
+                        child: const Text('Pilih Jadwal',
+                            style: TextStyle(fontSize: 12))),
+                  ]),
+            ),
+          ),
+        ));
   }
 
   static String _shortDay(String yyyyMmDd) {
     final d = DateTime.tryParse(yyyyMmDd);
     if (d == null) return yyyyMmDd;
-    const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-    return '${days[d.weekday - 1]} ${d.day}/${d.month}';
+    const days = [
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu'
+    ];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des'
+    ];
+    return '${days[d.weekday - 1]}\n${d.day} ${months[d.month - 1]}';
   }
 }
 

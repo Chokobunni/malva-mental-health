@@ -28,96 +28,99 @@ void main() {
               .load('packages/cupertino_icons/assets/CupertinoIcons.ttf')))
         .load();
   });
-  testWidgets('professional edit updates only the selected prescription item',
-      (tester) async {
-    final item = BackendEPrescriptionItem(
-      id: 'item-1',
-      medicationId: 'med-1',
-      name: 'Injeksi terjadwal',
-      dosage: '10 mg',
-      frequency: 'Setiap 2 bulan',
-      form: 'Injeksi',
-      currentStock: 14,
-      remainingStock: 9,
-      alertBelow: 1,
-      unitsPerDay: 2,
-      schedule: MedicationSchedule(
-        times: const ['14:30'],
-        weekdays: const [1, 2, 3, 4, 5, 6, 7],
-        startAt: wibFromParts(2025, 12, 31, 14, 30),
-        intervalMonths: 2,
-        unitsPerDose: 2,
-        refillEnabled: false,
-      ),
-    );
-    const peer = BackendEPrescriptionItem(
-      id: 'item-2',
-      name: 'Obat kedua',
-      dosage: '5 mg',
-      frequency: '1x sehari',
-    );
-    final prescription = BackendEPrescription(
-      id: 'rx1',
-      professionalId: 'pro',
-      patientId: 'p1',
-      instructions: 'Instruksi umum',
-      notes: 'Catatan klinis',
-      diagnosis: 'Diagnosis',
-      signatureData: const {},
-      qrToken: 'sealed',
-      status: 'issued',
-      items: [item, peer],
-    );
-    http.Request? request;
-    final api = MalvaApiClient(
-      baseUrl: 'https://backend.test',
-      httpClient: MockClient((r) async {
-        request = r;
-        return http.Response('{"prescription":{"id":"rx1"}}', 200);
-      }),
-    );
-    await tester.pumpWidget(ProviderScope(
-      child: MaterialApp(
-        home: EPrescriptionFormScreen(
-          apiClient: api,
-          session: const AuthSession(
-            role: UserRole.professional,
-            identifier: 'pro',
-            displayName: 'Dokter',
-            accessToken: 'token',
-          ),
-          prescription: prescription,
+  for (final status in ['issued', 'draft']) {
+    testWidgets(
+        'professional edit updates only the selected $status prescription item',
+        (tester) async {
+      final item = BackendEPrescriptionItem(
+        id: 'item-1',
+        medicationId: 'med-1',
+        name: 'Injeksi terjadwal',
+        dosage: '10 mg',
+        frequency: 'Setiap 2 bulan',
+        form: 'Injeksi',
+        currentStock: 14,
+        remainingStock: 9,
+        alertBelow: 1,
+        unitsPerDay: 2,
+        schedule: MedicationSchedule(
+          times: const ['14:30'],
+          weekdays: const [1, 2, 3, 4, 5, 6, 7],
+          startAt: wibFromParts(2025, 12, 31, 14, 30),
+          intervalMonths: 2,
+          unitsPerDose: 2,
+          refillEnabled: false,
         ),
-      ),
-    ));
-    expect(find.text('Edit Obat'), findsOneWidget);
-    expect(find.text('Pilih pasien'), findsNothing);
-    await tester.enterText(find.byKey(const Key('rx-name')), 'Nama baru');
-    for (final title in [
-      'Edit Rutinitas',
-      'Edit Pengingat Obat',
-      'Edit Pengingat Stok',
-    ]) {
-      await tester.tap(find.byKey(const Key('rx-next')));
+      );
+      const peer = BackendEPrescriptionItem(
+        id: 'item-2',
+        name: 'Obat kedua',
+        dosage: '5 mg',
+        frequency: '1x sehari',
+      );
+      final prescription = BackendEPrescription(
+        id: 'rx1',
+        professionalId: 'pro',
+        patientId: 'p1',
+        instructions: 'Instruksi umum',
+        notes: 'Catatan klinis',
+        diagnosis: 'Diagnosis',
+        signatureData: const {},
+        qrToken: 'sealed',
+        status: status,
+        items: [item, peer],
+      );
+      http.Request? request;
+      final api = MalvaApiClient(
+        baseUrl: 'https://backend.test',
+        httpClient: MockClient((r) async {
+          request = r;
+          return http.Response('{"prescription":{"id":"rx1"}}', 200);
+        }),
+      );
+      await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
+          home: EPrescriptionFormScreen(
+            apiClient: api,
+            session: const AuthSession(
+              role: UserRole.professional,
+              identifier: 'pro',
+              displayName: 'Dokter',
+              accessToken: 'token',
+            ),
+            prescription: prescription,
+          ),
+        ),
+      ));
+      expect(find.text('Edit Obat'), findsOneWidget);
+      expect(find.text('Pilih pasien'), findsNothing);
+      await tester.enterText(find.byKey(const Key('rx-name')), 'Nama baru');
+      for (final title in [
+        'Edit Rutinitas',
+        'Edit Pengingat',
+        'Edit Pengingat Stok',
+      ]) {
+        await tester.tap(find.byKey(const Key('rx-next')));
+        await tester.pumpAndSettle();
+        expect(find.text(title), findsOneWidget);
+      }
+      expect(find.text('9 ampul'), findsOneWidget);
+      await tester.tap(find.text('Simpan dan Kirim Perubahan'));
       await tester.pumpAndSettle();
-      expect(find.text(title), findsOneWidget);
-    }
-    expect(find.text('9 ampul'), findsOneWidget);
-    await tester.tap(find.text('Simpan dan Kirim Perubahan'));
-    await tester.pumpAndSettle();
-    expect(request?.method, 'PUT');
-    expect(request?.url.path, '/v1/e-prescriptions/rx1');
-    final data = jsonDecode(request!.body) as Map<String, dynamic>;
-    expect(data['patient_id'], 'p1');
-    expect(data['status'], 'issued');
-    expect(data['diagnosis'], prescription.diagnosis);
-    expect(data['notes'], prescription.notes);
-    expect(data['instructions'], prescription.instructions);
-    expect(data['items'], [
-      {...item.toJson(), 'name': 'Nama baru'},
-      peer.toJson(),
-    ]);
-  });
+      expect(request?.method, 'PUT');
+      expect(request?.url.path, '/v1/e-prescriptions/rx1');
+      final data = jsonDecode(request!.body) as Map<String, dynamic>;
+      expect(data['patient_id'], 'p1');
+      expect(data['status'], status);
+      expect(data['diagnosis'], prescription.diagnosis);
+      expect(data['notes'], prescription.notes);
+      expect(data['instructions'], prescription.instructions);
+      expect(data['items'], [
+        {...item.toJson(), 'name': 'Nama baru'},
+        peer.toJson(),
+      ]);
+    });
+  }
 
   for (final variant in [
     for (final mode in [

@@ -36,15 +36,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             setState(() => _role = UserRole.professional),
       );
     }
-    if (role == UserRole.patient) {
-      return PatientLoginScreen(
-        onAuthenticated: widget.onAuthenticated,
-        onBackToRole: () => setState(() => _role = null),
-      );
-    }
-    return ProfessionalLoginScreen(
-      onAuthenticated: widget.onAuthenticated,
-      onBackToRole: () => setState(() => _role = null),
+    void showRoleGate() => setState(() => _role = null);
+    return PopScope<Object?>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) showRoleGate();
+      },
+      child: role == UserRole.patient
+          ? PatientLoginScreen(
+              onAuthenticated: widget.onAuthenticated,
+              onBackToRole: showRoleGate,
+            )
+          : ProfessionalLoginScreen(
+              onAuthenticated: widget.onAuthenticated,
+              onBackToRole: showRoleGate,
+            ),
     );
   }
 }

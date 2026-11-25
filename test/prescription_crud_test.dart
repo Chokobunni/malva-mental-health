@@ -251,16 +251,28 @@ void main() {
     expect(find.text('QR & Detail'), findsNWidgets(2));
     await tester.tap(find.byKey(const Key('rx-edit-rx1')));
     await tester.pumpAndSettle();
-    expect(find.text('Edit E-Prescription'), findsOneWidget);
-    await tester.enterText(
-        find.widgetWithText(TextFormField, 'Diagnosis ICD-10 / Indikasi'),
-        'F41.1 • diperbarui');
-    final save = find.text('Simpan Perubahan');
+    expect(find.text('Edit Obat'), findsOneWidget);
+    expect(find.text('Tambah Obat'), findsNothing);
+    expect(find.text('Diagnosis ICD-10 / Indikasi'), findsNothing);
+    expect(find.text('Status penerbitan'), findsNothing);
+    await tester.enterText(find.byKey(const Key('rx-name')), 'Sertraline baru');
+    for (final title in [
+      'Edit Rutinitas',
+      'Edit Pengingat',
+      'Edit Pengingat Stok'
+    ]) {
+      await tester.tap(find.byKey(const Key('rx-next')));
+      await tester.pumpAndSettle();
+      expect(find.text(title), findsOneWidget);
+    }
+    final save = find.text('Simpan dan Kirim Perubahan');
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();
-    expect(saved!['diagnosis'], 'F41.1 • diperbarui');
+    expect(saved!['diagnosis'], 'F41.1');
+    expect(saved!['status'], 'issued');
     final changed = (saved!['items'] as List).single as Map;
+    expect(changed['name'], 'Sertraline baru');
     expect(changed['id'], 'i1');
     expect(changed['current_stock'], 30,
         reason: 'remaining27 must not replace supplied30');
@@ -270,7 +282,7 @@ void main() {
     await tester.ensureVisible(detail);
     await tester.tap(detail);
     await tester.pumpAndSettle();
-    expect(find.text('F41.1 • diperbarui'), findsOneWidget);
+    expect(find.text('F41.1'), findsOneWidget);
     final draft = find.text('Jadikan Draft');
     await tester.scrollUntilVisible(draft, 400,
         scrollable: find.byType(Scrollable).first);

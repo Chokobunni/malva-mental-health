@@ -115,8 +115,7 @@ void main() {
         await tester.tap(find.text('Aksi lain').first);
         await tester.pumpAndSettle();
       }
-      final reschedule =
-          find.text(isPatient ? 'Reschedule' : 'Jadwalkan ulang').first;
+      final reschedule = find.text('Reschedule').first;
       await tester.ensureVisible(reschedule);
       await tester.tap(reschedule);
       await tester.pumpAndSettle();

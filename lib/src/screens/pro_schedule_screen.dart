@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
@@ -15,7 +16,7 @@ import '../widgets/friendly_error.dart';
 import '../widgets/care_reference_widgets.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/professional_schedule_calendar.dart';
-import '../widgets/meet_join_button.dart';
+import '../widgets/care_session_card.dart';
 import '../widgets/professional_availability_summary.dart';
 import 'chat_screen.dart';
 import 'pro_patient_detail_screen.dart';
@@ -135,225 +136,227 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Parallel scope requests may straddle completion; terminal state wins.
     final sessionsById = <String, BackendCareSession>{};
     for (final s in [..._today, ..._upcoming, ..._past]) {
       if (sessionsById[s.id]?.isScheduled ?? true) sessionsById[s.id] = s;
     }
-    final needsCompletion = sessionsById.values
-        .where((s) => s.isScheduled && s.isAfterJoinWindow)
-        .toList()
+    final all = sessionsById.values.toList()
       ..sort((a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
-    final today = _today
-        .map((s) => sessionsById[s.id]!)
-        .where((s) => s.isScheduled && !s.isAfterJoinWindow)
-        .toList();
-    final todayIds = today.map((s) => s.id).toSet();
-    final upcoming = _upcoming
-        .map((s) => sessionsById[s.id]!)
-        .where((s) =>
-            s.isScheduled && !s.isAfterJoinWindow && !todayIds.contains(s.id))
-        .toList();
-    final completionIds = needsCompletion.map((s) => s.id).toSet();
-    final past = _past
-        .map((s) => sessionsById[s.id]!)
-        .where((s) => !completionIds.contains(s.id))
-        .toList();
-    final now = wibNow();
+    final needsCompletion =
+        all.where((s) => s.isScheduled && s.isAfterJoinWindow).toList();
+    final past = all.where((s) => !s.isScheduled).toList().reversed.toList();
+    final active =
+        all.where((s) => s.isScheduled && !s.isAfterJoinWindow).toList();
+    final now = ServerClock.now();
+    final todayKey = wibDateKey(now);
     final month = _calendarMonth ?? wibFromParts(now.year, now.month, 1);
     final byDate = <String, List<BackendCareSession>>{};
-    for (final session in [...today, ...upcoming]) {
-      final at = session.scheduledDateTime;
-      if (at != null) {
-        (byDate[wibDateKey(at)] ??= []).add(session);
-      }
+    for (final s in (_historyExpanded ? past : active)) {
+      final at = s.scheduledDateTime;
+      if (at != null) (byDate[wibDateKey(at)] ??= []).add(s);
     }
     final selectedKey =
         _selectedDate == null ? null : wibDateKey(_selectedDate!);
-    final selected = byDate[selectedKey];
-    final filtered = selected == null
-        ? upcoming
-        : upcoming.where((s) => selected.contains(s)).toList();
-    final selectionLabel = selected == null
-        ? 'Semua tanggal'
-        : professionalScheduleDateLabel(_selectedDate!);
-    void clearSelection() => setState(() => _selectedDate = null);
-    return Theme(
-        data: Theme.of(context).copyWith(
-            cardTheme: Theme.of(context).cardTheme.copyWith(elevation: .35)),
-        child: RefreshIndicator(
-          onRefresh: _load,
-          child: ListView(
-            padding: const EdgeInsets.all(18),
-            children: [
-              if (widget.header != null) ...[
-                widget.header!,
-                const SizedBox(height: 14),
-              ],
-              if (needsCompletion.isNotEmpty) ...[
-                const SectionLabel('Perlu diselesaikan',
-                    icon: Icons.task_alt_rounded),
-                for (final s in needsCompletion) ...[
-                  _ProSessionCard(
-                      key: ValueKey('complete-${s.id}'),
-                      session: s,
-                      onChanged: _load,
-                      accessToken: _token,
-                      apiClient: _api),
-                  const SizedBox(height: 10),
-                ],
-              ],
-              if (!_isLoading && _error == null) ...[
-                ProfessionalScheduleCalendar(
-                  month: month,
-                  today: now,
-                  sessionsByDate: byDate,
-                  selectedDate: selected == null ? null : _selectedDate,
-                  onMonthChanged: (offset) => setState(() {
-                    _calendarMonth =
-                        wibFromParts(month.year, month.month + offset, 1);
-                    _selectedDate = null;
-                  }),
-                  onClear: clearSelection,
-                  onDateTapped: (date) {
-                    final key = wibDateKey(date);
-                    if (key == selectedKey) {
-                      clearSelection();
-                    } else if (byDate.containsKey(key)) {
-                      setState(() => _selectedDate = date);
-                    } else {
-                      ScaffoldMessenger.of(context)
-                        ..hideCurrentSnackBar()
-                        ..showSnackBar(const SnackBar(
-                          content: Text('Tidak ada sesi pada tanggal ini.'),
-                        ));
-                    }
-                  },
-                ),
-                const SizedBox(height: 14),
-              ],
-              if (_isLoading)
-                const Center(child: CircularProgressIndicator())
-              else if (_error != null)
-                SoftCard(
-                  bordered: false,
-                  child: Column(
-                    children: [
-                      Text(_error!,
-                          style: const TextStyle(
-                              color: MalvaColors.danger,
-                              fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
+    bool selected(BackendCareSession s) =>
+        selectedKey == null ||
+        (s.scheduledDateTime != null &&
+            wibDateKey(s.scheduledDateTime!) == selectedKey);
+    final today = active
+        .where((s) =>
+            s.scheduledDateTime != null &&
+            wibDateKey(s.scheduledDateTime!) == todayKey &&
+            selected(s))
+        .toList();
+    final upcoming = active
+        .where((s) =>
+            s.scheduledDateTime == null ||
+            wibDateKey(s.scheduledDateTime!) != todayKey)
+        .where(selected)
+        .toList();
+    final history = past.where(selected).toList();
+    Widget cards(List<BackendCareSession> sessions, String prefix) =>
+        Column(children: [
+          for (final s in sessions)
+            Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _ProSessionCard(
+                    key: ValueKey('$prefix-${s.id}'),
+                    session: s,
+                    onChanged: _load,
+                    accessToken: _token,
+                    apiClient: _api))
+        ]);
+    Widget tab(String title, bool history) => Expanded(
+        child: InkWell(
+            key: history ? const ValueKey('session-history-toggle') : null,
+            onTap: () => setState(() {
+                  _historyExpanded = history;
+                  _selectedDate = null;
+                }),
+            child: Container(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+                decoration: BoxDecoration(
+                    color: _historyExpanded == history
+                        ? const Color(0xffead5f2)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(14)),
+                child: Text(title,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: _historyExpanded == history
+                            ? MalvaColors.seed
+                            : Colors.black54)))));
+    return Column(children: [
+      if (widget.header != null)
+        Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+            child: widget.header!),
+      Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xffe9dcef))),
+          child: Row(children: [
+            tab('List Sesi', false),
+            tab('Riwayat Sesi (${past.where((s) => s.status == 'completed').length})',
+                true)
+          ])),
+      Expanded(
+          child: RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(padding: const EdgeInsets.all(18), children: [
+                if (_isLoading)
+                  const Center(child: CircularProgressIndicator())
+                else if (_error != null)
+                  SoftCard(
+                      child: Column(children: [
+                    Text(_error!,
+                        style: const TextStyle(color: MalvaColors.danger)),
+                    OutlinedButton.icon(
                         onPressed: _load,
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: const Text('Coba Lagi'),
-                      ),
-                    ],
-                  ),
-                )
-              else ...[
-                if (today.isEmpty)
-                  const CareIllustratedCard(
-                    horizontal: true,
-                    imageHeight: 85,
-                    asset: 'pro-today',
-                    title: 'Sesi hari ini',
-                    subtitle: 'Tidak ada sesi hari ini',
-                  )
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Coba Lagi'))
+                  ]))
                 else ...[
-                  const SectionLabel('Sesi hari ini'),
-                  for (final s in today) ...[
-                    _ProSessionCard(
-                        key: ValueKey('today-${s.id}'),
-                        session: s,
-                        onChanged: _load,
-                        accessToken: _token,
-                        apiClient: _api),
-                    const SizedBox(height: 10),
+                  if (!_historyExpanded && needsCompletion.isNotEmpty) ...[
+                    const SectionLabel('Perlu diselesaikan',
+                        icon: Icons.task_alt_rounded),
+                    cards(needsCompletion, 'complete')
                   ],
-                ],
-                const SizedBox(height: 14),
-                Row(children: [
-                  const Flexible(
-                    child: Text('Mendatang',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w800)),
-                  ),
-                  const SizedBox(width: 8),
-                  StatusPill(
-                      label: '${filtered.length} sesi',
-                      color: MalvaColors.seed),
-                  const Spacer(),
-                  Flexible(
-                    child: Text(selectionLabel,
-                        textAlign: TextAlign.end,
-                        style: const TextStyle(color: MalvaColors.seed)),
-                  ),
-                ]),
-                const SizedBox(height: 10),
-                if (filtered.isEmpty)
-                  CareIllustratedCard(
-                    horizontal: true,
-                    imageHeight: 85,
-                    asset: 'pro-upcoming',
-                    title: selected == null
-                        ? 'Belum ada sesi mendatang'
-                        : 'Tidak ada sesi mendatang pada tanggal ini.',
-                  ),
-                for (final s in filtered) ...[
-                  _ProSessionCard(
-                      key: ValueKey('upcoming-${s.id}'),
-                      session: s,
-                      onChanged: _load,
-                      accessToken: _token,
-                      apiClient: _api),
-                  const SizedBox(height: 10),
-                ],
-                if (selected != null)
-                  OutlinedButton.icon(
-                    onPressed: clearSelection,
-                    icon: const Icon(Icons.layers_outlined),
-                    label: Text('Tampilkan semua sesi (${upcoming.length})'),
-                  ),
-                const SizedBox(height: 14),
-                SoftCard(
-                    radius: 14,
-                    padding: EdgeInsets.zero,
-                    child: ListTile(
-                      key: const ValueKey('session-history-toggle'),
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 13),
-                      leading: const Icon(Icons.history_rounded),
-                      title: const Text('Riwayat sesi',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
-                      subtitle: Text('${past.length} sesi'),
-                      trailing: Icon(_historyExpanded
-                          ? Icons.expand_less_rounded
-                          : Icons.expand_more_rounded),
-                      onTap: () =>
-                          setState(() => _historyExpanded = !_historyExpanded),
-                    )),
-                if (_historyExpanded && past.isEmpty)
-                  const EmptyState(
-                    icon: Icons.history_rounded,
-                    title: 'Belum ada riwayat',
-                    subtitle: 'Sesi selesai / batal tercatat di sini.',
-                  )
-                else if (_historyExpanded)
-                  for (final s in past) ...[
-                    _ProSessionCard(
-                        key: ValueKey('past-${s.id}'),
-                        session: s,
-                        onChanged: _load,
-                        accessToken: _token,
-                        apiClient: _api),
-                    const SizedBox(height: 10),
+                  Container(
+                      padding: const EdgeInsets.all(14),
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(15)),
+                      child: Row(children: [
+                        const Icon(Icons.calendar_today_outlined,
+                            color: MalvaColors.seed),
+                        const SizedBox(width: 10),
+                        Expanded(
+                            child: Text('Hari ini • ${wibWeekdayDate(now)}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800))),
+                        Text(
+                            '${active.where((s) => s.scheduledDateTime != null && wibDateKey(s.scheduledDateTime!) == todayKey).length} sesi',
+                            style: const TextStyle(
+                                color: MalvaColors.seed,
+                                fontWeight: FontWeight.w700))
+                      ])),
+                  if (!_historyExpanded) ...[
+                    ProfessionalScheduleCalendar(
+                        month: month,
+                        today: now,
+                        sessionsByDate: byDate,
+                        selectedDate: _selectedDate,
+                        onMonthChanged: (offset) => setState(() {
+                              _calendarMonth = wibFromParts(
+                                  month.year, month.month + offset, 1);
+                              _selectedDate = null;
+                            }),
+                        onClear: () => setState(() => _selectedDate = null),
+                        onDateTapped: (date) {
+                          if (!byDate.containsKey(wibDateKey(date))) {
+                            ScaffoldMessenger.of(context)
+                              ..hideCurrentSnackBar()
+                              ..showSnackBar(const SnackBar(
+                                  content: Text(
+                                      'Tidak ada sesi pada tanggal ini.')));
+                            return;
+                          }
+                          setState(() => _selectedDate =
+                              wibDateKey(date) == selectedKey ? null : date);
+                        }),
+                    const SizedBox(height: 14)
                   ],
-              ],
-            ],
-          ),
-        ));
+                  Row(children: [
+                    Expanded(
+                        child: Text(
+                            _historyExpanded ? 'Riwayat Sesi' : 'Daftar Sesi',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 18))),
+                    OutlinedButton.icon(
+                        onPressed: () async {
+                          final date = await showDatePicker(
+                              context: context,
+                              initialDate: _selectedDate ?? now,
+                              firstDate: wibFromParts(2020, 1, 1),
+                              lastDate: wibFromParts(now.year + 10, 12, 31));
+                          if (date != null && mounted)
+                            setState(() => _selectedDate =
+                                wibFromParts(date.year, date.month, date.day));
+                        },
+                        icon: const Icon(Icons.tune, size: 17),
+                        label: Text(_selectedDate == null
+                            ? 'Semua tanggal'
+                            : professionalScheduleDateLabel(_selectedDate!)))
+                  ]),
+                  if (_selectedDate != null)
+                    Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                            onPressed: () =>
+                                setState(() => _selectedDate = null),
+                            child: const Text('Tampilkan semua sesi'))),
+                  const SizedBox(height: 12),
+                  if (_historyExpanded) ...[
+                    if (history.isEmpty)
+                      const EmptyState(
+                          icon: Icons.history_rounded,
+                          title: 'Belum ada riwayat',
+                          subtitle: 'Sesi selesai / batal tercatat di sini.')
+                    else
+                      cards(history, 'past')
+                  ] else ...[
+                    if (today.isEmpty)
+                      const CareIllustratedCard(
+                          horizontal: true,
+                          imageHeight: 85,
+                          asset: 'pro-today',
+                          title: 'Sesi hari ini',
+                          subtitle: 'Tidak ada sesi hari ini')
+                    else ...[
+                      const SectionLabel('Sesi hari ini'),
+                      cards(today, 'today')
+                    ],
+                    const SizedBox(height: 14),
+                    const SectionLabel('Mendatang'),
+                    if (upcoming.isEmpty)
+                      const CareIllustratedCard(
+                          horizontal: true,
+                          imageHeight: 85,
+                          asset: 'pro-upcoming',
+                          title: 'Belum ada sesi mendatang')
+                    else
+                      cards(upcoming, 'upcoming'),
+                  ]
+                ]
+              ])))
+    ]);
   }
 }
 
@@ -371,215 +374,47 @@ class _ProSessionCard extends ConsumerWidget {
   final Future<void> Function() onChanged;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final at = session.scheduledDateTime;
-    final dateLabel = at == null
-        ? '-'
-        : '${wibWeekdayDate(at)} • ${formatWibBubbleTime(at)} WIB';
-    final statusColor = switch (session.status) {
-      'scheduled' => MalvaColors.seed,
-      'completed' => MalvaColors.mint,
-      'no_show' => MalvaColors.danger,
-      'cancelled_by_professional' => MalvaColors.amber,
-      'cancelled_by_patient' => Theme.of(context).colorScheme.onSurfaceVariant,
-      _ => Theme.of(context).colorScheme.onSurfaceVariant,
-    };
-    final statusLabel = switch (session.status) {
-      'scheduled' =>
-        session.isAfterJoinWindow ? 'Menunggu penyelesaian' : 'Terjadwal',
-      'completed' => 'Selesai',
-      'no_show' => 'Tidak hadir',
-      'cancelled_by_professional' => 'Dibatalkan profesional',
-      'cancelled_by_patient' => 'Dibatalkan pasien',
-      'expired_unpaid' => 'Pembayaran kedaluwarsa',
-      'pending_payment' => 'Menunggu pembayaran',
-      _ => session.status,
-    };
-    // Aksi sesi hanya tersedia selama sesi scheduled berada dalam jendela.
-    final live = session.canJoinNow;
-    return SoftCard(
-      padding: EdgeInsets.zero,
-      color: Colors.white,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          backgroundColor:
-                              MalvaColors.seed.withValues(alpha: 0.12),
-                          child: Text(
-                            session.patientName.isEmpty
-                                ? '?'
-                                : session.patientName.characters.first
-                                    .toUpperCase(),
-                            style: const TextStyle(
-                                color: MalvaColors.seed,
-                                fontWeight: FontWeight.w900),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                session.patientName.isEmpty
-                                    ? 'Pasien'
-                                    : session.patientName,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w900),
-                              ),
-                              Text(
-                                dateLabel,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (!session.isScheduled) ...[
-                          const SizedBox(width: 8),
-                          ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 112),
-                              child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 5),
-                                  decoration: BoxDecoration(
-                                      color: statusColor.withValues(alpha: .09),
-                                      borderRadius: BorderRadius.circular(5)),
-                                  child: Text(statusLabel,
-                                      style: TextStyle(
-                                          color: statusColor,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w800)))),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          if (session.isScheduled)
-                            StatusPill(label: statusLabel, color: statusColor),
-                          Text(
-                              '${session.isVideo ? 'Video' : 'Chat'} • ${session.durationMinutes} mnt • ${session.packageId == null ? 'Sekali sesi' : 'Paket'}',
-                              style: Theme.of(context).textTheme.bodySmall),
-                        ]),
-                    if (session.isScheduled && session.isBeforeJoinWindow) ...[
-                      const SizedBox(height: 8),
-                      const Text('Check-in dibuka 10 menit sebelum sesi.'),
-                    ],
-                    if (session.summaryForPatient.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text('Ringkasan: ${session.summaryForPatient}',
-                          style: Theme.of(context).textTheme.bodySmall),
-                    ],
-                    if (session.cancelReason.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text('Alasan: ${session.cancelReason}',
-                          style: Theme.of(context).textTheme.bodySmall),
-                    ],
-                    if (session.cancelledByProfessional ||
-                        session.status == 'no_show') ...[
-                      const SizedBox(height: 6),
-                      Text(
-                          session.cancelledByProfessional
-                              ? 'Kuota sesi pasien dikembalikan.'
-                              : 'Kuota sesi pasien terpakai.',
-                          style: Theme.of(context).textTheme.bodySmall),
-                    ],
-                    if (!session.isScheduled) ...[
-                      const SizedBox(height: 6),
-                      SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton(
-                            onPressed: () => _openPatientDetail(
-                                context, ref, session, apiClient),
-                            style: OutlinedButton.styleFrom(
-                                side:
-                                    const BorderSide(color: Color(0xFFE5E7EB)),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12)),
-                                minimumSize: const Size(0, 36)),
-                            child: const Text('Buka detail pasien'),
-                          )),
-                    ],
-                    // Konfirmasi hadir tidak menutup sesi; batas akhir tetap menutup akses.
-                    if (live) ...[
-                      const SizedBox(height: 10),
-                      // Sesi video: tombol gabung Google Meet dengan jendela waktu.
-                      // Bila link belum ada, tombol berubah menjadi "Siapkan link Meet".
-                      if (session.isVideo) ...[
-                        MeetJoinButton(
-                          session: session,
-                          accessToken:
-                              ref.read(currentSessionProvider)?.accessToken ??
-                                  '',
-                          expanded: true,
-                          onSessionChanged: (_) {
-                            onChanged();
-                          },
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                      // Lapis 2 — aksi primer selama jendela sesi terbuka.
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          FilledButton.icon(
-                            onPressed: () => _openChat(context),
-                            style: compactFilledButtonStyle,
-                            icon:
-                                const Icon(Icons.chat_bubble_rounded, size: 16),
-                            label: const Text('Join / Chat'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ])),
-          // Lapis 3 — aksi sekunder (batal/pindah/detail) hanya relevan
-          // untuk sesi yang masih scheduled.
-          if (session.isScheduled && !session.isAfterJoinWindow) ...[
-            ProfessionalSessionActions(
-              key: ValueKey('aksi-lain-${session.id}'),
-              session: session,
-              accessToken: accessToken,
-              apiClient: apiClient,
-              onChanged: onChanged,
-            ),
-          ],
-          if (session.isScheduled && !session.isBeforeJoinWindow)
-            Padding(
-                padding: const EdgeInsets.all(16),
-                child: SessionAttendanceActions(
+  Widget build(BuildContext context, WidgetRef ref) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        CareSessionCard(
+            session: session,
+            role: UserRole.professional,
+            detailLabel: session.isScheduled
+                ? 'Lihat Detail Sesi'
+                : 'Lihat Detail & Catatan Sesi',
+            onChanged: onChanged,
+            accessToken: accessToken,
+            apiClient: apiClient,
+            onProfile: () =>
+                _openPatientDetail(context, ref, session, apiClient),
+            onOpenChat: () => _openChat(context),
+            otherActions: session.isScheduled && !session.isAfterJoinWindow
+                ? ProfessionalSessionActions(
                     session: session,
-                    role: UserRole.professional,
-                    onChanged: onChanged)),
-        ],
-      ),
-    );
-  }
-
+                    onChanged: onChanged,
+                    accessToken: accessToken,
+                    apiClient: apiClient)
+                : null),
+        if (session.isScheduled && !session.isBeforeJoinWindow)
+          Padding(
+              padding: const EdgeInsets.all(12),
+              child: SessionAttendanceActions(
+                  session: session,
+                  role: UserRole.professional,
+                  onChanged: onChanged,
+                  accessToken: accessToken,
+                  apiClient: apiClient)),
+      ]);
   void _openChat(BuildContext context) {
     if (!session.canJoinNow) return;
     Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ChatScreen(
-          otherUserName:
-              session.patientName.isEmpty ? 'Pasien' : session.patientName,
-          otherUserId: session.patientId,
-        ),
-      ),
-    );
+        context,
+        MaterialPageRoute(
+            builder: (_) => ChatScreen(
+                otherUserName: session.patientName.isEmpty
+                    ? 'Pasien'
+                    : session.patientName,
+                otherUserId: session.patientId)));
   }
 }
 
@@ -602,52 +437,87 @@ class ProfessionalSessionActions extends ConsumerWidget {
       (session.scheduledDateTime?.isAfter(ServerClock.now()) ?? false);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return CollapsibleCard(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-      header: const Text(
-        'Aksi lain',
-        style: TextStyle(
-            fontWeight: FontWeight.w800, fontSize: 12, color: Colors.black54),
-      ),
-      color: const Color(0xFFF7F8FA),
-      child: LayoutBuilder(builder: (context, constraints) {
-        Widget action(
-                IconData icon, String title, VoidCallback? onPressed) =>
-            SizedBox(
-                width: (constraints.maxWidth - 8) / 2,
-                child: OutlinedButton.icon(
-                    onPressed: onPressed,
-                    style: OutlinedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        side: const BorderSide(color: Color(0xFFE5E7EB)),
-                        shape:
-                            RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(11)),
-                        minimumSize: const Size(0, 34),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 8),
-                        textStyle: Theme.of(context)
-                            .textTheme
-                            .labelLarge
-                            ?.copyWith(
-                                fontSize: 12, fontWeight: FontWeight.w700)),
-                    icon: Icon(icon, size: 15),
-                    label: Text(title, textAlign: TextAlign.center)));
-        return Wrap(spacing: 8, runSpacing: 8, children: [
-          action(Icons.person_outline_rounded, 'Detail pasien',
-              () => _openPatientDetail(context, ref, session, apiClient)),
-          action(Icons.cancel_outlined, 'Batal',
-              _canCancel ? () => _cancel(context, ref) : null),
-          action(Icons.edit_calendar_rounded, 'Jadwalkan ulang',
-              () => _reschedule(context, ref)),
-          if (session.isVideo)
-            action(Icons.link_rounded, 'Link', () => _editLink(context, ref)),
-        ]);
-      }),
-    );
-  }
-
+  Widget build(BuildContext context, WidgetRef ref) => Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 13),
+          childrenPadding: const EdgeInsets.all(12),
+          backgroundColor: const Color(0xfff7f4fa),
+          collapsedBackgroundColor: const Color(0xfff7f4fa),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
+          collapsedShape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
+          title: const Text('Aksi lain',
+              style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                  color: Colors.black54)),
+          children: [
+            LayoutBuilder(builder: (context, constraints) {
+              Widget action(IconData icon, String label, VoidCallback? callback,
+                      {bool full = false, bool danger = false}) =>
+                  SizedBox(
+                      width: full
+                          ? constraints.maxWidth
+                          : (constraints.maxWidth - 8) / 2,
+                      child: OutlinedButton.icon(
+                          onPressed: callback,
+                          style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 40),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 9),
+                              backgroundColor: danger
+                                  ? const Color(0xfffff6f7)
+                                  : Colors.white,
+                              foregroundColor: danger
+                                  ? MalvaColors.danger
+                                  : MalvaColors.seed,
+                              side: BorderSide(
+                                  color: danger
+                                      ? const Color(0xfff2dadd)
+                                      : const Color(0xffece6f1)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                              textStyle:
+                                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                          icon: Icon(icon, size: 17),
+                          label: Text(label, textAlign: TextAlign.center)));
+              return Wrap(spacing: 8, runSpacing: 8, children: [
+                if (!session.isVideo)
+                  action(Icons.event_repeat, 'Reschedule',
+                      () => _reschedule(context, ref),
+                      full: true),
+                action(Icons.person_outline, 'Profil',
+                    () => _openPatientDetail(context, ref, session, apiClient)),
+                action(Icons.cancel_outlined, 'Batal',
+                    _canCancel ? () => _cancel(context, ref) : null,
+                    danger: true),
+                if (session.isVideo) ...[
+                  action(Icons.event_repeat, 'Reschedule',
+                      () => _reschedule(context, ref)),
+                  action(Icons.link, 'Link', () async {
+                    if (session.meetingUrl.trim().isEmpty) {
+                      await _editLink(context, ref);
+                    } else {
+                      await Clipboard.setData(
+                          ClipboardData(text: session.meetingUrl));
+                      if (context.mounted)
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Link sesi disalin.')));
+                    }
+                  })
+                ],
+                if (session.isVideo && session.meetingUrl.trim().isNotEmpty)
+                  Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                          onPressed: () => _editLink(context, ref),
+                          child: const Text('Ubah link video'))),
+              ]);
+            })
+          ]));
   Future<void> _cancel(BuildContext context, WidgetRef ref) async {
     var reason = '';
     final confirmed = await showDialog<bool>(

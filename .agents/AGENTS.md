@@ -4,6 +4,7 @@
 
 - Mini Summary, Obat, dan ekspor memakai jadwal WIB serta log yang tersimpan. Catatan lama `partial` dihitung dan ditampilkan sebagai `taken`. Perhitungan melewatkan dosis yang belum jatuh tempo dan mengutamakan catatan diminum jika ada beberapa status untuk dosis yang sama.
 - Riwayat Target & Kebiasaan dan PDF menampilkan jadwal tetap yang sudah lewat tanpa log sebagai Tidak dilakukan. Baris turunan tidak disimpan dan tidak memberi izin koreksi checklist di luar jadwal.
+- Target mingguan 7 kali menghasilkan satu kejadian per hari untuk jadwal mingguan fleksibel serta data lama tanpa detail, mulai dari tanggal mulai atau tanggal pembuatan WIB.
 - Jadwal profesional Android dan web menyaring Mendatang berdasarkan tanggal WIB. Home profesional Android dan Percakapan memakai alur sesi yang sudah ada. Ringkasan sesi tersedia di riwayat.
 - Rincian Hasil menampilkan tabel arti skor baku untuk PHQ-9 dan GAD-7 tanpa mengubah skor, CF, atau indikator keselamatan.
 
