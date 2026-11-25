@@ -802,10 +802,11 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 		return CareSession{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var current, patientAttendance string
+	var current, patientAttendance, professionalID string
 	var start time.Time
 	var duration int
-	if err := tx.QueryRowContext(ctx, `SELECT status, scheduled_at, duration_minutes, patient_attendance FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&current, &start, &duration, &patientAttendance); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT status, scheduled_at, duration_minutes, patient_attendance, professional_id
+		FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&current, &start, &duration, &patientAttendance, &professionalID); err != nil {
 		return CareSession{}, err
 	}
 	if current == status && current != "scheduled" {
@@ -818,8 +819,14 @@ func (s *Store) UpdateCareSessionStatus(ctx context.Context, sessionID, status, 
 		return CareSession{}, ErrCareSessionTerminal
 	}
 	if status == "finalize" || status == "completed" || status == "no_show" {
-		if clock.Now().Before(start.Add(time.Duration(duration) * time.Minute)) {
-			return CareSession{}, errCareSessionNotEnded
+		now := clock.Now()
+		if now.Before(start.Add(time.Duration(duration) * time.Minute)) {
+			if status != "completed" {
+				return CareSession{}, errCareSessionNotEnded
+			}
+			if actorID != professionalID || !inSessionWindow(now, start, duration) {
+				return CareSession{}, errors.New("hanya profesional sesi yang bisa menyelesaikan sesi setelah check-in dibuka")
+			}
 		}
 		switch {
 		case status == "finalize":
@@ -1537,6 +1544,26 @@ func (s *Store) ChatAccessFor(ctx context.Context, patientID, professionalID, se
 		out.CanSendText = true
 		out.CanShare = senderRole != "patient" || hasPkg || !now.Before(start)
 		return out, nil
+	}
+	// Opening package chat before check-in does not activate clinical actions.
+	if hasPkg {
+		err = s.db.QueryRowContext(ctx, `SELECT EXISTS (
+			SELECT 1 FROM care_sessions cs
+			JOIN care_packages original ON original.id = cs.package_id
+			JOIN care_packages usable ON usable.id = COALESCE(original.merged_into, original.id)
+			WHERE cs.patient_id = $1 AND cs.professional_id = $2
+			  AND cs.status = 'scheduled' AND cs.session_type = 'chat'
+			  AND cs.scheduled_at > $3
+			  AND usable.patient_id = $1 AND usable.professional_id = $2
+			  AND usable.status = 'active' AND usable.starts_at <= $3 AND usable.expires_at > $3
+		)`, patientID, professionalID, now).Scan(&out.CanSendText)
+		if err != nil {
+			return ChatAccess{}, err
+		}
+		if out.CanSendText {
+			out.CanShare = senderRole == "patient"
+			return out, nil
+		}
 	}
 	// Di luar sesi: pasien dengan paket aktif boleh share data, TANPA teks.
 	if senderRole == "patient" && hasPkg {

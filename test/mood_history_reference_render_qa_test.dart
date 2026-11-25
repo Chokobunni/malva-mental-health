@@ -47,6 +47,7 @@ void main() {
           baseUrl: 'https://test.invalid',
           httpClient: MockClient((r) async => http.Response(
               jsonEncode({
+                'medications': [],
                 'medication_logs': [
                   {
                     'id': 'a',

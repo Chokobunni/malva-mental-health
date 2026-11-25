@@ -5,6 +5,56 @@ import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
 import '../time/wib.dart';
 import '../services/medication_adherence.dart';
+import '../services/server_clock.dart';
+
+/// Same scheduled-dose reconciliation as the PDF; inferred misses stay local.
+List<BackendMedicationLog> medicationHistoryRows(List<Medication> medications,
+    List<BackendMedicationLog> records, DateTime now) {
+  var start = medicationDay(now);
+  final logs = <MedicationLog>[];
+  for (final record in records) {
+    final at = record.takenAt ?? record.createdAt;
+    if (at == null) continue;
+    if (at.isBefore(start)) start = medicationDay(at);
+    logs.add(MedicationLog(
+        medicationId: record.medicationId,
+        medicationName: record.medicationName,
+        takenAt: at,
+        status: record.status));
+  }
+  for (final med in medications) {
+    final anchor = med.schedule?.startAt ?? med.createdAt;
+    if (anchor != null && anchor.isBefore(start)) start = medicationDay(anchor);
+  }
+  final summary = MedicationAdherence.calculate(
+      medications: medications, logs: logs, start: start, end: now);
+  final result = <BackendMedicationLog>[
+    for (final row in summary.rows)
+      records
+              .where((record) =>
+                  record.medicationId == row.medicationId &&
+                  record.medicationName == row.medicationName &&
+                  (record.takenAt ?? record.createdAt) == row.takenAt &&
+                  normalizedMedicationStatus(record.status) == row.status)
+              .firstOrNull ??
+          BackendMedicationLog(
+              id: 'due-${row.medicationId}-${row.takenAt.microsecondsSinceEpoch}',
+              medicationId: row.medicationId,
+              medicationName: row.medicationName,
+              status: row.status,
+              takenAt: row.takenAt),
+    ...records
+        .where((record) => record.takenAt == null && record.createdAt == null),
+  ];
+  result.sort((a, b) {
+    final at = a.takenAt ?? a.createdAt, bt = b.takenAt ?? b.createdAt;
+    if (at == null) return bt == null ? a.id.compareTo(b.id) : 1;
+    if (bt == null) return -1;
+    final order = bt.compareTo(at);
+    return order == 0 ? a.id.compareTo(b.id) : order;
+  });
+  return result;
+}
 
 class MedicationHistoryScreen extends ConsumerStatefulWidget {
   const MedicationHistoryScreen({super.key, this.session, this.apiClient});
@@ -16,7 +66,7 @@ class MedicationHistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _MedicationHistoryScreenState
-    extends ConsumerState<MedicationHistoryScreen> {
+    extends ConsumerState<MedicationHistoryScreen> with WidgetsBindingObserver {
   late final String? _owner;
   bool _bound = false, _invalid = false, _loading = true;
   int _generation = 0;
@@ -35,12 +85,24 @@ class _MedicationHistoryScreenState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final active = ref.read(authStateProvider).session;
     _owner = _key(widget.session ?? active);
     _bound = active != null;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _load();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _session != null) _load();
   }
 
   Future<void> _load() async {
@@ -61,15 +123,15 @@ class _MedicationHistoryScreenState
     try {
       final api = widget.apiClient ?? ref.read(apiClientProvider);
       if (api == null) throw StateError('Api unavailable');
-      final logs = await api.listMedicationLogs(accessToken: token, limit: 0);
+      final (records, medications) = await (
+        api.listMedicationLogs(accessToken: token, limit: 0),
+        api.listMedications(accessToken: token, limit: 0),
+      ).wait;
       if (!mounted || generation != _generation || _session == null) return;
-      logs.sort((a, b) {
-        final at = a.takenAt ?? a.createdAt, bt = b.takenAt ?? b.createdAt;
-        if (at == null) return bt == null ? a.id.compareTo(b.id) : 1;
-        if (bt == null) return -1;
-        final order = bt.compareTo(at);
-        return order == 0 ? a.id.compareTo(b.id) : order;
-      });
+      final logs = medicationHistoryRows(
+          medications.map((med) => med.toMedication()).toList(),
+          records,
+          ServerClock.now());
       setState(() {
         _logs = logs;
         _loading = false;
@@ -105,6 +167,15 @@ class _MedicationHistoryScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(malvaStoreProvider, (previous, next) {
+      if (previous != null &&
+          !_loading &&
+          _session != null &&
+          (!identical(previous.medications, next.medications) ||
+              !identical(previous.medicationLogs, next.medicationLogs))) {
+        _load();
+      }
+    });
     ref.listen(authStateProvider, (previous, next) {
       if (next.session != null) _bound = true;
       if (_key(next.session) != _owner &&

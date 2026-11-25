@@ -647,7 +647,9 @@ func (s *Server) createBooking(w http.ResponseWriter, r *http.Request, claims au
 	}
 	sessionType := strings.ToLower(strings.TrimSpace(req.SessionType))
 	if claims.Role == "patient" && isPackageSession {
-		sessionType = "video"
+		if sessionType == "" {
+			sessionType = "video"
+		}
 		if selectedPackage != nil {
 			legacy, found, err := s.store.PendingBookingForCarePackage(r.Context(), selectedPackage.ID)
 			if err != nil {

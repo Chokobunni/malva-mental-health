@@ -61,7 +61,10 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
   late final BookingOwner _owner;
   bool _isSubmitting = false;
   String? _error;
+  String _sessionType = 'video';
   final _sessions = <int, (String, String)>{};
+
+  String get _modalityLabel => _sessionType == 'chat' ? 'chat' : 'video';
 
   bool get _hasCapacity =>
       widget.remainingPatientSlots != 0 ||
@@ -144,17 +147,18 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
                             child: const Icon(Icons.calendar_month_outlined,
                                 size: 25, color: MalvaColors.seed)),
                         const SizedBox(width: 10),
-                        const Expanded(
+                        Expanded(
                             child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                              Text('Continuous Package',
+                              const Text('Continuous Package',
                                   style: TextStyle(
                                       fontWeight: FontWeight.w800,
                                       fontSize: 16)),
-                              SizedBox(height: 3),
-                              Text('4 sesi video • Masa aktif 6 minggu',
-                                  style: TextStyle(
+                              const SizedBox(height: 3),
+                              Text(
+                                  '4 sesi ${widget.canResumePackage ? 'konsultasi' : _modalityLabel} • Masa aktif 6 minggu',
+                                  style: const TextStyle(
                                       color: MalvaColors.seed, fontSize: 12)),
                             ])),
                         const SizedBox(width: 6),
@@ -172,6 +176,43 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
                       ])),
                 ]))),
         const SizedBox(height: 16),
+        if (!widget.canResumePackage) ...[
+          SoftCard(
+              radius: 24,
+              color: Colors.white,
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text('Jenis sesi',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 12),
+                    SegmentedButton<String>(
+                        key: const Key('package-modality'),
+                        segments: const [
+                          ButtonSegment(
+                              value: 'video',
+                              label: Text('Video'),
+                              icon: Icon(Icons.videocam_outlined)),
+                          ButtonSegment(
+                              value: 'chat',
+                              label: Text('Chat'),
+                              icon: Icon(Icons.chat_bubble_outline_rounded)),
+                        ],
+                        selected: {_sessionType},
+                        onSelectionChanged: _isSubmitting || !_hasCapacity
+                            ? null
+                            : (selection) => setState(
+                                () => _sessionType = selection.single)),
+                    const SizedBox(height: 9),
+                    const Text(
+                        'Pilihan berlaku untuk sesi pertama dan sesi opsional yang dijadwalkan saat checkout.',
+                        style:
+                            TextStyle(color: Color(0xFF788490), fontSize: 12)),
+                  ])),
+          const SizedBox(height: 16),
+        ],
         SoftCard(
             radius: 24,
             color: Colors.white,
@@ -233,10 +274,12 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
               ]),
               const SizedBox(height: 8),
               _PackageRule(
-                  Icons.videocam_outlined,
+                  _sessionType == 'chat' && !widget.canResumePackage
+                      ? Icons.chat_bubble_outline_rounded
+                      : Icons.videocam_outlined,
                   widget.durationLabel == null
-                      ? '4 sesi video per paket.'
-                      : '4 sesi video per paket, masing-masing berdurasi ${widget.durationLabel}.'),
+                      ? '4 sesi ${widget.canResumePackage ? 'konsultasi' : _modalityLabel} per paket.'
+                      : '4 sesi ${widget.canResumePackage ? 'konsultasi' : _modalityLabel} per paket, masing-masing berdurasi ${widget.durationLabel}.'),
               const _PackageRule(Icons.send_outlined,
                   'Selama paket aktif, kirim jurnal, target, asesmen, dan lembar kerja. Termasuk monitoring data.'),
               const _PackageRule(Icons.chat_bubble_outline_rounded,
@@ -420,6 +463,7 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
         accessToken: session?.accessToken,
         professionalId: widget.doctorUserId,
         index: index,
+        sessionType: _sessionType,
         initial: _sessions[index],
         first: index > 1 ? _sessions[1] : null,
         excluded: _sessions.entries
@@ -511,6 +555,7 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
           packageId: pkg.id,
           bookingDate: firstSession.$1,
           slotTime: firstSession.$2,
+          sessionType: _sessionType,
           additionalSessions: additional,
         );
         if (!mounted || _owner.session == null) return;
@@ -628,10 +673,12 @@ class _PackageSessionDialog extends StatefulWidget {
     required this.initial,
     required this.index,
     required this.excluded,
+    required this.sessionType,
     this.first,
   });
 
   final int index;
+  final String sessionType;
   final (String, String)? first;
   final Set<(String, String)> excluded;
   final MalvaApiClient api;
@@ -732,7 +779,8 @@ class _PackageSessionDialogState extends State<_PackageSessionDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('Sesi video • WIB'),
+                  Text(
+                      'Sesi ${widget.sessionType == 'chat' ? 'chat' : 'video'} • WIB'),
                   const SizedBox(height: 12),
                   Row(children: [
                     const Expanded(child: SectionLabel('Pilih tanggal')),

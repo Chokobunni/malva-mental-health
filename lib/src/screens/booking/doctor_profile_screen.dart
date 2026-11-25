@@ -727,7 +727,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
                             featureIcon: Icons.calendar_month_outlined,
                             features: [
                               (
-                                '4 sesi video terjadwal' +
+                                '4 sesi terjadwal (Video atau Chat)' +
                                     (_durationLabel('package') == null
                                         ? ''
                                         : " • ${_durationLabel('package')} per sesi"),
@@ -989,7 +989,7 @@ class _DoctorProfileScreenState extends ConsumerState<DoctorProfileScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(package
-                    ? 'Jadwal mingguan • WIB\n4 sesi video • 6 minggu'
+                    ? 'Jadwal mingguan • WIB\n4 sesi • 6 minggu'
                     : 'Jadwal mingguan • WIB'),
                 const SizedBox(height: 12),
                 for (final (label, category) in [

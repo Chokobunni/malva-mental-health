@@ -200,16 +200,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Aksi lain').first);
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Ubah link video').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Ubah link video').first);
-    await tester.pumpAndSettle();
-    expect(find.text('Link sesi video'), findsOneWidget);
-    expect(find.byType(TextField), findsOneWidget);
-    expect(find.text('Ringkasan untuk pasien'), findsNothing);
-    await tester.tap(find.descendant(
-        of: find.byType(AlertDialog), matching: find.text('Batal')));
-    await tester.pumpAndSettle();
+    expect(find.text('Ubah link video'), findsNothing);
+    expect(find.text('Buka Riwayat Chat'), findsNothing);
+    expect(find.text('Link'), findsWidgets);
     await tester.ensureVisible(find.text('Batal').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Batal').first);

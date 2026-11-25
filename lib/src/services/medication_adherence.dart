@@ -39,6 +39,20 @@ class MedicationAdherence {
     return ordered.takeWhile((day) => days[day]!).length;
   }
 
+  int get longestStreak {
+    final days = _scheduledDays
+        .where(
+            (day) => !_pendingDays.contains(day) || _failedDays.contains(day))
+        .toList()
+      ..sort();
+    var longest = 0, current = 0;
+    for (final day in days) {
+      current = _failedDays.contains(day) ? 0 : current + 1;
+      if (current > longest) longest = current;
+    }
+    return longest;
+  }
+
   static MedicationAdherence calculate({
     required List<Medication> medications,
     required List<MedicationLog> logs,

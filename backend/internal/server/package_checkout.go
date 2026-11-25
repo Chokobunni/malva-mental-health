@@ -118,15 +118,21 @@ func (s *Server) activatePackageCheckoutSlots(r *http.Request, booking store.Boo
 
 func (s *Server) createPaidPackageCheckoutSession(r *http.Request, booking store.Booking, pkg store.CarePackage, slot store.PackageCheckoutSlot) error {
 	ctx := r.Context()
-	meet, event, pending, err := s.prepareMeetEventFor(ctx, booking.PatientID, booking.ProfessionalID, slot.ScheduledAt, slot.DurationMinutes)
-	if err != nil && !errors.Is(err, ErrMeetUnavailable) {
-		return err
+	var meet, event string
+	var pending bool
+	if isVideoSession(booking.SessionType) {
+		var err error
+		meet, event, pending, err = s.prepareMeetEventFor(ctx, booking.PatientID, booking.ProfessionalID, slot.ScheduledAt, slot.DurationMinutes)
+		if err != nil && !errors.Is(err, ErrMeetUnavailable) {
+			return err
+		}
+		pending = pending || errors.Is(err, ErrMeetUnavailable)
 	}
 	cs, err := s.store.CreateCareSession(ctx, store.CareSession{
 		PackageID: &pkg.ID, PatientID: booking.PatientID, ProfessionalID: booking.ProfessionalID,
-		CheckoutSlotID: slot.ID, SessionType: "video", ScheduledAt: slot.ScheduledAt,
+		CheckoutSlotID: slot.ID, SessionType: booking.SessionType, ScheduledAt: slot.ScheduledAt,
 		DurationMinutes: slot.DurationMinutes, Status: "scheduled",
-		MeetingURL: meet, GoogleEventID: event, AllowPendingMeet: pending || errors.Is(err, ErrMeetUnavailable),
+		MeetingURL: meet, GoogleEventID: event, AllowPendingMeet: pending,
 	})
 	if err != nil {
 		if event != "" {

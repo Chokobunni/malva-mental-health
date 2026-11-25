@@ -534,7 +534,8 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
         accessToken: token,
         professionalId: _package.professionalId,
         expiresAt: _package.expiresDateTime,
-        initialType: 'video',
+        initialType: existing?.sessionType ?? 'video',
+        allowTypeSelection: existing == null,
       ),
     );
     if (picked == null || !mounted) return;
@@ -553,7 +554,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
           accessToken: token,
           packageId: _package.id,
           scheduledAt: parts[0],
-          sessionType: 'video',
+          sessionType: parts.last,
         );
         if (!mounted) return;
         // meet_pending = sesi video terjadwal tetapi link belum ada. Itu
@@ -926,6 +927,7 @@ class CareSessionSchedulerSheet extends StatefulWidget {
     this.serviceCategory = 'package',
     this.excludedSlots = const {},
     this.sessionNumber,
+    this.allowTypeSelection = false,
   });
 
   final MalvaApiClient apiClient;
@@ -936,6 +938,7 @@ class CareSessionSchedulerSheet extends StatefulWidget {
   final String serviceCategory;
   final Set<String> excludedSlots;
   final int? sessionNumber;
+  final bool allowTypeSelection;
 
   @override
   State<CareSessionSchedulerSheet> createState() =>
@@ -946,7 +949,7 @@ class CareSessionSchedulerSheetState extends State<CareSessionSchedulerSheet> {
   List<BackendAvailabilityDay> _days = const [];
   String? _date;
   String? _slot;
-  final String _type = 'video';
+  late String _type;
   bool _loadingDays = true;
   String? _error;
 
@@ -958,8 +961,9 @@ class CareSessionSchedulerSheetState extends State<CareSessionSchedulerSheet> {
   @override
   void initState() {
     super.initState();
+    _type = widget.initialType;
     _loadDays();
-    _loadMeetStatus();
+    if (_type == 'video') _loadMeetStatus();
   }
 
   /// Ambil status Meet sekali saat sheet dibuka. Kegagalan tidak ditampilkan
@@ -1088,17 +1092,41 @@ class CareSessionSchedulerSheetState extends State<CareSessionSchedulerSheet> {
                             fontSize: 11,
                             height: 1.5)),
                     const SizedBox(height: 10),
-                    const Row(children: [
-                      Icon(Icons.videocam_rounded,
-                          color: MalvaColors.seed, size: 16),
-                      SizedBox(width: 8),
-                      Flexible(
-                          child: Text('Video • 1 jam per sesi',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: MalvaColors.seed,
-                                  fontSize: 11))),
-                    ]),
+                    if (widget.allowTypeSelection)
+                      Wrap(spacing: 8, children: [
+                        for (final (value, label) in [
+                          ('video', 'Video'),
+                          ('chat', 'Chat')
+                        ])
+                          ChoiceChip(
+                            label: Text(label),
+                            selected: _type == value,
+                            onSelected: (_) {
+                              setState(() => _type = value);
+                              if (value == 'video' && _meetReady == null)
+                                _loadMeetStatus();
+                            },
+                          ),
+                      ])
+                    else
+                      Row(children: [
+                        Icon(
+                            _type == 'video'
+                                ? Icons.videocam_rounded
+                                : Icons.chat_bubble_outline,
+                            color: MalvaColors.seed,
+                            size: 16),
+                        const SizedBox(width: 8),
+                        Flexible(
+                            child: Text(
+                                _type == 'video'
+                                    ? 'Video • 1 jam per sesi'
+                                    : 'Chat',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: MalvaColors.seed,
+                                    fontSize: 11))),
+                      ]),
                     if (_type == 'video' && _meetReady == false) ...[
                       const SizedBox(height: 10),
                       const Text(

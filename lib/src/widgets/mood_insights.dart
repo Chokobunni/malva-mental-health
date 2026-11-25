@@ -466,7 +466,7 @@ class _RecentMood extends StatelessWidget {
                     style: const TextStyle(fontSize: 12))
               ])),
           StatusPill(
-              label: '🛏 ${entry.sleepHours.toStringAsFixed(1)}h',
+              label: '🛏 ${entry.sleepHours.toStringAsFixed(1)}j',
               color: MalvaColors.orchid)
         ]),
         const SizedBox(height: 12),

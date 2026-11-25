@@ -42,13 +42,13 @@ void main() {
       (tester) async {
     final api = MalvaApiClient(
         baseUrl: 'https://test.invalid',
-        httpClient: MockClient((r) async =>
-            http.Response(jsonEncode({'medication_logs': []}), 200)));
+        httpClient: MockClient((r) async => http.Response(
+            jsonEncode({'medication_logs': [], 'medications': []}), 200)));
     await tester.pumpWidget(ProviderScope(
         child: MaterialApp(
             home: MedicationScreen(session: patient, apiClient: api))));
     await tester.pumpAndSettle();
-    final button = find.widgetWithText(OutlinedButton, 'Riwayat minum obat');
+    final button = find.byKey(const Key('open-medication-history'));
     await tester.ensureVisible(button);
     await tester.pumpAndSettle();
     await tester.tap(button);

@@ -12,7 +12,7 @@ import '../widgets/malva_components.dart';
 // ============================================================
 // HISTORY LOG — sesuai Figma "Mood Tracker" bagian Recent:
 //   Kartu entry terbaru: nama mood (Anxious), "Yesterday",
-//   baris pill: Anxiety (High) / Irritability (Severe) / Energy + "11 h"
+//   baris pill: Anxiety (High) / Irritability (Severe) / Energy + "11 j"
 // Dipakai untuk tab History Log di Home.
 // ============================================================
 
@@ -158,7 +158,7 @@ class _HistoryEntryCard extends StatelessWidget {
               _LevelPill(label: 'Energi', value: _level(entry.energy)),
               _LevelPill(
                   label: 'Tidur',
-                  value: '${entry.sleepHours.toStringAsFixed(0)} h'),
+                  value: '${entry.sleepHours.toStringAsFixed(0)} j'),
             ],
           ),
         ],

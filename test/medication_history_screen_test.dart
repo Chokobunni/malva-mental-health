@@ -10,6 +10,7 @@ import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/providers/providers.dart';
 import 'package:malva_mental_health/src/screens/medication_history_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
+import 'package:malva_mental_health/src/time/wib.dart';
 
 const patient = AuthSession(
     role: UserRole.patient,
@@ -33,11 +34,87 @@ Future<ProviderContainer> open(WidgetTester tester, http.Client client) async {
 }
 
 void main() {
+  test('history reconciles due WIB doses with recorded outcomes like PDF', () {
+    final start = wibFromParts(2026, 11, 23, 8);
+    final med = Medication(
+        id: 'med',
+        name: 'Obat terjadwal',
+        dosage: '5 mg',
+        form: 'Tablet',
+        reminders: const [],
+        currentStock: 10,
+        alertBelow: 2,
+        source: 'Pasien',
+        schedule: MedicationSchedule(
+            times: const ['08:00', '20:00'],
+            weekdays: const [1, 2, 3, 4, 5, 6, 7],
+            startAt: start));
+    final rows = medicationHistoryRows([
+      med
+    ], [
+      BackendMedicationLog(
+          id: 'miss',
+          medicationId: 'med',
+          medicationName: med.name,
+          status: 'missed',
+          takenAt: start),
+      BackendMedicationLog(
+          id: 'taken',
+          medicationId: 'med',
+          medicationName: med.name,
+          status: 'partial',
+          takenAt: start.add(const Duration(minutes: 5))),
+      BackendMedicationLog(
+          id: 'skip',
+          medicationId: 'med',
+          medicationName: med.name,
+          status: 'skipped',
+          takenAt: wibFromParts(2026, 11, 23, 20)),
+      BackendMedicationLog(
+          id: 'deleted',
+          medicationId: 'gone',
+          medicationName: 'Obat lama',
+          status: 'taken',
+          takenAt: start),
+    ], wibFromParts(2026, 11, 24, 10));
+    expect(
+        rows.map((row) => row.id), containsAll(['taken', 'skip', 'deleted']));
+    expect(rows.map((row) => row.id), isNot(contains('miss')));
+    expect(rows.where((row) => row.status == 'missed').single.takenAt,
+        wibFromParts(2026, 11, 24, 8));
+    expect(rows.length, 4,
+        reason:
+            'Tonight is not due; the recorded partial replaces missed and retains its id.');
+  });
   setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  testWidgets('resume and store sync reload medicines and recorded logs',
+      (tester) async {
+    var medicineCalls = 0, logCalls = 0;
+    final container = await open(tester, MockClient((r) async {
+      if (r.url.path == '/v1/medications') {
+        medicineCalls++;
+        return http.Response('{"medications":[]}', 200);
+      }
+      logCalls++;
+      return http.Response('{"medication_logs":[]}', 200);
+    }));
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(medicineCalls, 2);
+    expect(logCalls, 2);
+    container.read(malvaStoreProvider.notifier).replaceMedicationLogs([]);
+    await tester.pumpAndSettle();
+    expect(medicineCalls, 3);
+    expect(logCalls, 3);
+  });
   testWidgets(
       'loads complete server history and groups newest first by WIB calendar date',
       (tester) async {
     await open(tester, MockClient((r) async {
+      if (r.url.path == '/v1/medications')
+        return http.Response('{"medications":[]}', 200);
       expect(r.url.queryParameters['limit'], '0');
       return http.Response(
           jsonEncode({
@@ -102,6 +179,8 @@ void main() {
       (tester) async {
     var calls = 0;
     await open(tester, MockClient((r) async {
+      if (r.url.path == '/v1/medications')
+        return http.Response('{"medications":[]}', 200);
       calls++;
       return calls == 1
           ? http.Response('{"error":"offline"}', 503)
@@ -121,6 +200,8 @@ void main() {
       var calls = 0;
       final tokens = <String?>[];
       final container = await open(tester, MockClient((r) async {
+        if (r.url.path == '/v1/medications')
+          return http.Response('{"medications":[]}', 200);
         calls++;
         tokens.add(r.headers['Authorization']);
         return calls == 1
