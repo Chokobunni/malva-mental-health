@@ -16,9 +16,7 @@ import 'package:malva_mental_health/src/widgets/google_account_card.dart';
 // UI: JADWAL SESI VIDEO SAAT GOOGLE PROFESIONAL BELUM SIAP
 //
 // Yang dikunci:
-//   - Sheet penjadwalan menampilkan CATATAN INFO (bukan error) saat
-//     meet-status belum siap, dan tombol "Pilih Jadwal" tetap bisa dipakai
-//     setelah slot dipilih. Pasien tidak boleh buntu.
+//   - Sheet paket meminta tanggal dan jam, termasuk saat Meet belum siap.
 //   - Kartu Akun Google membedakan 3 keadaan; keadaan "siap" menampilkan
 //     "Google Meet aktif".
 // ============================================================
@@ -119,10 +117,8 @@ http.Client _pendingMeetClient() {
 }
 
 void main() {
-  group('_SessionSchedulerSheet — catatan info saat Meet belum siap', () {
-    testWidgets(
-        'menampilkan catatan info (bukan error) & Pilih Jadwal tetap aktif',
-        (tester) async {
+  group('Penjadwalan paket saat Meet belum siap', () {
+    testWidgets('pasien tetap dapat memilih tanggal dan jam', (tester) async {
       final api = MalvaApiClient(
         baseUrl: 'http://backend.test',
         httpClient: _pendingMeetClient(),
@@ -148,14 +144,8 @@ void main() {
 
       final video = find.widgetWithText(ChoiceChip, 'Video');
       final chat = find.widgetWithText(ChoiceChip, 'Chat');
-      expect(tester.widget<ChoiceChip>(video).selected, isTrue);
-      expect(tester.widget<ChoiceChip>(chat).selected, isFalse);
-
-      expect(
-        find.textContaining('Video tetap bisa dijadwalkan'),
-        findsOneWidget,
-        reason: 'catatan info harus tampil saat Meet profesional belum siap',
-      );
+      expect(video, findsNothing);
+      expect(chat, findsNothing);
 
       // Pilih slot -> tombol "Pilih Jadwal" harus AKTIF (Meet tidak memblokir).
       await tester.tap(find.widgetWithText(ChoiceChip, '10:00'));

@@ -50,6 +50,22 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
   bool _isLoading = true;
   bool _loadInProgress = false;
   bool _historyExpanded = false;
+  String _historyFilter = 'completed';
+
+  static const _historyFilters = [
+    ('completed', 'Selesai'),
+    ('cancelled', 'Dibatalkan'),
+    ('no_show', 'Tidak Hadir'),
+    ('all', 'Semua'),
+  ];
+
+  bool _matchesHistory(BackendCareSession session, String filter) =>
+      switch (filter) {
+        'all' => true,
+        'cancelled' => isCareSessionCancelled(session),
+        _ => session.status == filter,
+      };
+
   DateTime? _calendarMonth;
   DateTime? _selectedDate;
   String? _error;
@@ -144,7 +160,14 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
       ..sort((a, b) => (a.scheduledAt ?? '').compareTo(b.scheduledAt ?? ''));
     final needsCompletion =
         all.where((s) => s.isScheduled && s.isAfterJoinWindow).toList();
-    final past = all.where((s) => !s.isScheduled).toList().reversed.toList();
+    final past = all
+        .where((s) =>
+            s.status == 'completed' ||
+            s.status == 'no_show' ||
+            isCareSessionCancelled(s))
+        .toList()
+        .reversed
+        .toList();
     final active =
         all.where((s) => s.isScheduled && !s.isAfterJoinWindow).toList();
     final now = ServerClock.now();
@@ -174,6 +197,8 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
         .where(selected)
         .toList();
     final history = past.where(selected).toList();
+    final filteredHistory =
+        history.where((s) => _matchesHistory(s, _historyFilter)).toList();
     Widget cards(List<BackendCareSession> sessions, String prefix) =>
         Column(children: [
           for (final s in sessions)
@@ -222,8 +247,7 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
               border: Border.all(color: const Color(0xffe9dcef))),
           child: Row(children: [
             tab('List Sesi', false),
-            tab('Riwayat Sesi (${past.where((s) => s.status == 'completed').length})',
-                true)
+            tab('Riwayat Sesi (${past.length})', true)
           ])),
       Expanded(
           child: RefreshIndicator(
@@ -343,13 +367,29 @@ class _ProScheduleScreenState extends ConsumerState<ProScheduleScreen>
                             child: const Text('Tampilkan semua sesi'))),
                   const SizedBox(height: 14),
                   if (_historyExpanded) ...[
-                    if (history.isEmpty)
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final (filter, label) in _historyFilters)
+                          ChoiceChip(
+                            label: Text(
+                                '$label ${history.where((s) => _matchesHistory(s, filter)).length}'),
+                            selected: _historyFilter == filter,
+                            onSelected: (_) =>
+                                setState(() => _historyFilter = filter),
+                            showCheckmark: false,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (filteredHistory.isEmpty)
                       const EmptyState(
                           icon: Icons.history_rounded,
                           title: 'Belum ada riwayat',
                           subtitle: 'Sesi selesai / batal tercatat di sini.')
                     else
-                      cards(history, 'past')
+                      cards(filteredHistory, 'past')
                   ] else ...[
                     if (today.isEmpty)
                       const CareIllustratedCard(

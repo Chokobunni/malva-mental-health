@@ -1810,6 +1810,55 @@ class MalvaApiClient {
     );
   }
 
+  Future<List<BackendHealthRecordAllergy>> listHealthRecordAllergies({
+    required String accessToken,
+    String? patientId,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+        path: '/v1/health-record/allergies',
+        queryParameters: {
+          if (patientId != null && patientId.trim().isNotEmpty)
+            'patient_id': patientId.trim(),
+        },
+      ),
+      accessToken: accessToken,
+    );
+    return _expectNullableCollection(
+            payload, 'items', 'Respons alergi tidak valid.')
+        .whereType<Map<String, dynamic>>()
+        .map(BackendHealthRecordAllergy.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<BackendHealthRecordAllergy> createHealthRecordAllergy({
+    required String accessToken,
+    required String clientId,
+    required String reactionType,
+    required String substance,
+    required String symptoms,
+    required String severity,
+    String occurredWhen = '',
+  }) async {
+    final payload = await _send(
+      'POST',
+      '/v1/health-record/allergies',
+      accessToken: accessToken,
+      body: {
+        'client_id': clientId,
+        'reaction_type': reactionType,
+        'substance': substance,
+        'symptoms': symptoms,
+        'severity': severity,
+        if (occurredWhen.isNotEmpty) 'occurred_when': occurredWhen,
+      },
+    );
+    return BackendHealthRecordAllergy.fromJson(
+      _expectMap(payload['item'], 'Respons alergi tidak valid.'),
+    );
+  }
+
   /// Profesional memperbarui diagnosis pasien (PUT /v1/health-record).
   Future<BackendHealthRecord> updateHealthRecordDiagnosis({
     required String accessToken,
@@ -2552,6 +2601,23 @@ class MalvaApiClient {
         .whereType<Map<String, dynamic>>()
         .map(BackendReviewEntitlement.fromJson)
         .toList(growable: false);
+  }
+
+  Future<bool> claimReviewPrompt({
+    required String accessToken,
+    required BackendReviewEntitlement entitlement,
+    required String claimId,
+  }) async {
+    final payload = await _send('POST', '/v1/review-entitlements/prompt',
+        accessToken: accessToken,
+        body: {
+          'claim_id': claimId,
+          if (entitlement.isPackage)
+            'care_package_id': entitlement.carePackageId
+          else
+            'session_id': entitlement.sessionId,
+        });
+    return payload['show'] == true;
   }
 
   Future<void> createDoctorReview({
@@ -3980,6 +4046,40 @@ class BackendMedication {
 
   bool get needsRefill =>
       (schedule?.refillEnabled ?? true) && currentStock <= alertBelow;
+}
+
+class BackendHealthRecordAllergy {
+  const BackendHealthRecordAllergy({
+    required this.id,
+    required this.reactionType,
+    required this.substance,
+    required this.symptoms,
+    required this.severity,
+    required this.occurredWhen,
+    required this.reportedBy,
+    this.createdAt,
+  });
+
+  factory BackendHealthRecordAllergy.fromJson(Map<String, dynamic> json) =>
+      BackendHealthRecordAllergy(
+        id: json['id']?.toString() ?? '',
+        reactionType: json['reaction_type']?.toString() ?? '',
+        substance: json['substance']?.toString() ?? '',
+        symptoms: json['symptoms']?.toString() ?? '',
+        severity: json['severity']?.toString() ?? '',
+        occurredWhen: json['occurred_when']?.toString() ?? '',
+        reportedBy: json['reported_by']?.toString() ?? '',
+        createdAt: parseWibStored(json['created_at']?.toString()),
+      );
+
+  final String id;
+  final String reactionType;
+  final String substance;
+  final String symptoms;
+  final String severity;
+  final String occurredWhen;
+  final String reportedBy;
+  final DateTime? createdAt;
 }
 
 /// Health record pasien (diagnosis summary yang diisi profesional).
@@ -5555,7 +5655,9 @@ class BackendReviewEntitlement {
       this.carePackageId = '',
       required this.professionalId,
       this.professionalName = 'Profesional',
-      this.completedAt});
+      this.completedAt,
+      this.sessionType,
+      this.scheduledAt});
   factory BackendReviewEntitlement.fromJson(Map<String, dynamic> json) =>
       BackendReviewEntitlement(
           sessionId: json['session_id']?.toString() ?? '',
@@ -5563,12 +5665,16 @@ class BackendReviewEntitlement {
           professionalId: json['professional_id']?.toString() ?? '',
           professionalName:
               json['professional_name']?.toString() ?? 'Profesional',
-          completedAt: json['completed_at']?.toString());
+          completedAt: json['completed_at']?.toString(),
+          sessionType: json['session_type']?.toString(),
+          scheduledAt: json['scheduled_at']?.toString());
   final String sessionId;
   final String carePackageId;
   final String professionalId;
   final String professionalName;
   final String? completedAt;
+  final String? sessionType;
+  final String? scheduledAt;
   String get key => '$professionalId:$sessionId:$carePackageId';
   bool get isPackage => carePackageId.isNotEmpty;
 }

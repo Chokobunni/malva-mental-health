@@ -121,7 +121,7 @@ void main() {
     expect(find.text('Terjadwal'), findsOneWidget);
     expect(find.text('Check-in dibuka 10 menit sebelum sesi.'), findsOneWidget);
     expect(find.text('Kehadiran saya'), findsNothing);
-    expect(find.widgetWithText(OutlinedButton, 'Chat'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Gabung Sesi'), findsNothing);
     final actions = find.text('Aksi lain');
     await tester.scrollUntilVisible(actions, 140);
     await tester.ensureVisible(actions);
@@ -156,7 +156,7 @@ void main() {
 
   testWidgets(
       'kartu sesi attended: satu konfirmasi kehadiran, tanpa "Tidak hadir", '
-      'tetap ada "Join / Chat"', (tester) async {
+      'tetap ada "Gabung Sesi"', (tester) async {
     final now = wibNow();
     final attendedSession = <String, dynamic>{
       'id': 'cs_attended',
@@ -192,7 +192,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
-      find.widgetWithText(OutlinedButton, 'Chat'),
+      find.widgetWithText(FilledButton, 'Gabung Sesi'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
@@ -203,8 +203,9 @@ void main() {
     expect(find.text('Tidak hadir'), findsNothing,
         reason:
             'tombol "Tidak hadir" tidak boleh ditawarkan lagi setelah hadir');
-    expect(find.widgetWithText(OutlinedButton, 'Chat'), findsOneWidget,
-        reason: 'sesi tetap berjalan setelah hadir; Join / Chat harus ada');
+    expect(find.widgetWithText(FilledButton, 'Gabung Sesi'), findsOneWidget,
+        reason:
+            'sesi tetap berjalan setelah hadir; aksi Gabung Sesi harus ada');
     await tester.pumpWidget(const SizedBox());
   });
 }

@@ -391,7 +391,7 @@ void main() {
     await tester.tap(find.text('Profil').first);
     await tester.pumpAndSettle();
     expect(find.text('Login dulu.'), findsNothing);
-    expect(find.text('Ringkasan klinis'), findsOneWidget);
+    expect(find.text('Paket & Sesi Konsultasi'), findsOneWidget);
     final details = client.requests.where((request) =>
         request.url.path == '/v1/care-packages' &&
         request.url.queryParameters['patient_id'] == 'patient-synthetic');

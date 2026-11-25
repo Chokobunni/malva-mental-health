@@ -16,6 +16,20 @@ import 'session_attendance_actions.dart';
 import 'professional_avatar.dart';
 import 'friendly_error.dart';
 
+String careSessionNoShowLabel(BackendCareSession session) =>
+    switch ((session.patientAttendance, session.professionalAttendance)) {
+      ('absent', 'absent') => 'Keduanya Tidak Hadir',
+      ('attended', 'absent' || '') => 'Profesional Tidak Hadir',
+      ('absent' || '', 'attended') => 'Pasien Tidak Hadir',
+      _ => 'Tidak hadir',
+    };
+
+bool isCareSessionCancelled(BackendCareSession session) => const {
+      'cancelled_by_patient',
+      'cancelled_by_professional',
+      'expired_unpaid',
+    }.contains(session.status);
+
 /// Shared session presentation for Home and Jadwal. Actions retain their owning flows.
 class CareSessionCard extends ConsumerWidget {
   const CareSessionCard(
@@ -107,16 +121,35 @@ class _SessionPresentationState extends State<_SessionPresentation> {
         : switch (s.status) {
             'scheduled' => s.isAfterJoinWindow ? 'Waktu berakhir' : 'Terjadwal',
             'completed' => 'Selesai',
-            'no_show' => 'Tidak hadir',
+            'no_show' => careSessionNoShowLabel(s),
             'pending_payment' => 'Menunggu pembayaran',
             'cancelled_by_patient' ||
-            'cancelled_by_professional' =>
+            'cancelled_by_professional' ||
+            'expired_unpaid' =>
               'Dibatalkan',
             _ => s.status
           };
-    final color = live || s.status == 'completed'
-        ? const Color(0xff099b78)
-        : MalvaColors.seed;
+    final (color, badgeColor) = switch (status) {
+      'Aktif' || 'Selesai' => (
+          const Color(0xff08765a),
+          const Color(0xffe5f8ef)
+        ),
+      'Dibatalkan' => (const Color(0xffb52028), const Color(0xfffce9e8)),
+      'Profesional Tidak Hadir' => (
+          const Color(0xffa5480b),
+          const Color(0xffffeed6)
+        ),
+      'Pasien Tidak Hadir' => (
+          const Color(0xff9c5505),
+          const Color(0xfffcf3d2)
+        ),
+      'Keduanya Tidak Hadir' => (
+          const Color(0xff9d1758),
+          const Color(0xfffbe7f3)
+        ),
+      'Tidak hadir' => (const Color(0xff754722), const Color(0xffffeed6)),
+      _ => (MalvaColors.seed, const Color(0xfff4eaf9)),
+    };
     final date = at == null
         ? 'Jadwal belum tersedia'
         : '${wibWeekdayDate(at)} • ${formatWibBubbleTime(at)}${live ? ' – ${formatWibBubbleTime(at.add(Duration(minutes: s.durationMinutes)))}' : ''} WIB';
@@ -132,7 +165,8 @@ class _SessionPresentationState extends State<_SessionPresentation> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         decoration: BoxDecoration(
             color: tint ?? const Color(0xfff5f3f8),
-            borderRadius: BorderRadius.circular(13)),
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: const Color(0xffede9f2))),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(icon, size: 19, color: MalvaColors.seed),
           const SizedBox(width: 8),
@@ -142,27 +176,45 @@ class _SessionPresentationState extends State<_SessionPresentation> {
                   style: const TextStyle(
                       fontWeight: FontWeight.w700, fontSize: 13)))
         ]));
-    Widget chip(String text, IconData icon) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-            color: const Color(0xfffaf8fc),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xffeee8f1))),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 15, color: MalvaColors.seed),
-          const SizedBox(width: 5),
-          Flexible(child: Text(text, style: const TextStyle(fontSize: 12)))
-        ]));
+    Widget chip(String text, IconData icon,
+            {bool active = false, bool accent = false}) =>
+        Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+                color: active
+                    ? const Color(0xffe5f8ef)
+                    : accent
+                        ? const Color(0xfffaf5fd)
+                        : const Color(0xfff7f8fa),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xffeee8f1))),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon,
+                  size: 15,
+                  color: active ? const Color(0xff08765a) : MalvaColors.seed),
+              const SizedBox(width: 5),
+              Flexible(
+                  child: Text(text,
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: active
+                              ? const Color(0xff08765a)
+                              : accent
+                                  ? MalvaColors.seed
+                                  : null,
+                          fontWeight:
+                              active || accent ? FontWeight.w700 : null)))
+            ]));
     final content =
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       LayoutBuilder(builder: (context, constraints) {
-        final narrow = constraints.maxWidth < 300 ||
-            MediaQuery.textScalerOf(context).scale(11) > 15;
+        final narrow =
+            constraints.maxWidth < (status.length > 19 ? 334 : 300) ||
+                MediaQuery.textScalerOf(context).scale(11) > 15;
         final badge = Container(
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
             decoration: BoxDecoration(
-                color: color.withValues(alpha: .09),
-                borderRadius: BorderRadius.circular(20)),
+                color: badgeColor, borderRadius: BorderRadius.circular(20)),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Icon(Icons.circle, size: 6, color: color),
               const SizedBox(width: 6),
@@ -222,7 +274,9 @@ class _SessionPresentationState extends State<_SessionPresentation> {
                 : s.packageId == null
                     ? 'Sekali sesi'
                     : 'Paket',
-            live ? Icons.timer_outlined : Icons.auto_awesome_outlined)
+            live ? Icons.timer_outlined : Icons.auto_awesome_outlined,
+            active: live,
+            accent: !live)
       ]),
       const SizedBox(height: 14),
       strip(date, Icons.calendar_today_outlined),
@@ -238,6 +292,9 @@ class _SessionPresentationState extends State<_SessionPresentation> {
             child: s.isVideo
                 ? MeetJoinButton(
                     session: s,
+                    joinLabel: professional || c.onConfirmAttendance != null
+                        ? null
+                        : 'Gabung Sesi',
                     accessToken: widget.token,
                     canCreateLink: professional,
                     expanded: true,
@@ -250,21 +307,22 @@ class _SessionPresentationState extends State<_SessionPresentation> {
                       padding: const EdgeInsets.symmetric(horizontal: 7),
                     ),
                     icon: const Icon(Icons.chat_rounded, size: 17),
-                    label: const Text('Gabung'),
+                    label: const Text('Gabung Sesi'),
                   ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-              child: OutlinedButton.icon(
-                  onPressed: c.onOpenChat,
-                  style: OutlinedButton.styleFrom(
-                    backgroundColor: const Color(0xffeafaf4),
-                    foregroundColor: const Color(0xff08765a),
-                    side: const BorderSide(color: Color(0xffc4eddf)),
-                    minimumSize: const Size(0, 48),
-                  ),
-                  icon: const Icon(Icons.chat_bubble_outline, size: 17),
-                  label: const Text('Chat'))),
+          if (s.isVideo) const SizedBox(width: 8),
+          if (s.isVideo)
+            Expanded(
+                child: OutlinedButton.icon(
+                    onPressed: c.onOpenChat,
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: const Color(0xffeafaf4),
+                      foregroundColor: const Color(0xff08765a),
+                      side: const BorderSide(color: Color(0xffc4eddf)),
+                      minimumSize: const Size(0, 48),
+                    ),
+                    icon: const Icon(Icons.chat_bubble_outline, size: 17),
+                    label: const Text('Chat'))),
         ]),
       ],
       if (!professional &&
@@ -297,10 +355,12 @@ class _SessionPresentationState extends State<_SessionPresentation> {
         ]),
       ],
       if (upcoming &&
+          (!live || c.otherActions != null) &&
           (c.otherActions != null ||
               c.onCancel != null ||
               c.onReschedule != null ||
-              c.onProfile != null)) ...[
+              c.onProfile != null ||
+              (s.isVideo && s.meetingUrl.trim().isNotEmpty))) ...[
         const SizedBox(height: 14),
         if (c.otherActions != null)
           c.otherActions!
@@ -328,32 +388,57 @@ class _SessionPresentationState extends State<_SessionPresentation> {
                               onPressed: c.onReschedule,
                               icon: const Icon(Icons.event_repeat),
                               label: const Text('Reschedule'))),
-                    Wrap(spacing: 8, runSpacing: 8, children: [
-                      if (c.onProfile != null)
-                        OutlinedButton.icon(
-                            onPressed: c.onProfile,
-                            icon: const Icon(Icons.person_outline),
-                            label: const Text('Profil')),
-                      if (c.onCancel != null)
-                        OutlinedButton.icon(
-                            onPressed: c.onCancel,
-                            icon: const Icon(Icons.cancel_outlined),
-                            label: const Text('Batal')),
-                      if (s.isVideo && c.onReschedule != null)
-                        OutlinedButton.icon(
-                            onPressed: c.onReschedule,
-                            icon: const Icon(Icons.event_repeat),
-                            label: const Text('Reschedule'))
-                    ])
+                    LayoutBuilder(builder: (context, constraints) {
+                      final width = constraints.maxWidth >=
+                              MediaQuery.textScalerOf(context).scale(250)
+                          ? (constraints.maxWidth - 8) / 2
+                          : constraints.maxWidth;
+                      return Wrap(spacing: 8, runSpacing: 8, children: [
+                        if (c.onProfile != null)
+                          SizedBox(
+                              width: width,
+                              child: OutlinedButton.icon(
+                                  onPressed: c.onProfile,
+                                  icon: const Icon(Icons.person_outline),
+                                  label: const Text('Profil'))),
+                        if (c.onCancel != null)
+                          SizedBox(
+                              width: width,
+                              child: OutlinedButton.icon(
+                                  onPressed: c.onCancel,
+                                  icon: const Icon(Icons.cancel_outlined),
+                                  style: OutlinedButton.styleFrom(
+                                      foregroundColor: const Color(0xffb52028),
+                                      backgroundColor: const Color(0xfffff3f3),
+                                      side: const BorderSide(
+                                          color: Color(0xfff2cfd1))),
+                                  label: const Text('Batal'))),
+                        if (s.isVideo && c.onReschedule != null)
+                          SizedBox(
+                              width: width,
+                              child: OutlinedButton.icon(
+                                  onPressed: c.onReschedule,
+                                  icon: const Icon(Icons.event_repeat),
+                                  label: const Text('Reschedule'))),
+                        if (s.isVideo && s.meetingUrl.trim().isNotEmpty)
+                          SizedBox(
+                              width: width,
+                              child: OutlinedButton.icon(
+                                onPressed: () async {
+                                  await Clipboard.setData(
+                                      ClipboardData(text: s.meetingUrl));
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text('Link sesi disalin.')),
+                                  );
+                                },
+                                icon: const Icon(Icons.link_rounded),
+                                label: const Text('Link'),
+                              )),
+                      ]);
+                    }),
                   ]))
-      ],
-      if (!s.isScheduled && s.summaryForPatient.isNotEmpty) ...[
-        const SizedBox(height: 10),
-        Text('Ringkasan: ${s.summaryForPatient}')
-      ],
-      if (s.cancelReason.isNotEmpty) ...[
-        const SizedBox(height: 10),
-        Text('Alasan: ${s.cancelReason}')
       ],
     ]);
     return Container(
@@ -555,7 +640,11 @@ class _CareSessionDetailScreenState
     final sessions = _feed
         .where((s) =>
             s.packageId == _session.packageId &&
-            (s.isScheduled || s.status == 'completed' || s.status == 'no_show'))
+            (s.isScheduled ||
+                s.status == 'completed' ||
+                (s.status == 'no_show' &&
+                    !(s.patientAttendance == 'attended' &&
+                        s.professionalAttendance == 'absent'))))
         .toList();
     if (total == null ||
         total <= 0 ||
@@ -928,7 +1017,7 @@ class _CareSessionDetailScreenState
                 ? 'Terjadwal'
                 : switch (_session.status) {
                     'completed' => 'Selesai',
-                    'no_show' => 'Tidak hadir',
+                    'no_show' => careSessionNoShowLabel(_session),
                     'pending_payment' => 'Menunggu pembayaran',
                     'expired_unpaid' => 'Pembayaran kedaluwarsa',
                     _ => 'Dibatalkan'

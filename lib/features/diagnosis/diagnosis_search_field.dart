@@ -11,12 +11,14 @@ class DiagnosisSearchField extends StatefulWidget {
     required this.onChanged,
     this.enabled = true,
     this.service,
+    this.showSelectionCards = false,
   });
 
   final List<Icd10Diagnosis> selected;
   final ValueChanged<List<Icd10Diagnosis>> onChanged;
   final bool enabled;
   final Icd10Service? service;
+  final bool showSelectionCards;
 
   @override
   State<DiagnosisSearchField> createState() => _DiagnosisSearchFieldState();
@@ -55,6 +57,11 @@ class _DiagnosisSearchFieldState extends State<DiagnosisSearchField> {
     });
     if (!widget.enabled || _isSelected(selected)) return;
     widget.onChanged(List.unmodifiable([...widget.selected, selected]));
+  }
+
+  void _remove(Icd10Diagnosis diagnosis) {
+    widget.onChanged(List.unmodifiable(widget.selected
+        .where((item) => item.codeClean != diagnosis.codeClean)));
   }
 
   bool _isSelected(Icd10Diagnosis option) =>
@@ -158,7 +165,33 @@ class _DiagnosisSearchFieldState extends State<DiagnosisSearchField> {
                 icon: const Icon(Icons.refresh),
                 label: const Text('Katalog gagal dimuat. Coba lagi'),
               ),
-            if (widget.selected.isNotEmpty)
+            if (widget.showSelectionCards && widget.selected.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text('DIAGNOSIS TERPILIH (${widget.selected.length})',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 12)),
+              const SizedBox(height: 8),
+              for (final (index, diagnosis) in widget.selected.indexed)
+                Card.outlined(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: const BorderSide(color: Color(0xFFEDE8F1)),
+                  ),
+                  child: ListTile(
+                    title: Text(
+                        '${index == 0 ? 'Primary' : 'Secondary'} - ${diagnosis.code}',
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: Text(diagnosis.title),
+                    trailing: IconButton(
+                      tooltip: 'Hapus ${diagnosis.code}',
+                      onPressed:
+                          widget.enabled ? () => _remove(diagnosis) : null,
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                  ),
+                ),
+            ] else if (widget.selected.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Wrap(
@@ -179,11 +212,8 @@ class _DiagnosisSearchFieldState extends State<DiagnosisSearchField> {
                           ],
                         ),
                         deleteButtonTooltipMessage: 'Hapus ${diagnosis.code}',
-                        onDeleted: widget.enabled
-                            ? () => widget.onChanged(List.unmodifiable(
-                                widget.selected.where((item) =>
-                                    item.codeClean != diagnosis.codeClean)))
-                            : null,
+                        onDeleted:
+                            widget.enabled ? () => _remove(diagnosis) : null,
                       ),
                   ],
                 ),

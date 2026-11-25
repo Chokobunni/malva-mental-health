@@ -75,6 +75,9 @@ func TestSessionLifecycleContract(t *testing.T) {
 		}
 	})
 	t.Run("completed session is terminal for chat", func(t *testing.T) {
+		if w := patch("professional", professional.ID, `{"status":"attended"}`); w.Code != http.StatusOK {
+			t.Fatalf("professional attendance: %d %s", w.Code, w.Body.String())
+		}
 		for range 2 {
 			w := patch("professional", professional.ID, `{"status":"completed"}`)
 			if w.Code != http.StatusOK {
@@ -143,7 +146,7 @@ func TestManualCompletionAfterEndAndReplay(t *testing.T) {
 	professional := createIdentityTestUser(t, db, st, "professional", nil)
 	id := insertManualLinkSession(t, db, patient.ID, professional.ID, "chat", "scheduled", "")
 	t.Cleanup(func() { _, _ = db.ExecContext(context.Background(), `DELETE FROM care_sessions WHERE id=$1`, id) })
-	if _, err := db.ExecContext(context.Background(), `UPDATE care_sessions SET scheduled_at=$2, patient_attendance='attended' WHERE id=$1`, id, clock.Now().Add(-time.Hour)); err != nil {
+	if _, err := db.ExecContext(context.Background(), `UPDATE care_sessions SET scheduled_at=$2, patient_attendance='attended', professional_attendance='attended' WHERE id=$1`, id, clock.Now().Add(-time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	srv := newOnboardingTestServer(db)
@@ -160,8 +163,8 @@ func TestManualCompletionAfterEndAndReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if session.Status != "completed" || session.PatientAttendance != "attended" || session.ProfessionalAttendance != "" {
-		t.Fatalf("completion fabricated attendance: %+v", session)
+	if session.Status != "completed" || session.PatientAttendance != "attended" || session.ProfessionalAttendance != "attended" {
+		t.Fatalf("completion did not preserve attendance: %+v", session)
 	}
 }
 
@@ -209,7 +212,7 @@ func TestPatientAttendanceDeadlineAndHistory(t *testing.T) {
 	for _, session := range history.Sessions {
 		got[session.ID] = session
 	}
-	if got[confirmed].Status != "completed" || got[confirmed].PatientAttendance != "attended" {
+	if got[confirmed].Status != "no_show" || got[confirmed].PatientAttendance != "attended" || got[confirmed].ProfessionalAttendance != "absent" {
 		t.Fatalf("confirmed session: %+v", got[confirmed])
 	}
 	if got[missed].Status != "no_show" || got[missed].PatientAttendance != "absent" {

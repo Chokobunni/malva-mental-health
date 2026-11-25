@@ -358,6 +358,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/doctors/{user_id}/reviews", s.public(s.listDoctorReviews))
 	mux.HandleFunc("POST /v1/doctors/{user_id}/reviews", s.requireAuth(s.createDoctorReview))
 	mux.HandleFunc("GET /v1/review-entitlements", s.requireAuth(s.listReviewEntitlements))
+	mux.HandleFunc("POST /v1/review-entitlements/prompt", s.requireAuth(s.claimReviewPrompt))
 	mux.HandleFunc("GET /v1/earnings", s.requireAuth(s.earningsSummary))
 	// Saldo gabungan: satu permintaan mencairkan semua earning pending.
 	mux.HandleFunc("POST /v1/earnings/payout", s.requireAuth(s.requestPayoutAll))
@@ -372,6 +373,8 @@ func (s *Server) Routes() http.Handler {
 	// Health Record — pasien read-only; profesional terverifikasi menulis diagnosis.
 	mux.HandleFunc("GET /v1/health-record", s.requireAuth(s.getHealthRecord))
 	mux.HandleFunc("PUT /v1/health-record", s.requireAuth(s.updateHealthRecord))
+	mux.HandleFunc("GET /v1/health-record/allergies", s.requireAuth(s.listHealthRecordAllergies))
+	mux.HandleFunc("POST /v1/health-record/allergies", s.requireAuth(s.createHealthRecordAllergy))
 	// GOALS & HABITS — tersimpan server, tidak hilang saat app ditutup.
 	mux.HandleFunc("GET /v1/goals", s.requireAuth(s.listGoals))
 	mux.HandleFunc("POST /v1/goals", s.requireAuth(s.createGoal))

@@ -96,6 +96,7 @@ class _Responses {
   final packages = <Map<String, dynamic>>[];
   final sessions = <Map<String, dynamic>>[];
   final extraWorksheets = <Map<String, dynamic>>[];
+  final allergies = <Map<String, dynamic>>[];
 
   late final api = MalvaApiClient(
     baseUrl: 'http://backend.test',
@@ -132,6 +133,8 @@ class _Responses {
         '/v1/diary-entries' => {'diaries': []},
         '/v1/professional-notes' => {'notes': []},
         '/v1/medications' => {'medications': []},
+        '/v1/medication-logs' => {'medication_logs': []},
+        '/v1/health-record/allergies' => {'items': allergies},
         '/v1/timeline' => {'events': []},
         '/v1/messages' => {'messages': []},
         '/v1/health-record' => {
@@ -207,7 +210,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('Post-traumatic stress disorder'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Simpan'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Simpan Diagnosis'));
     await tester.pumpAndSettle();
     expect(responses.diagnosisWrites, [
       'F41.1 - Generalized anxiety disorder\nF43.1 - Post-traumatic stress disorder',
@@ -233,8 +236,8 @@ void main() {
           'duration_minutes': 60,
         });
       await _pump(tester, responses);
-      final button = tester.widget<FilledButton>(
-          find.widgetWithText(FilledButton, 'Isi diagnosis'));
+      final button = tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Isi diagnosis'));
       if (offset == -10) {
         expect(button.onPressed, isNotNull);
       } else {
@@ -293,9 +296,8 @@ void main() {
         },
       ]);
     await _pump(tester, responses);
-    await tester.tap(find.byKey(const ValueKey('packages-section')));
-    await tester.pumpAndSettle();
-    expect(find.text('3/4 sesi tersisa'), findsOneWidget);
+    expect(find.byKey(const ValueKey('packages-section')), findsOneWidget);
+    expect(find.textContaining('3/4 sesi tersisa'), findsOneWidget);
     expect(tester.getTopLeft(find.text('12 Nov 2026')).dy,
         lessThan(tester.getTopLeft(find.text('Paket 8 sesi / 42 hari')).dy));
     expect(tester.widget<Text>(find.text('24 Okt 2026')).style?.decoration,
@@ -322,7 +324,7 @@ void main() {
       'screening omits symptom summary and retains recorded answer details',
       (tester) async {
     await _pump(tester, _Responses());
-    await tester.tap(find.byKey(const ValueKey('screening-screening-1')));
+    await tester.tap(find.text('Lihat hasil').first);
     await tester.pumpAndSettle();
     expect(find.text('Gejala teridentifikasi'), findsNothing);
     expect(find.text('Pola tidur terganggu'), findsNothing);
@@ -367,38 +369,43 @@ void main() {
     }
     await _pump(tester, responses);
     expect(find.text('WHO retake 1'), findsNothing);
-    expect(find.text('Tampilkan lebih banyak'), findsOneWidget);
-    await tester.tap(find.text('Tampilkan lebih banyak'));
+    expect(find.text('Tunjukkan Lebih (6 lagi)'), findsOneWidget);
+    expect(find.text('WHO retake 3'), findsOneWidget);
+    expect(find.text('WHO retake 2'), findsNothing);
+    await tester.tap(find.text('Tunjukkan Lebih (6 lagi)'));
     await tester.pumpAndSettle();
     expect(find.text('WHO retake 1'), findsOneWidget);
-    expect(find.text('08/11/2026 01:00'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilterChip, 'WHO-5'));
+    expect(find.text('Asesmen • 08/11/2026 01:00'), findsOneWidget);
+    expect(find.text('Tunjukkan Lebih (1 lagi)'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Terapi'));
     await tester.pumpAndSettle();
     expect(find.text('WHO retake 1'), findsNothing);
-    expect(find.byKey(const ValueKey('screening-screening-1')), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilterChip, 'PHQ-9 + GAD-7'));
+    expect(find.text('Skrining PHQ-9 + GAD-7'), findsNothing);
+    expect(find.text('Latihan ABCDE'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Asesmen'));
+    await tester.enterText(find.byType(TextField), 'DASS');
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('screening-screening-1')), findsNothing);
     expect(find.text('DASS-21 dibagikan'), findsOneWidget);
+    expect(find.text('WHO retake 6'), findsNothing);
   });
   testWidgets(
       'groups clinical data and keeps CF without raw traces or technical prose',
       (tester) async {
     await _pump(tester, _Responses());
-    final health = find.text('Rekam Medis & Obat');
+    final health = find.text('Diagnosis Klinis (ICD-10)');
     final daily = find.text('Pemantauan harian');
-    final screening = find.text('Skrining');
+    final screening = find.text('Arsip Klinis & Skrining');
     expect(find.text('Catatan sesi'), findsNothing);
     expect(health, findsOneWidget);
     expect(screening, findsOneWidget);
     expect(tester.getTopLeft(health).dy, lessThan(tester.getTopLeft(daily).dy));
     expect(
-        tester.getTopLeft(daily).dy, lessThan(tester.getTopLeft(screening).dy));
+        tester.getTopLeft(screening).dy, lessThan(tester.getTopLeft(daily).dy));
     expect(find.text('WHO-5 dibagikan'), findsOneWidget);
     expect(find.text('DASS-21 dibagikan'), findsOneWidget);
     expect(find.text('Latihan ABCDE'), findsOneWidget);
     expect(find.text('Hasil DASS-21 / WHO-5 & tren'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('screening-screening-1')));
+    await tester.tap(find.text('Lihat hasil').first);
     await tester.pumpAndSettle();
     expect(find.text('Rincian Hasil'), findsOneWidget);
     expect(find.text('Skor Total PHQ-9'), findsOneWidget);
@@ -435,9 +442,46 @@ void main() {
     responses.statusByPath.clear();
     await tester.tap(find.byTooltip('Muat ulang'));
     await tester.pumpAndSettle();
-    expect(find.text('PHQ-9 7 • GAD-7 6'), findsOneWidget);
+    expect(find.text('PHQ-9 7/27 (Ringan)'), findsOneWidget);
     expect(find.text('Diagnosis tersimpan'), findsOneWidget);
     expect(find.text('Mood belum dapat dimuat.'), findsNothing);
+  });
+
+  testWidgets(
+      'package expiry clears diagnosis and allergies for unverified professional',
+      (tester) async {
+    final now = wibNow();
+    final responses = _Responses()
+      ..packages.add({
+        'id': 'active',
+        'patient_id': 'patient',
+        'professional_id': 'professional',
+        'total_sessions': 1,
+        'status': 'active',
+        'starts_at': wibIso(now.subtract(const Duration(days: 1))),
+        'expires_at': wibIso(now.add(const Duration(seconds: 5))),
+      })
+      ..allergies.add({
+        'id': 'a1',
+        'reaction_type': 'allergy',
+        'substance': 'Ibuprofen',
+        'symptoms': 'Ruam',
+        'severity': 'high',
+        'reported_by': 'patient',
+      });
+    await _pump(tester, responses);
+    expect(find.text('Ibuprofen'), findsOneWidget);
+    expect(find.text('Diagnosis tersimpan'), findsOneWidget);
+    responses.statusByPath['/v1/health-record'] = 403;
+    responses.statusByPath['/v1/health-record/allergies'] = 403;
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+    expect(find.text('Ibuprofen'), findsNothing);
+    expect(find.text('Diagnosis tersimpan'), findsNothing);
+    expect(find.text('Alergi & Reaksi Obat tidak dibagikan pasien.'),
+        findsOneWidget);
+    expect(responses.requested.where((path) => path == '/v1/care-sessions'),
+        hasLength(1));
   });
 
   testWidgets('unshared screening does not hide other consented data',
@@ -455,7 +499,7 @@ void main() {
       (tester) async {
     await _pump(tester, _Responses()..missingGad = true);
     expect(find.textContaining('GAD-7 0'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('screening-screening-1')));
+    await tester.tap(find.text('Lihat hasil').first);
     await tester.pumpAndSettle();
     expect(find.text('GAD-7: hasil belum tersedia.'), findsOneWidget);
     expect(find.text('GAD-7: 0/0'), findsNothing);

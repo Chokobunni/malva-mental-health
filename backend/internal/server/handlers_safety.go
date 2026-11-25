@@ -1216,6 +1216,38 @@ func (s *Server) listReviewEntitlements(w http.ResponseWriter, r *http.Request, 
 	writeJSON(w, http.StatusOK, map[string]any{"entitlements": items})
 }
 
+type reviewPromptRequest struct {
+	SessionID     string `json:"session_id"`
+	CarePackageID string `json:"care_package_id"`
+	ClaimID       string `json:"claim_id"`
+}
+
+func (s *Server) claimReviewPrompt(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "patient" {
+		writeUserError(w, http.StatusForbidden, "Hanya pasien yang dapat mengulas.")
+		return
+	}
+	var req reviewPromptRequest
+	if err := readJSON(r, &req); err != nil || (req.SessionID == "") == (req.CarePackageID == "") {
+		writeUserError(w, http.StatusBadRequest, "Pilih salah satu sesi atau paket.")
+		return
+	}
+	unitID, unitType := req.SessionID, "session"
+	if req.CarePackageID != "" {
+		unitID, unitType = req.CarePackageID, "package"
+	}
+	if !store.ValidClinicalClientID(unitID) || !store.ValidClinicalClientID(req.ClaimID) {
+		writeUserError(w, http.StatusBadRequest, "ID ulasan tidak valid.")
+		return
+	}
+	show, err := s.store.ClaimReviewPrompt(r.Context(), claims.Subject, unitID, unitType, req.ClaimID)
+	if err != nil {
+		writeUserError(w, http.StatusInternalServerError, "Gagal memeriksa pengingat ulasan.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"show": show})
+}
+
 func (s *Server) requireVerifiedProfessional(w http.ResponseWriter, r *http.Request, claims auth.Claims) bool {
 	if claims.Role != "professional" {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "Only professionals can access this resource"})

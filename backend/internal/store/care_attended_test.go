@@ -115,8 +115,8 @@ func TestCompleteAttendedSessions(t *testing.T) {
 	// menit) -> scheduled_at + 30m <= now().
 	var sessionID string
 	if err := db.QueryRowContext(ctx, `INSERT INTO care_sessions
-	(booking_id, patient_id, professional_id, session_type, scheduled_at, duration_minutes, status, patient_attendance)
-	VALUES ($1,$2,$3,'chat', now() - interval '60 minutes', 30, 'scheduled', 'attended')
+	(booking_id, patient_id, professional_id, session_type, scheduled_at, duration_minutes, status, patient_attendance, professional_attendance)
+	VALUES ($1,$2,$3,'chat', now() - interval '60 minutes', 30, 'scheduled', 'attended', 'attended')
 		RETURNING id::text`, bookingID, patientID, profID).Scan(&sessionID); err != nil {
 		t.Fatalf("seed care_session: %v", err)
 	}

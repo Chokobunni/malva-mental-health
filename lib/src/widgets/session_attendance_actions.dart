@@ -51,9 +51,8 @@ class _SessionAttendanceActionsState
           context: context,
           builder: (ctx) => AlertDialog(
                 title: const Text('Konfirmasi tidak hadir'),
-                content: Text(widget.role == UserRole.professional
-                    ? 'Sesi dibatalkan dan kuota pasien dikembalikan.'
-                    : 'Sesi dicatat tidak hadir dan kuota sesi terpakai.'),
+                content: const Text(
+                    'Ketidakhadiran Anda akan dicatat. Status akhir sesi mengikuti catatan kehadiran kedua pihak.'),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(ctx, false),
@@ -161,7 +160,7 @@ class _SessionAttendanceActionsState
           style: const TextStyle(fontWeight: FontWeight.w700)),
       if (session.isScheduled && opened)
         Wrap(spacing: 8, runSpacing: 8, children: [
-          if (attendance.isEmpty) ...[
+          if (!ended && attendance.isEmpty) ...[
             OutlinedButton.icon(
                 onPressed: _busy ? null : () => _mark('attended'),
                 icon: const Icon(Icons.check_rounded, size: 16),
@@ -171,7 +170,9 @@ class _SessionAttendanceActionsState
                 icon: const Icon(Icons.person_off_rounded, size: 16),
                 label: const Text('Tidak hadir')),
           ],
-          if (ended)
+          if (ended &&
+              attendance == 'attended' &&
+              session.patientAttendance == 'attended')
             FilledButton.icon(
                 style: compactFilledButtonStyle,
                 onPressed: _busy ? null : () => _mark('completed'),

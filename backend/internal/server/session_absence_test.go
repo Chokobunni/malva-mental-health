@@ -53,6 +53,19 @@ func TestSelfAttendanceOutcomes(t *testing.T) {
 					t.Fatalf("absence: %d %s", w.Code, w.Body.String())
 				}
 			}
+			otherRole, otherActor := "professional", professional.ID
+			if role == "professional" {
+				otherRole, otherActor = "patient", patient.ID
+			}
+			if _, err := st.MarkCareSessionAttendance(context.Background(), id, otherRole, otherActor, "attended"); err != nil {
+				t.Fatalf("counterpart cannot check in after absence: %v", err)
+			}
+			if _, err := db.Exec(`UPDATE care_sessions SET scheduled_at=$2 WHERE id=$1`, id, clock.Now().Add(-2*time.Hour)); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, _, err := st.SweepCareState(context.Background()); err != nil {
+				t.Fatal(err)
+			}
 			session, err := st.GetCareSession(context.Background(), id)
 			if err != nil {
 				t.Fatal(err)
@@ -72,11 +85,11 @@ func TestSelfAttendanceOutcomes(t *testing.T) {
 				t.Fatal("absence recognized earnings")
 			}
 			if role == "patient" {
-				if session.Status != "no_show" || session.PatientAttendance != "absent" || session.ProfessionalAttendance != "" || pkg.UsedSessions != 1 || credits != 0 {
+				if session.Status != "no_show" || session.PatientAttendance != "absent" || session.ProfessionalAttendance != "attended" || pkg.UsedSessions != 1 || credits != 0 {
 					t.Fatalf("patient absence: session=%+v package=%+v credits=%d", session, pkg, credits)
 				}
 			} else {
-				if session.Status != "cancelled_by_professional" || session.ProfessionalAttendance != "absent" || session.PatientAttendance != "" || pkg.Status != "active" || pkg.UsedSessions != 0 || credits != 1 {
+				if session.Status != "no_show" || session.ProfessionalAttendance != "absent" || session.PatientAttendance != "attended" || pkg.Status != "active" || pkg.UsedSessions != 0 || credits != 0 {
 					t.Fatalf("professional absence: session=%+v package=%+v credits=%d", session, pkg, credits)
 				}
 			}

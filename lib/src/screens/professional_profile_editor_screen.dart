@@ -449,21 +449,6 @@ class _ProfessionalProfileEditorScreenState
     }
   }
 
-  /// Menghasilkan avatar AI via DiceBear API menggunakan user ID sebagai seed.
-  void _generateAiAvatar() {
-    final userId = _cred?.userId ?? widget.session?.backendUserId ?? '';
-    if (userId.isEmpty) {
-      setState(() =>
-          _error = 'User ID tidak tersedia untuk menghasilkan avatar AI.');
-      return;
-    }
-    setState(() {
-      _photoUrlController.text =
-          'https://api.dicebear.com/9.x/notionists/svg?seed=$userId';
-      _localPhotoBytes = null; // reset berkas lokal karena pakai URL eksternal
-    });
-  }
-
   void _addEducation() {
     setState(() {
       _education.add({'degree': '', 'school': '', 'year': wibNow().year});
@@ -611,13 +596,6 @@ class _ProfessionalProfileEditorScreenState
                                       style: TextStyle(
                                           fontSize: 11,
                                           color: Color(0xFF98A2AE))),
-                                  TextButton.icon(
-                                    onPressed: busy ? null : _generateAiAvatar,
-                                    icon: const Icon(
-                                        Icons.auto_awesome_outlined,
-                                        size: 16),
-                                    label: const Text('Buat avatar'),
-                                  ),
                                 ],
                               ),
                             ),

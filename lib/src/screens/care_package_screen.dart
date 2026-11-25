@@ -11,6 +11,7 @@ import '../services/care_session_refresh.dart';
 import '../services/server_clock.dart';
 import '../theme.dart';
 import '../time/wib.dart';
+import '../widgets/care_session_card.dart' show careSessionNoShowLabel;
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/meet_join_button.dart';
@@ -306,7 +307,8 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
                               fontWeight: FontWeight.w700, fontSize: 11)),
                       SizedBox(height: 10),
                       Text(
-                        '• Tidak hadir = sesi hangus.\n\n'
+                        '• Jika kamu hadir dan profesional tidak hadir, kuota sesi kembali.\n\n'
+                        '• Jika kamu tidak hadir, kuota sesi tetap terpakai.\n\n'
                         '• Profesional batal = kredit kembali, bisa dijadwalkan ulang.\n\n'
                         '• Batal/reschedule olehmu minimal 24 jam sebelum sesi.\n\n'
                         '• Chat teks aktif saat sesi berjalan; kiriman data dibahas saat sesi.',
@@ -535,7 +537,7 @@ class _CarePackageScreenState extends ConsumerState<CarePackageScreen> {
         professionalId: _package.professionalId,
         expiresAt: _package.expiresDateTime,
         initialType: existing?.sessionType ?? 'video',
-        allowTypeSelection: existing == null,
+        dateAndTimeOnly: existing == null,
       ),
     );
     if (picked == null || !mounted) return;
@@ -928,6 +930,7 @@ class CareSessionSchedulerSheet extends StatefulWidget {
     this.excludedSlots = const {},
     this.sessionNumber,
     this.allowTypeSelection = false,
+    this.dateAndTimeOnly = false,
   });
 
   final MalvaApiClient apiClient;
@@ -939,6 +942,7 @@ class CareSessionSchedulerSheet extends StatefulWidget {
   final Set<String> excludedSlots;
   final int? sessionNumber;
   final bool allowTypeSelection;
+  final bool dateAndTimeOnly;
 
   @override
   State<CareSessionSchedulerSheet> createState() =>
@@ -963,7 +967,7 @@ class CareSessionSchedulerSheetState extends State<CareSessionSchedulerSheet> {
     super.initState();
     _type = widget.initialType;
     _loadDays();
-    if (_type == 'video') _loadMeetStatus();
+    if (!widget.dateAndTimeOnly && _type == 'video') _loadMeetStatus();
   }
 
   /// Ambil status Meet sekali saat sheet dibuka. Kegagalan tidak ditampilkan
@@ -1092,7 +1096,7 @@ class CareSessionSchedulerSheetState extends State<CareSessionSchedulerSheet> {
                             fontSize: 11,
                             height: 1.5)),
                     const SizedBox(height: 10),
-                    if (widget.allowTypeSelection)
+                    if (!widget.dateAndTimeOnly && widget.allowTypeSelection)
                       Wrap(spacing: 8, children: [
                         for (final (value, label) in [
                           ('video', 'Video'),
@@ -1108,7 +1112,7 @@ class CareSessionSchedulerSheetState extends State<CareSessionSchedulerSheet> {
                             },
                           ),
                       ])
-                    else
+                    else if (!widget.dateAndTimeOnly)
                       Row(children: [
                         Icon(
                             _type == 'video'
@@ -1611,7 +1615,7 @@ class _PackageSessionCard extends StatelessWidget {
     final statusLabel = switch (session.status) {
       'scheduled' => 'Terjadwal',
       'completed' => 'Selesai',
-      'no_show' => 'Tidak hadir (hangus)',
+      'no_show' => careSessionNoShowLabel(session),
       'cancelled_by_professional' => 'Dibatalkan profesional (kredit kembali)',
       'cancelled_by_patient' => 'Dibatalkan',
       _ => session.status,

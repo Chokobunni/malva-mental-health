@@ -44,9 +44,18 @@ func TestReviewRenewalWaitsForEarlierAttendanceAndCreditReplacement(t *testing.T
 	if _, err := s.CreateDoctorReviewForEntitlement(ctx, professional, patient, 5, "Terlalu awal", true, "", renewal); !errors.Is(err, ErrReviewNotEligible) {
 		t.Fatalf("premature renewal POST=%v", err)
 	}
-	cancelled, err := s.MarkCareSessionAttendance(ctx, delayed, "professional", professional, "absent")
-	if err != nil || cancelled.Status != "cancelled_by_professional" {
-		t.Fatalf("delayed professional absence: %+v %v", cancelled, err)
+	if _, err := s.MarkCareSessionAttendance(ctx, delayed, "patient", patient, "attended"); err != nil {
+		t.Fatal(err)
+	}
+	absent, err := s.MarkCareSessionAttendance(ctx, delayed, "professional", professional, "absent")
+	if err != nil || absent.Status != "scheduled" {
+		t.Fatalf("delayed professional absence: %+v %v", absent, err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE care_sessions SET scheduled_at=now()-interval '2 hours' WHERE id=$1`, delayed); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.finalizeEndedCareSessions(ctx, " AND id=$2", delayed); err != nil {
+		t.Fatal(err)
 	}
 	pkg, err := s.GetCarePackage(ctx, original)
 	if err != nil || pkg.Remaining != 1 || pkg.TotalSessions != 8 || pkg.Price != 400000 {
@@ -67,7 +76,7 @@ func TestReviewRenewalWaitsForEarlierAttendanceAndCreditReplacement(t *testing.T
 		t.Fatalf("unfinished replacement allowed renewal: %+v %v", items, err)
 	}
 	// Advance only the fixture schedule to exercise real terminal completion.
-	if _, err := db.ExecContext(ctx, `UPDATE care_sessions SET scheduled_at=now()-interval '1 hour',patient_attendance='attended' WHERE id=$1`, replacement.ID); err != nil {
+	if _, err := db.ExecContext(ctx, `UPDATE care_sessions SET scheduled_at=now()-interval '1 hour',patient_attendance='attended',professional_attendance='attended' WHERE id=$1`, replacement.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.UpdateCareSessionStatus(ctx, replacement.ID, "completed", "", professional); err != nil {

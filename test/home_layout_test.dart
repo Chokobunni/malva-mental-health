@@ -42,7 +42,7 @@ void main() {
     // Psychological Therapy / Health Record.
     expect(find.text('Target & Kebiasaan'), findsOneWidget);
     expect(find.textContaining('Jurnal'), findsOneWidget);
-    expect(find.text('Rekam Medis'), findsOneWidget);
+    expect(find.text('Profil Klinis'), findsOneWidget);
     expect(find.text('Terapi Psikologis'), findsOneWidget);
 
     // Figma grid Professional Care: Assessment / History Log.

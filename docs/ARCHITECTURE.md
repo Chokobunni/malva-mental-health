@@ -541,6 +541,11 @@ schedule and hydrates legacy weekly quotas without inventing a time.
 
 ### Health Record diagnosis (2026-11-21)
 
+Profil Klinis stores patient-reported drug allergies and side effects in
+`clinical_allergies`. Authenticated patients can add entries to their own profile.
+Professional reads use the existing active link, consultation window and Health
+Record consent.
+
 The Flutter picker searches a cached ICD-10 asset regenerated from the supplied
 master file with `node tools/build_mh_dataset.js <path-to-master_icd_x.json>`.
 Selections use the existing `diagnosis_summary` field as ordered code/title
