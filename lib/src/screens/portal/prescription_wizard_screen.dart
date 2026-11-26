@@ -19,6 +19,8 @@ class EPrescriptionFormScreen extends ConsumerStatefulWidget {
       this.preselectedPatientId = '',
       this.preselectedPatientName = '',
       this.onCreated,
+      this.onIssued,
+      this.lockPatient = false,
       this.initialMedication,
       this.prescription,
       this.itemIndex = 0,
@@ -30,6 +32,8 @@ class EPrescriptionFormScreen extends ConsumerStatefulWidget {
   final List<BackendPatientProfessionalLink> links;
   final String preselectedPatientId, preselectedPatientName;
   final VoidCallback? onCreated;
+  final ValueChanged<BackendEPrescription>? onIssued;
+  final bool lockPatient;
   final Medication? initialMedication;
   final BackendEPrescription? prescription;
   final int itemIndex;
@@ -539,7 +543,9 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                     value: p.key,
                     child: Text(p.value, overflow: TextOverflow.ellipsis))
             ],
-            onChanged: (v) => setState(() => _patientId = v)),
+            onChanged: widget.lockPatient
+                ? null
+                : (v) => setState(() => _patientId = v)),
         if (patients.isEmpty)
           const Padding(
               padding: EdgeInsets.only(top: 8),
@@ -1469,7 +1475,7 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
         if (mounted && _session != null) Navigator.pop(context, true);
         return;
       }
-      await api.createEPrescription(
+      final issued = await api.createEPrescription(
           accessToken: token,
           patientId: _patientId!,
           status: 'issued',
@@ -1477,6 +1483,7 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
           notes: _notes.text.trim(),
           items: [updated]);
       if (!mounted || _session == null) return;
+      widget.onIssued?.call(issued);
       widget.onCreated?.call();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Resep dan rutinitas obat dikirim ke pasien.')));

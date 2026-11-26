@@ -8,6 +8,52 @@ import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/widgets/clinical_allergy_section.dart';
 
 void main() {
+  test('update preserves legacy occurrence and delete targets the same report',
+      () async {
+    final methods = <String>[];
+    final client = MalvaApiClient(
+      baseUrl: 'https://example.test',
+      httpClient: MockClient((request) async {
+        methods.add(request.method);
+        expect(request.url.path, '/v1/health-record/allergies/a1');
+        if (request.method == 'DELETE') {
+          return http.Response('{"deleted":true}', 200);
+        }
+        expect(jsonDecode(request.body), {
+          'reaction_type': 'side_effect',
+          'substance': 'Ibuprofen',
+          'symptoms': 'Pusing',
+          'severity': 'mild',
+        });
+        return http.Response(
+            jsonEncode({
+              'item': {
+                'id': 'a1',
+                'reaction_type': 'side_effect',
+                'substance': 'Ibuprofen',
+                'symptoms': 'Pusing',
+                'severity': 'mild',
+                'occurred_when': 'Masa kecil',
+                'reported_by': 'patient',
+              }
+            }),
+            200);
+      }),
+    );
+    final record = await client.updateHealthRecordAllergy(
+      accessToken: 'token',
+      allergyId: 'a1',
+      reactionType: 'side_effect',
+      substance: 'Ibuprofen',
+      symptoms: 'Pusing',
+      severity: 'mild',
+    );
+    expect(record.occurredWhen, 'Masa kecil');
+    await client.deleteHealthRecordAllergy(
+        accessToken: 'token', allergyId: 'a1');
+    expect(methods, ['PUT', 'DELETE']);
+  });
+
   testWidgets('form validates required fields and keeps retry ID',
       (tester) async {
     tester.view.physicalSize = const Size(430, 1400);
@@ -26,21 +72,19 @@ void main() {
                       context: context,
                       isScrollControlled: true,
                       builder: (_) => AddClinicalAllergySheet(
-                        onSave: (id, reaction, substance, symptoms, severity,
-                            date) async {
+                        onSave: (id, reaction, substance, symptoms,
+                            severity) async {
                           ids.add(id);
                           expect([
                             reaction,
                             substance,
                             symptoms,
-                            severity,
-                            date
+                            severity
                           ], [
                             'allergy',
                             'Ibuprofen',
                             'Ruam / Gatal',
-                            'moderate',
-                            ''
+                            'moderate'
                           ]);
                           if (ids.length == 1) throw StateError('retry');
                           return BackendHealthRecordAllergy(
@@ -49,7 +93,7 @@ void main() {
                             substance: substance,
                             symptoms: symptoms,
                             severity: severity,
-                            occurredWhen: date,
+                            occurredWhen: '',
                             reportedBy: 'patient',
                           );
                         },

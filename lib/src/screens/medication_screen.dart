@@ -203,13 +203,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen>
             logs: storeState.medicationLogs,
             start: historyStart,
             end: now);
-    final takenToday = storeState.medications
-        .where((med) => storeState.medicationLogs.any((log) =>
-            log.medicationId == med.id &&
-            medicationDay(log.takenAt) == today &&
-            !log.takenAt.isAfter(now) &&
-            normalizedMedicationStatus(log.status) == 'taken'))
-        .length;
+    final daily = storeState.medicationAdherenceToday(now);
     final content = RefreshIndicator(
       onRefresh: () async {
         final startedOwner = _owner(_session);
@@ -272,13 +266,12 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen>
                                 color: Colors.white.withValues(alpha: .12),
                                 borderRadius: BorderRadius.circular(18)),
                             child: Column(children: [
-                              Text('${storeState.adherencePercent}%',
+                              Text('${daily.percent}%',
                                   style: const TextStyle(
                                       fontSize: 26,
                                       fontWeight: FontWeight.w800,
                                       color: Colors.white)),
-                              Text(
-                                  '$takenToday/${storeState.medications.length} obat',
+                              Text('${daily.taken}/${daily.total} obat',
                                   style: const TextStyle(color: Colors.white70))
                             ])),
                       ]),
@@ -287,7 +280,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen>
                           style: TextStyle(color: Colors.white70)),
                       const SizedBox(height: 18),
                       LinearProgressIndicator(
-                          value: storeState.adherencePercent / 100,
+                          value: daily.percent / 100,
                           color: const Color(0xffd19de5),
                           backgroundColor: const Color(0xff48205e),
                           borderRadius: BorderRadius.circular(8),

@@ -147,7 +147,7 @@ type privacyConsentRequest struct {
 	ShareScreenings   bool   `json:"share_screenings"`
 	ShareMoodDiary    bool   `json:"share_mood_diary"`
 	ShareMedications  bool   `json:"share_medications"`
-	ShareTimeline     bool   `json:"share_timeline"`
+	ShareTimeline     *bool  `json:"share_timeline"`
 	ShareHealthRecord *bool  `json:"share_health_record"`
 	ShareGoals        *bool  `json:"share_goals"`
 	// ShareTherapyRecords: izin kategori Therapy Record (worksheet CBT/DBT).
@@ -373,8 +373,11 @@ func (s *Server) Routes() http.Handler {
 	// Health Record — pasien read-only; profesional terverifikasi menulis diagnosis.
 	mux.HandleFunc("GET /v1/health-record", s.requireAuth(s.getHealthRecord))
 	mux.HandleFunc("PUT /v1/health-record", s.requireAuth(s.updateHealthRecord))
+	mux.HandleFunc("GET /v1/health-record/access", s.requireAuth(s.getHealthRecordAccess))
 	mux.HandleFunc("GET /v1/health-record/allergies", s.requireAuth(s.listHealthRecordAllergies))
 	mux.HandleFunc("POST /v1/health-record/allergies", s.requireAuth(s.createHealthRecordAllergy))
+	mux.HandleFunc("PUT /v1/health-record/allergies/{allergy_id}", s.requireAuth(s.updateHealthRecordAllergy))
+	mux.HandleFunc("DELETE /v1/health-record/allergies/{allergy_id}", s.requireAuth(s.deleteHealthRecordAllergy))
 	// GOALS & HABITS — tersimpan server, tidak hilang saat app ditutup.
 	mux.HandleFunc("GET /v1/goals", s.requireAuth(s.listGoals))
 	mux.HandleFunc("POST /v1/goals", s.requireAuth(s.createGoal))
@@ -1701,17 +1704,16 @@ func (s *Server) updatePrivacyConsent(w http.ResponseWriter, r *http.Request, cl
 	if req.ShareTherapyRecords != nil {
 		shareTherapyRecords = *req.ShareTherapyRecords
 	}
-	consent, err := s.store.UpdatePatientDataConsent(r.Context(), store.PatientDataConsent{
+	consent, err := s.store.SavePatientDataConsent(r.Context(), store.PatientDataConsent{
 		PatientID:           claims.Subject,
 		ProfessionalID:      req.ProfessionalID,
 		ShareScreenings:     req.ShareScreenings,
 		ShareMoodDiary:      req.ShareMoodDiary,
 		ShareMedications:    req.ShareMedications,
-		ShareTimeline:       req.ShareTimeline,
 		ShareHealthRecord:   shareHealthRecord,
 		ShareGoals:          shareGoals,
 		ShareTherapyRecords: shareTherapyRecords,
-	})
+	}, req.ShareTimeline)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return

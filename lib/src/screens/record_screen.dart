@@ -329,231 +329,247 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SectionLabel('Diagnosis Klinis',
-                      action: StatusPill(
-                          label: 'Hanya Baca',
-                          color: MalvaColors.seed,
-                          icon: Icons.lock_outline)),
-                  if (_isLoading)
-                    const SoftCard(
-                      child: Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(8),
-                          child: CircularProgressIndicator(),
+                  ClinicalProfileSection(
+                    title: 'Diagnosis Klinis',
+                    art: 'diagnosis',
+                    action: const StatusPill(
+                        label: 'Hanya Baca',
+                        color: MalvaColors.seed,
+                        icon: Icons.lock_outline),
+                    children: [
+                      if (_isLoading)
+                        const SoftCard(
+                          child: Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(8),
+                              child: CircularProgressIndicator(),
+                            ),
+                          ),
+                        )
+                      else if (_healthRecord?.hasDiagnosis == true)
+                        ClinicalDiagnosisCard(record: _healthRecord!)
+                      else
+                        const _NoDiagnosisCard(),
+                      if (_loadError != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _loadError!,
+                          style: const TextStyle(
+                              color: MalvaColors.danger,
+                              fontWeight: FontWeight.w700),
                         ),
-                      ),
-                    )
-                  else if (_healthRecord?.hasDiagnosis == true)
-                    ClinicalDiagnosisCard(record: _healthRecord!)
-                  else
-                    const _NoDiagnosisCard(),
-                  if (_loadError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      _loadError!,
-                      style: const TextStyle(
-                          color: MalvaColors.danger,
-                          fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                  const SizedBox(height: 22),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
                   ClinicalAllergySection(
                     records: _allergies,
                     onAdd: widget.apiClient != null &&
                             (ref.read(currentSessionProvider) ?? widget.session)
                                     ?.role ==
                                 UserRole.patient
-                        ? _addAllergy
+                        ? () => _editAllergy()
                         : null,
+                    onEdit: widget.apiClient == null ? null : _editAllergy,
+                    onDelete: widget.apiClient == null ? null : _deleteAllergy,
                     status: _allergyError == null
                         ? null
                         : SoftCard(child: Text(_allergyError!)),
                   ),
                   const SizedBox(height: 22),
-                  SectionLabel(
-                    'Obat Aktif (${_medications.length})',
+                  ClinicalProfileSection(
+                    title: 'Obat Aktif',
+                    art: 'medication',
                     action: _adherence == null
                         ? null
                         : StatusPill(
-                            label: 'Kepatuhan $_adherence% (7 hr)',
+                            label: 'Kepatuhan $_adherence% (7 hari)',
                             color: MalvaColors.seed),
-                  ),
-                  if (_isLoading)
-                    const SizedBox.shrink()
-                  else if (_medications.isEmpty)
-                    const SoftCard(
-                      child: Column(
-                        children: [
-                          Icon(Icons.medication_outlined,
-                              size: 42, color: MalvaColors.seed),
-                          SizedBox(height: 10),
-                          Text(
-                            'Belum ada obat',
-                            style: TextStyle(fontWeight: FontWeight.w900),
+                    children: [
+                      if (_isLoading)
+                        const SizedBox.shrink()
+                      else if (_medications.isEmpty)
+                        const SoftCard(
+                          child: Column(
+                            children: [
+                              Icon(Icons.medication_outlined,
+                                  size: 42, color: MalvaColors.seed),
+                              SizedBox(height: 10),
+                              Text(
+                                'Belum ada obat aktif',
+                                style: TextStyle(fontWeight: FontWeight.w900),
+                              ),
+                              SizedBox(height: 6),
+                              Text(
+                                'Tambahkan obat dari menu Obat agar '
+                                'muncul di sini.',
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
-                          SizedBox(height: 6),
-                          Text(
-                            'Tambahkan obat dari menu Obat agar '
-                            'muncul di sini.',
-                            textAlign: TextAlign.center,
-                          ),
+                        )
+                      else
+                        for (final med in _medications) ...[
+                          ClinicalMedicationCard(med: med),
+                          const SizedBox(height: 12),
                         ],
-                      ),
-                    )
-                  else
-                    for (final med in _medications) ...[
-                      ClinicalMedicationCard(med: med),
-                      const SizedBox(height: 12),
                     ],
-                  const SizedBox(height: 22),
-                  SectionLabel(
-                    'Arsip Klinis',
+                  ),
+                  const SizedBox(height: 16),
+                  ClinicalProfileSection(
+                    title: 'Arsip Klinis',
+                    art: 'archive',
                     action: OutlinedButton.icon(
                       onPressed: () => _showAddRecordDialog(context),
                       icon: const Icon(Icons.upload_file_rounded),
                       label: const Text('Tambah Berkas'),
                     ),
-                  ),
-                  TextField(
-                    decoration: const InputDecoration(
-                      labelText: 'Cari',
-                      hintText: 'Cari dokumen, asesmen, atau terapi...',
-                      prefixIcon: Icon(Icons.search_rounded),
-                    ),
-                    onChanged: (v) => setState(() {
-                      _searchQuery = v;
-                      _visibleCount = 4;
-                    }),
-                  ),
-                  const SizedBox(height: 10),
-                  // Sumber tambahan masih dimuat: indikator ringkas saja,
-                  // bukan spinner besar yang menahan seluruh layar.
-                  if (_extrasLoading) ...[
-                    Row(
-                      children: [
-                        const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                    children: [
+                      TextField(
+                        decoration: const InputDecoration(
+                          labelText: 'Cari',
+                          hintText: 'Cari dokumen, asesmen, atau terapi...',
+                          prefixIcon: Icon(Icons.search_rounded),
                         ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Memuat asesmen & riwayat Terapi…',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  // Filter jenis entri (primer).
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (final option in _kindOptions)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: FilterChip(
-                              label: Text(option),
-                              selected: _kindFilter == option,
-                              onSelected: (_) => setState(() {
-                                _kindFilter = option;
-                                _visibleCount = 4;
-                                // Filter tipe file hanya berlaku untuk dokumen;
-                                // direset agar daftar tidak kosong tanpa sebab.
-                                if (option != _RecordEntry.kindDocument) {
-                                  _typeFilter = 'Semua';
-                                }
-                              }),
-                              selectedColor:
-                                  MalvaColors.seed.withValues(alpha: 0.15),
-                              checkmarkColor: MalvaColors.seed,
+                        onChanged: (v) => setState(() {
+                          _searchQuery = v;
+                          _visibleCount = 4;
+                        }),
+                      ),
+                      const SizedBox(height: 10),
+                      // Sumber tambahan masih dimuat: indikator ringkas saja,
+                      // bukan spinner besar yang menahan seluruh layar.
+                      if (_extrasLoading) ...[
+                        Row(
+                          children: [
+                            const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  // Filter tipe file hanya tampil saat melihat dokumen.
-                  if (_kindFilter == _RecordEntry.kindDocument) ...[
-                    const SizedBox(height: 8),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          for (final option in _typeOptions)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: FilterChip(
-                                label: Text(option),
-                                selected: _typeFilter == option,
-                                onSelected: (_) => setState(() {
-                                  _typeFilter = option;
-                                  _visibleCount = 4;
-                                }),
-                                selectedColor:
-                                    MalvaColors.seed.withValues(alpha: 0.15),
-                                checkmarkColor: MalvaColors.seed,
+                            const SizedBox(width: 10),
+                            Text(
+                              'Memuat asesmen & riwayat Terapi…',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                               ),
                             ),
-                        ],
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      // Filter jenis entri (primer).
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            for (final option in _kindOptions)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: FilterChip(
+                                  label: Text(option),
+                                  selected: _kindFilter == option,
+                                  onSelected: (_) => setState(() {
+                                    _kindFilter = option;
+                                    _visibleCount = 4;
+                                    // Filter tipe file hanya berlaku untuk dokumen;
+                                    // direset agar daftar tidak kosong tanpa sebab.
+                                    if (option != _RecordEntry.kindDocument) {
+                                      _typeFilter = 'Semua';
+                                    }
+                                  }),
+                                  selectedColor:
+                                      MalvaColors.seed.withValues(alpha: 0.15),
+                                  checkmarkColor: MalvaColors.seed,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                  if (_therapyError != null || _screeningError != null) ...[
-                    const SizedBox(height: 8),
-                    // Kegagalan satu sumber hanya jadi keterangan kecil:
-                    // dokumen, diagnosis, dan obat tetap tampil.
-                    Text(
-                      [
-                        if (_therapyError != null)
-                          'Riwayat Terapi belum termuat: $_therapyError',
-                        if (_screeningError != null)
-                          'Riwayat Asesmen belum termuat: $_screeningError',
-                      ].join(' • '),
-                      style: const TextStyle(
-                          fontSize: 11.5, color: MalvaColors.danger),
-                    ),
-                  ],
-                  const SizedBox(height: 10),
-                  // Empty state ditahan selama sumber tambahan dimuat: kalau
-                  // tidak, filter "Assessment"/"Therapy" sempat menampilkan
-                  // "Tidak ada yang cocok" padahal datanya belum tiba.
-                  if (visibleEntries.isEmpty && !_extrasLoading)
-                    SoftCard(
-                      child: Column(
-                        children: [
-                          const Icon(Icons.folder_open_rounded,
-                              size: 48, color: MalvaColors.seed),
+                      // Filter tipe file hanya tampil saat melihat dokumen.
+                      if (_kindFilter == _RecordEntry.kindDocument) ...[
+                        const SizedBox(height: 8),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (final option in _typeOptions)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: FilterChip(
+                                    label: Text(option),
+                                    selected: _typeFilter == option,
+                                    onSelected: (_) => setState(() {
+                                      _typeFilter = option;
+                                      _visibleCount = 4;
+                                    }),
+                                    selectedColor: MalvaColors.seed
+                                        .withValues(alpha: 0.15),
+                                    checkmarkColor: MalvaColors.seed,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (_therapyError != null || _screeningError != null) ...[
+                        const SizedBox(height: 8),
+                        // Kegagalan satu sumber hanya jadi keterangan kecil:
+                        // dokumen, diagnosis, dan obat tetap tampil.
+                        Text(
+                          [
+                            if (_therapyError != null)
+                              'Riwayat Terapi belum termuat: $_therapyError',
+                            if (_screeningError != null)
+                              'Riwayat Asesmen belum termuat: $_screeningError',
+                          ].join(' • '),
+                          style: const TextStyle(
+                              fontSize: 11.5, color: MalvaColors.danger),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      // Empty state ditahan selama sumber tambahan dimuat: kalau
+                      // tidak, filter "Assessment"/"Therapy" sempat menampilkan
+                      // "Tidak ada yang cocok" padahal datanya belum tiba.
+                      if (visibleEntries.isEmpty && !_extrasLoading)
+                        SoftCard(
+                          child: Column(
+                            children: [
+                              const Icon(Icons.folder_open_rounded,
+                                  size: 48, color: MalvaColors.seed),
+                              const SizedBox(height: 12),
+                              Text(
+                                entries.isEmpty
+                                    ? 'Belum ada record'
+                                    : 'Tidak ada yang cocok',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w900),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Upload dokumen, isi asesmen, atau simpan '
+                                'lembar kerja terapi — semuanya tampil di sini.',
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        for (final entry
+                            in visibleEntries.take(_visibleCount)) ...[
+                          _RecordEntryCard(entry: entry),
                           const SizedBox(height: 12),
-                          Text(
-                            entries.isEmpty
-                                ? 'Belum ada record'
-                                : 'Tidak ada yang cocok',
-                            style: const TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Upload dokumen, isi asesmen, atau simpan '
-                            'lembar kerja terapi — semuanya tampil di sini.',
-                            textAlign: TextAlign.center,
-                          ),
                         ],
-                      ),
-                    )
-                  else
-                    for (final entry in visibleEntries.take(_visibleCount)) ...[
-                      _RecordEntryCard(entry: entry),
-                      const SizedBox(height: 12),
+                      if (visibleEntries.length > _visibleCount)
+                        OutlinedButton(
+                          onPressed: () => setState(() => _visibleCount += 5),
+                          child: Text(
+                              'Tunjukkan Lebih (${visibleEntries.length - _visibleCount} lagi)'),
+                        ),
                     ],
-                  if (visibleEntries.length > _visibleCount)
-                    OutlinedButton(
-                      onPressed: () => setState(() => _visibleCount += 5),
-                      child: Text(
-                          'Tunjukkan Lebih (${visibleEntries.length - _visibleCount} lagi)'),
-                    ),
+                  ),
                 ],
               ),
             ),
@@ -587,7 +603,50 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
     ref.read(malvaStoreProvider.notifier).deleteRecord(document.id);
   }
 
-  Future<void> _addAllergy() async {
+  String? get _allergyToken {
+    if (!mounted || _screenOwner != _ownerKey(ref.read(currentSessionProvider)))
+      return null;
+    final session = ref.read(currentSessionProvider) ?? widget.session;
+    final token = session?.accessToken;
+    return session?.role == UserRole.patient && token?.isNotEmpty == true
+        ? token
+        : null;
+  }
+
+  Future<void> _deleteAllergy(BackendHealthRecordAllergy record) async {
+    if (_allergyToken == null || record.reportedBy != 'patient') return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Hapus catatan alergi?'),
+        content: Text(record.substance),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialog),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialog, true),
+              child: const Text('Hapus')),
+        ],
+      ),
+    );
+    final token = _allergyToken;
+    if (confirmed != true || token == null) return;
+    try {
+      await widget.apiClient!
+          .deleteHealthRecordAllergy(accessToken: token, allergyId: record.id);
+      if (_allergyToken != null) await _loadFromServer();
+    } on Object catch (error) {
+      if (_allergyToken != null)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyErrorMessage(error))),
+        );
+    }
+  }
+
+  Future<void> _editAllergy([BackendHealthRecordAllergy? initial]) async {
+    if (_allergyToken == null ||
+        (initial != null && initial.reportedBy != 'patient')) return;
     final api = widget.apiClient!;
     final record = await showModalBottomSheet<BackendHealthRecordAllergy>(
       context: context,
@@ -598,7 +657,8 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
       enableDrag: false,
       showDragHandle: true,
       builder: (_) => AddClinicalAllergySheet(
-        onSave: (id, reaction, substance, symptoms, severity, occurredWhen) {
+        initial: initial,
+        onSave: (id, reaction, substance, symptoms, severity) {
           final session = ref.read(currentSessionProvider) ?? widget.session;
           final token = session?.accessToken;
           if (!mounted ||
@@ -608,6 +668,16 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
               token.isEmpty) {
             return Future.error(StateError('Sesi akun telah berubah.'));
           }
+          if (initial != null) {
+            return api.updateHealthRecordAllergy(
+              accessToken: token,
+              allergyId: initial.id,
+              reactionType: reaction,
+              substance: substance,
+              symptoms: symptoms,
+              severity: severity,
+            );
+          }
           return api.createHealthRecordAllergy(
             accessToken: token,
             clientId: id,
@@ -615,7 +685,6 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
             substance: substance,
             symptoms: symptoms,
             severity: severity,
-            occurredWhen: occurredWhen,
           );
         },
       ),
@@ -870,49 +939,11 @@ class _NoDiagnosisCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SoftCard(
-      color: Colors.white,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.medical_information_outlined,
-                  color: MalvaColors.amber),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Belum ada diagnosis',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Diagnosis hanya dapat diberikan oleh psikolog/psikiater '
-            'terverifikasi setelah sesi konsultasi (meeting). Silakan booking '
-            'dan ikuti sesi dengan profesional terlebih dahulu.',
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.lock_rounded, size: 18, color: Colors.black45),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Pasien read-only — data ini terisi otomatis setelah '
-                  'profesional menyimpan diagnosis.',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Colors.black54),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+    return const ClinicalSectionMessage(
+      icon: Icons.assignment_ind_outlined,
+      title: 'Belum ada diagnosis',
+      message:
+          'Diagnosis diisi oleh psikolog atau psikiater selama layanan konsultasi aktif.',
     );
   }
 }

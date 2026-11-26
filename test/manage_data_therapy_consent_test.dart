@@ -151,7 +151,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(backend.putCalls, 1);
-    expect(backend.lastPutBody?['share_timeline'], isTrue);
+    expect(backend.lastPutBody?.containsKey('share_timeline'), isFalse);
     expect(backend.lastPutBody?['share_therapy_records'], isFalse,
         reason: 'perubahan toggle harus ikut terkirim di payload');
     expect(backend.lastPutBody?['share_screenings'], isTrue,
@@ -196,7 +196,7 @@ void main() {
     await tester.tap(save);
     await tester.pumpAndSettle();
 
-    expect(backend.lastPutBody?['share_timeline'], isTrue);
+    expect(backend.lastPutBody?.containsKey('share_timeline'), isFalse);
     expect(
         backend.lastPutBody?.entries
             .where((entry) =>

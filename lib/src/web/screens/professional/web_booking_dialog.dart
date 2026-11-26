@@ -7,6 +7,7 @@ import '../../../providers/providers.dart';
 import '../../../services/malva_api_client.dart';
 import '../../../theme.dart';
 import '../../../widgets/friendly_error.dart';
+import '../../../screens/booking/booking_owner.dart';
 import '../../../screens/booking/consent_request_sheet.dart';
 import '../../services/web_care_service.dart';
 import '../../web_format.dart';
@@ -63,11 +64,16 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
   bool _paid = false;
   bool _failed = false;
 
-  String get _token => ref.read(authStateProvider).session?.accessToken ?? '';
+  late final BookingOwner _owner;
+  String? get _token => mounted ? _owner.session?.accessToken : null;
 
   @override
   void initState() {
     super.initState();
+    _owner = BookingOwner(ref, null);
+    ref.listenManual(authStateProvider, (_, next) {
+      if (_token == null) _pollTimer?.cancel();
+    });
     unawaited(_loadSlots());
   }
 
@@ -86,7 +92,7 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
     });
     try {
       final slots = await ref.read(apiClientProvider).getDoctorAvailableSlots(
-            accessToken: _token.isEmpty ? null : _token,
+            accessToken: _token,
             userId: widget.doctor.userId,
             date: _date,
             serviceCategory: _service.isPackage
@@ -95,13 +101,13 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
                     ? 'quick_chat'
                     : 'quick_video',
           );
-      if (!mounted || request != _slotsRequest) return;
+      if (_token == null || request != _slotsRequest) return;
       setState(() {
         _slots = slots.where((BackendDoctorSlot s) => s.available).toList();
         _slotsLoading = false;
       });
     } catch (error) {
-      if (!mounted || request != _slotsRequest) return;
+      if (_token == null || request != _slotsRequest) return;
       setState(() {
         _slotsError = error;
         _slotsLoading = false;
@@ -145,28 +151,34 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
   }
 
   Future<void> _pay() async {
-    if (_busy || _paid) return;
-    final granted = await showConsentRequestSheet(
-      context: context,
-      professionalId: widget.doctor.userId,
-      oneTime: !_service.isPackage,
-    );
-    if (!granted || !mounted) return;
+    if (_busy || _paid || _token == null) return;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
       final api = ref.read(apiClientProvider);
+      final granted = await showConsentRequestSheet(
+        context: context,
+        professionalId: widget.doctor.userId,
+        professionalName: widget.doctor.displayName,
+        oneTime: !_service.isPackage,
+        apiClient: api,
+        ownerSession: () => mounted ? _owner.session : null,
+      );
+      final bookingToken = _token;
+      if (!granted || bookingToken == null) return;
       final BackendBooking booking;
       if (_service.isPackage) {
         // Paket: buat paket pending lalu booking sesi pertama (perilaku mobile).
         final carePackage = await api.createCarePackage(
-          accessToken: _token,
+          accessToken: bookingToken,
           professionalId: widget.doctor.userId,
         );
+        final sessionToken = _token;
+        if (sessionToken == null) return;
         booking = await api.createPackageSessionBooking(
-          accessToken: _token,
+          accessToken: sessionToken,
           packageId: carePackage.id,
           bookingDate: _date,
           slotTime: _slot ?? '',
@@ -174,7 +186,7 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
         );
       } else {
         booking = await api.createBooking(
-          accessToken: _token,
+          accessToken: bookingToken,
           professionalId: widget.doctor.userId,
           serviceType: _service.serviceType,
           sessionType: _service.sessionType,
@@ -184,20 +196,21 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
           price: _service.price,
         );
       }
+      final paymentToken = _token;
+      if (paymentToken == null) return;
       final response = await api.createPayment(
-        accessToken: _token,
+        accessToken: paymentToken,
         bookingId: booking.id,
       );
-      if (!mounted) return;
+      if (_token == null) return;
       setState(() {
-        _busy = false;
         _payment = response.payment;
         _paymentStatus = response.payment.status;
       });
       if (response.payment.redirectUrl.isNotEmpty) {
         // Tautan TIDAK ditampilkan mentah (memuat token gateway).
         final opened = await openWebExternalUrl(response.payment.redirectUrl);
-        if (!mounted) return;
+        if (_token == null) return;
         if (!opened) {
           setState(() => _error =
               'Halaman pembayaran tidak bisa dibuka otomatis. Izinkan pop-up '
@@ -206,11 +219,12 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
       }
       _startPolling();
     } catch (error) {
-      if (!mounted) return;
+      if (_token == null) return;
       setState(() {
-        _busy = false;
         _error = webBookingErrorMessage(error);
       });
+    } finally {
+      if (_token != null) setState(() => _busy = false);
     }
   }
 
@@ -218,6 +232,10 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
     _pollTimer?.cancel();
     _pollTicks = 0;
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (Timer timer) {
+      if (_token == null) {
+        timer.cancel();
+        return;
+      }
       _pollTicks++;
       if (_pollTicks > _maxPollTicks) {
         timer.cancel();
@@ -236,14 +254,16 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
 
   Future<void> _checkStatus() async {
     final payment = _payment;
-    if (payment == null || _checking || _paid || _failed) return;
+    final token = _token;
+    if (token == null || payment == null || _checking || _paid || _failed)
+      return;
     _checking = true;
     try {
       final status = await ref.read(apiClientProvider).getPaymentStatus(
-            accessToken: _token,
+            accessToken: token,
             reference: payment.reference,
           );
-      if (!mounted) return;
+      if (_token == null) return;
       final value = status.payment.status.toLowerCase();
       setState(() => _paymentStatus = status.payment.status);
       if (value == 'paid' || value == 'settlement') {
@@ -265,12 +285,24 @@ class _WebBookingDialogState extends ConsumerState<WebBookingDialog> {
 
   Future<void> _reopenPayment() async {
     final payment = _payment;
-    if (payment == null) return;
+    if (_token == null || payment == null) return;
     await openWebExternalUrl(payment.redirectUrl);
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(authStateProvider);
+    if (_token == null) {
+      return AlertDialog(
+        content: const Text('Sesi akun telah berubah.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Tutup'),
+          ),
+        ],
+      );
+    }
     return Dialog(
       insetPadding: const EdgeInsets.all(24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),

@@ -25,6 +25,7 @@ typedef LocalMoodPoint = ({DateTime at, double sleepHours, int moodScore});
 class WeeklySummaryMetrics {
   const WeeklySummaryMetrics({
     this.entries = const [],
+    this.medications,
     required this.source,
     required this.moodKnown,
     required this.moodCount,
@@ -39,6 +40,7 @@ class WeeklySummaryMetrics {
   /// 'api' (server), 'local' (store perangkat), atau 'mixed'.
   final String source;
   final List<MoodEntry> entries;
+  final List<BackendMedication>? medications;
 
   /// True bila jumlah mood diketahui (dari server atau store berisi data).
   final bool moodKnown;
@@ -78,6 +80,7 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
   required String accessToken,
   String? patientId,
   DateTime? asOf,
+  bool includeMedicationSnapshot = false,
   List<LocalMoodPoint> localMoods = const [],
 }) async {
   final now = toWib(asOf ?? wibNow());
@@ -177,7 +180,9 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
         );
   final logsKnown = adherence != null;
 
-  if (!moodKnown && !logsKnown) return null;
+  if (!moodKnown &&
+      !logsKnown &&
+      (!includeMedicationSnapshot || schedules == null)) return null;
 
   final source = moodFromApi && logsKnown
       ? 'api'
@@ -185,6 +190,7 @@ Future<WeeklySummaryMetrics?> loadWeeklySummary({
 
   return WeeklySummaryMetrics(
     entries: entries,
+    medications: includeMedicationSnapshot ? schedules : null,
     source: source,
     moodKnown: moodKnown,
     moodCount: moodCount,

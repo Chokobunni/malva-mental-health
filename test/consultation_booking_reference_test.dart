@@ -63,7 +63,7 @@ void main() {
     expect(
         tester
             .widget<FilledButton>(find.ancestor(
-              of: find.text('Proceed to Payment'),
+              of: find.text('Lanjut Pembayaran'),
               matching: find.bySubtype<FilledButton>(),
             ))
             .onPressed,
@@ -76,7 +76,7 @@ void main() {
     expect(
         tester
             .widget<FilledButton>(find.ancestor(
-              of: find.text('Proceed to Payment'),
+              of: find.text('Lanjut Pembayaran'),
               matching: find.bySubtype<FilledButton>(),
             ))
             .onPressed,
@@ -177,17 +177,21 @@ void main() {
       httpClient: MockClient((request) async {
         if (request.method != 'GET') writes.add(request.url.path);
         return http.Response(
-            jsonEncode(request.url.path.endsWith('/availability')
+            jsonEncode(request.url.path == '/v1/privacy/consents'
                 ? {
-                    'days': [
-                      {'date': '2099-11-25', 'free_slots': 1}
-                    ]
+                    'consent': {'share_timeline': false}
                   }
-                : {
-                    'slots': [
-                      {'time': '09:00', 'available': true}
-                    ]
-                  }),
+                : request.url.path.endsWith('/availability')
+                    ? {
+                        'days': [
+                          {'date': '2099-11-25', 'free_slots': 1}
+                        ]
+                      }
+                    : {
+                        'slots': [
+                          {'time': '09:00', 'available': true}
+                        ]
+                      }),
             200);
       }),
     );
@@ -212,17 +216,17 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('09:00'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Proceed to Payment'));
+    await tester.tap(find.text('Lanjut Pembayaran'));
     await tester.pumpAndSettle();
-    expect(find.text('Allow & Continue'), findsOneWidget);
+    expect(find.text('Simpan'), findsOneWidget);
     auth
       ..setSession(other)
       ..setSession(first);
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Allow & Continue'));
-    await tester.tap(find.text('Allow & Continue'));
+    await tester.ensureVisible(find.text('Simpan'));
+    await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
-    expect(find.text('Allow & Continue'), findsNothing);
+    expect(find.text('Simpan'), findsNothing);
     expect(writes, isEmpty);
   });
 }

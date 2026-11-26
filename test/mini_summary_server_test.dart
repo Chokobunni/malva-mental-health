@@ -79,7 +79,7 @@ void main() {
   testWidgets(
       'seven day summary loads goals while mood is pending without diary section',
       (tester) async {
-    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.physicalSize = const Size(390, 840);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -94,6 +94,16 @@ void main() {
               return pendingMood.future;
             case '/v1/medication-logs':
               return http.Response('{"error":"Unavailable"}', 503);
+            case '/v1/medications':
+              body = {
+                'medications': [
+                  {
+                    'id': 'med',
+                    'name': 'Obat dari server',
+                    'current_stock': 13
+                  },
+                ],
+              };
             case '/v1/diary-entries':
               body = {
                 'diaries': [
@@ -113,7 +123,17 @@ void main() {
                     'title': 'Berjalan pagi',
                     'is_active': true,
                     'done_this_week': 7,
-                    'target_per_week': 7
+                    'target_per_week': 7,
+                    'details': {
+                      'start_date': '2024-01-01',
+                      'weekly_target': 7,
+                      'method': 'checklist',
+                      'note': 'Berjalan setelah sarapan',
+                      'steps': [
+                        {'id': 'step-1', 'label': 'Siapkan sepatu'}
+                      ],
+                    },
+                    'today_completed_step_ids': ['step-1'],
                   },
                   {'id': 'old', 'title': 'Goal nonaktif', 'is_active': false},
                 ]
@@ -144,10 +164,19 @@ void main() {
     expect(find.text('Last Diary Entry'), findsNothing);
     expect(find.textContaining('Catatan diary server'), findsNothing);
     expect(find.text('Berjalan pagi'), findsOneWidget);
-    expect(find.text('7/7 minggu ini'), findsOneWidget);
+    expect(find.text('7/7'), findsOneWidget);
     expect(find.text('Goal nonaktif'), findsNothing);
     pendingMood.complete(http.Response('{"error":"Unavailable"}', 503));
     await tester.pumpAndSettle();
+    expect(find.text('Obat Aktif (1)'), findsOneWidget);
+    expect(find.text('Obat dari server'), findsOneWidget);
+    expect(find.text('Data kepatuhan obat belum dimuat.'), findsOneWidget);
+    expect(find.textContaining('Kepatuhan 0%'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Siapkan sepatu'), 100);
+    expect(find.text('1/1 selesai'), findsOneWidget);
+    expect(find.text('Berjalan setelah sarapan'), findsOneWidget);
+    expect(find.text('Live'), findsOneWidget);
+    expect(tester.takeException(), isNull);
     expect(find.textContaining('Catatan diary server'), findsNothing);
     container.read(authStateProvider.notifier).setSession(const AuthSession(
         role: UserRole.professional,

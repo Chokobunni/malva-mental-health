@@ -44,6 +44,11 @@ class _ConsentBackend {
   http.Client client() {
     return _FakeClient((request) async {
       final key = '${request.method} ${request.url.path}';
+      if (key == 'GET /v1/privacy/consents') {
+        return _json({
+          'consent': {'share_timeline': true}
+        });
+      }
       if (key == 'PUT /v1/privacy/consents') {
         putCalls++;
         lastPutBody = jsonDecode(request.body) as Map<String, dynamic>;
@@ -81,6 +86,7 @@ Widget _wrap(MalvaApiClient api) {
               onPressed: () => showConsentRequestSheet(
                 context: context,
                 professionalId: 'user_pro_1',
+                professionalName: 'Profesional Uji',
               ),
               child: const Text('Buka'),
             ),
@@ -93,10 +99,9 @@ Widget _wrap(MalvaApiClient api) {
 
 /// Switch yang berada di baris toggle "Therapy History".
 Finder _therapySwitch() {
-  final row = find
-      .ancestor(of: find.text('Riwayat Terapi'), matching: find.byType(Row))
-      .first;
-  return find.descendant(of: row, matching: find.byType(Switch));
+  return find.descendant(
+      of: find.widgetWithText(SwitchListTile, 'Riwayat Terapi (Psikologis)'),
+      matching: find.byType(Switch));
 }
 
 void main() {
@@ -115,7 +120,7 @@ void main() {
     await tester.tap(find.text('Buka'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Riwayat Terapi'), findsOneWidget,
+    expect(find.text('Riwayat Terapi (Psikologis)'), findsOneWidget,
         reason: 'toggle Therapy History harus ada di sheet consent');
     expect(tester.widget<Switch>(_therapySwitch()).value, isFalse,
         reason: 'default opt-in: izin mati sampai pasien menyalakannya');
@@ -140,13 +145,14 @@ void main() {
     expect(tester.widget<Switch>(_therapySwitch()).value, isTrue);
 
     // Simpan.
-    final saveButton = find.widgetWithText(FilledButton, 'Allow & Continue');
+    final saveButton = find.widgetWithText(FilledButton, 'Simpan');
     await tester.ensureVisible(saveButton);
     await tester.pumpAndSettle();
     await tester.tap(saveButton);
     await tester.pumpAndSettle();
 
     expect(backend.putCalls, 1);
+    expect(backend.lastPutBody?.containsKey('share_timeline'), isFalse);
     expect(backend.lastPutBody?['share_therapy_records'], isTrue,
         reason: 'toggle Therapy History ON harus terkirim di payload PUT');
   });

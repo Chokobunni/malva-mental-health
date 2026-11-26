@@ -126,6 +126,9 @@ void main() {
         httpClient: MockClient((request) async {
           expect(request.url.path, '/v1/privacy/consents');
           expect(request.headers['authorization'], 'Bearer patient-token');
+          if (request.method == 'GET') {
+            return http.Response('{"consent":{"share_timeline":false}}', 200);
+          }
           attempts++;
           if (attempts == 1) {
             return http.Response('{"error":"Consent belum tersimpan"}', 503);
@@ -145,20 +148,24 @@ void main() {
           return TextButton(
               onPressed: () async {
                 accepted = await showConsentRequestSheet(
-                    context: context, professionalId: 'pro', oneTime: true);
+                    context: context,
+                    professionalId: 'pro',
+                    professionalName: 'Profesional Uji',
+                    oneTime: true);
               },
               child: const Text('Consent'));
         })))));
     await tester.tap(find.text('Consent'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('durasi sesi satu jam'), findsOneWidget);
+    expect(find.textContaining('selama sesi konsultasi berlangsung'),
+        findsOneWidget);
     expect(find.byType(Switch), findsNWidgets(7));
-    await tester.tap(find.text('Allow & Continue'));
+    await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
     expect(attempts, 1);
     expect(accepted, isNull);
-    expect(find.text('Allow & Continue'), findsOneWidget);
-    await tester.tap(find.text('Allow & Continue'));
+    expect(find.text('Simpan'), findsOneWidget);
+    await tester.tap(find.text('Simpan'));
     await tester.pumpAndSettle();
     expect(attempts, 2);
     expect(accepted, isTrue);

@@ -20,13 +20,15 @@ void main() {
       'Evaluasi',
       'Saran',
       'Rencana',
-      'Target'
+      'Target',
+      'Obat 5 mg\nStok 30',
+      'Jalan pagi'
     ];
     expect(parseSessionNotes(formatSessionNotes(values)), values);
     expect(parseSessionNotes('Catatan lama bebas'),
-        ['Catatan lama bebas', '', '', '', '']);
+        ['Catatan lama bebas', '', '', '', '', '', '']);
     expect(parseSessionNotes(formatSessionNotes(['', '', 'Saran', '', ''])),
-        ['', '', 'Saran', '', '']);
+        ['', '', 'Saran', '', '', '', '']);
   });
   testWidgets(
       'patient detail keeps real ID, summary, and has no completion control',
@@ -49,7 +51,7 @@ void main() {
     await tester.tap(find.text('Lihat Detail Sesi'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
-    expect(find.text('Ringkasan Catatan Sesi'), findsOneWidget);
+    expect(find.text('Catatan Sesi Konsultasi'), findsOneWidget);
     expect(find.text('ID Sesi Konsultasi'), findsOneWidget);
     expect(find.text('real-session-42'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Ringkasan tersimpan'), 180,
@@ -130,13 +132,19 @@ void main() {
                   session: session, apiClient: api))));
       await tester.enterText(
           find.byType(TextField).first, 'Keluhan diperbarui');
-      await tester.tap(find.text(publish ? 'Pratinjau' : 'Simpan Draf'));
+      if (publish) {
+        await tester.tap(find.text('Pratinjau Ringkasan'));
+      } else {
+        await tester.tap(find.byTooltip('Simpan Draf'));
+      }
       if (publish) {
         await tester.pumpAndSettle();
         expect(payload, isNull);
-        expect(find.text('Pratinjau Catatan Sesi'), findsOneWidget);
+        expect(find.text('Pratinjau Ringkasan Sesi'), findsOneWidget);
         expect(find.text('Private existing'), findsNothing);
-        await tester.tap(find.text('Simpan & Selesai'));
+        await tester.tap(find.text('Tutup Pratinjau'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Simpan Catatan'));
       }
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));

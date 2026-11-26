@@ -144,7 +144,7 @@ void main() {
               summary:
                   'Keluhan Utama\nKeluhan tersimpan\n\nRekomendasi Praktis\nRekomendasi tersimpan'));
       if (role == UserRole.patient) {
-        expect(find.text('Ringkasan Catatan Sesi'), findsOneWidget);
+        expect(find.text('Catatan Sesi Konsultasi'), findsOneWidget);
         await tester.scrollUntilVisible(find.text('Keluhan tersimpan'), 180,
             scrollable: find.byType(Scrollable).first);
         expect(find.text('Keluhan tersimpan'), findsOneWidget);

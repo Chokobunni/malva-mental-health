@@ -383,7 +383,7 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
                 ? null
                 : _submitBooking,
             icon: const Icon(Icons.arrow_forward_rounded),
-            label: Text(_isSubmitting ? 'Memproses...' : 'Proceed to Payment'),
+            label: Text(_isSubmitting ? 'Memproses...' : 'Lanjut Pembayaran'),
           ),
           const SizedBox(height: 6),
           Text(
@@ -421,6 +421,8 @@ class _BookingDetailScreenState extends ConsumerState<BookingDetailScreen> {
       final granted = await showConsentRequestSheet(
         context: context,
         professionalId: widget.doctorUserId,
+        professionalName: widget.doctorName,
+        apiClient: apiClient,
         oneTime: true,
         ownerSession: () => mounted ? _owner.session : null,
       );
