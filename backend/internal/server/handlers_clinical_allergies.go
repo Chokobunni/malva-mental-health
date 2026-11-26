@@ -48,7 +48,7 @@ func (s *Server) createHealthRecordAllergy(w http.ResponseWriter, r *http.Reques
 		writeUserError(w, http.StatusBadRequest, "Catatan alergi tidak valid.")
 		return
 	}
-	item, valid := req.clinicalAllergyFields.validated()
+	item, valid := req.validated()
 	item.OccurredWhen = strings.TrimSpace(security.SanitizeText(req.OccurredWhen))
 	if !valid || len(item.OccurredWhen) > 240 {
 		writeUserError(w, http.StatusBadRequest, "Periksa jenis reaksi, nama pemicu, gejala, dan tingkat keparahan.")
