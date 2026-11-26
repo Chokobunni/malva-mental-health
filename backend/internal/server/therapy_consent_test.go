@@ -199,6 +199,45 @@ func TestPrivacyConsentRoundTripsTherapyRecords(t *testing.T) {
 	}
 }
 
+func TestPrivacyConsentOmittingTimelinePreservesExistingValue(t *testing.T) {
+	f := newTherapyConsentFixture(t)
+	save := func(professionalID string, timeline *bool) store.PatientDataConsent {
+		t.Helper()
+		body := map[string]any{"professional_id": professionalID, "share_health_record": true}
+		if timeline != nil {
+			body["share_timeline"] = *timeline
+		}
+		raw, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPut, "/v1/privacy/consents", bytes.NewReader(raw))
+		f.srv.updatePrivacyConsent(out, req, auth.Claims{Subject: f.patient.ID, Role: "patient"})
+		var saved struct{ Consent store.PatientDataConsent }
+		if out.Code != http.StatusOK || json.Unmarshal(out.Body.Bytes(), &saved) != nil {
+			t.Fatalf("invalid response: %d %s", out.Code, out.Body.String())
+		}
+		return saved.Consent
+	}
+	yes, no := true, false
+	if got := save(f.prof.ID, &yes); !got.ShareTimeline {
+		t.Fatal("legacy client could not enable Timeline")
+	}
+	if got := save(f.prof.ID, nil); !got.ShareTimeline || !got.ShareHealthRecord {
+		t.Fatal("six-category save lost existing Timeline consent")
+	}
+	if got := save(f.prof.ID, &no); got.ShareTimeline {
+		t.Fatal("legacy client could not revoke Timeline")
+	}
+	if got := save(f.prof.ID, nil); got.ShareTimeline {
+		t.Fatal("six-category save reverted Timeline revocation")
+	}
+	if got := save(f.other.ID, nil); got.ShareTimeline {
+		t.Fatal("omitting Timeline for a new pair enabled it")
+	}
+}
+
 // TestTherapyRecordsOtherPatientCannotSee: parameter `patient_id` diabaikan
 // untuk peran pasien (endpoint selalu memakai klaim subjek), sehingga pasien
 // lain hanya menerima daftarnya sendiri — bukan 403, dan yang penting tidak

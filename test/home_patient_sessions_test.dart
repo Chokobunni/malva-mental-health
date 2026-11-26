@@ -168,48 +168,11 @@ void main() {
     expect(actions, ['attended', url]);
   });
 
-  testWidgets('future session Chat opens peer before the live window',
-      (tester) async {
-    final server = (await tester
-        .runAsync(() => HttpServer.bind(InternetAddress.loopbackIPv4, 0)))!;
-    final sockets = <WebSocket>[];
-    await tester.runAsync(() async {
-      server.listen((request) async {
-        final socket = await WebSocketTransformer.upgrade(request);
-        sockets.add(socket);
-        socket.listen((_) {});
-      });
-    });
-    addTearDown(() async {
-      for (final socket in sockets) {
-        await socket.close();
-      }
-      await server.close(force: true);
-    });
-    await _pumpHome(tester, _api(baseUrl: 'http://127.0.0.1:${server.port}'),
-        providerOnly: true);
-    final chat = find.widgetWithText(OutlinedButton, 'Buka Riwayat Chat');
-    await tester.scrollUntilVisible(chat.last, 250,
-        scrollable: find.byType(Scrollable).first);
+  testWidgets('future session Home cards omit chat history', (tester) async {
+    await _pumpHome(tester, _api());
     await tester.pumpAndSettle();
-    await tester.runAsync(() async {
-      await tester.tap(chat.last);
-      await tester.pump();
-    });
-    // Let the real socket handshake resolve before settling the widget clock.
-    for (var attempt = 0;
-        attempt < 100 && find.text('Status belum diketahui').evaluate().isEmpty;
-        attempt++) {
-      await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 20)));
-      await tester.pump();
-    }
-    expect(sockets, hasLength(1));
-    expect(find.text('Status belum diketahui'), findsOneWidget);
-    await tester.pumpAndSettle();
-    expect(find.byType(ChatScreen), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await tester.runAsync(() => tester.pumpWidget(const SizedBox()));
+    expect(find.text('Buka Riwayat Chat'), findsNothing);
+    expect(find.byType(ChatScreen), findsNothing);
   });
 
   testWidgets(

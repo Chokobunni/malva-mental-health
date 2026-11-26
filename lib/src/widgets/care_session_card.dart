@@ -682,7 +682,10 @@ class _CareSessionDetailScreenState
         context,
         MaterialPageRoute(
             builder: (_) => ProfessionalSessionNotesScreen(
-                session: _session, accessToken: _token, apiClient: _api)));
+                session: _session,
+                accessToken: _token,
+                apiClient: _api,
+                packageLabel: _packageLabel)));
     if (!mounted || !_owns) return;
     await widget.card.onChanged();
     await _refresh();
@@ -932,37 +935,7 @@ class _CareSessionDetailScreenState
           Text(text)
         ]))
       ];
-    final sections = parseSessionNotes(text);
-    const icons = [
-      Icons.description_outlined,
-      Icons.psychology_outlined,
-      Icons.check_circle_outline,
-      Icons.event_note_outlined,
-      Icons.flag_outlined
-    ];
-    return [
-      for (var i = 0; i < sections.length; i++)
-        if (sections[i].trim().isNotEmpty)
-          _block(
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              _icon(icons[i]),
-              const SizedBox(width: 10),
-              Expanded(child: _text(sessionNoteSections[i], size: 16))
-            ]),
-            const SizedBox(height: 14),
-            Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                    color: const Color(0xfff8f7fa),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xffefedf3))),
-                child: Text(sections[i],
-                    style: const TextStyle(
-                        height: 1.55, color: Color(0xff414957))))
-          ]))
-    ];
+    return sessionPublishedNoteCards(parseSessionNotes(text));
   }
 
   Widget _cta(String label, IconData icon, VoidCallback? action,
@@ -1023,11 +996,11 @@ class _CareSessionDetailScreenState
                     _ => 'Dibatalkan'
                   };
     final title =
-        _completed && !professional ? 'Ringkasan Catatan Sesi' : 'Detail Sesi';
+        _completed && !professional ? 'Catatan Sesi Konsultasi' : 'Detail Sesi';
     final subtitle = _completed
         ? professional
             ? 'Ringkasan Sesi Selesai'
-            : 'Rekam Medis & Evaluasi dari Profesional'
+            : 'Ringkasan Medis & Evaluasi Sesi'
         : _live
             ? 'Sesi Konsultasi Aktif'
             : _session.isScheduled
@@ -1052,20 +1025,32 @@ class _CareSessionDetailScreenState
         Center(child: _text('Sesi Selesai', size: 25)),
         const SizedBox(height: 20),
       ],
-      if (!_completed || !professional) _identity(name, initials),
-      _information(
-          _completed
-              ? 'Selesai'
-              : _live
-                  ? 'Sedang Berlangsung'
-                  : _session.isScheduled
-                      ? 'Menunggu Jadwal'
-                      : status,
-          completedIdentity: _completed && professional
-              ? _identity(name, initials, white: true)
-              : null),
+      if (_completed && !professional) ...[
+        sessionNoteIdentity(_session, name, packageLabel: _packageLabel),
+        sessionNoteId(context, _session.id),
+      ] else if (!_completed)
+        _identity(name, initials),
+      if (!_completed || professional)
+        _information(
+            _completed
+                ? 'Selesai'
+                : _live
+                    ? 'Sedang Berlangsung'
+                    : _session.isScheduled
+                        ? 'Menunggu Jadwal'
+                        : status,
+            completedIdentity: _completed && professional
+                ? _identity(name, initials, white: true)
+                : null),
       if (_session.isScheduled && !_session.isAfterJoinWindow) _timer(),
-      if (_completed && !professional) ..._publishedSummary(),
+      if (_completed && !professional) ...[
+        ..._publishedSummary(),
+        const Center(
+            child: Chip(
+          avatar: Icon(Icons.lock_outline, size: 16),
+          label: Text('Catatan medis ini bersifat hanya baca'),
+        )),
+      ],
       if (_session.status == 'completed' && !_canShowSummary)
         _block(const Text(
             'Sesi telah selesai. Buka Riwayat untuk melihat ringkasannya.')),

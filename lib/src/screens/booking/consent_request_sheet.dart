@@ -3,226 +3,306 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models.dart';
 import '../../providers/providers.dart';
+import '../../services/malva_api_client.dart';
 import '../../theme.dart';
 import '../../widgets/friendly_error.dart';
-import '../../widgets/malva_components.dart';
+import 'booking_owner.dart';
 
-// ============================================================
-// CONSENT REQUEST SHEET — Paket Continuous 4 sesi / 6 minggu.
-// Pasien memberi izin kepada profesional untuk memantau progres
-// selama paket aktif:
-//   - Assessment (PHQ-9/GAD-7)
-//   - Mood & Diary
-//   - Medication
-//   - Goals & Habits
-//   - Health Record
-//   - Therapy History (worksheet CBT/DBT)
-//   - Timeline
-// Izin disimpan ke /v1/privacy/consents (backend) bila online.
-// Bila offline: disimpan lokal dan disinkronkan saat terhubung.
-// ============================================================
-
-/// Tampilkan sheet permintaan izin. Return true bila pasien setuju.
-/// [professionalId] adalah user ID dokter yang di-booking — izin dikirim
-/// ke dokter tersebut (bukan ke ID sendiri).
 Future<bool> showConsentRequestSheet({
   required BuildContext context,
   required String professionalId,
+  required String professionalName,
   bool oneTime = false,
+  MalvaApiClient? apiClient,
   AuthSession? Function()? ownerSession,
 }) async {
   final result = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
+    backgroundColor: const Color(0xfffaf1f8),
     isDismissible: false,
     enableDrag: false,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
     ),
-    builder: (sheetContext) => _ConsentRequestSheet(
+    builder: (_) => ManageDataSheet(
         professionalId: professionalId,
+        professionalName: professionalName,
+        apiClient: apiClient,
+        checkout: true,
         oneTime: oneTime,
         ownerSession: ownerSession),
   );
   return result == true;
 }
 
-class _ConsentRequestSheet extends ConsumerStatefulWidget {
-  const _ConsentRequestSheet(
-      {required this.professionalId, this.oneTime = false, this.ownerSession});
+class ManageDataSheet extends ConsumerStatefulWidget {
+  const ManageDataSheet({
+    super.key,
+    required this.professionalId,
+    required this.professionalName,
+    this.checkout = false,
+    this.oneTime = false,
+    this.ownerSession,
+    this.apiClient,
+  });
 
   final String professionalId;
+  final String professionalName;
+  final bool checkout;
   final bool oneTime;
   final AuthSession? Function()? ownerSession;
+  final MalvaApiClient? apiClient;
 
   @override
-  ConsumerState<_ConsentRequestSheet> createState() =>
-      _ConsentRequestSheetState();
+  ConsumerState<ManageDataSheet> createState() => _ManageDataSheetState();
 }
 
-class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
-  // Default MATI: pasien memberi izin eksplisit per kategori (opt-in),
-  // bukan opt-out diam-diam.
+class _ManageDataSheetState extends ConsumerState<ManageDataSheet> {
+  // Default MATI (opt-in eksplisit); nilai riil dimuat dari server.
+  late final BookingOwner _owner;
   bool _screenings = false;
   bool _moodDiary = false;
   bool _medications = false;
-  bool _goals = false;
   bool _healthRecord = false;
-  bool _therapyHistory = false;
-  bool _timeline = false;
+  bool _goals = false;
+  // Kategori Therapy Record (worksheet CBT/DBT) — OPT-IN, default MATI.
+  bool _therapyRecords = false;
+  bool _isLoading = true;
+  bool _loaded = false;
   bool _isSaving = false;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    _owner = BookingOwner(ref, null);
+    if (widget.checkout) {
+      _isLoading = false;
+      _loaded = true;
+    } else {
+      _load();
+    }
+  }
+
+  AuthSession? get _session =>
+      widget.ownerSession == null ? _owner.session : widget.ownerSession!();
+
+  Future<void> _load() async {
+    final MalvaApiClient apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
+    final token = _session?.accessToken;
+    if (token == null || token.isEmpty || widget.professionalId.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _loaded = widget.checkout;
+          _error = widget.checkout
+              ? null
+              : 'Mode offline aktif. '
+                  'Hubungkan ke server untuk mengatur persetujuan ini.';
+        });
+      }
+      return;
+    }
+    try {
+      final consent = await apiClient.getPrivacyConsent(
+        accessToken: token,
+        professionalId: widget.professionalId,
+      );
+      if (!mounted || _session == null) return;
+      setState(() {
+        if (!widget.checkout) {
+          _screenings = consent.shareScreenings;
+          _moodDiary = consent.shareMoodDiary;
+          _medications = consent.shareMedications;
+          _healthRecord = consent.shareHealthRecord;
+          _goals = consent.shareGoals;
+          _therapyRecords = consent.shareTherapyRecords;
+        }
+        _isLoading = false;
+        _loaded = true;
+      });
+    } on Object catch (e) {
+      if (!mounted || _session == null) return;
+      setState(() {
+        _isLoading = false;
+        _error = friendlyErrorMessage(e);
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
+    ref.watch(currentSessionProvider);
+    final count = [
+      _screenings,
+      _moodDiary,
+      _medications,
+      _goals,
+      _healthRecord,
+      _therapyRecords,
+    ].where((enabled) => enabled).length;
+    return SafeArea(
       child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Center(
-              child: Container(
-                width: 44,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.black26,
-                  borderRadius: BorderRadius.circular(999),
+                child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xffdfe1e8),
+                borderRadius: BorderRadius.circular(8),
+              ),
+            )),
+            const SizedBox(height: 14),
+            Row(children: [
+              const _ConsentIcon('privacy', size: 28),
+              const SizedBox(width: 7),
+              const Expanded(
+                  child: Text('Privasi & Akses Data',
+                      style: TextStyle(color: MalvaColors.seed))),
+              IconButton(
+                tooltip: 'Tutup',
+                onPressed: _isSaving ? null : () => Navigator.maybePop(context),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ]),
+            Text('Atur Data Konseling',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 4),
+            Text(widget.professionalName,
+                style: const TextStyle(
+                    color: MalvaColors.seed, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 12),
+            Text(widget.oneTime
+                ? 'Pilih kategori data yang diizinkan untuk diakses oleh profesional selama sesi konsultasi berlangsung.'
+                : 'Pilih kategori data yang diizinkan untuk diakses oleh profesional selama masa paket aktif Anda.'),
+            const SizedBox(height: 14),
+            if (_session == null && !widget.checkout && _error == null)
+              const Text('Sesi akun tidak tersedia.')
+            else if (_isLoading)
+              const Center(child: CircularProgressIndicator())
+            else if (_error != null && !_loaded)
+              TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _isLoading = true;
+                      _error = null;
+                    });
+                    _load();
+                  },
+                  child: Text('$_error Coba lagi'))
+            else ...[
+              Material(
+                color: Colors.white,
+                shape: RoundedRectangleBorder(
+                  side: const BorderSide(color: Color(0xffece2f3)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: _Toggle(
+                  asset: 'all',
+                  label: 'Pilih Semua Data',
+                  description: '$count dari 6 kategori aktif',
+                  value: count == 6,
+                  onChanged: _isSaving
+                      ? null
+                      : (enabled) => setState(() {
+                            _screenings = _moodDiary = _medications = _goals =
+                                _healthRecord = _therapyRecords = enabled;
+                          }),
                 ),
               ),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: MalvaColors.mint.withValues(alpha: 0.15),
-                  child: const Icon(Icons.handshake_rounded,
-                      color: MalvaColors.mint),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Allow Progres Monitoring?',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w900, fontSize: 16.5),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              widget.oneTime
-                  ? 'Pilih data yang ingin dibagikan kepada profesional. Izin berbagi '
-                      'data hanya berlaku selama durasi sesi satu jam dan berakhir '
-                      'saat sesi selesai. Pilihan dapat diubah kapan saja.'
-                  : 'Profesional dapat memantau progresmu selama paket aktif '
-                      '(4 sesi / 6 minggu). Pilih yang ingin dibagikan — bisa '
-                      'diubah kapan saja.',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: Colors.black54),
-            ),
-            const SizedBox(height: 14),
-            _ConsentToggle(
-              icon: Icons.fact_check_rounded,
-              color: MalvaColors.seed,
-              title: 'Asesmen',
-              subtitle: 'Hasil PHQ-9 & GAD-7',
-              value: _screenings,
-              onChanged: (v) => setState(() => _screenings = v),
-            ),
-            _ConsentToggle(
-              icon: Icons.edit_note_rounded,
-              color: MalvaColors.orchid,
-              title: 'Mood & Jurnal',
-              subtitle: 'Tren mood & catatan harian',
-              value: _moodDiary,
-              onChanged: (v) => setState(() => _moodDiary = v),
-            ),
-            _ConsentToggle(
-              icon: Icons.medication_rounded,
-              color: MalvaColors.mint,
-              title: 'Obat',
-              subtitle: 'Obat & kepatuhan minum obat',
-              value: _medications,
-              onChanged: (v) => setState(() => _medications = v),
-            ),
-            _ConsentToggle(
-              icon: Icons.flag_rounded,
-              color: MalvaColors.amber,
-              title: 'Target & Kebiasaan',
-              subtitle: 'Target harian & runtutan',
-              value: _goals,
-              onChanged: (v) => setState(() => _goals = v),
-            ),
-            _ConsentToggle(
-              icon: Icons.folder_shared_rounded,
-              color: MalvaColors.seed,
-              title: 'Rekam Medis',
-              subtitle: 'Diagnosis & catatan klinis',
-              value: _healthRecord,
-              onChanged: (v) => setState(() => _healthRecord = v),
-            ),
-            _ConsentToggle(
-              icon: Icons.psychology_alt_rounded,
-              color: MalvaColors.plum,
-              title: 'Riwayat Terapi',
-              subtitle: 'Lembar Kerja CBT/DBT & catatan terapi',
-              value: _therapyHistory,
-              onChanged: (v) => setState(() => _therapyHistory = v),
-            ),
-            _ConsentToggle(
-              icon: Icons.timeline_rounded,
-              color: MalvaColors.plum,
-              title: 'Timeline',
-              subtitle: 'Linimasa aktivitas kesehatanmu',
-              value: _timeline,
-              onChanged: (v) => setState(() => _timeline = v),
-            ),
-            if (_error != null) ...[
               const SizedBox(height: 8),
-              Text(
-                _error!,
-                style: const TextStyle(
-                    color: MalvaColors.danger, fontWeight: FontWeight.w700),
+              _Toggle(
+                  asset: 'assessment',
+                  label: 'Asesmen',
+                  description:
+                      'Hasil kuesioner skrining kesehatan mental berkala (WHO-5, PHQ-9 + GAD-7, dan DASS-21).',
+                  value: _screenings,
+                  onChanged: _isSaving
+                      ? null
+                      : (v) => setState(() => _screenings = v)),
+              const Divider(height: 1),
+              _Toggle(
+                  asset: 'mood',
+                  label: 'Mood & Jurnal Harian',
+                  description: 'Catatan perasaan harian dan refleksi pribadi.',
+                  value: _moodDiary,
+                  onChanged:
+                      _isSaving ? null : (v) => setState(() => _moodDiary = v)),
+              const Divider(height: 1),
+              _Toggle(
+                  asset: 'medication',
+                  label: 'Catatan Obat & Resep',
+                  description: 'Daftar konsumsi obat dan jadwal pengingat.',
+                  value: _medications,
+                  onChanged: _isSaving
+                      ? null
+                      : (v) => setState(() => _medications = v)),
+              const Divider(height: 1),
+              _Toggle(
+                  asset: 'goals',
+                  label: 'Target & Kebiasaan',
+                  description: 'Progres kebiasaan positif dan tujuan terapi.',
+                  value: _goals,
+                  onChanged:
+                      _isSaving ? null : (v) => setState(() => _goals = v)),
+              const Divider(height: 1),
+              _Toggle(
+                  asset: 'clinical',
+                  label: 'Profil Klinis',
+                  description:
+                      'Riwayat diagnosis dan catatan klinis sebelumnya.',
+                  value: _healthRecord,
+                  onChanged: _isSaving
+                      ? null
+                      : (v) => setState(() => _healthRecord = v)),
+              const Divider(height: 1),
+              _Toggle(
+                  asset: 'therapy',
+                  label: 'Riwayat Terapi (Psikologis)',
+                  description:
+                      'Profesional dapat melihat lembar kerja terapi CBT/DBT yang kamu isi (ABCDE, Jebakan Pikiran, TIPP, dll).',
+                  value: _therapyRecords,
+                  onChanged: _isSaving
+                      ? null
+                      : (v) => setState(() => _therapyRecords = v)),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(_error!,
+                    style: const TextStyle(color: MalvaColors.danger)),
+              ],
+              const SizedBox(height: 14),
+              FilledButton(
+                onPressed: _isSaving ? null : _save,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18)),
+                ),
+                child: Text(_isSaving ? 'Menyimpan...' : 'Simpan'),
               ),
             ],
-            const SizedBox(height: 14),
-            FilledButton(
-              onPressed: _isSaving ? null : _save,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(50),
-              ),
-              child: Text(_isSaving ? 'Menyimpan...' : 'Allow & Continue'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: _isSaving ? null : () => Navigator.pop(context, false),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(46),
-              ),
-              child: const Text('Not Now'),
-            ),
-            const SizedBox(height: 4),
           ],
         ),
       ),
     );
   }
 
-  bool get _ownerValid =>
-      widget.ownerSession == null || widget.ownerSession!() != null;
-
   Future<void> _save() async {
-    if (!_ownerValid) {
+    if (!_loaded || _isSaving) return;
+    final MalvaApiClient apiClient =
+        widget.apiClient ?? ref.read(apiClientProvider);
+    final token = _session?.accessToken;
+    if (widget.ownerSession != null && _session == null) {
       Navigator.pop(context, false);
       return;
     }
@@ -230,133 +310,103 @@ class _ConsentRequestSheetState extends ConsumerState<_ConsentRequestSheet> {
       _isSaving = true;
       _error = null;
     });
-    final rawToken = widget.ownerSession == null
-        ? ref.read(currentSessionProvider)?.accessToken
-        : widget.ownerSession!()?.accessToken;
-    final accessToken =
-        (rawToken == null || rawToken.isEmpty) ? null : rawToken;
-    if (accessToken == null || widget.professionalId.isEmpty) {
-      // Offline: izin disimpan lokal (pref).
-      await _saveLocalPreferences();
-      if (!mounted) return;
-      setState(() {
-        _isSaving = false;
-      });
-      Navigator.pop(context, true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'Izin monitoring disimpan di perangkat. Disinkronkan saat terhubung.'),
-        ),
-      );
-      return;
-    }
     try {
-      await ref.read(apiClientProvider).updatePrivacyConsent(
-            accessToken: accessToken,
-            professionalId: widget.professionalId,
-            shareScreenings: _screenings,
-            shareMoodDiary: _moodDiary,
-            shareMedications: _medications,
-            shareTimeline: _timeline,
-            shareHealthRecord: _healthRecord,
-            shareGoals: _goals,
-            shareTherapyRecords: _therapyHistory,
-          );
+      if (token != null &&
+          token.isNotEmpty &&
+          widget.professionalId.isNotEmpty) {
+        await apiClient.updatePrivacyConsent(
+          accessToken: token,
+          professionalId: widget.professionalId,
+          shareScreenings: _screenings,
+          shareMoodDiary: _moodDiary,
+          shareMedications: _medications,
+          shareHealthRecord: _healthRecord,
+          shareGoals: _goals,
+          shareTherapyRecords: _therapyRecords,
+        );
+      }
       if (!mounted) return;
-      if (!_ownerValid) {
+      if (widget.ownerSession != null && _session == null) {
         Navigator.pop(context, false);
         return;
       }
-      await _saveLocalPreferences();
-      if (!mounted) return;
-      Navigator.pop(context, _ownerValid);
-      if (!_ownerValid) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(widget.oneTime
-              ? 'Pilihan sharing disimpan dan berlaku saat sesi berlangsung.'
-              : 'Pilihan sharing disimpan dan berlaku selama paket aktif.'),
-          backgroundColor: MalvaColors.mint,
-        ),
-      );
+      if (widget.checkout) {
+        await ref.read(malvaStoreProvider.notifier).setContinuousSupportConsent(
+              diary: _moodDiary,
+              goals: _goals,
+              healthRecord: _healthRecord,
+              moodCheckin: _moodDiary,
+              medicationCheckin: _medications,
+              therapyRecords: _therapyRecords,
+            );
+        if (!mounted) return;
+        final valid = widget.ownerSession == null || _session != null;
+        Navigator.pop(context, valid);
+        if (valid) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(widget.oneTime
+                ? 'Pilihan berbagi data berlaku saat sesi berlangsung.'
+                : 'Pilihan berbagi data berlaku selama paket aktif.'),
+          ));
+        }
+      } else if (_session != null) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pengaturan sharing tersimpan.')),
+        );
+      }
+    } on MalvaApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
     } on Object catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isSaving = false;
-        _error = friendlyErrorMessage(e);
-      });
+      if (mounted) setState(() => _error = friendlyErrorMessage(e));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
-  }
-
-  Future<void> _saveLocalPreferences() async {
-    final store = ref.read(malvaStoreProvider.notifier);
-    await store.setContinuousSupportConsent(
-      diary: _moodDiary,
-      goals: _goals,
-      healthRecord: _healthRecord,
-      moodCheckin: _moodDiary,
-      medicationCheckin: _medications,
-      therapyRecords: _therapyHistory,
-    );
   }
 }
 
-class _ConsentToggle extends StatelessWidget {
-  const _ConsentToggle({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.subtitle,
+class _ConsentIcon extends StatelessWidget {
+  const _ConsentIcon(this.asset, {this.size = 44});
+
+  final String asset;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Image.asset(
+        'assets/care/consent-$asset.png',
+        width: size,
+        height: size,
+        cacheWidth: 144,
+        fit: BoxFit.contain,
+        excludeFromSemantics: true,
+      );
+}
+
+class _Toggle extends StatelessWidget {
+  const _Toggle({
+    required this.asset,
+    required this.label,
+    required this.description,
     required this.value,
     required this.onChanged,
   });
 
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String subtitle;
+  final String asset, label, description;
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: SoftCard(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        color: Colors.white,
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 19,
-              backgroundColor: color.withValues(alpha: 0.14),
-              child: Icon(icon, color: color, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w900, fontSize: 13.5)),
-                  Text(subtitle,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: Colors.black54)),
-                ],
-              ),
-            ),
-            Switch(
-              value: value,
-              onChanged: onChanged,
-              activeThumbColor: color,
-            ),
-          ],
-        ),
-      ),
+    return SwitchListTile(
+      value: value,
+      onChanged: onChanged,
+      secondary: _ConsentIcon(asset),
+      title: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+      subtitle: Text(description,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4)),
+      activeThumbColor: MalvaColors.seed,
+      activeTrackColor: const Color(0xffd8afea),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
     );
   }
 }

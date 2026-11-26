@@ -47,25 +47,21 @@ void main() {
               'Rahasia klinis\n\n[MALVA_DRAF_SESI_V1]\n${jsonEncode(values)}',
         )))));
     expect(find.text('Draf tersimpan'), findsOneWidget);
-    expect(find.textContaining('10:00 WIB'), findsOneWidget);
+    expect(find.textContaining('10:00–11:00 WIB'), findsOneWidget);
     expect(find.text('Konsultasi Video'), findsOneWidget);
     expect(find.text('Jalan pagi'), findsOneWidget);
     await tester.tap(find.byTooltip('Hapus rekomendasi 1'));
     await tester.pump();
     expect(find.text('Jalan pagi'), findsNothing);
     expect(find.text('1.'), findsOneWidget);
-    await tester.tap(find.text('Tambah rekomendasi'));
+    await tester.tap(find.text('Tambah Rekomendasi'));
     await tester.pump();
     expect(find.text('2.'), findsOneWidget);
-    await tester.tap(find.text('Pratinjau'));
+    await tester.tap(find.text('Pratinjau Ringkasan'));
     await tester.pumpAndSettle();
-    expect(find.text('Pratinjau Catatan Sesi'), findsOneWidget);
+    expect(find.text('Pratinjau Ringkasan Sesi'), findsOneWidget);
     expect(find.text('1. Tidur teratur'), findsOneWidget);
-    final preview = find.ancestor(
-        of: find.text('Pratinjau Catatan Sesi'),
-        matching: find.byType(SingleChildScrollView));
-    expect(find.descendant(of: preview, matching: find.text('Rahasia klinis')),
-        findsNothing);
+    expect(find.text('Rahasia klinis').hitTestable(), findsNothing);
     container.read(account.notifier).state = const AuthSession(
         role: UserRole.professional,
         identifier: 'other',
@@ -74,6 +70,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Keluhan draf'), findsNothing);
     expect(find.text('1. Tidur teratur'), findsNothing);
-    expect(find.text('Simpan & Selesai'), findsNothing);
+    expect(find.text('Tutup Pratinjau'), findsNothing);
   });
 }

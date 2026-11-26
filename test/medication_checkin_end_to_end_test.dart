@@ -77,7 +77,7 @@ int _adherence(List<Medication> meds, List<MedicationLog> logs) =>
       patient: _patient,
       medications: meds,
       medicationLogs: logs,
-    ).adherencePercent;
+    ).medicationAdherenceToday(_todayLocal(23, 59)).percent;
 
 /// Wall-clock WIB hari ini pada jam tertentu (belum di-UTC-kan).
 ///
@@ -263,10 +263,11 @@ void main() {
 
   test('B5: 3 obat berbeda dari 10 = 30%', () {
     final meds = [for (var i = 1; i <= 10; i++) _med('med_$i', 'Obat $i')];
+    final recordedAt = ServerClock.now().toUtc();
     final percent = _adherence(meds, [
-      _log('med_1', 'Obat 1', _todayLocal(7, 0).toUtc()),
-      _log('med_2', 'Obat 2', _todayLocal(12, 0).toUtc()),
-      _log('med_3', 'Obat 3', _todayLocal(19, 0).toUtc()),
+      _log('med_1', 'Obat 1', recordedAt),
+      _log('med_2', 'Obat 2', recordedAt),
+      _log('med_3', 'Obat 3', recordedAt),
     ]);
     expect(percent, 30);
   });

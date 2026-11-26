@@ -1853,6 +1853,11 @@ func (s *Store) GetPatientDataConsent(ctx context.Context, patientID, profession
 }
 
 func (s *Store) UpdatePatientDataConsent(ctx context.Context, consent PatientDataConsent) (PatientDataConsent, error) {
+	return s.SavePatientDataConsent(ctx, consent, &consent.ShareTimeline)
+}
+
+// Omitted Timeline stays unchanged for an existing pair and defaults off for a new pair.
+func (s *Store) SavePatientDataConsent(ctx context.Context, consent PatientDataConsent, timeline *bool) (PatientDataConsent, error) {
 	// Kolom share_goals/share_diary_checkin (migrasi 006) dan
 	// share_therapy_records (migrasi 023) mungkin belum ada di DB yang
 	// migrasinya belum lengkap — deteksi kolom dulu agar update tetap jalan
@@ -1866,16 +1871,16 @@ func (s *Store) UpdatePatientDataConsent(ctx context.Context, consent PatientDat
 	_ = s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns
 		WHERE table_schema = current_schema() AND table_name = 'patient_data_consents' AND column_name = 'share_therapy_records')`).Scan(&hasTherapy)
 	cols := "patient_id, professional_id, share_screenings, share_mood_diary, share_medications, share_timeline, share_health_record"
-	vals := "$1, $2, $3, $4, $5, $6, $7"
+	vals := "$1, $2, $3, $4, $5, COALESCE($6::boolean, false), $7"
 	setClause := `share_screenings = EXCLUDED.share_screenings,
 		    share_mood_diary = EXCLUDED.share_mood_diary,
 		    share_medications = EXCLUDED.share_medications,
-		    share_timeline = EXCLUDED.share_timeline,
+		    share_timeline = COALESCE($6::boolean, patient_data_consents.share_timeline),
 		    share_health_record = EXCLUDED.share_health_record`
 	returnCols := `patient_id, professional_id, share_screenings, share_mood_diary,
 		          share_medications, share_timeline, share_health_record`
 	args := []any{consent.PatientID, consent.ProfessionalID, consent.ShareScreenings,
-		consent.ShareMoodDiary, consent.ShareMedications, consent.ShareTimeline,
+		consent.ShareMoodDiary, consent.ShareMedications, timeline,
 		consent.ShareHealthRecord}
 	// Placeholder dihitung dari jumlah argumen: kolom opsional (migrasi 006/023)
 	// bisa ada atau tidak di DB, jadi nomor $n tidak boleh di-hardcode.

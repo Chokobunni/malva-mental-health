@@ -1810,6 +1810,32 @@ class MalvaApiClient {
     );
   }
 
+  Future<BackendPatientDataConsent> getClinicalProfileAccess({
+    required String accessToken,
+    required String patientId,
+  }) async {
+    final payload = await _sendUri(
+      'GET',
+      baseUri.replace(
+          path: '/v1/health-record/access',
+          queryParameters: {'patient_id': patientId}),
+      accessToken: accessToken,
+    );
+    final consent =
+        _expectMap(payload['consent'], 'Respons akses data tidak valid.');
+    if (const [
+      'share_screenings',
+      'share_mood_diary',
+      'share_medications',
+      'share_health_record',
+      'share_therapy_records',
+      'share_goals',
+    ].any((flag) => consent[flag] is! bool)) {
+      throw const FormatException('Respons akses data tidak valid.');
+    }
+    return BackendPatientDataConsent.fromJson(consent);
+  }
+
   Future<List<BackendHealthRecordAllergy>> listHealthRecordAllergies({
     required String accessToken,
     String? patientId,
@@ -1857,6 +1883,39 @@ class MalvaApiClient {
     return BackendHealthRecordAllergy.fromJson(
       _expectMap(payload['item'], 'Respons alergi tidak valid.'),
     );
+  }
+
+  Future<BackendHealthRecordAllergy> updateHealthRecordAllergy({
+    required String accessToken,
+    required String allergyId,
+    required String reactionType,
+    required String substance,
+    required String symptoms,
+    required String severity,
+  }) async {
+    final payload = await _send(
+      'PUT',
+      '/v1/health-record/allergies/${Uri.encodeComponent(allergyId)}',
+      accessToken: accessToken,
+      body: {
+        'reaction_type': reactionType,
+        'substance': substance,
+        'symptoms': symptoms,
+        'severity': severity,
+      },
+    );
+    return BackendHealthRecordAllergy.fromJson(
+      _expectMap(payload['item'], 'Respons alergi tidak valid.'),
+    );
+  }
+
+  Future<void> deleteHealthRecordAllergy({
+    required String accessToken,
+    required String allergyId,
+  }) async {
+    await _send('DELETE',
+        '/v1/health-record/allergies/${Uri.encodeComponent(allergyId)}',
+        accessToken: accessToken);
   }
 
   /// Profesional memperbarui diagnosis pasien (PUT /v1/health-record).
@@ -2019,7 +2078,7 @@ class MalvaApiClient {
     required bool shareScreenings,
     required bool shareMoodDiary,
     required bool shareMedications,
-    required bool shareTimeline,
+    bool? shareTimeline,
     bool shareHealthRecord = true,
     bool shareGoals = true,
     bool shareTherapyRecords = false,
@@ -2033,7 +2092,7 @@ class MalvaApiClient {
         'share_screenings': shareScreenings,
         'share_mood_diary': shareMoodDiary,
         'share_medications': shareMedications,
-        'share_timeline': shareTimeline,
+        if (shareTimeline != null) 'share_timeline': shareTimeline,
         'share_health_record': shareHealthRecord,
         'share_goals': shareGoals,
         'share_therapy_records': shareTherapyRecords,
@@ -4266,7 +4325,7 @@ class BackendPatientDataConsent {
       shareScreenings: json['share_screenings'] != false,
       shareMoodDiary: json['share_mood_diary'] != false,
       shareMedications: json['share_medications'] != false,
-      shareTimeline: json['share_timeline'] != false,
+      shareTimeline: json['share_timeline'] == true,
       shareHealthRecord: json['share_health_record'] != false,
       shareGoals: json['share_goals'] != false,
       shareDiaryCheckin: json['share_diary_checkin'] != false,

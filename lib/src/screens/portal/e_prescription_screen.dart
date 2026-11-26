@@ -10,7 +10,6 @@ import '../../services/malva_api_client.dart';
 import '../../time/wib.dart';
 import '../../widgets/friendly_error.dart';
 import '../../widgets/malva_components.dart';
-import 'prescription_editor_screen.dart';
 import 'prescription_widgets.dart';
 import 'prescription_wizard_screen.dart';
 
@@ -560,32 +559,6 @@ class _EPrescriptionDetailScreenState
     }
   }
 
-  Future<void> _status() async {
-    final rx = _rx;
-    final api = widget.apiClient;
-    final token = _session?.accessToken;
-    if (rx == null || api == null || token == null) return;
-    setState(() => _busy = true);
-    try {
-      final updated = await api.updateEPrescription(
-          accessToken: token,
-          prescriptionId: rx.id,
-          patientId: rx.patientId,
-          items: rx.items,
-          notes: rx.notes,
-          instructions: rx.instructions,
-          diagnosis: rx.diagnosis,
-          status: rx.status == 'issued' ? 'draft' : 'issued');
-      if (mounted && _session != null) setState(() => _rx = updated);
-    } on Object catch (e) {
-      if (mounted && _session != null)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _delete() async {
     if (!await confirmPrescriptionDelete(context) || !mounted) return;
     final token = _session?.accessToken;
@@ -905,41 +878,6 @@ class _EPrescriptionDetailScreenState
                                   ),
                                   const SizedBox(height: 12)
                                 ],
-                                if (canEdit)
-                                  Wrap(
-                                    spacing: 6,
-                                    alignment: WrapAlignment.end,
-                                    children: [
-                                      TextButton(
-                                        onPressed: _busy
-                                            ? null
-                                            : () async {
-                                                await Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                      builder: (_) =>
-                                                          EPrescriptionEditorScreen(
-                                                            session: _session,
-                                                            apiClient: widget
-                                                                .apiClient,
-                                                            prescription: rx,
-                                                            patientName: widget
-                                                                .patientName,
-                                                          )),
-                                                );
-                                                if (mounted && _session != null)
-                                                  await _load();
-                                              },
-                                        child: const Text('Kelola Isi Resep'),
-                                      ),
-                                      TextButton(
-                                        onPressed: _busy ? null : _status,
-                                        child: Text(rx.status == 'issued'
-                                            ? 'Jadikan Draft'
-                                            : 'Terbitkan Resep'),
-                                      ),
-                                    ],
-                                  ),
                               ]));
   }
 }

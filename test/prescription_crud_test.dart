@@ -180,7 +180,7 @@ void main() {
   });
 
   testWidgets(
-      'Rx list searches real data without a status filter, editor preserves consumed stock and full routine, draft and delete update list',
+      'Rx list searches real data without a status filter, editor preserves consumed stock and full routine and delete updates list',
       (tester) async {
     tester.view.physicalSize = const Size(430, 1100);
     tester.view.devicePixelRatio = 1;
@@ -290,12 +290,8 @@ void main() {
     expect(find.byKey(const Key('rx-name')), findsOneWidget);
     await tester.tap(find.byTooltip('Kembali'));
     await tester.pumpAndSettle();
-    final draft = find.text('Jadikan Draft');
-    await tester.scrollUntilVisible(draft, 400,
-        scrollable: find.byType(Scrollable).first);
-    await tester.tap(draft);
-    await tester.pumpAndSettle();
-    expect(saved!['status'], 'draft');
+    expect(find.text('Jadikan Draft'), findsNothing);
+    expect(find.text('Kelola Isi Resep'), findsNothing);
     final delete = find.text('Hapus');
     await tester.ensureVisible(delete);
     await tester.tap(delete);

@@ -25,6 +25,38 @@ type healthRecordUpdateRequest struct {
 	DiagnosisSummary string `json:"diagnosis_summary"`
 }
 
+func (s *Server) getHealthRecordAccess(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "professional" {
+		writeUserError(w, http.StatusForbidden, "Status akses tersedia untuk profesional.")
+		return
+	}
+	patientID, err := s.authorizePatientAccess(r, claims, r.URL.Query().Get("patient_id"))
+	if err != nil {
+		writeUserError(w, http.StatusForbidden, "Pasien tidak terhubung.")
+		return
+	}
+	active, err := s.store.PatientDataAccessActive(r.Context(), patientID, claims.Subject)
+	if err != nil {
+		writeUserError(w, http.StatusInternalServerError, "Gagal memeriksa status akses.")
+		return
+	}
+	var consent store.PatientDataConsent
+	if active {
+		consent, err = s.store.GetPatientDataConsent(r.Context(), patientID, claims.Subject)
+		if err != nil {
+			writeUserError(w, http.StatusInternalServerError, "Gagal membaca status akses.")
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"consent": map[string]any{
+		"patient_id": patientID, "professional_id": claims.Subject,
+		"share_screenings": consent.ShareScreenings, "share_mood_diary": consent.ShareMoodDiary,
+		"share_diary_checkin": consent.ShareDiaryCheckin, "share_medications": consent.ShareMedications,
+		"share_health_record": consent.ShareHealthRecord, "share_goals": consent.ShareGoals,
+		"share_therapy_records": consent.ShareTherapyRecords, "share_timeline": false,
+	}})
+}
+
 func (s *Server) getHealthRecord(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	patientID, err := s.authorizePatientAccess(r, claims, r.URL.Query().Get("patient_id"))
 	if err != nil {

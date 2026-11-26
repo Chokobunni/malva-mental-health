@@ -10,7 +10,6 @@ import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/screens/pro_patient_detail_screen.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
 import 'package:malva_mental_health/src/theme.dart';
-import 'package:malva_mental_health/src/widgets/mood_insights.dart';
 import 'package:malva_mental_health/src/time/wib.dart';
 
 const _session = AuthSession(
@@ -92,7 +91,14 @@ class _Responses {
   final statusByPath = <String, int>{};
   bool missingGad = false;
   final requested = <String>[];
-  final moods = <Map<String, dynamic>>[];
+  final consent = <String, bool>{
+    'share_screenings': true,
+    'share_mood_diary': true,
+    'share_medications': true,
+    'share_health_record': true,
+    'share_therapy_records': true,
+    'share_goals': true,
+  };
   final packages = <Map<String, dynamic>>[];
   final sessions = <Map<String, dynamic>>[];
   final extraWorksheets = <Map<String, dynamic>>[];
@@ -129,7 +135,7 @@ class _Responses {
             ],
           },
         '/v1/goals' => {'goals': []},
-        '/v1/mood-checkins' => {'moods': moods},
+        '/v1/health-record/access' => {'consent': consent},
         '/v1/diary-entries' => {'diaries': []},
         '/v1/professional-notes' => {'notes': []},
         '/v1/medications' => {'medications': []},
@@ -296,13 +302,11 @@ void main() {
         },
       ]);
     await _pump(tester, responses);
-    expect(find.byKey(const ValueKey('packages-section')), findsOneWidget);
+    expect(find.text('Paket & Sesi Konsultasi'), findsOneWidget);
     expect(find.textContaining('3/4 sesi tersisa'), findsOneWidget);
-    expect(tester.getTopLeft(find.text('12 Nov 2026')).dy,
-        lessThan(tester.getTopLeft(find.text('Paket 8 sesi / 42 hari')).dy));
-    expect(tester.widget<Text>(find.text('24 Okt 2026')).style?.decoration,
-        TextDecoration.lineThrough);
-    expect(find.text('09:00 WIB'), findsOneWidget);
+    expect(find.text('12 Nov 2026'), findsNothing);
+    expect(find.text('24 Okt 2026'), findsNothing);
+    expect(find.text('09:00 WIB'), findsNothing);
   });
 
   testWidgets(
@@ -335,25 +339,20 @@ void main() {
     expect(find.textContaining('Lebih dari separuh hari'), findsWidgets);
   });
   testWidgets(
-      'professional mood section uses shared charts and calendar from server',
+      'clinical access summary uses eligibility flags, not record counts',
       (tester) async {
-    final responses = _Responses()
-      ..moods.add({
-        'id': 'm',
-        'mood': 'great',
-        'occurred_at': wibIso(wibNow()),
-        'sleep_hours': 8,
-        'energy': 8,
-        'anxiety': 2,
-        'irritability': 1,
-        'note': 'Catatan server'
-      });
+    final responses = _Responses()..consent['share_goals'] = false;
     await _pump(tester, responses);
-    await tester.tap(find.byKey(const ValueKey('mood-section')));
+    expect(find.text('Pemantauan harian'), findsNothing);
+    expect(responses.requested, isNot(contains('/v1/mood-checkins')));
+    expect(responses.requested, isNot(contains('/v1/goals')));
+    expect(find.text('5 dari 6 kategori dibagikan'), findsOneWidget);
+    expect(find.text('Akses Sebagian'), findsOneWidget);
+    responses.consent['share_goals'] = true;
+    await tester.tap(find.byTooltip('Muat ulang'));
     await tester.pumpAndSettle();
-    expect(find.byType(MoodInsights), findsOneWidget);
-    expect(find.byType(MoodTrendChart), findsOneWidget);
-    expect(find.byType(SymptomsBalanceChart), findsOneWidget);
+    expect(find.text('6 dari 6 kategori dibagikan'), findsOneWidget);
+    expect(find.text('Akses Penuh'), findsOneWidget);
   });
 
   testWidgets(
@@ -393,14 +392,13 @@ void main() {
       (tester) async {
     await _pump(tester, _Responses());
     final health = find.text('Diagnosis Klinis (ICD-10)');
-    final daily = find.text('Pemantauan harian');
+
     final screening = find.text('Arsip Klinis & Skrining');
     expect(find.text('Catatan sesi'), findsNothing);
     expect(health, findsOneWidget);
     expect(screening, findsOneWidget);
-    expect(tester.getTopLeft(health).dy, lessThan(tester.getTopLeft(daily).dy));
-    expect(
-        tester.getTopLeft(screening).dy, lessThan(tester.getTopLeft(daily).dy));
+    expect(tester.getTopLeft(health).dy,
+        lessThan(tester.getTopLeft(screening).dy));
     expect(find.text('WHO-5 dibagikan'), findsOneWidget);
     expect(find.text('DASS-21 dibagikan'), findsOneWidget);
     expect(find.text('Latihan ABCDE'), findsOneWidget);
@@ -428,13 +426,13 @@ void main() {
       (tester) async {
     final responses = _Responses()
       ..statusByPath['/v1/screenings'] = 500
-      ..statusByPath['/v1/mood-checkins'] = 500
+      ..statusByPath['/v1/health-record/access'] = 500
       ..statusByPath['/v1/health-record'] = 500;
     await _pump(tester, responses);
     expect(find.text('WHO-5 dibagikan'), findsOneWidget);
     expect(find.text('Skrining PHQ-9 / GAD-7 belum dapat dimuat.'),
         findsOneWidget);
-    expect(find.text('Mood belum dapat dimuat.'), findsOneWidget);
+    expect(find.text('Status izin pasien belum dapat dimuat.'), findsOneWidget);
     expect(find.text('Rekam Medis belum dapat dimuat.'), findsOneWidget);
     expect(find.textContaining('Sebagian data gagal dimuat'), findsNothing);
     expect(find.text('Belum ada skrining'), findsNothing);
@@ -444,7 +442,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('PHQ-9 7/27 (Ringan)'), findsOneWidget);
     expect(find.text('Diagnosis tersimpan'), findsOneWidget);
-    expect(find.text('Mood belum dapat dimuat.'), findsNothing);
+    expect(find.text('Status izin pasien belum dapat dimuat.'), findsNothing);
   });
 
   testWidgets(

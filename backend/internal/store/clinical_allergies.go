@@ -69,3 +69,24 @@ func (s *Store) CreateClinicalAllergy(ctx context.Context, patientID string, ite
 	}
 	return created, err
 }
+
+func (s *Store) UpdateClinicalAllergy(ctx context.Context, patientID string, item ClinicalAllergy) (ClinicalAllergy, error) {
+	return scanClinicalAllergy(s.db.QueryRowContext(ctx, `UPDATE clinical_allergies
+		SET reaction_type=$3,substance=$4,symptoms=$5,severity=$6
+		WHERE id=$1 AND patient_id=$2 AND reported_by='patient'
+		RETURNING `+clinicalAllergyColumns, item.ID, patientID, item.ReactionType,
+		item.Substance, item.Symptoms, item.Severity))
+}
+
+func (s *Store) DeleteClinicalAllergy(ctx context.Context, patientID, id string) error {
+	result, err := s.db.ExecContext(ctx, `DELETE FROM clinical_allergies
+		WHERE id=$1 AND patient_id=$2 AND reported_by='patient'`, id, patientID)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err == nil && count == 0 {
+		return sql.ErrNoRows
+	}
+	return err
+}

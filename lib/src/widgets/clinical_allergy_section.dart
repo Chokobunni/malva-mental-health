@@ -25,12 +25,16 @@ class ClinicalAllergySection extends StatefulWidget {
     super.key,
     required this.records,
     this.onAdd,
+    this.onEdit,
+    this.onDelete,
     this.status,
     this.prescribing = false,
   });
 
   final List<BackendHealthRecordAllergy> records;
   final VoidCallback? onAdd;
+  final ValueChanged<BackendHealthRecordAllergy>? onEdit;
+  final ValueChanged<BackendHealthRecordAllergy>? onDelete;
   final Widget? status;
   final bool prescribing;
 
@@ -46,21 +50,17 @@ class _ClinicalAllergySectionState extends State<ClinicalAllergySection> {
     final records = widget.records;
     final visible = records
         .where((record) => _filter.isEmpty || record.reactionType == _filter);
-    final hasHighRisk = records.any((record) => record.severity == 'high');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ClinicalProfileSection(
+      title: 'Alergi & Reaksi Obat',
+      art: 'allergy',
+      action: widget.onAdd == null
+          ? null
+          : TextButton.icon(
+              onPressed: widget.onAdd,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Tambah'),
+            ),
       children: [
-        SectionLabel(
-          'Alergi & Reaksi Obat',
-          icon: hasHighRisk ? Icons.warning_amber_rounded : null,
-          action: widget.onAdd == null
-              ? null
-              : TextButton.icon(
-                  onPressed: widget.onAdd,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Tambah'),
-                ),
-        ),
         if (widget.status case final status?)
           status
         else ...[
@@ -98,10 +98,19 @@ class _ClinicalAllergySectionState extends State<ClinicalAllergySection> {
           if (visible.isEmpty)
             SoftCard(
                 child: Text(records.isEmpty
-                    ? 'Belum ada catatan alergi atau reaksi obat.'
+                    ? 'Tidak ada riwayat alergi obat tercatat.'
                     : 'Tidak ada catatan untuk jenis ini.')),
           for (final record in visible) ...[
-            _AllergyCard(record),
+            _AllergyCard(
+              record,
+              onEdit: record.reportedBy == 'patient' && widget.onEdit != null
+                  ? () => widget.onEdit!(record)
+                  : null,
+              onDelete:
+                  record.reportedBy == 'patient' && widget.onDelete != null
+                      ? () => widget.onDelete!(record)
+                      : null,
+            ),
             const SizedBox(height: 8),
           ],
         ],
@@ -111,7 +120,9 @@ class _ClinicalAllergySectionState extends State<ClinicalAllergySection> {
 }
 
 class _AllergyCard extends StatelessWidget {
-  const _AllergyCard(this.record);
+  const _AllergyCard(this.record, {this.onEdit, this.onDelete});
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   final BackendHealthRecordAllergy record;
 
@@ -139,12 +150,11 @@ class _AllergyCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClinicalIconTile(
-            color: tone,
-            icon: record.reactionType == 'allergy'
-                ? Icons.health_and_safety_outlined
-                : Icons.monitor_heart_outlined,
-          ),
+          ClinicalProfileArt(switch (record.severity) {
+            'high' => 'high',
+            'moderate' => 'moderate',
+            _ => 'mild',
+          }),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -165,6 +175,22 @@ class _AllergyCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 6),
+                if (onEdit != null || onDelete != null)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (onEdit != null)
+                        IconButton(
+                            tooltip: 'Edit alergi',
+                            onPressed: onEdit,
+                            icon: const Icon(Icons.edit_outlined, size: 18)),
+                      if (onDelete != null)
+                        IconButton(
+                            tooltip: 'Hapus alergi',
+                            onPressed: onDelete,
+                            icon: const Icon(Icons.delete_outline, size: 18)),
+                    ],
+                  ),
                 Text(record.substance,
                     style: const TextStyle(
                         fontWeight: FontWeight.w900, fontSize: 15)),
@@ -191,11 +217,12 @@ typedef AllergySave = Future<BackendHealthRecordAllergy> Function(
     String reaction,
     String substance,
     String symptoms,
-    String severity,
-    String occurredWhen);
+    String severity);
 
 class AddClinicalAllergySheet extends StatefulWidget {
-  const AddClinicalAllergySheet({super.key, required this.onSave});
+  const AddClinicalAllergySheet(
+      {super.key, required this.onSave, this.initial});
+  final BackendHealthRecordAllergy? initial;
 
   final AllergySave onSave;
 
@@ -206,11 +233,11 @@ class AddClinicalAllergySheet extends StatefulWidget {
 
 class _AddClinicalAllergySheetState extends State<AddClinicalAllergySheet> {
   final _form = GlobalKey<FormState>();
-  final _substance = TextEditingController();
-  final _symptoms = TextEditingController();
-  final _occurredWhen = TextEditingController();
-  String _reaction = 'allergy';
-  String _severity = 'moderate';
+  late final _substance =
+      TextEditingController(text: widget.initial?.substance);
+  late final _symptoms = TextEditingController(text: widget.initial?.symptoms);
+  late String _reaction = widget.initial?.reactionType ?? 'allergy';
+  late String _severity = widget.initial?.severity ?? 'moderate';
   String? _clientId;
   bool _saving = false;
   String? _error;
@@ -219,13 +246,13 @@ class _AddClinicalAllergySheetState extends State<AddClinicalAllergySheet> {
   void dispose() {
     _substance.dispose();
     _symptoms.dispose();
-    _occurredWhen.dispose();
+
     super.dispose();
   }
 
-  String? _validate(String? value, int limit, {bool required = true}) {
+  String? _validate(String? value, int limit) {
     final text = value?.trim() ?? '';
-    if (required && text.isEmpty) return 'Wajib diisi.';
+    if (text.isEmpty) return 'Wajib diisi.';
     return utf8.encode(text).length > limit ? 'Isian terlalu panjang.' : null;
   }
 
@@ -241,13 +268,8 @@ class _AddClinicalAllergySheetState extends State<AddClinicalAllergySheet> {
       _error = null;
     });
     try {
-      final record = await widget.onSave(
-          _clientId ??= newClientIntentId(),
-          _reaction,
-          _substance.text.trim(),
-          _symptoms.text.trim(),
-          _severity,
-          _occurredWhen.text.trim());
+      final record = await widget.onSave(_clientId ??= newClientIntentId(),
+          _reaction, _substance.text.trim(), _symptoms.text.trim(), _severity);
       if (mounted) Navigator.pop(context, record);
     } on Object catch (error) {
       if (mounted) {
@@ -280,7 +302,10 @@ class _AddClinicalAllergySheetState extends State<AddClinicalAllergySheet> {
                           color: MalvaColors.danger),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Text('Tambah Alergi & Reaksi Obat',
+                        child: Text(
+                            widget.initial == null
+                                ? 'Tambah Alergi & Reaksi Obat'
+                                : 'Edit Alergi & Reaksi Obat',
                             style: Theme.of(context)
                                 .textTheme
                                 .titleLarge
@@ -389,18 +414,6 @@ class _AddClinicalAllergySheetState extends State<AddClinicalAllergySheet> {
                                   }),
                         ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _occurredWhen,
-                    enabled: !_saving,
-                    onChanged: (_) => _edit(),
-                    decoration: const InputDecoration(
-                      labelText: 'Perkiraan Waktu Kejadian (Opsional)',
-                      hintText: 'Contoh: 2 minggu lalu atau masa kecil',
-                    ),
-                    validator: (value) =>
-                        _validate(value, 240, required: false),
                   ),
                   if (_error case final error?) ...[
                     const SizedBox(height: 8),

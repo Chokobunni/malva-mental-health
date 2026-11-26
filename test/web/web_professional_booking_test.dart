@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:malva_mental_health/src/models.dart';
 import 'package:malva_mental_health/src/platform/platform_providers.dart';
 import 'package:malva_mental_health/src/providers/providers.dart';
 import 'package:malva_mental_health/src/services/malva_api_client.dart';
@@ -43,6 +44,7 @@ Future<void> _pumpBooking(
   WidgetTester tester,
   FakeAdminApi api, {
   VoidCallback? onGoToSchedule,
+  AuthNotifier? auth,
 }) async {
   tester.view.physicalSize = const Size(1280, 1000);
   tester.view.devicePixelRatio = 1.0;
@@ -54,7 +56,7 @@ Future<void> _pumpBooking(
       overrides: <Override>[
         secureStoreProvider.overrideWithValue(InMemorySecureStore()),
         authStateProvider.overrideWith(
-          (ref) => AuthNotifier()..setSession(kPatientSession),
+          (ref) => auth ?? (AuthNotifier()..setSession(kPatientSession)),
         ),
         apiClientProvider.overrideWithValue(api),
       ],
@@ -230,6 +232,42 @@ void main() {
       expect(tester.widget<FilledButton>(next).onPressed, isNotNull);
     });
 
+    testWidgets('account switch and return prevents stale checkout writes',
+        (tester) async {
+      final api = FakeAdminApi();
+      final auth = AuthNotifier()..setSession(kPatientSession);
+      await _pumpBooking(tester, api, auth: auth);
+      for (final key in [
+        'web-booking-next',
+        'web-booking-slot-09:00',
+        'web-booking-next',
+        'web-booking-agree',
+        'web-booking-next',
+        'web-booking-pay',
+      ]) {
+        await tester.tap(find.byKey(Key(key)));
+        await tester.pumpAndSettle();
+      }
+      final save = find.text('Simpan');
+      expect(save, findsOneWidget);
+      auth.setSession(const AuthSession(
+        role: UserRole.patient,
+        identifier: 'different',
+        displayName: 'Other',
+        backendUserId: 'different',
+        accessToken: 'other-token',
+      ));
+      auth.setSession(kPatientSession);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(save);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(find.text('Sesi akun telah berubah.'), findsOneWidget);
+      expect(api.consentUpdates, 0);
+      expect(api.bookingCreates, 0);
+      expect(api.paymentCreates, 0);
+    });
+
     testWidgets('bayar membuat booking + payment lalu lunas setelah dicek',
         (WidgetTester tester) async {
       final api = FakeAdminApi();
@@ -256,8 +294,9 @@ void main() {
       expect(find.byKey(const Key('web-booking-pay')), findsOneWidget);
       await tester.tap(find.byKey(const Key('web-booking-pay')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('durasi sesi satu jam'), findsOneWidget);
-      final allow = find.text('Allow & Continue');
+      expect(find.textContaining('selama sesi konsultasi berlangsung'),
+          findsOneWidget);
+      final allow = find.text('Simpan');
       await tester.ensureVisible(allow);
       await tester.tap(allow);
       // Hindari pumpAndSettle: polling berjalan periodik.

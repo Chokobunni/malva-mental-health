@@ -61,10 +61,8 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
   late final BookingOwner _owner;
   bool _isSubmitting = false;
   String? _error;
-  String _sessionType = 'video';
+  static const _sessionType = 'video';
   final _sessions = <int, (String, String)>{};
-
-  String get _modalityLabel => _sessionType == 'chat' ? 'chat' : 'video';
 
   bool get _hasCapacity =>
       widget.remainingPatientSlots != 0 ||
@@ -147,18 +145,17 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
                             child: const Icon(Icons.calendar_month_outlined,
                                 size: 25, color: MalvaColors.seed)),
                         const SizedBox(width: 10),
-                        Expanded(
+                        const Expanded(
                             child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                              const Text('Continuous Package',
+                              Text('Continuous Package',
                                   style: TextStyle(
                                       fontWeight: FontWeight.w800,
                                       fontSize: 16)),
-                              const SizedBox(height: 3),
-                              Text(
-                                  '4 sesi ${widget.canResumePackage ? 'konsultasi' : _modalityLabel} • Masa aktif 6 minggu',
-                                  style: const TextStyle(
+                              SizedBox(height: 3),
+                              Text('4 sesi Video & Chat • Masa aktif 6 minggu',
+                                  style: TextStyle(
                                       color: MalvaColors.seed, fontSize: 12)),
                             ])),
                         const SizedBox(width: 6),
@@ -176,43 +173,6 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
                       ])),
                 ]))),
         const SizedBox(height: 16),
-        if (!widget.canResumePackage) ...[
-          SoftCard(
-              radius: 24,
-              color: Colors.white,
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text('Jenis sesi',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 12),
-                    SegmentedButton<String>(
-                        key: const Key('package-modality'),
-                        segments: const [
-                          ButtonSegment(
-                              value: 'video',
-                              label: Text('Video'),
-                              icon: Icon(Icons.videocam_outlined)),
-                          ButtonSegment(
-                              value: 'chat',
-                              label: Text('Chat'),
-                              icon: Icon(Icons.chat_bubble_outline_rounded)),
-                        ],
-                        selected: {_sessionType},
-                        onSelectionChanged: _isSubmitting || !_hasCapacity
-                            ? null
-                            : (selection) => setState(
-                                () => _sessionType = selection.single)),
-                    const SizedBox(height: 9),
-                    const Text(
-                        'Pilihan berlaku untuk sesi pertama dan sesi opsional yang dijadwalkan saat checkout.',
-                        style:
-                            TextStyle(color: Color(0xFF788490), fontSize: 12)),
-                  ])),
-          const SizedBox(height: 16),
-        ],
         SoftCard(
             radius: 24,
             color: Colors.white,
@@ -274,12 +234,10 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
               ]),
               const SizedBox(height: 8),
               _PackageRule(
-                  _sessionType == 'chat' && !widget.canResumePackage
-                      ? Icons.chat_bubble_outline_rounded
-                      : Icons.videocam_outlined,
+                  Icons.videocam_outlined,
                   widget.durationLabel == null
-                      ? '4 sesi ${widget.canResumePackage ? 'konsultasi' : _modalityLabel} per paket.'
-                      : '4 sesi ${widget.canResumePackage ? 'konsultasi' : _modalityLabel} per paket, masing-masing berdurasi ${widget.durationLabel}.'),
+                      ? '4 sesi Video & Chat per paket.'
+                      : '4 sesi Video & Chat per paket, masing-masing berdurasi ${widget.durationLabel}.'),
               const _PackageRule(Icons.send_outlined,
                   'Selama paket aktif, kirim jurnal, target, asesmen, dan lembar kerja. Termasuk monitoring data.'),
               const _PackageRule(Icons.chat_bubble_outline_rounded,
@@ -523,6 +481,8 @@ class _PackageBookingScreenState extends ConsumerState<PackageBookingScreen> {
           await showConsentRequestSheet(
             context: context,
             professionalId: widget.doctorUserId,
+            professionalName: widget.doctorName,
+            apiClient: apiClient,
             ownerSession: () => mounted ? _owner.session : null,
           );
       if (!granted || !mounted) return;

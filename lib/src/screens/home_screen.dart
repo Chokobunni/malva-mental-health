@@ -613,7 +613,6 @@ class _UpcomingSessionCard extends StatelessWidget {
   Widget build(BuildContext context) => CareSessionCard(
       session: session,
       role: UserRole.patient,
-      allowPreSessionChat: true,
       onOpenChat: onJoin,
       onChanged: onChanged,
       accessToken: accessToken,
@@ -839,7 +838,6 @@ class _OngoingSessionCard extends StatelessWidget {
   Widget build(BuildContext context) => CareSessionCard(
       session: session,
       role: UserRole.patient,
-      allowPreSessionChat: true,
       onOpenChat: onChat,
       accessToken: accessToken,
       onConfirmAttendance: onConfirmAttendance,

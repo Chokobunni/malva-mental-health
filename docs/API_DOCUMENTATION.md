@@ -1115,6 +1115,9 @@ Get privacy consent settings for a specific professional.
 
 #### `PUT /v1/privacy/consents`
 
+Omitting `share_timeline` preserves the saved value for an existing pair and
+defaults to false for a new pair. Clients that send a boolean set it explicitly.
+
 Update privacy consent settings.
 
 **Auth:** Patient only
@@ -1496,6 +1499,8 @@ tarik izin berbagi bila `professional_id` dikirim kosong.
 
 - `PUT /v1/health-record` requires a verified professional, an active patient link, and Health Record consent. A valid active multi-session package grants write access before and between sessions. A scheduled standalone session grants access from its start through its exclusive end. `diagnosis_summary` remains a string with a 2,000-byte limit. The app sends selected ICD-10 codes and titles as one ordered entry per line, with the primary diagnosis first.
 - `GET /v1/health-record/allergies` lists the patient's entries in `items`. A professional supplies `patient_id` and needs the same active link and consent as the Health Record read endpoint. `POST` accepts `reaction_type`, `substance`, `symptoms`, `severity`, and optional `occurred_when` from the authenticated patient, and returns `item`. An optional `client_id` UUID makes retries idempotent for the same patient and payload. The server assigns the source and timestamp.
+- `PUT /v1/health-record/allergies/{allergy_id}` accepts the reaction type, substance, symptoms, and severity and returns `item`. It preserves the original occurrence text, author, and creation timestamp. `DELETE` returns `{"deleted":true}`. Both operations apply only to patient reports owned by the authenticated patient.
+- `GET /v1/health-record/access?patient_id=...` returns the existing consent flags in `consent` for a linked professional. Flags represent effective access inside the care window. The response excludes the stored Timeline preference. Individually shared archives still use their existing access rules.
 - Payment GET status trusts configured authenticated HTTPS provider transport, binds response order to requested reference and enforces amount/fraud validation. Webhook signature remains required.
 - Provider body codes are accepted only as 200 for capture/settlement, 201/pending, 202/deny and 407/expire. Unrecognized non-200 combinations stay pending; missing or mismatched orders cannot change state. Terminal reconciliation is idempotent and never activates an unpaid booking.
 

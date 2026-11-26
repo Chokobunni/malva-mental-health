@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models.dart';
+import '../models/goal_details.dart';
 import '../providers/providers.dart';
 import '../services/weekly_summary_service.dart';
 import '../services/malva_api_client.dart';
+import '../time/wib.dart';
+import 'clinical_profile_cards.dart';
 import 'mood_insights.dart';
 import '../theme.dart';
 import 'malva_components.dart';
@@ -28,6 +31,7 @@ class MiniSummaryButton extends ConsumerWidget {
     void openSummary() => showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
+          backgroundColor: const Color(0xfff9f5fc),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
           ),
@@ -109,9 +113,11 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
             api: api,
             accessToken: token,
             patientId: widget.patientId,
+            includeMedicationSnapshot: true,
             localMoods: [
               for (final entry in store.moodEntries)
-                if (widget.patientId == null)
+                if (_owner?.role == UserRole.patient &&
+                    widget.patientId == null)
                   (
                     at: entry.date,
                     sleepHours: entry.sleepHours,
@@ -147,8 +153,8 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
     final moodKnown = metrics?.moodKnown ?? false;
     final moodCount = metrics?.moodCount ?? 0;
     final avgSleep = metrics?.avgSleepHours ?? 0.0;
+    final medications = metrics?.medications;
     final logsKnown = metrics?.logsKnown ?? false;
-    final taken = metrics?.takenLogs ?? 0;
     final totalLogs = metrics?.totalLogs ?? 0;
     final adherence = metrics?.adherencePercent ?? 0;
 
@@ -166,166 +172,321 @@ class _MiniSummarySheetState extends ConsumerState<_MiniSummarySheet> {
       initialChildSize: 0.85,
       minChildSize: 0.5,
       maxChildSize: 0.95,
-      builder: (context, controller) => ListView(
+      builder: (context, controller) => CustomScrollView(
         controller: controller,
-        padding: const EdgeInsets.all(20),
-        children: [
-          Center(
-            child: Container(
-              width: 44,
-              height: 5,
-              decoration: BoxDecoration(
-                color: Colors.black26,
-                borderRadius: BorderRadius.circular(999),
+        slivers: [
+          PinnedHeaderSliver(
+            child: Material(
+              color: const Color(0xfff9f5fc),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 10, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 38,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.black26,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                      ),
+                      Row(children: [
+                        const Expanded(
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 3,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text('Mini Summary (7 hari)',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 17)),
+                              StatusPill(
+                                  label: 'Live', color: MalvaColors.seed),
+                            ],
+                          ),
+                        ),
+                        IconButton.filledTonal(
+                          tooltip: 'Tutup',
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close, size: 18),
+                        ),
+                      ]),
+                      Text(
+                          'Ringkasan 7 hari terakhir • dihitung dari data tersimpan.',
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 14),
-          const Text(
-            'Mini Summary (7 hari)',
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Ringkasan 7 hari terakhir — dihitung dari data tersimpan.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          if (_isLoading) ...[
-            const SizedBox(height: 12),
-            const LinearProgressIndicator(minHeight: 2),
-          ],
-          const SizedBox(height: 16),
-          _SummaryTile(
-            icon: Icons.show_chart_rounded,
-            color: MalvaColors.seed,
-            title: 'Tren Mood',
-            value: moodKnown
-                ? '$moodTrend ($moodCount check-in)'
-                : 'Data check-in belum dimuat',
-          ),
-          if (metrics != null && metrics.entries.isNotEmpty) ...[
-            const SectionLabel('Tren mood — 7 hari terakhir'),
-            MoodTrendChart(entries: metrics.entries),
-            const SizedBox(height: 12),
-            const SectionLabel('Keseimbangan gejala'),
-            SymptomsBalanceChart(entries: metrics.entries),
-            const SizedBox(height: 12),
-          ],
-          _SummaryTile(
-            icon: Icons.bedtime_rounded,
-            color: MalvaColors.orchid,
-            title: 'Rata-rata Jam Tidur',
-            value: moodKnown && moodCount > 0
-                ? '${avgSleep.toStringAsFixed(1)} jam/malam'
-                : 'Belum ada data check-in',
-          ),
-          _SummaryTile(
-            icon: Icons.medication_rounded,
-            color: MalvaColors.mint,
-            title: 'Ketaatan Obat',
-            value: logsKnown
-                ? '$adherence% ($taken dari $totalLogs dosis)'
-                : 'Data log obat belum dimuat',
-          ),
-          const SizedBox(height: 8),
-          const SectionLabel('Target Saat Ini'),
-          if (_goals == null)
-            const Text('Data target belum dimuat.')
-          else if (activeGoals.isEmpty)
-            const Text('Belum ada goal aktif.')
-          else
-            for (final goal in activeGoals) ...[
-              _GoalRow(
-                  name: goal.title,
-                  progress:
-                      '${goal.doneThisWeek}/${goal.targetPerWeek} minggu ini'),
-              const SizedBox(height: 6),
-            ],
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: MalvaColors.seed.withValues(alpha: 0.07),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Text(
-              'Ringkasan 7 hari dari data tersimpan.',
-              style: TextStyle(fontSize: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryTile extends StatelessWidget {
-  const _SummaryTile({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.value,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: SoftCard(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            CircleAvatar(
-              backgroundColor: color.withValues(alpha: 0.12),
-              child: Icon(icon, color: color),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+            sliver: SliverList.list(children: [
+              if (_isLoading) ...[
+                const LinearProgressIndicator(minHeight: 2),
+                const SizedBox(height: 10),
+              ],
+              SoftCard(
+                color: Colors.white,
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    const CircleAvatar(
+                      backgroundColor: Color(0xfff3e8fa),
+                      child: Icon(Icons.show_chart_rounded,
+                          color: MalvaColors.seed),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Tren Mood',
+                              style: TextStyle(fontWeight: FontWeight.w800)),
+                          Text(
+                              moodKnown
+                                  ? '$moodTrend ($moodCount check-in)'
+                                  : 'Data check-in belum dimuat',
+                              style: Theme.of(context).textTheme.bodySmall),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      flex: 2,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('Rata-rata Tidur',
+                              textAlign: TextAlign.end,
+                              style: Theme.of(context).textTheme.bodySmall),
+                          Text(
+                              moodKnown && moodCount > 0
+                                  ? '${avgSleep.toStringAsFixed(1)} jam/malam'
+                                  : 'Belum ada data',
+                              textAlign: TextAlign.end,
+                              style: const TextStyle(
+                                  color: MalvaColors.plum,
+                                  fontWeight: FontWeight.w800)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (metrics != null && metrics.entries.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const SectionLabel('Tren mood — 7 hari terakhir'),
+                MoodTrendChart(entries: metrics.entries),
+                const SizedBox(height: 12),
+                const SectionLabel('Keseimbangan gejala'),
+                SymptomsBalanceChart(entries: metrics.entries),
+              ],
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                alignment: WrapAlignment.spaceBetween,
                 children: [
-                  Text(title,
-                      style: const TextStyle(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 2),
-                  Text(value, style: Theme.of(context).textTheme.bodyMedium),
+                  Text(
+                      medications == null
+                          ? 'Obat Aktif'
+                          : 'Obat Aktif (${medications.length})',
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                  if (logsKnown && totalLogs > 0)
+                    Tooltip(
+                      message: '${metrics!.takenLogs} dari $totalLogs dosis',
+                      child: StatusPill(
+                          label: 'Kepatuhan $adherence% (7 hr)',
+                          color: MalvaColors.seed),
+                    ),
                 ],
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GoalRow extends StatelessWidget {
-  const _GoalRow({required this.name, required this.progress});
-
-  final String name;
-  final String progress;
-
-  @override
-  Widget build(BuildContext context) {
-    return SoftCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child:
-                Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
-          ),
-          StatusPill(
-            label: progress,
-            color: MalvaColors.mint,
-            icon: Icons.local_fire_department_rounded,
+              const SizedBox(height: 8),
+              if (medications == null)
+                const Text('Data obat belum dimuat.')
+              else if (medications.isEmpty)
+                const Text('Belum ada obat aktif.')
+              else
+                for (final medication in medications)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: ClinicalMedicationCard(med: medication),
+                  ),
+              if (!logsKnown && medications?.isNotEmpty == true)
+                const Text('Data kepatuhan obat belum dimuat.'),
+              const SizedBox(height: 12),
+              SoftCard(
+                color: Colors.white,
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(children: [
+                      const CircleAvatar(
+                        backgroundColor: Color(0xfff3e8fa),
+                        child:
+                            Icon(Icons.flag_outlined, color: MalvaColors.seed),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Progres Target & Kebiasaan',
+                                style: TextStyle(fontWeight: FontWeight.w800)),
+                            Text('Pembaruan Target Mingguan',
+                                style: Theme.of(context).textTheme.bodySmall),
+                          ],
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 10),
+                    if (_goals == null)
+                      const Text('Data target belum dimuat.')
+                    else if (activeGoals.isEmpty)
+                      const Text('Belum ada target aktif.')
+                    else
+                      for (final goal in activeGoals) ...[
+                        const Divider(),
+                        _GoalProgress(goal: goal),
+                      ],
+                  ],
+                ),
+              ),
+            ]),
           ),
         ],
       ),
     );
   }
+}
+
+class _GoalProgress extends StatelessWidget {
+  const _GoalProgress({required this.goal});
+
+  final BackendGoal goal;
+
+  @override
+  Widget build(BuildContext context) {
+    final details = goal.details;
+    final numeric = details?.method == 'numeric';
+    final weeklyTarget = goal.effectiveWeeklyTarget(wibNow());
+    final target = numeric ? details!.target : weeklyTarget;
+    final done = numeric ? goal.todayValue : goal.doneThisWeek;
+    final known =
+        target > 0 && (numeric ? goal.isDue : goal.weeklyProgressAvailable);
+    final unit = numeric && details!.unit.isNotEmpty ? ' ${details.unit}' : '';
+    final stepIds = goal.todayCompletedStepIds.toSet();
+    final steps =
+        details?.method == 'checklist' ? details!.steps : const <GoalStep>[];
+    final stepsDone = steps.where((step) => stepIds.contains(step.id)).length;
+    final note = details?.note.trim() ?? '';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            Expanded(
+                child: Text(goal.title,
+                    style: const TextStyle(fontWeight: FontWeight.w800))),
+            if (known) ...[
+              const SizedBox(width: 8),
+              Flexible(
+                  child: Text('$done/$target$unit',
+                      textAlign: TextAlign.end,
+                      style: TextStyle(
+                          color: done > 0 ? MalvaColors.mint : Colors.black54,
+                          fontWeight: FontWeight.w700))),
+            ],
+          ]),
+          if (details != null) ...[
+            const SizedBox(height: 4),
+            Text(details.scheduleLabel,
+                style: Theme.of(context).textTheme.bodySmall),
+          ],
+          if (steps.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _GoalDetails(
+              title: 'Daftar Langkah',
+              trailing: '$stepsDone/${steps.length} selesai',
+              children: [
+                for (final step in steps)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Row(children: [
+                      Icon(
+                          stepIds.contains(step.id)
+                              ? Icons.check_box_outlined
+                              : Icons.check_box_outline_blank,
+                          size: 16,
+                          color: MalvaColors.seed,
+                          semanticLabel: stepIds.contains(step.id)
+                              ? 'Selesai'
+                              : 'Belum selesai'),
+                      const SizedBox(width: 7),
+                      Expanded(child: Text(step.label)),
+                    ]),
+                  ),
+              ],
+            ),
+          ],
+          if (known) ...[
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: (done / target).clamp(0.0, 1.0),
+              borderRadius: BorderRadius.circular(99),
+              backgroundColor: const Color(0xfff1e5f8),
+              color: MalvaColors.mint,
+            ),
+          ],
+          if (note.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _GoalDetails(title: 'Rincian Aktivitas', children: [Text(note)]),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _GoalDetails extends StatelessWidget {
+  const _GoalDetails(
+      {required this.title, this.trailing, required this.children});
+
+  final String title;
+  final String? trailing;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xfff6effa),
+          borderRadius: BorderRadius.circular(13),
+        ),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Expanded(
+                child: Text(title,
+                    style: const TextStyle(fontWeight: FontWeight.w800))),
+            if (trailing != null)
+              Text(trailing!, style: const TextStyle(color: MalvaColors.plum)),
+          ]),
+          const SizedBox(height: 4),
+          ...children,
+        ]),
+      );
 }

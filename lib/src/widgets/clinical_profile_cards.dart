@@ -8,6 +8,122 @@ import '../theme.dart';
 import '../time/wib.dart';
 import 'malva_components.dart';
 
+class ClinicalProfileSection extends StatelessWidget {
+  const ClinicalProfileSection({
+    super.key,
+    required this.title,
+    required this.children,
+    this.art,
+    this.icon,
+    this.action,
+    this.subtitle,
+  });
+
+  final String title;
+  final List<Widget> children;
+  final String? art;
+  final IconData? icon;
+  final Widget? action;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) => SoftCard(
+        radius: 22,
+        color: Colors.white,
+        outline: const BorderSide(color: Color(0xFFF0EBF3)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                if (art case final asset?)
+                  ClinicalProfileArt(asset)
+                else if (icon case final glyph?)
+                  ClinicalIconTile(icon: glyph, color: MalvaColors.seed),
+                if (art != null || icon != null) const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w800)),
+                      if (subtitle != null)
+                        Text(subtitle!,
+                            style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+                if (action != null) ...[const SizedBox(width: 6), action!],
+              ],
+            ),
+            if (children.isNotEmpty) const SizedBox(height: 12),
+            ...children,
+          ],
+        ),
+      );
+}
+
+class ClinicalProfileArt extends StatelessWidget {
+  const ClinicalProfileArt(this.asset, {super.key, this.size = 36});
+
+  final String asset;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Image.asset(
+        'assets/care/clinical_$asset.png',
+        width: size,
+        height: size,
+        excludeFromSemantics: true,
+      );
+}
+
+class ClinicalSectionMessage extends StatelessWidget {
+  const ClinicalSectionMessage({
+    super.key,
+    required this.message,
+    required this.icon,
+    this.title,
+    this.positive = false,
+  });
+
+  final String message;
+  final IconData icon;
+  final String? title;
+  final bool positive;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: positive ? const Color(0xFFEDFAF4) : const Color(0xFFF7F8FA),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFEBEDF2)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Icon(icon,
+                  color: positive ? const Color(0xFF147C52) : MalvaColors.plum,
+                  size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (title != null)
+                    Text(title!,
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                  Text(message),
+                ],
+              )),
+            ],
+          ),
+        ),
+      );
+}
+
 class ClinicalDiagnosisCard extends StatelessWidget {
   const ClinicalDiagnosisCard({super.key, required this.record, this.onEdit});
 

@@ -74,44 +74,24 @@ class MalvaStoreState {
   ScreeningBundle? get latestScreeningBundle =>
       screeningBundles.isEmpty ? null : screeningBundles.last;
 
-  /// Kepatuhan hari ini berdasarkan dosis terjadwal yang sudah jatuh tempo.
-  /// Obat fleksibel tetap dihitung satu kali per ID ketika dicatat.
-  int get adherencePercent {
-    final now = ServerClock.now();
-    final today = medicationDay(now);
-    final scheduled = medications
-        .where((medication) =>
-            medication.schedule != null ||
-            (medication.createdAt != null &&
-                medication.reminders.any((r) => r.repeatDaily)))
-        .toList();
-    final byId = {
-      for (final medication in medications) medication.id: medication
-    };
-    final scheduledIds = scheduled.map((medication) => medication.id).toSet();
-    final scheduledLogs = <MedicationLog>[];
-    final flexibleTaken = <String>{};
-    for (final log in medicationLogs) {
-      final identity = _medicationIdentityForAdherence(log);
-      if (identity == null) continue;
-      if (scheduledIds.contains(identity)) {
-        final med = byId[identity]!;
-        scheduledLogs.add(MedicationLog(
-            medicationId: med.id,
-            medicationName: med.name,
-            takenAt: log.takenAt,
-            status: log.status));
-      } else if (normalizedMedicationStatus(log.status) == 'taken' &&
-          isSameLocalDay(log.takenAt, now)) {
-        flexibleTaken.add(identity);
-      }
-    }
-    final adherence = MedicationAdherence.calculate(
-        medications: scheduled, logs: scheduledLogs, start: today, end: now);
-    final total = adherence.rows.length + medications.length - scheduled.length;
-    return total == 0
-        ? 0
-        : ((adherence.taken + flexibleTaken.length) * 100 / total).round();
+  /// Bagian obat aktif dengan catatan konsumsi pada hari WIB ini.
+  int get adherencePercent =>
+      medicationAdherenceToday(ServerClock.now()).percent;
+
+  ({int taken, int total, int percent}) medicationAdherenceToday(DateTime now) {
+    final taken = {
+      for (final log in medicationLogs)
+        if (!log.takenAt.isAfter(now) &&
+            isSameLocalDay(log.takenAt, now) &&
+            normalizedMedicationStatus(log.status) == 'taken')
+          if (_medicationIdentityForAdherence(log) case final String id) id
+    }.length;
+    final total = medications.length;
+    return (
+      taken: taken,
+      total: total,
+      percent: total == 0 ? 0 : (taken * 100 / total).round()
+    );
   }
 
   /// Identitas obat pada daftar [medications] yang cocok dengan [log].

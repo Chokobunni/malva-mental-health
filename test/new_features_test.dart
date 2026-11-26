@@ -141,8 +141,8 @@ void main() {
 
     expect(find.text('Mini Summary (7 hari)'), findsOneWidget);
     expect(find.text('Tren Mood'), findsOneWidget);
-    expect(find.text('Rata-rata Jam Tidur'), findsOneWidget);
-    expect(find.text('Ketaatan Obat'), findsOneWidget);
+    expect(find.text('Rata-rata Tidur'), findsOneWidget);
+    expect(find.textContaining('Obat Aktif'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

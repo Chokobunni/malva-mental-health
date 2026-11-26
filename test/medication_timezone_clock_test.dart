@@ -68,12 +68,38 @@ MedicationLog _log(String id, String name, DateTime at,
       status: status,
     );
 
-int _adherence(List<Medication> meds, List<MedicationLog> logs) =>
+int _adherence(List<Medication> meds, List<MedicationLog> logs,
+        {DateTime? asOf}) =>
     MalvaStoreState(
       patient: _patient,
       medications: meds,
       medicationLogs: logs,
-    ).adherencePercent;
+    ).medicationAdherenceToday(asOf ?? _todayAt(23, 59)).percent;
+
+void _newMedicationCountsToday() {
+  final now = ServerClock.now();
+  final medications = [_med(_serverMedId, 'Obat pertama')];
+  final newMedication = Medication(
+    id: 'a1b2c3d4-0000-4000-8000-000000000002',
+    name: 'Obat baru',
+    dosage: '10 mg',
+    form: 'Tablet',
+    currentStock: 30,
+    alertBelow: 1,
+    source: 'patient',
+    reminders: const [],
+    createdAt: now,
+    schedule: MedicationSchedule(
+      times: const ['08:00'],
+      weekdays: [now.weekday % 7 + 1],
+      startAt: now,
+    ),
+  );
+  final logs = [_log(_serverMedId, 'Obat pertama', now)];
+
+  expect(_adherence(medications, logs, asOf: now), 100);
+  expect(_adherence([...medications, newMedication], logs, asOf: now), 50);
+}
 
 /// Wall-clock WIB hari ini pada jam tertentu.
 ///
@@ -148,6 +174,8 @@ Widget _screenApp(ProviderContainer container, MalvaApiClient api) {
 }
 
 void main() {
+  test('New active medicine counts in the same-day medication total',
+      _newMedicationCountsToday);
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
@@ -357,10 +385,11 @@ void main() {
 
   test('adherence banyak obat: 3 obat berbeda dari 10 obat = 30%', () {
     final meds = [for (var i = 1; i <= 10; i++) _med('med_$i', 'Obat $i')];
+    final recordedAt = ServerClock.now();
     final percent = _adherence(meds, [
-      _log('med_1', 'Obat 1', _todayAt(7, 0)),
-      _log('med_2', 'Obat 2', _todayAt(12, 0)),
-      _log('med_3', 'Obat 3', _todayAt(19, 0)),
+      _log('med_1', 'Obat 1', recordedAt),
+      _log('med_2', 'Obat 2', recordedAt),
+      _log('med_3', 'Obat 3', recordedAt),
     ]);
     expect(percent, 30);
   });
