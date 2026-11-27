@@ -221,9 +221,18 @@ void main() {
   // The production asset is decoded in an isolate outside the fake clock.
   setUpAll(() async => Icd10Service().load());
 
-  testWidgets('professional tools expose five working menus', (tester) async {
+  testWidgets(
+      'professional tools expose the reference entries and existing actions',
+      (tester) async {
     await _open(tester, _Backend());
-    for (final key in ['goals', 'assessment', 'health', 'files', 'summary']) {
+    for (final key in [
+      'goals',
+      'assessment',
+      'therapy',
+      'health',
+      'files',
+      'summary'
+    ]) {
       expect(find.byKey(Key('tool-$key')), findsOneWidget);
     }
   });
@@ -236,8 +245,9 @@ void main() {
     await _open(tester, backend, onMessage: messages.add);
     await tester.tap(find.byKey(const Key('tool-assessment')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('DASS-21'));
-    await tester.tap(find.byKey(const Key('send-assessment')));
+    final dass21 = find.byKey(const Key('send-assessment-dass21'));
+    await tester.ensureVisible(dass21);
+    await tester.tap(dass21);
     await tester.pumpAndSettle();
     expect(messages, isEmpty);
     await tester.tap(find.text('Coba Lagi'));
@@ -249,6 +259,23 @@ void main() {
     expect(backend.cards.first['client_message_id'],
         matches(RegExp(r'^[0-9a-f-]{36}$')));
     expect(messages.single.id, 'message-1');
+  });
+
+  testWidgets('therapy chooser sends the selected module and active session',
+      (tester) async {
+    final backend = _Backend();
+    final messages = <BackendChatMessage>[];
+    await _open(tester, backend, onMessage: messages.add);
+    await tester.tap(find.byKey(const Key('tool-therapy')));
+    await tester.pumpAndSettle();
+    expect(find.text('Kirim Terapi Psikologis'), findsOneWidget);
+    final send = find.byKey(const Key('send-therapy-abcde'));
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    expect(backend.cards.single['kind'], 'therapy_request');
+    expect(backend.cards.single['metadata'],
+        {'session_id': 'session-1', 'module_id': 'abcde'});
+    expect(messages, hasLength(1));
   });
 
   testWidgets(
@@ -330,7 +357,7 @@ void main() {
     final container = await _open(tester, backend, onMessage: messages.add);
     await tester.tap(find.byKey(const Key('tool-assessment')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('send-assessment')));
+    await tester.tap(find.byKey(const Key('send-assessment-screening')));
     await tester.pump();
     container.read(authStateProvider.notifier).setSession(const AuthSession(
         role: UserRole.professional,
@@ -349,7 +376,7 @@ void main() {
     }));
     await tester.pumpAndSettle();
     expect(messages, isEmpty);
-    expect(find.byKey(const Key('send-assessment')), findsNothing);
+    expect(find.byKey(const Key('send-assessment-screening')), findsNothing);
   });
 
   testWidgets(
@@ -572,12 +599,12 @@ void main() {
         sessionEndsAt: wibNow().add(const Duration(seconds: 2)));
     await tester.tap(find.byKey(const Key('tool-assessment')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('send-assessment')));
+    await tester.tap(find.byKey(const Key('send-assessment-screening')));
     await tester.pump();
     await tester.pump(const Duration(seconds: 3));
     final endedLabels = find.text('Sesi berakhir').evaluate().length;
     final sendActions =
-        find.byKey(const Key('send-assessment')).evaluate().length;
+        find.byKey(const Key('send-assessment-screening')).evaluate().length;
     response.complete(_json({
       'message': {
         'id': 'late-message',

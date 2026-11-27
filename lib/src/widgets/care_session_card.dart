@@ -605,7 +605,8 @@ class _CareSessionDetailScreenState
   }
 
   Future<void> _notes() async {
-    if (!_owns || !_professional || !_completed) return;
+    if (!_owns || !_professional || !_completed || !_session.canWriteNotes)
+      return;
     if (widget.card.onNotes != null) {
       widget.card.onNotes!();
       return;
@@ -939,6 +940,10 @@ class _CareSessionDetailScreenState
                 ? 'Sesi Terjadwal'
                 : 'Riwayat Konsultasi';
     final notesSaved = _session.summaryForPatient.trim().isNotEmpty;
+    final notesDeadline = _session.notesDeadline;
+    final notesExpired = _completed &&
+        notesDeadline != null &&
+        !ServerClock.now().isBefore(notesDeadline);
     final content = <Widget>[
       if (_completed && professional) ...[
         const SizedBox(height: 12),
@@ -986,6 +991,30 @@ class _CareSessionDetailScreenState
       if (_session.status == 'completed' && !_canShowSummary)
         _block(const Text(
             'Sesi telah selesai. Buka Riwayat untuk melihat ringkasannya.')),
+      if (professional && notesExpired && !notesSaved)
+        _block(
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xff99500a)),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Batas Waktu Pengisian Berakhir',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800, color: Color(0xff714109))),
+                const SizedBox(height: 6),
+                Text(
+                    'Batas waktu 24 jam untuk menambah atau mengubah Isi Catatan Sesi telah berakhir pada ${wibWeekdayDate(notesDeadline)} pukul ${formatWibBubbleTime(notesDeadline)} WIB.',
+                    style:
+                        const TextStyle(color: Color(0xff714109), height: 1.5)),
+              ],
+            )),
+          ]),
+          color: const Color(0xfffcf7e4),
+        ),
+      if (_completed && professional && notesExpired && notesSaved)
+        ..._publishedSummary(),
       if (_completed &&
           professional &&
           (notesSaved || _session.privateNote.trim().isNotEmpty))
@@ -1062,13 +1091,14 @@ class _CareSessionDetailScreenState
     final actions = <Widget>[];
     if (_completed) {
       if (professional) {
-        actions.add(_cta(
-            notesSaved ? 'Lihat / Edit Catatan Sesi' : 'Isi Catatan Sesi',
-            Icons.edit_note,
-            _notes));
+        if (!notesExpired || !notesSaved)
+          actions.add(_cta(
+              notesSaved ? 'Lihat / Edit Catatan Sesi' : 'Isi Catatan Sesi',
+              notesExpired ? Icons.lock_outline : Icons.edit_note,
+              _session.canWriteNotes ? _notes : null));
         actions.add(const SizedBox(height: 8));
-        actions.add(_cta(
-            'Nanti', Icons.arrow_back, () => Navigator.pop(context),
+        actions.add(_cta(notesExpired ? 'Kembali' : 'Nanti', Icons.arrow_back,
+            () => Navigator.pop(context),
             outline: true));
       } else
         actions.add(_cta('Kembali ke Riwayat', Icons.arrow_back,

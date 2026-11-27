@@ -9,6 +9,7 @@ import (
 	"malva/backend/internal/store"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -71,5 +72,48 @@ func TestOneTimeWorksheetShareAndReadExpireAtSessionEnd(t *testing.T) {
 	f.srv.getTherapySubmission(out, req, auth.Claims{Subject: f.prof.ID, Role: "professional"})
 	if out.Code != http.StatusNotFound {
 		t.Fatalf("ended professional read: %d %s", out.Code, out.Body)
+	}
+}
+func TestSessionNoteContextUsesCategoryConsentAndActiveRows(t *testing.T) {
+	f := newClinicalFixture(t)
+	ctx := context.Background()
+	if _, err := f.db.Exec(`UPDATE care_sessions SET scheduled_at=$2,duration_minutes=60,status='completed' WHERE id=$1`, f.sessionID, clock.Now().Add(-2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.db.Exec(`INSERT INTO goals(patient_id,title,is_active) VALUES ($1,'Active goal',true),($1,'Inactive goal',false)`, f.patient.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.db.Exec(`INSERT INTO medications(patient_id,name,dosage,form,active) VALUES ($1,'Active medication','10 mg','Tablet',true),($1,'Inactive medication','10 mg','Tablet',false)`, f.patient.ID); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = f.db.Exec("DELETE FROM goals WHERE patient_id=$1", f.patient.ID)
+		_, _ = f.db.Exec("DELETE FROM medications WHERE patient_id=$1", f.patient.ID)
+	})
+	load := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.SetPathValue("session_id", f.sessionID)
+		out := httptest.NewRecorder()
+		f.srv.careSessionNoteContext(out, req, auth.Claims{Subject: f.prof.ID, Role: "professional"})
+		return out
+	}
+	for _, tc := range []struct{ goals, medications bool }{{}, {true, false}, {false, true}, {true, true}} {
+		if _, err := f.st.UpdatePatientDataConsent(ctx, store.PatientDataConsent{
+			PatientID: f.patient.ID, ProfessionalID: f.prof.ID, ShareGoals: tc.goals, ShareMedications: tc.medications,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		out := load()
+		body := out.Body.String()
+		if out.Code != 200 || strings.Contains(body, "Active goal") != tc.goals ||
+			strings.Contains(body, "Active medication") != tc.medications || strings.Contains(body, "Inactive") {
+			t.Fatalf("goal=%t medication=%t: %d %s", tc.goals, tc.medications, out.Code, body)
+		}
+	}
+	if _, err := f.db.Exec(`UPDATE care_sessions SET scheduled_at=$2 WHERE id=$1`, f.sessionID, clock.Now().Add(-25*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if out := load(); out.Code != http.StatusForbidden {
+		t.Fatalf("expired note context: %d %s", out.Code, out.Body)
 	}
 }

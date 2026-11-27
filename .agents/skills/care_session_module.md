@@ -1,5 +1,10 @@
 # Skill: Care Session Module (Paket Care + Sesi)
 
+## Catatan dan editor jadwal (2026-11-28)
+
+- Catatan sesi selesai memakai akhir jadwal sesi ditambah 24 jam sebagai tenggat. Jendela yang sama berlaku untuk membuat/mengubah catatan dan untuk memuat tujuan/kebiasaan serta obat aktif yang diizinkan per kategori untuk sesi tersebut.
+- Tambah dan Edit jadwal memakai input jam dengan dial, pilihan 60/90/120 menit, durasi kustom 60–180 menit, dan ringkasan jumlah slot penuh. Tetap kirim hari praktik, jam 24 jam WIB, durasi, dan status aktif.
+
 Paket care 4 sesi / 6 minggu (menggantikan Continuous Support 7 hari) dan penjadwalan sesinya.
 
 ## Lokasi kode

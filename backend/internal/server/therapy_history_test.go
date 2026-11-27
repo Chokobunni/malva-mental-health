@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"malva/backend/internal/auth"
@@ -51,4 +52,42 @@ func TestTherapyFullHistoryPreservesOwnershipConsentAndDefaultLimit(t *testing.T
 		t.Fatal(err)
 	}
 	list(f.prof.ID, "professional", "?patient_id="+f.patient.ID+"&limit=0", 125)
+}
+
+func TestUpdateTherapySubmissionKeepsHistoryIdentityAndChecksOwner(t *testing.T) {
+	f := newTherapyConsentFixture(t)
+	ctx := context.Background()
+	original, err := f.st.CreateTherapySubmission(ctx, f.patient.ID, "abcde", "Worksheet",
+		json.RawMessage(`{"activating":"before"}`), "", &f.prof.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	update := func(subject, role, moduleID string, want int) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPut, "/v1/therapy-submissions/"+original.ID,
+			strings.NewReader(`{"module_id":"`+moduleID+`","answers":{"activating":"after"}}`))
+		req.SetPathValue("submission_id", original.ID)
+		rec := httptest.NewRecorder()
+		f.srv.updateTherapySubmission(rec, req, auth.Claims{Subject: subject, Role: role})
+		if rec.Code != want {
+			t.Fatalf("status %d, want %d: %s", rec.Code, want, rec.Body.String())
+		}
+	}
+	update(f.prof.ID, "professional", "abcde", http.StatusForbidden)
+	update(f.other.ID, "patient", "abcde", http.StatusNotFound)
+	update(f.patient.ID, "patient", "thinking_traps", http.StatusNotFound)
+	update(f.patient.ID, "patient", "who5", http.StatusBadRequest)
+	update(f.patient.ID, "patient", "abcde", http.StatusOK)
+	updated, err := f.st.GetTherapySubmission(ctx, f.patient.ID, original.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ID != original.ID || !updated.CreatedAt.Equal(original.CreatedAt) ||
+		updated.SharedWithProfessionalID == nil || *updated.SharedWithProfessionalID != f.prof.ID {
+		t.Fatal("edit changed worksheet history identity or recipient")
+	}
+	var answers map[string]string
+	if err := json.Unmarshal(updated.Answers, &answers); err != nil || answers["activating"] != "after" {
+		t.Fatal("edited worksheet answers were not persisted")
+	}
 }

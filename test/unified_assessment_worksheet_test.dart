@@ -162,7 +162,7 @@ void main() {
       await tester.pumpWidget(_app(TherapyDetailScreen(module: module)));
       await tester.pumpAndSettle();
       expect(find.text('Apa itu?'), findsOneWidget);
-      expect(find.text('Langkah-langkah'), findsNothing);
+      expect(find.text('Panduan Langkah-langkah'), findsNothing);
       expect(find.text(module.worksheetFields.first.label), findsOneWidget);
       expect(find.text('0 = Tidak pernah'), findsWidgets);
       expect(find.byType(AssessmentResultCard), findsNothing);
@@ -210,10 +210,10 @@ void main() {
     )));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('Langkah-langkah'),
+      find.text('Panduan Langkah-langkah'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('Langkah-langkah'), findsOneWidget);
+    expect(find.text('Panduan Langkah-langkah'), findsOneWidget);
   });
 }

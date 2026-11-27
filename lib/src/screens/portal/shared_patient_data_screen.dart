@@ -34,8 +34,10 @@ class SharedPatientDataScreen extends ConsumerStatefulWidget {
     super.key,
     this.session,
     this.apiClient,
+    this.initialAssessmentPatientId,
   });
 
+  final String? initialAssessmentPatientId;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
 
@@ -68,7 +70,11 @@ class _SharedPatientDataScreenState
   void initState() {
     super.initState();
     _owner = ref.read(currentSessionProvider);
-    _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController = TabController(
+      length: _tabs.length,
+      initialIndex: widget.initialAssessmentPatientId == null ? 0 : 5,
+      vsync: this,
+    );
     unawaited(_loadLinks());
   }
 
@@ -99,8 +105,14 @@ class _SharedPatientDataScreenState
           accessToken: accessToken);
       if (!mounted) return;
       setState(() {
-        _links = links.where((link) => link.status == 'active').toList();
-        _selectedPatientId = _links.isEmpty ? null : _links.first.patientId;
+        final initialPatientId = widget.initialAssessmentPatientId;
+        _links = links
+            .where((link) =>
+                link.status == 'active' &&
+                (initialPatientId == null ||
+                    link.patientId == initialPatientId))
+            .toList();
+        _selectedPatientId = _links.firstOrNull?.patientId;
         _isLoading = false;
       });
     } on MalvaApiException catch (error) {
@@ -126,7 +138,9 @@ class _SharedPatientDataScreenState
     }
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Data Pasien Dibagikan'),
+        title: Text(widget.initialAssessmentPatientId == null
+            ? 'Data Pasien Dibagikan'
+            : 'Riwayat Asesmen'),
         backgroundColor: MalvaColors.seed,
         foregroundColor: Colors.white,
       ),

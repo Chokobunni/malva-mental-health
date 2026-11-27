@@ -207,6 +207,21 @@ func (s *Store) ShareTherapySubmission(ctx context.Context, patientID, submissio
 	return s.GetTherapySubmission(ctx, patientID, submissionID, false)
 }
 
+func (s *Store) UpdateTherapySubmission(ctx context.Context, patientID, submissionID, moduleID string,
+	answers json.RawMessage) (TherapySubmission, error) {
+	var sub TherapySubmission
+	err := s.db.QueryRowContext(ctx, `
+		UPDATE therapy_submissions
+		SET answers = $4::jsonb, updated_at = now()
+		WHERE id = $1 AND patient_id = $2 AND module_id = $3
+		RETURNING id, patient_id, module_id, title, answers, summary,
+		          shared_with_professional_id, shared_at, created_at, updated_at
+	`, submissionID, patientID, moduleID, string(answers)).
+		Scan(&sub.ID, &sub.PatientID, &sub.ModuleID, &sub.Title, &sub.Answers, &sub.Summary,
+			&sub.SharedWithProfessionalID, &sub.SharedAt, &sub.CreatedAt, &sub.UpdatedAt)
+	return sub, err
+}
+
 func (s *Store) DeleteTherapySubmission(ctx context.Context, patientID, submissionID string) error {
 	res, err := s.db.ExecContext(ctx, `
 		DELETE FROM therapy_submissions WHERE id = $1 AND patient_id = $2

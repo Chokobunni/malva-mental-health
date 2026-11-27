@@ -2567,7 +2567,7 @@ var validChatKinds = map[string]bool{
 	// "worksheet": kartu worksheet terapi (ABCDE, grounding, dll.) yang
 	// dibagikan pasien. Tanpa entri ini kind dinormalisasi jadi "text"
 	// sehingga kartu ringkasan di chat tidak pernah muncul.
-	"worksheet": true, "assessment_request": true, "session_summary": true, "attachment": true,
+	"worksheet": true, "assessment_request": true, "therapy_request": true, "session_summary": true, "attachment": true,
 }
 
 func normalizeChatKind(kind string) string {

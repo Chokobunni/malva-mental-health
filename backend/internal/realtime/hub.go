@@ -304,7 +304,7 @@ func (c *client) handleChatMessage(raw json.RawMessage) {
 	// Kebijakan chat: teks hanya saat sesi berjalan; share data milik
 	// pasien butuh paket aktif; profesional tidak membalas di luar sesi.
 	kindLower := strings.ToLower(strings.TrimSpace(msg.Kind))
-	if c.role != "professional" && (kindLower == "attachment" || kindLower == "assessment_request" || kindLower == "session_summary") {
+	if c.role != "professional" && (kindLower == "attachment" || kindLower == "assessment_request" || kindLower == "therapy_request" || kindLower == "session_summary") {
 		return
 	}
 	isShare := kindLower != "" && kindLower != "text"

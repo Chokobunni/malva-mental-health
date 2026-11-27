@@ -16,7 +16,9 @@ import '../../services/client_intent_id.dart';
 import '../../services/malva_api_client.dart';
 import '../../services/server_clock.dart';
 import '../../theme.dart';
+import '../../widgets/assessment_reference.dart';
 import '../../widgets/friendly_error.dart';
+import '../../widgets/therapy_library.dart';
 import '../portal/prescription_wizard_screen.dart';
 
 /// Professional actions remain scoped to the patient and live session supplied
@@ -59,7 +61,6 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
   final _diagnosisCatalog = Icd10Service();
   List<Icd10Diagnosis> _selectedDiagnoses = const [];
   bool _loadedCodedDiagnoses = false;
-  String _module = 'screening';
   String? _goalFingerprint, _goalIntent, _cardFingerprint, _cardIntent;
   BackendHealthRecord? _health;
   List<BackendMedication>? _medications;
@@ -303,7 +304,8 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
       _cardFingerprint = null;
       _cardIntent = null;
       _notice('Pesan tersimpan di chat.');
-      Navigator.of(context).maybePop();
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) navigator.pop();
     });
   }
 
@@ -370,7 +372,8 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
         _uploadIntent = null;
       });
       _notice('Berkas tersimpan di chat.');
-      Navigator.of(context).maybePop();
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) navigator.pop();
     });
   }
 
@@ -506,110 +509,211 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
         widget.session.role == UserRole.professional &&
         widget.sessionId.isNotEmpty &&
         widget.patientId.isNotEmpty;
+    final (title, subtitle) = switch (_section) {
+      'goals' => ('Target / Kebiasaan', 'Lihat progres dan buat tujuan pasien'),
+      'assessment' => ('Asesmen Klinis', 'Kirim instrumen skrining ke pasien'),
+      'therapy' => (
+          'Kirim Terapi Psikologis',
+          'Pilih lembar kerja untuk diisi pasien'
+        ),
+      'health' => ('Isikan Profil Klinis', 'Kelola diagnosis dan resep pasien'),
+      'files' => ('Berkas', 'Kirim gambar atau PDF ke chat'),
+      'summary' => (
+          'Rangkuman sesi',
+          'Bagikan target dan insight untuk pasien'
+        ),
+      _ => ('Alat Sesi', 'Pilih tindakan atau instrumen untuk pasien'),
+    };
     return PopScope(
-        canPop: !_busy,
-        child: Scaffold(
-          appBar: AppBar(
-              backgroundColor: MalvaColors.seed,
-              title: Text(switch (_section) {
-                'goals' => 'Target / Kebiasaan',
-                'assessment' => 'Asesmen',
-                'health' => 'Rekam Medis',
-                'files' => 'Berkas',
-                'summary' => 'Rangkuman sesi',
-                _ => 'Alat sesi',
-              }),
-              leading: _section == null
-                  ? null
-                  : IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: _busy
-                          ? null
-                          : () => setState(() {
-                                _section = null;
-                                _error = null;
-                              }))),
-          body: !allowed
-              ? Center(
-                  child: Text(_sessionOpen
-                      ? 'Alat profesional hanya tersedia pada sesi aktif.'
-                      : 'Sesi berakhir'))
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    if (_busy)
-                      const Padding(
-                          padding: EdgeInsets.only(bottom: 12),
-                          child: LinearProgressIndicator()),
-                    if (_error != null)
-                      Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: FriendlyErrorCard(
-                              error: _error!,
-                              onRetry: () {
-                                if (_busy) return;
-                                final retry = _retry;
-                                if (retry != null) {
-                                  _run(retry);
-                                } else {
-                                  setState(() => _error = null);
-                                }
-                              })),
-                    ...switch (_section) {
-                      'goals' => _goalsPanel(false),
-                      'assessment' => _assessmentPanel(),
-                      'health' => _healthPanel(),
-                      'files' => _filesPanel(),
-                      'summary' => _goalsPanel(true),
-                      _ => _menu(),
-                    },
-                  ],
+      canPop: !_busy,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: _section == null
+              ? (MediaQuery.sizeOf(context).height * .70)
+                  .clamp(0.0, 480.0)
+                  .toDouble()
+              : double.infinity,
+        ),
+        child: Material(
+          color: const Color(0xfff5f6fa),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          clipBehavior: Clip.antiAlias,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.fromLTRB(16, 11, 16, 15),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 5,
+                        decoration: BoxDecoration(
+                            color: const Color(0xffcfd3d9),
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(children: [
+                        if (_section != null) ...[
+                          _headerButton(Icons.chevron_left_rounded, 'Kembali',
+                              () => _selectMenu()),
+                          const SizedBox(width: 10),
+                        ],
+                        Expanded(
+                            child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(title,
+                                style: const TextStyle(
+                                    color: MalvaColors.ink,
+                                    fontSize: 21,
+                                    fontWeight: FontWeight.w800)),
+                            Text(subtitle,
+                                style: const TextStyle(
+                                    color: Color(0xff68727e), fontSize: 13)),
+                          ],
+                        )),
+                        const SizedBox(width: 6),
+                        _headerButton(Icons.close_rounded, 'Tutup',
+                            () => Navigator.maybePop(context)),
+                      ]),
+                    ],
+                  ),
                 ),
-        ));
+                const Divider(height: 1, color: Color(0xffe6e9ee)),
+                if (!allowed)
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(_sessionOpen
+                        ? 'Alat profesional hanya tersedia pada sesi aktif.'
+                        : 'Sesi berakhir'),
+                  )
+                else
+                  Flexible(
+                    child: ListView(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        if (_busy)
+                          const Padding(
+                              padding: EdgeInsets.only(bottom: 12),
+                              child: LinearProgressIndicator()),
+                        if (_error != null)
+                          Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: FriendlyErrorCard(
+                                  error: _error!,
+                                  onRetry: () {
+                                    if (_busy) return;
+                                    final retry = _retry;
+                                    if (retry != null) {
+                                      _run(retry);
+                                    } else {
+                                      setState(() => _error = null);
+                                    }
+                                  })),
+                        ...switch (_section) {
+                          'goals' => _goalsPanel(false),
+                          'assessment' => _assessmentPanel(),
+                          'therapy' => _therapyPanel(),
+                          'health' => _healthPanel(),
+                          'files' => _filesPanel(),
+                          'summary' => _goalsPanel(true),
+                          _ => _menu(),
+                        },
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
+
+  void _selectMenu() {
+    setState(() {
+      _section = null;
+      _error = null;
+      _retry = null;
+    });
+  }
+
+  Widget _headerButton(IconData icon, String label, VoidCallback onPressed) =>
+      IconButton.filledTonal(
+        tooltip: label,
+        onPressed: _busy ? null : onPressed,
+        style: IconButton.styleFrom(
+          backgroundColor: const Color(0xfff1f2f4),
+          foregroundColor: const Color(0xff596370),
+        ),
+        icon: Icon(icon),
+      );
 
   List<Widget> _menu() => [
         for (final item in const [
           (
-            'goals',
-            'Target / Kebiasaan',
-            'Lihat progres dan buat tujuan pasien',
-            Icons.task_alt
-          ),
-          (
             'assessment',
             'Asesmen',
             'Kirim permintaan skrining, DASS-21, atau WHO-5',
-            Icons.assignment_outlined
+            Icons.assignment_outlined,
+            Color(0xff5146bd)
+          ),
+          (
+            'therapy',
+            'Terapi Psikologis',
+            'Kirim lembar kerja CBT, DBT, atau latihan relaksasi',
+            Icons.lightbulb_outline_rounded,
+            Color(0xff8036bd)
           ),
           (
             'health',
-            'Rekam Medis',
-            'Perbarui diagnosis dan kelola obat',
-            Icons.medical_information_outlined
-          ),
-          (
-            'files',
-            'Berkas',
-            'Kirim gambar atau PDF ke chat',
-            Icons.attach_file
+            'Isikan Profil Klinis',
+            'Kelola diagnosis ICD-10 dan terbitkan resep obat',
+            Icons.badge_outlined,
+            Color(0xffab2ab1)
           ),
           (
             'summary',
             'Rangkuman sesi',
             'Bagikan target dan insight untuk pasien',
-            Icons.summarize_outlined
+            Icons.description_outlined,
+            Color(0xff07836b)
+          ),
+          (
+            'goals',
+            'Target / Kebiasaan',
+            'Lihat progres dan buat tujuan pasien',
+            Icons.task_alt,
+            MalvaColors.seed
+          ),
+          (
+            'files',
+            'Berkas',
+            'Kirim gambar atau PDF ke chat',
+            Icons.attach_file,
+            MalvaColors.seed
           ),
         ])
-          Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
-                  key: Key('tool-${item.$1}'),
-                  leading: Icon(item.$4, color: MalvaColors.seed),
-                  title: Text(item.$2),
-                  subtitle: Text(item.$3),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _select(item.$1))),
+          _toolRow(
+            key: Key('tool-${item.$1}'),
+            icon: Container(
+              width: 43,
+              height: 43,
+              decoration: BoxDecoration(
+                color: item.$5.withValues(alpha: .10),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(item.$4, color: item.$5, size: 22),
+            ),
+            title: item.$2,
+            subtitle: item.$3,
+            onTap: _busy ? null : () => _select(item.$1),
+          ),
       ];
 
   List<Widget> _goalsPanel(bool summary) {
@@ -692,30 +796,177 @@ class _ProfessionalChatToolsState extends ConsumerState<ProfessionalChatTools> {
   }
 
   List<Widget> _assessmentPanel() => [
-        const Text(
-            'Pilih asesmen yang perlu diisi pasien. Hasil tetap diperiksa dan dibagikan oleh pasien.'),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+                child: Text('Pilih Skrining',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w800))),
+            const SizedBox(width: 8),
+            Text('${AssessmentInstrument.values.length} Tersedia',
+                style: const TextStyle(color: Color(0xff68727e))),
+          ],
+        ),
         const SizedBox(height: 12),
-        for (final entry in const {
-          'screening': 'Skrining PHQ-9 / GAD-7',
-          'dass21': 'DASS-21',
-          'who5': 'WHO-5'
-        }.entries)
-          ListTile(
-              title: Text(entry.value),
-              leading: Icon(_module == entry.key
-                  ? Icons.radio_button_checked
-                  : Icons.radio_button_off),
-              selected: _module == entry.key,
-              onTap: _busy ? null : () => setState(() => _module = entry.key)),
-        const SizedBox(height: 12),
-        FilledButton(
-            key: const Key('send-assessment'),
-            onPressed: _busy
+        for (final instrument in AssessmentInstrument.values) ...[
+          AssessmentChoiceCard(
+            key: Key('send-assessment-${instrument.id}'),
+            instrument: instrument,
+            onTap: _busy
                 ? null
-                : () => _sendCard('assessment_request', 'Permintaan asesmen',
-                    {'session_id': widget.sessionId, 'module_id': _module}),
-            child: const Text('Kirim permintaan asesmen')),
+                : () => _sendCard(
+                      'assessment_request',
+                      'Permintaan asesmen',
+                      {
+                        'session_id': widget.sessionId,
+                        'module_id': instrument.id
+                      },
+                    ),
+          ),
+          const SizedBox(height: 10),
+        ],
       ];
+
+  List<Widget> _therapyPanel() => [
+        for (final (category, description) in const [
+          ('CBT', 'Cognitive Behavioral'),
+          ('DBT', 'Dialectical Behavior'),
+          ('Relaksasi', 'Ketenangan Diri'),
+          ('Psikoedukasi', 'Pemahaman Psikologis'),
+        ]) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
+            child: Wrap(
+              spacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(category.toUpperCase(),
+                    style: const TextStyle(
+                        color: Color(0xff68727e), fontWeight: FontWeight.w800)),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: category == 'CBT'
+                        ? const Color(0xfff2e6fa)
+                        : const Color(0xffd5f8e9),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Text(description,
+                        style: TextStyle(
+                            color: category == 'CBT'
+                                ? const Color(0xff762b9e)
+                                : const Color(0xff116d57),
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (final module
+              in allTherapyModules.where((m) => m.category == category))
+            _toolRow(
+              key: Key('send-therapy-${module.id}'),
+              icon: TherapyModuleIcon(module: module, size: 42),
+              title: module.title,
+              subtitle: _therapyRequestSubtitle(module.id),
+              send: true,
+              onTap: _busy
+                  ? null
+                  : () => _sendCard(
+                        'therapy_request',
+                        'Permintaan terapi psikologis',
+                        {
+                          'session_id': widget.sessionId,
+                          'module_id': module.id
+                        },
+                      ),
+            ),
+        ],
+      ];
+
+  Widget _toolRow({
+    required Key key,
+    required Widget icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback? onTap,
+    bool send = false,
+  }) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Material(
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+            side: const BorderSide(color: Color(0xffedf0f3)),
+            borderRadius: BorderRadius.circular(17),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            key: send ? null : key,
+            onTap: send ? null : onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: Row(
+                children: [
+                  icon,
+                  const SizedBox(width: 12),
+                  Expanded(
+                      child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: const TextStyle(
+                              color: MalvaColors.ink,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 3),
+                      Text(subtitle,
+                          style: const TextStyle(
+                              color: Color(0xff68727e),
+                              fontSize: 13,
+                              height: 1.35)),
+                    ],
+                  )),
+                  const SizedBox(width: 6),
+                  if (send)
+                    TextButton(
+                      key: key,
+                      onPressed: onTap,
+                      style: TextButton.styleFrom(
+                        backgroundColor: const Color(0xfff8f1fc),
+                        foregroundColor: const Color(0xff7b2ba7),
+                        padding: const EdgeInsets.symmetric(horizontal: 9),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('Kirim'),
+                    )
+                  else
+                    const Icon(Icons.chevron_right_rounded,
+                        color: Color(0xff98a4b0)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+  String _therapyRequestSubtitle(String id) => switch (id) {
+        'abcde' => 'Analisis pemicu, keyakinan, & konsekuensi',
+        'thinking_traps' => 'Deteksi pola pikir bias & overthinking',
+        'behavioral_activation' =>
+          'Susun langkah kecil untuk rutinitas positif',
+        'grounding' => 'Kembali fokus ke saat ini melalui 5 indra',
+        'tipp' => 'Redakan lonjakan emosi lewat respons fisik',
+        'breathing' => 'Latihan pernapasan dengan ritme 4–2–6',
+        'pmr' => 'Lepaskan ketegangan fisik secara bertahap',
+        _ => 'Pahami kondisi psikologis dengan panduan terstruktur',
+      };
 
   List<Widget> _filesPanel() => [
         const Text('Gambar JPEG, PNG, WebP atau PDF, maksimal 10 MiB.'),

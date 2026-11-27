@@ -663,12 +663,16 @@ func (s *Store) CreateCareSession(ctx context.Context, cs CareSession) (CareSess
 }
 
 func (s *Store) GetCareSession(ctx context.Context, sessionID string) (CareSession, error) {
+	return getCareSession(ctx, s.db, sessionID, "")
+}
+
+func getCareSession(ctx context.Context, db sessionDetailWriter, sessionID, lock string) (CareSession, error) {
 	const q = `SELECT ` + careSessionColumns + `
 		FROM care_sessions cs
 		LEFT JOIN users pat ON pat.id = cs.patient_id
 		LEFT JOIN users pro ON pro.id = cs.professional_id
 		WHERE cs.id = $1`
-	return scanCareSession(s.db.QueryRowContext(ctx, q, sessionID))
+	return scanCareSession(db.QueryRowContext(ctx, q+lock, sessionID))
 }
 
 // GetCareSessionByBookingID mencari sesi yang lahir dari satu booking.
@@ -1217,6 +1221,13 @@ func (s *Store) ListSessionsForReminder(ctx context.Context, from, to time.Time)
 	return out, rows.Err()
 }
 
+func (cs CareSession) CanWriteNotesAt(now time.Time) bool {
+	end := cs.ScheduledAt.Add(time.Duration(cs.DurationMinutes) * time.Minute)
+	return cs.Status == "completed" && !now.Before(end) && now.Before(end.Add(24*time.Hour))
+}
+
+var ErrSessionNotesClosed = errors.New("batas waktu pengisian catatan sesi berakhir")
+
 // UpdateCareSessionDetail meeting_url / ringkasan sesi / catatan privat.
 func (s *Store) UpdateCareSessionDetail(ctx context.Context, sessionID, meetingURL, summary, privateNote string) (CareSession, error) {
 	return s.PatchCareSessionDetail(ctx, sessionID, &meetingURL, &summary, &privateNote)
@@ -1224,6 +1235,15 @@ func (s *Store) UpdateCareSessionDetail(ctx context.Context, sessionID, meetingU
 
 // Nil fields are omitted PATCH values; an explicit empty string clears a field.
 func (s *Store) PatchCareSessionDetail(ctx context.Context, sessionID string, meetingURL, summary, privateNote *string) (CareSession, error) {
+	return patchCareSessionDetail(ctx, s.db, sessionID, meetingURL, summary, privateNote)
+}
+
+type sessionDetailWriter interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func patchCareSessionDetail(ctx context.Context, db sessionDetailWriter, sessionID string, meetingURL, summary, privateNote *string) (CareSession, error) {
 	trim := func(value *string) *string {
 		if value == nil {
 			return nil
@@ -1234,7 +1254,7 @@ func (s *Store) PatchCareSessionDetail(ctx context.Context, sessionID string, me
 	const q = `UPDATE care_sessions
 		SET meeting_url = COALESCE($1,meeting_url), summary_for_patient = COALESCE($2,summary_for_patient), private_note = COALESCE($3,private_note), updated_at = now()
 		WHERE id = $4`
-	res, err := s.db.ExecContext(ctx, q,
+	res, err := db.ExecContext(ctx, q,
 		trim(meetingURL), trim(summary), trim(privateNote), sessionID)
 	if err != nil {
 		return CareSession{}, err
@@ -1243,7 +1263,57 @@ func (s *Store) PatchCareSessionDetail(ctx context.Context, sessionID string, me
 	if aff == 0 {
 		return CareSession{}, errors.New("care session not found")
 	}
-	return s.GetCareSession(ctx, sessionID)
+	return getCareSession(ctx, db, sessionID, "")
+}
+
+func (s *Store) SaveCareSessionNotes(ctx context.Context, sessionID, authorID string, meetingURL, summary, privateNote *string, prescriptionIntent string, rx EPrescription, items []EPrescriptionItem) (CareSession, string, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return CareSession{}, "", false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	session, err := getCareSession(ctx, tx, sessionID, " FOR UPDATE OF cs")
+	if err != nil {
+		return CareSession{}, "", false, err
+	}
+	if session.ProfessionalID != authorID {
+		return CareSession{}, "", false, sql.ErrNoRows
+	}
+	if len(items) > 0 {
+		var existing string
+		err := tx.QueryRowContext(ctx, "SELECT entity_id FROM audit_logs WHERE actor_id=$2 AND action='session_note.prescription_saved' AND metadata->>'intent'=$1 LIMIT 1", prescriptionIntent, authorID).Scan(&existing)
+		if err == nil {
+			return session, "", false, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return CareSession{}, "", false, err
+		}
+	}
+	if !session.CanWriteNotesAt(clock.Now()) {
+		return CareSession{}, "", false, ErrSessionNotesClosed
+	}
+	updated, err := patchCareSessionDetail(ctx, tx, sessionID, meetingURL, summary, privateNote)
+	if err != nil {
+		return CareSession{}, "", false, err
+	}
+	var rxID string
+	if len(items) > 0 {
+		rx.ProfessionalID, rx.PatientID = session.ProfessionalID, session.PatientID
+		saved, err := saveEPrescriptionTx(ctx, tx, rx, items, false)
+		if err != nil {
+			return CareSession{}, "", false, err
+		}
+		rxID = saved.ID
+		if _, err := tx.ExecContext(ctx, `INSERT INTO audit_logs(actor_id,patient_id,action,entity_type,entity_id,metadata)
+			VALUES($1,$2,'session_note.prescription_saved','e_prescriptions',$3,jsonb_build_object('intent',$4::text))`,
+			authorID, session.PatientID, rxID, prescriptionIntent); err != nil {
+			return CareSession{}, "", false, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return CareSession{}, "", false, err
+	}
+	return updated, rxID, true, nil
 }
 
 // ============================================================

@@ -467,6 +467,10 @@ type bodyField struct {
 // (handlers_safety.go), dan payment.WebhookEvent (internal/payment).
 // Endpoint yang tidak ada di sini tidak diberi requestBody.
 var requestBodies = map[string][]bodyField{
+	"PUT /v1/therapy-submissions/{submission_id}": {
+		{"module_id", "string", "", true},
+		{"answers", "object", "", true},
+	},
 	"POST /v1/doctors/{user_id}/reviews": {
 		{"session_id", "string", "uuid", false},
 		{"care_package_id", "string", "uuid", false},
@@ -550,6 +554,14 @@ var requestBodies = map[string][]bodyField{
 		{"session_type", "string", "", false},
 		{"duration_minutes", "integer", "", false},
 		{"meeting_url", "string", "", false},
+	},
+	"PATCH /v1/care-sessions/{session_id}": {
+		{"status", "string", "", false},
+		{"cancel_reason", "string", "", false},
+		{"meeting_url", "string", "", false},
+		{"summary_for_patient", "string", "", false},
+		{"private_note", "string", "", false},
+		{"prescription_items", "array", "object", false},
 	},
 	"POST /v1/crisis-alerts": {
 		{"triggered_by", "string", "", false},

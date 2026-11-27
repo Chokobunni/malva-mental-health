@@ -52,19 +52,6 @@ func TestSessionLifecycleContract(t *testing.T) {
 			t.Fatal("private note leaked to patient")
 		}
 	})
-	t.Run("summary patch preserves omitted fields", func(t *testing.T) {
-		w := patch("professional", professional.ID, `{"summary_for_patient":"summary"}`)
-		if w.Code != 200 {
-			t.Fatalf("summary: %d %s", w.Code, w.Body.String())
-		}
-		s, err := st.GetCareSession(context.Background(), id)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if s.PrivateNote != "confidential" || s.MeetingURL != "https://meet.google.com/abc-defg-hij" {
-			t.Fatalf("summary cleared unrelated fields: %+v", s)
-		}
-	})
 	t.Run("patient list hides private notes", func(t *testing.T) {
 		_, _ = db.ExecContext(context.Background(), `UPDATE care_sessions SET private_note='confidential' WHERE id=$1`, id)
 		r := httptest.NewRequest(http.MethodGet, "/v1/care-sessions?scope=all", nil)
@@ -96,6 +83,34 @@ func TestSessionLifecycleContract(t *testing.T) {
 			t.Fatalf("terminal completed overwritten: %d %s", w.Code, w.Body.String())
 		}
 	})
+	// Simulate the scheduled end, which starts the note window.
+	if _, err := db.ExecContext(context.Background(), `UPDATE care_sessions SET scheduled_at=$2 WHERE id=$1`, id, clock.Now().Add(-2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	t.Run("summary patch preserves omitted fields", func(t *testing.T) {
+		w := patch("professional", professional.ID, `{"summary_for_patient":"summary"}`)
+		if w.Code != 200 {
+			t.Fatalf("summary: %d %s", w.Code, w.Body.String())
+		}
+		s, err := st.GetCareSession(context.Background(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.PrivateNote != "confidential" || s.MeetingURL != "https://meet.google.com/abc-defg-hij" {
+			t.Fatalf("summary cleared unrelated fields: %+v", s)
+		}
+	})
+	t.Run("expired notes reject both writes", func(t *testing.T) {
+		if _, err := db.ExecContext(context.Background(), `UPDATE care_sessions SET scheduled_at=$2 WHERE id=$1`, id, clock.Now().Add(-26*time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+		for _, body := range []string{`{"summary_for_patient":"should not save"}`, `{"private_note":"should not save"}`} {
+			if w := patch("professional", professional.ID, body); w.Code != http.StatusForbidden {
+				t.Fatalf("expired patch: %d %s", w.Code, w.Body.String())
+			}
+		}
+	})
+
 }
 
 func TestPaidPackageChatBeforeCheckIn(t *testing.T) {
@@ -250,6 +265,7 @@ func TestChatAccessChoosesActiveSessionBeforeEndedOrFuture(t *testing.T) {
 	if !access.InSession || access.SessionID != active || access.SessionEndsAt == nil {
 		t.Fatalf("active session hidden: %+v", access)
 	}
+
 }
 
 func TestSessionClosureAndLateAttendanceSerialize(t *testing.T) {
@@ -298,4 +314,5 @@ func TestSessionClosureAndLateAttendanceSerialize(t *testing.T) {
 	if session.Status == "no_show" && session.PatientAttendance != "absent" {
 		t.Fatal("winning absence did not preserve participant attendance")
 	}
+
 }

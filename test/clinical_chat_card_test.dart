@@ -77,11 +77,13 @@ void main() {
             body: ClinicalChatCard(
                 message: message, isPatient: false, onAction: () {}))));
     expect(find.text('Isi asesmen'), findsNothing);
+    expect(find.text('Lihat Riwayat'), findsOneWidget);
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: ClinicalChatCard(
                 message: message, isPatient: true, onAction: () {}))));
-    expect(find.text('WHO-5'), findsOneWidget);
+    expect(find.text('WHO-5 (Indeks Kesejahteraan)'), findsOneWidget);
+    expect(find.text('5 Soal'), findsOneWidget);
     expect(find.text('Isi asesmen'), findsOneWidget);
   });
 }

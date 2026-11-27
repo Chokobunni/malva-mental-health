@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -75,6 +76,11 @@ class _ProfessionalSessionNotesScreenState
   late final List<TextEditingController> _recommendations;
   String? _ownerId;
   bool _ownerChanged = false;
+  Timer? _notesWindowTimer;
+  final _prescriptionIntent = newClientIntentId();
+  final _pendingPrescription = <BackendEPrescriptionItem>[];
+  List<BackendGoal> _patientGoals = [];
+  List<BackendMedication> _patientMedications = [];
   @override
   void initState() {
     super.initState();
@@ -106,10 +112,50 @@ class _ProfessionalSessionNotesScreenState
             : [if (recommendations.isNotEmpty) recommendations])
         .map((text) => TextEditingController(text: text))
         .toList();
+    if (widget.session.canWriteNotes) {
+      _notesWindowTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (widget.session.canWriteNotes) return;
+        timer.cancel();
+        if (mounted)
+          setState(() {
+            _patientGoals = [];
+            _patientMedications = [];
+          });
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadPatientContext();
+      });
+    }
+  }
+
+  Future<void> _loadPatientContext() async {
+    final owner = ref.read(currentSessionProvider);
+    final api = widget.apiClient ?? ref.read(apiClientProvider);
+    final token = owner?.accessToken ?? widget.accessToken;
+    if (!_isOwner(owner) || api == null || token == null || token.isEmpty)
+      return;
+    try {
+      final data = await api.getCareSessionNoteContext(
+          accessToken: token, sessionId: widget.session.id);
+      if (!mounted ||
+          !widget.session.canWriteNotes ||
+          !_isOwner(ref.read(currentSessionProvider))) return;
+      setState(() {
+        _patientGoals = data.goals.where((goal) => goal.isActive).toList();
+        _patientMedications = data.medications;
+      });
+    } on Object catch (error) {
+      if (!mounted ||
+          !widget.session.canWriteNotes ||
+          !_isOwner(ref.read(currentSessionProvider))) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(error))));
+    }
   }
 
   @override
   void dispose() {
+    _notesWindowTimer?.cancel();
     for (final c in _fields) {
       c.dispose();
     }
@@ -134,8 +180,25 @@ class _ProfessionalSessionNotesScreenState
       owner?.backendUserId == _ownerId &&
       _ownerId == widget.session.professionalId;
 
-  List<String> get _values =>
-      _fields.map((controller) => controller.text).toList();
+  String _prescriptionLine(BackendEPrescriptionItem item) => [
+        '${item.name} ${item.dosage}',
+        [
+          item.schedule?.label ?? item.frequency,
+          item.form,
+          if (item.schedule?.relationToMeal.isNotEmpty == true)
+            item.schedule!.relationToMeal,
+          'Stok ${item.currentStock}',
+        ].where((part) => part.isNotEmpty).join(' • '),
+      ].join('\n');
+
+  List<String> get _values {
+    final values = _fields.map((controller) => controller.text).toList();
+    values[5] = [
+      if (values[5].trim().isNotEmpty) values[5],
+      ..._pendingPrescription.map(_prescriptionLine),
+    ].join('\n\n');
+    return values;
+  }
 
   Future<void> _preview() async {
     final values = _values;
@@ -224,7 +287,8 @@ class _ProfessionalSessionNotesScreenState
 
   Future<void> _addPrescription() async {
     final owner = ref.read(currentSessionProvider);
-    if (!_isOwner(owner) || owner == null) return;
+    if (!widget.session.canWriteNotes || !_isOwner(owner) || owner == null)
+      return;
     final token = owner.accessToken ?? widget.accessToken;
     final api = widget.apiClient ?? ref.read(apiClientProvider);
     if (api == null ||
@@ -233,14 +297,16 @@ class _ProfessionalSessionNotesScreenState
         widget.session.patientId.isEmpty) return;
     try {
       final credential = await api.getMyCredentials(accessToken: token);
-      if (!mounted || !_isOwner(ref.read(currentSessionProvider))) return;
+      if (!mounted ||
+          !widget.session.canWriteNotes ||
+          !_isOwner(ref.read(currentSessionProvider))) return;
       if (credential == null ||
           !isPsychiatristSpecialization(credential.specialization) ||
           credential.verificationStatus.toUpperCase() != 'VERIFIED') {
         throw StateError(
             'Resep hanya dapat diterbitkan psikiater terverifikasi.');
       }
-      await Navigator.push(
+      final item = await Navigator.push<BackendEPrescriptionItem>(
           context,
           MaterialPageRoute(
               builder: (_) => EPrescriptionFormScreen(
@@ -249,27 +315,14 @@ class _ProfessionalSessionNotesScreenState
                     preselectedPatientId: widget.session.patientId,
                     preselectedPatientName: widget.session.patientName,
                     lockPatient: true,
-                    onIssued: (rx) {
-                      if (!mounted ||
-                          !_isOwner(ref.read(currentSessionProvider)) ||
-                          rx.patientId != widget.session.patientId) return;
-                      for (final item in rx.items) {
-                        _append(
-                            5,
-                            [
-                              '${item.name} ${item.dosage}',
-                              [
-                                item.schedule?.label ?? item.frequency,
-                                item.form,
-                                if (item.schedule?.relationToMeal.isNotEmpty ==
-                                    true)
-                                  item.schedule!.relationToMeal,
-                                'Stok ${item.remainingStock ?? item.currentStock}'
-                              ].where((part) => part.isNotEmpty).join(' • '),
-                            ].join('\n'));
-                      }
-                    },
+                    sessionDraft: true,
                   )));
+      if (item != null &&
+          mounted &&
+          widget.session.canWriteNotes &&
+          _isOwner(ref.read(currentSessionProvider))) {
+        setState(() => _pendingPrescription.add(item));
+      }
     } catch (error) {
       if (mounted && _isOwner(ref.read(currentSessionProvider))) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -282,8 +335,10 @@ class _ProfessionalSessionNotesScreenState
 
   Future<void> _addGoal() async {
     final owner = ref.read(currentSessionProvider);
-    if (!_isOwner(owner) || owner == null || widget.session.patientId.isEmpty)
-      return;
+    if (!widget.session.canWriteNotes ||
+        !_isOwner(owner) ||
+        owner == null ||
+        widget.session.patientId.isEmpty) return;
     final api = widget.apiClient ?? ref.read(apiClientProvider);
     if (api == null) return;
     final intent = newClientIntentId();
@@ -292,7 +347,7 @@ class _ProfessionalSessionNotesScreenState
         MaterialPageRoute(
             builder: (_) => GoalEditor(
                   onSave: (result) async {
-                    if (!mounted) return false;
+                    if (!mounted || !widget.session.canWriteNotes) return false;
                     final current = ref.read(currentSessionProvider);
                     if (!_isOwner(current)) return false;
                     final token = current?.accessToken ?? widget.accessToken;
@@ -324,7 +379,7 @@ class _ProfessionalSessionNotesScreenState
   }
 
   Future<void> _save({required bool publish}) async {
-    if (_busy) return;
+    if (_busy || !widget.session.canWriteNotes) return;
     final owner = ref.read(currentSessionProvider);
     if (!_isOwner(owner)) return;
     final api = widget.apiClient ?? ref.read(apiClientProvider);
@@ -332,14 +387,24 @@ class _ProfessionalSessionNotesScreenState
     if (api == null || token.isEmpty) return;
     setState(() => _busy = true);
     try {
-      final values = _fields.map((c) => c.text).toList();
-      final updated = await api.updateCareSession(
-          accessToken: token,
-          sessionId: widget.session.id,
-          summaryForPatient: publish ? formatSessionNotes(values) : null,
-          privateNote: publish
-              ? _private.text
-              : '${_private.text}$_draftMarker${jsonEncode(values)}');
+      final values = _values;
+      final summary = publish ? formatSessionNotes(values) : null;
+      final privateNote = publish
+          ? _private.text
+          : '${_private.text}$_draftMarker${jsonEncode(values)}';
+      final updated = _pendingPrescription.isEmpty
+          ? await api.updateCareSession(
+              accessToken: token,
+              sessionId: widget.session.id,
+              summaryForPatient: summary,
+              privateNote: privateNote)
+          : await api.saveCareSessionWithPrescription(
+              accessToken: token,
+              sessionId: widget.session.id,
+              intent: _prescriptionIntent,
+              summaryForPatient: summary,
+              privateNote: privateNote,
+              items: _pendingPrescription);
       if (!mounted || !_isOwner(ref.read(currentSessionProvider))) return;
       Navigator.pop(context, updated);
     } catch (error) {
@@ -380,9 +445,27 @@ class _ProfessionalSessionNotesScreenState
         .toList();
     return _NotesPanel(
       section: index,
-      count: lines.length,
+      count: lines.length + (index == 5 ? _pendingPrescription.length : 0),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        if (lines.isEmpty) _noteInset(Center(child: Text(empty))),
+        if (lines.isEmpty && (index != 5 || _pendingPrescription.isEmpty))
+          _noteInset(Center(child: Text(empty))),
+        if (index == 5)
+          for (final item in _pendingPrescription)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _noteInset(Row(children: [
+                Expanded(
+                    child: _snapshotRow(_prescriptionLine(item),
+                        prescription: true)),
+                IconButton(
+                  tooltip: 'Lepas obat dari resep',
+                  icon: const Icon(Icons.link_off),
+                  onPressed: _busy
+                      ? null
+                      : () => setState(() => _pendingPrescription.remove(item)),
+                ),
+              ])),
+            ),
         for (final (position, line) in lines.indexed)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
@@ -441,7 +524,9 @@ class _ProfessionalSessionNotesScreenState
         actions: [
           IconButton(
             tooltip: 'Simpan Draf',
-            onPressed: _busy ? null : () => _save(publish: false),
+            onPressed: _busy || !session.canWriteNotes
+                ? null
+                : () => _save(publish: false),
             icon: const Icon(Icons.save_as_outlined),
           ),
         ],
@@ -511,6 +596,46 @@ class _ProfessionalSessionNotesScreenState
                       () => setState(
                           () => _recommendations.add(TextEditingController()))),
                 ])),
+        if (_patientGoals.isNotEmpty || _patientMedications.isNotEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Isi Detail Sesi',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  if (_patientGoals.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    const Text('Tujuan & Kebiasaan Aktif'),
+                    for (final goal in _patientGoals)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.flag_outlined),
+                        title: Text(goal.title),
+                        subtitle: goal.details == null
+                            ? null
+                            : Text(goal.details!.scheduleLabel),
+                      ),
+                  ],
+                  if (_patientMedications.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    const Text('Obat Aktif'),
+                    for (final med in _patientMedications)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.medication_outlined),
+                        title: Text(med.name),
+                        subtitle: Text([
+                          med.dosage,
+                          med.schedule?.label ?? med.reminderTime
+                        ].where((value) => value.isNotEmpty).join(' • ')),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ),
         _resource(
             5, 'Tidak ada obat diresepkan', 'Tambah Obat', _addPrescription),
         _resource(6, 'Belum ada target kebiasaan',
@@ -554,7 +679,9 @@ class _ProfessionalSessionNotesScreenState
                     FilledButton.icon(
                         style: FilledButton.styleFrom(
                             backgroundColor: _notesPurple),
-                        onPressed: _busy ? null : () => _save(publish: true),
+                        onPressed: _busy || !session.canWriteNotes
+                            ? null
+                            : () => _save(publish: true),
                         icon: const Icon(Icons.save_outlined),
                         label: Text(_busy ? 'Menyimpan…' : 'Simpan Catatan')),
                     OutlinedButton.icon(

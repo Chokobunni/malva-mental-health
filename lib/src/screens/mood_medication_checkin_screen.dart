@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models.dart';
 import '../services/malva_api_client.dart';
 import '../services/medication_reminder_service.dart';
+import '../theme.dart';
 import '../widgets/malva_components.dart';
 import 'medication_screen.dart';
 import 'mood_screen.dart';
@@ -47,13 +48,52 @@ class _MoodMedicationCheckinScreenState
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
-            child: SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(value: 0, label: Text('Mood')),
-                ButtonSegment(value: 1, label: Text('Obat')),
-              ],
-              selected: {_tab},
-              onSelectionChanged: (s) => setState(() => _tab = s.first),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 268),
+              child: DecoratedBox(
+                decoration: const ShapeDecoration(
+                  color: Color(0xffe9eaee),
+                  shape: StadiumBorder(),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Row(
+                    children: [
+                      for (final (index, label, icon) in const [
+                        (0, 'Mood', Icons.sentiment_satisfied_alt_outlined),
+                        (1, 'Obat', Icons.medication_outlined),
+                      ])
+                        Expanded(
+                          child: Semantics(
+                            selected: _tab == index,
+                            child: TextButton.icon(
+                              onPressed: () => setState(() => _tab = index),
+                              style: TextButton.styleFrom(
+                                minimumSize: const Size(0, 44),
+                                backgroundColor: _tab == index
+                                    ? MalvaColors.seed
+                                    : Colors.transparent,
+                                foregroundColor: _tab == index
+                                    ? Colors.white
+                                    : const Color(0xff4b5563),
+                                textStyle: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w700),
+                              ),
+                              icon: index == 0
+                                  ? Icon(icon, size: 19)
+                                  : const ImageIcon(
+                                      AssetImage(
+                                          'assets/prescription/capsule.png'),
+                                      size: 19,
+                                    ),
+                              label: Text(label),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
           Expanded(

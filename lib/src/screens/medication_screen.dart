@@ -12,6 +12,7 @@ import '../theme.dart';
 import '../time/wib.dart';
 import '../services/medication_adherence.dart';
 import '../services/server_clock.dart';
+import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import 'medication_history_screen.dart';
 import 'portal/prescription_wizard_screen.dart';
@@ -54,6 +55,8 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen>
 
   /// Guard agar satu dosis tidak tercatat dua kali karena tap ganda.
   final Set<String> _pendingLogs = {};
+  final Set<String> _pendingDeletions = {};
+  final Set<String> _pendingMedicationSync = {};
   final Map<String, DateTime> _lastLogAt = {};
   final Map<String, MedicationLog> _unsavedLogs = {};
   Timer? _cooldownTimer;
@@ -365,6 +368,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen>
                           .read(malvaStoreProvider.notifier)
                           .canTakeMedication(med.id),
                       onTake: _pendingLogs.contains(med.id) ||
+                              _pendingDeletions.contains(med.id) ||
                               (!_unsavedLogs.containsKey(med.id) &&
                                   !ref
                                       .read(malvaStoreProvider.notifier)
@@ -375,7 +379,15 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen>
                               ? () => unawaited(_logMedication(
                                   context, med, _unsavedLogs[med.id]!.status))
                               : () => _takeMedication(context, med),
-                      onEdit: () => _openMedicationForm(context, med),
+                      onEdit: _pendingDeletions.contains(med.id) ||
+                              _pendingMedicationSync.contains(med.id)
+                          ? null
+                          : () => _openMedicationForm(context, med),
+                      onDelete: _pendingDeletions.contains(med.id) ||
+                              _pendingMedicationSync.contains(med.id) ||
+                              _pendingLogs.contains(med.id)
+                          ? null
+                          : () => unawaited(_deleteMedication(context, med)),
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -558,16 +570,6 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen>
           personal: true,
           session: session,
           initialMedication: medication,
-          onDelete: medication == null
-              ? null
-              : () {
-                  if (mounted &&
-                      context.mounted &&
-                      !_historyAccountInvalid &&
-                      _owner(session) == _owner(_session)) {
-                    _deleteMedication(context, medication);
-                  }
-                },
         ),
       ),
     );
@@ -578,11 +580,19 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen>
         _owner(session) != _owner(_session)) return;
     ref.read(malvaStoreProvider.notifier).upsertMedication(value);
     unawaited(_reminderService?.scheduleMedicationReminder(value));
-    unawaited(_syncMedication(context, value, isNew: medication == null));
+    setState(() => _pendingMedicationSync.add(value.id));
+    try {
+      await _syncMedication(context, value, isNew: medication == null);
+    } finally {
+      if (mounted) setState(() => _pendingMedicationSync.remove(value.id));
+    }
   }
 
-  void _deleteMedication(BuildContext context, Medication medication) {
-    showDialog<void>(
+  Future<void> _deleteMedication(
+      BuildContext context, Medication medication) async {
+    final owner = _owner(_session);
+    final authOwner = _owner(ref.read(authStateProvider).session);
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Hapus ${medication.name}?'),
@@ -593,14 +603,7 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen>
             child: const Text('Batal'),
           ),
           FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ref
-                  .read(malvaStoreProvider.notifier)
-                  .deleteMedication(medication.id);
-              unawaited(_reminderService?.cancelReminder(medication.id));
-              unawaited(_syncMedicationDeletion(context, medication));
-            },
+            onPressed: () => Navigator.pop(context, true),
             style: compactFilledButtonStyle.copyWith(
               backgroundColor: const WidgetStatePropertyAll(MalvaColors.danger),
             ),
@@ -609,6 +612,47 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen>
         ],
       ),
     );
+    if (!mounted ||
+        !context.mounted ||
+        confirmed != true ||
+        _historyAccountInvalid ||
+        _owner(_session) != owner ||
+        _owner(ref.read(authStateProvider).session) != authOwner ||
+        _pendingLogs.contains(medication.id) ||
+        _pendingMedicationSync.contains(medication.id) ||
+        _pendingDeletions.contains(medication.id)) return;
+    setState(() => _pendingDeletions.add(medication.id));
+    try {
+      final token = _session?.accessToken;
+      if (_looksLikeServerId(medication.id)) {
+        if (token == null || token.isEmpty || _apiClient == null) {
+          throw StateError('Masuk kembali untuk menghapus obat.');
+        }
+        try {
+          await _apiClient!.deleteMedication(
+            accessToken: token,
+            medicationId: medication.id,
+          );
+        } on MalvaApiException catch (error) {
+          if (error.statusCode != 404) rethrow;
+        }
+      }
+      if (!mounted ||
+          _historyAccountInvalid ||
+          _owner(_session) != owner ||
+          _owner(ref.read(authStateProvider).session) != authOwner) return;
+      ref.read(malvaStoreProvider.notifier).deleteMedication(medication.id);
+      unawaited(_reminderService?.cancelReminder(medication.id));
+    } on Object catch (error) {
+      if (!context.mounted ||
+          _owner(_session) != owner ||
+          _owner(ref.read(authStateProvider).session) != authOwner) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Gagal menghapus obat: ${friendlyErrorMessage(error)}'),
+      ));
+    } finally {
+      if (mounted) setState(() => _pendingDeletions.remove(medication.id));
+    }
   }
 
   void _takeMedication(BuildContext context, Medication medication) {
@@ -897,35 +941,6 @@ class _MedicationScreenState extends ConsumerState<MedicationScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Obat tersimpan lokal, sync backend gagal: $error'),
-        ),
-      );
-    }
-  }
-
-  /// Hapus obat di server.
-  ///
-  /// Sebelumnya penghapusan hanya terjadi di state lokal, sehingga obat
-  /// muncul kembali begitu daftar dimuat ulang dari backend.
-  Future<void> _syncMedicationDeletion(
-    BuildContext context,
-    Medication medication,
-  ) async {
-    final accessToken = _session?.accessToken;
-    final api = _apiClient;
-    if (api == null || accessToken == null || accessToken.isEmpty) {
-      return;
-    }
-    if (!_looksLikeServerId(medication.id)) return;
-    try {
-      await api.deleteMedication(
-        accessToken: accessToken,
-        medicationId: medication.id,
-      );
-    } on Object catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Obat terhapus lokal, sync backend gagal: $error'),
         ),
       );
     }
@@ -1248,6 +1263,7 @@ class _MedicationCard extends StatelessWidget {
     required this.medication,
     required this.onTake,
     required this.onEdit,
+    required this.onDelete,
     this.busy = false,
     this.serverReady = true,
     this.cooldown = false,
@@ -1256,7 +1272,8 @@ class _MedicationCard extends StatelessWidget {
 
   final Medication medication;
   final VoidCallback? onTake;
-  final VoidCallback onEdit;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
   final bool busy;
   final bool serverReady;
   final bool cooldown;
@@ -1305,7 +1322,16 @@ class _MedicationCard extends StatelessWidget {
                 ),
               ),
               IconButton(
-                  onPressed: onEdit, icon: const Icon(Icons.edit_rounded)),
+                  tooltip: 'Edit ${medication.name}',
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_rounded,
+                      color: Color(0xff50545a), size: 20)),
+              IconButton(
+                tooltip: 'Hapus ${medication.name}',
+                onPressed: onDelete,
+                color: MalvaColors.danger,
+                icon: const Icon(Icons.delete_rounded, size: 20),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -1380,12 +1406,10 @@ class MedicationFormSheet extends StatefulWidget {
     super.key,
     required this.onSave,
     this.initial,
-    this.onDelete,
   });
 
   final Medication? initial;
   final ValueChanged<Medication> onSave;
-  final VoidCallback? onDelete;
 
   @override
   State<MedicationFormSheet> createState() => _MedicationFormSheetState();
@@ -1511,16 +1535,6 @@ class _MedicationFormSheetState extends State<MedicationFormSheet> {
             ),
             const SizedBox(height: 16),
             FilledButton(onPressed: _save, child: const Text('Simpan')),
-            if (widget.onDelete != null) ...[
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: widget.onDelete,
-                icon:
-                    const Icon(Icons.delete_rounded, color: MalvaColors.danger),
-                label: const Text('Hapus Obat',
-                    style: TextStyle(color: MalvaColors.danger)),
-              ),
-            ],
           ],
         ),
       ),

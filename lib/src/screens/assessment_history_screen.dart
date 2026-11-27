@@ -5,10 +5,12 @@ import '../providers/providers.dart';
 import '../models.dart';
 import '../services/malva_api_client.dart';
 import '../theme.dart';
+import '../widgets/assessment_reference.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/therapy_library.dart';
 import '../widgets/shared_record_detail.dart';
+import '../widgets/share_professional_sheet.dart';
 import '../time/wib.dart';
 
 // ============================================================
@@ -639,14 +641,23 @@ class AssessmentHistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
+    final instrument = entry.isScreening
+        ? AssessmentInstrument.phqGad
+        : AssessmentInstrument.fromId(entry.moduleId);
+    final screening = entry.screening;
     return SoftCard(
       onTap: onTap,
+      color: Colors.white,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            backgroundColor: entry.color.withValues(alpha: 0.14),
-            child: Icon(entry.icon, color: entry.color),
-          ),
+          if (instrument != null)
+            instrument.icon(39)
+          else
+            CircleAvatar(
+              backgroundColor: entry.color.withValues(alpha: 0.14),
+              child: Icon(entry.icon, color: entry.color),
+            ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -657,7 +668,21 @@ class AssessmentHistoryCard extends StatelessWidget {
                   style: const TextStyle(
                       fontWeight: FontWeight.w900, fontSize: 14),
                 ),
-                if (entry.subtitle.isNotEmpty) ...[
+                if (entry.isShared) ...[
+                  const SizedBox(height: 4),
+                  const StatusPill(
+                    label: 'Dibagikan',
+                    color: MalvaColors.mint,
+                    icon: Icons.send_rounded,
+                  ),
+                ],
+                if (screening != null) ...[
+                  const SizedBox(height: 6),
+                  Wrap(spacing: 5, runSpacing: 5, children: [
+                    _scoreLabel('PHQ-9', screening.phq9),
+                    _scoreLabel('GAD-7', screening.gad7),
+                  ]),
+                ] else if (entry.subtitle.isNotEmpty) ...[
                   const SizedBox(height: 3),
                   Text(
                     entry.subtitle,
@@ -667,25 +692,45 @@ class AssessmentHistoryCard extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 3),
-                Text(
-                  formatAssessmentDate(entry.date),
-                  style: TextStyle(fontSize: 11.5, color: onSurfaceVariant),
-                ),
+                Row(children: [
+                  const Icon(Icons.schedule_rounded,
+                      size: 14, color: Color(0xff8794a1)),
+                  const SizedBox(width: 5),
+                  Expanded(
+                      child: Text(
+                    formatAssessmentDate(entry.date),
+                    style: TextStyle(fontSize: 11.5, color: onSurfaceVariant),
+                  )),
+                ]),
               ],
             ),
           ),
-          if (entry.isShared) ...[
-            const SizedBox(width: 8),
-            const StatusPill(
-              label: 'Dibagikan',
-              color: MalvaColors.mint,
-              icon: Icons.send_rounded,
-            ),
-          ],
         ],
       ),
     );
   }
+}
+
+Widget _scoreLabel(String label, BackendAssessmentSummary score) {
+  final color = switch (score.level.toLowerCase()) {
+    'minimal' || 'mild' => const Color(0xff087356),
+    'moderate' => const Color(0xff945418),
+    'moderately_severe' || 'severe' || 'crisis' => const Color(0xffac254f),
+    _ => const Color(0xff53616e),
+  };
+  return DecoratedBox(
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: color.withValues(alpha: .20)),
+      color: color.withValues(alpha: .06),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      child: Text(_screeningScorePart(label, score),
+          style: TextStyle(
+              color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+    ),
+  );
 }
 
 /// Ringkasan assessment record terbaru untuk halaman Assessment.
@@ -695,8 +740,13 @@ class AssessmentHistoryCard extends StatelessWidget {
 /// gagal, yang tampil hanya kartu ajakan/keterangan ringkas.
 /// Sharing uses the same server authorization as chat and worksheet records.
 class AssessmentRecordShareActions extends ConsumerStatefulWidget {
-  const AssessmentRecordShareActions({super.key, required this.entry});
+  const AssessmentRecordShareActions({
+    super.key,
+    required this.entry,
+    this.shareLabel = 'Bagikan ke profesional',
+  });
   final AssessmentHistoryEntry entry;
+  final String shareLabel;
   @override
   ConsumerState<AssessmentRecordShareActions> createState() =>
       _AssessmentRecordShareActionsState();
@@ -765,41 +815,15 @@ class _AssessmentRecordShareActionsState
         return;
       }
       final api = ref.read(apiClientProvider);
-      final packages = await api.listCarePackages(accessToken: token);
-      if (!_ownerMatches) return;
-      final links = await api.listPatientProfessionalLinks(accessToken: token);
-      if (!_ownerMatches) return;
-      final professionalIds = packages
-          .where((p) => p.isActive)
-          .map((p) => p.professionalId)
-          .toSet();
-      final eligible = links
-          .where((link) =>
-              link.status == 'active' &&
-              professionalIds.contains(link.professionalUserId))
-          .toList();
-      if (eligible.isEmpty) {
-        _toast(
-            'Berbagi data membutuhkan paket aktif dengan profesional terhubung.');
-        return;
-      }
-      final selected = await showDialog<BackendPatientProfessionalLink>(
-          context: context,
-          builder: (dialogContext) => SimpleDialog(
-                title: const Text('Bagikan ke profesional'),
-                children: [
-                  for (final link in eligible)
-                    SimpleDialogOption(
-                      onPressed: () => Navigator.pop(dialogContext, link),
-                      child: Text(link.professionalDisplayName.isEmpty
-                          ? 'Profesional terhubung'
-                          : link.professionalDisplayName),
-                    )
-                ],
-              ));
+      final selected = await pickShareProfessional(
+        context: context,
+        api: api,
+        token: token,
+        isCurrent: () => _ownerMatches,
+      );
       if (selected == null || !_ownerMatches) return;
       final permission = await api.chatPermission(
-          accessToken: token, professionalId: selected.professionalUserId);
+          accessToken: token, professionalId: selected);
       if (!_ownerMatches) return;
       if (!permission.canShare) {
         _toast('Berbagi data belum tersedia untuk profesional ini.');
@@ -810,7 +834,7 @@ class _AssessmentRecordShareActionsState
         final text = 'Hasil skrining: ${screeningScoreSummary(screening)}.';
         await api.sendChatMessage(
             accessToken: token,
-            recipientId: selected.professionalUserId,
+            recipientId: selected,
             text: text,
             kind: 'assessment',
             metadata: {
@@ -827,7 +851,7 @@ class _AssessmentRecordShareActionsState
         await api.shareTherapySubmission(
             accessToken: token,
             submissionId: entry.sourceId,
-            professionalId: selected.professionalUserId);
+            professionalId: selected);
       }
       _toast('Riwayat Asesmen dibagikan ke profesional.');
     } on Object catch (error) {
@@ -847,7 +871,7 @@ class _AssessmentRecordShareActionsState
       OutlinedButton.icon(
           onPressed: _busy ? null : () => _share(pdf: false),
           icon: const Icon(Icons.send_rounded),
-          label: const Text('Bagikan ke profesional')),
+          label: Text(widget.shareLabel)),
       OutlinedButton.icon(
           onPressed: _busy ? null : () => _share(pdf: true),
           icon: const Icon(Icons.picture_as_pdf_rounded),
