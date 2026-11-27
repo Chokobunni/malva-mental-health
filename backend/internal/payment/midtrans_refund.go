@@ -67,7 +67,7 @@ func (g *MidtransGateway) RefundPayment(ctx context.Context, orderID, key string
 			}
 		}
 	}
-	return "", fmt.Errorf("Midtrans belum menyetujui refund (kode %q)", out.Code)
+	return "", fmt.Errorf("refund belum disetujui Midtrans (kode %q)", out.Code)
 }
 
 func (g *MidtransGateway) requestRefund(ctx context.Context, method, endpoint string, payload []byte) (midtransRefundResponse, error) {

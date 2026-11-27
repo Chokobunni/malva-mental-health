@@ -40,7 +40,9 @@ func (s *Store) CancelCareSession(ctx context.Context, sessionID, role, actorID,
 		FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&current, &patient, &professional, &start, &bookingID, &packageID); err != nil {
 		return CareSession{}, CareRefund{}, false, err
 	}
-	if !((role == "patient" && actorID == patient) || (role == "professional" && actorID == professional)) {
+	isPatient := role == "patient" && actorID == patient
+	isProfessional := role == "professional" && actorID == professional
+	if !isPatient && !isProfessional {
 		return CareSession{}, CareRefund{}, false, errors.New("anda tidak berhak atas sesi ini")
 	}
 	status := "cancelled_by_" + role
