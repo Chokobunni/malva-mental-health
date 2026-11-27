@@ -1877,7 +1877,18 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	// Siarkan realtime ke kedua pihak (bila online).
+	s.publishChatMessage(saved, recipientID)
+	// Push FCM ke penerima — hanya pesan teks percakapan (kartu share tidak
+	// memicu push). notifyChatPush menahan bila sesi tidak aktif, penerima
+	// online, atau dalam cooldown.
+	if !isShare {
+		s.notifyChatPush(r.Context(), recipientID, claims.Subject, senderName, text,
+			patientID, professionalID, access.SessionID, access.InSession)
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"message": saved})
+}
+
+func (s *Server) publishChatMessage(saved store.ChatMessage, recipientID string) {
 	if s.hub != nil {
 		data := map[string]any{
 			"id":           saved.ID,
@@ -1895,14 +1906,6 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 		s.hub.Publish(saved.SenderID, event)
 		s.hub.Publish(recipientID, event)
 	}
-	// Push FCM ke penerima — hanya pesan teks percakapan (kartu share tidak
-	// memicu push). notifyChatPush menahan bila sesi tidak aktif, penerima
-	// online, atau dalam cooldown.
-	if !isShare {
-		s.notifyChatPush(r.Context(), recipientID, claims.Subject, senderName, text,
-			patientID, professionalID, access.SessionID, access.InSession)
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{"message": saved})
 }
 
 // notifyChatPush mengirim push FCM untuk pesan chat — HANYA saat sesi aktif,

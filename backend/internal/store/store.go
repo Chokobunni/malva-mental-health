@@ -2579,6 +2579,9 @@ func normalizeChatKind(kind string) string {
 }
 
 func (s *Store) CreateChatMessage(ctx context.Context, msg ChatMessage) (ChatMessage, error) {
+	if strings.EqualFold(strings.TrimSpace(msg.Kind), "session_cancellation") {
+		return ChatMessage{}, errors.New("kartu pembatalan hanya dibuat saat sesi dibatalkan")
+	}
 	msg.Text = strings.TrimSpace(msg.Text)
 	msg.SenderName = strings.TrimSpace(msg.SenderName)
 	msg.Kind = normalizeChatKind(msg.Kind)
@@ -2671,7 +2674,7 @@ func (s *Store) DeleteOwnChatMessage(ctx context.Context, id, senderID, role str
 		UPDATE chat_messages
 		SET deleted_at = COALESCE(deleted_at, $4), text = '', sender_name = '',
 		    attachment_type = NULL, attachment_url = NULL, attachment_meta = NULL
-		WHERE id = $1 AND sender_id = $2
+		WHERE id = $1 AND sender_id = $2 AND kind <> 'session_cancellation'
 		  AND (($3 = 'patient' AND patient_id = sender_id)
 		    OR ($3 = 'professional' AND professional_id = sender_id))
 		RETURNING patient_id, professional_id

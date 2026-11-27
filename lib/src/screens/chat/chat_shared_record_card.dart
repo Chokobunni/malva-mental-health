@@ -15,6 +15,7 @@ import '../../services/weekly_summary_service.dart';
 import '../../services/medication_reminder_service.dart';
 import '../../theme.dart';
 import '../../time/wib.dart';
+import 'screening_answers_sheet.dart';
 
 /// A display-only snapshot: never includes medication IDs or dose logs.
 Map<String, dynamic> sharedMedicationSnapshot(Medication med,
@@ -109,10 +110,15 @@ Map _diaryData(ChatMessage message, BackendDiaryEntry? entry) {
 /// Compact saved clinical records stay readable in the conversation.
 class ChatSharedRecordCard extends ConsumerStatefulWidget {
   const ChatSharedRecordCard(
-      {super.key, required this.message, this.onOpenDiary, this.onOpenRecord});
+      {super.key,
+      required this.message,
+      this.onOpenDiary,
+      this.onOpenRecord,
+      this.guardDetail});
 
   final ChatMessage message;
   final VoidCallback? onOpenDiary, onOpenRecord;
+  final Widget Function(Widget child)? guardDetail;
 
   @override
   ConsumerState<ChatSharedRecordCard> createState() =>
@@ -664,9 +670,17 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
       ]);
 
   List<Widget> _assessment() {
+    final completedAt = _submission?.createdDateTime ??
+        _screening?.createdAt ??
+        parseWibStored(_meta['completed_at']?.toString()) ??
+        parseWibStored(_meta['created_at']?.toString()) ??
+        parseWibStored(_meta['shared_at']?.toString());
     final header = _heading(
         'Hasil Skrining Klinis', Icons.assignment_turned_in_outlined,
-        subtitle: 'Evaluasi Mandiri Terbaru', color: _mint);
+        subtitle: completedAt == null
+            ? 'Waktu pengisian tidak tersedia'
+            : 'Diisi pada ${formatWibDate(completedAt)} • ${formatWibBubbleTime(completedAt)} WIB',
+        color: _mint);
     final submissionId = _meta['submission_id']?.toString() ?? '';
     final screeningId = _meta['screening_id']?.toString() ?? '';
     if ((submissionId.isNotEmpty && _submission == null) ||
@@ -689,20 +703,28 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
         final score = complete ? scoreWho5(answers) : null;
         return [
           header,
-          _white(_instrument(
-              'WHO-5 (Indeks Kesejahteraan)',
-              '${score?.raw ?? '—'} / 25',
-              score?.level ?? 'Belum tersedia',
-              'WHO-5',
-              interpretation?.certaintyFactor,
-              triage: true)),
+          _assessmentPanel(
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            _instrument(
+                'WHO-5 (Indeks Kesejahteraan)',
+                '${score?.raw ?? '—'} / 25',
+                score?.level ?? 'Belum tersedia',
+                'WHO-5',
+                interpretation?.certaintyFactor,
+                triage: true),
+            _answersButton(
+                'who5',
+                worksheetScreeningAnswers('who5', answers),
+                '${score?.raw ?? '—'} / 25',
+                'Indeks Kesejahteraan • Kategori: ${score?.level ?? 'Belum tersedia'}')
+          ])),
           if (_meta['crisis_flag'] == true) _safety(),
         ];
       }
       final score = complete ? scoreDass21(answers) : null;
       return [
         header,
-        _white(
+        _assessmentPanel(
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const Text('DASS-21',
               style: TextStyle(
@@ -723,7 +745,11 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
             _level(part.$3 ?? 'Belum tersedia', screening: true),
             const Divider(height: 14, color: Color(0xffece7f1)),
           ],
-          _cf('DASS-21', interpretation?.certaintyFactor, triage: true),
+          _answersButton(
+              'dass21',
+              worksheetScreeningAnswers('dass21', answers),
+              '21 Item',
+              'Depresi: ${score?.depression ?? '—'} • Kecemasan: ${score?.anxiety ?? '—'} • Stres: ${score?.stress ?? '—'}'),
         ])),
         if (interpretation?.triageLevel == 'krisis' ||
             _meta['crisis_flag'] == true)
@@ -739,6 +765,7 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
           'score': saved.score,
           'max_score': saved.maxScore,
           'crisis_flag': saved.crisisFlag,
+          'answers': saved.answers,
           'cf': saved.hasCertaintyFactor ? saved.certaintyFactor : double.nan,
         };
       return data[id] is Map
@@ -747,15 +774,28 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
               'score': data['${id}_score'],
               'max_score': data['${id}_max_score'],
               'cf': data['${id}_cf'],
-              'crisis_flag': data['${id}_crisis_flag']
+              'crisis_flag': data['${id}_crisis_flag'],
+              'answers': data['${id}_answers']
             };
     }
 
     final phq = instrument('phq9');
     final gad = instrument('gad7');
+    final phqAnswers = AssessmentEngine.savedAnswers(phq['answers']);
+    final gadAnswers = AssessmentEngine.savedAnswers(gad['answers']);
+    final safety = _screening?.crisisFlag == true ||
+        (phqAnswers['phq_self_harm'] ?? 0) > 0 ||
+        [_meta, data, phq, gad].any((value) => value['crisis_flag'] == true);
+    final phqLevel = AssessmentEngine.levelFromScore(
+        AssessmentType.phq9, phq['score'],
+        maxScore: phq['max_score']);
+    final gadLevel = AssessmentEngine.levelFromScore(
+        AssessmentType.gad7, gad['score'],
+        maxScore: gad['max_score']);
     return [
       header,
-      _white(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _assessmentPanel(
+          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         for (final item in [
           (AssessmentType.phq9, 'PHQ-9 (Depresi)', 'PHQ-9', 27, phq),
           (AssessmentType.gad7, 'GAD-7 (Kecemasan)', 'GAD-7', 21, gad)
@@ -784,12 +824,70 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
                       cf),
                 ]);
           }),
+        _answersButton(
+            'screening',
+            clinicalScreeningAnswers(phqAnswers, gadAnswers),
+            safety ? 'Keselamatan: YA' : '',
+            'PHQ-9: ${phqLevel == null ? '—' : phq['score']}/27 (${phqLevel?.label ?? 'Belum tersedia'}) • GAD-7: ${gadLevel == null ? '—' : gad['score']}/21 (${gadLevel?.label ?? 'Belum tersedia'})'),
       ])),
-      if (_screening?.crisisFlag == true ||
-          [_meta, data, phq, gad].any((value) => value['crisis_flag'] == true))
-        _safety(),
+      if (safety) _safety(),
     ];
   }
+
+  Widget _assessmentPanel(Widget child) => _white(child,
+      color: const Color(0xfffcf8fe), padding: const EdgeInsets.all(14));
+
+  Widget _answersButton(String module, List<ScreeningAnswer> answers,
+          String badge, String subtitle) =>
+      Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: OutlinedButton.icon(
+          onPressed: () {
+            final guard = widget.guardDetail;
+            showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.white,
+              clipBehavior: Clip.antiAlias,
+              shape: const RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.vertical(top: Radius.circular(24))),
+              builder: (_) {
+                final detail = Consumer(builder: (context, ref, _) {
+                  final owner = _ownerOf(ref.watch(currentSessionProvider));
+                  if (owner != _owner || _invalidated) {
+                    return const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text('Detail asesmen sudah tidak tersedia.'));
+                  }
+                  return ScreeningAnswersSheet(
+                      module: module,
+                      subtitle: subtitle,
+                      badge: badge,
+                      answers: answers);
+                });
+                return guard?.call(detail) ?? detail;
+              },
+            );
+          },
+          style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xff812b98),
+              backgroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+              side: const BorderSide(color: Color(0xffdccbe4)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13))),
+          icon: const Icon(Icons.checklist_rounded, size: 17),
+          label: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Flexible(
+                child: Text('Lihat Rincian Jawaban (${answers.length} Item)',
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700))),
+            const SizedBox(width: 5),
+            const Icon(Icons.chevron_right_rounded, size: 17),
+          ]),
+        ),
+      );
 
   Widget _safety() => const Padding(
       padding: EdgeInsets.only(bottom: 10),
@@ -982,31 +1080,13 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
   Widget build(BuildContext context) {
     if (!_ownerMatches) return const SizedBox.shrink();
     final record = widget.message.kind == 'worksheet' && !_isAssessmentModule;
+    if (record) return _therapyRecordCard();
+    final assessment =
+        const {'assessment', 'screening'}.contains(widget.message.kind) ||
+            widget.message.kind == 'worksheet' && _isAssessmentModule;
     final content = switch (widget.message.kind) {
       'summary' || 'progress' => _summary(),
       'goals' || 'habits' => _goals(),
-      'worksheet' when record => [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _tile(Icons.assignment_turned_in_outlined, _purple, size: 42),
-            const SizedBox(width: 11),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  const Text('Riwayat Terapi',
-                      style: TextStyle(color: _ink, fontSize: 12)),
-                  const SizedBox(height: 3),
-                  Text(_text(_meta, 'title', widget.message.text),
-                      style: const TextStyle(
-                          color: _ink,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 8),
-                  const Text('Dibagikan',
-                      style: TextStyle(color: _ink, fontSize: 11)),
-                ])),
-          ]),
-        ],
       'assessment' || 'screening' || 'worksheet' => _assessment(),
       'prescription' || 'medication' => _medications(),
       'diary' => _diary(),
@@ -1015,19 +1095,22 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
     return Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-            color: const {'prescription', 'medication'}
-                    .contains(widget.message.kind)
+            color: (assessment ||
+                    const {'prescription', 'medication'}
+                        .contains(widget.message.kind))
                 ? Colors.white
                 : const Color(0xFFF8F1FC),
             boxShadow: widget.message.kind == 'diary' ? careSoftShadow : null,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-                color: const {'prescription', 'medication'}
-                        .contains(widget.message.kind)
+                color: (assessment ||
+                        const {'prescription', 'medication'}
+                            .contains(widget.message.kind))
                     ? const Color(0xFFDCCBE4)
                     : const Color(0xFFEDE4F7),
-                width: const {'prescription', 'medication'}
-                        .contains(widget.message.kind)
+                width: (assessment ||
+                        const {'prescription', 'medication'}
+                            .contains(widget.message.kind))
                     ? 1.5
                     : 1)),
         child: InkWell(
@@ -1054,4 +1137,69 @@ class _ChatSharedRecordCardState extends ConsumerState<ChatSharedRecordCard> {
                   ],
                 ])));
   }
+
+  Widget _therapyRecordCard() => Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xfff0e8f7)),
+        ),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _tile(Icons.assignment_turned_in_outlined, _purple, size: 45),
+          const SizedBox(width: 14),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(
+                      child: Text(
+                          _submission?.title ??
+                              _text(_meta, 'title', widget.message.text),
+                          style: const TextStyle(
+                              color: Color(0xff202a38),
+                              fontSize: 15,
+                              height: 1.35,
+                              fontWeight: FontWeight.w800))),
+                  const SizedBox(width: 8),
+                  Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                          color: const Color(0xfff3e7fc),
+                          borderRadius: BorderRadius.circular(8)),
+                      child: const Text('Dibagikan',
+                          style: TextStyle(
+                              color: Color(0xff963bd0),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700))),
+                ]),
+                const Divider(height: 29, color: Color(0xfff0f2f4)),
+                Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Expanded(
+                      child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                              style: TextButton.styleFrom(
+                                  foregroundColor: const Color(0xff963bd0),
+                                  backgroundColor: const Color(0xfff3e7fc),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 13, vertical: 10),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12))),
+                              onPressed: widget.onOpenRecord,
+                              icon: const Icon(CupertinoIcons.square_pencil,
+                                  size: 17),
+                              label: const Text('Lihat riwayat',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13))))),
+                  const SizedBox(width: 8),
+                  Text(formatWibBubbleTime(widget.message.timestamp),
+                      style: const TextStyle(color: _muted, fontSize: 11)),
+                ]),
+              ])),
+        ]),
+      );
 }

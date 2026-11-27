@@ -26,6 +26,7 @@ type Goal struct {
 	Details               *GoalDetails `json:"details,omitempty"`
 	DoneToday             bool         `json:"done_today"`
 	TodayValue            int          `json:"today_value"`
+	TodaySessions         int          `json:"today_sessions"`
 	TodayCompletedStepIDs []string     `json:"today_completed_step_ids"`
 	StreakDays            int          `json:"streak_days"`
 	CompletedWeekdays     []int        `json:"completed_weekdays"`
@@ -45,6 +46,7 @@ type HabitLog struct {
 	Done             bool      `json:"done"`
 	CreatedAt        time.Time `json:"created_at"`
 	Value            int       `json:"value"`
+	Sessions         int       `json:"sessions"`
 	CompletedStepIDs []string  `json:"completed_step_ids"`
 }
 

@@ -485,6 +485,8 @@ class GoalItem {
     this.details,
     this.value = 0,
     this.completedStepIds = const [],
+    this.sessionCounts = const {},
+    this.progressOn,
   });
 
   final String id;
@@ -498,6 +500,8 @@ class GoalItem {
   final GoalDetails? details;
   final int value;
   final List<String> completedStepIds;
+  final Map<String, int> sessionCounts;
+  final String? progressOn;
 
   GoalItem copyWith({
     String? id,
@@ -510,6 +514,8 @@ class GoalItem {
     GoalDetails? details,
     int? value,
     List<String>? completedStepIds,
+    Map<String, int>? sessionCounts,
+    String? progressOn,
   }) {
     return GoalItem(
       id: id ?? this.id,
@@ -522,6 +528,8 @@ class GoalItem {
       details: details ?? this.details,
       value: value ?? this.value,
       completedStepIds: completedStepIds ?? this.completedStepIds,
+      sessionCounts: sessionCounts ?? this.sessionCounts,
+      progressOn: progressOn ?? this.progressOn,
     );
   }
 }

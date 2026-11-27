@@ -181,6 +181,12 @@ Revisi referensi 2026-11-11: Home pasien menjalankan5langkah: mood → obat → 
 
 ### 4.9 Goals & Habits
 
+Target Frekuensi dapat memakai metode Ya / Tidak, Dengan Nilai, atau Sub-tugas.
+Kartu menempatkan Ya dan Undo di bawah progres. Ya menambah satu sesi mingguan
+dan mengosongkan progres yang sedang diisi. Undo mengurangi satu sesi terakhir
+pada minggu WIB yang dipilih dan mempertahankan progres yang sedang diisi.
+Pencapaian mingguan ditampilkan dalam satuan sesi.
+
 | ID | Feature | Priority | Status |
 |---|---|---|---|
 | G-01 | Goals screen | P0 | ✅ Done |

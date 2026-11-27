@@ -21,14 +21,11 @@ Map<String, List<GoalHistoryEntry>> groupGoalHistory(
   }
   for (final goal in goals) {
     final details = goal.details;
-    // Seven occurrences require every day, even when stored as a flexible
-    // weekly goal. Smaller weekly targets have no fixed missed day to infer.
+    // Flexible session quotas can be met on any day, including multiple sessions.
     final legacyDaily = details == null && goal.targetPerWeek == 7;
     if (!goal.isActive ||
         (details == null && !legacyDaily) ||
-        (details?.recurrence == 'weekly' &&
-            details?.weeklyTarget != null &&
-            details!.weeklyTarget != 7)) {
+        (details?.recurrence == 'weekly' && details?.weeklyTarget != null)) {
       continue;
     }
     final anchor = details == null

@@ -151,6 +151,42 @@ void main() {
     });
   }
 
+  testWidgets(
+      'saved DASS detail button filters answers and hides on account change',
+      (tester) async {
+    final container = await _show(tester,
+        kind: 'assessment',
+        metadata: {
+          'module_id': 'dass21',
+          'submission_id': 'saved',
+        },
+        respond: (_) async => _json({
+              'submission': {
+                'id': 'saved',
+                'module_id': 'dass21',
+                'answers': _answers('dass21'),
+              }
+            }));
+    await tester.ensureVisible(find.text('Lihat Rincian Jawaban (21 Item)'));
+    await tester.tap(find.text('Lihat Rincian Jawaban (21 Item)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Rincian Jawaban DASS-21'), findsOneWidget);
+    expect(find.text('Semua (21)'), findsOneWidget);
+    await tester.tap(find.text('Depresi (7)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Saya tidak dapat merasakan perasaan positif sama sekali'),
+        findsOneWidget);
+    container.read(authStateProvider.notifier).setSession(const AuthSession(
+        role: UserRole.patient,
+        identifier: 'new-owner',
+        displayName: 'Owner',
+        accessToken: 'other'));
+    await tester.pumpAndSettle();
+    expect(find.text('Saya tidak dapat merasakan perasaan positif sama sekali'),
+        findsNothing);
+    expect(find.text('Detail asesmen sudah tidak tersedia.'), findsOneWidget);
+  });
+
   testWidgets('invalid score CF and missing CF never become zero',
       (tester) async {
     await _show(tester, kind: 'screening', metadata: {
@@ -215,7 +251,7 @@ void main() {
         expect(
             find.textContaining(module == 'who5' ? '0.55' : '0.90',
                 findRichText: true),
-            findsOneWidget);
+            module == 'who5' ? findsOneWidget : findsNothing);
         expect(find.text('CF belum tersedia'), findsNothing);
         if (module == 'who5') expect(find.text('21 / 25'), findsOneWidget);
         if (module == 'dass21')
@@ -240,7 +276,8 @@ void main() {
               'anxiety': 28,
               'stress': 28
             });
-        expect(find.text('CF belum tersedia'), findsOneWidget);
+        expect(find.text('CF belum tersedia'),
+            module == 'who5' ? findsOneWidget : findsNothing);
         expect(find.textContaining('0.55', findRichText: true), findsNothing);
         expect(find.textContaining('0.40', findRichText: true), findsNothing);
       });
@@ -265,8 +302,8 @@ void main() {
       });
       expect(requests, 1);
       expect(find.text('Hasil Skrining Klinis'), findsOneWidget);
-      expect(
-          find.textContaining('Dukungan aturan triage (CF)'), findsOneWidget);
+      expect(find.textContaining('Dukungan aturan triage (CF)'),
+          module == 'who5' ? findsOneWidget : findsNothing);
       if (module == 'who5') {
         expect(find.text('10 / 25'), findsOneWidget);
         expect(find.text('Rendah'), findsOneWidget);
@@ -688,7 +725,7 @@ void main() {
                                           padding:
                                               const EdgeInsets.only(top: 14),
                                           child: SizedBox(
-                                              width: 390 * .70,
+                                              width: 390 * .90,
                                               child: ChatSharedRecordCard(
                                                   message: ChatMessage(
                                                       id: 'cf-$i',
@@ -707,7 +744,7 @@ void main() {
       expect(find.text('21 / 21'), findsOneWidget);
       expect(find.text('21 / 25'), findsOneWidget);
       expect(find.text('42 / 42'), findsNWidgets(3));
-      expect(find.textContaining('0.90', findRichText: true), findsNWidgets(2));
+      expect(find.textContaining('0.90', findRichText: true), findsOneWidget);
       expect(find.textContaining('0.85', findRichText: true), findsOneWidget);
       expect(find.textContaining('0.55', findRichText: true), findsOneWidget);
       expect(find.text('CF belum tersedia'), findsNothing);

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -27,23 +28,23 @@ func cancellationHasPenalty(status string, now, start time.Time) bool {
 }
 
 // CancelCareSession commits the cancellation and its financial outcome together.
-func (s *Store) CancelCareSession(ctx context.Context, sessionID, role, actorID, reason string) (CareSession, CareRefund, bool, error) {
+func (s *Store) CancelCareSession(ctx context.Context, sessionID, role, actorID, reason string) (CareSession, CareRefund, *ChatMessage, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return CareSession{}, CareRefund{}, false, err
+		return CareSession{}, CareRefund{}, nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var current, patient, professional string
+	var current, patient, professional, method string
 	var bookingID, packageID sql.NullString
 	var start time.Time
-	if err := tx.QueryRowContext(ctx, `SELECT status, patient_id, professional_id, scheduled_at, booking_id, package_id
-		FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&current, &patient, &professional, &start, &bookingID, &packageID); err != nil {
-		return CareSession{}, CareRefund{}, false, err
+	if err := tx.QueryRowContext(ctx, `SELECT status, patient_id, professional_id, scheduled_at, booking_id, package_id, session_type
+		FROM care_sessions WHERE id=$1 FOR UPDATE`, sessionID).Scan(&current, &patient, &professional, &start, &bookingID, &packageID, &method); err != nil {
+		return CareSession{}, CareRefund{}, nil, err
 	}
 	isPatient := role == "patient" && actorID == patient
 	isProfessional := role == "professional" && actorID == professional
 	if !isPatient && !isProfessional {
-		return CareSession{}, CareRefund{}, false, errors.New("anda tidak berhak atas sesi ini")
+		return CareSession{}, CareRefund{}, nil, errors.New("anda tidak berhak atas sesi ini")
 	}
 	status := "cancelled_by_" + role
 	if current == status {
@@ -53,39 +54,71 @@ func (s *Store) CancelCareSession(ctx context.Context, sessionID, role, actorID,
 			ORDER BY (idempotency_key=$3) DESC,created_at,id LIMIT 1`, sessionID,
 			automaticRefundPrefix+sessionID+":%", forfeitedCreditPrefix+sessionID, packageID))
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return CareSession{}, CareRefund{}, false, err
+			return CareSession{}, CareRefund{}, nil, err
 		}
 		if err := tx.Commit(); err != nil {
-			return CareSession{}, CareRefund{}, false, err
+			return CareSession{}, CareRefund{}, nil, err
 		}
 		cs, err := s.GetCareSession(ctx, sessionID)
-		return cs, refund, false, err
+		return cs, refund, nil, err
 	}
 	if current != "scheduled" {
-		return CareSession{}, CareRefund{}, false, ErrCareSessionTerminal
+		return CareSession{}, CareRefund{}, nil, ErrCareSessionTerminal
 	}
 	now := clock.Now()
 	if !now.Before(start) {
-		return CareSession{}, CareRefund{}, false, ErrCareCancellationStarted
+		return CareSession{}, CareRefund{}, nil, ErrCareCancellationStarted
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE care_sessions SET status=$2,cancel_reason=$3,cancelled_by=$4,updated_at=$5
 		WHERE id=$1`, sessionID, status, strings.TrimSpace(reason), actorID, now); err != nil {
-		return CareSession{}, CareRefund{}, false, err
+		return CareSession{}, CareRefund{}, nil, err
 	}
+	penalty := cancellationHasPenalty(status, now, start)
 	refund, err := recordCancellationOutcome(ctx, tx, sessionID, patient, professional, actorID,
-		packageID, bookingID, cancellationHasPenalty(status, now, start), now)
+		packageID, bookingID, penalty, now)
 	if err != nil {
-		return CareSession{}, CareRefund{}, false, err
+		return CareSession{}, CareRefund{}, nil, err
 	}
 	if err := deactivateCancelledOneTimeLink(ctx, tx, sessionID); err != nil {
-		return CareSession{}, CareRefund{}, false, err
+		return CareSession{}, CareRefund{}, nil, err
+	}
+	outcome := "none"
+	switch {
+	case penalty:
+		outcome = "penalty"
+	case refund.Kind != "":
+		outcome = refund.Kind
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"session_id": sessionID, "actor_role": role, "package": packageID.Valid,
+		"session_type": method, "scheduled_at": start, "reason": strings.TrimSpace(reason),
+		"outcome": outcome, "refund_amount": refund.Amount,
+	})
+	if err != nil {
+		return CareSession{}, CareRefund{}, nil, err
+	}
+	message := &ChatMessage{
+		ID:        ClinicalRetryID("session_cancellation", actorID, sessionID),
+		PatientID: patient, ProfessionalID: professional, SenderID: actorID,
+		Text: "Sesi Dibatalkan oleh Profesional", Kind: "session_cancellation", Metadata: metadata,
+	}
+	if isPatient {
+		message.Text = "Sesi Dibatalkan oleh Pasien"
+	}
+	err = tx.QueryRowContext(ctx, `INSERT INTO chat_messages
+		(id, patient_id, professional_id, sender_id, sender_name, text, kind, attachment_meta, created_at)
+		VALUES ($1,$2,$3,$4,(SELECT display_name FROM users WHERE id=$4),$5,$6,$7::jsonb,$8)
+		RETURNING sender_name, created_at`, message.ID, patient, professional, actorID,
+		message.Text, message.Kind, string(metadata), now).Scan(&message.SenderName, &message.CreatedAt)
+	if err != nil {
+		return CareSession{}, CareRefund{}, nil, err
 	}
 	if err := tx.Commit(); err != nil {
-		return CareSession{}, CareRefund{}, false, err
+		return CareSession{}, CareRefund{}, nil, err
 	}
 	_ = s.AddAuditLog(ctx, actorID, patient, "care_session."+status, "care_session", sessionID, nil)
 	cs, err := s.GetCareSession(ctx, sessionID)
-	return cs, refund, true, err
+	return cs, refund, message, err
 }
 
 func recordCancellationOutcome(ctx context.Context, tx *sql.Tx, sessionID, patient, professional, actorID string,

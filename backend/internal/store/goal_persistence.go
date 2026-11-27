@@ -93,7 +93,8 @@ func summarizeGoal(g *Goal, logs []HabitLog, on, today time.Time) {
 			found = true
 			g.DoneToday = done
 			g.TodayValue = goalPublicValue(g.Details, l)
-			g.TodayCompletedStepIDs = append([]string{}, l.CompletedStepIDs...)
+			g.TodaySessions = goalLogSessions(g.Details, l)
+			g.TodayCompletedStepIDs = goalPublicSteps(l.CompletedStepIDs)
 		}
 	}
 	sort.Ints(g.CompletedWeekdays)
@@ -357,6 +358,17 @@ func (s *Store) LogHabit(ctx context.Context, patientID, goalID, loggedOn string
 	if !g.IsActive {
 		return HabitLog{}, errors.New("habit nonaktif tidak dapat dicatat")
 	}
+	patch := HabitProgressPatch{}
+	if len(progress) > 0 {
+		patch = progress[0]
+	}
+	replay, err := readHabitSessionReceipt(ctx, tx, g, loggedOn, patch)
+	if err != nil {
+		return HabitLog{}, err
+	}
+	if replay != nil {
+		return *replay, tx.Commit()
+	}
 	if err := validateHabitDate(g.Details, on, now); err != nil {
 		return HabitLog{}, err
 	}
@@ -367,11 +379,15 @@ func (s *Store) LogHabit(ctx context.Context, patientID, goalID, loggedOn string
 	if g.Details != nil && !goalDue(g.Details, on) && current.ID == "" {
 		return HabitLog{}, errors.New("di luar jadwal hanya dapat mengoreksi progres yang sudah dicatat pada tanggal ini")
 	}
-	patch := HabitProgressPatch{}
-	if len(progress) > 0 {
-		patch = progress[0]
+	if current.LoggedOn == "" {
+		current.LoggedOn = loggedOn
 	}
-	current, err = applyHabitProgress(g.Details, current, done, patch)
+	if patch.SessionAction != "" {
+		current, err = applyGoalSessionAction(ctx, tx, g, on, current, patch)
+		loggedOn = current.LoggedOn
+	} else {
+		current, err = applyHabitProgress(g.Details, current, done, patch)
+	}
 	if err != nil {
 		return HabitLog{}, err
 	}
@@ -388,10 +404,13 @@ func (s *Store) LogHabit(ctx context.Context, patientID, goalID, loggedOn string
 	if err != nil {
 		return HabitLog{}, err
 	}
+	l = publicHabitLog(g.Details, l)
+	if err := saveHabitSessionReceipt(ctx, tx, g, on.Format("2006-01-02"), patch, l); err != nil {
+		return HabitLog{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return HabitLog{}, err
 	}
-	l.Value = goalPublicValue(g.Details, l)
 	return l, nil
 }
 
@@ -412,10 +431,7 @@ func (s *Store) ListHabitLogs(ctx context.Context, patientID, from, to string) (
 	// NULLIF avoids trying to cast an empty bound before PostgreSQL evaluates OR.
 	rows, err := s.db.QueryContext(ctx, `
  SELECT l.id,l.goal_id,l.patient_id,l.logged_date::text,l.done,l.created_at,
- CASE WHEN g.details->>'method'='yes_no' AND g.details->>'recurrence'='weekly'
-       AND g.details->>'weekly_target' IS NOT NULL
-      THEN CASE WHEN l.value<0 THEN -l.value-1 WHEN l.done THEN 1 ELSE 0 END
-      ELSE GREATEST(l.value,0) END,l.completed_step_ids
+ l.value,l.completed_step_ids,g.details
  FROM habit_logs l JOIN goals g ON g.id=l.goal_id AND g.patient_id=l.patient_id
  WHERE l.patient_id=$1 AND (NULLIF($2,'')::date IS NULL OR l.logged_date>=NULLIF($2,'')::date)
  AND (NULLIF($3,'')::date IS NULL OR l.logged_date<=NULLIF($3,'')::date)
@@ -426,11 +442,22 @@ func (s *Store) ListHabitLogs(ctx context.Context, patientID, from, to string) (
 	defer func() { _ = rows.Close() }()
 	out := []HabitLog{}
 	for rows.Next() {
-		l, err := scanHabitLog(rows)
+		var l HabitLog
+		var steps, raw []byte
+		err := rows.Scan(&l.ID, &l.GoalID, &l.PatientID, &l.LoggedOn, &l.Done, &l.CreatedAt, &l.Value, &steps, &raw)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, l)
+		if err := json.Unmarshal(steps, &l.CompletedStepIDs); err != nil {
+			return nil, err
+		}
+		var details *GoalDetails
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &details); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, publicHabitLog(details, l))
 	}
 	return out, rows.Err()
 }

@@ -558,7 +558,7 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 		return
 	case (isProf && status == "cancelled_by_professional") || (isPatient && status == "cancelled_by_patient"):
 		reason := strings.TrimSpace(req.CancelReason)
-		updated, refund, changed, err := s.store.CancelCareSession(r.Context(), sessionID, claims.Role, claims.Subject, reason)
+		updated, refund, message, err := s.store.CancelCareSession(r.Context(), sessionID, claims.Role, claims.Subject, reason)
 		if err != nil {
 			if errors.Is(err, store.ErrCareSessionTerminal) || errors.Is(err, store.ErrCareCancellationStarted) {
 				writeUserError(w, http.StatusBadRequest, err.Error())
@@ -568,7 +568,12 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 			}
 			return
 		}
-		if changed {
+		if message != nil {
+			recipientID := cs.ProfessionalID
+			if isProf {
+				recipientID = cs.PatientID
+			}
+			s.publishChatMessage(*message, recipientID)
 			s.cancelMeetEventBestEffort(r.Context(), s.calendar, cs.ProfessionalID, cs.GoogleEventID)
 			meta := map[string]string{"session_id": sessionID}
 			if isProf {

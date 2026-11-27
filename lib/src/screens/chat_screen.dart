@@ -28,6 +28,7 @@ import '../platform/platform_providers.dart';
 import 'chat/professional_chat_tools.dart';
 import 'chat/clinical_chat_card.dart';
 import 'chat/chat_shared_record_card.dart';
+import 'chat/session_cancellation_card.dart';
 import 'assessment_screen.dart';
 import 'booking/doctor_profile_screen.dart';
 import 'portal/shared_patient_data_screen.dart';
@@ -1214,6 +1215,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             submissionId: submissionId,
           );
       if (!mounted || !_ownerMatches) return;
+      if (isTherapyRecordSubmission(record)) {
+        await showTherapyRecordDetail(context, record);
+        return;
+      }
       await _showSharedDetail(message,
           detail: TherapySubmissionView(
             moduleId: record.moduleId,
@@ -1241,12 +1246,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       return;
     }
     if (meta['answers'] is Map && meta['module_id'] != null) {
+      final moduleId = meta['module_id'].toString();
+      final answers = Map<String, dynamic>.from(meta['answers'] as Map);
+      final title = meta['title']?.toString() ?? 'Record dibagikan';
+      final summary = meta['summary']?.toString() ?? message.text;
+      if (findTherapyModuleById(moduleId)?.isAssessment != true) {
+        await showTherapySubmissionDetail(
+          context,
+          moduleId: moduleId,
+          title: title,
+          answers: answers,
+          summary: summary,
+          createdAt: parseWibStored(meta['created_at']?.toString()) ??
+              message.timestamp,
+        );
+        return;
+      }
       await _showSharedDetail(message,
           detail: TherapySubmissionView(
-            moduleId: meta['module_id'].toString(),
-            title: meta['title']?.toString() ?? 'Record dibagikan',
-            answers: Map<String, dynamic>.from(meta['answers'] as Map),
-            summary: meta['summary']?.toString() ?? message.text,
+            moduleId: moduleId,
+            title: title,
+            answers: answers,
+            summary: summary,
           ));
       return;
     }
@@ -1294,6 +1315,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           },
         )),
       );
+
+  Widget _guardAssessmentDetail(String id, Widget detail) =>
+      _ownedOverlay(ValueListenableBuilder<int>(
+        valueListenable: _chatRevision,
+        child: detail,
+        builder: (context, _, child) =>
+            mounted && _messages.any((message) => message.id == id)
+                ? child!
+                : const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('Detail asesmen sudah tidak tersedia.')),
+      ));
 
   Future<void> _showSharedDetail(ChatMessage message,
           {Widget? detail, BackendScreeningSession? screening}) =>
@@ -1914,7 +1947,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                           if (showTimestamp)
                             _TimestampLabel(date: msg.timestamp),
                           const SizedBox(height: 6),
-                          if (const [
+                          if (msg.kind == 'session_cancellation')
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: SessionCancellationCard(message: msg),
+                            )
+                          else if (const [
                                 'summary',
                                 'progress',
                                 'goals',
@@ -1941,15 +1979,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                                     : const [
                                                         'medication',
                                                         'prescription',
-                                                        'diary'
+                                                        'diary',
+                                                        'assessment',
+                                                        'screening',
+                                                        'worksheet'
                                                       ].contains(msg.kind)
-                                                        ? .86
+                                                        ? .90
                                                         : .70)),
                                     child: _ChatMessageActions(
                                       onDelete: onDelete,
                                       child: ChatSharedRecordCard(
                                           key: ValueKey(msg.id),
                                           message: msg,
+                                          guardDetail: (detail) =>
+                                              _guardAssessmentDetail(
+                                                  msg.id, detail),
                                           onOpenRecord: msg.kind == 'worksheet'
                                               ? () => _openSharedRecord(msg)
                                               : null,
@@ -2220,8 +2264,12 @@ class _EmptyChat extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 56, color: MalvaColors.seed.withValues(alpha: 0.5)),
+            if (state == ChatState.connected)
+              Image.asset('assets/reference/chat-empty.png',
+                  width: 156, excludeFromSemantics: true)
+            else
+              Icon(icon,
+                  size: 56, color: MalvaColors.seed.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             Text(
               title,

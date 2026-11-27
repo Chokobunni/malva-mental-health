@@ -194,7 +194,7 @@ void main() {
                   home: GoalsScreen(
                       now: () => wibFromParts(2026, 11, 14, 12))))));
       await tester.pumpAndSettle();
-      expect(find.text(frequency ? '2/4 kali' : 'Hari terpilih (3×/minggu)'),
+      expect(find.text(frequency ? '2/4 sesi' : 'Hari terpilih (3×/minggu)'),
           findsOneWidget);
       expect(find.text('2/3 selesai'), findsOneWidget);
       expect(find.byType(Checkbox), findsNWidgets(3));
