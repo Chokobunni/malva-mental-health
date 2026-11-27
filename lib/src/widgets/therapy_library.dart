@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import '../services/malva_api_client.dart';
 import '../theme.dart';
 import 'friendly_error.dart';
 import 'malva_components.dart';
+import 'share_professional_sheet.dart';
 import '../time/wib.dart';
 
 // Skoring baku DASS-21/WHO-5 kini tinggal di `ai/assessment_scoring.dart`
@@ -899,7 +901,6 @@ const breathingModule = TherapyModule(
     'Hembuskan perlahan lewat mulut 6 detik.',
     'Ulangi 5-10 siklus, atau 5 menit sebelum tidur.',
     'Catat jumlah siklus dan ketegangan sebelum/sesudah di bawah.',
-    'Gunakan panduan animasi di Safety Protocol untuk ritme.',
   ],
 );
 
@@ -911,7 +912,7 @@ const breathingWorksheetFields = <TherapyWorksheetField>[
     label: 'Jumlah siklus 4-2-6 yang dilakukan',
     kind: TherapyFieldKind.number,
     minValue: 0,
-    maxValue: 60,
+    hint: 'Rekomendasi: 5–10 siklus per sesi',
   ),
   TherapyWorksheetField(
     id: 'tension',
@@ -1052,6 +1053,118 @@ final List<TherapyModule> allTherapyModules = [
   psychoeducationModule,
 ];
 
+const _therapyModuleAssets = {
+  'abcde': 'cbt_abcde',
+  'thinking_traps': 'cbt_distortion',
+  'behavioral_activation': 'cbt_activation',
+  'grounding': 'dbt_grounding',
+  'tipp': 'dbt_tipp',
+  'breathing': 'breathing',
+  'pmr': 'pmr',
+  'psychoeducation': 'psychoeducation',
+  'who5': 'who5',
+  'dass21': 'dass21',
+};
+
+const _therapyModuleLabels = {
+  'abcde': 'TEKNIK INTI CBT',
+  'thinking_traps': 'MODUL TERAPI KOGNITIF',
+  'behavioral_activation': 'MODUL TERAPI KOGNITIF',
+  'grounding': 'DIALECTICAL BEHAVIOR THERAPY',
+  'tipp': 'DBT & REGULASI SOMATIK',
+  'breathing': 'RELAKSASI & PERNAPASAN',
+  'pmr': 'PROGRESSIVE MUSCLE RELAXATION',
+  'psychoeducation': 'STRUCTURED PSYCHOEDUCATION',
+};
+
+class TherapyModuleIcon extends StatelessWidget {
+  const TherapyModuleIcon({super.key, this.module, this.size = 44});
+  final TherapyModule? module;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final asset = _therapyModuleAssets[module?.id];
+    if (asset != null) {
+      return Image.asset('assets/reference/$asset.png',
+          width: size, height: size);
+    }
+    final color = module?.color ?? MalvaColors.mint;
+    return CircleAvatar(
+      radius: size / 2,
+      backgroundColor: color.withValues(alpha: .12),
+      child: Icon(module?.icon ?? Icons.folder_outlined, color: color),
+    );
+  }
+}
+
+const _therapyPurple = Color(0xff8b2db0);
+const _therapyGradient = LinearGradient(
+  colors: [_therapyPurple, Color(0xff9f39c4)],
+);
+
+Color _therapyPageColor(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+        ? Theme.of(context).colorScheme.surface
+        : const Color(0xfff7f7f9);
+
+AppBar _therapyAppBar(String title,
+        {String? subtitle, List<Widget>? actions}) =>
+    AppBar(
+      centerTitle: true,
+      foregroundColor: Colors.white,
+      backgroundColor: _therapyPurple,
+      flexibleSpace: const DecoratedBox(
+        decoration: BoxDecoration(gradient: _therapyGradient),
+      ),
+      title: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (subtitle != null)
+            Text(subtitle,
+                style: const TextStyle(fontSize: 10, letterSpacing: 1.1)),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+        ],
+      ),
+      actions: actions,
+    );
+
+Widget _therapyPanel(
+  BuildContext context, {
+  required Widget child,
+  EdgeInsetsGeometry padding = const EdgeInsets.all(14),
+}) {
+  final scheme = Theme.of(context).colorScheme;
+  return Material(
+    color: Theme.of(context).brightness == Brightness.dark
+        ? scheme.surfaceContainer
+        : Colors.white,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(18),
+      side: BorderSide(color: scheme.outlineVariant.withValues(alpha: .45)),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: Padding(padding: padding, child: child),
+  );
+}
+
+TextStyle? _therapyBodyStyle(BuildContext context) =>
+    Theme.of(context).textTheme.bodyMedium?.copyWith(
+          height: 1.5,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        );
+
+Widget _therapySectionTitle(String title, IconData icon, Color color) => Row(
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 8),
+        Flexible(
+            child: Text(title,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w800, fontSize: 15))),
+      ],
+    );
+
 /// Cari definisi modul dari id (untuk viewer jawaban tersimpan).
 TherapyModule? findTherapyModuleById(String id) {
   if (id == 'dass21') return dass21Module;
@@ -1106,9 +1219,14 @@ Color worksheetFieldFill(BuildContext context) {
 /// Worksheet bisa diisi, disimpan ke server (Therapy Record), diunduh
 /// (share/export), dan dibagikan ke profesional (butuh paket aktif).
 class TherapyDetailScreen extends ConsumerStatefulWidget {
-  const TherapyDetailScreen({super.key, required this.module});
+  const TherapyDetailScreen({
+    super.key,
+    required this.module,
+    this.submission,
+  });
 
   final TherapyModule module;
+  final BackendTherapySubmission? submission;
 
   @override
   ConsumerState<TherapyDetailScreen> createState() =>
@@ -1129,7 +1247,112 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
   String? _savedPayload;
   AuthSession? _savedOwner;
   int _submissionRevision = 0;
+  BackendTherapySubmission? _editingSubmission;
   String? _error;
+  Timer? _breathingTimer;
+  int _breathingPhase = 0;
+  int _breathingSeconds = 4;
+
+  static const _breathingDurations = [4, 2, 6];
+  static const _breathingLabels = [
+    'Tarik Napas',
+    'Tahan Napas',
+    'Hembuskan Perlahan',
+  ];
+
+  void _toggleBreathing() {
+    setState(() {
+      if (_breathingTimer != null) {
+        _breathingTimer?.cancel();
+        _breathingTimer = null;
+        return;
+      }
+      _breathingPhase = 0;
+      _breathingSeconds = _breathingDurations.first;
+      _breathingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        setState(() {
+          if (--_breathingSeconds > 0) return;
+          _breathingPhase = (_breathingPhase + 1) % _breathingDurations.length;
+          _breathingSeconds = _breathingDurations[_breathingPhase];
+          if (_breathingPhase == 0) {
+            _numberValues['cycles'] = (_numberValues['cycles'] ?? 0) + 1;
+            _saved = false;
+          }
+        });
+      });
+    });
+  }
+
+  int get _filledWorksheetFields {
+    final answers = _answers();
+    if (module.id == groundingModule.id) {
+      return answers.values.whereType<List>().fold(
+            0,
+            (count, points) => count + points.where((p) => p != '').length,
+          );
+    }
+    return answers.values.where((answer) => answer != '' && answer != 0).length;
+  }
+
+  Widget _breathingGuide(BuildContext context) {
+    final color = module.color ?? MalvaColors.mint;
+    final running = _breathingTimer != null;
+    return SoftCard(
+      color: color.withValues(alpha: 0.07),
+      child: Row(
+        children: [
+          AnimatedScale(
+            scale: running ? (_breathingPhase == 2 ? .95 : 1.10) : 1,
+            duration: Duration(
+                seconds: running
+                    ? (_breathingPhase == 1
+                        ? 0
+                        : _breathingDurations[_breathingPhase])
+                    : 0),
+            child: Container(
+              width: 60,
+              height: 60,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: .13),
+                border: Border.all(color: color, width: 1.5),
+              ),
+              child: Text(
+                running ? '$_breathingSeconds' : '4–2–6\ndetik',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: color, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+              child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                  running
+                      ? _breathingLabels[_breathingPhase]
+                      : 'Pemandu Ritme 4–2–6',
+                  style: const TextStyle(fontWeight: FontWeight.w800)),
+              Text(
+                  running
+                      ? '$_breathingSeconds detik'
+                      : 'Tekan Mulai untuk panduan hitung mundur',
+                  style: Theme.of(context).textTheme.bodySmall),
+            ],
+          )),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: _toggleBreathing,
+            style: FilledButton.styleFrom(
+                backgroundColor: color, minimumSize: const Size(64, 44)),
+            child: Text(running ? 'Berhenti' : 'Mulai'),
+          ),
+        ],
+      ),
+    );
+  }
 
   TherapyModule get module => widget.module;
 
@@ -1141,10 +1364,13 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
           previous?.identifier == next?.identifier &&
           previous?.role == next?.role) return;
       _submissionRevision++;
+      _breathingTimer?.cancel();
+      _breathingTimer = null;
       setState(() {
         _isSaving = false;
         _saved = false;
         _savedSubmission = null;
+        _editingSubmission = null;
         _savedPayload = null;
         _savedOwner = null;
         _error = null;
@@ -1176,10 +1402,52 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
           break;
       }
     }
+    final submission = widget.submission;
+    if (submission != null && !module.isAssessment) {
+      _editingSubmission = submission;
+      _restoreSubmission(submission);
+    }
+  }
+
+  void _restoreSubmission(BackendTherapySubmission submission) {
+    final answers = submission.answers;
+    for (final field in module.worksheetFields) {
+      final id = field.id;
+      final answer = answers[id];
+      switch (field.kind) {
+        case TherapyFieldKind.text:
+          if (answer is String) _textControllers[id]?.text = answer;
+        case TherapyFieldKind.points:
+          if (answer is List) {
+            for (var i = 0; i < answer.length && i < field.pointCount; i++) {
+              final point = answer[i];
+              if (point is String) _textControllers['$id#$i']?.text = point;
+            }
+          }
+        case TherapyFieldKind.scale:
+          if (answer is int) _scaleValues[id] = answer;
+        case TherapyFieldKind.number:
+          if (answer is int) _numberValues[id] = answer;
+        case TherapyFieldKind.choice:
+          if (answer is String) _choiceValues[id] = answer;
+        case TherapyFieldKind.choiceMulti:
+          if (answer is List) {
+            _choiceMultiValues[id] = answer.whereType<String>().toSet();
+          }
+        case TherapyFieldKind.beforeAfter:
+          if (answer is Map) {
+            final before = answer['before'];
+            final after = answer['after'];
+            if (before is int) _beforeValues[id] = before;
+            if (after is int) _afterValues[id] = after;
+          }
+      }
+    }
   }
 
   @override
   void dispose() {
+    _breathingTimer?.cancel();
     for (final controller in _textControllers.values) {
       controller.dispose();
     }
@@ -1187,8 +1455,9 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
   }
 
   Map<String, dynamic> _answers() {
-    final out = <String, dynamic>{};
+    final out = <String, dynamic>{...?_editingSubmission?.answers};
     for (final field in module.worksheetFields) {
+      out.remove(field.id);
       switch (field.kind) {
         case TherapyFieldKind.text:
           out[field.id] = _textControllers[field.id]?.text.trim() ?? '';
@@ -1270,7 +1539,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
   }
 
   void _markDirty() {
-    if (_saved) setState(() => _saved = false);
+    setState(() => _saved = false);
   }
 
   Future<void> _submit({bool share = false}) async {
@@ -1308,15 +1577,23 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
           _savedOwner?.backendUserId == session!.backendUserId &&
           _savedOwner?.identifier == session.identifier &&
           _savedOwner?.role == session.role;
+      final editing = _editingSubmission;
       final submission = reuse
           ? cached
-          : await api.createTherapySubmission(
-              accessToken: token,
-              moduleId: module.id.isEmpty ? module.title : module.id,
-              title: module.title,
-              answers: answers,
-              summary: assessmentSummary(module.id, answers),
-            );
+          : editing != null
+              ? await api.updateTherapySubmission(
+                  accessToken: token,
+                  submissionId: editing.id,
+                  moduleId: editing.moduleId,
+                  answers: answers,
+                )
+              : await api.createTherapySubmission(
+                  accessToken: token,
+                  moduleId: module.id.isEmpty ? module.title : module.id,
+                  title: module.title,
+                  answers: answers,
+                  summary: assessmentSummary(module.id, answers),
+                );
       if (!_isCurrentSubmissionAccount(session!, revision)) return;
       if (submission.id.isEmpty) throw StateError('ID hasil belum tersedia.');
       // Cache immediately: cancelling or retrying the share must not create
@@ -1324,6 +1601,8 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
       _savedSubmission = submission;
       _savedPayload = payload;
       _savedOwner = session;
+      if (editing != null) _editingSubmission = submission;
+      ref.read(_therapyHistoryRevision.notifier).state++;
       String? sharedTo;
       if (share) {
         sharedTo = await _pickProfessional(session, revision);
@@ -1350,6 +1629,11 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
         _isSaving = false;
         _saved = jsonEncode(_answers()) == payload;
       });
+      if (share) ref.read(_therapyHistoryRevision.notifier).state++;
+      if (editing != null && !share) {
+        Navigator.pop(context, true);
+        return;
+      }
       _toast(share
           ? 'Lembar Kerja tersimpan & dibagikan ke profesional.'
           : 'Lembar Kerja tersimpan di Riwayat Terapi.');
@@ -1372,91 +1656,14 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
         current.role == owner.role;
   }
 
-  /// Pilih profesional dengan paket aktif untuk berbagi worksheet.
   Future<String?> _pickProfessional(AuthSession owner, int revision) async {
-    final session = ref.read(currentSessionProvider);
-    final token = session?.accessToken;
+    final token = ref.read(currentSessionProvider)?.accessToken;
     if (token == null || token.isEmpty) return null;
-    List<BackendPatientProfessionalLink> links;
-    try {
-      links = await ref
-          .read(apiClientProvider)
-          .listPatientProfessionalLinks(accessToken: token);
-    } on Object {
-      return null;
-    }
-    if (!_isCurrentSubmissionAccount(owner, revision)) return null;
-    final active = links
-        .where((link) =>
-            link.status == 'active' &&
-            (link.professionalDisplayName.trim().isNotEmpty))
-        .toList(growable: false);
-    if (active.isEmpty) {
-      _toast('Berbagi lembar kerja butuh paket sesi aktif dengan profesional.');
-      return null;
-    }
-    // Hanya yang paketnya aktif (server menolak sisanya).
-    final eligible = <BackendPatientProfessionalLink>[];
-    final api = ref.read(apiClientProvider);
-    final pkgs = await api.listCarePackages(accessToken: token);
-    final activeProIds = {
-      for (final p in pkgs)
-        if (p.isActive) p.professionalId,
-    };
-    for (final link in active) {
-      if (activeProIds.contains(link.professionalUserId)) eligible.add(link);
-    }
-    if (!_isCurrentSubmissionAccount(owner, revision)) return null;
-    if (eligible.isEmpty) {
-      _toast('Berbagi lembar kerja butuh paket sesi aktif dengan profesional.');
-      return null;
-    }
-    return showModalBottomSheet<String>(
+    return pickShareProfessional(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Bagikan ke profesional',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
-              const SizedBox(height: 4),
-              Text(
-                'Hanya profesional dengan paket sesi aktif.',
-                style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
-              const SizedBox(height: 12),
-              for (final link in eligible)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: SoftCard(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const CircleAvatar(
-                        backgroundColor: Color(0x228E44AD),
-                        child: Icon(Icons.medical_services_rounded,
-                            color: MalvaColors.seed),
-                      ),
-                      title: Text(link.professionalDisplayName,
-                          style: const TextStyle(fontWeight: FontWeight.w800)),
-                      trailing: const Icon(Icons.send_rounded, size: 18),
-                      onTap: () => Navigator.pop(ctx, link.professionalUserId),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+      api: ref.read(apiClientProvider),
+      token: token,
+      isCurrent: () => _isCurrentSubmissionAccount(owner, revision),
     );
   }
 
@@ -1527,57 +1734,78 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
     // bukan tombol yang melempar UnsupportedError saat diklik.
     final canExport = ref.watch(capabilitiesProvider).canExportFiles;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(module.category ?? 'Terapi'),
-        backgroundColor: MalvaColors.seed,
-        foregroundColor: Colors.white,
+      backgroundColor: _therapyPageColor(context),
+      appBar: _therapyAppBar(
+        module.category ?? 'Terapi',
+        subtitle: module.isAssessment ? null : 'MODUL TERAPI',
       ),
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: color.withValues(alpha: 0.14),
-                child: Icon(module.icon ?? Icons.self_improvement_rounded,
-                    color: color),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  module.title,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w900, fontSize: 17),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                TherapyModuleIcon(module: module, size: 50),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (!module.isAssessment)
+                        Text(
+                          _therapyModuleLabels[module.id] ??
+                              module.category ??
+                              '',
+                          style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 10,
+                            letterSpacing: .6,
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      Text(module.title,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w800)),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 14),
-          SoftCard(
+          const SizedBox(height: 16),
+          _therapyPanel(
+            context,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Apa itu?',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
-                const SizedBox(height: 6),
-                Text(module.description,
-                    style: Theme.of(context).textTheme.bodyMedium),
+                _therapySectionTitle('Apa itu?', Icons.info_outline, color),
+                const SizedBox(height: 10),
+                Text(module.description, style: _therapyBodyStyle(context)),
               ],
             ),
           ),
           if (!module.isAssessment && module.steps.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            SoftCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 16),
+            _therapyPanel(
+              context,
+              padding: EdgeInsets.zero,
+              child: ExpansionTile(
+                initiallyExpanded: true,
+                shape: const Border(),
+                collapsedShape: const Border(),
+                title: _therapySectionTitle(
+                  'Panduan Langkah-langkah',
+                  Icons.format_list_numbered,
+                  color,
+                ),
+                childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
                 children: [
-                  const Text('Langkah-langkah',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
-                  const SizedBox(height: 10),
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
                   for (var i = 0; i < module.steps.length; i++)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
@@ -1585,21 +1813,20 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           CircleAvatar(
-                            radius: 11,
-                            backgroundColor: color.withValues(alpha: 0.14),
+                            radius: 10,
+                            backgroundColor: color.withValues(alpha: .12),
                             child: Text(
                               '${i + 1}',
                               style: TextStyle(
                                   color: color,
-                                  fontWeight: FontWeight.w900,
+                                  fontWeight: FontWeight.w800,
                                   fontSize: 11),
                             ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: Text(module.steps[i],
-                                style: Theme.of(context).textTheme.bodyMedium),
-                          ),
+                              child: Text(module.steps[i],
+                                  style: _therapyBodyStyle(context))),
                         ],
                       ),
                     ),
@@ -1607,12 +1834,31 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
               ),
             ),
           ],
+          if (module.id == breathingModule.id) ...[
+            const SizedBox(height: 16),
+            _breathingGuide(context),
+          ],
           if (module.worksheetFields.isNotEmpty) ...[
             const SizedBox(height: 14),
             Row(
               children: [
-                const Expanded(child: SectionLabel('Lembar Kerja')),
-                const Spacer(),
+                Expanded(
+                  child: Row(children: [
+                    Image.asset('assets/reference/worksheet.png',
+                        width: 28, height: 28),
+                    const SizedBox(width: 8),
+                    const Flexible(
+                        child: Text('Lembar Kerja',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w800))),
+                  ]),
+                ),
+                if (!module.isAssessment)
+                  StatusPill(
+                    label:
+                        '$_filledWorksheetFields/${module.id == groundingModule.id ? 15 : module.worksheetFields.length} Terisi',
+                    color: color,
+                  ),
                 if (module.isAssessment)
                   StatusPill(
                     label:
@@ -1639,75 +1885,74 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                   moduleId: module.id, answers: _liveAssessmentAnswers()),
               const SizedBox(height: 10),
             ],
-            SoftCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    module.isAssessment
-                        ? 'Pilih jawaban yang paling sesuai untuk setiap '
-                            'pernyataan. Semua wajib dijawab agar skor valid.'
-                        : 'Isi lembar kerja ini sesuai kondisimu. Hasilnya bisa '
-                            'disimpan ke Riwayat Terapi, diunduh, atau dikirim '
-                            'langsung ke profesional (butuh paket sesi aktif).',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+            const SizedBox(height: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  module.isAssessment
+                      ? 'Pilih jawaban yang paling sesuai untuk setiap '
+                          'pernyataan. Semua wajib dijawab agar skor valid.'
+                      : 'Isi lembar kerja ini sesuai kondisimu. Hasilnya bisa '
+                          'disimpan ke Riwayat Terapi, diunduh, atau dikirim '
+                          'langsung ke profesional.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 12),
+                for (final field in module.worksheetFields) ...[
+                  _WorksheetFieldBlock(
+                    field: field,
+                    moduleColor: color,
+                    // Layar sisi pasien: semua baris poin dapat diisi.
+                    readOnly: false,
+                    textController: _textControllers[field.id],
+                    pointControllers: [
+                      for (var i = 0; i < field.pointCount; i++)
+                        _textControllers['${field.id}#$i'],
+                    ],
+                    scaleValue: _scaleValues[field.id],
+                    numberValue: _numberValues[field.id],
+                    choiceValue: _choiceValues[field.id],
+                    choiceMultiValues:
+                        _choiceMultiValues[field.id] ?? const <String>{},
+                    beforeValue: _beforeValues[field.id],
+                    afterValue: _afterValues[field.id],
+                    onTextChanged: (_) => _markDirty(),
+                    onScaleSelect: (v) => setState(() {
+                      _scaleValues[field.id] = v;
+                      _saved = false;
+                    }),
+                    onNumberChanged: (v) => setState(() {
+                      _numberValues[field.id] = v;
+                      _saved = false;
+                    }),
+                    onChoiceSelect: (v) => setState(() {
+                      _choiceValues[field.id] = v;
+                      _saved = false;
+                    }),
+                    onChoiceMultiToggle: (v) => setState(() {
+                      final set = _choiceMultiValues[field.id] ?? <String>{};
+                      if (set.contains(v)) {
+                        set.remove(v);
+                      } else {
+                        set.add(v);
+                      }
+                      _choiceMultiValues[field.id] = set;
+                      _saved = false;
+                    }),
+                    onBeforeSelect: (v) => setState(() {
+                      _beforeValues[field.id] = v;
+                      _saved = false;
+                    }),
+                    onAfterSelect: (v) => setState(() {
+                      _afterValues[field.id] = v;
+                      _saved = false;
+                    }),
                   ),
                   const SizedBox(height: 12),
-                  for (final field in module.worksheetFields) ...[
-                    _WorksheetFieldBlock(
-                      field: field,
-                      moduleColor: color,
-                      // Layar sisi pasien: semua baris poin dapat diisi.
-                      readOnly: false,
-                      textController: _textControllers[field.id],
-                      pointControllers: [
-                        for (var i = 0; i < field.pointCount; i++)
-                          _textControllers['${field.id}#$i'],
-                      ],
-                      scaleValue: _scaleValues[field.id],
-                      numberValue: _numberValues[field.id],
-                      choiceValue: _choiceValues[field.id],
-                      choiceMultiValues:
-                          _choiceMultiValues[field.id] ?? const <String>{},
-                      beforeValue: _beforeValues[field.id],
-                      afterValue: _afterValues[field.id],
-                      onTextChanged: (_) => _markDirty(),
-                      onScaleSelect: (v) => setState(() {
-                        _scaleValues[field.id] = v;
-                        _saved = false;
-                      }),
-                      onNumberChanged: (v) => setState(() {
-                        _numberValues[field.id] = v;
-                        _saved = false;
-                      }),
-                      onChoiceSelect: (v) => setState(() {
-                        _choiceValues[field.id] = v;
-                        _saved = false;
-                      }),
-                      onChoiceMultiToggle: (v) => setState(() {
-                        final set = _choiceMultiValues[field.id] ?? <String>{};
-                        if (set.contains(v)) {
-                          set.remove(v);
-                        } else {
-                          set.add(v);
-                        }
-                        _choiceMultiValues[field.id] = set;
-                        _saved = false;
-                      }),
-                      onBeforeSelect: (v) => setState(() {
-                        _beforeValues[field.id] = v;
-                        _saved = false;
-                      }),
-                      onAfterSelect: (v) => setState(() {
-                        _afterValues[field.id] = v;
-                        _saved = false;
-                      }),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
                 ],
-              ),
+              ],
             ),
           ],
           if (_error != null) ...[
@@ -1724,8 +1969,7 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                 SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Lembar Kerja tersimpan di Riwayat Terapi (menu More → '
-                    'Riwayat Terapi).',
+                    'Lembar Kerja tersimpan di Riwayat Terapi.',
                     style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
                   ),
                 ),
@@ -1745,7 +1989,9 @@ class _TherapyDetailScreenState extends ConsumerState<TherapyDetailScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.save_rounded),
-              label: const Text('Simpan ke Riwayat Terapi'),
+              label: Text(_editingSubmission == null
+                  ? 'Simpan ke Riwayat Terapi'
+                  : 'Simpan Perubahan'),
             ),
             const SizedBox(height: 8),
             FilledButton.tonalIcon(
@@ -2200,16 +2446,30 @@ class _WorksheetFieldBlock extends StatelessWidget {
   /// tanpa `TextField` — nilai tidak dapat diketik (Q-6).
   final bool readOnly;
 
+  Widget _ratingLabel(String label, int? rating) => Row(
+        children: [
+          Expanded(
+              child: Text(label,
+                  style: const TextStyle(fontWeight: FontWeight.w800))),
+          StatusPill(
+              label: rating?.toString() ?? 'Belum dipilih', color: moduleColor),
+        ],
+      );
+
+  static const _senseIcons = {
+    'see': Icons.visibility_outlined,
+    'hear': Icons.hearing_outlined,
+    'touch': Icons.front_hand_outlined,
+    'smell': Icons.air_rounded,
+    'taste_feel': Icons.local_cafe_outlined,
+  };
+
   @override
   Widget build(BuildContext context) {
-    final fill = worksheetFieldFill(context);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: moduleColor.withValues(alpha: 0.25)),
-      ),
+    final fill = _therapyPageColor(context);
+    final outline = Theme.of(context).colorScheme.outlineVariant;
+    return _therapyPanel(
+      context,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2231,27 +2491,31 @@ class _WorksheetFieldBlock extends StatelessWidget {
                 const SizedBox(width: 8),
               ],
               Expanded(
-                child: Text(field.label,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 13.5)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(field.label,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        )),
+                    if (field.hint.isNotEmpty &&
+                        field.kind != TherapyFieldKind.scale)
+                      Text(field.hint,
+                          style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
               ),
+              if (_senseIcons[field.id] case final icon?)
+                Icon(icon, color: moduleColor, size: 19),
             ],
           ),
-          if (field.hint.isNotEmpty &&
-              field.kind != TherapyFieldKind.scale) ...[
-            const SizedBox(height: 4),
-            Text(
-              field.hint,
-              style: TextStyle(
-                  fontSize: 11.5,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant),
-            ),
-          ],
           const SizedBox(height: 8),
           if (field.id == 'trap_type')
             Material(
               color: Colors.transparent,
               child: ExpansionTile(
+                initiallyExpanded: true,
                 tilePadding: EdgeInsets.zero,
                 title: const Text('Arti 7 jebakan pikiran',
                     style: TextStyle(fontSize: 13)),
@@ -2277,7 +2541,7 @@ class _WorksheetFieldBlock extends StatelessWidget {
             TherapyFieldKind.number => _NumberStepper(
                 value: numberValue ?? field.minValue ?? 0,
                 min: field.minValue ?? 0,
-                max: field.maxValue ?? 60,
+                max: field.maxValue ?? 999999,
                 color: moduleColor,
                 onChanged: onNumberChanged,
               ),
@@ -2402,9 +2666,7 @@ class _WorksheetFieldBlock extends StatelessWidget {
             TherapyFieldKind.beforeAfter => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Sebelum latihan',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                  _ratingLabel('Sebelum latihan', beforeValue),
                   const SizedBox(height: 6),
                   _MiniScale(
                     min: field.minValue ?? 0,
@@ -2414,9 +2676,8 @@ class _WorksheetFieldBlock extends StatelessWidget {
                     onSelect: onBeforeSelect,
                   ),
                   const SizedBox(height: 10),
-                  const Text('Sesudah latihan',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                  const Divider(height: 16),
+                  _ratingLabel('Sesudah latihan', afterValue),
                   const SizedBox(height: 6),
                   _MiniScale(
                     min: field.minValue ?? 0,
@@ -2440,13 +2701,11 @@ class _WorksheetFieldBlock extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide:
-                        BorderSide(color: moduleColor.withValues(alpha: 0.25)),
+                    borderSide: BorderSide(color: outline),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide:
-                        BorderSide(color: moduleColor.withValues(alpha: 0.25)),
+                    borderSide: BorderSide(color: outline),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -2563,8 +2822,10 @@ class _NumberStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 4,
+      runSpacing: 4,
       children: [
         _StepButton(
           icon: Icons.remove_rounded,
@@ -2592,6 +2853,15 @@ class _NumberStepper extends StatelessWidget {
           color: color,
           onTap: value < max ? () => onChanged?.call(value + 1) : null,
         ),
+        for (final preset in [5, 10])
+          OutlinedButton(
+            onPressed: onChanged == null ? null : () => onChanged?.call(preset),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(38, 38),
+              padding: const EdgeInsets.symmetric(horizontal: 7),
+            ),
+            child: Text('$preset×'),
+          ),
       ],
     );
   }
@@ -2764,6 +3034,41 @@ class _MiniScale extends StatelessWidget {
 /// Assessment record (DASS-21 / WHO-5) TIDAK ditampilkan di sini: record
 /// punya halamannya sendiri (Assessment → Assessment Record) agar worksheet
 /// terapi tidak tercampur dengan hasil skrining.
+final _therapyHistoryRevision = StateProvider<int>((ref) => 0);
+
+Future<void> _editTherapyRecord(
+  BuildContext context,
+  BackendTherapySubmission item,
+) async {
+  final module = findTherapyModuleById(item.moduleId);
+  if (module == null || module.isAssessment) return;
+  await Navigator.push<bool>(
+    context,
+    MaterialPageRoute(
+        builder: (_) => TherapyDetailScreen(module: module, submission: item)),
+  );
+}
+
+Future<bool?> _confirmTherapyDeletion(
+  BuildContext context,
+  BackendTherapySubmission submission,
+) =>
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus lembar kerja?'),
+        content: Text('"${submission.title}" akan dihapus permanen.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Hapus')),
+        ],
+      ),
+    );
+
 class TherapySubmissionsScreen extends ConsumerStatefulWidget {
   const TherapySubmissionsScreen({super.key});
 
@@ -2829,75 +3134,14 @@ class _TherapySubmissionsScreenState
     final session = ref.read(currentSessionProvider);
     final token = session?.accessToken;
     if (token == null || token.isEmpty) return;
-    List<BackendPatientProfessionalLink> links;
     try {
-      links = await ref
-          .read(apiClientProvider)
-          .listPatientProfessionalLinks(accessToken: token);
-    } on Object {
-      return;
-    }
-    final active = links.where((l) => l.status == 'active').toList();
-    if (!mounted || !_isOwner || active.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Belum ada profesional aktif yang terhubung.')),
+      final chosen = await pickShareProfessional(
+        context: context,
+        api: ref.read(apiClientProvider),
+        token: token,
+        isCurrent: () => mounted && _isOwner,
       );
-      return;
-    }
-    final api = ref.read(apiClientProvider);
-    final pkgs = await api.listCarePackages(accessToken: token);
-    final activeProIds = {
-      for (final p in pkgs)
-        if (p.isActive) p.professionalId,
-    };
-    final eligible = active
-        .where((l) => activeProIds.contains(l.professionalUserId))
-        .toList();
-    if (!mounted || !_isOwner) return;
-    if (eligible.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text(
-                'Berbagi lembar kerja butuh paket sesi aktif dengan profesional.')),
-      );
-      return;
-    }
-    final chosen = await showModalBottomSheet<String>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Bagikan lembar kerja ke',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
-              const SizedBox(height: 4),
-              Text('Hanya profesional dengan paket sesi aktif.',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              const SizedBox(height: 12),
-              for (final link in eligible)
-                ListTile(
-                  leading: const Icon(Icons.medical_services_rounded,
-                      color: MalvaColors.seed),
-                  title: Text(link.professionalDisplayName,
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                  onTap: () => Navigator.pop(ctx, link.professionalUserId),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (chosen == null || !_isOwner) return;
-    try {
+      if (chosen == null || !mounted || !_isOwner) return;
       await ref.read(apiClientProvider).shareTherapySubmission(
             accessToken: token,
             submissionId: submission.id,
@@ -2910,7 +3154,8 @@ class _TherapySubmissionsScreenState
           backgroundColor: MalvaColors.mint,
         ),
       );
-      await _load();
+      if (mounted && _isOwner)
+        ref.read(_therapyHistoryRevision.notifier).state++;
     } on Object catch (e) {
       if (!mounted || !_isOwner) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2924,26 +3169,13 @@ class _TherapySubmissionsScreenState
   Future<void> _delete(BackendTherapySubmission submission) async {
     final token = ref.read(currentSessionProvider)?.accessToken;
     if (token == null || token.isEmpty) return;
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Hapus lembar kerja?'),
-        content: Text('"${submission.title}" akan dihapus permanen.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Batal')),
-          FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Hapus')),
-        ],
-      ),
-    );
+    final confirm = await _confirmTherapyDeletion(context, submission);
     if (confirm != true || !_isOwner) return;
     try {
       await ref.read(apiClientProvider).deleteTherapySubmission(
           accessToken: token, submissionId: submission.id);
-      await _load();
+      if (mounted && _isOwner)
+        ref.read(_therapyHistoryRevision.notifier).state++;
     } on Object catch (e) {
       if (!mounted || !_isOwner) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2956,6 +3188,7 @@ class _TherapySubmissionsScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(_therapyHistoryRevision, (_, __) => _load());
     if (ref.watch(currentSessionProvider) != _owner) {
       return const Scaffold(
           body: Center(child: Text('Sesi akun telah berubah.')));
@@ -3053,6 +3286,17 @@ class _TherapySubmissionsScreenState
                                     runSpacing: 8,
                                     children: [
                                       OutlinedButton.icon(
+                                        onPressed: findTherapyModuleById(
+                                                    item.moduleId) ==
+                                                null
+                                            ? null
+                                            : () => _editTherapyRecord(
+                                                context, item),
+                                        icon: const Icon(Icons.edit_outlined,
+                                            size: 16),
+                                        label: const Text('Edit'),
+                                      ),
+                                      OutlinedButton.icon(
                                         onPressed: () => _share(item),
                                         icon: const Icon(Icons.send_rounded,
                                             size: 16),
@@ -3082,8 +3326,8 @@ class _TherapySubmissionsScreenState
 ///
 /// Memuat datanya sendiri (pola sama dengan `AssessmentHistoryPreview`):
 /// sengaja TIDAK menampilkan spinner besar agar halaman katalog tidak
-/// tertahan menunggu endpoint ini. Menampilkan maksimal 3 kartu read-only
-/// (tanpa tombol Bagikan/Hapus). Tap kartu membuka detail record yang dipilih.
+/// tertahan menunggu endpoint ini. Menampilkan maksimal tiga hasil.
+/// Ketuk kartu untuk membuka detail atau gunakan tindakan Edit dan Hapus.
 class TherapyRecordPreview extends ConsumerStatefulWidget {
   const TherapyRecordPreview({super.key});
 
@@ -3100,6 +3344,33 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
 
   /// Batas kartu yang ditampilkan di halaman induk.
   static const int _maxPreview = 3;
+  final _deleting = <String>{};
+
+  Future<void> _delete(BackendTherapySubmission item) async {
+    final owner = ref.read(currentSessionProvider);
+    final token = owner?.accessToken;
+    if (token == null || token.isEmpty || !_deleting.add(item.id)) return;
+    try {
+      if (await _confirmTherapyDeletion(context, item) != true ||
+          !mounted ||
+          ref.read(currentSessionProvider) != owner) return;
+      await ref.read(apiClientProvider).deleteTherapySubmission(
+            accessToken: token,
+            submissionId: item.id,
+          );
+      if (mounted && ref.read(currentSessionProvider) == owner) {
+        ref.read(_therapyHistoryRevision.notifier).state++;
+      }
+    } on Object catch (error) {
+      if (mounted && ref.read(currentSessionProvider) == owner) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyErrorMessage(error))),
+        );
+      }
+    } finally {
+      _deleting.remove(item.id);
+    }
+  }
 
   @override
   void initState() {
@@ -3164,6 +3435,7 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
       });
       _load();
     });
+    ref.listen(_therapyHistoryRevision, (_, __) => _load());
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     // Placeholder ringkas: baris teks + indikator kecil, bukan spinner besar.
     if (_isLoading) {
@@ -3229,6 +3501,10 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
           _TherapyRecordPreviewCard(
             item: item,
             onTap: () => showTherapyRecordDetail(context, item),
+            onEdit: findTherapyModuleById(item.moduleId) == null
+                ? null
+                : () => _editTherapyRecord(context, item),
+            onDelete: () => _delete(item),
           ),
           const SizedBox(height: 10),
         ],
@@ -3237,137 +3513,210 @@ class _TherapyRecordPreviewState extends ConsumerState<TherapyRecordPreview> {
   }
 }
 
-/// Kartu read-only satu therapy record di halaman pratinjau.
-///
-/// Tanpa tombol Bagikan/Hapus — aksi itu hanya ada di halaman Therapy Record
-/// lengkap yang dibuka lewat tombol "Lihat semua".
 class _TherapyRecordPreviewCard extends StatelessWidget {
-  const _TherapyRecordPreviewCard({required this.item, this.onTap});
+  const _TherapyRecordPreviewCard({
+    required this.item,
+    this.onTap,
+    this.onEdit,
+    this.onDelete,
+  });
 
   final BackendTherapySubmission item;
   final VoidCallback? onTap;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
     final created = item.createdDateTime;
-    return SoftCard(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return _therapyPanel(
+      context,
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
             children: [
+              TherapyModuleIcon(
+                  module: findTherapyModuleById(item.moduleId), size: 42),
+              const SizedBox(width: 10),
               Expanded(
-                child: Text(item.title,
-                    style: const TextStyle(fontWeight: FontWeight.w900)),
-              ),
-              StatusPill(
-                label: item.isShared ? 'Dibagikan' : 'Tersimpan',
-                color: item.isShared ? MalvaColors.mint : MalvaColors.amber,
-                icon: item.isShared ? Icons.send_rounded : Icons.folder_rounded,
-              ),
+                  child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item.title,
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 5),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (created != null)
+                        Text(formatTherapyRecordDate(created),
+                            style: Theme.of(context).textTheme.bodySmall),
+                      StatusPill(
+                        label: item.isShared ? 'Dibagikan' : 'Tersimpan',
+                        color: item.isShared
+                            ? MalvaColors.mint
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
+                ],
+              )),
+              IconButton(
+                  tooltip: 'Edit',
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined)),
+              IconButton(
+                  tooltip: 'Hapus',
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline_rounded)),
             ],
           ),
-          if (item.summary.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(item.summary,
-                style: const TextStyle(
-                    fontSize: 12.5, fontStyle: FontStyle.italic)),
-          ],
-          if (created != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              formatTherapyRecordDate(created),
-              style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
 }
 
 /// Halaman katalog terapi (dipakai dari Home > Psychological Therapy).
-class TherapyCatalogScreen extends StatelessWidget {
+class TherapyCatalogScreen extends StatefulWidget {
   const TherapyCatalogScreen({super.key});
+
+  @override
+  State<TherapyCatalogScreen> createState() => _TherapyCatalogScreenState();
+}
+
+class _TherapyCatalogScreenState extends State<TherapyCatalogScreen> {
+  String? _category;
+
+  static const _descriptions = {
+    'abcde': 'Ubah pola pikir negatif menjadi lebih realistis',
+    'thinking_traps': 'Deteksi jebakan pikiran otomatis sehari-hari',
+    'behavioral_activation': 'Susun langkah kecil untuk bangkitkan energi',
+    'grounding': 'Teknik panca indera untuk tenangkan pikiran',
+    'tipp': 'Redakan lonjakan emosi lewat respons tubuh',
+    'breathing': 'Atur ritme napas untuk menenangkan diri',
+    'pmr': 'Lepaskan ketegangan tubuh secara bertahap',
+    'psychoeducation': 'Pahami kondisi psikologis dengan panduan terstruktur',
+  };
 
   @override
   Widget build(BuildContext context) {
     final categories =
-        allTherapyModules.map((m) => m.category ?? 'Lainnya').toSet().toList();
+        allTherapyModules.map((m) => m.category!).toSet().toList();
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Terapi Psikologis'),
-        backgroundColor: MalvaColors.seed,
-        foregroundColor: Colors.white,
-      ),
+      backgroundColor: _therapyPageColor(context),
+      appBar: _therapyAppBar('Terapi Psikologis'),
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          SoftCard(
-            color: Colors.white,
+          _therapyPanel(
+            context,
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.folder_copy_rounded, color: MalvaColors.mint),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    'Isi lembar kerja pada tiap modul, lalu simpan ke '
-                    'Riwayat Terapi — bisa diunduh & dikirim ke profesional '
-                    '(butuh paket sesi aktif).',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const TherapySubmissionsScreen(),
-                    ),
-                  ),
-                  child: const Text('Buka'),
-                ),
+                Image.asset('assets/reference/worksheet.png',
+                    width: 44, height: 44),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Lembar Kerja Pasien',
+                        style: TextStyle(
+                          color: _therapyPurple,
+                          fontWeight: FontWeight.w800,
+                        )),
+                    const SizedBox(height: 4),
+                    Text(
+                        'Isi lembar kerja pada tiap modul dan simpan ke Riwayat Terapi. '
+                        'Hasil dapat diunduh maupun dikirimkan langsung ke profesional.',
+                        style: _therapyBodyStyle(context)),
+                  ],
+                )),
               ],
             ),
           ),
-          const SizedBox(height: 6),
-          for (final category in categories) ...[
-            SectionLabel(category),
+          const SizedBox(height: 18),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final category in <String?>[null, ...categories])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(category ?? 'Semua Modul'),
+                      selected: _category == category,
+                      labelStyle: TextStyle(
+                        color: _category == category
+                            ? Colors.white
+                            : scheme.onSurface,
+                      ),
+                      showCheckmark: false,
+                      backgroundColor: scheme.surface,
+                      selectedColor: _therapyPurple,
+                      shape: const StadiumBorder(),
+                      onSelected: (_) => setState(() => _category = category),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          for (final category in categories
+              .where((c) => _category == null || c == _category)) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                    child: Text(category,
+                        style: const TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w800))),
+                Text(
+                    '${allTherapyModules.where((m) => m.category == category).length} Modul',
+                    style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+            const SizedBox(height: 12),
             for (final module
                 in allTherapyModules.where((m) => m.category == category))
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: ActionTile(
-                  icon: module.icon ?? Icons.self_improvement_rounded,
-                  title: module.title,
-                  color: module.color ?? MalvaColors.seed,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => TherapyDetailScreen(module: module),
-                    ),
+                child: _therapyPanel(
+                  context,
+                  padding: EdgeInsets.zero,
+                  child: ListTile(
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    leading: TherapyModuleIcon(module: module),
+                    title: Text(module.title,
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: Text(_descriptions[module.id] ?? '',
+                        maxLines: 2, overflow: TextOverflow.ellipsis),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => TherapyDetailScreen(module: module),
+                        )),
                   ),
                 ),
               ),
-            const SizedBox(height: 8),
           ],
-          // Therapy Record di bawah semua daftar modul: pasien bisa langsung
-          // melihat worksheet terapi yang sudah tersimpan tanpa harus membuka
-          // halaman penuh. `SectionLabel` di sini child langsung `Column`
-          // (aman — tidak dipasang di dalam Row tanpa Expanded).
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
           SectionLabel(
             'Riwayat Terapi',
             action: TextButton(
               onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const TherapySubmissionsScreen(),
-                ),
-              ),
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const TherapySubmissionsScreen(),
+                  )),
               child: const Text('Lihat semua'),
             ),
           ),

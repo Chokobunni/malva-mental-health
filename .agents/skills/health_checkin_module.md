@@ -1,5 +1,10 @@
 # Check-in, diary, review dan PDF
 
+## Check-in obat dan resep dalam catatan sesi (2026-11-28)
+
+- Aksi Hapus ada di kartu obat pasien. Untuk obat server, perubahan daftar menunggu konfirmasi penghapusan dan riwayat dosis dipertahankan.
+- Dalam Tulis Catatan Sesi, wizard obat mengembalikan item sementara. Simpan catatan menerbitkan resep dan obat dalam transaksi yang sama. Retry dengan kunci intent yang sama mempertahankan resep pertama. Penambahan dua item yang disengaja tetap sah.
+
 ## Diary & Positive Vault (0.1.30)
 
 Mulai 0.1.32, pemilik mengelola izin profesional per diary dari editor atau daftar. Diary baru, termasuk antrean offline, selalu pribadi. Bagikan pada draft baru menyimpan diary terlebih dahulu. Cabut akses tidak mengubah isi draft. Akses profesional pada daftar, detail, media dan timeline diperiksa terhadap entry yang sama.

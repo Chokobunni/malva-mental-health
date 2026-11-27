@@ -29,8 +29,8 @@ import 'chat/professional_chat_tools.dart';
 import 'chat/clinical_chat_card.dart';
 import 'chat/chat_shared_record_card.dart';
 import 'assessment_screen.dart';
-import 'goals_screen.dart';
 import 'booking/doctor_profile_screen.dart';
+import 'portal/shared_patient_data_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({
@@ -765,18 +765,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       return;
     }
     final session = ref.read(currentSessionProvider)!;
-    await Navigator.push<void>(
-        context,
-        MaterialPageRoute(
-            builder: (_) => ProfessionalChatTools(
-                  apiClient: ref.read(apiClientProvider),
-                  session: session,
-                  patientId: widget.otherUserId,
-                  sessionId: _access.sessionId,
-                  sessionEndsAt: _access.sessionEndsAt,
-                  onMessage: _appendClinicalMessage,
-                  openFiles: openFiles,
-                )));
+    final api = ref.read(apiClientProvider);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      constraints: BoxConstraints(
+          maxWidth: 640, maxHeight: MediaQuery.sizeOf(context).height * .94),
+      builder: (_) => ProfessionalChatTools(
+        apiClient: api,
+        session: session,
+        patientId: widget.otherUserId,
+        sessionId: _access.sessionId,
+        sessionEndsAt: _access.sessionEndsAt,
+        onMessage: _appendClinicalMessage,
+        openFiles: openFiles,
+      ),
+    );
     if (mounted) unawaited(_loadAccess());
   }
 
@@ -839,38 +845,50 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       }
       return;
     }
-    if (!_isPatient || message.kind != 'assessment_request') {
+    final assessment = message.kind == 'assessment_request';
+    final therapy = message.kind == 'therapy_request';
+    if (!assessment && !therapy) {
       await _openSharedRecord(message);
       return;
     }
-    if (message.kind == 'assessment_request') {
-      // Assessment requests are actionable while this consultation is active.
-      await _loadAccess();
-      if (!mounted ||
-          !_canSendText ||
-          meta['session_id'] != _access.sessionId) {
-        if (mounted)
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Sesi permintaan asesmen sudah berakhir.')));
-        return;
-      }
-      final module = meta['module_id']?.toString();
-      if (module == 'screening') {
+    if (!_isPatient) {
+      if (assessment) {
         await Navigator.push<void>(
-            context,
-            MaterialPageRoute(
-                builder: (_) =>
-                    AssessmentScreen(session: session, apiClient: api)));
-      } else if (module == 'dass21' || module == 'who5') {
-        await Navigator.push<void>(
-            context,
-            MaterialPageRoute(
-                builder: (_) => TherapyDetailScreen(
-                    module: module == 'dass21' ? dass21Module : who5Module)));
+          context,
+          MaterialPageRoute(
+              builder: (_) => SharedPatientDataScreen(
+                    session: session,
+                    apiClient: api,
+                    initialAssessmentPatientId: widget.otherUserId,
+                  )),
+        );
       }
-    } else {
+      return;
+    }
+
+    await _loadAccess();
+    if (!mounted || !_ownerMatches) return;
+    if (!_canSendText || meta['session_id'] != _access.sessionId) {
+      _toast(assessment
+          ? 'Sesi permintaan asesmen sudah berakhir.'
+          : 'Sesi permintaan terapi sudah berakhir.');
+      return;
+    }
+    final moduleId = meta['module_id']?.toString() ?? '';
+    if (assessment && moduleId == 'screening') {
       await Navigator.push<void>(
-          context, MaterialPageRoute(builder: (_) => const GoalsScreen()));
+        context,
+        MaterialPageRoute(
+            builder: (_) => AssessmentScreen(session: session, apiClient: api)),
+      );
+      return;
+    }
+    final module = findTherapyModuleById(moduleId);
+    if (module != null && module.isAssessment == assessment) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(builder: (_) => TherapyDetailScreen(module: module)),
+      );
     }
   }
 
@@ -1941,6 +1959,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                     )))
                           else if (const [
                                 'assessment_request',
+                                'therapy_request',
                                 'session_summary',
                                 'attachment'
                               ].contains(msg.kind) ||
@@ -1964,7 +1983,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                     constraints: BoxConstraints(
                                         maxWidth:
                                             MediaQuery.of(context).size.width *
-                                                (msg.kind == 'session_summary'
+                                                (const [
+                                                  'session_summary',
+                                                  'assessment_request',
+                                                  'therapy_request'
+                                                ].contains(msg.kind)
                                                     ? .95
                                                     : .85)),
                                     child: _ChatMessageActions(

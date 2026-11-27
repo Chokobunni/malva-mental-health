@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,11 +37,12 @@ type rescheduleSessionRequest struct {
 }
 
 type updateSessionRequest struct {
-	Status            string  `json:"status"`
-	CancelReason      string  `json:"cancel_reason"`
-	MeetingURL        *string `json:"meeting_url"`
-	SummaryForPatient *string `json:"summary_for_patient"`
-	PrivateNote       *string `json:"private_note"`
+	Status            string           `json:"status"`
+	CancelReason      string           `json:"cancel_reason"`
+	MeetingURL        *string          `json:"meeting_url"`
+	SummaryForPatient *string          `json:"summary_for_patient"`
+	PrivateNote       *string          `json:"private_note"`
+	PrescriptionItems []eRxItemRequest `json:"prescription_items"`
 }
 
 type timeOffRequest struct {
@@ -383,6 +385,49 @@ func careSessionForRole(session store.CareSession, role string) store.CareSessio
 	return session
 }
 
+func (s *Server) careSessionNoteContext(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	ctx := r.Context()
+	if claims.Role != "professional" {
+		writeUserError(w, http.StatusForbidden, "Hanya profesional pemilik sesi yang dapat melihat data ini.")
+		return
+	}
+	cs, err := s.store.GetCareSession(ctx, r.PathValue("session_id"))
+	if err != nil || cs.ProfessionalID != claims.Subject {
+		writeUserError(w, http.StatusNotFound, "Sesi tidak ditemukan.")
+		return
+	}
+	if !cs.CanWriteNotesAt(clock.Now()) {
+		writeUserError(w, http.StatusForbidden, "Waktu pengisian catatan sesi telah berakhir.")
+		return
+	}
+	consent, err := s.store.GetPatientDataConsent(ctx, cs.PatientID, claims.Subject)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	goals := []store.Goal{}
+	var medications []store.Medication
+	if consent.ShareGoals {
+		goals, err = s.store.ListGoals(ctx, cs.PatientID, false, "")
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+	if consent.ShareMedications {
+		medications, err = s.store.ListMedications(ctx, cs.PatientID, 100)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+	if !cs.CanWriteNotesAt(clock.Now()) {
+		writeUserError(w, http.StatusForbidden, "Waktu pengisian catatan sesi telah berakhir.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"goals": goals, "medications": medicationsForResponse(medications)})
+}
+
 // updateCareSession: profesional dan pasien mengelola kehadiran atau pembatalan sesi.
 func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	sessionID := r.PathValue("session_id")
@@ -403,6 +448,10 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 		return
 	}
 	status := strings.ToLower(strings.TrimSpace(req.Status))
+	if status != "" && len(req.PrescriptionItems) > 0 {
+		writeUserError(w, http.StatusBadRequest, "Resep hanya dapat disimpan bersama catatan sesi.")
+		return
+	}
 
 	// Update detail saja (meeting_url / ringkasan / catatan) tanpa ubah status.
 	if status == "" {
@@ -414,12 +463,63 @@ func (s *Server) updateCareSession(w http.ResponseWriter, r *http.Request, claim
 			writeError(w, http.StatusBadRequest, errors.New("link meeting harus berupa link Google Meet (meet.google.com). Kosongkan untuk membuat otomatis"))
 			return
 		}
-		updated, err := s.store.PatchCareSessionDetail(r.Context(), sessionID, req.MeetingURL, req.SummaryForPatient, req.PrivateNote)
+		var updated store.CareSession
+		changed := true
+		var rxID string
+		if req.SummaryForPatient != nil || req.PrivateNote != nil || len(req.PrescriptionItems) > 0 {
+			var rx store.EPrescription
+			var prescriptionIntent string
+			if len(req.PrescriptionItems) > 0 {
+				key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+				if key == "" || len(key) > 128 || req.PrivateNote == nil {
+					writeUserError(w, http.StatusBadRequest, "Resep memerlukan catatan sesi dan kunci penyimpanan.")
+					return
+				}
+				if err := validatePrescriptionRequest(createEPrescriptionRequest{
+					Status: "issued", PatientID: cs.PatientID, Items: req.PrescriptionItems,
+				}); err != nil {
+					writeError(w, http.StatusBadRequest, err)
+					return
+				}
+				if !s.requireVerifiedProfessional(w, r, claims) {
+					return
+				}
+				cred, err := s.store.GetProfessionalCredential(r.Context(), claims.Subject)
+				if err != nil || !isPsychiatristSpecialization(cred.Specialization) {
+					writeUserError(w, http.StatusForbidden, "Resep hanya dapat diterbitkan psikiater terverifikasi.")
+					return
+				}
+				prescriptionIntent = fmt.Sprintf("%x", sha256.Sum256([]byte("session-note:"+sessionID+":"+claims.Subject+":"+key)))
+				rx = store.EPrescription{
+					Status:  "issued",
+					QRToken: generateChatMessageID(),
+					SignatureData: map[string]any{
+						"str_number":  cred.STRNumber,
+						"sip_number":  cred.SIPNumber,
+						"sipp_number": cred.SIPPNumber,
+						"timestamp":   clock.Now().Format(time.RFC3339),
+					},
+				}
+			}
+			updated, rxID, changed, err = s.store.SaveCareSessionNotes(r.Context(), sessionID, claims.Subject, req.MeetingURL, req.SummaryForPatient, req.PrivateNote, prescriptionIntent, rx, rxItemsFromRequest(req.PrescriptionItems))
+		} else {
+			updated, err = s.store.PatchCareSessionDetail(r.Context(), sessionID, req.MeetingURL, nil, nil)
+		}
+		if errors.Is(err, store.ErrSessionNotesClosed) {
+			writeUserError(w, http.StatusForbidden, "Catatan sesi hanya dapat disimpan dalam 24 jam setelah sesi selesai.")
+			return
+		}
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		if req.SummaryForPatient != nil && strings.TrimSpace(*req.SummaryForPatient) != "" {
+		if rxID != "" {
+			s.publishClinicalChange(cs.PatientID, "medications")
+			s.notifyPatient(r, cs.PatientID, "prescription_created",
+				"Resep baru tersedia", "Resep elektronik barumu sudah tersedia di Malva.",
+				map[string]string{"prescription_id": rxID, "professional_id": claims.Subject})
+		}
+		if changed && req.SummaryForPatient != nil && strings.TrimSpace(*req.SummaryForPatient) != "" {
 			s.notifyPatient(r, cs.PatientID, "session_summary",
 				"Ringkasan sesi tersedia",
 				"Profesional membagikan ringkasan sesi terakhirmu.",

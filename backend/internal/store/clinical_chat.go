@@ -49,7 +49,7 @@ func (s *Store) ValidateProfessionalChatCard(ctx context.Context, patientID, pro
 	if !access.InSession || access.SessionID == "" || len(raw) > 8192 {
 		return nil, denied
 	}
-	if kind != "assessment_request" && kind != "session_summary" && kind != "goals" {
+	if kind != "assessment_request" && kind != "therapy_request" && kind != "session_summary" && kind != "goals" {
 		// Attachments are created only by the authenticated upload endpoint.
 		return nil, denied
 	}
@@ -73,11 +73,12 @@ func (s *Store) ValidateProfessionalChatCard(ctx context.Context, patientID, pro
 		return nil, denied
 	}
 	var snapshots []clinicalGoalSnapshot
-	if kind == "assessment_request" {
-		if (meta.ModuleID != "screening" && meta.ModuleID != "dass21" && meta.ModuleID != "who5") || len(meta.GoalIDs) != 0 || meta.Insight != "" {
+	switch kind {
+	case "assessment_request", "therapy_request":
+		if !validClinicalRequestModule(kind, meta.ModuleID) || len(meta.GoalIDs) != 0 || meta.Insight != "" {
 			return nil, denied
 		}
-	} else {
+	default:
 		meta.Insight = strings.TrimSpace(meta.Insight)
 		if meta.ModuleID != "" || len(meta.GoalIDs) > 20 || len(meta.Insight) > 2000 {
 			return nil, denied
@@ -119,6 +120,19 @@ func (s *Store) ValidateProfessionalChatCard(ctx context.Context, patientID, pro
 		return json.Marshal(enriched)
 	}
 	return metadata, nil
+}
+
+func validClinicalRequestModule(kind, moduleID string) bool {
+	switch kind {
+	case "assessment_request":
+		return moduleID == "screening" || moduleID == "dass21" || moduleID == "who5"
+	case "therapy_request":
+		switch moduleID {
+		case "abcde", "thinking_traps", "behavioral_activation", "grounding", "tipp", "breathing", "pmr", "psychoeducation":
+			return true
+		}
+	}
+	return false
 }
 
 // GetChatAttachment authorizes against the persisted message pair, so an ended

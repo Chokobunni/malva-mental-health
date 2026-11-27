@@ -101,6 +101,25 @@ Future<void> mountDetail(WidgetTester tester,
 
 void main() {
   setUp(initializeWib);
+
+  testWidgets('expired professional detail locks new session notes',
+      (tester) async {
+    await mountDetail(tester, role: UserRole.professional, data: {
+      ...sessionJson(status: 'completed'),
+      'scheduled_at':
+          wibIso(ServerClock.now().subtract(const Duration(hours: 26))),
+    });
+    final submit = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Isi Catatan Sesi'));
+    expect(submit.onPressed, isNull);
+    expect(find.byIcon(Icons.lock_outline), findsOneWidget);
+    await tester.scrollUntilVisible(
+        find.text('Batas Waktu Pengisian Berakhir'), 180,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.textContaining('24 jam'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final role in [UserRole.patient, UserRole.professional]) {
     testWidgets(
         '$role live video has join and guarded role-specific completion',

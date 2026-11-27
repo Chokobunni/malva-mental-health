@@ -92,6 +92,73 @@ Widget _buildApp(MalvaApiClient api, {required Widget home}) {
 
 void main() {
   testWidgets(
+      'preview edits existing worksheet and deletes it after confirmation',
+      (tester) async {
+    final item = _submission(
+      id: 'sub_abcde',
+      moduleId: 'abcde',
+      title: 'Latihan tersimpan',
+      createdAt: '2026-11-20T09:00:00+07:00',
+    )..['answers'] = {
+        'activating': 'Jawaban lama',
+        'legacy_key': 'Pertahankan'
+      };
+    final writes = <String>[];
+    var deleted = false;
+    final api = MalvaApiClient(
+      baseUrl: 'http://backend.test',
+      httpClient: _FakeClient((request) {
+        switch (request.method) {
+          case 'GET':
+            return http.Response(
+                jsonEncode({
+                  'submissions': [if (!deleted) item],
+                }),
+                200);
+          case 'PUT':
+            writes.add('PUT ${request.url.path}');
+            final payload = jsonDecode(request.body) as Map<String, dynamic>;
+            item['answers'] = payload['answers'];
+            return http.Response(jsonEncode({'submission': item}), 200);
+          case 'DELETE':
+            writes.add('DELETE ${request.url.path}');
+            deleted = true;
+            return http.Response('{}', 200);
+          default:
+            fail('Unexpected ${request.method}');
+        }
+      }),
+    );
+    await tester.pumpWidget(
+        _buildApp(api, home: const Scaffold(body: TherapyRecordPreview())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Edit'));
+    await tester.pumpAndSettle();
+    final field = find.byWidgetPredicate((widget) =>
+        widget is TextField && widget.controller?.text == 'Jawaban lama');
+    await tester.scrollUntilVisible(field, 250,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Jawaban lama'), findsOneWidget);
+    await tester.enterText(field, 'Jawaban diperbarui');
+    final save = find.text('Simpan Perubahan');
+    await tester.scrollUntilVisible(save, 300,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    expect(item['answers'], containsPair('activating', 'Jawaban diperbarui'));
+    expect(item['answers'], containsPair('legacy_key', 'Pertahankan'));
+    expect(find.text('Latihan tersimpan'), findsOneWidget);
+    await tester.tap(find.byTooltip('Hapus'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Hapus'));
+    await tester.pumpAndSettle();
+    expect(find.text('Latihan tersimpan'), findsNothing);
+    expect(writes, [
+      'PUT /v1/therapy-submissions/sub_abcde',
+      'DELETE /v1/therapy-submissions/sub_abcde',
+    ]);
+  });
+  testWidgets(
       'seksi Therapy Record muncul setelah daftar modul + tap Lihat semua membuka halaman penuh',
       (tester) async {
     // Viewport tinggi agar seluruh ListView katalog (lazy) ter-build.

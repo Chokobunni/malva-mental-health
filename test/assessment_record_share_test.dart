@@ -102,6 +102,7 @@ class _Fixture {
           '/v1/chat-permission' => {
               'access': {'can_share': canShare}
             },
+          '/v1/care-sessions' => {'sessions': []},
           '/v1/therapy-submissions/saved-who/share' => {
               'submission': {
                 'id': 'saved-who',
@@ -139,7 +140,7 @@ class _Fixture {
   Future<void> chooseProfessional(WidgetTester tester) async {
     await tester.tap(find.text('Bagikan ke profesional'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Dokter terhubung'));
+    await tester.tap(find.byTooltip('Kirim ke Dokter terhubung'));
     await tester.pumpAndSettle();
   }
 }
@@ -227,7 +228,7 @@ void main() {
       await tester.tap(find.text('Bagikan ke profesional'));
       await tester.pumpAndSettle();
       if (denied == 'permission') {
-        await tester.tap(find.text('Dokter terhubung'));
+        await tester.tap(find.byTooltip('Kirim ke Dokter terhubung'));
         await tester.pumpAndSettle();
       }
       expect(f.requests.where((r) => r.method == 'POST'), isEmpty);
@@ -251,7 +252,7 @@ void main() {
         200));
     await tester.pumpAndSettle();
     expect(find.text('Dokter terhubung'), findsNothing);
-    expect(f.requests.length, 1);
+    expect(f.requests.where((request) => request.method == 'POST'), isEmpty);
   });
   testWidgets(
       'thinking trap definitions fit narrow screen and retain all seven chips',
@@ -267,8 +268,6 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Arti 7 jebakan pikiran'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Arti 7 jebakan pikiran'));
     await tester.pumpAndSettle();
     expect(find.byType(FilterChip), findsNWidgets(7));
     for (final label in [

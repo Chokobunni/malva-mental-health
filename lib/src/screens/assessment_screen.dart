@@ -5,12 +5,14 @@ import '../assessment_engine.dart';
 import '../models.dart';
 import '../providers/providers.dart';
 import '../services/malva_api_client.dart';
+import '../time/wib.dart';
 import '../theme.dart';
 import '../widgets/malva_components.dart';
 import '../widgets/friendly_error.dart';
 import '../widgets/therapy_library.dart';
 import '../widgets/shared_record_detail.dart';
 import 'booking/doctor_discovery_screen.dart';
+import 'assessment_history_screen.dart';
 import 'initial_screening_consent_screen.dart';
 import 'safety/emergency_dashboard_screen.dart';
 
@@ -353,6 +355,7 @@ class _AssessmentScreenState extends ConsumerState<AssessmentScreen> {
       MaterialPageRoute(
         builder: (_) => AssessmentResultScreen(
           bundle: bundle,
+          uploaded: result.uploaded,
           session: widget.session,
           apiClient: widget.apiClient,
           onDone: () {
@@ -636,12 +639,28 @@ class AssessmentResultScreen extends StatelessWidget {
     required this.onDone,
     this.session,
     this.apiClient,
+    this.uploaded = false,
   });
 
   final ScreeningBundle bundle;
   final VoidCallback onDone;
   final AuthSession? session;
   final MalvaApiClient? apiClient;
+  final bool uploaded;
+
+  AssessmentHistoryEntry _shareEntry() {
+    Map<String, Object> score(AssessmentResult result) => {
+          'score': result.score,
+          'max_score': result.maxScore,
+          'crisis_flag': result.crisisFlag,
+        };
+    return assessmentEntryFromScreening(BackendScreeningSession.fromJson({
+      'id': bundle.id,
+      'crisis_flag': bundle.crisisFlag,
+      'created_at': wibIso(bundle.createdAt),
+      'bundle': {'phq9': score(bundle.phq9), 'gad7': score(bundle.gad7)},
+    }));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -684,6 +703,13 @@ class AssessmentResultScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SharedRecordDetail.bundle(bundle: bundle),
+                  if (!bundle.isInitial && uploaded) ...[
+                    const SizedBox(height: 12),
+                    AssessmentRecordShareActions(
+                      entry: _shareEntry(),
+                      shareLabel: 'Simpan & Kirim ke Profesional',
+                    ),
+                  ],
                   if (bundle.crisisFlag) ...[
                     const SizedBox(height: 12),
                     _CrisisSupportCard(

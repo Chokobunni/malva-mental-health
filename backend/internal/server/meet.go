@@ -625,10 +625,7 @@ func (s *Server) setManualMeetLinkHandler(w http.ResponseWriter, r *http.Request
 		writeUserError(w, http.StatusBadRequest, verr.Error())
 		return
 	}
-	// Simpan lewat store yang ada; pertahankan ringkasan & catatan privat
-	// (UpdateCareSessionDetail menulis ketiganya, jadi kirim nilai saat ini).
-	updated, err := s.store.UpdateCareSessionDetail(
-		r.Context(), sessionID, meetURL, cs.SummaryForPatient, cs.PrivateNote)
+	updated, err := s.store.PatchCareSessionDetail(r.Context(), sessionID, &meetURL, nil, nil)
 	if err != nil {
 		writeUserError(w, http.StatusInternalServerError, "Gagal menyimpan link video. Coba lagi.")
 		return

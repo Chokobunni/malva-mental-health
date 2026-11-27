@@ -69,6 +69,8 @@ func TestClinicalProfessionalCards(t *testing.T) {
 	}{
 		{"assessment", "assessment_request", map[string]any{"session_id": f.sessionID, "module_id": "dass21"}, 201},
 		{"screening", "assessment_request", map[string]any{"session_id": f.sessionID, "module_id": "screening"}, 201},
+		{"therapy", "therapy_request", map[string]any{"session_id": f.sessionID, "module_id": "grounding"}, 201},
+		{"assessment as therapy", "therapy_request", map[string]any{"session_id": f.sessionID, "module_id": "who5"}, 403},
 		{"summary", "session_summary", map[string]any{"session_id": f.sessionID, "goal_ids": []string{goal.ID}, "insight": "Practice daily"}, 201},
 		{"goals", "goals", map[string]any{"session_id": f.sessionID, "goal_ids": []string{goal.ID}}, 201},
 		{"unknown module", "assessment_request", map[string]any{"session_id": f.sessionID, "module_id": "invented"}, 403},
@@ -276,7 +278,7 @@ func TestClinicalGoalRetryDoesNotDuplicate(t *testing.T) {
 
 func TestClinicalPatientCannotForgeNewProfessionalCards(t *testing.T) {
 	f := newClinicalFixture(t)
-	for _, kind := range []string{"attachment", "assessment_request", "session_summary"} {
+	for _, kind := range []string{"attachment", "assessment_request", "session_summary", "therapy_request"} {
 		out := f.call(t, "POST", "/v1/messages", "patient", f.patient.ID, map[string]any{"recipient_id": f.prof.ID, "kind": kind, "metadata": map[string]string{"session_id": f.sessionID, "module_id": "who5"}})
 		if out.Code != 403 {
 			t.Fatalf("patient forged %s: %d %s", kind, out.Code, out.Body)

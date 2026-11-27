@@ -384,8 +384,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('PHQ-9 16/27 (Cukup berat) • GAD-7 7/21 (Ringan)'),
-        findsOneWidget);
+    expect(find.text('PHQ-9 16/27 (Cukup berat)'), findsOneWidget);
+    expect(find.text('GAD-7 7/21 (Ringan)'), findsOneWidget);
     await tester.tap(find.text('Skrining PHQ-9 + GAD-7'));
     await tester.pumpAndSettle();
 
@@ -420,12 +420,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Skrining'), findsOneWidget);
+    expect(find.text('Pilih Skrining'), findsOneWidget);
     expect(find.text('Screening Utama'), findsNothing);
     expect(find.text('Assessment Lanjutan'), findsNothing);
     final who = find.text('WHO-5 (Indeks Kesejahteraan)');
     final phqGad = find.text('PHQ-9 + GAD-7');
-    final dass = find.text('DASS-21 (Skala Depresi, Kecemasan, dan Stres)');
+    final dass = find.text('DASS-21 (Depresi, Kecemasan, Stres)');
     expect(tester.getTopLeft(who).dy, lessThan(tester.getTopLeft(phqGad).dy));
     expect(tester.getTopLeft(phqGad).dy, lessThan(tester.getTopLeft(dass).dy));
 
@@ -665,8 +665,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Ringkasan skor tampil di kartu daftar.
-    expect(find.text('PHQ-9 12/27 (Sedang) • GAD-7 9/21 (Ringan)'),
-        findsOneWidget);
+    expect(find.text('PHQ-9 12/27 (Sedang)'), findsOneWidget);
+    expect(find.text('GAD-7 9/21 (Ringan)'), findsOneWidget);
 
     await tester.tap(find.text('Skrining PHQ-9 + GAD-7'));
     await tester.pumpAndSettle();

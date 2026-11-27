@@ -1306,160 +1306,416 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     var durationText = '${currentDuration < 60 ? 60 : currentDuration}';
     var isActive = schedule?.isActive ?? true;
     String? error;
+    final isNew = schedule == null;
+    const choices = [60, 90, 120];
+    var custom = !choices.contains(int.tryParse(durationText));
+    const accent = Color(0xff8d4897);
+    const border = Color(0xffe0cce4);
+    const ink = Color(0xff171d2e);
+    const muted = Color(0xff637083);
+    const lilac = Color(0xfff3e6f6);
+    final cardShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(18),
+      side: const BorderSide(color: border),
+    );
     final edited = await showModalBottomSheet<Map<String, Object?>>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      showDragHandle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-      builder: (context) => StatefulBuilder(
-          builder: (context, setSheetState) => Padding(
-                padding: EdgeInsets.fromLTRB(
-                    20, 0, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
-                child: SingleChildScrollView(
-                    child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                      Row(children: [
-                        Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                                color: MalvaColors.seed.withValues(alpha: .10),
-                                borderRadius: BorderRadius.circular(18)),
-                            child: const Icon(Icons.edit_calendar_outlined,
-                                color: MalvaColors.seed, size: 28)),
-                        const SizedBox(width: 12),
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final duration = int.tryParse(durationText.trim()) ?? 0;
+          final slots = duration > 0 && _validScheduleTimes(start, end)
+              ? (_scheduleMinutes(end) - _scheduleMinutes(start)) ~/ duration
+              : 0;
+          void save() {
+            final minutes = int.tryParse(durationText.trim()) ?? 0;
+            final invalid = _scheduleValidation(start, end, minutes);
+            if (invalid != null) {
+              setSheetState(() => error = invalid);
+              return;
+            }
+            if (_storedRows(category).any((other) =>
+                other.id != schedule?.id &&
+                other.dayOfWeek == day &&
+                other.startTime == start &&
+                other.endTime == end)) {
+              setSheetState(() =>
+                  error = 'Jadwal dengan hari dan jam tersebut sudah ada.');
+              return;
+            }
+            Navigator.pop(sheetContext, {
+              if (schedule != null) 'id': schedule.id,
+              'service_category': category,
+              'day_of_week': day,
+              'start_time': start,
+              'end_time': end,
+              'slot_duration_minutes': minutes,
+              'is_active': isActive,
+            });
+          }
+
+          Widget timeField(
+              String label, String time, ValueChanged<String> put) {
+            final value = _scheduleMinutes(time);
+            final hour = value ~/ 60;
+            final display =
+                '${(hour + 11) % 12 + 1}:${time.substring(3)} ${hour < 12 ? 'AM' : 'PM'}';
+            return Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: ink,
+                  side: const BorderSide(color: border),
+                  shape: cardShape,
+                  padding: const EdgeInsets.all(13),
+                ),
+                onPressed: () async {
+                  final picked = await _pickScheduleTime(context, value, label);
+                  if (picked == null || !context.mounted) return;
+                  final hh = picked.hour.toString().padLeft(2, '0');
+                  final mm = picked.minute.toString().padLeft(2, '0');
+                  setSheetState(() {
+                    put('$hh:$mm');
+                    error = null;
+                  });
+                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(label, style: const TextStyle(color: muted)),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
                         Expanded(
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                              Text(
-                                  schedule == null
-                                      ? 'Tambah jadwal'
-                                      : 'Edit jadwal',
-                                  style: const TextStyle(
-                                      fontSize: 23,
-                                      fontWeight: FontWeight.w900)),
-                              Text(
-                                  '${professionalServiceNames[category]} · WIB',
-                                  style: const TextStyle(
-                                      color: MalvaColors.seed,
-                                      fontWeight: FontWeight.w700)),
-                            ])),
-                        IconButton(
-                            onPressed: () => Navigator.pop(context),
-                            tooltip: 'Tutup',
-                            icon: const Icon(Icons.close)),
-                      ]),
-                      const SizedBox(height: 24),
-                      DropdownButtonFormField<int>(
-                          initialValue: day,
-                          decoration: _scheduleField(context, 'Hari praktik'),
-                          items: [
-                            for (final i in [1, 2, 3, 4, 5, 6, 0])
-                              DropdownMenuItem(
-                                  value: i, child: Text(_dayNames[i]))
-                          ],
-                          onChanged: (value) {
-                            if (value != null) setSheetState(() => day = value);
-                          }),
-                      const SizedBox(height: 18),
-                      Row(children: [
-                        Expanded(
-                            child: TextFormField(
-                                initialValue: start,
-                                onChanged: (value) =>
-                                    setSheetState(() => start = value),
-                                decoration: _scheduleField(context, 'Mulai'))),
-                        const SizedBox(width: 8),
-                        Expanded(
-                            child: TextFormField(
-                                initialValue: end,
-                                onChanged: (value) =>
-                                    setSheetState(() => end = value),
-                                decoration:
-                                    _scheduleField(context, 'Selesai'))),
-                        const SizedBox(width: 8),
-                        Expanded(
-                            child: TextFormField(
-                                initialValue: durationText,
-                                onChanged: (value) => durationText = value,
-                                keyboardType: TextInputType.number,
-                                decoration:
-                                    _scheduleField(context, 'Slot (mnt)'))),
-                      ]),
-                      if (category == 'package' &&
-                          isActive &&
-                          _validScheduleTimes(start.trim(), end.trim()) &&
-                          _overlapsQuick(day, start.trim(), end.trim()))
-                        _scheduleWarning(),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Aktif'),
-                        value: isActive,
-                        onChanged: (value) =>
-                            setSheetState(() => isActive = value),
-                      ),
-                      if (error != null)
-                        Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: Text(error!,
+                            child: Text(display,
                                 style: const TextStyle(
-                                    color: MalvaColors.danger))),
-                      const SizedBox(height: 22),
-                      Row(children: [
-                        Expanded(
-                            child: OutlinedButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('Batal'))),
-                        const SizedBox(width: 10),
-                        Expanded(
-                            flex: 2,
-                            child: FilledButton.icon(
-                                icon: const Icon(Icons.check, size: 18),
-                                label: Text(
-                                    schedule == null
-                                        ? 'Simpan jadwal'
-                                        : 'Simpan perubahan',
-                                    style:
-                                        const TextStyle(fontFamily: 'Roboto'),
-                                    textAlign: TextAlign.center),
-                                onPressed: () {
-                                  final duration =
-                                      int.tryParse(durationText.trim()) ?? 0;
-                                  final from = start.trim();
-                                  final to = end.trim();
-                                  final invalid =
-                                      _scheduleValidation(from, to, duration);
-                                  if (invalid != null) {
-                                    setSheetState(() => error = invalid);
-                                    return;
-                                  }
-                                  if (_storedRows(category).any((other) =>
-                                      other.id != schedule?.id &&
-                                      other.dayOfWeek == day &&
-                                      other.startTime == from &&
-                                      other.endTime == to)) {
-                                    setSheetState(() => error =
-                                        'Jadwal dengan hari dan jam tersebut sudah ada.');
-                                    return;
-                                  }
-                                  Navigator.pop(context, {
-                                    if (schedule != null) 'id': schedule.id,
-                                    'service_category': category,
-                                    'day_of_week': day,
-                                    'start_time': from,
-                                    'end_time': to,
-                                    'slot_duration_minutes': duration,
-                                    'is_active': isActive,
-                                  });
-                                })),
-                      ]),
-                    ])),
-              )),
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 16))),
+                        const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          Widget summaryRow(String label, String value, Color color) => Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                      child: Text(label, style: const TextStyle(color: muted))),
+                  const SizedBox(width: 8),
+                  Flexible(
+                      child: Text(value,
+                          textAlign: TextAlign.end,
+                          style: TextStyle(
+                              color: color, fontWeight: FontWeight.w800))),
+                ],
+              );
+
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                  10, 10, 10, MediaQuery.viewInsetsOf(context).bottom + 8),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 510),
+                child: Material(
+                  color: const Color(0xfff8f3fa),
+                  borderRadius: BorderRadius.circular(30),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ColoredBox(
+                        color: lilac,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(children: [
+                            IconButton.filledTonal(
+                              tooltip: 'Kembali',
+                              onPressed: () => Navigator.pop(sheetContext),
+                              style: IconButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: accent),
+                              icon: const Icon(Icons.chevron_left_rounded),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                                child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(isNew ? 'Tambah jadwal' : 'Edit jadwal',
+                                    style: const TextStyle(
+                                        color: ink,
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w900)),
+                                const SizedBox(height: 4),
+                                Wrap(
+                                  spacing: 7,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Text(professionalServiceNames[category]!,
+                                        style: const TextStyle(
+                                            color: accent,
+                                            fontWeight: FontWeight.w800)),
+                                    const StatusPill(
+                                        label: 'WIB', color: accent),
+                                  ],
+                                ),
+                              ],
+                            )),
+                            if (isNew)
+                              const StatusPill(label: 'Baru', color: accent),
+                          ]),
+                        ),
+                      ),
+                      Flexible(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(18),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              DropdownButtonFormField<int>(
+                                initialValue: day,
+                                decoration:
+                                    _scheduleField(context, 'Hari praktik'),
+                                items: [
+                                  for (final i in [1, 2, 3, 4, 5, 6, 0])
+                                    DropdownMenuItem(
+                                        value: i, child: Text(_dayNames[i])),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null)
+                                    setSheetState(() {
+                                      day = value;
+                                      error = null;
+                                    });
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              const Text('Jam operasional',
+                                  style: TextStyle(
+                                      color: ink,
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w900)),
+                              const SizedBox(height: 10),
+                              Row(children: [
+                                timeField(
+                                    'Mulai', start, (value) => start = value),
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 10),
+                                  child: CircleAvatar(
+                                      radius: 16,
+                                      backgroundColor: lilac,
+                                      child: Icon(Icons.arrow_forward_rounded,
+                                          color: accent, size: 19)),
+                                ),
+                                timeField(
+                                    'Selesai', end, (value) => end = value),
+                              ]),
+                              const SizedBox(height: 18),
+                              const Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Flexible(
+                                    child: Text('Durasi per slot',
+                                        style: TextStyle(
+                                            color: ink,
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.w900)),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text('Min. 60 menit',
+                                        textAlign: TextAlign.end,
+                                        style: TextStyle(
+                                            color: accent,
+                                            fontWeight: FontWeight.w700)),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 7,
+                                runSpacing: 4,
+                                children: [
+                                  for (final minutes in [...choices, 0])
+                                    ChoiceChip(
+                                      label: Text(minutes == 0
+                                          ? 'Custom'
+                                          : '$minutes mnt'),
+                                      selected: minutes == 0
+                                          ? custom
+                                          : !custom && duration == minutes,
+                                      showCheckmark: false,
+                                      backgroundColor: Colors.white,
+                                      selectedColor: accent,
+                                      labelStyle: TextStyle(
+                                          color: (minutes == 0
+                                                  ? custom
+                                                  : !custom &&
+                                                      duration == minutes)
+                                              ? Colors.white
+                                              : muted,
+                                          fontWeight: FontWeight.w700),
+                                      side: const BorderSide(color: border),
+                                      onSelected: (_) => setSheetState(() {
+                                        custom = minutes == 0;
+                                        if (!custom) durationText = '$minutes';
+                                        error = null;
+                                      }),
+                                    ),
+                                ],
+                              ),
+                              if (custom) ...[
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  initialValue: durationText,
+                                  onChanged: (value) => setSheetState(() {
+                                    durationText = value;
+                                    error = null;
+                                  }),
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly
+                                  ],
+                                  keyboardType: TextInputType.number,
+                                  decoration:
+                                      _scheduleField(context, 'Slot (mnt)'),
+                                ),
+                              ],
+                              const SizedBox(height: 16),
+                              Card.outlined(
+                                margin: EdgeInsets.zero,
+                                color: Colors.white,
+                                shape: cardShape,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(14),
+                                  child: Column(children: [
+                                    Row(children: [
+                                      const Icon(Icons.circle,
+                                          size: 9, color: accent),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                          child: Text(
+                                              isNew
+                                                  ? 'RINGKASAN JADWAL BARU'
+                                                  : 'RINGKASAN JADWAL',
+                                              style: const TextStyle(
+                                                  color: accent,
+                                                  fontWeight:
+                                                      FontWeight.w900))),
+                                      StatusPill(
+                                          label: '$slots Sesi', color: accent),
+                                    ]),
+                                    const Divider(height: 20),
+                                    summaryRow('Jam Operasional',
+                                        '$start – $end WIB', ink),
+                                    const SizedBox(height: 6),
+                                    summaryRow(
+                                        'Durasi & Kapasitas',
+                                        '$duration mnt/slot ($slots sesi)',
+                                        accent),
+                                  ]),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              Card.outlined(
+                                color: Colors.white,
+                                margin: EdgeInsets.zero,
+                                shape: cardShape,
+                                child: CheckboxListTile(
+                                  activeColor: accent,
+                                  shape: cardShape,
+                                  value: isActive,
+                                  onChanged: (value) => setSheetState(
+                                      () => isActive = value ?? false),
+                                  title: Text(
+                                      isNew
+                                          ? 'Langsung aktifkan jadwal'
+                                          : 'Status jadwal aktif',
+                                      style: const TextStyle(
+                                          color: ink,
+                                          fontWeight: FontWeight.w900)),
+                                  subtitle: Text(
+                                      isNew
+                                          ? 'Jadwal otomatis terbuka setelah disimpan'
+                                          : 'Pasien dapat memesan sesi pada jam ini',
+                                      style: const TextStyle(color: muted)),
+                                ),
+                              ),
+                              if (category == 'package' &&
+                                  isActive &&
+                                  _validScheduleTimes(start, end) &&
+                                  _overlapsQuick(day, start, end))
+                                _scheduleWarning(),
+                              if (error != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: Text(error!,
+                                      style: const TextStyle(
+                                          color: MalvaColors.danger)),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      ColoredBox(
+                        color: lilac,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(children: [
+                            Expanded(
+                                child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: muted,
+                                  minimumSize: const Size(0, 48),
+                                  shape: cardShape,
+                                  side: const BorderSide(color: border)),
+                              onPressed: () => Navigator.pop(sheetContext),
+                              child: const Text('Batal'),
+                            )),
+                            const SizedBox(width: 10),
+                            Expanded(
+                                flex: 2,
+                                child: FilledButton.icon(
+                                  style: FilledButton.styleFrom(
+                                      backgroundColor: accent,
+                                      foregroundColor: Colors.white,
+                                      minimumSize: const Size(0, 48),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(18)),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10)),
+                                  icon: Icon(
+                                      isNew
+                                          ? Icons.add_rounded
+                                          : Icons.check_rounded,
+                                      size: 18),
+                                  label: Text(
+                                      isNew
+                                          ? 'Simpan Jadwal Baru'
+                                          : 'Simpan Perubahan',
+                                      textAlign: TextAlign.center),
+                                  onPressed: save,
+                                )),
+                          ]),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
     if (!mounted || edited == null) return;
     await _writeSchedules(
@@ -1467,6 +1723,36 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
       schedules: _replaceScheduleRow(category, edited, schedule?.id),
     );
   }
+
+  int _scheduleMinutes(String time) =>
+      int.parse(time.substring(0, 2)) * 60 + int.parse(time.substring(3));
+
+  Future<TimeOfDay?> _pickScheduleTime(
+          BuildContext context, int minutes, String label) =>
+      showTimePicker(
+        context: context,
+        initialTime: TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60),
+        orientation: Orientation.portrait,
+        helpText: 'Jam $label',
+        cancelText: 'Batal',
+        confirmText: 'Atur',
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+          child: Theme(
+            data: ThemeData.dark(useMaterial3: false).copyWith(
+              colorScheme: const ColorScheme.dark(primary: Color(0xffaccbfb)),
+              timePickerTheme: const TimePickerThemeData(
+                backgroundColor: Color(0xff1c1e1f),
+                dialBackgroundColor: Color(0xff525454),
+                dialHandColor: Color(0xffaccbfb),
+                hourMinuteColor: Color(0xff525454),
+                dayPeriodColor: Color(0xff525454),
+              ),
+            ),
+            child: child!,
+          ),
+        ),
+      );
 
   bool _validScheduleTimes(String from, String to) {
     final times = RegExp(r'^(?:[01][0-9]|2[0-3]):[0-5][0-9]$');
@@ -1479,9 +1765,7 @@ class _ProAvailabilityScreenState extends ConsumerState<ProAvailabilityScreen> {
     if (!_validScheduleTimes(from, to)) {
       return 'Isi jam mulai dan selesai dalam urutan yang benar (HH:MM).';
     }
-    int minutes(String text) =>
-        int.parse(text.substring(0, 2)) * 60 + int.parse(text.substring(3));
-    if (minutes(to) - minutes(from) < duration)
+    if (_scheduleMinutes(to) - _scheduleMinutes(from) < duration)
       return 'Rentang jadwal harus memuat setidaknya satu slot sesi.';
     return null;
   }

@@ -327,6 +327,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/care-packages/{package_id}/cancel", s.requireAuth(s.cancelPendingCarePackage))
 	mux.HandleFunc("POST /v1/care-sessions", s.requireAuth(s.scheduleSession))
 	mux.HandleFunc("GET /v1/care-sessions", s.requireAuth(s.listCareSessions))
+	mux.HandleFunc("GET /v1/care-sessions/{session_id}/note-context", s.requireAuth(s.careSessionNoteContext))
 	mux.HandleFunc("PATCH /v1/care-sessions/{session_id}", s.requireAuth(s.updateCareSession))
 	mux.HandleFunc("POST /v1/care-sessions/{session_id}/reschedule", s.requireAuth(s.rescheduleCareSession))
 	// Link Google Meet: buat / ambil ulang untuk sesi video (pasien & profesional).
@@ -389,6 +390,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/therapy-submissions", s.requireAuth(s.listTherapySubmissions))
 	mux.HandleFunc("POST /v1/therapy-submissions", s.requireAuth(s.createTherapySubmission))
 	mux.HandleFunc("GET /v1/therapy-submissions/{submission_id}", s.requireAuth(s.getTherapySubmission))
+	mux.HandleFunc("PUT /v1/therapy-submissions/{submission_id}", s.requireAuth(s.updateTherapySubmission))
 	mux.HandleFunc("POST /v1/therapy-submissions/{submission_id}/share", s.requireAuth(s.shareTherapySubmission))
 	mux.HandleFunc("DELETE /v1/therapy-submissions/{submission_id}", s.requireAuth(s.deleteTherapySubmission))
 	// Administrasi penuh (khusus role admin): kelola pengguna & dokter.
@@ -1806,7 +1808,7 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, claims auth
 		text = text[:5000]
 	}
 	kind := strings.ToLower(strings.TrimSpace(req.Kind))
-	if claims.Role != "professional" && (kind == "attachment" || kind == "assessment_request" || kind == "session_summary") {
+	if claims.Role != "professional" && (kind == "attachment" || kind == "assessment_request" || kind == "therapy_request" || kind == "session_summary") {
 		writeError(w, http.StatusForbidden, errors.New("kartu ini hanya dapat dikirim profesional sesi"))
 		return
 	}

@@ -22,7 +22,7 @@ import 'record_render_capture.dart';
 //   - tidak error saat token kosong (belum login) → ajakan login.
 //   - modul tak dikenal tetap dianggap terapi (data pasien tidak hilang).
 //   - hasil asesmen (WHO-5) tersaring keluar.
-//   - kartu read-only (tanpa tombol Bagikan/Hapus) & maks 3 kartu terbaru.
+//   - kartu memiliki aksi edit dan hapus, maksimal 3 kartu terbaru.
 //   - tap kartu membuka detail record yang dipilih; header membuka riwayat.
 // ============================================================
 
@@ -191,8 +191,7 @@ void main() {
     expect(find.textContaining('WHO-5'), findsNothing);
   });
 
-  testWidgets('T2: kartu pratinjau read-only (tanpa tombol Bagikan/Hapus)',
-      (tester) async {
+  testWidgets('T2: kartu pratinjau menampilkan Edit dan Hapus', (tester) async {
     final api = _apiWith([
       _submission(
         id: 'sub_1',
@@ -211,9 +210,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Terapi ABCDE'), findsOneWidget);
-    // Pratinjau tidak memuat aksi berbahaya (itu hanya di halaman penuh).
+    expect(find.byTooltip('Edit'), findsOneWidget);
     expect(find.text('Bagikan'), findsNothing);
-    expect(find.text('Hapus'), findsNothing);
+    expect(find.byTooltip('Hapus'), findsOneWidget);
   });
 
   testWidgets('T2: maksimal 3 kartu & urut terbaru dulu', (tester) async {

@@ -404,6 +404,40 @@ func (s *Server) createTherapySubmission(w http.ResponseWriter, r *http.Request,
 	writeJSON(w, http.StatusCreated, map[string]any{"submission": sub})
 }
 
+func (s *Server) updateTherapySubmission(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
+	if claims.Role != "patient" {
+		writeError(w, http.StatusForbidden, errors.New("hanya pasien yang bisa mengubah worksheet"))
+		return
+	}
+	var req therapySubmissionRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	var answers map[string]json.RawMessage
+	if err := json.Unmarshal(req.Answers, &answers); err != nil || len(answers) == 0 ||
+		len(req.Answers) > maxTherapyAnswersBytes {
+		writeError(w, http.StatusBadRequest, errors.New("jawaban worksheet tidak valid"))
+		return
+	}
+	moduleID := strings.TrimSpace(req.ModuleID)
+	if moduleID == "" || len(moduleID) > maxTherapyModuleID || moduleID == "who5" || moduleID == "dass21" {
+		writeError(w, http.StatusBadRequest, errors.New("module_id worksheet tidak valid"))
+		return
+	}
+	submissionID := r.PathValue("submission_id")
+	sub, err := s.store.UpdateTherapySubmission(r.Context(), claims.Subject, submissionID, moduleID, req.Answers)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, errors.New("worksheet tidak ditemukan"))
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"submission": sub})
+}
+
 func (s *Server) getTherapySubmission(w http.ResponseWriter, r *http.Request, claims auth.Claims) {
 	submissionID := r.PathValue("submission_id")
 	professionalView := claims.Role == "professional"

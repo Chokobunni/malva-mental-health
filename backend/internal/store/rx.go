@@ -73,17 +73,30 @@ func (s *Store) UpdateEPrescription(ctx context.Context, rx EPrescription, items
 	return s.saveEPrescription(ctx, rx, items, true)
 }
 func (s *Store) saveEPrescription(ctx context.Context, rx EPrescription, items []EPrescriptionItem, update bool) (EPrescription, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return EPrescription{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	saved, err := saveEPrescriptionTx(ctx, tx, rx, items, update)
+	if err != nil {
+		return EPrescription{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return EPrescription{}, err
+	}
+	full, err := s.GetEPrescription(ctx, saved.ID)
+	return full.EPrescription, err
+}
+
+func saveEPrescriptionTx(ctx context.Context, tx *sql.Tx, rx EPrescription, items []EPrescriptionItem, update bool) (EPrescription, error) {
 	if rx.Status == "" {
 		rx.Status = "issued"
 	}
 	if rx.Status != "issued" && rx.Status != "draft" {
 		return EPrescription{}, ErrPrescriptionConflict
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return EPrescription{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
+	var err error
 	previous := map[string]EPrescriptionItem{}
 	var before json.RawMessage
 	if update {
@@ -211,11 +224,7 @@ func (s *Store) saveEPrescription(ctx context.Context, rx EPrescription, items [
 	if _, err := tx.ExecContext(ctx, `INSERT INTO audit_logs(actor_id,patient_id,action,entity_type,entity_id,metadata) VALUES($1,$2,$3,'e_prescriptions',$4,$5)`, rx.ProfessionalID, rx.PatientID, "eprescription.saved", rx.ID, metadata); err != nil {
 		return EPrescription{}, err
 	}
-	if err := tx.Commit(); err != nil {
-		return EPrescription{}, err
-	}
-	full, err := s.GetEPrescription(ctx, rx.ID)
-	return full.EPrescription, err
+	return rx, nil
 }
 func (s *Store) DeleteEPrescription(ctx context.Context, rxID, authorID, newQR string) error {
 	tx, err := s.db.BeginTx(ctx, nil)

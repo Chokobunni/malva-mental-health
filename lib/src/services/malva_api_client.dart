@@ -1495,6 +1495,23 @@ class MalvaApiClient {
     );
   }
 
+  Future<BackendTherapySubmission> updateTherapySubmission({
+    required String accessToken,
+    required String submissionId,
+    required String moduleId,
+    required Map<String, dynamic> answers,
+  }) async {
+    final payload = await _send(
+      'PUT',
+      '/v1/therapy-submissions/$submissionId',
+      accessToken: accessToken,
+      body: {'module_id': moduleId, 'answers': answers},
+    );
+    return BackendTherapySubmission.fromJson(
+      _expectMap(payload['submission'], 'Respons lembar kerja tidak valid.'),
+    );
+  }
+
   Future<BackendTherapySubmission> getTherapySubmission({
     required String accessToken,
     required String submissionId,
@@ -2259,6 +2276,54 @@ class MalvaApiClient {
         if (meetingUrl != null) 'meeting_url': meetingUrl,
         if (summaryForPatient != null) 'summary_for_patient': summaryForPatient,
         if (privateNote != null) 'private_note': privateNote,
+      },
+    );
+    return BackendCareSession.fromJson(
+      _expectMap(payload['session'], 'Respons sesi tidak valid.'),
+    );
+  }
+
+  Future<({List<BackendGoal> goals, List<BackendMedication> medications})>
+      getCareSessionNoteContext({
+    required String accessToken,
+    required String sessionId,
+  }) async {
+    final payload = await _send(
+      'GET',
+      '/v1/care-sessions/$sessionId/note-context',
+      accessToken: accessToken,
+    );
+    return (
+      goals: _expectNullableCollection(
+              payload, 'goals', 'Respons tujuan tidak valid.')
+          .whereType<Map<String, dynamic>>()
+          .map(BackendGoal.fromJson)
+          .toList(),
+      medications: _expectNullableCollection(
+              payload, 'medications', 'Respons obat tidak valid.')
+          .whereType<Map<String, dynamic>>()
+          .map(BackendMedication.fromJson)
+          .toList(),
+    );
+  }
+
+  Future<BackendCareSession> saveCareSessionWithPrescription({
+    required String accessToken,
+    required String sessionId,
+    required String intent,
+    required String? summaryForPatient,
+    required String privateNote,
+    required List<BackendEPrescriptionItem> items,
+  }) async {
+    final payload = await _send(
+      'PATCH',
+      '/v1/care-sessions/$sessionId',
+      accessToken: accessToken,
+      extraHeaders: {'Idempotency-Key': intent},
+      body: {
+        if (summaryForPatient != null) 'summary_for_patient': summaryForPatient,
+        'private_note': privateNote,
+        'prescription_items': items.map((item) => item.toJson()).toList(),
       },
     );
     return BackendCareSession.fromJson(
@@ -5484,6 +5549,19 @@ class BackendCareSession {
 
   DateTime? get scheduledDateTime =>
       scheduledAt == null ? null : parseWibStored(scheduledAt!);
+
+  DateTime? get notesDeadline => _joinClosesAt?.add(const Duration(hours: 24));
+
+  bool get canWriteNotes {
+    final end = _joinClosesAt;
+    final deadline = notesDeadline;
+    final now = ServerClock.now();
+    return status == 'completed' &&
+        end != null &&
+        deadline != null &&
+        !now.isBefore(end) &&
+        now.isBefore(deadline);
+  }
 
   bool get isScheduled => status == 'scheduled';
   bool get isVideo => sessionType == 'video';

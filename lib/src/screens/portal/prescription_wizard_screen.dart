@@ -25,7 +25,7 @@ class EPrescriptionFormScreen extends ConsumerStatefulWidget {
       this.prescription,
       this.itemIndex = 0,
       this.onSaveMedication,
-      this.onDelete,
+      this.sessionDraft = false,
       this.personal = false});
   final AuthSession? session;
   final MalvaApiClient? apiClient;
@@ -38,7 +38,7 @@ class EPrescriptionFormScreen extends ConsumerStatefulWidget {
   final BackendEPrescription? prescription;
   final int itemIndex;
   final Future<void> Function(Medication)? onSaveMedication;
-  final VoidCallback? onDelete;
+  final bool sessionDraft;
   final bool personal;
   @override
   ConsumerState<EPrescriptionFormScreen> createState() =>
@@ -317,16 +317,6 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
                   tooltip: 'Kembali',
                   onPressed: _saving ? null : _back,
                   icon: const Icon(Icons.arrow_back_rounded, size: 24)),
-              actions: [
-                if (_step == 0 && widget.onDelete != null)
-                  IconButton(
-                      tooltip: 'Hapus obat',
-                      onPressed: () {
-                        Navigator.pop(context);
-                        widget.onDelete!();
-                      },
-                      icon: const Icon(Icons.delete_outline_rounded)),
-              ],
             ),
             body: SafeArea(
                 bottom: false,
@@ -1462,6 +1452,10 @@ class _PrescriptionWizardState extends ConsumerState<EPrescriptionFormScreen> {
           currentStock: _stock + _stockOffset,
           alertBelow: _threshold,
           schedule: legacy ? null : schedule);
+      if (widget.sessionDraft) {
+        Navigator.pop(context, updated);
+        return;
+      }
       if (rx != null) {
         await api.updateEPrescription(
             accessToken: token,

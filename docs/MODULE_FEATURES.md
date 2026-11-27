@@ -1,5 +1,12 @@
 # MODULE_FEATURES — Matriks Fitur Malva
 
+## Alur klinis dan terapi Android (28 November 2026)
+
+- Chat sesi menyediakan Alat Sesi, pemilih WHO-5/PHQ-9 + GAD-7/DASS-21, dan daftar permintaan modul terapi. Kartu permintaan asesmen membuka pengisian dari akun pasien dan riwayat pasien terkait dari akun profesional.
+- Asesmen Mandiri dan Terapi Psikologis menggunakan aset referensi. Pasien dapat mengubah atau menghapus lembar kerja tersimpan. Pemandu 4–2–6 menghitung satu siklus setelah seluruh fase selesai. Pasien dapat mengirim hasil ke profesional terhubung dengan paket aktif atau ke profesional dalam sesi Chat/Video yang sedang berjalan.
+- Catatan sesi selesai dapat ditulis atau diubah sampai batas 24 jam setelah jadwal berakhir. Data aktif Goals & Habits dan obat hanya ditawarkan dengan izin kategori masing-masing. Item resep di editor bersifat sementara sampai catatan disimpan dan penerbitannya idempoten.
+- Check-in memakai tab Mood/Obat dan aksi Hapus di kartu obat. Editor jadwal baru dan edit memakai dial jam, durasi per slot, ringkasan kapasitas, hari praktik, serta status aktif.
+
 Diary 0.1.30 (16 November 2026): tujuh koreksi gambar pengguna diterapkan pada Vault, kalender/palet, daftar cerita dan editor. Header menjadi akses lencana; pilihan apresiasi editor dipindah ke halaman lencana dan ditautkan ke diari pilihan pasien, dengan tetap mempertahankan bukti lama. Kartu refleksi bisa dibuka/ditutup; refresh mengganti ketiga posisi dan tidak mengulang susunan sampai 970.200 susunan habis. Daftar memuat hanya foto/sketsa pertama secara lazy dengan token akun terkini. Tidak ada perubahan kontrak HTTP/skema.
 
 Versi 0.1.29: Diary mengikuti Mental Health Diary & Positive Vault, dengan tiga kartu flip dari 100 pertanyaan, pemasangan prompt di editor, palet/kalender/filter, Vault acak dan reader terpisah. Tombol pada header membuka 100 lencana Apresiasi Diri yang dihitung dari catatan tersimpan tanpa streak. Pengalaman pribadi berasal dari pilihan pasien; aktivitas interaksi tersimpan per akun/perangkat. Topik, afirmasi dan metadata dipertahankan lewat note versi 1. Rujukan: [rencana Diary & Vault](superpowers/plans/2026-11-15-diary-positive-vault.md).

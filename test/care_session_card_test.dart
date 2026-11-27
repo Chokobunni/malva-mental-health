@@ -100,6 +100,9 @@ void main() {
       final api = MalvaApiClient(
           baseUrl: 'https://synthetic.test',
           httpClient: MockClient((request) async {
+            if (request.method == 'GET') {
+              return http.Response('{"goals":[],"medications":[]}', 200);
+            }
             payload = jsonDecode(request.body) as Map<String, dynamic>;
             return http.Response(
                 jsonEncode({
@@ -118,7 +121,9 @@ void main() {
           displayName: 'Pro',
           backendUserId: 'pro',
           accessToken: 'token');
-      const session = BackendCareSession(
+      final session = BackendCareSession(
+          scheduledAt:
+              wibIso(ServerClock.now().subtract(const Duration(hours: 2))),
           id: 'notes-session',
           patientId: 'patient',
           professionalId: 'pro',

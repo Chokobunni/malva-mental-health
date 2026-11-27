@@ -23,6 +23,9 @@ void main() {
   testWidgets(
       'editing a categorized slot preserves inactive state and other slots',
       (tester) async {
+    tester.view.physicalSize = const Size(390, 850);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final api = _AvailabilityApi();
     await tester.pumpWidget(ProviderScope(
       child: MaterialApp(
@@ -45,11 +48,20 @@ void main() {
     await tester.tap(find.text('Edit jadwal'));
     await tester.pumpAndSettle();
     final dialog = find.byType(BottomSheet);
+    await tester.tap(find.text('Mulai'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TimePickerDialog), findsOneWidget);
+    expect(find.text('Atur').hitTestable(), findsOneWidget);
+    await tester.tap(find.text('Atur'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Custom'));
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.descendant(of: dialog, matching: find.byType(TextField)).last,
       '75',
     );
-    await tester.tap(find.text('Simpan perubahan'));
+    await tester.pump();
+    await tester.tap(find.text('Simpan Perubahan'));
     await tester.pumpAndSettle();
     expect(api.saved, hasLength(1));
     expect(api.saved!.first['slot_duration_minutes'], 75);
@@ -182,7 +194,9 @@ void main() {
     await tester.tap(find.text('Jumat').last);
     await tester.pumpAndSettle();
     expect(warning, findsOneWidget);
-    final active = find.widgetWithText(SwitchListTile, 'Aktif');
+    final active =
+        find.widgetWithText(CheckboxListTile, 'Langsung aktifkan jadwal');
+    await tester.ensureVisible(active);
     await tester.tap(active);
     await tester.pumpAndSettle();
     expect(warning, findsNothing);

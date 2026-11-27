@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../models.dart';
 import '../../theme.dart';
+import '../../time/wib.dart';
+import '../../widgets/assessment_reference.dart';
+import '../../widgets/therapy_library.dart';
 import 'session_summary_chat_card.dart';
 
 /// Only server-validated clinical messages use this card. File actions fetch
@@ -22,26 +25,18 @@ class ClinicalChatCard extends StatelessWidget {
     }
     final meta = message.metadata ?? const <String, dynamic>{};
     final assessment = message.kind == 'assessment_request';
+    final therapy = message.kind == 'therapy_request';
+    if (assessment || therapy) {
+      return _requestCard(meta['module_id']?.toString() ?? '', assessment);
+    }
     final attachment = message.kind == 'attachment';
     final rawGoals = meta['goals'];
     final goals = (rawGoals is List ? rawGoals : const []).whereType<Map>();
     final rawGoalIds = meta['goal_ids'];
     final goalIds = rawGoalIds is List ? rawGoalIds : const [];
-    final module = meta['module_id']?.toString() ?? '';
-    final assessmentLabel = switch (module) {
-      'screening' => 'PHQ-9 & GAD-7',
-      'dass21' => 'DASS-21',
-      'who5' => 'WHO-5',
-      _ => 'Asesmen',
-    };
     final insight = meta['insight']?.toString() ?? '';
     final filename = meta['filename']?.toString() ?? 'Lampiran';
-    if (assessment || attachment) {
-      final action = attachment
-          ? 'Buka lampiran'
-          : isPatient
-              ? 'Isi asesmen'
-              : 'Lihat detail';
+    if (attachment) {
       final size = meta['size'];
       return Container(
         padding: const EdgeInsets.all(12),
@@ -57,29 +52,20 @@ class ClinicalChatCard extends StatelessWidget {
             decoration: BoxDecoration(
                 color: const Color(0xfff3e8fc),
                 borderRadius: BorderRadius.circular(10)),
-            child: Icon(
-                attachment
-                    ? Icons.attach_file_rounded
-                    : Icons.fact_check_outlined,
-                color: MalvaColors.seed),
+            child:
+                const Icon(Icons.attach_file_rounded, color: MalvaColors.seed),
           ),
           const SizedBox(width: 10),
           Expanded(
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                Text(attachment ? filename : assessmentLabel,
+                Text(filename,
                     style: const TextStyle(
                         color: MalvaColors.ink,
                         fontWeight: FontWeight.w900,
                         fontSize: 14)),
-                if (assessment) ...[
-                  const SizedBox(height: 4),
-                  const Text(
-                      'Isi sendiri untuk mencatat kondisi terkini. Hasil tersimpan di Riwayat Asesmen.',
-                      style: TextStyle(color: MalvaColors.ink, fontSize: 12)),
-                ],
-                if (attachment && size is num && size.isFinite && size > 0) ...[
+                if (size is num && size.isFinite && size > 0) ...[
                   const SizedBox(height: 4),
                   Text('${(size / 1024).ceil()} KB',
                       style: const TextStyle(
@@ -97,12 +83,8 @@ class ClinicalChatCard extends StatelessWidget {
                     textStyle: const TextStyle(
                         fontSize: 12, fontWeight: FontWeight.w800),
                   ),
-                  icon: Icon(
-                      attachment
-                          ? Icons.download_outlined
-                          : Icons.edit_note_rounded,
-                      size: 17),
-                  label: Text(action),
+                  icon: const Icon(Icons.download_outlined, size: 17),
+                  label: const Text('Buka lampiran'),
                 ),
               ])),
         ]),
@@ -169,5 +151,113 @@ class ClinicalChatCard extends StatelessWidget {
                       onPressed: onAction, child: const Text('Lihat detail')),
               ]),
         ));
+  }
+
+  Widget _requestCard(String moduleId, bool assessment) {
+    final instrument =
+        assessment ? AssessmentInstrument.fromId(moduleId) : null;
+    final module = assessment ? null : findTherapyModuleById(moduleId);
+    final title = (instrument == AssessmentInstrument.phqGad
+            ? 'PHQ-9 & GAD-7'
+            : instrument?.title) ??
+        module?.title ??
+        (assessment ? 'Asesmen' : 'Terapi Psikologis');
+    final color = instrument?.color ?? MalvaColors.seed;
+    final tint = instrument?.tint ?? const Color(0xfff4e8fb);
+    final description = assessment
+        ? 'Isi sendiri untuk mencatat kondisi terkini. Hasil tersimpan otomatis di Riwayat Asesmen.'
+        : 'Isi lembar kerja dan simpan hasilnya di Riwayat Terapi.';
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: tint),
+        borderRadius: BorderRadius.circular(19),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (instrument != null)
+            instrument.icon(41)
+          else if (module != null)
+            TherapyModuleIcon(module: module, size: 41)
+          else
+            Icon(Icons.assignment_outlined, color: color, size: 31),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(
+                      child: Text(title,
+                          style: const TextStyle(
+                              color: MalvaColors.ink,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800))),
+                  if (instrument != null) ...[
+                    const SizedBox(width: 6),
+                    Flexible(
+                        child: DecoratedBox(
+                      decoration: BoxDecoration(
+                          color: tint, borderRadius: BorderRadius.circular(6)),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 4),
+                        child: Text('${instrument.questionCount} Soal',
+                            style: TextStyle(
+                                color: color,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800)),
+                      ),
+                    )),
+                  ],
+                ]),
+                const SizedBox(height: 6),
+                Text(description,
+                    style: const TextStyle(
+                        color: Color(0xff68727e), fontSize: 13, height: 1.45)),
+                const Divider(height: 18, color: Color(0xffeff0f2)),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (assessment || isPatient)
+                      Flexible(
+                          child: FilledButton.tonalIcon(
+                        onPressed: (instrument != null || module != null)
+                            ? onAction
+                            : null,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: tint,
+                          foregroundColor: color,
+                          minimumSize: const Size(0, 40),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          textStyle: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w800),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: Icon(
+                            isPatient
+                                ? Icons.edit_outlined
+                                : Icons.history_rounded,
+                            size: 16),
+                        label: Text(isPatient
+                            ? (assessment ? 'Isi asesmen' : 'Isi lembar kerja')
+                            : 'Lihat Riwayat'),
+                      )),
+                    const SizedBox(width: 7),
+                    if (!assessment && !isPatient) const Spacer(),
+                    Text(formatWibBubbleTime(message.timestamp),
+                        style: const TextStyle(
+                            color: Color(0xff7a8591), fontSize: 11)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
